@@ -2,15 +2,13 @@
 
 Every array in NumSharp has a **dtype**-a data type that determines what kind of values the array stores, how many bytes each element takes, and which operations are valid. When you write `np.zeros(10, np.int32)`, the `np.int32` is the dtype. When you call `arr.astype(np.float64)`, you're converting to a different dtype.
 
-NumSharp supports numeric arrays, fixed-width Unicode and byte strings (`U` / `S`), and NumPy 2's variable-width `StringDType` (`T`). This page explains their descriptors, .NET mappings, promotion and casting. For text operations, missing values and `np.@char`, see [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md).
+This page covers NumSharp's supported dtypes, how they map to NumPy's types, how to refer to them in code, and the places where NumSharp's behavior differs from NumPy.
 
 ---
 
 ## Supported dtypes
 
-### Numeric, Boolean and Char storage
-
-These 15 storage types cover NumPy's Boolean, integer, real and complex128 arrays, plus .NET's `Decimal` and `Char`. They are not the whole dtype system: the text families below carry additional descriptor information.
+NumSharp supports the following dtypes:
 
 | NPTypeCode | C# Type | NumPy Equivalent | Bytes | Kind | SIMD |
 |------------|---------|------------------|-------|------|------|
@@ -29,37 +27,30 @@ These 15 storage types cover NumPy's Boolean, integer, real and complex128 array
 | `Decimal`  | `decimal`                  | *no equiv*   | 16 | `f` | Scalar arithmetic |
 | `Complex`  | `System.Numerics.Complex`  | `complex128` | 16 | `c` | Operation-dependent |
 | `Char`     | `char`                     | *no equiv*   | 2  | `u` | Through uint16 kernels where supported |
+| `String`   | `byte[]` values            | `bytes_` (`S`) | n | `S` | Specialized kernels |
+| `String`   | `string` values            | `str_` (`U`) | 4 × n | `U` | Specialized kernels |
+| `String`   | `string` or NA values      | `StringDType` (`T`) | 16-byte cell | `T` | Specialized kernels |
 
-The **Bytes** and **Kind** columns are the descriptor's `itemsize` and `kind`. `Boolean.kind` is `'b'`; its **type character** (`dtype.@char`) is `'?'`. `Decimal.itemsize` is 16 and `Char.itemsize` is 2. These descriptor properties are not the old internal kind table or a width inferred from a dtype name.
+**Bytes** and **Kind** are the descriptor's `itemsize` and `kind`. For `S` and `U`, **n** is the width in bytes or Unicode code points; shorter values are NUL-padded and longer writes truncate. `StringDType` has no fixed text width: each element has a 16-byte cell, with longer text stored separately. Its `nbytes` counts the cells, not that extra storage.
+
+The three string dtypes share `NPTypeCode.String`. Their full descriptors distinguish the representation and carry the width, byte order or `na_object` / `coerce` settings. Use `arr.dtype` when preserving a dtype. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for creation, operations, missing values and interop.
 
 **Decimal** and **Char** are NumSharp-specific types with no NumPy counterpart; see [NumSharp-specific types](#numsharp-specific-types-decimal-and-char).
-
-### Text descriptors: S, U and StringDType
-
-| Family | C# spelling | `kind` | `itemsize` | Element returned by `item()` |
-|--------|-------------|--------|------------|------------------------------|
-| Fixed-width bytes | `np.dtype("S5")` | `S` | 5 bytes | `byte[]` |
-| Fixed-width Unicode | `np.dtype("U5")` | `U` | 20 bytes (5 UCS-4 code points) | `string` |
-| Variable-width UTF-8 | `np.dtypes.StringDType()` or `np.dtype("T")` | `T` | 16-byte cell; longer text is stored separately | `string`, or the configured NA object |
-
-All three use **`NPTypeCode.String`**, but that enum value alone cannot specify an array's dtype. Use **`arr.dtype`** when preserving a dtype: it carries a fixed width and byte order, or `StringDType`'s `na_object` and `coerce` settings. `typeof(string)` likewise cannot preserve those settings. A `StringDType` array's `nbytes` counts its cells, not the arena and heap storage of its longer texts.
-
-Text arrays support creation, views, copies, indexing, movement, number ↔ text casts, printing, file I/O and Python interop. Comparisons, truth, concatenation, repetition, sorting, searching, unique values and set routines compute for all three families. `StringDType` additionally has concatenating `sum` / `cumsum` and lexical `maximum` / `minimum` and reductions. These are dtype-specific loops, not a promise that numeric operations such as `sqrt` accept text. See the [text support table](fundamentals/strings-and-bytes.md#available-text-operations) for the remaining transform APIs and NumPy's own refusals.
 
 ---
 
 ## Referring to Dtypes in Code
 
-Every public `dtype` parameter takes a **`DType` descriptor**. Numeric `NPTypeCode` values, C# `Type`s and dtype strings convert to that descriptor implicitly; the following are different spellings of the same numeric request.
+Every public `dtype` parameter takes a **`DType` descriptor**. You can name a dtype with an `np.*` alias, a C# `Type`, an `NPTypeCode` or a dtype string:
 
-### 1. `NPTypeCode` enum (numeric storage discriminator)
+### 1. `NPTypeCode` enum
 
 ```csharp
 var arr = np.zeros(new Shape(10), NPTypeCode.Int32);
 var cplx = np.zeros(new Shape(2, 3), NPTypeCode.Complex);
 ```
 
-Useful when dispatching on a numeric storage type. For text, use a descriptor such as `"U10"`, `"S5"` or `np.dtypes.StringDType()` instead of `NPTypeCode.String`.
+Use the enum when the element type is already known. String dtypes need a descriptor such as `"U10"`, `"S5"` or `np.dtypes.StringDType()` because `NPTypeCode.String` alone carries no width or NA policy.
 
 ### 2. `np.*` class-level aliases (idiomatic)
 
@@ -595,7 +586,7 @@ Quick reference for common pairs:
 | `float16` | `float32` | `float32` | higher precision wins |
 | numeric | `complex128` | `complex128` | complex absorbs numeric operands; text follows descriptor promotion |
 
-For the 15 numeric/Boolean/Char storage types, the promotion matrix is tested pair by pair. **Text promotion uses the full descriptors**, not that enum matrix: `S3` with `U2` promotes to `U3`; `T` with `U` promotes to `T`; `T` with `S` or a numeric dtype has no common dtype. Fixed-width text can promote with a strong numeric dtype to a wide enough string, but an individual ufunc still needs a loop for its operands. Promotion does not make `text + number` numeric addition or implicit concatenation.
+String promotion also accounts for the descriptor's width and missing-value policy: `S3` with `U2` promotes to `U3`; `T` with `U` promotes to `T`; `T` with `S` or a numeric dtype has no common dtype. Fixed-width text can promote with a strong numeric dtype to a wide enough string, but an individual ufunc still needs a loop for its operands. Promotion does not make `text + number` numeric addition or implicit concatenation.
 
 ```csharp
 np.promote_types(np.dtype("S3"), np.dtype("U2")); // dtype('<U3')
@@ -741,7 +732,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | `np.dtype("int32").name` | `string` | NumPy's dtype name (`"int32"`, `"datetime64[s]"`) |
 | `np.dtype("int32").byteorder` | `char` | `'='` native, `'\|'` for 1-byte dtypes, `'>'` / `'<'` when given explicitly non-native (`np.dtype(">i4")`) |
 | `DType d = typeof(int);` | `DType` | A C# type, an `NPTypeCode` or a dtype string converts to `DType` implicitly |
-| `InfoOf<T>.Size` | `int` | Byte size of CLR type `T` (correct for all 15 types, including Decimal/Char) |
+| `InfoOf<T>.Size` | `int` | Byte size of an unmanaged CLR element type; use `arr.itemsize` for a string dtype |
 | `InfoOf<T>.NPTypeCode` | `NPTypeCode` | `NPTypeCode` for CLR type `T` |
 
 ### Machine limits
@@ -756,7 +747,7 @@ On `NDArray` itself the key properties are `.dtype` (a `DType`, NumPy's `ndarray
 | Exception | When |
 |-----------|------|
 | `NotSupportedException` | dtype string unrecognized, or NumPy dtype NumSharp doesn't implement (`V`/`O`/`complex64`/…); an array of a descriptor with no storage yet (`M8`, `m8`); the conversion of `np.complex64` / `np.csingle` / `np.object_` / `np.void` to a dtype |
-| `StringComputationNotSupportedException` | An exposed text route not implemented yet, such as `np.evaluate` over text or `chararray.partition(sep)`; not sorting, searching or number ↔ text casts |
+| `StringComputationNotSupportedException` | A text operand passed to the numeric expression engine, `np.evaluate`; use the string operations directly |
 | `DTypePromotionError` | No common dtype, such as `StringDType` with a numeric dtype or `S` |
 | `UnicodeEncodeError` / `UnicodeDecodeError` | An invalid encoding conversion, such as non-ASCII `U` → `S` or invalid UTF-8 `S` → `T` |
 | `TypeError` | Complex → non-complex scalar cast (`(int)complexScalar`, etc.) |

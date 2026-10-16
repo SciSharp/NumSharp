@@ -86,7 +86,7 @@ If you need the raw buffer in .NET vector code, `nd.Unsafe.Span<T>()` hands SIMD
 
 ## .NET interop - `Span<T>` / `Memory<T>` / arrays / `IEnumerable<T>`
 
-Two ways to hand an `NDArray` to plain .NET code - a **zero-copy aliasing** side (`nd.Unsafe`, the absolute performance ceiling: no copy, no walk) and a **safe copying / enumerable** side (extensions). Both cover the 15 unmanaged CLR element types (numbers, Boolean and Char), not `S` / `U` / `T` as managed strings.
+Two ways to hand an `NDArray` to plain .NET code - a **zero-copy aliasing** side (`nd.Unsafe`, the absolute performance ceiling: no copy, no walk) and a **safe copying / enumerable** side (extensions). The typed buffer APIs require an unmanaged `T`; use the [text accessors](#iterating-text) for string values.
 
 ### `nd.Unsafe` - zero-copy BCL views (aliasing; you must keep the NDArray alive)
 
@@ -151,7 +151,7 @@ foreach (Span<double> chunk in np.nditer_chunks<double>(a, writeable: true))
     System.Numerics.Tensors.TensorPrimitives.Multiply(chunk, 2.0, chunk);
 ```
 
-A **contiguous array arrives as a single chunk** - and so do F-contiguous, transposed and reversed views, which the iterator coalesces. Both cover the 15 unmanaged CLR element types; text uses the [descriptor-aware forms](#iterating-text).
+A **contiguous array arrives as a single chunk** - and so do F-contiguous, transposed and reversed views, which the iterator coalesces. `T` must be an unmanaged element type; text values use the [descriptor-aware iterator](#iterating-text).
 
 **Rules of the road** (all matching NumPy's `nditer` where a counterpart exists):
 

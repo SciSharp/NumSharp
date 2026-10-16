@@ -111,7 +111,7 @@ Like `NDIterRef`, `np.broadcast(...)` has **no explicit operand-count cap** - Nu
 
 A `T` operand requires **`refs_ok`**, even when a buffer casts it to another dtype. Each `T` buffer owns an allocator, and fills, flushes and iterator copies duplicate strings rather than copying raw cells. Operand views use the allocator of the memory they actually reference. Dispose the iterator to flush pending writes and release those allocators. The unmanaged CLR `ref T` / `Span<T>` iteration extensions are not a `ref string` interface.
 
-The buffering used by these routes is NumPy's core/outer buffering port, including buffered reductions, `grow_inner`, buffer reuse and masked write-back. Older numeric-only descriptions below should not be used to infer that a `T` cell is an ordinary 16-byte value. See [Iterating text](iterating-and-enumerating.md#iterating-text) for an application example and [StringDType iteration](fundamentals/strings-and-bytes.md#iterating-with-npnditer) for casts and write-back.
+The buffering used by these routes follows NumPy's core/outer schedule, including buffered reductions, `grow_inner`, buffer reuse and masked write-back. See [Iterating text](iterating-and-enumerating.md#iterating-text) for an application example and [StringDType iteration](fundamentals/strings-and-bytes.md#iterating-with-npnditer) for casts and write-back.
 
 ### Typed iteration - unboxed elements and Span chunks
 

@@ -6,10 +6,10 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     NumPy's <c>numpy.strings</c> module over fixed-width <c>S</c> / <c>U</c> and variable-width
-        ///     <c>StringDType</c> text. The public <see cref="add"/> and <see cref="multiply"/> functions concatenate and
-        ///     repeat elements; length, search, strip, pad, case and codec APIs are not public yet.
-        ///     Use ordinary <c>np.sort</c>, <c>np.unique</c> and comparison functions for the implemented ordering operations.
+        ///     NumPy's <c>numpy.strings</c> module: elementwise comparisons, concatenation, repetition, search,
+        ///     stripping, padding, replacement, slicing, Unicode properties, case conversion, formatting and codecs
+        ///     over fixed-width <c>S</c> / <c>U</c> and variable-width <c>StringDType</c> text. Arguments broadcast;
+        ///     each operation determines its result width and handling of missing values.
         /// </summary>
         /// <remarks>
         ///     A C# <see cref="string"/> argument of a <c>numpy.strings</c> function is NumPy's Python <c>str</c> — a 0-d <c>U</c>

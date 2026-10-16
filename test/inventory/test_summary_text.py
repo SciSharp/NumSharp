@@ -9,13 +9,13 @@ class StringSummaryTests(unittest.TestCase):
     """Keep shipped phase-2 cases visible without labeling them as unimplemented."""
 
     def test_phase_two_is_a_subset_not_a_deferral_count(self):
-        """Check the report labels without building assemblies or scanning a large corpus.
+        """Keep the public summary about contracts, not the implementation stages that produced them.
 
         Returns:
             None; assertions validate the rendered Markdown.
 
         Raises:
-            AssertionError: A phase-tag count is presented as pending work or loses its numeric value.
+            AssertionError: A generator phase leaks into the public label, or the total count is lost.
         """
         # A tiny synthetic report isolates presentation from the changing repository-wide inventory totals.
         tests = dict.fromkeys((
@@ -30,7 +30,8 @@ class StringSummaryTests(unittest.TestCase):
         ), 0)
         oracle.update(stringOracleCases=100, stringOraclePhase2Cases=80)
         result = summary_text({"summary": {"tests": tests, "oracle": oracle}})
-        self.assertIn("String dtype test cases (phase-2-tagged subset, not pending work) | 100 (80)", result)
+        self.assertIn("| String dtype test cases | 100 |", result)
+        self.assertNotIn("phase", result)
         self.assertNotIn("deferred", result)
         self.assertIn("not a runtime pass rate", result)
 

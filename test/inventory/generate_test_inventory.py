@@ -27,8 +27,8 @@ TOOL = HERE / "NumSharp.Tools.TestInventory" / "NumSharp.Tools.TestInventory.csp
 TOOL_DLL = HERE / "NumSharp.Tools.TestInventory" / "bin" / "Release" / "net8.0" / "NumSharp.Tools.TestInventory.dll"
 CORPUS = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "corpus"
 SCHEMA_VERSION = 2
-# Distinguish the corrected phase-tag wording from snapshots that called every phase-2 case deferred.
-GENERATOR_VERSION = "1.3.1"
+# User-facing summaries report string contracts without exposing generator phase tags.
+GENERATOR_VERSION = "1.3.2"
 OUTPUT_FILES = ("tests-oracle-report.json", "tests-oracle-report.csv", "summary.md", "tests-oracle-manifest.json")
 
 PROJECT_ROOTS = {
@@ -531,7 +531,7 @@ def summary_text(report: dict[str, Any]) -> str:
         report: Validated report from ``render``, including test and oracle summary dictionaries.
 
     Returns:
-        Markdown for the published summary; phase-2 counts classify contracts, not pending work.
+        Markdown for the published summary; implementation phase tags are not displayed as user-facing status.
 
     Raises:
         KeyError: A required report field is absent.
@@ -555,8 +555,7 @@ def summary_text(report: dict[str, Any]) -> str:
         f"| FuzzMatrix methods | {tests['fuzzMatrixMethods']:,} |",
         f"| Corpus Oracle test cases | {oracle['corpusRows']:,} |",
         f"| Specialized flags/layout/NPY/string test cases | {oracle['specializedOracleCases']:,} |",
-        f"| String dtype test cases (phase-2-tagged subset, not pending work) | {oracle['stringOracleCases']:,} "
-        f"({oracle['stringOraclePhase2Cases']:,}) |",
+        f"| String dtype test cases | {oracle['stringOracleCases']:,} |",
         f"| Total Oracle test cases | {oracle['totalSerializedContracts']:,} |",
         f"| Oracle operation keys | {oracle['opKeys']:,} |",
         f"| Host-pin metadata records (not cases) | {oracle['hostPinRecords']:,} |", "",

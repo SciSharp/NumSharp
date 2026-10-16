@@ -64,7 +64,7 @@ Run them in a `dotnet run` file-based app, LINQPad, a console project, or a C# n
 
 ---
 
-NumSharp also holds homogeneous **text** arrays: labels, categories, fixed-width byte fields and variable-width strings. Their shapes, views and indexing work like numeric arrays; their valid operations depend on the text dtype. They are not restricted to a .NET `string[]` beside your numeric arrays.
+NumSharp also holds **text** arrays: labels, categories, fixed-width byte fields and variable-width strings. Their shapes, views and indexing work like numeric arrays, with string operations for comparing, searching and transforming the values.
 
 ## Arrays of text
 

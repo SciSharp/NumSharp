@@ -80,7 +80,7 @@ Functions for combining multiple arrays.
 
 ## Strings, Bytes and Character Arrays
 
-`NDArray` stores all three NumPy text families. See [Strings, bytes and chararrays](../docs/fundamentals/strings-and-bytes.md) for creation, truncation, encoding, NA values and the current operation-by-operation support.
+`NDArray` stores NumPy's Unicode, byte-string and variable-width string dtypes. See [Strings, bytes and chararrays](../docs/fundamentals/strings-and-bytes.md) for text operations, encoding, missing values and character-array behavior.
 
 | API | Behavior |
 |-----|----------|
@@ -88,6 +88,13 @@ Functions for combining multiple arrays.
 | `np.dtype("S8")` / `np.bytes_` | Fixed-width bytes; `item()` returns `byte[]` |
 | `np.dtypes.StringDType(...)`, `np.dtype("T")` | Variable-width UTF-8 with optional `na_object` and `coerce` |
 | `np.strings.add`, `np.strings.multiply` | Elementwise concatenation and repetition |
+| `np.strings.equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal` | Elementwise comparisons without stripping |
+| `np.strings.str_len`, `find`, `rfind`, `index`, `rindex`, `count`, `startswith`, `endswith` | Lengths and substring searches |
+| `np.strings.strip`, `lstrip`, `rstrip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill`, `slice` | Text transformations |
+| `np.strings.partition`, `rpartition` | Three arrays: before, separator and after |
+| `np.strings.isalpha`, `isalnum`, `isdigit`, `isdecimal`, `isnumeric`, `isspace`, `islower`, `isupper`, `istitle` | Character-property predicates |
+| `np.strings.upper`, `lower`, `swapcase`, `capitalize`, `title`, `translate` | Case conversion and translation |
+| `np.strings.mod`, `encode`, `decode` | Python-style formatting and codec conversion |
 | `np.sort`, `np.searchsorted`, `np.unique`, `np.isin`, set routines | Compute on `S`, `U` and `T` |
 | `np.sum`, `np.cumsum`, `np.max`, `np.min` over `T` | Concatenation / lexical reductions; `S` / `U` have NumPy's refusals |
 | `np.@char.equal` … `np.@char.greater_equal`, `compare_chararrays` | Fixed-width comparisons that strip trailing ASCII whitespace |
@@ -96,7 +103,7 @@ Functions for combining multiple arrays.
 | `np.@char.split`, `rsplit`, `splitlines` | Return `NDListArray`; dispose the result explicitly |
 | `np.@char.join` | Join each element's characters, not array elements |
 
-`char` is a C# keyword, hence `np.@char`. The module still converts to the legacy **Char dtype** in dtype parameters; that 2-byte UTF-16 code-unit type is distinct from the text dtypes and `NDCharArray`. The `np.strings` length, search, transform and Unicode families are still pending; their names are not a claim of current availability.
+`char` is a C# keyword, hence `np.@char`. The module exposes the string functions above except `slice`; its comparisons strip trailing whitespace and its `partition` / `rpartition` stack the parts on a new last axis. `NDCharArray` exposes the corresponding string methods. The module also converts to the existing **Char dtype** in dtype parameters; that 2-byte UTF-16 code-unit type is distinct from a string dtype or a chararray.
 
 ---
 
@@ -389,7 +396,7 @@ These types are for advanced users extending NumSharp or understanding its inter
 
 ## Supported Data Types
 
-The 15 numeric/Boolean/Char storage types are listed below. The three text families use the descriptor-based `String` lane after the table; an enum value is not the full dtype.
+NumSharp supports the following array dtypes:
 
 | NPTypeCode | C# Type | NumPy Equivalent |
 |------------|---------|------------------|
@@ -408,9 +415,11 @@ The 15 numeric/Boolean/Char storage types are listed below. The three text famil
 | Double | `double` | `np.float64` |
 | Decimal | `decimal` | (no equivalent) |
 | Complex | `System.Numerics.Complex` | `np.complex128` |
-| String | UCS-4 / bytes / UTF-8 cells | `np.str_` (`U`), `np.bytes_` (`S`), `np.dtypes.StringDType()` (`T`) |
+| String | `byte[]` values | `np.bytes_` (`S`, fixed-width bytes) |
+| String | `string` values | `np.str_` (`U`, fixed-width Unicode) |
+| String | `string` or NA values | `np.dtypes.StringDType()` (`T`, variable-width UTF-8) |
 
-`NPTypeCode.String` is a real storage lane, shared by three different descriptor classes. Use `arr.dtype`, `np.dtype("U8")`, `np.dtype("S8")` or `np.dtypes.StringDType(...)` to keep the width, encoding and NA policy. `NDArray<string>` is not the storage representation.
+String descriptors carry the width, encoding and NA policy in addition to the shared `NPTypeCode.String` value. Preserve `arr.dtype` when creating a matching array; use `np.dtype("U8")`, `np.dtype("S8")` or `np.dtypes.StringDType(...)` to select a representation.
 
 `NPTypeCode.Empty` is a sentinel; `NPTypeCode.Float` is an alias of `Single`, not another dtype.
 

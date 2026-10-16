@@ -189,15 +189,15 @@ API_FALLBACK
     cat >> "$output" << 'TYPES'
 ## Supported Data Types
 
-Numeric/Boolean/Char storage: bool, sbyte, byte, short, ushort, int, uint, long, ulong,
-Half, float, double, decimal, char, System.Numerics.Complex.
+NumSharp supports bool, sbyte, byte, short, ushort, int, uint, long, ulong, Half, float,
+double, decimal, char, System.Numerics.Complex, fixed-width bytes (S), fixed-width Unicode (U)
+and variable-width StringDType (T).
 
-Text: fixed-width bytes (S), fixed-width UCS-4 Unicode (U), variable-width UTF-8 StringDType (T).
-All three text families share NPTypeCode.String; preserve the full array.dtype descriptor for widths
-and StringDType's na_object/coerce settings. C# char is a separate 2-byte UTF-16 code unit.
-np.@char is the numpy.char module; NDCharArray is its fixed-width string subclass, and NDListArray
-holds split results. Storage, conversion, ordering, membership, concatenation and repetition work;
-additional np.strings transform/Unicode APIs and fused text expressions are still pending.
+String descriptors carry the width, encoding and missing-value policy; preserve array.dtype
+when creating a matching array. C# char is a 2-byte UTF-16 code unit. np.strings provides
+elementwise string operations, Unicode properties, case conversion, formatting and codecs.
+np.@char is the numpy.char module, NDCharArray its string-array subclass, and NDListArray
+holds split results.
 
 ## Key Concepts
 

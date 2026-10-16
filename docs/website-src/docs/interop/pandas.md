@@ -146,7 +146,7 @@ because the name already exists.
 
 - scalar, empty Series, zero-row frames, zero-column frames, empty RangeIndex, and 1×1 frames;
 - C/F layouts, positive strides, reversed negative strides, and storage offsets;
-- all 15 numeric/Boolean/Char source dtypes, including Char→uint16 and Decimal→float64 boundaries;
+- NumSharp's dtype mappings, including Char→uint16 and Decimal→float64 boundaries;
 - NaN payloads, infinities, signed zero, unsigned maxima, and complex values;
 - mixed blocks, nullable missing values, categorical, sparse, object and semantic time dtypes;
 - duplicate labels and MultiIndex axes;
@@ -179,7 +179,7 @@ because the name already exists.
 | 10 | complex64 copy-widens while View declines | [`Complex64ViewDeclines_AndCopyWidensToNumSharpComplex128`][gate-edge] |
 | 11 | empty and degenerate ranks/shapes/dtypes are preserved | [`EmptyAndDegenerateShapes_PreserveRankShapeAndResolvedDtype`][gate-edge] |
 | 12 | positive and negative Series strides preserve logical values | [`PositiveAndNegativeStridedSeries_PreserveLogicalOffsetsAndStrides`][gate-edge] |
-| 13 | all 15 numeric/Boolean/Char source dtypes round-trip through a numeric Series | [`All15NumSharpDtypes_RoundTripThroughPandasNumericSeries`][gate-edge] |
+| 13 | NumSharp values round-trip through the numeric Series mappings | [`All15NumSharpDtypes_RoundTripThroughPandasNumericSeries`][gate-edge] |
 | 14 | labels are metadata; duplicate/MultiIndex axes do not alter value order | [`AxisLabelsDuplicatesAndMultiIndex_AreMetadataOnly_ValuesKeepTwoDimensionalOrder`][gate-edge] |
 | 15 | derived NumSharp views retain Pandas storage after Python wrappers die | [`DerivedNumSharpView_KeepsPandasStorageAliveAfterAllPythonWrappersDie`][gate-edge] |
 | 16 | View/Copy/Auto and adapter-disable policies remain distinct | [`CodecModes_RespectPandasViewCopyAutoAndExplicitAdapterDisable`][gate-edge] |

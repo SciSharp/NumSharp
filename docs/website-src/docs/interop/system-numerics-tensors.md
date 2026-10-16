@@ -149,11 +149,8 @@ element, so they import as the empty vector `(0,)`, never as a one-element 0-d a
 
 ## Dtypes
 
-The bridge's methods constrain `T` to **unmanaged CLR element types**. The 15 numeric/Boolean/Char
-storage types below cross as themselves; no conversion is needed for those types. **Text dtypes
-`S`, `U` and `StringDType` do not cross through this bridge**: their packed representation is not a
-`Tensor<string>` backing array. Use NumSharp's text accessors to materialize .NET values when needed,
-or the [pythonnet text bridge](pythonnet-numpy.md#how-does-text-cross) for NumPy arrays.
+The bridge maps NumSharp dtypes to `Tensor<T>` element types as follows. Shared views preserve the
+CLR element type without conversion; the bridge's generic methods require an unmanaged `T`.
 
 | NumSharp | Crosses as | Note |
 |---|---|---|
@@ -162,6 +159,7 @@ or the [pythonnet text bridge](pythonnet-numpy.md#how-does-text-cross) for NumPy
 | Char | `char` | zero-copy, UTF-16 code units; **directional** - a `ushort` element type reads back as `UInt16`, never `Char` |
 | Decimal | `System.Decimal` | zero-copy (a 16-byte unmanaged struct) - no conversion |
 | Complex | `System.Numerics.Complex` | zero-copy (a 16-byte unmanaged struct) - no refusal |
+| `S`, `U`, `StringDType` | not supported by this bridge | packed text is not a `Tensor<string>` buffer; use managed text values or the [NumPy bridge](pythonnet-numpy.md#how-does-text-cross) |
 
 `T` must be the array's own element type: a mismatch (`AsTensorSpan<int>()` on a `float` array) is refused
 up front rather than silently reinterpreting the bytes.
@@ -204,11 +202,11 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 
 ## Claims ledger
 
-The dtype claims in this ledger cover the 15 unmanaged CLR types listed above, not the text families.
+The dtype claims below cover the supported mappings in the table above.
 
 | # | Claim | Gate |
 |---|---|---|
-| 1 | All 15 dtypes map to their own CLR type and round-trip; the map is directional (UInt16 ≠ Char) | [`DtypeMapTests`][gate] |
+| 1 | Supported dtypes map to their own CLR type and round-trip; the map is directional (UInt16 ≠ Char) | [`DtypeMapTests`][gate] |
 | 2 | `AsTensorSpan` shares memory both ways (span↔ndarray write-through) and shares every dtype's bytes 1:1 | [`ExportTests`][gate] |
 | 3 | `ToTensor` is an independent dense copy that reads any layout (incl. negative stride) in logical order | [`ExportTests`][gate] |
 | 4 | `ToNDArray` copies (dense + strided); `AsNDArray` is a zero-copy view, write-through, dense or strided | [`ImportTests`][gate] |
@@ -220,9 +218,9 @@ The dtype claims in this ledger cover the 15 unmanaged CLR types listed above, n
 | 10 | Special values (NaN sign/payload/signaling, ±inf, ±0, subnormals, every dtype extreme) survive every crossing bit-exact | [`SpecialValueFidelityTests`][gate] |
 | 11 | NDArray → Tensor → NDArray and NDArray → TensorSpan → NDArray preserve values across all dtypes and layouts | [`RoundTripTests`][gate] |
 | 12 | The examples on this page run as written | [`DocExampleTests`][gate] |
-| 13 | A tensor that starts past element 0 of its backing array (a `Slice`, a range indexer, `Tensor.Create(array, start, …)`) imports its own elements through `ToNDArray` and `AsNDArray`, for all 15 dtypes; a write through the view lands on the element it names | [`ImportTests`][gate] |
-| 14 | A 0-d array crosses as `[1]` through `AsTensorSpan` and `ToTensor` with its value kept, for all 15 dtypes | [`ExportTests`][gate] |
-| 15 | An empty array exports with its shape and all-zero strides; the BCL can flatten, fill and reduce the span, and it imports back to the same shape, for all 15 dtypes; the BCL's rank-0 values import as `(0,)` | [`ExportTests`][gate], [`ImportTests`][gate] |
+| 13 | A tensor that starts past element 0 of its backing array (a `Slice`, a range indexer, `Tensor.Create(array, start, …)`) imports its own elements through `ToNDArray` and `AsNDArray`, for every supported dtype; a write through the view lands on the element it names | [`ImportTests`][gate] |
+| 14 | A 0-d array crosses as `[1]` through `AsTensorSpan` and `ToTensor` with its value kept, for every supported dtype | [`ExportTests`][gate] |
+| 15 | An empty array exports with its shape and all-zero strides; the BCL can flatten, fill and reduce the span, and it imports back to the same shape, for every supported dtype; the BCL's rank-0 values import as `(0,)` | [`ExportTests`][gate], [`ImportTests`][gate] |
 | 16 | Both export verbs refuse a released buffer with `ObjectDisposedException`, for every layout | [`LifetimeTests`][gate] |
 | 17 | The copies refuse what they cannot hold before allocating (`ToTensor` past `Array.MaxLength`, `ToNDArray` past `int.MaxValue`); `AsNDArray` of a stride-0 tensor shares any size zero-copy | [`ImportTests`][gate], [`BoundaryTests`][gate] |
 | 18 | Every dtype × every catalogued layout (≈45: offsets, steps, transposes, broadcasts, empties at offsets, unit axes, read-only flags, ranks 40/70) × every export verb holds, element by element through the BCL's own indexer, and each write through a span changes exactly the element it names | [`LayoutMatrixTests`][gate] |

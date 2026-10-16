@@ -19,7 +19,7 @@ and edge-case semantics survive the trip into hand-written machine code.
 
 ## At a Glance
 
-The tables below preserve a **numeric-kernel inventory snapshot** (see [Refreshing the Inventory](#refreshing-the-inventory)). They predate the text-kernel families described in [Text kernels](#text-kernels-are-descriptor-aware), so their file/factory counts are not current totals for the whole library:
+The kernel layer covers NumSharp's dtypes, layouts and operations. The source counts below are an inventory snapshot; [Refreshing the Inventory](#refreshing-the-inventory) shows how to reproduce them after kernel changes.
 
 | The system in numbers | |
 | --- | ---: |
@@ -30,7 +30,7 @@ The tables below preserve a **numeric-kernel inventory snapshot** (see [Refreshi
 | `DynamicMethod` kernel factories | 57 |
 | Distinct generated-kernel caches | 45 |
 | Binary / unary / reduction / comparison ops | 17 / 35 / 20 / 6 |
-| Numeric/Boolean/Char storage types in this matrix | 15 |
+| NumSharp dtype families | 18 |
 | Binary memory-layout paths | 5 |
 | Total kernel source | ~48,000 lines |
 | Raw IL instructions emitted by hand | ~7,000 |
@@ -51,7 +51,7 @@ The operation surface those kernels cover:
 | Unary operations | 35 | trig, exp/log family, rounding, `abs`, `sign`, `reciprocal`, predicates, bitwise/logical not |
 | Reductions | 20 | `sum`, `prod`, `min`, `max`, `arg*`, `mean`, `std`, `var`, and NaN-aware variants |
 | Comparisons | 6 | `equal`, `not_equal`, `<`, `<=`, `>`, `>=` |
-| Dtypes | 15 | bool, integer widths, char, half, single, double, decimal, complex |
+| Dtypes | 18 | bool, integer widths, char, half, single, double, decimal, complex, bytes (`S`), Unicode (`U`), StringDType (`T`) |
 | Binary layout paths | 5 | full SIMD, scalar-left/right broadcast, chunked SIMD, general strided |
 
 ## Two Generators, Two Contracts
@@ -157,21 +157,22 @@ type utilities. Only the loop-driving model differs.
 
 ### Text kernels are descriptor-aware
 
-The numeric type switch is not the whole dtype system. `S`, `U` and `StringDType`
+String kernels resolve the full dtype descriptor. `S`, `U` and `StringDType`
 share `NPTypeCode.String`, but differ in element layout, width, ownership and NA rules.
-A text kernel must resolve the **descriptor**, not treat that enum as one CLR type.
 
-- `ILKernelGenerator.Text*` emits fixed-width comparison, truth, concatenation and
-  repetition loops with width-specialized chunks and broadcast stages. NDIter supplies
-  strides and masks; the rows form handles short runs without a call per element.
+- `ILKernelGenerator.Text*` emits fixed-width text loops for comparisons, truth,
+  concatenation, repetition, search and transformations. Width-specialized chunks
+  and broadcast stages handle code units; Unicode properties and case mappings use
+  the CPython tables. NDIter supplies strides and masks; the rows form handles short
+  runs without a call per element.
 - `ILKernelGenerator.Text.VString` uses allocator-aware helpers over `T` cells.
   Inline text can be processed inside the cell; longer text and NA cells follow the
   descriptor's rules. Output strings belong to the destination's allocator, never
   to an allocator referenced by a raw copied cell.
 - Text sorting/searching uses prefix keys and NumPy's ordering rules; text/number
   casts use the shared format/parse machinery and descriptor-aware transfers.
-- The numeric `NDExpr` compiler does **not** thereby gain string leaves:
-  `np.evaluate` still refuses text. Use ordinary text operations instead.
+- `np.evaluate` compiles numerical expressions. Text operations use the
+  descriptor-aware string kernels directly.
 
 See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for the
 implemented public surface, and [String operands and buffers](NDIter.md#string-operands-and-buffers)
@@ -794,10 +795,9 @@ care about: how many kernels this process has compiled.
    sizes - no managed allocations in the hot body.
 5. **Separate path selection from loop emission.** The house style is a
    dispatcher, then path-specific `Generate*` methods, then `Emit*Loop` helpers.
-6. **Make dtype support explicit.** Cover the 15 numeric/Boolean/Char storage types
-   where the operation applies, and dispatch `S` / `U` / `T` through their descriptors.
-   Unsupported combinations need the appropriate refusal or a correct fallback, never
-   a raw numeric loop over text cells.
+6. **Handle NumSharp's dtypes where the operation applies.** Include string widths
+   and missing-value policies when resolving text operands. Unsupported combinations
+   need NumPy's refusal or a correct fallback, never a raw numeric loop over text cells.
 7. **Preserve view semantics.** Offset is already in the base pointer; strides
    must handle non-contiguous, negative, and broadcast cases.
 8. **Add NumPy-derived tests** - contiguous, strided, broadcast, empty/scalar,

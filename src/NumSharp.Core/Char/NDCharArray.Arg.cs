@@ -172,12 +172,11 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's <c>chararray.partition(sep)</c>: the STRING partition (<c>np.char.partition</c>: each element split
         ///     around the first <paramref name="sep"/> into three parts), which hides ndarray's in-place sort partition.
-        ///     NumSharp's string partition is a later stage of its string support (<c>np.strings</c>, P2.5).
+        ///     The result adds a final axis of length three for the before, separator and after parts.
         /// </summary>
-        /// <param name="sep">The separator (NumPy converts it to text).</param>
-        /// <returns>Never returns yet.</returns>
-        /// <exception cref="StringComputationNotSupportedException">Always: NumPy computes the partition; NumSharp's
-        ///     <c>np.strings</c> stage that computes it has not landed.</exception>
+        /// <param name="sep">The separator, broadcast against the array's elements.</param>
+        /// <returns>A chararray containing the three parts of each element on its last axis.</returns>
+        /// <exception cref="StringComputationNotSupportedException">The execution path cannot provide a text partition.</exception>
         public NDCharArray partition(object sep) => throw NDStringUfuncs.NextPhase("chararray.partition", this);
 
         /// <summary>

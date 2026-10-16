@@ -33,8 +33,8 @@ pythonnet. **`StringDType` cannot use a raw shared-buffer route**: its cells ref
 The Python bridge copies `T` values through NumPy's C API, preserving `na_object` and `coerce`; it
 also copies an object array containing only Python `str` values into `StringDType()`.
 
-A PyTorch tensor has no text dtype, and the System.Numerics.Tensors bridge accepts only the 15
-unmanaged CLR element types, not packed string storage. File exchange supports all three text
+A PyTorch tensor has no text dtype, and the System.Numerics.Tensors bridge requires unmanaged
+CLR elements rather than packed strings. File exchange supports all three text
 families, with `allow_pickle: true` required to load `T`. See [Text in the Python bridge](pythonnet-numpy.md#how-does-text-cross)
 and [Strings, bytes and chararrays](../fundamentals/strings-and-bytes.md). The raw-pointer contract
 below is not permission to copy `T` cells between unrelated allocators.
@@ -163,7 +163,7 @@ own gates.
 | **Pandas containers** - `DataFrame` / `Series` / `Index` / extension arrays through verified `to_numpy` projections | `NumSharp.Interop.pythonnet` | ✅ when Pandas exposes stable storage; Auto copies otherwise | [Pandas](pandas.md) |
 | **Python buffer consumers** - `torch.frombuffer`, Pillow, Arrow, OpenCV, stdlib | `NumSharp.Interop.pythonnet` | ✅ `memoryview` / PEP 3118 | [Any library via np.frombuffer](np-frombuffer.md) |
 | **Numpy.NET coexistence** - drive real numpy's C# API over NumSharp buffers | + `Numpy.Bare` | ✅ `PyObject` handoff | [Numpy.NET](numpy-net.md) |
-| **System.Numerics.Tensors** - `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; the 15 unmanaged CLR element types cross as themselves (not text); no Python, no native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
+| **System.Numerics.Tensors** - `NDArray` ⇄ `Tensor<T>` / `TensorSpan<T>` / `ReadOnlyTensorSpan<T>` | `NumSharp.Interop.System.Numerics.Tensors` | ✅ `AsTensorSpan` shares **any** non-negative-stride layout (strided/transposed/broadcast); `AsNDArray` views a tensor's buffer; supported dtypes cross as their CLR element type; text is not a tensor-buffer mapping; no Python or native code | [System.Numerics.Tensors](system-numerics-tensors.md) |
 | **`.npy` / `.npz` files** - `np.save` / `np.load`, byte-for-byte identical to NumPy's own writer | `NumSharp` (core) | - files, not memory | [NumPy compliance](../compliance.md#npy-and-npz-interoperability) |
 
 Start with the page whose *consumer* matches yours: numpy code → the pythonnet page; a library
@@ -200,7 +200,7 @@ above applies to it; it has [its own page](openblas.md).
 
 - [Python & numpy (pythonnet)](pythonnet-numpy.md) - the reference bridge: four verbs, layouts,
   lifetime, codec, GIL, dtypes, versions
-- [PyTorch](pytorch.md) - shared CPU tensors, autograd, numeric/Char dtype mappings, layout/device copy boundaries
+- [PyTorch](pytorch.md) - shared CPU tensors, autograd, dtype mappings and layout/device copy boundaries
 - [Pandas](pandas.md) - frames/series/indexes, Copy-on-Write, mixed blocks and extension dtypes
 - [Any library via np.frombuffer](np-frombuffer.md) - the buffer protocol route to libraries that
   never touch numpy

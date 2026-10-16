@@ -107,7 +107,7 @@ var growing = names.astype(np.dtypes.StringDType());  // variable-width UTF-8
 growing[0] = "a much longer label";                   // no fixed-width truncation
 ```
 
-Use `"S8"` for fixed-width byte strings, `"U8"` for eight Unicode code points, or `np.dtypes.StringDType(na_object: null)` for variable-width text with a missing-value sentinel. A C# `'a'` is a **Char code unit**; `"a"` is a **string**. NumPy's legacy `numpy.char` module is **`np.@char`** in C#, and `np.@char.array(...)` creates an `NDCharArray` with whitespace-stripping element access and comparisons. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for the implemented functions and remaining transform APIs.
+Use `"S8"` for fixed-width byte strings, `"U8"` for eight Unicode code points, or `np.dtypes.StringDType(na_object: null)` for variable-width text with a missing-value sentinel. A C# `'a'` is a **Char code unit**; `"a"` is a **string**. NumPy's legacy `numpy.char` module is **`np.@char`** in C#, and `np.@char.array(...)` creates an `NDCharArray` with whitespace-stripping element access and comparisons. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for string operations, missing values and the chararray rules.
 
 ---
 

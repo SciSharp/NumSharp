@@ -579,7 +579,7 @@ html[data-bs-theme="dark"] .ns-bench-dashboard {
       <article class="story-card"><h3>Flags test cases</h3><strong class="metric-good">${number(oracle.flagsOracleRows)}</strong><p>Serialized ndarray flag expectations outside the common operation schema.</p></article>
       <article class="story-card"><h3>Layout test cases</h3><strong class="metric-good">${number(oracle.layoutOracleRows)}</strong><p>Dedicated layout-parity cases outside the common operation schema.</p></article>
       <article class="story-card"><h3>NPY/NPZ test cases</h3><strong class="metric-good">${number(oracle.npyOracleCases)}</strong><p>Byte and file-format test cases from the committed archive manifest.</p></article>
-      <article class="story-card"><h3>String dtype test cases</h3><strong class="metric-good">${number(oracle.stringOracleCases ?? 0)}</strong><p>S/U/StringDType storage, computation, casts, I/O and chararray contracts; ${number(oracle.stringOraclePhase2Cases ?? 0)} are phase-2-tagged cases, not a count of pending implementations. <a href="fundamentals/strings-and-bytes.html#available-text-operations">Current text support</a>.</p></article>
+      <article class="story-card"><h3>String dtype test cases</h3><strong class="metric-good">${number(oracle.stringOracleCases ?? 0)}</strong><p>String storage, operations, casts, I/O, missing values and chararray behavior. <a href="fundamentals/strings-and-bytes.html#computing-on-text">String operations</a>.</p></article>
       <article class="story-card"><h3>Host-pin metadata</h3><strong class="metric-good">${number(oracle.hostPinRecords)}</strong><p>BLAS/platform provenance records; explicitly not counted as replay cases.</p></article>`;
 
     const explorer = {

@@ -49,7 +49,7 @@ var text = names.astype(np.dtypes.StringDType());
 var joined = np.sum(text);                        // 'catdog': concatenation, not numeric addition
 ```
 
-The dtype determines which loops exist. `np.sum(names)` and `np.max(names)` refuse fixed-width strings as NumPy does, while their `T` forms compute. `np.sqrt` has no text loop. `np.equal` does **not** strip whitespace; the legacy `np.@char.equal` function does and has no ufunc `out=` / `where=` parameters. See [Text operations](strings-and-bytes.md#available-text-operations) for the supported families and NA rules.
+The dtype determines which loops exist. `np.sum(names)` and `np.max(names)` refuse fixed-width strings as NumPy does, while their `T` forms compute. `np.sqrt` has no text loop. `np.equal` does **not** strip whitespace; the legacy `np.@char.equal` function does and has no ufunc `out=` / `where=` parameters. See [Computing on text](strings-and-bytes.md#computing-on-text) for the string functions and NA rules.
 
 ---
 
@@ -169,7 +169,7 @@ NDArray r = np.evaluate((NDExpr)a * b + 2);                 // fused a*b+2, one 
 NDArray s = np.evaluate(NDExpr.Sum((NDExpr)a * b));         // fused sum(a*b), no temp
 ```
 
-**Fusion is currently numeric-only.** Text operands (`S`, `U`, `T`) raise `StringComputationNotSupportedException` in `np.evaluate`; use the ordinary text functions above instead.
+`np.evaluate` compiles numerical expressions. For text transformations, use `np.strings` and `np.@char` directly.
 
 This is the NumSharp analog of `numexpr.evaluate` - measured 3–6× faster than the equivalent NumPy chain on large arrays. Per-node dtypes follow the same NEP 50 rules as the individual ufuncs. See [NDIter](../NDIter.md) and the API reference.
 

@@ -46,7 +46,7 @@ Console.WriteLine(a + b);  // [1 3 5 7 9]</code></pre>
       <a class="ns-doc-card" href="docs/dtypes.md">
         <span>Types</span>
         <strong>Dtypes</strong>
-        <p>Numeric and text dtypes, .NET and NumPy mappings, promotion, casting, and SIMD coverage.</p>
+        <p>Supported NumSharp types, .NET and NumPy mappings, promotion, casting, and SIMD coverage.</p>
       </a>
       <a class="ns-doc-card" href="docs/fundamentals/strings-and-bytes.md">
         <span>Text</span>

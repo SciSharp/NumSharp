@@ -231,10 +231,7 @@ storage is appropriate, or `ToTorchNDArray(force: true)` for the safe independen
 
 ## Dtype map
 
-PyTorch 2.13.0 accepts the 15 numeric/Boolean/Char storage types through the mappings below.
-**It does not have a text tensor dtype**: NumSharp's `S`, `U` and `StringDType` arrays are refused by
-`ToTorch`, even though they can cross the [NumPy bridge](pythonnet-numpy.md#how-does-text-cross).
-Tokenize or otherwise encode text into numeric tensors before handing it to a model.
+The NumSharp-to-PyTorch dtype mappings on PyTorch 2.13.0 are:
 
 | NumSharp | NumPy adapter | PyTorch 2.13 |
 |---|---|---|
@@ -248,6 +245,7 @@ Tokenize or otherwise encode text into numeric tensors before handing it to a mo
 | `Single` / `Double` | `float32` / `float64` | `torch.float32` / `torch.float64` |
 | `Complex` | `complex128` | `torch.complex128` |
 | `Decimal` | converted to `float64` | `torch.float64` |
+| `S`, `U`, `StringDType` | supported by the NumPy bridge | no text tensor dtype; `ToTorch` refuses |
 
 `Decimal` is necessarily a conversion: NumPy and PyTorch have no CLR-decimal dtype, so values lose
 precision beyond what IEEE float64 can represent. `Char` is data, not text semantics - PyTorch sees
@@ -295,7 +293,7 @@ case:
 | Non-zero storage offset | first-element pointers agree; logical shape and positive strides survive |
 | F-order / transpose | zero-copy; Torch and NumSharp retain `(1,M)`-style strides |
 | Singleton dimensions | rank and their legal repeated strides survive |
-| All 15 numeric/Boolean/Char dtype boundary values | min/max integers, unsigned maxima, UTF-16 surrogates, signed zero, infinities and NaN payloads round-trip byte-exact; only `Decimal` converts |
+| Supported dtype boundary values | min/max integers, unsigned maxima, UTF-16 surrogates, signed zero, infinities and NaN payloads round-trip byte-exact; only `Decimal` converts |
 | PyTorch `complex64` | cannot be a NumSharp view; `ToTorchNDArray()` copy-widens to `Complex`/complex128 |
 | PyTorch `bfloat16` / float8 | PyTorch's NumPy adapter rejects them; the bridge preserves that directed error |
 | Sparse tensor | rejected with PyTorch's instruction to call `to_dense()` first |
@@ -358,7 +356,7 @@ direction-specific protocol instead of pretending those are the same capability.
 | 1 | The installed PyTorch is at or above the gate floor (2.3), and the version parser survives CUDA/nightly spellings | live `torch.__version__`; `2.12.1+cu126`, `2.14.0a0+git…` parse | [`Runtime_IsAtLeastTheGateFloor_AndTheFloorParserHandlesLocalVersions`][gate] |
 | 2 | A contiguous tensor has NumSharp's exact pointer and shares writes both ways | `data_ptr` equality + mutations | [`NumSharpToTorch_Contiguous_IsZeroCopyAndMutatesBothWays`][gate] |
 | 3 | Positive strides survive NumSharp → Torch | shape `(3,2)`, stride `(4,2)`, skipped columns untouched | [`NumSharpToTorch_PositiveStridedView_PreservesShapeStrideAndStorage`][gate] |
-| 4 | All 15 numeric/Boolean/Char dtypes map on 2.13 | exhaustive dtype table | [`NumSharpToTorch_All15Dtypes_MapOnPyTorch213`][gate] |
+| 4 | The supported dtype mappings hold on 2.13 | exhaustive dtype table | [`NumSharpToTorch_All15Dtypes_MapOnPyTorch213`][gate] |
 | 5 | Negative/read-only layouts cannot enter an unsafe shared tensor | directed rejection; `copy:true` succeeds and detaches | [`NumSharpToTorch_UnsafeLayoutsRequireExplicitCopy`][gate] |
 | 6 | A positive-strided CPU tensor becomes a lifetime-safe NumSharp view | shape/strides + both-way writes + delete-source survival | [`TorchToNumSharp_PositiveStridedCpuTensor_IsZeroCopyAndSurvivesTensorWrapper`][gate] |
 | 7 | Copy and force semantics are detached and autograd-safe | PyTorch rejection without detach; force copy remains unchanged | [`TorchToNumSharp_CopyIsDetached_AndForceHandlesAutogradTensor`][gate] |
@@ -371,7 +369,7 @@ direction-specific protocol instead of pretending those are the same capability.
 |---|---|---|---|
 | 10 | Degenerate and rare NumSharp layouts | scalar, empty, offset, F-order, singleton axes | [`NumSharpShapes_ScalarEmptyOffsetFortranAndSingletonAxes`][gate-edge] |
 | 11 | Degenerate and rare Torch layouts | scalar, empty, transpose, offset, expanded/broadcast | [`TorchShapes_ScalarEmptyTransposeOffsetAndExpanded`][gate-edge] |
-| 12 | Boundary values for all 15 numeric/Boolean/Char dtypes | byte-exact round-trip including NaN payloads and unsigned maxima | [`All15Dtypes_BoundaryValuesRoundTripThroughTorch`][gate-edge] |
+| 12 | Boundary values for the supported dtypes | byte-exact round-trip including NaN payloads and unsigned maxima | [`All15Dtypes_BoundaryValuesRoundTripThroughTorch`][gate-edge] |
 | 13 | Reverse dtype surface | 13 native views; complex64 directed copy-widen | [`TorchDtypes_AllNativelyViewableTypesShare_Complex64CopiesAndWidens`][gate-edge] |
 | 14 | Lazy conjugate/negative state | sharing rejects, force resolves exact values | [`ConjugateAndNegativeBits_RequireForce_ThenResolveExactly`][gate-edge] |
 | 15 | Unsupported tensor families | bfloat16, float8, sparse, quantized, meta directed errors | [`UnsupportedTorchDtypesLayoutsAndDevices_FailWithDirectedPyTorchErrors`][gate-edge] |

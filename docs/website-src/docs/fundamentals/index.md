@@ -39,7 +39,7 @@ If you have written NumPy before, these pages are the fastest way to map that kn
 NumSharp's goal is that ported NumPy code behaves identically. So each article follows its NumPy source closely - same concepts, same section order, the same worked examples - but:
 
 - **Code is C#, not Python.** `np.zeros((2, 3))`, `arr["1:3, :2"]`, `arr.astype(np.float64)`. Python slice literals (`a[1:5:2]`) become **strings** in C# (`a["1:5:2"]`) because C# has no slice syntax - see [Indexing](indexing.md).
-- **Text is array data too.** Alongside its 15 numeric/Boolean/Char storage types, NumSharp supports NumPy's `S`, `U` and `StringDType` text families. A descriptor carries the width or missing-value policy; `Char` remains a separate UTF-16 code-unit type. Object, void and structured arrays, native `complex64` storage and datetime/timedelta storage are still outside the supported array types. Each article distinguishes implemented behavior from the remaining gaps.
+- **NumSharp's dtypes follow NumPy's model.** Arrays can hold numbers, Unicode strings, byte strings or variable-width `StringDType` text; `Decimal` and `Char` add .NET-specific choices. Object, void and structured arrays, native `complex64` storage and datetime/timedelta storage are not represented. Each article explains the relevant rules and alternatives.
 - **Divergences are documented, never silent.** Where NumSharp cannot match NumPy exactly (e.g. a C# `int[]` is a *strong* array that wraps on downcast, where a Python list is *weak* and raises), the article flags it. Behavioral differences are gated in the test suite under the `Misaligned` category.
 
 ---

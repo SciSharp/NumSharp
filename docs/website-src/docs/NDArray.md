@@ -68,7 +68,7 @@ NDArray d = NDArray.Scalar(100.123m);    // 0-d decimal
 NDArray e = NDArray.Scalar<long>(1);     // 0-d with explicit dtype
 ```
 
-Implicit scalar → NDArray exists for the 15 numeric/Boolean/Char types (`bool, sbyte, byte, short, ushort, int, uint, long, ulong, char, Half, float, double, decimal, Complex`) **and for C# strings**: `NDArray label = "cat"` is a 0-d `U3` text array. It does not parse numbers or split the string into chars. Use `NDArray.Scalar<T>(value)` to pin a numeric CLR type.
+Implicit scalar → NDArray conversions are available for `bool`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `char`, `Half`, `float`, `double`, `decimal`, `Complex` and `string`. `NDArray label = "cat"` is a 0-d `U3` array; `NDArray.Scalar<short>(1)` pins an integer value to `int16`.
 
 ### Text is array data
 
@@ -462,7 +462,7 @@ foreach (Span<double> chunk in np.nditer_chunks<double>(a, writeable: true))
 
 Measured on 100K `float64` (Release, best-of-9): `np.nditer<T>` **0.167 ms**, `np.nditer_chunks<T>` **0.162 ms**, chunks + `Vector<T>` **0.027 ms** - against **59 ms** for the boxed `np.nditer` `it[0]` loop and a 0.047 ms raw-pointer floor.
 
-Both support the 15 unmanaged CLR element types, with the layout constraints below. They do **not** expose string arrays as `ref string` / `Span<string>`; use `item()`, `tolist()`, ordinary iteration or `np.nditer` (`refs_ok` for `StringDType`). Three things to know:
+These overloads require an unmanaged CLR element type. For string values, use `item()`, `tolist()`, ordinary iteration or `np.nditer` (`refs_ok` for `StringDType`). Three things to know:
 
 - **`T` must be the array's exact dtype** - a `ref` cannot convert, so `np.nditer<double>` on an `int32` array throws rather than reinterpreting the bytes. `astype` first.
 - **Order is `'K'` (memory order)**, matching `np.nditer`. On a reversed view that is not the logical order - pass `order: 'C'` if you need the order `np.ndenumerate` uses.
@@ -701,8 +701,8 @@ C# compound assignment reassigns the variable; it doesn't mutate. See [Compound 
 
 | Direction | Kind | Notes |
 |-----------|------|-------|
-| scalar → `NDArray` | implicit | The 15 numeric/Boolean/Char types and `string` (a 0-d `U` value) |
-| `NDArray` → scalar | explicit | same 15 types + `string` - 0-d required; complex → non-complex throws `TypeError` |
+| scalar → `NDArray` | implicit | `bool`, `sbyte`, `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `char`, `Half`, `float`, `double`, `decimal`, `Complex`, `string` |
+| `NDArray` → scalar | explicit | Numeric values and `string`; use `item()` for `S` byte strings or a StringDType NA object; complex → non-complex throws `TypeError` |
 
 ### Persistence & Buffers
 
