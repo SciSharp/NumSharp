@@ -97,7 +97,7 @@ resolution (the operands' common NA object, the first operand's `coerce`; a `T` 
 out receives the default `StringDType()` through the output cast, so an NA is `''` in a `U` out). Code:
 `Backends/Strings/NDVString{Cells,Comparison,Arithmetic,Reduction,Statistics}.cs` + `ILKernelGenerator.Text.VString.cs`
 (IL kernels over NDIter). Design rules: two short cells compare INSIDE their cells as a masked 128-bit big-endian key, no
-branch on the data; a pair outside its cells decides by the first eight bytes inline; everything else is out of line
+branch on the data (one vector compare first sends a text holding a NUL to the strncmp path: see "Phase 2 validated" below); a pair outside its cells decides by the first eight bytes inline; everything else is out of line
 (`ComparePairSlow`, `NoInlining` arena forms: inlined beside the short forms they made the JIT spill registers on every
 element); the truth readers read only byte 15 and the size field (four cells a step on AVX2); a fresh output reserves its
 arena ONCE from a size pass and appends at the cursor (`VStringAllocator.AppendFresh`); `maximum` / `minimum` reserve the
@@ -132,6 +132,39 @@ for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 N
 `tma` cases strict), `StringDTypeOrderTests` (24). Benchmark: 168 cells 1.8–32× NumPy, geomean 7.8×. Left: the
 `np.strings` functions beyond `add` / `multiply` (P2.5 / P2.6) and 8 `NextPhase` sites: 7 of P2.7, and numpy.char
 phase 3's `chararray.partition(sep)` (the string partition, P2.5; its 22 oracle cases are the only deferred ones).
+**Phase 2 validated against a randomized NumPy soak (2026-10-16, `b57c3e8b`; plan state log).** `test/oracle/soak_strings_oracle.py`
+draws fresh random cases for every family phase 2 computes (the sorts and partitions, `np.lexsort`, the searches,
+`np.unique` and its Array-API forms, `np.isin` and the set routines, `np.sort_complex`, the histograms, the quantile
+family, the `T` comparisons / arithmetic / truth readers / reductions, numpy.ma) over `S` / `U` / `T` in 25 random
+layouts with random NA kinds and texts holding NULs, non-ASCII and arena / heap sizes; `StringOracleTests.StringSoak`
+replays the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names (Inconclusive when unset; the corpora are not committed).
+77,824 cases over 10 seeds (21,458 NumPy errors) match NumPy 2.4.2; the first run diverged on 381 of 15,604. Findings:
+- **`NpyString_cmp` is strncmp** over the shorter size, then the sizes: a NUL both texts share ENDS the byte comparison
+  (`'a\0c' == 'a\0b'`, `'a\0c' < 'a\0bb'`, `'a\0' < 'ab'`), and every `T` comparison, sort, search, extreme, set routine
+  and order statistic inherits it (297 of the 381). `U` compares every code point. `NDVStringCells.Order` /
+  `StrncmpStop` (32 / 16 bytes a step, `~(a == b) | (a == 0)`); the fast paths test for a NUL only where it can change
+  the answer — `Equal` only for a pair of one size whose bytes differ, `Less` / the 128-bit key one vector compare per
+  short pair (`ShortHasNul`), `TryFirstWord` via `WordHasNul`; `VStringSort` keys on each text's comparison prefix
+  (`NulLengthInPlace`); `VStringDistinct` drops duplicates by byte content inside each strncmp-equal run. Cost 1.02–1.19×
+  the previous build; every measured cell stays ≥ 1.97× NumPy (a scalar zero-byte test on every pair cost up to 1.65×).
+- **Fixed:** `np.searchsorted`'s descriptor is `PyArray_PromoteTypes(keys, haystack)` (keys FIRST: the first operand's
+  `coerce`); a `T` comparison with `where=` into an out of another dtype computes its bool temporary under the mask (a
+  masked-off `None` NA raised); a masked `T` reduction's result layout lets the `where=` mask vote
+  (`Shape.ReductionOutputShape(dims, input, axis, where)`); the nan forms remove NaN-like NAs in `_remove_nan_1d`'s
+  order (`RemoveNaN1D` — the partition keeps tied texts in arrival order); numeric `np.isin`'s empty answers are views;
+  numpy.ma `filled()` of a `coerce=False` array with a number raises, and its set routines' unique stand-in raises a
+  `None` NA first; `np.array_equal` / `np.array_equiv` compute over `T`.
+- **Quantile family (numbers too):** a 2-d `q` is kept (rank 3+ raises after the axis checks); all-NaN data answers
+  `np.full(q.shape, nan)` in the data's dtype and an all-NaN FIRST slice makes the result the data's dtype;
+  `np.nanquantile` takes the element for an integer `q` and reads an array `q` as a strong float64 weight; new overloads
+  (an array `q` with a tuple axis; a Python-int `q`); the method name is checked where `_quantile` reads it.
+- **TRAPS:** NumPy 2.4.2 bugs the generator avoids (pinned `[Misaligned]`): the `T` → complex cast writes the real part
+  into the imaginary part, `np.histogram` over `T` data searches with the keys' allocator, `np.argsort(view, axis=None)`
+  of a non-contiguous `T` view holding an arena text misorders (that call only), an empty text times a negative count
+  hangs. NumPy's values-only `np.unique` hashes the FULL bytes and sorts unstably, so two strncmp-equal texts survive
+  in an order the C++ library picks: the soak's `TieExcuse` accepts an element that compares EQUAL to NumPy's. The
+  harness rebuilds a 1-D view of a whole base as the base (OWNDATA), so the generator never builds one. Open:
+  `float16` / `float32` `q` arrays (NumPy computes in `q`'s precision) and the `weights` parameter.
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
