@@ -22,6 +22,7 @@ namespace NumSharp.Tests.Backends.Unmanaged
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public unsafe void GcDoesntCollectArraySliceAlone()
         {
             //this test should be churned.

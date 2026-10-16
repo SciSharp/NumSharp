@@ -22,6 +22,7 @@ namespace NumSharp.Tests.Backends
     ///     <c>NumSharp.Tests.Interop</c>.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class LapackEigTests
     {
         private const double Tol = 1e-9;

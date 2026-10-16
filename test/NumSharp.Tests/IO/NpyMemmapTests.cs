@@ -19,6 +19,7 @@ namespace NumSharp.Tests.IO
     ///     the fallback where a test can SEE the file is still held.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
     public class NpyMemmapTests
     {
         private string _dir;

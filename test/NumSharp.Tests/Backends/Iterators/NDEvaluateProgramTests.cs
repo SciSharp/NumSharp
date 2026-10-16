@@ -67,6 +67,7 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
+        [DoNotParallelize] // reads/resizes the process-wide NDExpr program cache and counts the kernel cache
         public void StructuralCache_RebuiltTree_HitsTheProgram_WithoutABindOrTypingPass()
         {
             var a = Vec(1, 2, 3, 4);
@@ -143,6 +144,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // reads/resizes the process-wide NDExpr program cache and counts the kernel cache
         public void StructuralCache_IsBounded_AndClearsWhenFull()
         {
             int capacity = NDExprProgramCache.Capacity;
@@ -211,6 +213,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void Call_SameDelegateInstanceRebuiltPerCall_KeepsOneSlotAndOneKernel()
         {
             var x = Vec(1, 2, 3, 4);
@@ -491,6 +494,7 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void ParameterForm_ZeroDOperand_ServesEveryConstantWithOneKernel()
         {
             var a = Vec(1, 2, 3, 4, 5, 6, 7, 8);

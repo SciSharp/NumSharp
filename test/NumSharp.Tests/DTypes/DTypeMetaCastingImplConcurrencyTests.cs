@@ -17,6 +17,7 @@ namespace NumSharp.Tests.DTypes
     ///     the casts registered on it leave the builtin classes' tables, which every other test shares, untouched.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
     public class DTypeMetaCastingImplConcurrencyTests
     {
         /// <summary>

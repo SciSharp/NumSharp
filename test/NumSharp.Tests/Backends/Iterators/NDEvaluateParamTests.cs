@@ -44,6 +44,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void OneKernel_ForEveryValue_AndTheStructuralCacheKeysOnTheMask()
         {
             var a = Vec(1, 2, 3, 4, 5, 6, 7, 8);

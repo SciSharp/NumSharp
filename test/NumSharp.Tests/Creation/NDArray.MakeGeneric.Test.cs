@@ -83,6 +83,7 @@ namespace NumSharp.Tests.Creation
         ///     after the source NDArray is disposed and finalized (no use-after-free).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void MakeGeneric_AliasOutlivesDisposedSource()
         {
             // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with
@@ -103,6 +104,7 @@ namespace NumSharp.Tests.Creation
         ///     Disposing the alias must NOT free the buffer out from under the still-live source.
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void MakeGeneric_DisposingAlias_LeavesSourceValid()
         {
             // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with

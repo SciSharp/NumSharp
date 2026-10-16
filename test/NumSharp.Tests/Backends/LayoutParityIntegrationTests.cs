@@ -147,6 +147,7 @@ namespace NumSharp.Tests.Backends
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void ReshapeView_SurvivesSourceWrapperCollection()
         {
             // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with

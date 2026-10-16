@@ -22,6 +22,7 @@ namespace NumSharp.Tests.Polynomial
     ///     parity is the host-pinned <c>PolyrootsParity</c> oracle tier); everything before LAPACK is asserted bit for bit.
     /// </remarks>
     [TestClass]
+    [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
     public class PolynomialRootsTests
     {
         /// <summary>One basis's companion / roots pair plus what NumPy's tests build them from.</summary>

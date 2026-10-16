@@ -13,6 +13,7 @@ namespace NumSharp.Tests.Matrixlib
     ///     same call. The differential gate with 26,000 cases is <c>FuzzCorpusTests.Matrix</c>.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // flips NDMatrix's process-wide scaling-route hooks and reads their counters
     public class NDMatrixTests
     {
         /// <summary>The 2 x 2 integer array NumPy's tests build most matrices from.</summary>

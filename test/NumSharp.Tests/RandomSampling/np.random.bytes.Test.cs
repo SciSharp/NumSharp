@@ -9,6 +9,7 @@ namespace NumSharp.Tests.RandomSampling
     ///     can exceed 2 GiB, matching NumPy's 64-bit <c>npy_intp</c> length.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // seeds the global np.random singleton and expects its stream
     public class NpRandomBytesTest
     {
         // Mirrors AssertInts in np.random.default_rng.Test.cs: asserts a 1-D uint8 array's bytes.

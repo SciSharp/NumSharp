@@ -235,6 +235,7 @@ namespace NumSharp.Tests.Documentation
         // ── Generating random numbers ────────────────────────────────────────────────────────────────
 
         [TestMethod]
+        [DoNotParallelize] // seeds the global np.random singleton and expects its stream
         public void Random_SeededDeterministic()
         {
             np.random.seed(42);

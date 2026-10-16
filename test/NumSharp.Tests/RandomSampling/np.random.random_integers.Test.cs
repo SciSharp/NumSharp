@@ -9,6 +9,7 @@ namespace NumSharp.Tests.RandomSampling
     ///     Windows NumPy's long is int32, with the same values wherever both accept the bounds).
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // seeds the global np.random singleton and expects its stream
     public class NpRandomRandomIntegersTest
     {
         [TestMethod]

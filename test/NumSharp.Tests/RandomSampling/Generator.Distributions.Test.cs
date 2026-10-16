@@ -941,6 +941,7 @@ namespace NumSharp.Tests.RandomSampling
         [DataRow("empty", "ERR ValueError: cannot reshape array of size 0 into shape (0)")]
         [DataRow("after raise", "0.09417734788764953")]
         [DataRow("after cholesky failure", "0.09417734788764953")]
+        [DoNotParallelize] // binds the process-wide OpenBLAS backend (TensorEngine.Blas)
         public void MultivariateNormal_WithLapackBackend_ByteIdenticalToNumPy(string probe, string expected)
         {
             try

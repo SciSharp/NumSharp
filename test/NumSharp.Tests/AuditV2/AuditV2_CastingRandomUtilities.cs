@@ -96,6 +96,7 @@ public class AuditV2_CastingRandomUtilities
     //   np.random.randint(-10, -1, 3) which NumPy returns e.g. [-4, -7, -3].
     // -----------------------------------------------------------------------
     [TestMethod]
+    [DoNotParallelize] // seeds the global np.random singleton and expects its stream
     public void T1_31_Randint_NegativeOneHigh_TreatedAsSentinel()
     {
         np.random.seed(42);
@@ -255,6 +256,7 @@ public class AuditV2_CastingRandomUtilities
     //   contiguous path on a half-true int32 mask.
     // -----------------------------------------------------------------------
     [TestMethod]
+    [DoNotParallelize] // asserts wall-clock time
     public void T1_58_BooleanMask_Fallback_PerElement_MemoryCopy()
     {
         const int N = 100_000;

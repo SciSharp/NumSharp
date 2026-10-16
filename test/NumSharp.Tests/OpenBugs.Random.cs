@@ -23,6 +23,7 @@ namespace NumSharp.Tests
     ///     </code>
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // seeds the global np.random singleton and expects its stream
     public class OpenBugsRandom : TestClass
     {
         /// <summary>

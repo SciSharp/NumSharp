@@ -41,6 +41,7 @@ namespace NumSharp.Tests.Documentation
         }
 
         [TestMethod]
+        [DoNotParallelize] // flips the process-wide np.multithreading switch
         public void Multithreading_Toggle()
         {
             // Enable then disable so the global setting is left off for other tests.

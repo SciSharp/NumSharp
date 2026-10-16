@@ -111,6 +111,7 @@ namespace NumSharp.Tests.Creation
         }
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void View_Survives_Source_Dispose()
         {
             // Built after this epoch, so CollectSince decides these objects' fate as a full collection would, with

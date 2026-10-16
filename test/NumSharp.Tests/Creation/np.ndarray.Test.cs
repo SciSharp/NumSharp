@@ -472,6 +472,7 @@ namespace NumSharp.Tests.Creation
         /// <summary>A managed array stays pinned only while an array over it lives: once the result is disposed the
         ///     array is collectable (a pin is a strong root, so a leaked pin keeps it alive).</summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void ManagedArrayPin_IsReleasedWithTheResult()
         {
             GcQuiescence.WaitCollected(WrapAndDispose()).Should().BeTrue("disposing the result frees the pin");
@@ -488,6 +489,7 @@ namespace NumSharp.Tests.Creation
 
         /// <summary>A result that is never disposed releases the pin when it is collected.</summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void ManagedArrayPin_IsReleasedWhenTheResultIsCollected()
         {
             GcQuiescence.WaitCollected(WrapAndDrop()).Should().BeTrue("the finalizers release the pin");
@@ -505,6 +507,7 @@ namespace NumSharp.Tests.Creation
         /// <summary>A call that fails after the buffer was pinned (here: a bad order, checked after the buffer) frees the
         ///     pin at once.</summary>
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void ManagedArrayPin_IsReleasedWhenTheCallFails()
         {
             GcQuiescence.WaitCollected(FailAfterPinning()).Should().BeTrue("the failed call releases its pin");

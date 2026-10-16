@@ -1030,6 +1030,7 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void Cache_DistinctExpressionsProduceDistinctKernels()
         {
             GeneratedDelegates.ClearInnerLoop();
@@ -1054,6 +1055,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void Cache_SameExpressionReusesKernel()
         {
             GeneratedDelegates.ClearInnerLoop();
@@ -1332,6 +1334,7 @@ namespace NumSharp.Tests.Backends.Iterators
         // =====================================================================
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void AutoKey_EquivalentExpressionsShareKernel()
         {
             GeneratedDelegates.ClearInnerLoop();
@@ -1359,6 +1362,7 @@ namespace NumSharp.Tests.Backends.Iterators
         }
 
         [TestMethod]
+        [DoNotParallelize] // counts the process-wide inner-loop kernel cache, which other tests' work grows
         public void AutoKey_DifferentConstantsProduceDifferentKernels()
         {
             GeneratedDelegates.ClearInnerLoop();

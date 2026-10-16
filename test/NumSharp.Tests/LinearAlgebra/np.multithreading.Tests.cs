@@ -8,6 +8,7 @@ namespace NumSharp.Tests.LinearAlgebra
     /// (small dots never parallelize, so the blast radius is already nil).
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // flips the process-wide np.multithreading switch
     public class np_multithreading_test : TestClass
     {
         [TestMethod]

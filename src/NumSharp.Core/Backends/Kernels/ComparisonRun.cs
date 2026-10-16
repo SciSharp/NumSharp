@@ -195,38 +195,54 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         ///     Test and measurement hook: when true, <see cref="Get"/> answers null for every pair, so every comparison
-        ///     takes the routes it took before this class existed (the per-element kernels and the iterator). It is a
-        ///     process-wide switch read on every comparison call; set it only from single-threaded test code and
-        ///     restore it in a <c>finally</c>.
+        ///     takes the routes it took before this class existed (the per-element kernels and the iterator). Set it
+        ///     from test code only and restore it in a <c>finally</c>.
         /// </summary>
+        /// <remarks>
+        ///     Deliberately PROCESS-WIDE, unlike the four route hooks below: it is read on every comparison call, where a
+        ///     <c>[ThreadStatic]</c> read would add a thread-local lookup to the hot path. Flipping it changes no
+        ///     comparison's RESULT (the former routes compute the same bytes; that equality is what the test holding it
+        ///     checks), but it does change which route a concurrent call takes, so a test that asserts routes would see
+        ///     it: the test that flips it is <c>[DoNotParallelize]</c> and runs after the parallel tests.
+        /// </remarks>
         internal static bool Disabled;
 
         /// <summary>
         ///     Test and measurement hook: when true, <see cref="RunRows"/> stages a tiled operand one row at a time,
-        ///     as it did before <see cref="RunTiles"/> existed. The results are the same bytes. Process-wide; set it
-        ///     only from single-threaded test code and restore it in a <c>finally</c>.
+        ///     as it did before <see cref="RunTiles"/> existed. The results are the same bytes. Set it from test code only
+        ///     and restore it in a <c>finally</c>.
         /// </summary>
-        internal static bool TilesDisabled;
+        /// <remarks>
+        ///     <c>[ThreadStatic]</c>: tests run in parallel, and a test proves which route its OWN calls took
+        ///     (<see cref="TileRuns"/>), so another thread's switch must neither re-route those calls nor be re-routed by
+        ///     them. Read once per <see cref="RunRows"/> call, never per element.
+        /// </remarks>
+        [ThreadStatic] internal static bool TilesDisabled;
 
         /// <summary>
         ///     Test and measurement hook: when true, <see cref="RunRows"/> compares a matrix against one row with one
-        ///     kernel call a row (and <see cref="RepeatsRow"/> answers false). The results are the same bytes.
-        ///     Process-wide; set it only from single-threaded test code and restore it in a <c>finally</c>.
+        ///     kernel call a row (and <see cref="RepeatsRow"/> answers false). The results are the same bytes. Set it from
+        ///     test code only and restore it in a <c>finally</c>.
         /// </summary>
-        internal static bool RepeatedRowDisabled;
+        /// <remarks><c>[ThreadStatic]</c> for the reason <see cref="TilesDisabled"/> gives; read once per row decision.</remarks>
+        [ThreadStatic] internal static bool RepeatedRowDisabled;
 
         /// <summary>
-        ///     Test hook: calls of <see cref="RunRows"/> that ran tile by tile (<see cref="RunTiles"/>) since the
-        ///     process started. A plain counter, not synchronized: tests read the difference around calls they make
-        ///     on one thread, and a lost increment under concurrent comparisons changes nothing else.
+        ///     Test hook: calls of <see cref="RunRows"/> on the CALLING THREAD that ran tile by tile
+        ///     (<see cref="RunTiles"/>) since the thread started. Tests read the difference around calls they make.
         /// </summary>
-        internal static long TileRuns;
+        /// <remarks>
+        ///     <c>[ThreadStatic]</c>: tests run in parallel, and a process-wide count would also move with every other
+        ///     test's tiled comparisons, breaking the exact differences the route tests assert. It also keeps the
+        ///     increment off a cache line other threads write.
+        /// </remarks>
+        [ThreadStatic] internal static long TileRuns;
 
         /// <summary>
-        ///     Test hook: calls of <see cref="RunRows"/> that compared a matrix against one repeated row
-        ///     (<see cref="RunRepeatedRow"/>). See <see cref="TileRuns"/> for its limits.
+        ///     Test hook: calls of <see cref="RunRows"/> on the calling thread that compared a matrix against one repeated
+        ///     row (<see cref="RunRepeatedRow"/>). Per thread, for the reason <see cref="TileRuns"/> gives.
         /// </summary>
-        internal static long RepeatedRowRuns;
+        [ThreadStatic] internal static long RepeatedRowRuns;
 
         /// <summary>
         ///     The run for <paramref name="op"/> over the dtype pair, or null when this host cannot serve it (runtime

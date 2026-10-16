@@ -402,8 +402,11 @@ namespace NumSharp.Tests.Collections
         /// <summary>Arms <paramref name="threads" /> shooters on one gate, fires them together, joins, and rethrows every failure.</summary>
         /// <param name="threads">Shooter count.</param>
         /// <param name="body">Per-thread workload; receives the 0-based thread id.</param>
+        /// <param name="onFire">Runs once every shooter is armed, right before the gate opens; a wall-clock window
+        ///     starts here, so the time spent creating and starting the threads (which grows on a loaded machine) is
+        ///     not taken out of the racing time. The shooters see its writes (opening the gate publishes them).</param>
         /// <exception cref="AggregateException">One or more shooters threw.</exception>
-        private static void FireGun(int threads, Action<int> body)
+        private static void FireGun(int threads, Action<int> body, Action onFire = null)
         {
             using var go = new ManualResetEventSlim(false);
             using var ready = new CountdownEvent(threads);
@@ -433,6 +436,7 @@ namespace NumSharp.Tests.Collections
             }
 
             ready.Wait();
+            onFire?.Invoke();
             go.Set();
             foreach (Thread s in shooters)
             {
@@ -475,10 +479,12 @@ namespace NumSharp.Tests.Collections
             int pinnedCounter = 1_000_000;
             int movedCandidate = 0;
             long wrongPair = 0, absent = 0, torn = 0, hits = 0;
-            var stopAt = DateTime.UtcNow.AddMilliseconds(milliseconds);
+            // The window opens when the gun fires (onFire below), not before the shooters exist: on a loaded host the
+            // thread starts alone could eat a 250 ms window and leave the readers no time (0 hits, a vacuous run).
+            var stopAt = DateTime.MaxValue;
             int threads = GunThreads;
 
-            FireGun(threads, id =>
+            FireGun(threads, onFire: () => stopAt = DateTime.UtcNow.AddMilliseconds(milliseconds), body: id =>
             {
                 var rng = new System.Random(101 + id);
                 if (id == 0)

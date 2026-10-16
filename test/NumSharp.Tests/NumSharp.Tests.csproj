@@ -21,7 +21,30 @@
          NumSharp.Tests.Build.Analyzer 23.9 s -> 20.7 s. Tier-1 code only loses PGO-guided layout and guarded
          devirtualization; no test asserts steady-state speed tightly enough to notice. -->
     <TieredPGO>false</TieredPGO>
+    <!-- GC posture for this TEST HOST: the server GC with EIGHT heaps (testhost reads this project's
+         runtimeconfig.json; the product and its consumers are untouched). The tests run in parallel
+         (Utilities/TestParallelization.cs), and with the workstation GC every allocating thread contends for the
+         one heap's allocation and finalization locks. Measured 2026-10-16 on an i9-13900K (32 logical CPUs), a
+         24-thread np.zeros/Dispose + small-op churn followed by 400 forced young collections (the GcQuiescence
+         pattern of the [DoNotParallelize] tests, which run alone afterwards):
+           workstation          churn 3,837 ms   young GC 0.13 ms
+           server, default      churn   937 ms   young GC 4.95 ms  (DATAS; every collection wakes ~32 GC threads)
+           server, 8 heaps      churn   523 ms   young GC 0.40 ms
+           server, 4 heaps      churn   666 ms   young GC 0.24 ms
+           server, 16 heaps     churn   672 ms   young GC 0.97 ms
+         Eight heaps is fastest for the parallel phase and keeps the serial phase's 800+ forced collections
+         cheap; the runtime clamps the count to the processors the host has, so a 4-CPU CI runner gets 4. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <!-- The run settings `dotnet test`, Visual Studio and Rider apply to this project: VSTest's result batching,
+         without which the parallel run (Utilities/TestParallelization.cs) waits on the host's reporting lock. The
+         file explains the setting and its measurement. -->
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)NumSharp.Tests.runsettings</RunSettingsFilePath>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- See the GC posture note above: the server GC's heap count, fixed (a fixed count also turns DATAS off). -->
+    <RuntimeHostConfigurationOption Include="System.GC.HeapCount" Value="8" />
+  </ItemGroup>
 	
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <DocumentationFile />

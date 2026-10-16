@@ -949,6 +949,7 @@ namespace NumSharp.Tests.RandomSampling
         ///     (Philox's block buffer and every engine's buffered 32-bit half would tear without the lock).
         /// </summary>
         [TestMethod]
+        [DoNotParallelize] // a race test calibrated to run alone: its threads must own the cores to overlap
         public void SharedNewGenerators_ConcurrentDraws_ConsumeTheSequentialStream()
         {
             foreach (Func<BitGenerator> make in new Func<BitGenerator>[] { () => new Philox(7), () => new SFC64(7), () => new PCG64DXSM(7) })

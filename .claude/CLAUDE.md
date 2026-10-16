@@ -5096,10 +5096,33 @@ dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v
 dotnet test --no-build -v normal
 ```
 
-### Keeping the suite fast (2026-09-24: NumSharp.Tests 262 s → ~24 s, Oracle 37 s → 12 s per framework, local)
+### Keeping the suite fast (2026-09-24: NumSharp.Tests 262 s → ~24 s, Oracle 37 s → 12 s per framework, local; 2026-10-16: NumSharp.Tests runs in parallel, 108 → 22-27 s net10.0, 117 → 22-28 s net8.0, Release)
 
-MSTest runs the ~16K tests **serially**, so a handful of slow tests set the wall time. The rules came out
-of finding them (the diagnosis, per-test numbers and mutation checks are in commit messages / the files):
+NumSharp.Tests runs its tests **in parallel, one test per worker** (`Utilities/TestParallelization.cs`:
+`[assembly: Parallelize(Workers = 0, Scope = ExecutionScope.MethodLevel)]`), then every `[DoNotParallelize]` test
+alone (~10 s of the run); `-- MSTest.Parallelize.Workers=1` on the `dotnet test` line runs it serially. The other
+test projects (Oracle, Interop, Analyzer) still run serially, so a handful of slow tests set their wall time. The
+rules came out of finding them (the diagnosis, per-test numbers and mutation checks are in commit messages / the files):
+
+- **A test that touches process-wide state carries `[DoNotParallelize]`** (the full list and the reasons are on
+  `TestParallelization`): process-wide counters (pool takes/returns, `GC.CollectionCount`, kernel/program cache
+  sizes), forced collections (one suspends every worker), `OpenBlasEngine.Enable`/`Disable` (`TensorEngine.Blas`),
+  environment variables, `Console.SetOut`, `np.multithreading`, `np.ma.masked_print_option`, a non-`[ThreadStatic]`
+  engine hook (`ComparisonRun.Disabled`, `DefaultEngine.CastLoopBlockElements`,
+  `DirectILKernelGenerator.ClipStreamingOverride`), the GLOBAL `np.random` when the test expects its stream (seed a
+  private `np.random.RandomState(seed)` instead: the same stream, nothing to opt out of), a wall-clock assertion
+  (measure the FASTEST of several batches), and a race test calibrated to own the cores. Method level means a sibling
+  test of the SAME class runs concurrently too. A new engine test hook is `[ThreadStatic]`: a bool or counter starts
+  false/0 on every thread, but a `[ThreadStatic]` field's initializer runs on ONE thread only, so a hook with another
+  default needs a separate override field. A raw pointer (`.Address`) does not root its array: keep the array alive
+  (`GC.KeepAlive`) past the pointer's last read; the parallel run's GC traffic turned that into wrong values. Two
+  host settings carry the speed: `NumSharp.Tests.runsettings` (via `RunSettingsFilePath`) batches results
+  (`BatchSize` 1000: at VSTest's default 10 the host serialized every in-progress test on every test start and
+  result, with a lock held, and half the workers waited on it), and the csproj runs the server GC with 8 heaps.
+  The parallel phase is CPU-bound (~230 CPU s against ~170 serial; JIT ~40 s and the collection storms ~53 s of the
+  serial run), and its queue follows the compiler's class order (namespaces reverse-alphabetical, so `Backends`
+  comes last). **Measuring:** other load on the machine moves a run by ±3 s, so compare interleaved runs; a TRX
+  (`--logger trx`) has each test's start and end, which separates the parallel and serial phases.
 
 - **Never force a FULL GC per measurement.** A forced full collection marks the whole live heap, and in a
   full run that heap is mostly MSTest's per-test bookkeeping (~120 MiB → ~78 ms per

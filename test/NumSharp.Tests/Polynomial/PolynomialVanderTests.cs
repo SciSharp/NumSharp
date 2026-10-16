@@ -136,17 +136,17 @@ namespace NumSharp.Tests.Polynomial
         [TestMethod]
         public void Vander2dVander3d_TimesFlatCoefficients_AreVal2dVal3d_NumPyTestVander()
         {
-            np.random.seed(7);
-            var x = np.random.random(new Shape(3, 5)) * 2 - 1;
+            var rng = np.random.RandomState(7); // a private stream: the global np.random is shared by the tests running in parallel
+            var x = rng.random(new Shape(3, 5)) * 2 - 1;
             NDArray x1 = x["0"], x2 = x["1"], x3 = x["2"];
             foreach (var b in Bases)
             {
-                var c = np.random.random(new Shape(2, 3));
+                var c = rng.random(new Shape(2, 3));
                 var van = b.Vander2d(x1, x2, new[] { 1, 2 });
                 AlmostEqual(np.dot(van, c.flat), b.Val2d(x1, x2, c), $"{b.Name}vander2d");
                 b.Vander2d(new object[] { x1 }, new object[] { x2 }, new[] { 1, 2 }).shape.Should().Equal(new long[] { 1, 5, 6 }, b.Name);
 
-                var c3 = np.random.random(new Shape(2, 3, 4));
+                var c3 = rng.random(new Shape(2, 3, 4));
                 var van3 = b.Vander3d(x1, x2, x3, new[] { 1, 2, 3 });
                 AlmostEqual(np.dot(van3, c3.flat), b.Val3d(x1, x2, x3, c3), $"{b.Name}vander3d");
                 b.Vander3d(new object[] { x1 }, new object[] { x2 }, new object[] { x3 }, new[] { 1, 2, 3 }).shape
@@ -496,14 +496,14 @@ namespace NumSharp.Tests.Polynomial
         [TestMethod]
         public void Kernels_ForcedSmallBlocks_AgreeWithTheDefault()
         {
-            np.random.seed(11);
+            var rng = np.random.RandomState(11); // a private stream: the global np.random is shared by the tests running in parallel
             var xs = new[]
             {
-                np.random.random(new Shape(53)) * 3 - 1.5,
-                (np.random.random(new Shape(53)) * 3 - 1.5).astype(np.float32),
-                (np.random.random(new Shape(53)) * 3 - 1.5).astype(np.float16),
-                np.random.random(new Shape(53)) * 2 - 1 + np.random.random(new Shape(53)).astype(np.complex128) * new Complex(0, 1),
-                (np.random.random(new Shape(53)) * 20 - 10).astype(np.int32),
+                rng.random(new Shape(53)) * 3 - 1.5,
+                (rng.random(new Shape(53)) * 3 - 1.5).astype(np.float32),
+                (rng.random(new Shape(53)) * 3 - 1.5).astype(np.float16),
+                rng.random(new Shape(53)) * 2 - 1 + rng.random(new Shape(53)).astype(np.complex128) * new Complex(0, 1),
+                (rng.random(new Shape(53)) * 20 - 10).astype(np.int32),
             };
             foreach (var b in Bases)
             {
@@ -540,17 +540,17 @@ namespace NumSharp.Tests.Polynomial
         [TestMethod]
         public void Kernels_NonTemporalProduct_WritesTheNormalStoresBytes()
         {
-            np.random.seed(12);
+            var rng = np.random.RandomState(12); // a private stream: the global np.random is shared by the tests running in parallel
             foreach (int n in new[] { 1, 2, 3, 5, 7, 9, 17, 33, 1001 })
             {
                 var xs = new[]
                 {
-                    np.random.random(new Shape(n)) * 3 - 1.5,
-                    (np.random.random(new Shape(n)) * 3 - 1.5).astype(np.float32),
-                    (np.random.random(new Shape(n)) * 3 - 1.5).astype(np.float16),
-                    np.random.random(new Shape(n)) * 2 - 1 + np.random.random(new Shape(n)).astype(np.complex128) * new Complex(0, 1),
-                    (np.random.random(new Shape(n)) * 20 - 10).astype(np.int32),
-                    (np.random.random(new Shape(n)) * 3 - 1.5).astype(np.@decimal),
+                    rng.random(new Shape(n)) * 3 - 1.5,
+                    (rng.random(new Shape(n)) * 3 - 1.5).astype(np.float32),
+                    (rng.random(new Shape(n)) * 3 - 1.5).astype(np.float16),
+                    rng.random(new Shape(n)) * 2 - 1 + rng.random(new Shape(n)).astype(np.complex128) * new Complex(0, 1),
+                    (rng.random(new Shape(n)) * 20 - 10).astype(np.int32),
+                    (rng.random(new Shape(n)) * 3 - 1.5).astype(np.@decimal),
                 };
                 foreach (var b in Bases)
                 {
@@ -598,10 +598,10 @@ namespace NumSharp.Tests.Polynomial
                     return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(span));
                 }
             }
-            np.random.seed(13);
-            var x = np.random.random(new Shape(40_000)) * 2 - 1;
-            var y = np.random.random(new Shape(40_000)) * 2 - 1;
-            var z = np.random.random(new Shape(40_000)) * 2 - 1;
+            var rng = np.random.RandomState(13); // a private stream: the global np.random is shared by the tests running in parallel
+            var x = rng.random(new Shape(40_000)) * 2 - 1;
+            var y = rng.random(new Shape(40_000)) * 2 - 1;
+            var z = rng.random(new Shape(40_000)) * 2 - 1;
             var cheb = Bases[1];
             (40_000L * 121 * 8).Should().BeGreaterThanOrEqualTo(NDPolyVander.NonTemporalMinBytes, "the 2-D result must cross the threshold");
             (40_000L * 105 * 8).Should().BeGreaterThanOrEqualTo(NDPolyVander.NonTemporalMinBytes, "the 3-D result must cross the threshold");

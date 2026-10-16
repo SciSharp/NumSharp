@@ -354,6 +354,7 @@ namespace NumSharp.Tests.Backends
         // ---- memmap / foreign memory ------------------------------------------------------------
 
         [TestMethod]
+        [DoNotParallelize] // forces garbage collections, which suspend every thread: it runs with the serial set
         public void Memmap_EveryMode_NeverOwns()
         {
             // NumPy's memmap has the mmap object as its non-array base: owndata=False in EVERY mode.

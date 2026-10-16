@@ -9,6 +9,7 @@ namespace NumSharp.Tests.Backends
     /// np.multithreading integration.
     /// </summary>
     [TestClass]
+    [DoNotParallelize] // sets process-wide environment variables and flips np.multithreading
     public class TensorEngineThreadingTests : TestClass
     {
         [TestMethod]

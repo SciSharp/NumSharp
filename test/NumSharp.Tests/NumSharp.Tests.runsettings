@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Run settings of NumSharp.Tests, applied by `dotnet test` (and by Visual Studio and Rider) through the project's
+  RunSettingsFilePath property. A settings file passed to `dotnet test` explicitly replaces this one; inline
+  Name=Value arguments after the double dash are merged over it.
+
+  The tests run in parallel, one test per worker (Utilities/TestParallelization.cs), and that makes VSTest's result
+  reporting the bottleneck unless results are batched:
+
+  BatchSize: how many results the test host collects before it sends them to the runner. The host keeps one cache of
+  results and of the tests in progress, behind one lock, and flushes it (serializing every cached result AND every
+  test still in progress to JSON and writing it to the runner's socket, with the lock held) as soon as
+  results + tests in progress >= BatchSize. With the default of 10 and 32 tests in progress, that condition holds on
+  every test start and every result, so every test serialized the whole in-progress list twice while the other
+  workers waited on the lock: measured 2026-10-16 (i9-13900K, net10.0), a stack snapshot two seconds into the run
+  found 16 of 32 workers blocked on that lock. At 1000 the host flushes once per ~1000 results, and each result is
+  serialized once. Progress reaches the console once per batch, and the last partial batch at the end of the run.
+-->
+<RunSettings>
+  <RunConfiguration>
+    <BatchSize>1000</BatchSize>
+  </RunConfiguration>
+</RunSettings>
