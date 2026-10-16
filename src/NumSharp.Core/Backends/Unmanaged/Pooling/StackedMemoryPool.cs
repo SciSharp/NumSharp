@@ -161,12 +161,25 @@ namespace NumSharp.Unmanaged.Memory
                     goto _restart;
 
                 var removeCount = Math.Min(_totalCount - _originalTotals, availables.Count);
-                for (int i = 0; i < removeCount; i++)
+                if (removeCount > 0)
                 {
-                    var addr = availables.Pop();
-                    Debug.Assert(individualyAllocated.Contains(addr), "individualyAllocated.Contains(addr)");
-                    individualyAllocated.Remove(addr);
-                    NativeMemory.Free((void*)addr);
+                    // Free the excess first, then drop it from the bookkeeping list in ONE pass. Removing the pointers
+                    // one at a time (List.Remove: a linear search plus a shift of the tail) was quadratic in the pool's
+                    // size, all of it under the pool lock: once a multi-threaded burst had grown the scalar pool to a
+                    // few hundred thousand individual allocations, this timer held the lock for 7-12 s (measured
+                    // 2026-10-16 in the parallel test run) and every NDArray.Scalar on every thread waited for it.
+                    // Every pointer in `availables` is an individual allocation (block slots return to
+                    // availables_blocks), so the set is exactly what RemoveAll must drop.
+                    var freed = new HashSet<IntPtr>((int)removeCount);
+                    for (long i = 0; i < removeCount; i++)
+                    {
+                        var addr = availables.Pop();
+                        freed.Add(addr);
+                        NativeMemory.Free((void*)addr);
+                    }
+
+                    int dropped = individualyAllocated.RemoveAll(freed.Contains);
+                    Debug.Assert(dropped == removeCount, "every freed pointer was an individual allocation");
                 }
 
                 availables.TrimExcess();
