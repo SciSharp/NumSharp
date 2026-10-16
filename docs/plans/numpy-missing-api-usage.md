@@ -23,6 +23,15 @@ measures stay here and in the CSV for reference. See "Generator 1.14.0" at the e
   Still missing from the family, each for a reason: `np.complex64` and its `Complex64DType` (NumSharp has one complex
   width), `np.object_`, `np.str_`, `np.bytes_`, `np.void` (no such dtypes on journey4; the strings branch has `str_` and
   `bytes_`), and `np.ScalarType` (a tuple of Python built-in classes and NumPy classes, which has no faithful C# form).
+- **2026-10-16 (strings): the rest of the family** - 4 more rows, 84,353 files summed: `np.complex64` (11th, 49,398;
+  also `np.csingle`), `np.object_` (20th, 22,711), `np.void` (11,294) and `np.ScalarType` (950). The NumPy classes
+  NumSharp has no dtype for are `NDScalarType` classes in their NumPy places (every type test sees them; only
+  `np.dtype(np.complex64)` refuses), Python's built-in classes complete every `__mro__` (strings `03580d52`), and
+  `np.ScalarType` is NumPy's list of 31 classes, Python's seven first. `np.longdouble` (29th, 9,639) became its own class
+  beside float64, so `np.issubdtype(np.float64, np.longdouble)` is False, as in NumPy, with `np.clongdouble`, Windows'
+  `np.intc` / `np.uintc` and Linux's `np.longlong` / `np.ulonglong` (the C-type classes that share a storage format,
+  strings `19725778`). `np.str_` and `np.bytes_` are the strings branch's string classes. Still missing:
+  `Complex64DType` (one complex width).
 
 ## How the numbers were made
 
