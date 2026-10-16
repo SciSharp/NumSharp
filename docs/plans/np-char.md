@@ -792,7 +792,7 @@ C-D1 decision and C3 for C-D3.
     pieces are now copied inline (two overlapping moves up to 32 bytes, 16-byte blocks up to 512) and the separators found
     by the engine's own vector searches (`FindUnit` / `FindUnitLast`, and a candidate scan for short texts in
     `FindNeedle` / `FindNeedleLast`); both modes are fast now.
-  - **Gates.** Oracle section `strcharobj` (3,625 cases, 305 NumPy errors, zero excuses): S / U / StringDType over the 11
+  - **Gates.** Oracle section `strcharobj` (3,625 cases, 294 NumPy errors, zero excuses): S / U / StringDType over the 11
     core layouts × 8 separators × 5 limits for split / rsplit, 11 keepends forms, join over every class pair and layout,
     the argument kinds of 13 dtypes and of Python values (big ints, complex, `None`, object lists), StringDType NA
     objects, broadcasting and its error, NumPy's error order, the one-unit U+10FFFF rule, the whitespace and
