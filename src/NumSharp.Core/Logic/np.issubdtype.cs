@@ -183,12 +183,15 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The scalar class an <c>issubdtype</c> argument stands for: the class itself, or float64's for null — NumPy's
-        ///     <c>None</c>, which <c>dtype(None)</c> turns into float64 (<c>np.issubdtype(None, np.floating)</c> is True).
+        ///     The scalar class an <c>issubdtype</c> argument stands for: a NumPy class itself; for a Python built-in class
+        ///     the class NumPy reads it as (<c>if not issubclass_(arg, generic): arg = dtype(arg).type</c>, so <c>float</c>
+        ///     is <c>numpy.float64</c> and <c>np.issubdtype(bool, int)</c> compares <c>numpy.bool</c> with
+        ///     <c>numpy.int64</c>); float64's for null — NumPy's <c>None</c>, which <c>dtype(None)</c> turns into float64
+        ///     (<c>np.issubdtype(None, np.floating)</c> is True).
         /// </summary>
         /// <param name="sctype">The scalar class, or null.</param>
         /// <returns>The class to compare.</returns>
-        private static NDScalarType ScalarClassOf(NDScalarType sctype) => sctype ?? NDScalarType.Of(DTypeRegistry.Double);
+        private static NDScalarType ScalarClassOf(NDScalarType sctype) => sctype is null ? NDScalarType.Of(DTypeRegistry.Double) : sctype.NumPyClass;
 
         /// <summary>The scalar class of a descriptor (NumPy's <c>dtype(arg).type</c>), float64's for null (NumPy's <c>None</c>).</summary>
         /// <param name="dtype">The descriptor, or null.</param>

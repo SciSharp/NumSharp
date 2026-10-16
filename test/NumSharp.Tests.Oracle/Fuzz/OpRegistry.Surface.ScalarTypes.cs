@@ -14,24 +14,30 @@ namespace NumSharp.Tests.Fuzz
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     A case names a class or a dtype by a small JSON dict (<c>{"class": "integer"}</c>, <c>{"dtype": "i4"}</c>,
-    ///     <c>null</c>). Each adapter calls the NumSharp overload a C# port of the NumPy call binds: a class is its
-    ///     <see cref="NDScalarType"/> (<c>np.integer</c>), a dtype string stays a string — so the string overloads, and
-    ///     the implicit string → <see cref="DType"/> conversion with its own refusal, are what run — and NumPy's
-    ///     <c>None</c> is a null <see cref="DType"/>.
+    ///     A case names a class or a dtype by a small JSON dict (<c>{"class": "integer"}</c>, <c>{"builtin": "float"}</c>,
+    ///     <c>{"dtype": "i4"}</c>, <c>null</c>). Each adapter calls the NumSharp overload a C# port of the NumPy call
+    ///     binds: a NumPy class is its <see cref="NDScalarType"/> (<c>np.integer</c>, <c>np.complex64</c>), a Python
+    ///     built-in class NumSharp's model of it (<see cref="NDScalarType.PyFloat"/>), a dtype string stays a string — so
+    ///     the string overloads, and the implicit string → <see cref="DType"/> conversion with its own refusal, are what
+    ///     run — and NumPy's <c>None</c> is a null <see cref="DType"/>.
     ///     </para>
     ///     <para>
-    ///     A list of classes is rendered as the Python repr of their names (<c>['integer', 'number', 'generic']</c>), the
-    ///     form the generator records; the renderer only formats, it never repairs an answer.
+    ///     A list of classes is rendered as the Python repr of their qualified names
+    ///     (<c>['numpy.integer', 'numpy.number', 'numpy.generic', 'object']</c>: <c>module.name</c> for a NumPy or NumSharp
+    ///     class, the bare name for a Python built-in), the form the generator records; the renderer only formats, it
+    ///     never repairs an answer.
     ///     </para>
     /// </remarks>
     public static partial class OpRegistry
     {
-        /// <summary>The abstract class a generator name stands for (<c>"integer"</c> → <see cref="np.integer"/>).</summary>
-        /// <param name="name">One of NumPy's ten abstract class names.</param>
+        /// <summary>
+        ///     The NumPy class a generator name stands for: one of the ten abstract classes (<c>"integer"</c> →
+        ///     <see cref="np.integer"/>) or a class NumSharp has no dtype for (<c>"complex64"</c> → <see cref="np.complex64"/>).
+        /// </summary>
+        /// <param name="name">The class's NumPy attribute name.</param>
         /// <returns>The class object.</returns>
         /// <exception cref="NotSupportedException">A name the generator does not emit.</exception>
-        private static NDScalarType AbstractScalarClass(string name) => name switch
+        private static NDScalarType NumPyScalarClass(string name) => name switch
         {
             "generic" => np.generic,
             "number" => np.number,
@@ -43,8 +49,42 @@ namespace NumSharp.Tests.Fuzz
             "complexfloating" => np.complexfloating,
             "flexible" => np.flexible,
             "character" => np.character,
-            _ => throw new NotSupportedException($"scalar class '{name}' is not one of NumPy's abstract classes"),
+            "complex64" => np.complex64,
+            "object_" => np.object_,
+            "void" => np.@void,
+            _ => throw new NotSupportedException($"scalar class '{name}' is not one of the classes the generator names"),
         };
+
+        /// <summary>The Python built-in class a generator name stands for (<c>"float"</c> → <see cref="NDScalarType.PyFloat"/>).</summary>
+        /// <param name="name">The built-in's name.</param>
+        /// <returns>NumSharp's model of the class.</returns>
+        /// <exception cref="NotSupportedException">A built-in NumSharp does not model.</exception>
+        private static NDScalarType BuiltinScalarClass(string name) => name switch
+        {
+            "object" => NDScalarType.PyObject,
+            "int" => NDScalarType.PyInt,
+            "bool" => NDScalarType.PyBool,
+            "float" => NDScalarType.PyFloat,
+            "complex" => NDScalarType.PyComplex,
+            "str" => NDScalarType.PyStr,
+            "bytes" => NDScalarType.PyBytes,
+            "memoryview" => NDScalarType.PyMemoryView,
+            _ => throw new NotSupportedException($"Python class '{name}' is not one NumSharp models"),
+        };
+
+        /// <summary>The class an argument dict names: <c>{"class": ...}</c> (a NumPy class) or <c>{"builtin": ...}</c> (a Python one).</summary>
+        /// <param name="e">A class dict (<see cref="IsClassArg"/> is true for it).</param>
+        /// <returns>The class object.</returns>
+        /// <exception cref="NotSupportedException">A name the generator does not emit.</exception>
+        private static NDScalarType ScalarClassArg(JsonElement e)
+            => e.TryGetProperty("builtin", out var b) ? BuiltinScalarClass(b.GetString()) : NumPyScalarClass(e.GetProperty("class").GetString());
+
+        /// <summary>The class a check / attribute case is about: params <c>builtin</c> (a Python class) or <c>cls</c> (a NumPy class).</summary>
+        /// <param name="p">The case params.</param>
+        /// <returns>The class object.</returns>
+        /// <exception cref="NotSupportedException">A name the generator does not emit.</exception>
+        private static NDScalarType ParamsScalarClass(IReadOnlyDictionary<string, JsonElement> p)
+            => p.TryGetValue("builtin", out var b) ? BuiltinScalarClass(b.GetString()) : NumPyScalarClass(p["cls"].GetString());
 
         /// <summary>
         ///     <c>np.issubdtype(arg1, arg2)</c> over two argument dicts, through the overload each pair of spellings binds:
@@ -60,11 +100,11 @@ namespace NumSharp.Tests.Fuzz
             var b = p["arg2"];
             bool r;
             if (IsClassArg(a) && IsClassArg(b))
-                r = np.issubdtype(AbstractScalarClass(a.GetProperty("class").GetString()), AbstractScalarClass(b.GetProperty("class").GetString()));
+                r = np.issubdtype(ScalarClassArg(a), ScalarClassArg(b));
             else if (IsClassArg(a))
-                r = np.issubdtype(AbstractScalarClass(a.GetProperty("class").GetString()), DtypeArg(b));
+                r = np.issubdtype(ScalarClassArg(a), DtypeArg(b));
             else if (IsClassArg(b))
-                r = np.issubdtype(DtypeArg(a), AbstractScalarClass(b.GetProperty("class").GetString()));
+                r = np.issubdtype(DtypeArg(a), ScalarClassArg(b));
             else if (a.ValueKind == JsonValueKind.Null)
                 r = np.issubdtype((DType)null, DtypeString(b));
             else
@@ -79,7 +119,10 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="p">The case params: <c>arg</c> (a class or a dtype dict) and <c>kinds</c> (a list of kind dicts).</param>
         /// <returns>NumSharp's answer as a 0-d bool array.</returns>
         /// <exception cref="ValueError">An unknown kind name, the outcome the case may expect.</exception>
-        /// <exception cref="TypeError">A kind of a refused type (an int), the outcome the case may expect.</exception>
+        /// <exception cref="TypeError">
+        ///     A kind of a refused type (an int, a Python built-in class) or a built-in class as the argument, the outcome
+        ///     the case may expect.
+        /// </exception>
         internal static NDArray ScalarTypeIsDtype(IReadOnlyDictionary<string, JsonElement> p)
         {
             var kinds = p["kinds"].EnumerateArray().Select(KindObject).ToArray();
@@ -87,7 +130,7 @@ namespace NumSharp.Tests.Fuzz
             bool r;
             if (IsClassArg(arg))
             {
-                var a = AbstractScalarClass(arg.GetProperty("class").GetString());
+                var a = ScalarClassArg(arg);
                 r = kinds.Length != 1 ? np.isdtype(a, kinds) : kinds[0] switch
                 {
                     string s => np.isdtype(a, s),
@@ -116,13 +159,13 @@ namespace NumSharp.Tests.Fuzz
         ///     case's operand (a 0-d array that stands for a NumPy scalar, or a 1-D array), issubclass of a class or of a
         ///     dtype's class (a <see cref="DType"/> converts to its class).
         /// </summary>
-        /// <param name="p">The case params: <c>cls</c>, <c>check</c>, and <c>sub</c> for a subclass check.</param>
+        /// <param name="p">The case params: <c>cls</c> or <c>builtin</c>, <c>check</c>, and <c>sub</c> for a subclass check.</param>
         /// <param name="ops">The operand of an isinstance check.</param>
         /// <returns>NumSharp's answer as a 0-d bool array.</returns>
         /// <exception cref="NotSupportedException">A check the generator does not emit.</exception>
         internal static NDArray ScalarTypeCheck(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
         {
-            var cls = AbstractScalarClass(p["cls"].GetString());
+            var cls = ParamsScalarClass(p);
             switch (p["check"].GetString())
             {
                 case "instance":
@@ -131,7 +174,7 @@ namespace NumSharp.Tests.Fuzz
                 {
                     var sub = p["sub"];
                     return NDArray.Scalar(IsClassArg(sub)
-                        ? cls.__subclasscheck__(AbstractScalarClass(sub.GetProperty("class").GetString()))
+                        ? cls.__subclasscheck__(ScalarClassArg(sub))
                         : cls.__subclasscheck__(np.dtype(sub.GetProperty("dtype").GetString())));
                 }
                 default:
@@ -140,17 +183,16 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     One attribute of a class as text: an abstract class by name, or a concrete one as the class of a dtype
-        ///     (<c>of</c>: <c>(NDScalarType)np.dtype(of)</c>, NumPy's <c>np.dtype(of).type</c>).
+        ///     One attribute of a class as text: a NumPy class by name (<c>cls</c>), a Python built-in class
+        ///     (<c>builtin</c>), or a concrete class as the class of a dtype (<c>of</c>: <c>(NDScalarType)np.dtype(of)</c>,
+        ///     NumPy's <c>np.dtype(of).type</c>).
         /// </summary>
-        /// <param name="p">The case params: <c>cls</c>, <c>attr</c>, optionally <c>of</c>.</param>
-        /// <returns>The attribute's text (a class list as the repr of its names).</returns>
+        /// <param name="p">The case params: <c>cls</c> or <c>builtin</c>, <c>attr</c>, optionally <c>of</c>.</param>
+        /// <returns>The attribute's text (a class list as the repr of its qualified names).</returns>
         /// <exception cref="NotSupportedException">An attribute the generator does not emit.</exception>
         internal static string ScalarTypeAttribute(IReadOnlyDictionary<string, JsonElement> p)
         {
-            NDScalarType cls = p.TryGetValue("of", out var of)
-                ? np.dtype(of.GetString())
-                : AbstractScalarClass(p["cls"].GetString());
+            NDScalarType cls = p.TryGetValue("of", out var of) ? np.dtype(of.GetString()) : ParamsScalarClass(p);
             return p["attr"].GetString() switch
             {
                 "__name__" => cls.__name__,
@@ -159,12 +201,22 @@ namespace NumSharp.Tests.Fuzz
                 "repr" => cls.ToString(),
                 "__mro__" => ClassNames(cls.__mro__),
                 "__bases__" => ClassNames(cls.__bases__),
-                "__base__" => cls.__base__?.__name__ ?? "None",
+                "__base__" => cls.__base__ is null ? "None" : ClassName(cls.__base__),
                 "mro" => ClassNames(cls.mro()),
                 "__subclasses__" => ClassNames(cls.__subclasses__()),
                 var a => throw new NotSupportedException($"scalar-class attribute '{a}'"),
             };
         }
+
+        /// <summary>
+        ///     <c>repr(np.dtype(np.sctypeDict[key]))</c> for a string name (<c>"str"</c> → <c>dtype('&lt;U')</c>): the two
+        ///     string classes share one storage code, so these values are compared by repr rather than by code.
+        /// </summary>
+        /// <param name="p">The case params: <c>key</c>.</param>
+        /// <returns>The descriptor's repr.</returns>
+        /// <exception cref="KeyNotFoundException">A key NumSharp's table lacks.</exception>
+        internal static string SctypeDictRepr(IReadOnlyDictionary<string, JsonElement> p)
+            => np.sctypeDict[p["key"].GetString()].ToString(true);
 
         /// <summary><c>np.typecodes[key]</c>, or the repr of its key list for a null key.</summary>
         /// <param name="p">The case params: <c>key</c>.</param>
@@ -179,19 +231,20 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     The dtype a class converts to, through <c>np.dtype</c> / <c>np.finfo</c> / <c>np.iinfo</c> (<c>fn</c>) — an
-        ///     abstract class by name (<c>sctype</c>, refused) or a dtype's class (<c>sctype_of</c>).
+        ///     The dtype a class converts to, through <c>np.dtype</c> / <c>np.finfo</c> / <c>np.iinfo</c> (<c>fn</c>) — a
+        ///     NumPy class by name (<c>sctype</c>: abstract, refused, or dtype-less), a Python built-in class
+        ///     (<c>sctype_builtin</c>) or a dtype's class (<c>sctype_of</c>).
         /// </summary>
         /// <param name="fn">"dtype", "finfo" or "iinfo".</param>
-        /// <param name="p">The case params: <c>sctype</c> or <c>sctype_of</c>.</param>
+        /// <param name="p">The case params: <c>sctype</c>, <c>sctype_builtin</c> or <c>sctype_of</c>.</param>
         /// <returns>The resulting dtype's code.</returns>
         /// <exception cref="TypeError">np.dtype of an abstract class (the outcome the case expects).</exception>
-        /// <exception cref="ValueError">np.finfo / np.iinfo of an abstract class (the outcome the case expects).</exception>
+        /// <exception cref="ValueError">np.finfo / np.iinfo of a class outside their family (the outcome the case expects).</exception>
         /// <exception cref="NotSupportedException">A function the generator does not emit.</exception>
         internal static NPTypeCode ScalarTypeDtype(string fn, IReadOnlyDictionary<string, JsonElement> p)
         {
-            NDScalarType cls = p.TryGetValue("sctype", out var name)
-                ? AbstractScalarClass(name.GetString())
+            NDScalarType cls = p.TryGetValue("sctype", out var name) ? NumPyScalarClass(name.GetString())
+                : p.TryGetValue("sctype_builtin", out var builtin) ? BuiltinScalarClass(builtin.GetString())
                 : np.dtype(p["sctype_of"].GetString());
             return fn switch
             {
@@ -236,16 +289,17 @@ namespace NumSharp.Tests.Fuzz
             var f => throw new NotSupportedException($"np.longdouble facet '{f}'"),
         };
 
-        /// <summary>True when a case names its dtype through a scalar class (the <c>sctype</c> / <c>sctype_of</c> params).</summary>
+        /// <summary>True when a case names its dtype through a scalar class (the <c>sctype</c> / <c>sctype_builtin</c> / <c>sctype_of</c> params).</summary>
         /// <param name="p">The case params.</param>
         /// <returns>Whether the scalar-type adapters own the case.</returns>
         internal static bool IsScalarTypeDtypeCase(IReadOnlyDictionary<string, JsonElement> p)
-            => p.ContainsKey("sctype") || p.ContainsKey("sctype_of");
+            => p.ContainsKey("sctype") || p.ContainsKey("sctype_builtin") || p.ContainsKey("sctype_of");
 
-        /// <summary>True for an argument dict that names an abstract class (<c>{"class": ...}</c>).</summary>
+        /// <summary>True for an argument dict that names a class (<c>{"class": ...}</c> or <c>{"builtin": ...}</c>).</summary>
         /// <param name="e">The argument (an object or null).</param>
         /// <returns>Whether it is a class dict.</returns>
-        private static bool IsClassArg(JsonElement e) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty("class", out _);
+        private static bool IsClassArg(JsonElement e)
+            => e.ValueKind == JsonValueKind.Object && (e.TryGetProperty("class", out _) || e.TryGetProperty("builtin", out _));
 
         /// <summary>
         ///     A dtype argument as the <see cref="DType"/> a C# port passes: the string converted IMPLICITLY at the call (so
@@ -261,7 +315,10 @@ namespace NumSharp.Tests.Fuzz
         /// <returns>The dtype string, or null.</returns>
         private static string DtypeString(JsonElement e) => e.ValueKind == JsonValueKind.Null ? null : e.GetProperty("dtype").GetString();
 
-        /// <summary>An isdtype kind dict as the object a C# port passes: a name, a class, a descriptor, or (refused) an int.</summary>
+        /// <summary>
+        ///     An isdtype kind dict as the object a C# port passes: a name, a NumPy class, a Python built-in class (refused),
+        ///     a descriptor, or (refused) an int.
+        /// </summary>
         /// <param name="e">The kind dict.</param>
         /// <returns>The kind object.</returns>
         /// <exception cref="NotSupportedException">A kind dict the generator does not emit.</exception>
@@ -269,15 +326,21 @@ namespace NumSharp.Tests.Fuzz
         {
             if (e.TryGetProperty("name", out var name)) return name.GetString();
             if (e.TryGetProperty("int", out var i)) return i.GetInt32();
-            if (e.TryGetProperty("class", out var c)) return AbstractScalarClass(c.GetString());
+            if (e.TryGetProperty("class", out var c)) return NumPyScalarClass(c.GetString());
+            if (e.TryGetProperty("builtin", out var b)) return BuiltinScalarClass(b.GetString());
             if (e.TryGetProperty("dtype", out var d)) return np.dtype(d.GetString());
             throw new NotSupportedException($"isdtype kind {e}");
         }
 
-        /// <summary>The Python repr of a list of class names: <c>['integer', 'number', 'generic']</c>.</summary>
+        /// <summary>A class's qualified name as the generator writes it: <c>numpy.float64</c>, <c>numsharp.char</c>, or a built-in's bare name (<c>float</c>).</summary>
+        /// <param name="cls">The class.</param>
+        /// <returns>The name.</returns>
+        private static string ClassName(NDScalarType cls) => cls.IsBuiltin ? cls.__name__ : cls.__module__ + "." + cls.__name__;
+
+        /// <summary>The Python repr of a list of qualified class names: <c>['numpy.integer', 'numpy.number', 'numpy.generic', 'object']</c>.</summary>
         /// <param name="classes">The classes.</param>
         /// <returns>The repr.</returns>
         private static string ClassNames(IEnumerable<NDScalarType> classes)
-            => "[" + string.Join(", ", classes.Select(c => "'" + c.__name__ + "'")) + "]";
+            => "[" + string.Join(", ", classes.Select(c => "'" + ClassName(c) + "'")) + "]";
     }
 }

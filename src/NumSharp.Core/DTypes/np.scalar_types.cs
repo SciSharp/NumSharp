@@ -8,18 +8,22 @@ namespace NumSharp
         // =========================================================================================================
         // NumPy's abstract scalar classes (numpy/_core/numerictypes.py: allTypes' "_abstract_type_names").
         //
-        //   generic
+        //   object (Python's)
+        //   \-> generic
         //     +-> bool
         //     +-> number
         //     |   +-> integer
         //     |   |   +-> signedinteger     int8 int16 int32 int64 timedelta64
         //     |   |   \-> unsignedinteger   uint8 uint16 uint32 uint64 (char)
         //     |   \-> inexact
-        //     |       +-> floating          float16 float32 float64 (decimal)
-        //     |       \-> complexfloating   complex128
+        //     |       +-> floating          float16 float32 float64 (+ Python's float) (decimal)
+        //     |       \-> complexfloating   complex64* complex128 (+ Python's complex)
         //     +-> flexible
-        //     |   \-> character
-        //     \-> datetime64
+        //     |   +-> character         bytes_ (+ Python's bytes) str_ (+ Python's str)
+        //     |   \-> void*
+        //     +-> datetime64
+        //     \-> object_*
+        //   (* a NumPy class NumSharp has no dtype for: np.dtype(cls) refuses)
         //
         // Each is the one NDScalarType object of its class (identity matters: issubclass/isinstance compare references),
         // so the properties return the shared static, never a copy.
@@ -76,6 +80,39 @@ namespace NumSharp
         public static NDScalarType character => NDScalarType.Character;
 
         // =========================================================================================================
+        // NumPy's concrete classes NumSharp has no dtype for. They are classes all the same: the hierarchy, np.ScalarType
+        // and every type test see them (np.issubdtype(np.complex64, np.complexfloating) is True); np.dtype(cls) and the
+        // explicit (DType) conversion refuse with a NotSupportedException.
+        // =========================================================================================================
+
+        /// <summary>
+        ///     <c>numpy.complex64</c> (two float32 parts): a class under <see cref="complexfloating"/> with no NumSharp dtype —
+        ///     NumSharp's one complex width is <see cref="complex128"/>. Type tests work (<c>np.issubdtype(np.complex64,
+        ///     np.inexact)</c> is True, <c>np.isdtype(np.complex64, "complex floating")</c> True), <c>np.finfo(np.complex64)</c>
+        ///     is float32's, and <c>np.dtype(np.complex64)</c> raises <see cref="System.NotSupportedException"/>.
+        /// </summary>
+        /// <remarks>
+        ///     <c>np.zeros(3, np.complex64)</c> does not compile: a class converts to a descriptor only explicitly, and
+        ///     NumSharp cannot allocate complex64 storage. Use <see cref="complex128"/>.
+        /// </remarks>
+        public static NDScalarType complex64 => NDScalarType.Complex64;
+
+        /// <summary><c>numpy.csingle</c>: NumPy's other name for <see cref="complex64"/> — the same class object.</summary>
+        public static NDScalarType csingle => NDScalarType.Complex64;
+
+        /// <summary>
+        ///     <c>numpy.object_</c>: a class directly under <see cref="generic"/> with no NumSharp dtype (NumSharp has no
+        ///     arrays of Python objects); <c>np.dtype(np.object_)</c> raises <see cref="System.NotSupportedException"/>.
+        /// </summary>
+        public static NDScalarType object_ => NDScalarType.Object_;
+
+        /// <summary>
+        ///     <c>numpy.void</c>: a class under <see cref="flexible"/> with no NumSharp dtype (NumSharp has no raw-byte or
+        ///     structured arrays); <c>np.dtype(np.void)</c> raises <see cref="System.NotSupportedException"/>.
+        /// </summary>
+        public static NDScalarType @void => NDScalarType.Void;
+
+        // =========================================================================================================
         // The relatives: NumPy's bool constants and its name tables (numpy/_core/numerictypes.py, _type_aliases.py)
         // =========================================================================================================
 
@@ -114,13 +151,19 @@ namespace NumSharp
         ///     <c>"int"</c>, <c>"uintp"</c> and <c>"uint"</c> the pointer size.
         ///     </para>
         ///     <para>
-        ///     Differences from NumPy, all from NumSharp's dtype set: the names of classes NumSharp lacks are absent
-        ///     (<c>complex64</c>, <c>csingle</c>, <c>bytes_</c>, <c>str_</c>, <c>void</c>, <c>object_</c>, and the aliases
-        ///     <c>object</c>, <c>bytes</c>, <c>a</c>, <c>str</c>, <c>unicode</c>); the names of classes NumSharp collapses
-        ///     map to the class they collapse onto (<c>"intc"</c> is <see cref="int32"/>, <c>"longdouble"</c> is
-        ///     <see cref="float64"/>, <c>"clongdouble"</c> is <see cref="complex128"/>, where Windows NumPy keeps distinct
-        ///     classes). <c>"datetime64"</c> / <c>"timedelta64"</c> map to the generic-unit descriptors (<c>dtype('&lt;M8')</c>,
-        ///     the object <c>np.dtype("M")</c> returns). Read-only, for the reason <see cref="typecodes"/> is.
+        ///     The string names map to the UNSIZED string descriptors, the objects <see cref="bytes_"/> and
+        ///     <see cref="str_"/> are (<c>"bytes_"</c>, <c>"bytes"</c>, <c>"a"</c> to <c>dtype('S')</c>; <c>"str_"</c>,
+        ///     <c>"str"</c>, <c>"unicode"</c> to <c>dtype('&lt;U')</c>), as NumPy's <c>np.dtype(np.sctypeDict["str"])</c> is.
+        ///     </para>
+        ///     <para>
+        ///     Differences from NumPy, all from NumSharp's dtype set: the names of the classes NumSharp has no dtype for are
+        ///     absent (<c>complex64</c>, <c>csingle</c>, <c>void</c>, <c>object_</c>, <c>object</c>) — the values here are
+        ///     descriptors, and those classes (<see cref="complex64"/>, <see cref="object_"/>, <see cref="@void"/>) have none;
+        ///     the names of classes NumSharp collapses map to the class they collapse onto (<c>"intc"</c> is
+        ///     <see cref="int32"/>, <c>"longdouble"</c> is <see cref="float64"/>, <c>"clongdouble"</c> is
+        ///     <see cref="complex128"/>, where Windows NumPy keeps distinct classes). <c>"datetime64"</c> /
+        ///     <c>"timedelta64"</c> map to the generic-unit descriptors (<c>dtype('&lt;M8')</c>, the object
+        ///     <c>np.dtype("M")</c> returns). Read-only, for the reason <see cref="typecodes"/> is.
         ///     </para>
         /// </remarks>
         public static IReadOnlyDictionary<string, DType> sctypeDict => ScalarTypeTables.SctypeDict;
@@ -165,6 +208,10 @@ namespace NumSharp
                 // pointer size here rather than read from np's fields, so this table never depends on np's initialization.
                 DType intp = System.IntPtr.Size == 8 ? DType.Int64 : DType.Int32;
                 DType uintp = System.IntPtr.Size == 8 ? DType.UInt64 : DType.UInt32;
+                // np.dtype(np.bytes_) / np.dtype(np.str_) are the UNSIZED builtins (dtype('S'), dtype('<U')): the class
+                // singletons, the same objects np.bytes_ / np.str_ are.
+                DType bytes = DTypeRegistry.Bytes.singleton;
+                DType str = DTypeRegistry.Str.singleton;
                 return new ReadOnlyDictionary<string, DType>(new Dictionary<string, DType>
                 {
                     ["bool"] = DType.Boolean,
@@ -174,6 +221,8 @@ namespace NumSharp
                     ["longdouble"] = DType.Double,
                     ["complex128"] = DType.Complex,
                     ["clongdouble"] = DType.Complex,
+                    ["bytes_"] = bytes,
+                    ["str_"] = str,
                     ["datetime64"] = DTypeRegistry.DateTime64.singleton,
                     ["timedelta64"] = DTypeRegistry.TimeDelta64.singleton,
                     ["int8"] = DType.SByte,
@@ -205,7 +254,11 @@ namespace NumSharp
                     ["uint"] = uintp,
                     ["float"] = DType.Double,
                     ["complex"] = DType.Complex,
+                    ["bytes"] = bytes,
+                    ["a"] = bytes,
                     ["int"] = intp,
+                    ["str"] = str,
+                    ["unicode"] = str,
                 });
             }
         }

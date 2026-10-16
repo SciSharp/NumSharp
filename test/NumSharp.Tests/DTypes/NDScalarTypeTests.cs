@@ -9,11 +9,12 @@ namespace NumSharp.Tests.DTypes
 {
     /// <summary>
     ///     NumPy's scalar-type hierarchy as <see cref="NDScalarType"/> objects (<c>np.generic</c>, <c>np.number</c>,
-    ///     <c>np.integer</c>, ...), its integration in <c>np.issubdtype</c> / <c>np.isdtype</c> / <c>np.dtype</c> /
-    ///     <c>np.finfo</c> / <c>np.iinfo</c>, and the relatives <c>np.typecodes</c>, <c>np.sctypeDict</c>,
-    ///     <c>np.True_</c> / <c>np.False_</c>, <c>np.longdouble</c> and <c>np.typing</c>. Every NumPy value was probed against
-    ///     <c>numpy==2.4.2</c> (win-amd64); NumSharp's own modelling choices (C# values are scalars, the collapsed and
-    ///     NumSharp-only classes) are named where they apply.
+    ///     <c>np.integer</c>, ...), the Python built-in classes it derives from (<c>object</c>, <c>float</c>, <c>str</c>, ...),
+    ///     the NumPy classes NumSharp has no dtype for (<c>np.complex64</c>, <c>np.object_</c>, <c>np.void</c>), their
+    ///     integration in <c>np.issubdtype</c> / <c>np.isdtype</c> / <c>np.dtype</c> / <c>np.finfo</c> / <c>np.iinfo</c>, and
+    ///     the relatives <c>np.typecodes</c>, <c>np.sctypeDict</c>, <c>np.True_</c> / <c>np.False_</c>, <c>np.longdouble</c>
+    ///     and <c>np.typing</c>. Every NumPy value was probed against <c>numpy==2.4.2</c> (win-amd64); NumSharp's own
+    ///     modelling choices (C# values are scalars, the collapsed and NumSharp-only classes) are named where they apply.
     /// </summary>
     [TestClass]
     public class NDScalarTypeTests
@@ -25,10 +26,22 @@ namespace NumSharp.Tests.DTypes
             np.complexfloating, np.flexible, np.character,
         };
 
-        /// <summary>The names of a class list, for compact assertions.</summary>
+        /// <summary>The eight modelled Python built-in classes, in the order Python created them.</summary>
+        private static NDScalarType[] Builtins => new[]
+        {
+            NDScalarType.PyObject, NDScalarType.PyInt, NDScalarType.PyBool, NDScalarType.PyFloat, NDScalarType.PyComplex,
+            NDScalarType.PyStr, NDScalarType.PyBytes, NDScalarType.PyMemoryView,
+        };
+
+        /// <summary>
+        ///     The names of a class list as NumPy's probes print them: <c>module.name</c> for a NumPy or NumSharp class
+        ///     (<c>numpy.float64</c>, <c>numsharp.char</c>), the bare name for a Python built-in (<c>float</c>, <c>object</c>)
+        ///     — the only way to tell Python's <c>bool</c> from <c>numpy.bool</c> in one list.
+        /// </summary>
         /// <param name="classes">The classes.</param>
-        /// <returns>Their <c>__name__</c>s, in order.</returns>
-        private static string[] Names(IEnumerable<NDScalarType> classes) => classes.Select(c => c.__name__).ToArray();
+        /// <returns>Their qualified names, in order.</returns>
+        private static string[] Names(IEnumerable<NDScalarType> classes)
+            => classes.Select(c => c.IsBuiltin ? c.__name__ : c.__module__ + "." + c.__name__).ToArray();
 
         // ---- the abstract classes' own surface ---------------------------------------------------------------------
 
@@ -58,20 +71,22 @@ namespace NumSharp.Tests.DTypes
         }
 
         /// <summary>
-        ///     The MRO and the bases end at <c>np.generic</c> (NumPy's also list Python's <c>object</c>, which is not a
-        ///     NumSharp object; <c>np.generic.__base__</c> is therefore null where NumPy's is <c>object</c>).
+        ///     The MRO and the bases are NumPy's whole tuples: every one ends in Python's <c>object</c>, which is
+        ///     <c>np.generic</c>'s base (<c>np.generic.__base__</c> is <c>object</c>, whose own base is None).
         /// </summary>
         [TestMethod]
         public void AbstractClasses_MroAndBases()
         {
-            Names(np.generic.__mro__).Should().Equal("generic");
-            Names(np.integer.__mro__).Should().Equal("integer", "number", "generic");
-            Names(np.signedinteger.__mro__).Should().Equal("signedinteger", "integer", "number", "generic");
-            Names(np.complexfloating.__mro__).Should().Equal("complexfloating", "inexact", "number", "generic");
-            Names(np.character.__mro__).Should().Equal("character", "flexible", "generic");
-            np.generic.__bases__.Should().BeEmpty();
-            np.generic.__base__.Should().BeNull();
-            Names(np.floating.__bases__).Should().Equal("inexact");
+            Names(np.generic.__mro__).Should().Equal("numpy.generic", "object");
+            Names(np.integer.__mro__).Should().Equal("numpy.integer", "numpy.number", "numpy.generic", "object");
+            Names(np.signedinteger.__mro__).Should().Equal("numpy.signedinteger", "numpy.integer", "numpy.number", "numpy.generic", "object");
+            Names(np.complexfloating.__mro__).Should().Equal("numpy.complexfloating", "numpy.inexact", "numpy.number", "numpy.generic", "object");
+            Names(np.character.__mro__).Should().Equal("numpy.character", "numpy.flexible", "numpy.generic", "object");
+            Names(np.generic.__bases__).Should().Equal("object");
+            ReferenceEquals(np.generic.__base__, NDScalarType.PyObject).Should().BeTrue();
+            NDScalarType.PyObject.__base__.Should().BeNull();
+            NDScalarType.PyObject.__bases__.Should().BeEmpty();
+            Names(np.floating.__bases__).Should().Equal("numpy.inexact");
         }
 
         /// <summary><c>mro()</c> is a NEW mutable list each call, as Python's is; <c>__mro__</c> is read-only.</summary>
@@ -80,28 +95,177 @@ namespace NumSharp.Tests.DTypes
         {
             var first = np.integer.mro();
             first.Add(np.generic);
-            Names(np.integer.mro()).Should().Equal("integer", "number", "generic");
+            Names(np.integer.mro()).Should().Equal("numpy.integer", "numpy.number", "numpy.generic", "object");
             new Action(() => ((IList<NDScalarType>)np.integer.__mro__).Add(np.generic)).Should().Throw<NotSupportedException>();
         }
 
         /// <summary>
         ///     <c>__subclasses__()</c> lists the direct subclasses in NumPy's registration order — abstract first, then
-        ///     concrete. NumSharp's lists differ from NumPy's only by the classes it lacks (object_, void, bytes_, complex64),
-        ///     collapses (intc, longdouble, clongdouble) or adds (decimal, char).
+        ///     concrete, the dtype-less classes in their NumPy places (<c>object_</c> last under generic, <c>void</c> after
+        ///     <c>character</c>, <c>complex64</c> before <c>complex128</c>). NumSharp's lists differ from NumPy's only by the
+        ///     classes it collapses (intc, longdouble, clongdouble) or adds (decimal, char).
         /// </summary>
         [TestMethod]
         public void Subclasses_FollowNumPysRegistrationOrder()
         {
-            Names(np.generic.__subclasses__()).Should().Equal("number", "flexible", "bool", "datetime64");
-            Names(np.number.__subclasses__()).Should().Equal("integer", "inexact");
-            Names(np.integer.__subclasses__()).Should().Equal("signedinteger", "unsignedinteger");
-            Names(np.signedinteger.__subclasses__()).Should().Equal("int8", "int16", "int32", "int64", "timedelta64");
-            Names(np.unsignedinteger.__subclasses__()).Should().Equal("uint8", "uint16", "uint32", "uint64", "char");
-            Names(np.inexact.__subclasses__()).Should().Equal("floating", "complexfloating");
-            Names(np.floating.__subclasses__()).Should().Equal("float16", "float32", "float64", "decimal");
-            Names(np.complexfloating.__subclasses__()).Should().Equal("complex128");
-            Names(np.flexible.__subclasses__()).Should().Equal("character");
+            Names(np.generic.__subclasses__()).Should().Equal("numpy.number", "numpy.flexible", "numpy.bool", "numpy.datetime64", "numpy.object_");
+            Names(np.number.__subclasses__()).Should().Equal("numpy.integer", "numpy.inexact");
+            Names(np.integer.__subclasses__()).Should().Equal("numpy.signedinteger", "numpy.unsignedinteger");
+            Names(np.signedinteger.__subclasses__()).Should().Equal("numpy.int8", "numpy.int16", "numpy.int32", "numpy.int64", "numpy.timedelta64");
+            Names(np.unsignedinteger.__subclasses__()).Should().Equal("numpy.uint8", "numpy.uint16", "numpy.uint32", "numpy.uint64", "numsharp.char");
+            Names(np.inexact.__subclasses__()).Should().Equal("numpy.floating", "numpy.complexfloating");
+            Names(np.floating.__subclasses__()).Should().Equal("numpy.float16", "numpy.float32", "numpy.float64", "numsharp.decimal");
+            Names(np.complexfloating.__subclasses__()).Should().Equal("numpy.complex64", "numpy.complex128");
+            Names(np.flexible.__subclasses__()).Should().Equal("numpy.character", "numpy.void");
+            Names(np.character.__subclasses__()).Should().Equal("numpy.bytes_", "numpy.str_");
             ((NDScalarType)np.float64).__subclasses__().Should().BeEmpty();
+            np.complex64.__subclasses__().Should().BeEmpty();
+            // NumPy's void lists numpy.record (the class of a structured record), which NumSharp does not model.
+            np.@void.__subclasses__().Should().BeEmpty();
+        }
+
+        // ---- Python's built-in classes ------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The built-in classes print, name and derive as Python's do: module <c>builtins</c>, a repr without the module
+        ///     (<c>&lt;class 'float'&gt;</c>), every one directly under <c>object</c> but <c>bool</c>, which derives from
+        ///     <c>int</c>. None is abstract.
+        /// </summary>
+        [TestMethod]
+        public void BuiltinClasses_NamesBasesAndRepr()
+        {
+            var names = new[] { "object", "int", "bool", "float", "complex", "str", "bytes", "memoryview" };
+            foreach (var (cls, name) in Builtins.Zip(names))
+            {
+                cls.__name__.Should().Be(name);
+                cls.__qualname__.Should().Be(name);
+                cls.__module__.Should().Be("builtins");
+                cls.ToString().Should().Be($"<class '{name}'>");
+                cls.IsBuiltin.Should().BeTrue();
+                cls.IsAbstract.Should().BeFalse();
+            }
+
+            Names(NDScalarType.PyBool.__mro__).Should().Equal("bool", "int", "object");
+            Names(NDScalarType.PyFloat.__mro__).Should().Equal("float", "object");
+            Names(NDScalarType.PyObject.__mro__).Should().Equal("object");
+            ReferenceEquals(NDScalarType.PyBool.__base__, NDScalarType.PyInt).Should().BeTrue();
+            ReferenceEquals(NDScalarType.PyStr.__base__, NDScalarType.PyObject).Should().BeTrue();
+            foreach (var cls in Abstract)
+                cls.IsBuiltin.Should().BeFalse();
+            ((NDScalarType)np.float64).IsBuiltin.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     NumPy's four classes that also derive from a Python class (its <c>DUAL_INHERIT</c> / <c>DUAL_INHERIT2</c>
+        ///     table): float64 from <c>float</c> and complex128 from <c>complex</c> after their NumPy base, bytes_ and str_
+        ///     from <c>bytes</c> / <c>str</c> BEFORE <c>character</c> (so their <c>__base__</c> is the Python class); no
+        ///     other class has a Python base (float32, complex64 and the integers do not). The MROs are Python's C3 order.
+        /// </summary>
+        [TestMethod]
+        public void DualInheritance_FollowsNumPysTable()
+        {
+            Names(((NDScalarType)np.float64).__bases__).Should().Equal("numpy.floating", "float");
+            Names(((NDScalarType)np.float64).__mro__).Should().Equal(
+                "numpy.float64", "numpy.floating", "numpy.inexact", "numpy.number", "numpy.generic", "float", "object");
+            Names(((NDScalarType)np.complex128).__bases__).Should().Equal("numpy.complexfloating", "complex");
+            Names(((NDScalarType)np.complex128).__mro__).Should().Equal(
+                "numpy.complex128", "numpy.complexfloating", "numpy.inexact", "numpy.number", "numpy.generic", "complex", "object");
+            Names(((NDScalarType)np.bytes_).__bases__).Should().Equal("bytes", "numpy.character");
+            Names(((NDScalarType)np.bytes_).__mro__).Should().Equal(
+                "numpy.bytes_", "bytes", "numpy.character", "numpy.flexible", "numpy.generic", "object");
+            Names(((NDScalarType)np.str_).__bases__).Should().Equal("str", "numpy.character");
+            Names(((NDScalarType)np.str_).__mro__).Should().Equal(
+                "numpy.str_", "str", "numpy.character", "numpy.flexible", "numpy.generic", "object");
+            ReferenceEquals(((NDScalarType)np.str_).__base__, NDScalarType.PyStr).Should().BeTrue();
+            ReferenceEquals(((NDScalarType)np.float64).__base__, np.floating).Should().BeTrue();
+            Names(((NDScalarType)np.float32).__bases__).Should().Equal("numpy.floating");
+            Names(np.complex64.__bases__).Should().Equal("numpy.complexfloating");
+            Names(((NDScalarType)np.int64).__mro__).Should().Equal(
+                "numpy.int64", "numpy.signedinteger", "numpy.integer", "numpy.number", "numpy.generic", "object");
+        }
+
+        /// <summary>
+        ///     A built-in class's <c>__subclasses__()</c> lists the modelled classes deriving from it: <c>float</c> →
+        ///     <c>[numpy.float64]</c>, <c>int</c> → <c>[bool]</c>, <c>object</c> → the other built-ins and
+        ///     <c>numpy.generic</c> (Python's own lists also hold classes outside NumPy: <c>enum.IntEnum</c> under
+        ///     <c>int</c>, <c>enum.StrEnum</c> under <c>str</c>, some 360 classes under <c>object</c>).
+        /// </summary>
+        [TestMethod]
+        public void BuiltinClasses_Subclasses()
+        {
+            Names(NDScalarType.PyFloat.__subclasses__()).Should().Equal("numpy.float64");
+            Names(NDScalarType.PyComplex.__subclasses__()).Should().Equal("numpy.complex128");
+            Names(NDScalarType.PyBytes.__subclasses__()).Should().Equal("numpy.bytes_");
+            Names(NDScalarType.PyStr.__subclasses__()).Should().Equal("numpy.str_");
+            Names(NDScalarType.PyInt.__subclasses__()).Should().Equal("bool");
+            NDScalarType.PyMemoryView.__subclasses__().Should().BeEmpty();
+            NDScalarType.PyBool.__subclasses__().Should().BeEmpty();
+            Names(NDScalarType.PyObject.__subclasses__()).Should().Equal(
+                "int", "float", "complex", "str", "bytes", "memoryview", "numpy.generic");
+        }
+
+        /// <summary>
+        ///     A StringDType descriptor's class IS Python's <c>str</c> (<c>np.dtypes.StringDType().type is str</c>), outside
+        ///     NumPy's scalar hierarchy.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_ClassIsPythonsStr()
+        {
+            ReferenceEquals((NDScalarType)np.dtype("T"), NDScalarType.PyStr).Should().BeTrue();
+            np.generic.__subclasscheck__(np.dtype("T")).Should().BeFalse();
+            np.issubdtype(np.dtype("U5"), np.dtype("T")).Should().BeTrue();
+            np.issubdtype(np.dtype("T"), np.character).Should().BeFalse();
+        }
+
+        // ---- the NumPy classes NumSharp has no dtype for --------------------------------------------------------------
+
+        /// <summary>
+        ///     <c>np.complex64</c> (= <c>np.csingle</c>), <c>np.object_</c> and <c>np.void</c> are NumPy's concrete classes
+        ///     in their NumPy places of the hierarchy; converting one to a dtype refuses with a
+        ///     <see cref="NotSupportedException"/> that names what NumSharp stores instead.
+        /// </summary>
+        [TestMethod]
+        public void DtypelessClasses_ExistAndRefuseTheConversion()
+        {
+            ReferenceEquals(np.csingle, np.complex64).Should().BeTrue();
+            np.complex64.ToString().Should().Be("<class 'numpy.complex64'>");
+            np.object_.ToString().Should().Be("<class 'numpy.object_'>");
+            np.@void.ToString().Should().Be("<class 'numpy.void'>");
+            Names(np.complex64.__mro__).Should().Equal(
+                "numpy.complex64", "numpy.complexfloating", "numpy.inexact", "numpy.number", "numpy.generic", "object");
+            Names(np.object_.__mro__).Should().Equal("numpy.object_", "numpy.generic", "object");
+            Names(np.@void.__mro__).Should().Equal("numpy.void", "numpy.flexible", "numpy.generic", "object");
+            foreach (var cls in new[] { np.complex64, np.object_, np.@void })
+            {
+                cls.IsAbstract.Should().BeFalse();
+                cls.IsBuiltin.Should().BeFalse();
+                new Action(() => np.dtype(cls)).Should().Throw<NotSupportedException>();
+                new Action(() => _ = (DType)cls).Should().Throw<NotSupportedException>();
+            }
+
+            new Action(() => np.dtype(np.complex64)).Should().Throw<NotSupportedException>()
+                .WithMessage("*complex64*").WithMessage("*complex128*");
+            new Action(() => np.dtype(np.object_)).Should().Throw<NotSupportedException>().WithMessage("*object dtype*");
+            new Action(() => np.dtype(np.@void)).Should().Throw<NotSupportedException>().WithMessage("*void dtype*");
+        }
+
+        /// <summary>
+        ///     <c>np.dtype</c> of a Python built-in class is NumPy's descriptor for it — the shared singletons for
+        ///     <c>float</c> / <c>complex</c> / <c>bool</c> / <c>int</c> (pointer-sized), the unsized string descriptors for
+        ///     <c>str</c> / <c>bytes</c> — and refuses <c>object</c> and <c>memoryview</c>, whose NumPy dtypes (<c>O</c>,
+        ///     <c>V</c>) NumSharp lacks.
+        /// </summary>
+        [TestMethod]
+        public void BuiltinClass_ToDtype_IsNumPysDescriptor()
+        {
+            ReferenceEquals(np.dtype(NDScalarType.PyFloat), np.float64).Should().BeTrue();
+            ReferenceEquals(np.dtype(NDScalarType.PyComplex), np.complex128).Should().BeTrue();
+            ReferenceEquals(np.dtype(NDScalarType.PyBool), np.bool_).Should().BeTrue();
+            ReferenceEquals(np.dtype(NDScalarType.PyInt), np.intp).Should().BeTrue();
+            np.dtype(NDScalarType.PyStr).ToString(true).Should().Be("dtype('<U')");
+            np.dtype(NDScalarType.PyBytes).ToString(true).Should().Be("dtype('S')");
+            new Action(() => np.dtype(NDScalarType.PyObject)).Should().Throw<NotSupportedException>();
+            new Action(() => np.dtype(NDScalarType.PyMemoryView)).Should().Throw<NotSupportedException>();
         }
 
         // ---- concrete classes and the conversions ------------------------------------------------------------------
@@ -119,10 +283,13 @@ namespace NumSharp.Tests.DTypes
             ReferenceEquals((NDScalarType)np.dtype("M8[s]"), (NDScalarType)np.dtype("M8[ns]")).Should().BeTrue();
             f8.ToString().Should().Be("<class 'numpy.float64'>");
             f8.IsAbstract.Should().BeFalse();
-            Names(f8.__mro__).Should().Equal("float64", "floating", "inexact", "number", "generic");
-            Names(((NDScalarType)np.dtype("m8[s]")).__mro__).Should().Equal("timedelta64", "signedinteger", "integer", "number", "generic");
-            Names(((NDScalarType)np.bool_).__mro__).Should().Equal("bool", "generic");
+            Names(((NDScalarType)np.dtype("m8[s]")).__mro__).Should().Equal(
+                "numpy.timedelta64", "numpy.signedinteger", "numpy.integer", "numpy.number", "numpy.generic", "object");
+            Names(((NDScalarType)np.dtype("M8[s]")).__mro__).Should().Equal("numpy.datetime64", "numpy.generic", "object");
+            Names(((NDScalarType)np.bool_).__mro__).Should().Equal("numpy.bool", "numpy.generic", "object");
             ((NDScalarType)np.@decimal).ToString().Should().Be("<class 'numsharp.decimal'>");
+            Names(((NDScalarType)np.@decimal).__mro__).Should().Equal(
+                "numsharp.decimal", "numpy.floating", "numpy.inexact", "numpy.number", "numpy.generic", "object");
             ((NDScalarType)(DType)null).Should().BeNull();
         }
 
@@ -178,7 +345,41 @@ namespace NumSharp.Tests.DTypes
             new Action(() => np.iinfo(np.integer)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'O'.");
             np.finfo((NDScalarType)np.float32).bits.Should().Be(32);
             np.iinfo((NDScalarType)np.int16).max.Should().Be(short.MaxValue);
-            new Action(() => np.finfo((NDScalarType)np.int32)).Should().Throw<ArgumentException>();
+            new Action(() => np.finfo((NDScalarType)np.int32)).Should().Throw<ValueError>()
+                .WithMessage("data type <class 'numpy.int32'> not inexact");
+        }
+
+        /// <summary>
+        ///     <c>np.finfo</c> / <c>np.iinfo</c> of the dtype-less and the built-in classes, NumPy 2.4.2's answers: a complex
+        ///     class reports its real part's limits (<c>np.finfo(np.complex64)</c> is float32's, which NumSharp has); a
+        ///     built-in class is read as NumPy's class for it (<c>float</c> → float64, <c>int</c> → int64); every refusal
+        ///     names that class, or its dtype's kind character.
+        /// </summary>
+        [TestMethod]
+        public void FinfoIinfo_DtypelessAndBuiltinClasses()
+        {
+            np.finfo(np.complex64).dtype.Should().Be(np.float32);
+            new Action(() => np.iinfo(np.complex64)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'c'.");
+            new Action(() => np.finfo(np.object_)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.object_'> not inexact");
+            new Action(() => np.iinfo(np.object_)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'O'.");
+            new Action(() => np.finfo(np.@void)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.void'> not inexact");
+            new Action(() => np.iinfo(np.@void)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'V'.");
+
+            np.finfo(NDScalarType.PyFloat).dtype.Should().Be(np.float64);
+            np.finfo(NDScalarType.PyComplex).dtype.Should().Be(np.float64);
+            np.iinfo(NDScalarType.PyInt).dtype.Should().Be(np.int64);
+            new Action(() => np.iinfo(NDScalarType.PyFloat)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'f'.");
+            new Action(() => np.finfo(NDScalarType.PyInt)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.int64'> not inexact");
+            new Action(() => np.finfo(NDScalarType.PyBool)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.bool'> not inexact");
+            new Action(() => np.iinfo(NDScalarType.PyBool)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'b'.");
+            new Action(() => np.finfo(NDScalarType.PyStr)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.str_'> not inexact");
+            new Action(() => np.iinfo(NDScalarType.PyStr)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'U'.");
+            new Action(() => np.finfo(NDScalarType.PyBytes)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.bytes_'> not inexact");
+            new Action(() => np.iinfo(NDScalarType.PyBytes)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'S'.");
+            new Action(() => np.finfo(NDScalarType.PyObject)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.object_'> not inexact");
+            new Action(() => np.iinfo(NDScalarType.PyObject)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'O'.");
+            new Action(() => np.finfo(NDScalarType.PyMemoryView)).Should().Throw<ValueError>().WithMessage("data type <class 'numpy.void'> not inexact");
+            new Action(() => np.iinfo(NDScalarType.PyMemoryView)).Should().Throw<ValueError>().WithMessage("Invalid integer data type 'V'.");
         }
 
         // ---- np.issubdtype --------------------------------------------------------------------------------------------
@@ -251,6 +452,52 @@ namespace NumSharp.Tests.DTypes
             np.issubdtype(np.integer, (NDScalarType)null).Should().BeFalse();
         }
 
+        /// <summary>
+        ///     A Python built-in class is read as NumPy's <c>dtype(cls).type</c> (<c>float</c> as numpy.float64, <c>int</c>
+        ///     as numpy.int64, <c>object</c> as numpy.object_, <c>memoryview</c> as numpy.void), so the pairs answer NumPy
+        ///     2.4.2's way: <c>np.issubdtype(float, np.floating)</c> is True and <c>np.issubdtype(bool, int)</c> False
+        ///     (numpy.bool is no numpy.int64), although Python's <c>bool</c> derives from <c>int</c>.
+        /// </summary>
+        [TestMethod]
+        public void IsSubdtype_PythonBuiltins()
+        {
+            var py = new Dictionary<string, NDScalarType>
+            {
+                ["int"] = NDScalarType.PyInt, ["float"] = NDScalarType.PyFloat, ["complex"] = NDScalarType.PyComplex,
+                ["bool"] = NDScalarType.PyBool, ["str"] = NDScalarType.PyStr, ["bytes"] = NDScalarType.PyBytes,
+                ["object"] = NDScalarType.PyObject, ["memoryview"] = NDScalarType.PyMemoryView,
+            };
+            var cases = new (NDScalarType arg1, NDScalarType arg2, bool expected)[]
+            {
+                (np.float64, py["float"], true), (py["float"], np.floating, true), (py["float"], np.float64, true),
+                (np.str_, py["str"], true), (py["str"], np.str_, true), (py["int"], np.integer, true),
+                (np.int64, py["int"], true), (py["int"], np.int64, true), (py["object"], np.generic, true),
+                (np.object_, py["object"], true), (py["memoryview"], np.@void, true), (py["bool"], np.bool_, true),
+                (np.bool_, py["bool"], true), (py["complex"], np.complexfloating, true), (np.complex128, py["complex"], true),
+                (py["bytes"], np.bytes_, true), (np.bytes_, py["bytes"], true), (py["str"], np.character, true),
+                (py["str"], py["str"], true), (py["float"], py["float"], true), (np.float32, py["float"], false),
+                (py["bool"], py["int"], false), (np.bool_, py["int"], false), (py["memoryview"], py["memoryview"], true),
+                (py["object"], py["object"], true), (py["float"], py["int"], false),
+            };
+            foreach (var (a, b, expected) in cases)
+                np.issubdtype(a, b).Should().Be(expected, $"np.issubdtype({a}, {b})");
+        }
+
+        /// <summary>The dtype-less classes take part in issubdtype like any NumPy class (NumPy 2.4.2's answers).</summary>
+        [TestMethod]
+        public void IsSubdtype_DtypelessClasses()
+        {
+            np.issubdtype(np.complex64, np.complexfloating).Should().BeTrue();
+            np.issubdtype(np.complex64, np.inexact).Should().BeTrue();
+            np.issubdtype(np.complex64, np.complex128).Should().BeFalse();
+            np.issubdtype(np.complex128, np.complex64).Should().BeFalse();
+            np.issubdtype(np.object_, np.generic).Should().BeTrue();
+            np.issubdtype(np.object_, np.number).Should().BeFalse();
+            np.issubdtype(np.@void, np.flexible).Should().BeTrue();
+            np.issubdtype(np.@void, np.character).Should().BeFalse();
+            np.issubdtype(np.@void, np.@void).Should().BeTrue();
+        }
+
         // ---- np.isdtype ---------------------------------------------------------------------------------------------
 
         /// <summary>
@@ -282,6 +529,35 @@ namespace NumSharp.Tests.DTypes
                 .WithMessage("kind argument is a string, but 'bad' is not a known kind name.");
             new Action(() => np.isdtype((NDScalarType)null, "integral")).Should().Throw<TypeError>()
                 .WithMessage("dtype argument must be a NumPy dtype, but it is a <class 'NoneType'>.");
+        }
+
+        /// <summary>
+        ///     np.isdtype accepts NumPy's classes only (<c>allTypes</c>): the dtype-less ones are in their named kinds
+        ///     (complex64 is "complex floating" and "numeric", object_ and void in none) and identical to themselves; a
+        ///     Python built-in class is refused as an argument and as a kind with NumPy's texts (it is a Python
+        ///     <c>type</c>).
+        /// </summary>
+        [TestMethod]
+        public void IsDtype_DtypelessAndBuiltinClasses()
+        {
+            np.isdtype(np.complex64, "complex floating").Should().BeTrue();
+            np.isdtype(np.complex64, "numeric").Should().BeTrue();
+            np.isdtype(np.complex64, "real floating").Should().BeFalse();
+            np.isdtype(np.complex64, np.complex64).Should().BeTrue();
+            np.isdtype(np.complex64, np.complex128).Should().BeFalse();
+            foreach (var cls in new[] { np.object_, np.@void })
+                foreach (var kind in new[] { "bool", "signed integer", "unsigned integer", "integral", "real floating", "complex floating", "numeric" })
+                    np.isdtype(cls, kind).Should().BeFalse($"np.isdtype({cls}, '{kind}')");
+            np.isdtype(np.float64, np.object_).Should().BeFalse();
+            np.isdtype(np.float64, np.object_, "numeric").Should().BeTrue();
+
+            foreach (var cls in Builtins)
+            {
+                new Action(() => np.isdtype(cls, "numeric")).Should().Throw<TypeError>()
+                    .WithMessage("dtype argument must be a NumPy dtype, but it is a <class 'type'>.");
+                new Action(() => np.isdtype(np.float64, cls)).Should().Throw<TypeError>()
+                    .WithMessage("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'type'>.");
+            }
         }
 
         // ---- isinstance / issubclass ---------------------------------------------------------------------------------
@@ -333,13 +609,85 @@ namespace NumSharp.Tests.DTypes
             np.integer.__instancecheck__(a).Should().BeFalse();
         }
 
-        /// <summary>A class or a descriptor is not an INSTANCE of a scalar class (NumPy: <c>isinstance(np.int64, np.integer)</c> is False).</summary>
+        /// <summary>
+        ///     A class or a descriptor is not an INSTANCE of a scalar class (NumPy: <c>isinstance(np.int64, np.integer)</c> is
+        ///     False) — but it is an <c>object</c>, as every Python value is.
+        /// </summary>
         [TestMethod]
         public void InstanceCheck_ClassesAreNotInstances()
         {
             np.floating.__instancecheck__(np.float64).Should().BeFalse();
             np.generic.__instancecheck__(np.integer).Should().BeFalse();
             np.generic.__instancecheck__(typeof(double)).Should().BeFalse();
+            NDScalarType.PyFloat.__instancecheck__(np.float64).Should().BeFalse();
+            NDScalarType.PyObject.__instancecheck__(np.float64).Should().BeTrue();
+            NDScalarType.PyObject.__instancecheck__(np.integer).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     The Python classes' isinstance: a C# value is the Python object it stands for in NumSharp's NEP 50 rules (an
+        ///     integer an <c>int</c>, a <see cref="bool"/> a <c>bool</c> and so an <c>int</c>, a <see cref="double"/> /
+        ///     <see cref="float"/> a <c>float</c>, a <see cref="string"/> a <c>str</c>, a <c>byte[]</c> a <c>bytes</c>, an
+        ///     <see cref="np.MemoryView"/> a <c>memoryview</c>); a <see cref="Half"/> or <see cref="decimal"/> is a NumPy
+        ///     scalar only; every non-null value is an <c>object</c>.
+        /// </summary>
+        [TestMethod]
+        public void InstanceCheck_PythonClasses_BoxedValues()
+        {
+            NDScalarType.PyFloat.__instancecheck__(1.5).Should().BeTrue();
+            NDScalarType.PyFloat.__instancecheck__(1.5f).Should().BeTrue();
+            NDScalarType.PyFloat.__instancecheck__(5).Should().BeFalse();
+            NDScalarType.PyFloat.__instancecheck__((Half)1.5).Should().BeFalse();
+            NDScalarType.PyFloat.__instancecheck__(1.5m).Should().BeFalse();
+            NDScalarType.PyInt.__instancecheck__(5).Should().BeTrue();
+            NDScalarType.PyInt.__instancecheck__(5UL).Should().BeTrue();
+            NDScalarType.PyInt.__instancecheck__(BigInteger.Pow(2, 70)).Should().BeTrue();
+            NDScalarType.PyInt.__instancecheck__(true).Should().BeTrue();
+            NDScalarType.PyInt.__instancecheck__(DayOfWeek.Monday).Should().BeFalse();
+            NDScalarType.PyBool.__instancecheck__(true).Should().BeTrue();
+            NDScalarType.PyBool.__instancecheck__(1).Should().BeFalse();
+            NDScalarType.PyComplex.__instancecheck__(new Complex(1, 2)).Should().BeTrue();
+            NDScalarType.PyStr.__instancecheck__("a").Should().BeTrue();
+            NDScalarType.PyBytes.__instancecheck__(new byte[] { 1 }).Should().BeTrue();
+            NDScalarType.PyBytes.__instancecheck__("a").Should().BeFalse();
+            using (var a = np.arange(3))
+                NDScalarType.PyMemoryView.__instancecheck__(a.data).Should().BeTrue();
+            NDScalarType.PyObject.__instancecheck__(new object()).Should().BeTrue();
+            NDScalarType.PyObject.__instancecheck__(DayOfWeek.Monday).Should().BeTrue();
+            NDScalarType.PyObject.__instancecheck__(null).Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     The Python classes' isinstance over NumPy scalars (0-d arrays that stand for one) follows NumPy's MROs: a
+        ///     float64 scalar is a <c>float</c> (<c>isinstance(np.float64(1.5), float)</c>) and a complex128 one a
+        ///     <c>complex</c>; float32, int64 and bool scalars are not Python's (<c>isinstance(np.int64(1), int)</c> is
+        ///     False); an explicit <c>np.array(1.5)</c> is an ndarray, so only an <c>object</c>.
+        /// </summary>
+        [TestMethod]
+        public void InstanceCheck_PythonClasses_NumPyScalars()
+        {
+            using var f64 = np.arange(3.0);
+            using var f32 = f64.astype(np.float32);
+            using var i64 = np.arange(3L);
+            using var c128 = f64.astype(np.complex128);
+            using var s64 = f64.sum();
+            using var s32 = f32.sum();
+            using var si = i64.sum();
+            using var sc = c128.sum();
+            using var positive = i64 > 0;
+            // a[i] of a 1-D bool array through the untyped indexer: the 0-d array that stands for a numpy.bool scalar (the
+            // typed NDArray<bool> indexer returns the C# bool itself)
+            using var b = ((NDArray)positive)[1];
+            using var explicitArray = np.array(1.5);
+            NDScalarType.PyFloat.__instancecheck__(s64).Should().BeTrue();
+            NDScalarType.PyFloat.__instancecheck__(s32).Should().BeFalse();
+            NDScalarType.PyInt.__instancecheck__(si).Should().BeFalse();
+            NDScalarType.PyComplex.__instancecheck__(sc).Should().BeTrue();
+            NDScalarType.PyBool.__instancecheck__(b).Should().BeFalse();
+            NDScalarType.PyInt.__instancecheck__(b).Should().BeFalse();
+            NDScalarType.PyFloat.__instancecheck__(explicitArray).Should().BeFalse();
+            NDScalarType.PyObject.__instancecheck__(explicitArray).Should().BeTrue();
+            NDScalarType.PyObject.__instancecheck__(f64).Should().BeTrue();
         }
 
         /// <summary>
@@ -359,6 +707,38 @@ namespace NumSharp.Tests.DTypes
             new Action(() => np.integer.__subclasscheck__((NDScalarType)null)).Should().Throw<TypeError>()
                 .WithMessage("issubclass() arg 1 must be a class");
             new Action(() => np.integer.__subclasscheck__((Type)null)).Should().Throw<TypeError>();
+        }
+
+        /// <summary>
+        ///     issubclass with the Python classes follows the MROs (NumPy 2.4.2 / CPython's answers): float64 is a
+        ///     <c>float</c>, float32 is not; no NumPy integer is an <c>int</c>; Python's <c>bool</c> is an <c>int</c> while
+        ///     numpy.bool is not; every class is an <c>object</c>, a C# type included. A C# type also stands for the
+        ///     Python class of its values (<c>typeof(long)</c> is an <c>int</c>).
+        /// </summary>
+        [TestMethod]
+        public void SubclassCheck_PythonClasses()
+        {
+            NDScalarType.PyFloat.__subclasscheck__(np.float64).Should().BeTrue();
+            NDScalarType.PyFloat.__subclasscheck__(np.float32).Should().BeFalse();
+            NDScalarType.PyComplex.__subclasscheck__(np.complex128).Should().BeTrue();
+            NDScalarType.PyComplex.__subclasscheck__(np.complex64).Should().BeFalse();
+            NDScalarType.PyInt.__subclasscheck__(np.int64).Should().BeFalse();
+            NDScalarType.PyInt.__subclasscheck__(NDScalarType.PyBool).Should().BeTrue();
+            NDScalarType.PyInt.__subclasscheck__(np.bool_).Should().BeFalse();
+            NDScalarType.PyStr.__subclasscheck__(np.str_).Should().BeTrue();
+            NDScalarType.PyBytes.__subclasscheck__(np.bytes_).Should().BeTrue();
+            NDScalarType.PyObject.__subclasscheck__(np.object_).Should().BeTrue();
+            NDScalarType.PyObject.__subclasscheck__(np.generic).Should().BeTrue();
+            np.generic.__subclasscheck__(NDScalarType.PyFloat).Should().BeFalse();
+            np.generic.__subclasscheck__(NDScalarType.PyObject).Should().BeFalse();
+            np.floating.__subclasscheck__(NDScalarType.PyFloat).Should().BeFalse();
+
+            NDScalarType.PyInt.__subclasscheck__(typeof(long)).Should().BeTrue();
+            NDScalarType.PyInt.__subclasscheck__(typeof(bool)).Should().BeTrue();
+            NDScalarType.PyFloat.__subclasscheck__(typeof(double)).Should().BeTrue();
+            NDScalarType.PyFloat.__subclasscheck__(typeof(Half)).Should().BeFalse();
+            NDScalarType.PyBool.__subclasscheck__(typeof(int)).Should().BeFalse();
+            NDScalarType.PyObject.__subclasscheck__(typeof(System.IO.Stream)).Should().BeTrue();
         }
 
         // ---- the relatives ---------------------------------------------------------------------------------------------
@@ -391,8 +771,14 @@ namespace NumSharp.Tests.DTypes
             ReferenceEquals(np.sctypeDict["long"], np.@long).Should().BeTrue();
             np.sctypeDict["int"].Should().Be(np.intp);
             np.sctypeDict.ContainsKey("complex64").Should().BeFalse();
+            np.sctypeDict.ContainsKey("object").Should().BeFalse();
             np.sctypeDict.Keys.Take(5).Should().Equal("bool", "float16", "float32", "float64", "longdouble");
-            np.sctypeDict.Keys.Last().Should().Be("int");
+            np.sctypeDict.Keys.Skip(7).Take(3).Should().Equal("bytes_", "str_", "datetime64");
+            np.sctypeDict.Keys.TakeLast(5).Should().Equal("bytes", "a", "int", "str", "unicode");
+            foreach (var name in new[] { "bytes_", "bytes", "a" })
+                ReferenceEquals(np.sctypeDict[name], np.bytes_).Should().BeTrue(name);
+            foreach (var name in new[] { "str_", "str", "unicode" })
+                ReferenceEquals(np.sctypeDict[name], np.str_).Should().BeTrue(name);
             foreach (var value in np.sctypeDict.Values)
                 np.issubdtype(value, np.generic).Should().BeTrue();
         }

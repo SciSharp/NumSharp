@@ -76,8 +76,20 @@
       "notes": "NDArray.Shape is a NumSharp Shape value, not the tuple returned by numpy.shape."
     },
     "numpy.complex64": {
-      "status": "unsupported",
-      "notes": "The public compatibility symbol exists, but NumSharp does not implement a Complex64 storage dtype."
+      "status": "partial",
+      "notes": "A scalar class (NDScalarType, also np.csingle): the hierarchy, np.issubdtype / np.isdtype / np.finfo / isinstance / issubclass work, but NumSharp has no complex64 storage dtype, so np.dtype(np.complex64) raises NotSupportedException."
+    },
+    "numpy.csingle": {
+      "status": "partial",
+      "notes": "NumPy's other name for numpy.complex64, the same NDScalarType: the type tests work, but NumSharp has no complex64 storage dtype, so np.dtype(np.csingle) raises NotSupportedException."
+    },
+    "numpy.object_": {
+      "status": "partial",
+      "notes": "A scalar class (NDScalarType): the hierarchy and the type tests work, but NumSharp has no object dtype, so np.dtype(np.object_) raises NotSupportedException."
+    },
+    "numpy.void": {
+      "status": "partial",
+      "notes": "A scalar class (NDScalarType): the hierarchy and the type tests work, but NumSharp has no void or structured dtype, so np.dtype(np.void) raises NotSupportedException."
     }
   },
   "stray_allowlist": {

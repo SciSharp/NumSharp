@@ -64,10 +64,9 @@ namespace NumSharp
             if (dtype is null) throw new ArgumentNullException(nameof(dtype));
             ThrowIfNotNumPyDType(dtype);
             CheckIsdtypeKind(kind);
-
-            if (!dtype.Meta.HasStorage)
-                return false; // datetime64 / timedelta64: not in NumPy's sctypes categories
-            return NPTypeHierarchy.IsSubType(dtype.typecode, kind);
+            // The kind is a set of CONCRETE scalar classes (NumPy builds it from sctypes, which leave datetime64 /
+            // timedelta64 out): the descriptor's class answers.
+            return ((NDScalarType)dtype).IsInKind(kind);
         }
 
         /// <summary>
@@ -110,8 +109,9 @@ namespace NumSharp
         {
             CheckIsdtypeDtype(dtype);
             CheckIsdtypeKind(kind);
-            // An abstract class is in no kind's set; only then does the concrete class need its descriptor.
-            return !dtype.IsAbstract && isdtype(dtype.ToDescriptor(), kind);
+            // A kind is a set of concrete classes: an abstract class is in none, a dtype-less NumPy class (complex64) is
+            // in its family's, though NumSharp has no descriptor for it.
+            return dtype.IsInKind(kind);
         }
 
         /// <summary>NumPy's tuple form of <see cref="isdtype(NDScalarType, string)"/>: true when the class is in ANY of the kinds (every kind is validated first, as NumPy does).</summary>
@@ -235,7 +235,7 @@ namespace NumSharp
                     case string name:
                         CheckIsdtypeKind(name);
                         // A named kind holds concrete classes only; an abstract class is in none of them.
-                        result |= !sctype.IsAbstract && isdtype(sctype.ToDescriptor(), name);
+                        result |= sctype.IsInKind(name);
                         break;
                     case NDScalarType cls:
                         CheckIsdtypeKindClass(cls);
@@ -275,9 +275,10 @@ namespace NumSharp
         private static void CheckIsdtypeDtype(NDScalarType dtype)
         {
             if (dtype is null) throw new TypeError("dtype argument must be a NumPy dtype, but it is a <class 'NoneType'>.");
-            // NumPy accepts only its own scalar classes (allTypes): Python's built-in str, the class of a StringDType
-            // descriptor, is a class but not a NumPy dtype, and NumPy names the class's type, <class 'type'>.
-            if (dtype.__module__ == "builtins")
+            // NumPy accepts only its own scalar classes (allTypes): a Python built-in class (float, int, ... and str, the
+            // class of a StringDType descriptor) is a class but not a NumPy dtype, and NumPy names the class's type,
+            // <class 'type'>.
+            if (dtype.IsBuiltin)
                 throw new TypeError("dtype argument must be a NumPy dtype, but it is a <class 'type'>.");
         }
 
@@ -287,8 +288,8 @@ namespace NumSharp
         private static void CheckIsdtypeKindClass(NDScalarType kind)
         {
             if (kind is null) throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'NoneType'>.");
-            // The same _preprocess_dtype refusal for a kind: Python's built-in str is not one of NumPy's scalar classes.
-            if (kind.__module__ == "builtins")
+            // The same _preprocess_dtype refusal for a kind: a Python built-in class is not one of NumPy's scalar classes.
+            if (kind.IsBuiltin)
                 throw new TypeError("kind argument must be comprised of NumPy dtypes or strings only, but is a <class 'type'>.");
         }
 

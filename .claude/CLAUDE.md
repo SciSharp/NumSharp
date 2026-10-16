@@ -3111,7 +3111,7 @@ and `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy)
 30/30 + Oracle 176/176 (dtype_text tier unchanged), Interop 638/638.
 
 **NumPy's scalar-type hierarchy is `NDScalarType` (2026-10-16; `DTypes/NDScalarType.cs`, `DTypes/np.scalar_types.cs`,
-`APIs/np.typing.cs`; gates `DTypes/NDScalarTypeTests.cs` (23) + the surface tier's scalar-type section, 3,245 cases, zero
+`APIs/np.typing.cs`; gates `DTypes/NDScalarTypeTests.cs` (36) + the surface tier's scalar-type section, 5,631 cases, zero
 excuses).** The abstract scalar CLASSES were the most used NumPy names NumSharp lacked (`np.integer` ~203K GitHub files,
 `np.floating` 161K, `np.number` 128K; `docs/plans/numpy-missing-api-usage.md`).
 - **Model.** `np.generic`, `np.number`, `np.integer`, `np.signedinteger`, `np.unsignedinteger`, `np.inexact`,
@@ -3127,28 +3127,56 @@ excuses).** The abstract scalar CLASSES were the most used NumPy names NumSharp 
 - **Class surface.** `__name__`, `__qualname__`, `__module__`, `__base__`, `__bases__`, `__mro__`, `mro()` (a fresh
   list), `__subclasses__()` (NumPy's registration order: abstract children first; cached per registry state through
   `DTypeRegistry.AllSnapshot`, which a registration republishes), `__instancecheck__` (isinstance), `__subclasscheck__`
-  (issubclass of a class, a `DType` or a C# element `Type`), `IsAbstract`, `ToString()` = `<class 'numpy.integer'>`.
-  Python's built-in bases are not modelled: MROs end at generic, `np.generic.__base__` is null (NumPy: `object`).
+  (issubclass of a class, a `DType` or a C# element `Type`), `IsAbstract`, `IsBuiltin`, `ToString()` =
+  `<class 'numpy.integer'>` (`<class 'float'>` for a built-in).
+- **Python's built-in classes are modelled** (`NDScalarType.PyObject`, `PyInt`, `PyBool` (base `int`), `PyFloat`,
+  `PyComplex`, `PyStr`, `PyBytes`, `PyMemoryView`; module `builtins`), so every `__mro__` is NumPy's WHOLE tuple by Python's
+  C3 linearisation: `numpy.generic.__base__` is `object`, and NumPy's `DUAL_INHERIT` table gives `numpy.float64`
+  `[floating, float]`, `numpy.complex128` `[complexfloating, complex]`, `numpy.bytes_` / `numpy.str_` `[bytes|str,
+  character]` (the Python base FIRST, `DUAL_INHERIT2`, so their `__base__` is Python's). Keyed by NumPy's TYPE NUMBER, not
+  the kind: `float32`, `complex64` and the integers have no Python base. A built-in's `__subclasses__()` lists the
+  modelled classes only (Python's `int` also lists `enum.IntEnum`, `str` `enum.StrEnum`, `object` ~360 classes).
+- **The dtype-less NumPy classes** `np.complex64` (= `np.csingle`, type number 14), `np.object_` (17) and `np.void` (20)
+  are concrete `NDScalarType`s in their NumPy places (`object_` last under generic, `void` under flexible): type tests,
+  `np.finfo(np.complex64)` (float32's) and `np.isdtype` kinds work; `np.dtype(cls)` / `(DType)cls` raise
+  `NotSupportedException`. A dtype class registered later under one of those type numbers ADOPTS the class (same object).
+  BREAKING: `np.complex64` / `np.csingle` were throwing `DType` properties; `np.zeros(3, np.complex64)` is now a compile
+  error. Not modelled: `numpy.record` (NumPy's one subclass of `void`).
 - **isinstance rule.** NumSharp has no scalar objects, so a boxed C# value of a dtype's EXACT element type is a scalar of
   that dtype (`np.floating.__instancecheck__(1.5)` is True; Python's `1.0` is not a `numpy.floating`), and so is an
   UNMARKED 0-d array (a computed 0-d result, `a[0]`, `NDArray.Scalar`); an explicit `np.array(5)` is not
-  (`NDArray.IsExplicitZeroDimArray`, now read by a second consumer besides `NDMatrix`), nor a boxed enum.
+  (`NDArray.IsExplicitZeroDimArray`, now read by a second consumer besides `NDMatrix`), nor a boxed enum. A boxed C# value
+  is ALSO the Python object it stands for in the NEP 50 house map (`NDScalarType.PythonClassOf`: integers and `BigInteger`
+  → `int`, `bool` → `bool`, `float`/`double` → `float`, `Complex` → `complex`, `string` → `str`, `byte[]` → `bytes`,
+  `np.MemoryView` → `memoryview`; `Half`/`char`/`decimal` are NumPy scalars only). A 0-d array follows NumPy's MROs: a
+  float64 scalar is a Python `float`, an int64 one is not an `int`, as in NumPy. Every non-null value (classes too) is an
+  `object`.
 - **BREAKING: `np.issubdtype`'s string argument is a DTYPE string**, as in NumPy (`dtype(arg).type`): NumSharp's old
   category vocabulary (`"integer"`, `"floating"`, `"signed"`, `"float"` read as floating, ...) is gone — `"integer"` raises
   `NotSupportedException("data type 'integer' not understood")` and `issubdtype(np.float32, "float")` is False (it was
   True: `"float"` is float64). Write the class: `np.issubdtype(x, np.floating)`. A null argument is NumPy's `None`
-  (float64). New overloads `(NDScalarType, NDScalarType)`, `(DType, NDScalarType)`, `(NDScalarType, DType)`. TRAP:
-  `np.issubdtype(NPTypeCode.X, np.bool_)` is CS0121-ambiguous (`DType → NPTypeCode` is implicit, so both
-  `(DType, DType)` and `(NPTypeCode, NPTypeCode)` apply) — pre-existing; spell one side as a string or a `DType`.
+  (float64). New overloads `(NDScalarType, NDScalarType)`, `(DType, NDScalarType)`, `(NDScalarType, DType)`. A Python
+  built-in class is read as NumPy's `dtype(cls).type` (`NDScalarType.NumPyClass`: `int` → the pointer-sized int64,
+  `float` → float64, `object` → object_, `memoryview` → void), so `issubdtype(float, np.floating)` is True and
+  `issubdtype(bool, int)` False. TRAP: `np.issubdtype(NPTypeCode.X, np.bool_)` is CS0121-ambiguous (`DType → NPTypeCode`
+  is implicit, so both `(DType, DType)` and `(NPTypeCode, NPTypeCode)` apply) — pre-existing; spell one side as a string
+  or a `DType`.
 - **np.isdtype with classes compares by IDENTITY** (NumPy's `dtype in processed_kinds`): `isdtype(np.int64, np.integer)`
   is False and an abstract class is in no named kind; the mixed tuple form is `isdtype(dtype, params object[])` (names,
-  `DType`s, classes, `Type`s; NumPy's TypeError text `... but is a <class 'int'>.` for anything else).
+  `DType`s, classes, `Type`s; NumPy's TypeError text `... but is a <class 'int'>.` for anything else). The named kinds
+  are NumPy's `sctypes` sets (`NDScalarType.IsInKind`): complex64 is "complex floating" / "numeric", object_ and void in
+  none. A Python built-in class is no NumPy dtype: refused as the argument and as a kind, `... but it is a <class
+  'type'>.`.
 - `np.finfo` / `np.iinfo` of an abstract class raise NumPy's ValueErrors, which name `object_` because NumPy retries with
-  the argument's type (`data type <class 'numpy.object_'> not inexact`, `Invalid integer data type 'O'.`).
+  the argument's type (`data type <class 'numpy.object_'> not inexact`, `Invalid integer data type 'O'.`). Of a
+  dtype-less or built-in class they read NumPy's class (`finfo(np.complex64)` is float32's, `finfo(float)` float64's,
+  `iinfo(int)` int64's) and refuse with its name or kind (`Invalid integer data type 'c'.`).
 - **Relatives.** `np.typecodes` (NumPy's strings in NumPy's order, read-only); `np.sctypeDict` (NumPy's names →
-  NumSharp's DESCRIPTORS, `np.sctypeDict["float64"]` IS `np.float64`; absent classes have no key, collapsed names map onto
-  the class they collapse onto, `long`/`ulong` follow the host's C long); `np.True_` / `np.False_` (C# bools);
-  `np.longdouble` (the float64 descriptor, as `np.clongdouble` is complex128).
+  NumSharp's DESCRIPTORS, `np.sctypeDict["float64"]` IS `np.float64`; the string names `bytes_`/`bytes`/`a` and
+  `str_`/`str`/`unicode` map to the unsized `dtype('S')` / `dtype('<U')`; the dtype-less classes' names (`complex64`,
+  `csingle`, `void`, `object_`, `object`) have no key, collapsed names map onto the class they collapse onto,
+  `long`/`ulong` follow the host's C long); `np.True_` / `np.False_` (C# bools); `np.longdouble` (the float64 descriptor,
+  as `np.clongdouble` is complex128).
 - **`np.typing`** (`[ModuleName("np.typing")]`): C# has no exported type aliases, so each member names the C# type that
   plays the alias's role in NumSharp's signatures — `NDArray` → `typeof(NDArray<>)` (`NumSharp.Generic`;
   `npt.NDArray[np.float64]` is `NDArray<double>`), `ArrayLike` → `typeof(NDArray)` (every array_like parameter),
@@ -3158,8 +3186,8 @@ excuses).** The abstract scalar CLASSES were the most used NumPy names NumSharp 
   descriptor's class is Python's own `str` (`<class 'str'>`, module `builtins`, OUTSIDE `np.generic`), which `np.str_`
   derives from, so `issubdtype('U5', StringDType())` is True and `issubdtype(StringDType(), np.character)` False;
   `np.isdtype` refuses a `StringDType` descriptor and Python's `str` with NumPy's `_preprocess_dtype` texts.
-- **Not done:** `np.ScalarType` (NumPy's tuple mixes Python built-in classes with NumPy's; no faithful C# form —
-  `np.isscalar` covers its use); the complex64 / object_ / void classes (no such dtypes).
+- **Not done:** `np.ScalarType`; the classes NumPy keeps apart where NumSharp collapses them (`intc`/`uintc` on Windows,
+  `longdouble`/`clongdouble`: `np.issubdtype(np.float64, np.longdouble)` is True here, False in NumPy).
 - **Perf (NPY/NS, two pinned P-cores, a loaded host):** issubdtype 38–140×, isdtype 69–658×, isinstance 5.2–8.8×,
   issubclass 11×, `np.dtype(cls)` 52×, `__subclasses__()` 10× (was 1.3× before its cache), typecodes / sctypeDict lookups
   ~8×.

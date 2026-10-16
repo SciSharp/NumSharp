@@ -5,28 +5,37 @@ namespace NumSharp.Tests.Creation
 {
     /// <summary>
     ///     NumSharp only supports <c>complex128</c> (System.Numerics.Complex =
-    ///     2 × float64). Attempts to access <c>complex64</c> through any API
+    ///     2 × float64). Attempts to obtain a complex64 DESCRIPTOR through any API
     ///     must throw <see cref="NotSupportedException"/> — we do not silently
     ///     widen to complex128, because that would mask user intent and hide
-    ///     precision-loss expectations.
+    ///     precision-loss expectations. <c>np.complex64</c> itself is NumPy's scalar
+    ///     CLASS (an <see cref="NDScalarType"/>), so type tests over it work.
     /// </summary>
     [TestClass]
     public class Complex64RefusalTests
     {
+        /// <summary>
+        ///     <c>np.complex64</c> is the class (reading it never throws); converting it to a descriptor throws, naming
+        ///     complex64 and the complex128 NumSharp stores instead.
+        /// </summary>
         [TestMethod]
-        public void NpComplex64_Direct_Access_Throws()
+        public void NpComplex64_IsAClass_TheDescriptorThrows()
         {
-            Action act = () => { var _ = np.complex64; };
+            np.complex64.ToString().Should().Be("<class 'numpy.complex64'>");
+            Action act = () => np.dtype(np.complex64);
             act.Should().Throw<NotSupportedException>()
                 .WithMessage("*complex64*")
                 .WithMessage("*complex128*");
+            Action cast = () => { var _ = (DType)np.complex64; };
+            cast.Should().Throw<NotSupportedException>();
         }
 
+        /// <summary>NumPy: <c>np.csingle</c> is <c>np.complex64</c> — the same class object, the same refusal.</summary>
         [TestMethod]
-        public void NpCsingle_Direct_Access_Throws()
+        public void NpCsingle_IsComplex64()
         {
-            // NumPy: np.csingle is alias for complex64. NumSharp: throws like complex64.
-            Action act = () => { var _ = np.csingle; };
+            ReferenceEquals(np.csingle, np.complex64).Should().BeTrue();
+            Action act = () => np.dtype(np.csingle);
             act.Should().Throw<NotSupportedException>();
         }
 

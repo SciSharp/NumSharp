@@ -60,7 +60,7 @@ namespace NumSharp.Tests.Fuzz
             var r = run.Sweep;
 
             // Members that were ONLY ever measured throwing: legitimate for by-design throwers
-            // (np.complex64, np.chars), but a member landing here because no target makes it succeed
+            // (np.chars), but a member landing here because no target makes it succeed
             // would have its success path unaudited — listed so the target plan can be widened.
             var errorOnly = r.ErrorMeasuredByOp.Keys.Where(k => r.MeasuredByOp.GetValueOrDefault(k) == 0)
                              .OrderBy(k => k, StringComparer.Ordinal).ToList();

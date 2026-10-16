@@ -29,9 +29,22 @@ namespace NumSharp.Tests.Documentation
 
             NDScalarType t = a.dtype;
             t.ToString().Should().Be("<class 'numpy.float64'>");
-            t.__mro__.Select(c => c.__name__).Should().Equal("float64", "floating", "inexact", "number", "generic");
+            t.__mro__.Select(c => c.__name__).Should().Equal("float64", "floating", "inexact", "number", "generic", "float", "object");
             np.floating.__subclasses__().Select(c => c.__name__).Should().Equal("float16", "float32", "float64", "decimal");
             ReferenceEquals((DType)t, np.float64).Should().BeTrue();
+        }
+
+        /// <summary>The page's built-in and dtype-less classes snippet: Python's classes in the hierarchy, np.complex64 without a dtype.</summary>
+        [TestMethod]
+        public void BuiltinAndDtypelessClasses_AsDocumented()
+        {
+            NDScalarType.PyFloat.__subclasscheck__(np.float64).Should().BeTrue();
+            NDScalarType.PyFloat.__subclasscheck__(np.float32).Should().BeFalse();
+            np.issubdtype(NDScalarType.PyFloat, np.floating).Should().BeTrue();
+            np.issubdtype(NDScalarType.PyBool, NDScalarType.PyInt).Should().BeFalse();
+            np.issubdtype(np.complex64, np.complexfloating).Should().BeTrue();
+            np.finfo(np.complex64).dtype.Should().Be(np.float32);
+            new Action(() => np.dtype(np.complex64)).Should().Throw<NotSupportedException>();
         }
 
         /// <summary>The page's rules: an abstract class is not a dtype, a string is a dtype string, isdtype compares identity, a C# value is a scalar.</summary>

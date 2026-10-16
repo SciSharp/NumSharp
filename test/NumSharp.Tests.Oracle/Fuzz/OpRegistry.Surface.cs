@@ -272,9 +272,10 @@ namespace NumSharp.Tests.Fuzz
                 case "binary_repr":
                     return np.binary_repr(PyInt(p["num"]), SurfNullableInt(p, "width"));
                 case "typename": return np.typename(SurfStr(p, "char"));
-                // The scalar-type section: a class's own attributes, np.typecodes.
+                // The scalar-type section: a class's own attributes, np.typecodes, the repr of np.sctypeDict's string values.
                 case "sctype": return ScalarTypeAttribute(p);
                 case "typecodes": return TypeCodes(p);
+                case "sctypeDict": return SctypeDictRepr(p);
                 case "datetime_data":
                 {
                     var (unit, count) = np.datetime_data(SurfStr(p, "dtype"));

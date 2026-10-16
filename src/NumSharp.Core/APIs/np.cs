@@ -108,31 +108,12 @@ namespace NumSharp
         public static readonly DType longdouble = float_;
 
         // ---- Complex ----
-        // NumSharp's Complex = System.Numerics.Complex = two 64-bit floats (complex128).
-        // There is NO complex64 in NumSharp — any attempt to use it throws.
+        // NumSharp's Complex = System.Numerics.Complex = two 64-bit floats (complex128). NumPy's complex64 is a scalar CLASS
+        // here (np.complex64, DTypes/np.scalar_types.cs) with no dtype behind it: converting it to a dtype refuses.
         public static readonly DType complex_ = typeof(Complex);
         public static readonly DType complex128 = complex_;
         public static readonly DType cdouble = complex_;      // NumPy alias for complex128
         public static readonly DType clongdouble = complex_;  // NumPy: long-double complex collapses to complex128
-
-        /// <summary>
-        ///     NumSharp does not support <c>complex64</c> (two 32-bit floats). The only complex
-        ///     type available is <see cref="complex128"/> (two 64-bit floats, backed by
-        ///     <see cref="System.Numerics.Complex"/>). Accessing this property throws
-        ///     <see cref="NotSupportedException"/>; use <see cref="complex128"/> or
-        ///     <see cref="complex_"/> instead.
-        /// </summary>
-        public static DType complex64 => throw new NotSupportedException(
-            "NumSharp does not support complex64 (two 32-bit floats). " +
-            "Use np.complex128 (System.Numerics.Complex, two 64-bit floats) instead.");
-
-        /// <summary>
-        ///     NumPy alias for complex64. Same as <see cref="complex64"/> — throws
-        ///     because NumSharp does not support complex64.
-        /// </summary>
-        public static DType csingle => throw new NotSupportedException(
-            "NumSharp does not support csingle (= complex64, two 32-bit floats). " +
-            "Use np.complex128 / np.cdouble instead.");
 
         /// <summary>NumSharp-only: the <see cref="System.Decimal"/> descriptor (no NumPy counterpart).</summary>
         public static readonly DType @decimal = typeof(decimal);

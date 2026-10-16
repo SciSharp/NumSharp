@@ -148,25 +148,34 @@ namespace NumSharp
 
         /// <summary>
         ///     Machine limits of an integer scalar CLASS — NumPy's <c>np.iinfo(cls)</c>: a concrete class gives its dtype's
-        ///     limits (<c>np.iinfo((NDScalarType)np.int16)</c> is <c>np.iinfo(np.int16)</c>); an abstract class
-        ///     (<see cref="integer"/>, <see cref="signedinteger"/>, ...) has no dtype and is refused with NumPy's text.
+        ///     limits (<c>np.iinfo((NDScalarType)np.int16)</c> is <c>np.iinfo(np.int16)</c>), and a Python built-in class
+        ///     the limits of the NumPy class NumPy reads it as (<c>np.iinfo(NDScalarType.PyInt)</c> is int64's on a 64-bit
+        ///     host).
         /// </summary>
         /// <param name="dtype">The scalar class.</param>
-        /// <returns>The limits of the class's dtype.</returns>
+        /// <returns>The limits.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
         /// <exception cref="ValueError">
-        ///     <paramref name="dtype"/> is abstract: <c>Invalid integer data type 'O'.</c>, NumPy's text. NumPy's
-        ///     <c>iinfo</c> retries a value that converts to no dtype with the dtype of its TYPE, and the type of a class is
-        ///     Python's <c>type</c>, an object dtype (kind <c>'O'</c>).
+        ///     The class's kind is not <c>'i'</c> or <c>'u'</c> — NumPy's text, which names the kind of <c>np.dtype(cls)</c>:
+        ///     <c>Invalid integer data type 'f'.</c>, <c>'b'</c> for bool, <c>'m'</c> for timedelta64, <c>'c'</c> for
+        ///     complex64, <c>'O'</c> for object_. An abstract class is <c>'O'</c>: NumPy's <c>iinfo</c> retries a value that
+        ///     converts to no dtype with the dtype of its TYPE, and the type of a class is Python's <c>type</c>, an object
+        ///     dtype.
         /// </exception>
-        /// <exception cref="ArgumentException">A concrete class that is not an integer one (the error <see cref="iinfo(DType)"/> raises).</exception>
         public static iinfo iinfo(NDScalarType dtype)
         {
             if (dtype is null)
                 throw new ArgumentNullException(nameof(dtype));
             if (dtype.IsAbstract)
                 throw new ValueError("Invalid integer data type 'O'.");
-            return new iinfo(dtype.ToDescriptor());
+
+            // A Python built-in class is read as NumPy's dtype(cls).type (int -> int64); NumPy then checks the descriptor's
+            // kind, so a dtype-less class (complex64, object_, void) is refused by its recorded kind without a descriptor.
+            var cls = dtype.NumPyClass;
+            char kind = cls.NumPyKind;
+            if (kind != 'i' && kind != 'u')
+                throw new ValueError($"Invalid integer data type '{kind}'.");
+            return new iinfo(cls.ToDescriptor());
         }
 
         /// <summary>
