@@ -164,7 +164,29 @@ replays the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names (Inconclusive when
   hangs. NumPy's values-only `np.unique` hashes the FULL bytes and sorts unstably, so two strncmp-equal texts survive
   in an order the C++ library picks: the soak's `TieExcuse` accepts an element that compares EQUAL to NumPy's. The
   harness rebuilds a 1-D view of a whole base as the base (OWNDATA), so the generator never builds one. Open:
-  `float16` / `float32` `q` arrays (NumPy computes in `q`'s precision) and the `weights` parameter.
+  `float16` / `float32` `q` arrays (NumPy computes in `q`'s precision).
+**The quantile family's `weights=` (2026-10-16, `467f0729`; plan state log).** `NDArray weights = null` on all 28
+overloads of `np.quantile` / `np.percentile` / `np.nanquantile` / `np.nanpercentile` runs NumPy 2.4.2's weighted
+branch (`inverted_cdf` only) for every dtype, text included (`Statistics/QuantileWeighted.cs`): NumPy's check order and
+texts (the method, the axis with argname `axis`, `_weights_are_valid`, `np.any(weights < 0)`), `_ureduce` merging data
+AND weights, argsort + gathers + `cumsum / last` + the -1 rule + searchsorted-left, NaN slices, the nan forms'
+`_nanquantile_1d` per position (NumPy 2.4.2's own IndexError for reduced-shape weights over a kept axis longer than 1,
+reproduced). Routes: one line never gathers the whole sorted data (the last element and the picks go through the
+argsort) and, for a float64 search, divides only the cumulative sums its bisection probes (`SearchLazily`; float16 /
+float32 `q` cast the cdf first, `SearchEagerly`); rows count the cdf entries below each `q` in one vectorized pass, or
+search row by row past `CountingMaxWork`. Thread-static hooks `ForceRowByRowTestHook` / `ForceEagerSearchTestHook` and two
+oracle replays keep both alternate routes gated. The computation runs in a plain region (`NDMatrixBoundary.PlainFor`): a
+chararray `a` keeps its class in the plain forms and gets the plain text's `isnan` refusal in the nan forms; chararray
+WEIGHTS refuse at `weights < 0` with compare_chararrays' `comparison of non-string arrays`. Known divergence: TIED
+numbers add their weights in NumPy's unstable argsort order (introsort / x86-simd-sort, host-dependent); NumSharp's
+argsort is stable; text is exact. Gates: section `qfamily` (7,952 cases, 2,273 NumPy errors, zero excuses), the soak's
+`quant` family with weights, `np.quantile_family.Weights.Tests.cs` (12). Perf: 25 cells 1.52–24× NumPy (geomean 3.28×);
+the float64 flat cells are bound by the argsort (39 of 43 ms at 1M). Rode along: the sort family's per-call scratch
+comes from the buffer pool (`9065078f`: np.argsort float64 100K 3.9 → 2.8 ms, 1M 45 → 39 ms), and an `S` / `U` ordering
+against a C# number literal names `_PyLongDType` / `_PyFloatDType` in its refusal, as NumPy does (`09f11b41`).
+**Benchmark trap:** a harness that warms each cell just before timing it measures its FIRST cells before loops that
+run once per call (the radix passes) reach tier-1 code (59 µs vs 28 µs for one call in one process): warm every cell,
+pause, then time.
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
