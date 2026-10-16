@@ -191,7 +191,7 @@
     "random_api_mvn.jsonl": {"class": "pinned-blas", "reason": "Random-API oracle: multivariate_normal factorises through NumPy's scipy-openblas at threads=1 (the linalg_parity pin) and draws through the win-amd64 CRT; Inconclusive elsewhere."}
   },
   "npy": {
-    "note": "test/NumSharp.Tests/IO/corpus/npy_oracle.zip (real np.save / np.savez output), replayed by NpyOracleTests. Variant = case kind, suffixed :compressed for savez_compressed archives and :load_npy for the typed-reader cases.",
+    "note": "test/NumSharp.Tests/IO/corpus/npy_oracle.zip (real np.save / np.savez output), replayed by NpyOracleTests. Variant = case kind, suffixed :compressed for savez_compressed archives and :load_npy for the typed-reader cases. The NEP 55 StringDType kinds (NumPy pickles such an array behind the descr '|O'): tpickle = a .npy file written and read with allow_pickle, tpickle_raw = a bare pickle np.load unpickles, tnpz = an archive with a StringDType member.",
     "npy": ["numpy.save", "numpy.load"],
     "header": ["numpy.save"],
     "raw": ["numpy.load"],
@@ -199,7 +199,10 @@
     "npz": ["numpy.savez", "numpy.load"],
     "npz:compressed": ["numpy.savez_compressed", "numpy.load"],
     "sequence": ["numpy.load"],
-    "write_only": ["numpy.save"]
+    "write_only": ["numpy.save"],
+    "tpickle": ["numpy.save", "numpy.load"],
+    "tpickle_raw": ["numpy.load"],
+    "tnpz": ["numpy.savez", "numpy.load"]
   },
   "flags": {
     "note": "test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl, replayed by FlagsOracleTests. Variant = read (flags of a recipe) or setflags (after setflags write/align/uic ops).",

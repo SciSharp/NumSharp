@@ -406,8 +406,9 @@ class CommittedCorpusTests(unittest.TestCase):
         for name in ("__add__", "__mul__", "__getitem__", "__imul__", "__repr__"):
             self.assertIn(f"matrix.{name}", self.evidence(f"numpy.matrix.{name}").keys)
             self.assertNotIn(f"matrix.{name}", self.evidence("numpy.matrix").keys)
-        # "write_only" = Char arrays written as NumPy's '<U1' and compared byte for byte (they read back as strings).
-        self.assertEqual({"npy:header", "npy:npy", "npy:write_only"}, self.evidence("numpy.save").keys)
+        # "write_only" = Char arrays written as NumPy's '<U1' and compared byte for byte (they read back as strings);
+        # "tpickle" = StringDType arrays, which NumPy pickles behind the descr '|O', written and read with allow_pickle.
+        self.assertEqual({"npy:header", "npy:npy", "npy:write_only", "npy:tpickle"}, self.evidence("numpy.save").keys)
         self.assertEqual({"npy:npz:compressed"}, self.evidence("numpy.savez_compressed").keys)
         self.assertEqual({"flags:setflags"}, self.evidence("numpy.ndarray.setflags").keys)
         self.assertEqual({"evaluate"}, self.evidence("numsharp.np.evaluate").keys)
