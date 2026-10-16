@@ -5,7 +5,10 @@ the number of public Python files on GitHub that use it. 1,737 missing rows; 1,3
 number (from 643 measures), 372 cannot be measured by code search (reasons below).
 Measured 2026-10-15 (generator 1.12.0 rows) and 2026-10-16 (rows generator 1.13.0 added) with
 `gh api search/code`. Row-level data: `numpy-missing-api-usage.csv` beside this file. APIs marked † had no
-catalog row before generator 1.13.0 (see "Detected by generator 1.13.0").
+catalog row before generator 1.13.0 (see "Detected by generator 1.13.0"). APIs marked ‡ are no longer in the
+inventory: generator 1.14.0 (journey4 `2676e907`) leaves out NumPy 1.x compatibility APIs that NumPy itself
+deprecated, `numpy.matlib` (deprecated since 1.19) and `numpy.typing.NBitBase` (deprecated in 2.3); their
+measures stay here and in the CSV for reference. See "Generator 1.14.0" at the end.
 
 ## Implemented since
 
@@ -13,7 +16,7 @@ catalog row before generator 1.13.0 (see "Detected by generator 1.13.0").
   (overlapping): `np.integer` (1st), `numpy.typing` (2nd), `numpy.typing.NDArray` (3rd), `np.floating` (4th), `np.number`
   (5th), `np.generic` (12th), `numpy.typing.ArrayLike` (16th), `np.longdouble`, `np.complexfloating`, `np.typecodes`,
   `numpy.typing.DTypeLike`, `np.True_`, `np.signedinteger`, `np.False_`, `np.inexact`, `np.unsignedinteger`,
-  `np.character`, `np.sctypeDict`, `np.flexible`, `numpy.typing.NBitBase`. The abstract classes are `NDScalarType`
+  `np.character`, `np.sctypeDict`, `np.flexible`, `numpy.typing.NBitBase` ‡. The abstract classes are `NDScalarType`
   objects (NumPy's class surface, `np.issubdtype` / `np.isdtype` / `np.dtype` / `np.finfo` / `np.iinfo` integration),
   and every row but `numpy.typing` and its four members is oracle-verified (the surface tier's scalar-type section,
   3,245 cases; a typing alias names a C# type and has no value to compare).
@@ -81,7 +84,7 @@ catalog row before generator 1.13.0 (see "Detected by generator 1.13.0").
 | 27 | `np.void` | 11,294 | 1 | estimate 17376 x 130/200 |
 | 28 | `np.maximum.reduce` | 10,048 | 1 | NOT reduceat re-count 10,048 (lower bound; the original 11,680 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled) |
 | 29 | `np.longdouble` | 9,639 | 1 | estimate 18016 x 107/200 |
-| 30 | `numpy.matlib (module)` † | 9,314 | 1 | estimate 10768 x 173/200 |
+| 30 | `numpy.matlib (module)` † ‡ | 9,314 | 1 | estimate 10768 x 173/200 |
 | 31 | `np.core` | 8,941 | 1 | estimate 13345 x 134/200 |
 | 32 | `np.complexfloating` | 8,452 | 1 | estimate 11904 x 142/200 |
 | 33 | `np.minimum.accumulate` | 7,648 | 1 | estimate 7648 x 100/100 |
@@ -101,7 +104,7 @@ catalog row before generator 1.13.0 (see "Detected by generator 1.13.0").
 | 47 | `np.ufunc` | 3,872 | 1 | estimate 7376 x 105/200 |
 | 48 | `np.exceptions.VisibleDeprecationWarning` † | 3,831 | 1 | sum of exceptions.VisibleDeprecationWarning 480 (estimate 495 x 97/100); np.VisibleDeprecationWarning(1.x) 3351 (estimate 4296 x 156/200) |
 | 49 | `np.rec` | 3,795 | 1 | NOT re-count; estimate 3912 x 97/100 |
-| 50 | `np.matlib.repmat` † | 3,653 | 1 | estimate 4624 x 158/200 |
+| 50 | `np.matlib.repmat` † ‡ | 3,653 | 1 | estimate 4624 x 158/200 |
 | 51 | `np.add.reduce` | 3,624 | 1 | NOT reduceat re-count 3,624 (lower bound; the original 9,472 also counts files using reduceat, and the two differ by estimate noise when reduceat is rare); ufunc study (vendored-filtered, literal not sampled) |
 | 52 | `np.minimum.at` | 3,049 | 1 | estimate 3080 x 99/100 |
 | 53 | `np.datetime_as_string` | 2,801 | 1 | estimate 3112 x 180/200 |
@@ -143,8 +146,8 @@ catalog row before generator 1.13.0 (see "Detected by generator 1.13.0").
 - **File I/O and array construction:** `np.genfromtxt` 100,614, `np.memmap (class)` 44,997, `np.fromiter` 31,163, `np.fromfunction` 5,844, `np.from_dlpack` 1,197, `np.fromregex` 159
 - **Record arrays:** `np.recarray (class)` 6,156, `np.rec` 3,795, `np.rec.fromarrays` 2,098, `np.rec.array` 1,578, `np.rec.fromrecords` 969, `np.record (class)` 607, `np.rec.fromstring` 457, `np.rec.fromfile` 446, `np.rec.recarray` 424, `np.rec.format_parser` 73, `np.rec.record` 2
 - **Masked record arrays and numpy.ma modules:** `numpy.ma.core (module)` 15,990, `numpy.ma.extras (module)` 1,421, `numpy.ma.mrecords (module; MaskedRecords and its members)` 280, `np.ma.mrecords.fromtextfile` 113, `np.ma.mvoid` 25, `np.ma.mrecords.mrecarray` 5, `np.ma.mrecords.fromarrays` 2, `np.ma.mrecords.fromrecords` 0, `np.ma.mrecords.addfield` 0
-- **Matrix library (numpy.matlib, deprecated by NumPy):** `numpy.matlib (module)` 9,314, `np.matlib.repmat` 3,653, `np.matlib.identity` 572, `np.matlib.zeros` 567, `np.matlib.eye` 328, `np.matlib.ones` 296, `np.matlib.empty` 266, `np.matlib.rand` 232, `np.matlib.randn` 136
-- **Runtime, build and typing:** `numpy.typing (module)` 181,274, `numpy.typing.NDArray` 162,286, `np.__version__` 67,579, `numpy.typing.ArrayLike` 34,090, `np.ndim` 29,737, `np.get_include` 13,324, `np.core` 8,941, `numpy.typing.DTypeLike` 5,244, `numpy.version (module)` 4,267, `np.version.version` 2,538, `np.info` 1,695, `np.exceptions` 1,361, `np.show_config` 1,085, `np.version.full_version` 308, `np.version.short_version` 236, `numpy.typing.NBitBase` 116, `np.version.release` 78, `np.f2py.get_include` 75, `np.f2py.run_main` 49, `np.test` 17, `np.version.git_revision` 7
+- **Matrix library (numpy.matlib, deprecated by NumPy):** `numpy.matlib (module)` ‡ 9,314, `np.matlib.repmat` ‡ 3,653, `np.matlib.identity` ‡ 572, `np.matlib.zeros` ‡ 567, `np.matlib.eye` ‡ 328, `np.matlib.ones` ‡ 296, `np.matlib.empty` ‡ 266, `np.matlib.rand` ‡ 232, `np.matlib.randn` ‡ 136
+- **Runtime, build and typing:** `numpy.typing (module)` 181,274, `numpy.typing.NDArray` 162,286, `np.__version__` 67,579, `numpy.typing.ArrayLike` 34,090, `np.ndim` 29,737, `np.get_include` 13,324, `np.core` 8,941, `numpy.typing.DTypeLike` 5,244, `numpy.version (module)` 4,267, `np.version.version` 2,538, `np.info` 1,695, `np.exceptions` 1,361, `np.show_config` 1,085, `np.version.full_version` 308, `np.version.short_version` 236, `numpy.typing.NBitBase` ‡ 116, `np.version.release` 78, `np.f2py.get_include` 75, `np.f2py.run_main` 49, `np.test` 17, `np.version.git_revision` 7
 - **numpy.polynomial** (28 measures, 21,557 files summed): `leggauss` 11,615, `polynomial.Polynomial (via Polynomial.fit)` 2,346, `hermgauss` 1,952, `polynomial.polyfit` 1,214, `chebfit` 922, `polynomial.Chebyshev (via Chebyshev.fit)` 702, `hermegauss` 556, `legfit` 346, `laggauss` 324, `polyvalfromroots` 258, `hermfit` 149, `lagfit` 146, ...
 - **numpy.char** (68 measures, 21,587 files summed): `np.char.add` 2,570, `np.char.lower` 1,412, `np.char.decode` 1,243, `np.char.find` 1,216, `np.char.startswith` 1,188, `np.char.replace` 1,123, `np.char.strip` 1,108, `np.char.mod` 1,039, `np.char.array` 716, `np.char.upper` 696, `np.char.equal` 674, `np.char.encode` 665, ...
 - **numpy.strings** (91 measures, 4,155 files summed): `np.strings.multiply` 542, `np.strings.find` 159, `np.strings.replace` 155, `np.strings.strip` 154, `np.strings.count` 148, `np.strings.endswith` 148, `np.strings.index` 144, `np.strings.rindex` 144, `np.strings.lstrip` 142, `np.strings.rstrip` 142, `np.strings.expandtabs` 141, `np.strings.str_len` 90, ...
@@ -168,29 +171,29 @@ the catalog to both NumPy lists.
 | 3 | `numpy.typing.NDArray` | 162,286 | 1 | max of co:numpy.typing+NDArray 162286 (estimate 173568 x 187/200); npt.NDArray 61376 (estimate 70144 x 175/200) |
 | 16 | `numpy.typing.ArrayLike` | 34,090 | 1 | estimate 37054 x 184/200 |
 | 22 | `numpy.ma.core (module)` | 15,990 | 1 | estimate 29888 x 107/200 |
-| 30 | `numpy.matlib (module)` | 9,314 | 1 | estimate 10768 x 173/200 |
+| 30 | `numpy.matlib (module)` ‡ | 9,314 | 1 | estimate 10768 x 173/200 |
 | 41 | `numpy.typing.DTypeLike` | 5,244 | 1 | estimate 7184 x 146/200 |
 | 45 | `numpy.version (module)` | 4,267 | 1 | sum of np.version 2715 (estimate 4052 x 134/200); numpy.version 1552 (estimate 4032 x 77/200) |
 | 48 | `np.exceptions.VisibleDeprecationWarning` | 3,831 | 1 | sum of exceptions.VisibleDeprecationWarning 480 (estimate 495 x 97/100); np.VisibleDeprecationWarning(1.x) 3351 (estimate 4296 x 156/200) |
-| 50 | `np.matlib.repmat` | 3,653 | 1 | estimate 4624 x 158/200 |
+| 50 | `np.matlib.repmat` ‡ | 3,653 | 1 | estimate 4624 x 158/200 |
 | 56 | `np.version.version` | 2,538 | 1 | sum of np.version.version 1613 (estimate 1812 x 178/200); numpy.version.version 925 (estimate 934 x 99/100) |
 | 58 | `np.exceptions.ComplexWarning` | 2,404 | 1 | sum of exceptions.ComplexWarning 1380 (estimate 2604 x 106/200); np.ComplexWarning(1.x) 1024 (estimate 1896 x 108/200) |
 | 66 | `np.exceptions.RankWarning` | 1,969 | 1 | sum of exceptions.RankWarning 640 (estimate 970 x 66/100); np.RankWarning(1.x) 1329 (estimate 1682 x 158/200) |
 | 74 | `numpy.ma.extras (module)` | 1,421 | 1 | estimate 2608 x 109/200 |
 | 98 | `np.dtypes.StringDType` | 892 | 1 | max of dtypes.StringDType 892 (estimate 1716 x 104/200); co:numpy.dtypes+StringDType 347 (estimate 780 x 44/99) |
-| 115 | `np.matlib.identity` | 572 | 1 | estimate 2288 x 50/200 |
-| 116 | `np.matlib.zeros` | 567 | 1 | estimate 2412 x 47/200 |
+| 115 | `np.matlib.identity` ‡ | 572 | 1 | estimate 2288 x 50/200 |
+| 116 | `np.matlib.zeros` ‡ | 567 | 1 | estimate 2412 x 47/200 |
 | 131 | `np.rec.recarray` | 424 | 1 | estimate 1664 x 51/200 |
 | 138 | `np.dtypes.ObjectDType` | 330 | 1 | estimate 674 x 49/100 |
-| 139 | `np.matlib.eye` | 328 | 1 | estimate 2344 x 28/200 |
+| 139 | `np.matlib.eye` ‡ | 328 | 1 | estimate 2344 x 28/200 |
 | 143 | `np.version.full_version` | 308 | 1 | sum of np.version.full_version 265 (estimate 270 x 98/100); numpy.version.full_version 43 (unsampled first-pass count) |
-| 147 | `np.matlib.ones` | 296 | 1 | estimate 2364 x 25/200 |
+| 147 | `np.matlib.ones` ‡ | 296 | 1 | estimate 2364 x 25/200 |
 | 148 | `numpy.ma.mrecords (module; MaskedRecords and its members)` | 280 | 96 | estimate 2944 x 19/200 |
-| 151 | `np.matlib.empty` | 266 | 1 | estimate 2216 x 24/200 |
+| 151 | `np.matlib.empty` ‡ | 266 | 1 | estimate 2216 x 24/200 |
 | 156 | `np.version.short_version` | 236 | 1 | sum of np.version.short_version 178 (estimate 742 x 24/100); numpy.version.short_version 58 (estimate 135 x 43/100) |
-| 157 | `np.matlib.rand` | 232 | 1 | estimate 357 x 65/100 |
-| 191 | `np.matlib.randn` | 136 | 1 | estimate 2272 x 12/200 |
-| 199 | `numpy.typing.NBitBase` | 116 | 1 | estimate 3320 x 7/200 |
+| 157 | `np.matlib.rand` ‡ | 232 | 1 | estimate 357 x 65/100 |
+| 191 | `np.matlib.randn` ‡ | 136 | 1 | estimate 2272 x 12/200 |
+| 199 | `numpy.typing.NBitBase` ‡ | 116 | 1 | estimate 3320 x 7/200 |
 | 203 | `np.ma.mrecords.fromtextfile` | 113 | 1 | estimate 940 x 12/100 |
 | 215 | `np.dtypes.StrDType` | 92 | 1 | unsampled first-pass count |
 | 244 | `np.version.release` | 78 | 1 | sum of np.version.release 78 (estimate 970 x 8/100); numpy.version.release 0 (unsampled first-pass count) |
@@ -216,15 +219,18 @@ classes, 8 `np.ma` objects (`masked`, `nomask`, `mr_`, `masked_array`, ...), the
 constants and the 7 polynomial submodules; `numpy.exceptions.AxisError`, `DTypePromotionError`, `TooHardError` and
 `numpy.ma.MAError`/`MaskError` are credited to their NumSharp types.
 
-Not catalogued, as open decisions (the CI guard exempts exactly these two classes): Python protocol dunders on
-the object surfaces (operators, container and pickling hooks: `ndarray.__matmul__`, `ndarray.__getitem__`, ...;
-847 over the 32 catalogued classes) and the members of NumPy's scalar types (`np.float64(x).is_integer()`, ...).
-Neither is measurable by phrase: `a @ b` and `a[i]` have no searchable spelling.
+Not ranked: the Python protocols NumPy's classes define (operators, subscripting, casts, `with`, pickling:
+`ndarray.__matmul__`, `ndarray.__getitem__`, ...) and the members of NumPy's scalar types
+(`np.float64(x).is_integer()`, ...). They were open decisions when these measures were made; generator 1.14.0
+catalogues both (see "Generator 1.14.0"). Protocols are not measurable by phrase: `a @ b` and `a[i]` have no
+searchable spelling. Scalar-type members are not measured yet.
 
 ### Outside the dashboard (measured for context)
 
-The dashboard projection hides `numpy.testing`, `numpy.lib`, `numpy.ctypeslib`, the ndarray interop dunders and
-`numpy.__array_namespace_info__` (Python tooling). Their rows exist and are missing in NumSharp; a few measures:
+When these measures were made the dashboard projection hid `numpy.testing`, `numpy.lib`, `numpy.ctypeslib`, the
+ndarray interop dunders and `numpy.__array_namespace_info__` (Python tooling). Since generator 1.14.0 it hides only
+`numpy.testing` and `numpy.lib`, and shows `numpy.lib.NumpyVersion` anyway, so `np.ctypeslib.*` and
+`np.lib.NumpyVersion` below are dashboard rows now (missing in NumSharp). A few measures:
 
 | API | Files | How |
 |---|---:|---|
@@ -250,3 +256,22 @@ The dashboard projection hides `numpy.testing`, `numpy.lib`, `numpy.ctypeslib`, 
 - 3 rows: Python protocol (call / doc / name) of every ufunc
 - 2 rows: not attributable: other libraries define functions with the same name
 - 2 rows: generic member name (pickle.dump / json.dumps share it)
+
+## Generator 1.14.0
+
+Journey4 `2676e907` makes the inventory detect everything but `numpy.testing` and `numpy.lib` (with
+`numpy.lib.NumpyVersion` the one exception), validated against NumPy 2.4.2:
+
+- 1,793 Python protocols NumPy's classes define are catalogued (operators, subscripting, casts, iteration, `with`,
+  pickling, `__array__` and the other interop hooks), each class listing the protocols it has; NumSharp provides
+  158 of them (C# operators, casts, indexers, `ToString`, `foreach`, `using`, and members named like the protocol).
+  20 are slots NumPy fills only to refuse every call.
+- 923 members of NumPy's scalar types are catalogued once each, at the class that defines them; none is in NumSharp.
+- 26 members of other classes (`numpy.errstate`, `numpy.ma.mvoid`, `numpy.exceptions.AxisError`,
+  `numpy.dtypes.StringDType`) are catalogued.
+- `numpy.ctypeslib`, `numpy.__array_namespace_info__` and `numpy.lib.NumpyVersion` are shown on the dashboard.
+- `numpy.matlib` (module and 8 functions) and `numpy.typing.NBitBase` are left out (‡ above); a CI guard fails on
+  any catalogued API that NumPy deprecates as a whole, and another resolves every row on NumPy 2.4.2.
+
+The expanded scope went from 1,291 of 2,952 APIs available to 1,449 of 4,844; the headline is unchanged (533 of
+560). The ranking above was not re-run for the new rows.
