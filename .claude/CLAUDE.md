@@ -105,8 +105,33 @@ larger text of each pair and skip the pass over cell-only inputs. TRAPS: a short
 keeps the old offset's high bytes past its size (`NpyString_newemptysize` writes only byte 15), so every reader masks;
 `pack_empty` leaves a never-written cell all zero; `string_to_bool` reads `default_string.size == 0` for a string NA
 (`na_object=''` is True). Gates: oracle `tcomp` / `tarith` / `treduce` (12,111 cases, zero excuses),
-`StringDTypeComputeTests` (raw-cell and arena-reservation tests included). Left: P2.2 over `T` (sorts, searches, set
-routines, `np.median`: 4 deferral sites, 5 `tma` cases).
+`StringDTypeComputeTests` (raw-cell and arena-reservation tests included).
+**Ordering `StringDType` computes since P2.2 over `T` (2026-10-16, `287c3e2e`; plan state log).** `np.sort` / `np.argsort` /
+`ndarray.sort` / `np.partition` / `np.argpartition` / `np.lexsort`, `np.searchsorted` / `np.digitize`, `np.unique` and the
+Array-API unique family, `np.isin`, the four set routines, `np.sort_complex`, `np.histogram`, `np.median`, the quantile
+family with its nan forms, and numpy.ma's `sort` / `argsort` / `median` / `unique`, with NumPy's ordering of missing
+values (NaN-like NA after every text in input order, string NA as its text, `None`-like NA raises at the first comparison
+that meets it — a line of one element compares nothing). Code: `Backends/Default/Sorting/VString{Sort,Search,Distinct}.cs`,
+`Manipulation/{NDArray.unique,np.isin}.VString.cs`, `Backends/Strings/NDVStringStatistics.Quantile.cs`. Design: a stable
+radix of 8-byte prefix keys with a tie pass (NumPy's stable kind), NumPy's introsort replayed over (rank, index) records
+only where equal texts make the default kind's order observable; `np.lexsort` replays `npy_atimsort` when two or more
+NaN-like NAs meet (its asymmetric compare reverses adjacent NAs); `np.unique`'s values-only route hashes (`TextTable`:
+cell texts hashed from their two size-masked words — stale bytes past the size never count) unless the birthday estimate
+from the repeats of its first window (an eighth of the array, 256 to 4,096 texts) says more than half the array is
+distinct, then argsorts the array itself; the order statistics run NumPy's Python statements (`_lerp`'s `b - a` of the
+neighbours' Python objects, `_ureduce`'s out / keepdims indexing, `apply_along_axis`'s first-row buffer dtype). TRAPS:
+NumPy 2.4.2 CRASHES in `np.lexsort` over a non-contiguous `T` key and in the default-kind sort when its introsort spends
+the depth budget (the heapsort fallback reads the method context as an array: `np.intersect1d` of two unique outputs
+reaches it), misorders arena texts in the argsort of a broadcast view, and loads `searchsorted`'s haystack with the keys'
+allocator (an arena haystack text raises `MemoryError`) — the oracle generator avoids those inputs and the unit tests pin
+NumSharp's answers (`StringDTypeOrderTests`, `[Misaligned]`); a `None` NA row result of `np.apply_along_axis` is an object
+array in NumPy, `NotSupportedException` here. The ownership gate's flake (2026-10-16): the catalogue snapshot counted
+undisposed views earlier entries left of the shared fixture, and the measurement's own hygiene collection finalized them
+mid-entry — `ScopeAudit.Quiesce()` before the snapshot, plus `OwnershipLedger.DropMayBeFinalization` / `DrainAndRebase`
+for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 NumPy errors, zero excuses; the 5 deferred
+`tma` cases strict), `StringDTypeOrderTests` (24). Benchmark: 168 cells 1.8–32× NumPy, geomean 7.8×. Left: the
+`np.strings` functions beyond `add` / `multiply` (P2.5 / P2.6) and 8 `NextPhase` sites: 7 of P2.7, and numpy.char
+phase 3's `chararray.partition(sep)` (the string partition, P2.5; its 22 oracle cases are the only deferred ones).
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
@@ -368,9 +393,10 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
     families.
   - Found and NOT fixed (pre-existing): `NDArray.view()` of a DISPOSED array returns a live view over the freed buffer
     (`InitializeArc` ignores `TryAddRef`'s failure).
-  Gates: string-oracle section `tma` (4,167 cases, 437 deferred = the section's ceiling) + `Ma/np.ma.StringDType.Test.cs`.
-- Still refused loudly (P1.7 / phase 2): `loadtxt` / `savetxt`, and computation (comparisons, `np.sum`, sorting,
-  `np.strings`).
+  Gates: string-oracle section `tma` (4,167 cases; its 437 deferred cases became strict with P2.T and P2.2 over `T`) +
+  `Ma/np.ma.StringDType.Test.cs`.
+- Still refused loudly (phase 2): the `np.strings` functions beyond `add` / `multiply`. Text I/O for `T` landed with
+  P1.7c, comparisons and reductions with P2.T, sorting with P2.2 over `T`.
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
@@ -422,11 +448,12 @@ read-only `out=`, non-bool `where=`, the axis under one of three rules, the quan
 a computing loop's output cast and broadcast; `Backends/Strings/NDStringUfuncs{,.Precedence}.cs`). Every engine ufunc
 member resolves its `dtype=` through `UfuncLoopCode(dtype, "<numpy name>", x1, x2, out, where)` so an unsized string
 request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`test/oracle/gen_strings_oracle.py` →
-`NumSharp.Tests.Oracle/Strings`, 82,890 cases in 34 sections, `strconv` = 4,487 conversion cases, `tdtype` = 1,188 descriptor cases, `strsort` = 4,998 sorting cases; a phase-2 case passes as
+`NumSharp.Tests.Oracle/Strings`, 142,151 cases in 44 sections (82,890 in 34 at this pass), `strconv` = 4,487 conversion cases, `tdtype` = 1,188 descriptor cases, `strsort` = 4,998 sorting cases; a phase-2 case passes as
 "deferred" only while NumSharp throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus,
-and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 783 in all: 346 `S` / `U` cases
-of searching, the set routines, histograms and quantiles, and 437 `StringDType` cases through numpy.ma), so a computation
-answered today cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
+and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 783 in all when phase 2 began:
+346 `S` / `U` cases of searching, the set routines, histograms and quantiles, and 437 `StringDType` cases through
+numpy.ma; 22 since P2.2 over `T`: section `strcharops`' `chararray.partition(sep)`), so a computation answered today
+cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
 lists every deferred case with its refusal) + `Backends/Strings/StringCallOrderTests.cs` + `StringShapeDecidedTests.cs`
 + `StringComparisonTruthTests.cs` + `StringArithmeticTests.cs` + `TextNumberConversionTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
 reads the text (compares, concatenates, parses, formats into a result); where dtypes, sizes or shapes decide NumPy's
