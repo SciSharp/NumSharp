@@ -22,12 +22,13 @@ from urllib.parse import quote
 
 import oracle_evidence
 from numpy_documentation import documentation_index, documentation_url
-from object_surfaces import OBJECT_SURFACE_PATHS, enrich_object_classes, object_surface_rows
+from object_surfaces import (OBJECT_SURFACE_PATHS, SIGNATURE_UNAVAILABLE, class_member_rows, enrich_object_classes,
+                             object_surface_rows, scalar_type_rows)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.13.0"
+GENERATOR_VERSION = "1.14.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -114,6 +115,9 @@ CATEGORY_OVERRIDES = {
     **dict.fromkeys({"dot", "inner", "kron", "matmul", "outer", "trace", "cross"}, "Linear algebra"),
     **dict.fromkeys({"copysign", "frexp", "ldexp", "nextafter", "signbit", "spacing"}, "Floating-point handling"),
     "frompyfunc": "Function utilities",
+    # A class: its own row stays in "Types" (category_for categorises every non-callable first); the entry
+    # categorises the class's member rows (member_category), errstate's __enter__/__exit__/__call__.
+    "errstate": "Floating-point handling",
 }
 
 MATH.update({"angle", "around", "float_power", "frompyfunc", "gradient", "i0", "imag", "interp", "packbits", "piecewise", "real", "real_if_close", "trapezoid", "unpackbits", "unwrap"})
@@ -168,21 +172,80 @@ EXTENDED_SUBMODULES = [
     ("lib",                   "lib",                   "Library support",           "tooling"),
     ("lib.mixins",            "lib.mixins",            "Operator mixins",           "tooling"),
     ("testing.overrides",     "testing.overrides",     "Test support",              "tooling"),
-    # Documented in NumPy's reference although test_public_api.py does not list them: numpy.matlib
-    # (deprecated with a PendingDeprecationWarning since NumPy 1.19, still shipped) and the
+    # Documented in NumPy's reference although test_public_api.py does not list it: the
     # numpy.testing.extbuild helpers (an attribute of numpy.testing, not an importable path;
-    # resolve_submodule's attribute walk finds it). The third, numpy.lib.user_array, documents one
-    # name, its container class, which object_surfaces catalogues with its members.
-    ("matlib",                "matlib",                "Matrix library",            "candidate"),
+    # resolve_submodule's attribute walk finds it). Of the other two such modules, numpy.lib.user_array
+    # documents one name, its container class, which object_surfaces catalogues with its members, and
+    # numpy.matlib is a NumPy 1.x compatibility module (COMPAT_EXCLUDED_APIS).
     ("testing.extbuild",      "testing.extbuild",      "Test support",              "tooling"),
 ]
 
-# Submodules whose public listing re-exports NumPy's main namespace, so only the members they
-# DEFINE are their API: numpy.matlib does `from numpy import *`, so its __all__ is all ~500 NumPy names
-# plus its own eight functions. Scanning that listing would catalogue numpy.matlib.sum,
-# numpy.matlib.add.reduce and hundreds of other duplicates of numpy.* rows. A name is kept when the
-# object's __module__ is the submodule itself; constants carry no __module__, and matlib defines none.
-OWN_MEMBERS_ONLY_SUBMODULES = frozenset({"matlib"})
+# NumPy APIs that the pinned NumPy still ships but has itself deprecated, kept there only so code written
+# for NumPy 1.x keeps working. The catalog leaves each one out, everything under it included: a NumSharp
+# port follows the API NumPy points to, not the compatibility shim, so neither a missing row nor a credit
+# should count it. A name joins this table only with NumPy's own deprecation as the reason.
+# test_catalog's deprecation guard fails on any catalogued row whose NumPy documentation deprecates the
+# API as a whole, unless the row is listed here (left out) or in KEPT_DEPRECATED_APIS (kept, with a reason).
+COMPAT_EXCLUDED_APIS = {
+    "numpy.matlib": ("Deprecated since NumPy 1.19: importing it raises PendingDeprecationWarning ('Importing "
+                     "from numpy.matlib is deprecated since 1.19.0. The matrix subclass is not the recommended "
+                     "way to represent matrices or deal with linear algebra ... Please adjust your code to use "
+                     "regular ndarray'). Its eight functions are numpy.zeros, ones, empty, eye, identity, "
+                     "random.rand, random.randn and tile returning matrices."),
+    "numpy.typing.NBitBase": ("Deprecated in NumPy 2.3 ('.. deprecated:: 2.3 Use @typing.overload or a TypeVar "
+                              "with a scalar-type as upper bound, instead'); added in NumPy 1.20 for the "
+                              "precision-generic annotations of the 1.x typing stubs."),
+}
+
+# Catalogued APIs NumPy documents as deprecated as a whole, kept in the catalog on purpose, each with the
+# reason. The deprecation guard (test_catalog) accepts exactly these; every other deprecated row fails it.
+KEPT_DEPRECATED_APIS = {
+    "numpy.random.random_integers": ("Deprecated since NumPy 1.11 (use randint), but a numpy.random headline "
+                                     "export that NumSharp implements and the oracle verifies; removing it "
+                                     "would change the headline denominator. Owner's call."),
+    "numpy.random.RandomState.random_integers": ("Deprecated since NumPy 1.11; the RandomState method of the "
+                                                 "same function, kept with it."),
+    "numpy.testing.assert_warns": ("Deprecated in NumPy 2.4; numpy.testing is catalogued but never shown "
+                                   "(IGNORED_DASHBOARD_ROOTS)."),
+    "numpy.testing.suppress_warnings": ("Deprecated in NumPy 2.4; numpy.testing is catalogued but never "
+                                        "shown (IGNORED_DASHBOARD_ROOTS)."),
+}
+
+
+def compat_excluded(api_id: str) -> bool:
+    """Tell whether a ``numpy.*`` id lies in a NumPy 1.x compatibility API the catalog leaves out.
+
+    :param api_id: a catalog id (``numpy.matlib.zeros``) or a submodule path prefixed with ``numpy.``.
+    :returns: True when the id is a COMPAT_EXCLUDED_APIS entry or a member of one.
+    """
+    return any(within_namespace(api_id, excluded) for excluded in COMPAT_EXCLUDED_APIS)
+
+
+_SECTION_UNDERLINE = re.compile(r"^\s*([-=~^])\1{2,}\s*$")
+
+
+def deprecation_scope(doc: str | None) -> str | None:
+    """Tell what a NumPy docstring's ``.. deprecated::`` directive deprecates: the API, or a part of it.
+
+    numpydoc puts a whole-object deprecation directly after the summary, unindented and before the first
+    section (random_integers, NBitBase), and a parameter's or a return value's inside that section's
+    entry, indented under it (numpy.fft.fft2's ``s`` without ``axes``, numpy.fromstring's ``sep=''``).
+
+    :param doc: a cleaned docstring (``inspect.getdoc``), or None.
+    :returns: ``"api"`` when an unindented directive appears before any section heading, ``"part"`` when
+        every directive is indented or follows a heading, None when the docstring has none.
+    """
+    if not doc or ".. deprecated::" not in doc:
+        return None
+    lines = doc.splitlines()
+    for index, line in enumerate(lines):
+        # A heading is a line followed by an underline of '-', '=', '~' or '^' (a module docstring's
+        # title counts too: everything after it is a section of the module's documentation).
+        if index + 1 < len(lines) and line.strip() and _SECTION_UNDERLINE.match(lines[index + 1]):
+            return "part"
+        if line.startswith(".. deprecated::"):
+            return "api"
+    return "part"
 
 # Public NumPy modules (by NumPy's own list, see above) the catalog deliberately does not scan, each
 # with the reason. A module counts as covered when it, or a parent listed here, appears below, so
@@ -206,39 +269,30 @@ HEADLINE_SUBMODULES = ("random", "linalg", "fft")
 # object inventory catalogs each ufunc method on every ufunc-like export found here (numpy itself
 # is always included): numpy.strings.str_len and numpy.ma's masked add are ufunc protocol owners
 # just like numpy.add, so scanning only the top level left their methods out of the catalog.
-# The own-members-only submodules are left out: the members they define contain no ufunc, and their
-# listing (numpy.matlib's __all__ is NumPy's whole namespace) would re-catalogue every top-level
-# ufunc's methods under them.
 UFUNC_PROTOCOL_NAMESPACES = (
     tuple((surface, surface) for surface in HEADLINE_SUBMODULES)
-    + tuple((path, surface) for path, surface, _category, _disposition in EXTENDED_SUBMODULES
-            if path not in OWN_MEMBERS_ONLY_SUBMODULES)
+    + tuple((path, surface) for path, surface, _category, _disposition in EXTENDED_SUBMODULES)
 )
 
-# ndarray interop-protocol dunders. public_exports() drops every '_'-prefixed ndarray member, so
-# these zero-copy / array-protocol hooks were invisible too. Catalogued out-of-headline against the
-# NDArray host so a scan sees them; several (__array_interface__, __dlpack__, __array__) are genuine
-# interop surface NumSharp could implement.
-EXTENDED_NDARRAY_DUNDERS = [
-    "__array__", "__array_interface__", "__array_ufunc__", "__array_function__",
-    "__array_wrap__", "__array_finalize__", "__array_priority__",
-    "__dlpack__", "__dlpack_device__", "__buffer__",
-    "__index__", "__complex__", "__int__", "__float__",
-]
-
 # Why each extended family is out of headline scope — surfaced in summary.md so the reader can rank
-# implementable "candidate" families above intentional non-goals.
+# implementable "candidate" families above intentional non-goals. ndarray's Python protocols, once a
+# hand-picked "interop" list under the invented id numpy.ndarray.interop.*, are catalogued with every
+# other protocol under their real ids (numpy.ndarray.__array__) by the ndarray object surface.
 DISPOSITION_NOTE = {
     "candidate": "Implementable NumPy submodule NumSharp does not expose yet (out of headline scope).",
     "subsystem": "Requires a NumSharp subsystem that does not exist yet (out of headline scope).",
     "tooling":   "Python-runtime tooling with no NumSharp analog (out of headline scope).",
-    "interop":   "ndarray interop-protocol hook, absent in NumSharp (out of headline scope).",
 }
 
 
-IGNORED_DASHBOARD_ROOTS = (
-    "ndarray.interop", "__array_namespace_info__", "lib", "ctypeslib", "testing",
-)
+# The namespaces the catalog lists but the dashboard never shows: NumPy's test helpers (numpy.testing)
+# and its library-support package (numpy.lib), by the owner's decision. Every other public NumPy API is
+# shown. IGNORED_DASHBOARD_EXCEPTIONS names what inside those namespaces is shown anyway.
+IGNORED_DASHBOARD_ROOTS = ("lib", "testing")
+# numpy.lib.NumpyVersion, the version-comparison class user code imports to gate behaviour on the NumPy
+# version, is shown although numpy.lib is not (the owner's decision); its rows are grouped under their
+# own surface, lib.NumpyVersion, so the class row does not stand alone under "lib".
+IGNORED_DASHBOARD_EXCEPTIONS = ("lib.NumpyVersion",)
 LEGACY_POLYNOMIAL_APIS = {
     "poly", "poly1d", "polyadd", "polyder", "polydiv", "polyfit", "polyint",
     "polymul", "polysub", "polyval", "roots",
@@ -250,8 +304,23 @@ def within_namespace(value: str, root: str) -> bool:
     return value == root or value.startswith(root + ".")
 
 
+def shown_exception(api_id: str) -> str | None:
+    """Return the IGNORED_DASHBOARD_EXCEPTIONS entry an id lies in, if any.
+
+    :param api_id: a catalog id (``numpy.lib.NumpyVersion.major``).
+    :returns: the exception path (``lib.NumpyVersion``) or None.
+    """
+    return next((path for path in IGNORED_DASHBOARD_EXCEPTIONS if within_namespace(api_id, "numpy." + path)), None)
+
+
 def ignored_dashboard_id(api_id: str) -> bool:
-    return any(within_namespace(api_id, "numpy." + root) for root in IGNORED_DASHBOARD_ROOTS)
+    """Tell whether the dashboard hides an id: it lies in an ignored root and in none of its exceptions.
+
+    :param api_id: a catalog id or an object-surface path prefixed with ``numpy.``.
+    :returns: True for numpy.testing.* and numpy.lib.* ids other than numpy.lib.NumpyVersion's.
+    """
+    return (any(within_namespace(api_id, "numpy." + root) for root in IGNORED_DASHBOARD_ROOTS)
+            and shown_exception(api_id) is None)
 
 
 def dashboard_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -259,10 +328,21 @@ def dashboard_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     IDs and implementation evidence remain canonical. Grouping never aliases a
     method to another owner or changes support; ignored rows never reach any UI
-    scope, count, search result, or tooltip.
+    scope, count, search result, or tooltip. A row inside an ignored root is hidden by
+    its id or by its surface, unless its id lies in IGNORED_DASHBOARD_EXCEPTIONS; such a
+    row is shown under the exception's own surface (the class row numpy.lib.NumpyVersion
+    has the surface ``lib``, its members ``lib.NumpyVersion``).
+
+    :param rows: the resolved catalog rows (resolve_rows), hidden namespaces included.
+    :returns: new row dicts for the shown rows, in input order; numpy.ma rows are grouped under the ``ma``
+        surface and the polynomial family under ``polynomial``. The input rows are not modified.
     """
     result = []
     for row in rows:
+        exception = shown_exception(row["id"])
+        if exception is not None:
+            result.append({**row, "surface": exception})
+            continue
         if ignored_dashboard_id(row["id"]) or any(
             within_namespace(row["surface"], root) for root in IGNORED_DASHBOARD_ROOTS
         ):
@@ -299,6 +379,13 @@ def load_numpy() -> Any:
 
 
 def load_numsharp_inventory() -> dict[str, Any]:
+    """Build and run NumSharp.Tools.ApiInventory, returning the reflected NumSharp public surface.
+
+    :returns: the inventory JSON (schema 6): ``modules`` by [ModuleName], ``unannotatedSurface``,
+        ``exportedTypes`` and ``objectTypes`` (each type's members and, since schema 6, its operators).
+    :raises SystemExit: when the tool does not build or run, emits invalid JSON, or emits another schema
+        (an inventory without operators would report every operator protocol missing).
+    """
     project = ROOT / "coverage" / "NumSharp.Tools.ApiInventory" / "NumSharp.Tools.ApiInventory.csproj"
     build_command = [
         "dotnet", "build", str(project), "--configuration", "Release", "--framework", "net8.0",
@@ -325,14 +412,18 @@ def load_numsharp_inventory() -> dict[str, Any]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
-    if data.get("schemaVersion") != 5 or not isinstance(data.get("modules"), dict) or not data["modules"]:
-        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 5 with a non-empty 'modules' map.")
+    if data.get("schemaVersion") != 6 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 6 with a non-empty 'modules' map.")
     if not isinstance(data.get("unannotatedSurface"), dict):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 5 must carry the 'unannotatedSurface' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 must carry the 'unannotatedSurface' index.")
     if not isinstance(data.get("exportedTypes"), list):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 5 must carry the 'exportedTypes' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 must carry the 'exportedTypes' index.")
     if not isinstance(data.get("objectTypes"), dict):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 5 must carry the 'objectTypes' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 must carry the 'objectTypes' index.")
+    # Schema 6's addition: every type carries its C# operators and conversions, which credit NumPy's
+    # Python operator protocols. An inventory without them would silently report every operator missing.
+    if any(not isinstance(type_data.get("operators"), list) for type_data in data["objectTypes"].values()):
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 types must carry 'operators'.")
     return data
 
 
@@ -361,6 +452,14 @@ def compact_text(value: str, limit: int = 420) -> str:
 
 
 def numpy_signature(obj: Any, fallback_name: str) -> str:
+    """Render a NumPy object's signature for a catalog row, without calling it.
+
+    :param obj: the NumPy callable (function, method, slot wrapper, ufunc, class).
+    :param fallback_name: the member's name; a docstring's first line is used only when it names it or
+        starts with ``(``.
+    :returns: ``inspect.signature``'s text, else the docstring's first line, else ``ufunc(nin=, nout=)`` for a
+        ufunc, else SIGNATURE_UNAVAILABLE (object_surfaces.scalar_type_rows recognises that text).
+    """
     try:
         return compact_text(str(inspect.signature(obj)))
     except (TypeError, ValueError):
@@ -373,7 +472,7 @@ def numpy_signature(obj: Any, fallback_name: str) -> str:
     nout = getattr(obj, "nout", None)
     if isinstance(nin, int):
         return f"ufunc(nin={nin}, nout={nout})"
-    return "Signature unavailable from runtime introspection"
+    return SIGNATURE_UNAVAILABLE
 
 
 # Runtime types of numpy.typing's aliases: NDArray is a types.GenericAlias, ArrayLike and DTypeLike are
@@ -655,7 +754,8 @@ def submodule_public_names(module: Any, path: str, surface: str) -> list[str]:
     (``numpy.<path>.<name>`` or ``numpy.<surface>.<name>``) and that exists on the pinned build is added:
     numpy.exceptions.RankWarning is documented but absent from that module's ``__all__``. Names the docs
     list only for a newer NumPy (the index tracks latest stable) are skipped by the existence check.
-    For OWN_MEMBERS_ONLY_SUBMODULES only names the module itself defines survive, documented or not.
+    A name inside a NumPy 1.x compatibility API (COMPAT_EXCLUDED_APIS: numpy.typing.NBitBase) is left
+    out, listed or documented.
 
     The result must not depend on what the process imported before: a submodule is an attribute of
     its package only once something has imported it, so ``hasattr`` alone made numpy.typing.mypy_plugin
@@ -689,10 +789,10 @@ def submodule_public_names(module: Any, path: str, surface: str) -> list[str]:
                     pass  # documented only for a newer NumPy: no such submodule on the pin
             if hasattr(module, name):
                 names.add(name)
-    if path in OWN_MEMBERS_ONLY_SUBMODULES:
-        names = {name for name in names
-                 if getattr(getattr(module, name, None), "__module__", None) == module.__name__}
-    return sorted(names)
+    # The compatibility exclusion applies to listed and documented names alike; both spellings of the
+    # module (import path and display surface) are checked, as the documentation index may use either.
+    return sorted(name for name in names
+                  if not compat_excluded(f"numpy.{path}.{name}") and not compat_excluded(f"numpy.{surface}.{name}"))
 
 
 def extended_surface_rows(
@@ -815,14 +915,8 @@ def extended_surface_rows(
                 continue
             emit(surface, name, numpy_kind(np, obj), category, disposition, host_module, obj)
 
-    # ndarray interop dunders — public_exports() drops these via its '_'-prefix filter.
-    for name in EXTENDED_NDARRAY_DUNDERS:
-        if not hasattr(np.ndarray, name):  # dunder set drifts across NumPy versions; skip absent ones.
-            continue
-        obj = inspect.getattr_static(np.ndarray, name)
-        kind = "method" if callable(getattr(np.ndarray, name)) else "property"
-        emit("ndarray.interop", name, kind, "Array interop protocol", "interop", "ndarray", obj)
-
+    # ndarray's Python protocols (public_exports drops every '_'-prefixed member) are not emitted here:
+    # the ndarray object surface lists all of them under their real ids, credited against NDArray.
     return rows
 
 
@@ -853,7 +947,57 @@ def auto_alternative(
     return None, None
 
 
+def lists_as_numsharp_only(surface: str, member: dict[str, Any], consumed_targets: set[str]) -> bool:
+    """Tell whether a member of an annotated NumSharp module gets a NumSharp-only row.
+
+    :param surface: the module's surface (``np``, ``ndarray``, ``typing``, ...).
+    :param member: the member entry from member_maps (``name`` and ``target`` are read).
+    :param consumed_targets: NumSharp targets a NumPy row already credits.
+    :returns: False for a member a NumPy row credits, a ``_``-prefixed member, and NumSharp's port of a NumPy
+        1.x compatibility API the catalog leaves out (np.typing.NBitBase, kept [Obsolete] like NumPy's): that is
+        NumPy's API, not a NumSharp-only extension, so it gets no row of either kind. True otherwise.
+    """
+    if member["target"] in consumed_targets or member["name"].startswith("_"):
+        return False
+    return not compat_excluded(f"numpy.{surface}.{member['name']}")
+
+
+def member_category(class_row: dict[str, Any]) -> str:
+    """Return the category the member rows of a class get (object_surfaces.class_member_rows).
+
+    A class row from an extended family carries the family's category (numpy.ma.mvoid: "Masked arrays");
+    a top-level class row is categorised "Types", like every supporting class, so its members take the
+    class's entry in CATEGORY_OVERRIDES (numpy.errstate: "Floating-point handling") when it has one.
+
+    :param class_row: the class's catalog row.
+    :returns: the category for the class's member rows.
+    """
+    # A row without a category (public_exports' rows, before resolve_rows categorises them) is a namespace
+    # export, so it is treated as the top-level class row it will be.
+    category = class_row.get("category") or "Types"
+    if category == "Types":
+        return CATEGORY_OVERRIDES.get(class_row["name"], "Types")
+    return category
+
+
 def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
+    """Build the full catalog: every NumPy row matched against NumSharp, plus NumSharp-only rows.
+
+    In order: the headline exports (with aliases, support overrides and the stray-host gate), NumSharp-only
+    members of the annotated modules, the extended submodule families, the object surfaces (members and
+    Python protocols, then per-ufunc methods), NumPy's scalar types, and the members of every other public
+    NumPy class; then rows a credit consumed are dropped from the NumSharp-only set and the NumPy-oracle
+    evidence is joined.
+
+    :param np: the imported, version-pinned numpy module.
+    :param inventory: the reflected NumSharp inventory (load_numsharp_inventory).
+    :param overrides: the reviewed overrides (overrides.json: aliases, support, stray allowlist).
+    :returns: the rows, sorted (NumPy rows first, by surface and name), and the NumSharp targets credited.
+    :raises SystemExit: on a duplicate id, an unbacked surface, a stale override, a stray-host miss, a
+        NumSharp-only row without a source link, or an oracle join problem.
+    :raises ValueError: from object_surfaces when a credited member has no source evidence or a reviewed
+        protocol adapter is stale.
+    """
     targets, surfaces, prefixes = member_maps(inventory)
     # Exported-type index (simple name -> full name) for crediting a NumPy CLASS export against a
     # NumSharp type of the same name. A repeated simple name prefers the root NumSharp.<Name>.
@@ -1022,7 +1166,7 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
         for member in members:
             name = member["name"]
             target = member["target"]
-            if target in consumed_targets or name.startswith("_"):
+            if not lists_as_numsharp_only(surface, member, consumed_targets):
                 continue
             row_id = f"numsharp.{surface}.{name}"
             if row_id in seen_ids:
@@ -1055,7 +1199,16 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
         signature=numpy_signature, documentation_url=documentation_url,
         ufunc_namespaces=UFUNC_PROTOCOL_NAMESPACES,
     ))
+    # NumPy's scalar types, then every other public NumPy class: each member at the class that defines
+    # it. The class-member pass reads the class rows emitted above (namespace exports, extended families,
+    # object surfaces), so it runs last.
+    rows.extend(scalar_type_rows(np, seen_ids, signature=numpy_signature, documentation_url=documentation_url))
     enrich_object_classes(rows, inventory, ROOT, NUMSHARP_SOURCE_BASE_URL)
+    rows.extend(class_member_rows(
+        np, list(rows), seen_ids, inventory, root=ROOT, source_base_url=NUMSHARP_SOURCE_BASE_URL,
+        signature=numpy_signature, documentation_url=documentation_url,
+        types_by_simple_name=numsharp_types_by_simple, category_of=member_category, excluded=compat_excluded,
+    ))
 
     # A facade member used by an extended mapping is no longer a NumSharp-only extension.
     consumed_targets.update(row["numsharp_target"] for row in rows
@@ -1128,6 +1281,14 @@ def status_counts(rows: list[dict[str, Any]]) -> dict[str, int | float]:
 
 
 def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Count the projected rows for coverage.json, manifest.json and summary.md.
+
+    :param rows: the dashboard rows (dashboard_rows output).
+    :returns: the headline (``default_scope``) and expanded (``api_scope``) counts with their per-surface and
+        per-category breakdowns, the extended-family and object-surface counts, the ufunc-protocol counts
+        (rows marked ``ufunc_protocol``), the Python-protocol counts (rows marked ``python_protocol``, with
+        how many NumPy refuses), and the row totals.
+    """
     default_rows = [row for row in rows if row["origin"] == "numpy" and row["in_default_scope"]]
     numpy_rows = [row for row in rows if row["origin"] == "numpy"]
     by_surface = {
@@ -1164,9 +1325,17 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "object_surfaces": status_counts(object_rows),
         "ufunc_protocols": {
-            "total": sum("applicability" in row for row in object_rows),
-            "conditional": sum(row.get("applicability") == "conditional" for row in object_rows),
-            "not_applicable": sum(row.get("applicability") == "not_applicable" for row in object_rows),
+            "total": sum(bool(row.get("ufunc_protocol")) for row in object_rows),
+            "conditional": sum(bool(row.get("ufunc_protocol")) and row.get("applicability") == "conditional"
+                               for row in object_rows),
+            "not_applicable": sum(bool(row.get("ufunc_protocol")) and row.get("applicability") == "not_applicable"
+                                  for row in object_rows),
+        },
+        # Python protocols ("dunder" members) NumPy defines, on every object surface, scalar type and class.
+        "python_protocols": {
+            **status_counts([row for row in object_rows if row.get("python_protocol")]),
+            "not_applicable": sum(bool(row.get("python_protocol")) and row.get("applicability") == "not_applicable"
+                                  for row in object_rows),
         },
         "all_numpy_exports": len(numpy_rows),
         "numsharp_extensions": sum(row["origin"] == "numsharp" for row in rows),
@@ -1330,6 +1499,15 @@ def oracle_markdown(summary: dict[str, Any], rows: list[dict[str, Any]], oracle:
 
 def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_version: str, assembly_version: str,
                   oracle: dict[str, Any] | None = None) -> str:
+    """Render summary.md: the headline and expanded figures, gaps, near-misses, families and counting rules.
+
+    :param summary: build_summary's output for the same rows.
+    :param rows: the dashboard rows.
+    :param numpy_version: the NumPy version compared.
+    :param assembly_version: the NumSharp assembly version reflected.
+    :param oracle: the artifact's oracle block (oracle_evidence.describe), or None to omit the oracle section.
+    :returns: the Markdown text.
+    """
     headline = summary["default_scope"]
     all_apis = summary["api_scope"]
     lines = [
@@ -1347,6 +1525,14 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         "methods numpy.ma's masked ufunc wrappers implement); "
         f"**{summary['ufunc_protocols']['not_applicable']}** describe methods whose calls NumPy rejects "
         "for that ufunc. These count as exposed API contracts, not computable operations.",
+        "",
+        f"It also includes **{summary['python_protocols']['total']} Python protocols** NumPy defines on its "
+        "classes (operators, subscripting, conversions, iteration, `with`, pickling), each class listing the "
+        "protocols it has; NumSharp provides "
+        f"**{summary['python_protocols']['available']}**, through a member of the protocol's own name, the C# "
+        "operator, indexer or cast of the same meaning, or a reviewed adapter. "
+        f"**{summary['python_protocols']['not_applicable']}** are slots NumPy fills only to refuse every call "
+        "(`del a[i]`, ordering comparisons on `ndarray.flags`).",
         "",
         f"Headline API availability: **{headline['coverage_percent']:.1f}%** "
         f"({headline['available']} of {headline['total']} default-scope APIs). "
@@ -1409,7 +1595,7 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         lines.append("_None detected._")
 
     # Extended-submodule section: the families the headline scope excludes, listed so a scan cannot
-    # miss them. Ranked candidate -> subsystem -> tooling -> interop so implementable gaps read first.
+    # miss them. Ranked candidate -> subsystem -> tooling so implementable gaps read first.
     extended = [row for row in rows if row.get("extended")]
     lines.extend([
         "",
@@ -1417,19 +1603,19 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         "",
         "These surfaces appear in the dashboard by default. `candidate` denotes numeric APIs and "
         "object contracts; `subsystem` denotes a separate object model such as masked/string/record "
-        "arrays or ufuncs; `tooling` denotes Python tooling; `interop` denotes array protocols. "
+        "arrays, ufuncs or NumPy's scalar types; `tooling` denotes Python tooling. "
         "Class existence is catalogued separately from member availability. The historical headline "
         "remains unchanged by these additions.",
         "",
     ])
     if extended:
-        disposition_rank = {"candidate": 0, "subsystem": 1, "tooling": 2, "interop": 3}
+        disposition_rank = {"candidate": 0, "subsystem": 1, "tooling": 2}
         lines.append("| Surface | Disposition | Available | Missing | Total | Notable missing |")
         lines.append("|---|---|---:|---:|---:|---|")
         surfaces = sorted(
             {row["surface"] for row in extended},
             key=lambda s: (disposition_rank.get(
-                next((r["disposition"] for r in extended if r["surface"] == s), "interop"), 9), s),
+                next((r["disposition"] for r in extended if r["surface"] == s), "tooling"), 9), s),
         )
         for surface in surfaces:
             members = [row for row in extended if row["surface"] == surface]
@@ -1456,7 +1642,7 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         "",
         "## Counting rules",
         "",
-        "The historical headline is NumPy top-level callables, ndarray public methods/properties, and callables in numpy.random, numpy.linalg, and numpy.fft. The expanded API scope adds public extended-submodule callables and object methods/properties/protocols. Types, constants, modules, and NumSharp-only APIs remain searchable in the full catalog but do not enter either API denominator. Aliases are separate exported names; inherited members are separate contracts on each object type. A ufunc method row records the exposed protocol even when that ufunc rejects the operation (for example, unary reductions). Matching a namespace function never credits a ufunc or a different object type's member.",
+        "The historical headline is NumPy top-level callables, ndarray public methods/properties, and callables in numpy.random, numpy.linalg, and numpy.fft. The expanded API scope adds public extended-submodule callables and object methods/properties/protocols: the Python protocols (dunder members) NumPy defines, the members of NumPy's scalar types, and the members of every other public NumPy class. Types, constants, modules, and NumSharp-only APIs remain searchable in the full catalog but do not enter either API denominator. Aliases are separate exported names; inherited members are separate contracts on each object type, while NumPy's scalar types and the classes no object surface owns list each member once, at the class that defines it. A ufunc method row records the exposed protocol even when that ufunc rejects the operation (for example, unary reductions), and a protocol row records a slot NumPy fills only to refuse it. Matching a namespace function never credits a ufunc or a different object type's member. APIs NumPy keeps only for NumPy 1.x code and has itself deprecated (numpy.matlib, numpy.typing.NBitBase) are left out; numpy.lib and numpy.testing are catalogued but not shown, except numpy.lib.NumpyVersion.",
         "",
     ])
     return "\n".join(lines)
@@ -1479,7 +1665,7 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
             "headline": "Available default-scope APIs divided by all default-scope NumPy APIs.",
             "default_scope": "Top-level NumPy callables; ndarray public methods and properties; callable exports of numpy.random, numpy.linalg, and numpy.fft.",
             "api_scope": "Dashboard default: headline APIs plus extended public submodule callables and object methods/properties/protocols. Supporting class, constant and module exports are catalogued but excluded from API percentages.",
-            "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc.",
+            "object_members": "Object members match only their explicit NumSharp owner type. Inherited members and ufunc protocols are catalogued per owner; NumPy's scalar types and the other public classes list each member once, at the class that defines it. A Python protocol is credited by a NumSharp member of its own name, the C# operator, indexer or cast of the same meaning, or a reviewed adapter. Namespace namesakes never confer support. Protocol existence does not imply applicability to every ufunc or object.",
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
             "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
             "oracle": "Behavioral parity evidence: committed NumPy 2.4.2 oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",

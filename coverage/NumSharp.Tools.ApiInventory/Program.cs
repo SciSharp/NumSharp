@@ -43,7 +43,10 @@ foreach (var (type, moduleName) in annotatedTypes)
 }
 
 var inventory = new ApiInventory(
-    SchemaVersion: 5,
+    // Schema 6 adds TypeInventory.Operators: the C# operator and conversion methods, which the generator
+    // needs to credit NumPy's Python operator protocols (ndarray.__add__ is spelled `a + b` in both
+    // languages). Earlier schemas dropped every special-name method, so an operator was invisible.
+    SchemaVersion: 6,
     AssemblyVersion: assembly.GetName().Version?.ToString() ?? "unknown",
     Modules: modules,
     // The full public surface OUTSIDE the annotated modules (type -> member names). The generator
@@ -76,6 +79,17 @@ Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 }));
 
+/// <summary>
+///     Reflects one type's public surface: methods, properties, fields and (schema 6) C# operators and conversions,
+///     each grouped by name with every overload's signature. Members declared outside NumSharp (System.Object's
+///     ToString/GetHashCode when not overridden) are left out, so a protocol is never credited to .NET's defaults.
+/// </summary>
+/// <param name="type">The type to reflect.</param>
+/// <param name="flags">
+///     The binding flags: <c>DeclaredOnly</c> for module facades (their members are their own), or
+///     <c>FlattenHierarchy</c> for the object inventory (inherited members and a base type's static operators too).
+/// </param>
+/// <returns>The type's inventory, every collection ordered by name for deterministic output.</returns>
 static TypeInventory InspectType(Type type, BindingFlags flags)
 {
     var methods = type.GetMethods(flags)
@@ -117,8 +131,42 @@ static TypeInventory InspectType(Type type, BindingFlags flags)
         .OrderBy(member => member.Name, StringComparer.Ordinal)
         .ToArray();
 
-    return new TypeInventory(type.FullName ?? type.Name, methods, properties, fields);
+    // Operators are the special-name methods the `methods` list above excludes. Only C# operator and
+    // conversion methods qualify (their CLR names all start with "op_"); property accessors and event
+    // methods are special-name too and stay excluded. With FlattenHierarchy (the object inventory) a
+    // base type's static operators appear as well, so every overload records its declaring type and its
+    // operand types: the generator credits a protocol only when the OWNER type itself is an operand.
+    var operators = type.GetMethods(flags)
+        .Where(method => method.IsSpecialName && method.Name.StartsWith("op_", StringComparison.Ordinal)
+                         && method.DeclaringType?.Assembly == type.Assembly)
+        .GroupBy(method => method.Name, StringComparer.Ordinal)
+        .Select(group => new ApiOperator(
+            group.Key,
+            group.Select(FormatOperatorOverload)
+                .OrderBy(overload => overload.Signature, StringComparer.Ordinal)
+                .ToArray()))
+        .OrderBy(op => op.Name, StringComparer.Ordinal)
+        .ToArray();
+
+    return new TypeInventory(type.FullName ?? type.Name, methods, properties, fields, operators);
 }
+
+/// <summary>
+///     Describes one operator or conversion overload with the structure the generator matches on:
+///     the result type, each operand's type and the type that declares the overload.
+/// </summary>
+/// <param name="method">An <c>op_*</c> special-name method (an operator or a conversion).</param>
+/// <returns>
+///     The overload's signature text (the same format as <see cref="FormatMethod" />), its result type and
+///     its operand types in <see cref="FriendlyType" /> spelling (a nested type keeps the CLR <c>+</c>), and
+///     the full name of the declaring type, which differs from the inspected type for an operator
+///     inherited through <see cref="BindingFlags.FlattenHierarchy" />.
+/// </returns>
+static OperatorOverload FormatOperatorOverload(MethodInfo method) => new(
+    FormatMethod(method),
+    FriendlyType(method.ReturnType),
+    method.GetParameters().Select(parameter => FriendlyType(parameter.ParameterType)).ToArray(),
+    method.DeclaringType!.FullName ?? method.DeclaringType.Name);
 
 static string[] DeclaringTypes(IEnumerable<MemberInfo> members) => members
     .Select(member => member.DeclaringType!.FullName ?? member.DeclaringType.Name)
@@ -336,11 +384,46 @@ internal sealed record ApiInventory(
     // Exact CLR full names, with inherited public members and declaration ownership for source links.
     IReadOnlyDictionary<string, TypeInventory> ObjectTypes);
 
+/// <summary>One reflected type: its public members grouped by member kind.</summary>
+/// <param name="Type">The type's CLR full name (a nested type keeps <c>+</c>, as in <c>NumSharp.np+FlatIterator</c>).</param>
+/// <param name="Methods">Public methods, one entry per name with every overload's signature.</param>
+/// <param name="Properties">Public properties, including indexers (the C# name <c>Item</c>).</param>
+/// <param name="Fields">Public fields and constants.</param>
+/// <param name="Operators">
+///     C# operator and conversion methods (<c>op_Addition</c>, <c>op_Explicit</c>, ...), one entry per CLR
+///     name; empty for a type without operators. Added in schema 6 so the generator can credit NumPy's
+///     Python operator protocols, which a C# operator spells with the same symbol.
+/// </param>
 internal sealed record TypeInventory(
     string Type,
     ApiMember[] Methods,
     ApiMember[] Properties,
-    ApiMember[] Fields);
+    ApiMember[] Fields,
+    ApiOperator[] Operators);
+
+/// <summary>Every overload of one C# operator or conversion on a type.</summary>
+/// <param name="Name">The CLR special name, such as <c>op_Addition</c> or <c>op_Explicit</c>.</param>
+/// <param name="Overloads">The overloads, ordered by signature text for deterministic output.</param>
+internal sealed record ApiOperator(
+    string Name,
+    OperatorOverload[] Overloads);
+
+/// <summary>One operator or conversion overload, structured for operand matching.</summary>
+/// <param name="Signature">The overload as text, in the format of every other method signature.</param>
+/// <param name="ReturnType">The result type; for a conversion, the type converted TO.</param>
+/// <param name="ParameterTypes">
+///     The operand types in order: two for a binary operator (left, right), one for a unary operator or a
+///     conversion (the type converted FROM).
+/// </param>
+/// <param name="DeclaringType">
+///     The full name of the type that declares the overload; it differs from the inspected type when the
+///     operator is inherited through <see cref="BindingFlags.FlattenHierarchy" />.
+/// </param>
+internal sealed record OperatorOverload(
+    string Signature,
+    string ReturnType,
+    string[] ParameterTypes,
+    string DeclaringType);
 
 internal sealed record ApiMember(
     string Name,

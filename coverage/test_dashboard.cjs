@@ -173,7 +173,7 @@ test('declared but inapplicable ufunc methods stay searchable with a scoped disc
   const { api, element } = dashboard();
   api.state.rows.push(row('numpy.sin.reduce', 'Universal function objects', { surface: 'ufunc', name: 'sin.reduce', kind: 'method', applicability: 'not_applicable' }));
   api.changeScope();
-  assert.match(element('cov-applicability-note').textContent, /1 declared ufunc contract whose calls NumPy rejects/);
+  assert.match(element('cov-applicability-note').textContent, /1 declared contract whose calls NumPy rejects \(ufunc methods/);
   assert.equal(api.scopedRows().length, 7, 'all declared API contracts remain countable');
   element('cov-search').value = 'np.sin.reduce';
   api.filterRows();
@@ -182,6 +182,19 @@ test('declared but inapplicable ufunc methods stay searchable with a scoped disc
   element('cov-scope').value = 'default';
   api.changeScope();
   assert.equal(element('cov-applicability-note').textContent, '');
+});
+
+test('a refused Python protocol is disclosed as a protocol, not as a ufunc method', () => {
+  const { api, element } = dashboard();
+  api.state.rows.push(row('numpy.ndarray.__delitem__', 'Array protocols', { surface: 'ndarray', name: '__delitem__', kind: 'method', applicability: 'not_applicable', python_protocol: true }));
+  api.state.rows.push(row('numpy.sin.reduce', 'Universal function objects', { surface: 'ufunc', name: 'sin.reduce', kind: 'method', applicability: 'not_applicable' }));
+  api.changeScope();
+  assert.match(element('cov-applicability-note').textContent, /2 declared contracts whose calls NumPy rejects/);
+  element('cov-search').value = 'ndarray.__delitem__';
+  api.filterRows();
+  assert.equal(api.state.filtered.length, 1);
+  assert.match(element('cov-detail').innerHTML, /NumPy rejects every call of this protocol/);
+  assert.doesNotMatch(element('cov-detail').innerHTML, /ufunc method/);
 });
 
 test('large card grids scroll without dropping any surfaces or categories', () => {

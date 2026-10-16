@@ -27,7 +27,6 @@ API_ALIASES = {
     "numpy.bitwise_not": "numpy.invert",
     "numpy.row_stack": "numpy.vstack",
     "numpy.test": "numpy.testing",
-    "numpy.ndarray.interop": "numpy.ndarray",
     "numpy.polynomial.Polynomial": "numpy.polynomial.polynomial.Polynomial",
     "numpy.polynomial.Chebyshev": "numpy.polynomial.chebyshev.Chebyshev",
     "numpy.polynomial.Legendre": "numpy.polynomial.legendre.Legendre",

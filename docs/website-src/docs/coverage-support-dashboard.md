@@ -677,7 +677,7 @@
     const categories = [...new Set(rows.map((row) => row.category))].sort((a, b) => a.localeCompare(b));
     const rejectedContracts = rows.filter((row) => row.applicability === "not_applicable").length;
     byId("cov-scope-note").textContent = `${scopeLabels[scope]}: ${stats.total.toLocaleString()} entries across ${surfaces.length} surfaces and ${categories.length} capability areas. This selection updates every summary and the explorer.`;
-    byId("cov-applicability-note").textContent = rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared ufunc contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects; gaps describe public API presence, not a count of computable operations.` : "";
+    byId("cov-applicability-note").textContent = rejectedContracts ? `This scope includes ${rejectedContracts.toLocaleString()} declared contract${rejectedContracts === 1 ? "" : "s"} whose calls NumPy rejects (ufunc methods the ufunc's shape rules out, and Python protocol slots NumPy fills only to refuse); gaps describe public API presence, not a count of computable operations.` : "";
 
     byId("cov-metrics").innerHTML = [
       metricCard("Scoped API availability", coverageLabel(stats), stats.numpy ? `${stats.availableApis} of ${stats.numpy} comparable NumPy APIs` : "No comparable NumPy APIs in this scope"),
@@ -865,7 +865,7 @@
         <div class="cov-detail-fact"><div class="cov-detail-label">Category</div><div class="cov-detail-value">${escapeHtml(row.category)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Availability</div><div class="cov-detail-value">${escapeHtml(mapping)}</div></div>
         <div class="cov-detail-fact"><div class="cov-detail-label">Inventory group</div><div class="cov-detail-value">${row.in_default_scope ? "Headline comparison" : isComparableApi(row) ? "Extended NumPy API" : row.origin === "numsharp" ? "NumSharp-only API" : "Supporting NumPy export"}${row.disposition ? ` · ${escapeHtml(dispositionLabels[row.disposition] || row.disposition)}` : ""}</div></div>
-        ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? "NumPy rejects this ufunc method" : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
+        ${row.applicability ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy applicability</div><div class="cov-detail-value">${escapeHtml(row.applicability === "not_applicable" ? (row.python_protocol ? "NumPy rejects every call of this protocol" : "NumPy rejects this ufunc method") : row.applicability === "conditional" ? "Depends on operands and dtype" : row.applicability)}</div></div>` : ""}
         ${state.hasOracle ? `<div class="cov-detail-fact"><div class="cov-detail-label">NumPy oracle</div><div class="cov-detail-value">${escapeHtml(oracleSummary(row))}</div></div>` : ""}
       </div>
       ${oracleSection(row)}

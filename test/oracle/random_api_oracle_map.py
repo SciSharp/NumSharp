@@ -43,10 +43,15 @@ SPECIAL = {
     "RandomState.ranf": ["numpy.random.ranf"],
     "RandomState.sample": ["numpy.random.sample"],
     # NumPy has these as numpy.random attributes outside __all__, so the catalog files them as NumSharp extensions; the
-    # oracle still compares them with NumPy's own functions / str().
+    # oracle still compares them with NumPy's own functions.
     "RandomState.get_bit_generator": ["numsharp.random.get_bit_generator"],
     "RandomState.set_bit_generator": ["numsharp.random.set_bit_generator"],
-    "RandomState.ToString": ["numsharp.random.ToString"],
+    # The ToString overrides port NumPy's str() / repr() of these objects, and the catalog credits them to those
+    # protocol rows (coverage/object_surfaces.py REVIEWED_PROTOCOL_ADAPTERS); the oracle compares them with NumPy's
+    # str(), which SeedSequence takes from its __repr__.
+    "Generator.ToString": ["numpy.random.Generator.__str__"],
+    "RandomState.ToString": ["numpy.random.RandomState.__str__"],
+    "SeedSequence.ToString": ["numpy.random.SeedSequence.__repr__"],
 }
 
 NOTE = ("Random-API oracle (gen_random_oracle.py): every overload of the random world by exact C# signature; "
