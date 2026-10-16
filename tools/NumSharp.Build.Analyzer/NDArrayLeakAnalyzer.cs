@@ -66,6 +66,13 @@ namespace NumSharp.Build.Analyzer
         ///     possible input disposed) and a memory blow-up (a long loop under a scope); conditions whose
         ///     violation only leaves the leak in place stay in the description. The contract test caps the
         ///     message length.</para>
+        ///     <para>The first sentence claims only what this analysis knows: nothing in THIS method reclaims the
+        ///     array. A scope a caller opened does reclaim it (case 2), so a sentence such as "this array is never
+        ///     scoped" would be false in exactly the case the analysis cannot see, and would send an agent to add a
+        ///     scope. Case 2 names the signal to look for in the callers (an <c>[NDScoped*]</c> attribute or
+        ///     <c>NDScope.Open()</c>) and excludes a caller that runs the method in a long loop: scopes nest, so
+        ///     <c>[NDScoped]</c> under a caller's scope frees each call's arrays when the call returns, while a
+        ///     covered method's arrays wait for the caller's scope to close.</para>
         ///     <para>Every condition in the description is a way the attributes would dispose an array the program
         ///     still uses, or stop reclaiming one, that neither the weaver nor this analyzer reports:
         ///     an array kept past the call, by the method or by a callee (a static cache included: the caller's
@@ -89,13 +96,13 @@ namespace NumSharp.Build.Analyzer
         internal static readonly DiagnosticDescriptor Nw012 = new DiagnosticDescriptor(
             "NDW012",
             "NDArray is created but never disposed, returned, stored, or scoped (left to the finalizer)",
-            "This {1} is never disposed, returned, stored, or scoped. Do not add {0} just to silence this: it " +
-            "disposes every array the call creates except what the method returns. Take the first case that fits: " +
+            "Nothing in this method disposes, returns, stores, or scopes this {1}. Do not add {0} just to silence " +
+            "this: it disposes every array the call creates except what the method returns. Take the first that fits: " +
             "(1) a call hands back an array the method already holds (@out, inplace: true): suppress only this line; " +
-            "(2) every call already runs under a scope and the method is not public: [NDScopedCovered]; (3) no new " +
-            "array is stored, cached, captured, or put in a holder the method hands out, and no long loop in it " +
-            "creates arrays: {0}; (4) otherwise dispose it after its last use, unless it may be an input " +
-            "(np.asarray(x)).",
+            "(2) every caller already has a scope ([NDScoped*] or NDScope.Open()), none runs it in a long loop, and " +
+            "this method is not public: [NDScopedCovered]; (3) no new array is stored, cached, captured, or handed " +
+            "out in a holder, and no long loop in it creates arrays: {0}; (4) otherwise dispose it after its last " +
+            "use, unless it may be an input (np.asarray(x)).",
             Category,
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
@@ -107,16 +114,21 @@ namespace NumSharp.Build.Analyzer
                          "back an array the method already holds (@out, inplace: true; not a view or copy) or the " +
                          "callee takes the array over: suppress only that line, with a comment. Case 2: every call of " +
                          "a non-public method, counting delegate, interface, and base-virtual calls, runs on the " +
-                         "calling thread while a scope is open, and the method creates no array after an await: " +
-                         "[NDScopedCovered], free at run time. Case 3: no array created during the call is kept past " +
+                         "calling thread while a caller's scope is open, no caller runs it in a long loop, and the " +
+                         "method creates no array after an await: [NDScopedCovered], free at run time. Scopes nest: " +
+                         "[NDScoped] under a caller's scope adds an inner scope that frees the method's arrays when it " +
+                         "returns and passes its result to the outer scope, which costs a scope per call but is the " +
+                         "right choice under a caller's long loop, where a covered method's arrays would pile up in " +
+                         "the caller's scope. Case 3: no array created during the call is kept past " +
                          "it by the method or a callee (field, property, static cache, collection, caller's array, a " +
                          "lambda or task run later) unless detached (NDScope.Detach, an [NDScopedExit] parameter); only " +
                          "NDArray, NDArray[], INDArrayCarrier structs, tuples of those, or array-free values are " +
                          "returned or put in out parameters (a holder such as NDMaskedArray or poly1d comes back " +
                          "disposed, even inside a tuple); no pointer into a temporary escapes: [NDScoped] or " +
                          "[NDScopedAsync], or the same on its unscoped callers and then case 2. Neither attribute fits " +
-                         "a constructor, a scope open across a long loop that creates arrays, or arrays a lambda or " +
-                         "task creates on another thread or after the scope closed. Case 4: dispose after the last " +
+                         "a constructor, a scope open across a long loop that creates arrays (in the method, or in a " +
+                         "caller for [NDScopedCovered]), or arrays a lambda or task creates on another thread or after " +
+                         "the scope closed. Case 4: dispose after the last " +
                          "use, never an array the method returns, stores, or was given, nor one that may be an input " +
                          "(np.asarray(x), x.astype(t, copy: false)).",
             helpLinkUri: HelpLink);

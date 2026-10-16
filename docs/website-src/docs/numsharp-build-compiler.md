@@ -495,12 +495,16 @@ first case that holds:
    or the method it is passed to takes it over (disposes it, detaches it, or returns it or an object
    that owns it). Keep the code and suppress just that line between `#pragma warning disable NDW012`
    and `#pragma warning restore NDW012`, with a comment that gives the reason.
-2. **Every call already runs under a scope.** Every call to the method (count calls through a delegate,
-   an interface or a base virtual) happens while a scope is open on the calling thread: an
-   `[NDScoped]`, `[NDScopedAsync]` or `[NDScopedCovered]` method, or a `using var scope =
-   NDScope.Open()`, is up the call stack. The method also creates no array after an `await`, and
-   nothing outside the assembly can call it. Mark it **`[NDScopedCovered]`**, which costs nothing at run
-   time, not `[NDScoped]`, which would add a second scope to every call.
+2. **A caller already has a scope.** Every call to the method (count calls through a delegate, an
+   interface or a base virtual) happens while a scope is open on the calling thread: an `[NDScoped]`,
+   `[NDScopedAsync]` or `[NDScopedCovered]` method, or a `using var scope = NDScope.Open()`, is up the
+   call stack. That scope already reclaims the array, which this check cannot see. No caller runs the
+   method in a long loop, the method creates no array after an `await`, and nothing outside the assembly
+   can call it. Mark it **`[NDScopedCovered]`**, which costs nothing at run time, not `[NDScoped]`.
+   Scopes nest, so `[NDScoped]` here would not be wrong: its inner scope frees the method's arrays when
+   the method returns and passes the result to the caller's scope. It costs a scope per call, and it is
+   the right choice when a caller runs the method in a long loop, where a covered method's arrays would
+   pile up in the caller's scope until that scope closes.
 3. **An entry point that keeps nothing.** This case needs three conditions:
    - No array created during the call is kept past it by the method or by anything it calls (in a
      field, a property, a static cache, a collection or the caller's array, or by a lambda or task that

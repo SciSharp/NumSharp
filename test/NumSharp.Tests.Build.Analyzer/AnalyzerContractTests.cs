@@ -38,24 +38,27 @@ namespace NumSharp.Tests.Build.Analyzer
         ///     its summary, so a long text floods logs (NumSharp.Core has 171 NDW012 sites) and an agent's context;
         ///     the full conditions belong in the description and on the help page, whose link the compiler prints
         ///     after the message. The NDArray text sits just under this cap: it is the shortest that still names
-        ///     every fix with the words that block a use-after-free.
+        ///     every fix with the words that block a use-after-free and says that a caller's scope, which the
+        ///     analysis cannot see, may already reclaim the array.
         /// </summary>
-        private const int Ndw012MessageCap = 640;
+        private const int Ndw012MessageCap = 680;
 
         /// <summary>Cap for the holder text, whose fix has a single branch (dispose it, or suppress a hand-off).</summary>
         private const int Ndw012HolderMessageCap = 400;
 
         /// <summary>
-        ///     Pins what each NDW012 tier must carry. The MESSAGE (the build-log line an agent acts on) must forbid
-        ///     adding the scope attribute as a reflex and say why, then give the four fixes in order with the words
-        ///     that block their misuse: the false-positive exit (a call handing back an array the method already
-        ///     holds), <c>[NDScopedCovered]</c> for scoped, non-public methods, the scope attribute only when no
-        ///     new array is stored, cached, captured or handed out in a holder and no long loop creates arrays, and
-        ///     disposal that spares a possible input; and it must stay short. The DESCRIPTION must carry every
-        ///     condition the message abbreviates (the per-method limit, detaching, delegate and base-virtual
-        ///     callers, threads and awaits, static caches, the return shapes a scope yields, the tuple gap, pointers,
-        ///     constructors, loops, lambdas and tasks). The holder text must say that no scope attribute fixes it.
-        ///     Wording may change; these facts and the caps may not.
+        ///     Pins what each NDW012 tier must carry. The MESSAGE (the build-log line an agent acts on) must claim
+        ///     only what a per-method analysis knows (nothing in THIS method reclaims the array; a caller's scope
+        ///     may), forbid adding the scope attribute as a reflex and say why, then give the four fixes in order
+        ///     with the words that block their misuse: the false-positive exit (a call handing back an array the
+        ///     method already holds), <c>[NDScopedCovered]</c> when every caller already has a scope, none runs the
+        ///     method in a long loop and it is not public, the scope attribute only when no new array is stored,
+        ///     cached, captured or handed out in a holder and no long loop creates arrays, and disposal that spares a
+        ///     possible input; and it must stay short. The DESCRIPTION must carry every condition the message
+        ///     abbreviates (the per-method limit, detaching, delegate and base-virtual callers, threads and awaits,
+        ///     nesting under a caller's scope, static caches, the return shapes a scope yields, the tuple gap,
+        ///     pointers, constructors, loops, lambdas and tasks). The holder text must say that no scope attribute
+        ///     fixes it. Wording may change; these facts and the caps may not.
         /// </summary>
         [TestMethod]
         public void Ndw012_Texts_CarryTheFixProcedure_AndStayShort()
@@ -63,18 +66,25 @@ namespace NumSharp.Tests.Build.Analyzer
             string message = NDArrayLeakAnalyzer.Nw012.MessageFormat.ToString();
             foreach (var fact in new[]
                      {
+                         "Nothing in this method disposes, returns, stores, or scopes this {1}", // only what it knows
                          "Do not add {0} just to silence this",        // no reflex attribute
                          "it disposes every array the call creates except what the method returns", // why
-                         "Take the first case that fits",              // an ordered procedure
+                         "Take the first that fits",                   // an ordered procedure
                          "a call hands back an array the method already holds (@out, inplace: true)", // false positive
                          "suppress only this line",                    // a line, never a whole file
-                         "every call already runs under a scope and the method is not public: [NDScopedCovered]",
-                         "stored, cached, captured, or put in a holder the method hands out", // use-after-free shapes
+                         "every caller already has a scope ([NDScoped*] or NDScope.Open())", // the scope it cannot see
+                         "none runs it in a long loop",                // a nested [NDScoped] frees per call instead
+                         "this method is not public: [NDScopedCovered]",
+                         "stored, cached, captured, or handed out in a holder", // use-after-free shapes
                          "no long loop in it creates arrays: {0}",     // a scope frees only when it closes
                          "otherwise dispose it after its last use",    // the fallback
                          "unless it may be an input (np.asarray(x))",  // never dispose a possible passthrough
                      })
                 StringAssert.Contains(message, fact, $"the NDW012 message must keep: {fact}");
+            // A per-method analysis cannot know that no caller scoped the array: "never ... scoped" is false whenever
+            // a caller's scope reclaims it, and sends an agent to add a scope that already exists.
+            Assert.IsFalse(message.Contains("never disposed, returned, stored, or scoped"),
+                "the message must not claim the array is never scoped: a caller's scope is invisible to this check");
             Assert.IsTrue(message.Length <= Ndw012MessageCap,
                 $"the NDW012 message is a build-log line, not a document: {message.Length} > {Ndw012MessageCap} characters; " +
                 "move detail to the description and the help page");
@@ -92,6 +102,9 @@ namespace NumSharp.Tests.Build.Analyzer
                          "with a comment",
                          "counting delegate, interface, and base-virtual calls", // callers a search misses
                          "runs on the calling thread",
+                         "no caller runs it in a long loop",           // covered arrays wait for the caller's scope
+                         "Scopes nest",                                // [NDScoped] under a caller's scope is safe
+                         "frees the method's arrays when it returns and passes its result to the outer scope",
                          "no array after an await",                    // a covered async helper
                          "static cache",                               // a callee's cache is tracked by the scope
                          "an [NDScopedExit] parameter",
@@ -150,7 +163,7 @@ namespace NumSharp.Tests.Build.Analyzer
 
             string sync = leaks[0].GetMessage(), async = leaks[1].GetMessage(), holder = leaks[2].GetMessage();
             Assert.AreSame(NDArrayLeakAnalyzer.Nw012, leaks[0].Descriptor);
-            StringAssert.Contains(sync, "This NDArray is never disposed", "the value is named");
+            StringAssert.Contains(sync, "Nothing in this method disposes, returns, stores, or scopes this NDArray.", "the value is named");
             StringAssert.Contains(sync, "Do not add [NDScoped] just to silence this", "the warning names the sync attribute");
             StringAssert.Contains(sync, "creates arrays: [NDScoped];", "a synchronous method is offered [NDScoped]");
 
