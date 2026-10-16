@@ -299,7 +299,8 @@ namespace NumSharp.Backends.Strings
             long nans = np.count_nonzero(nan);
             if (nans == line.size)
                 return ScalarElement(line, line.size - 1);
-            using var kept = nans == 0 ? null : line[np.logical_not(nan)];
+            // _remove_nan_1d's order (see RemoveNaN1D), as np.median then partitions it.
+            using var kept = nans == 0 ? null : RemoveNaN1D(line, nan, nans);
             return Median(kept ?? line, null, null, false);
         }
 
@@ -431,14 +432,48 @@ namespace NumSharp.Backends.Strings
             {
                 // Only a NaN-like NA is a NaN, so the line's descriptor has one: np.full stores its Python float nan as the NA.
                 var full = new NDArray(line.dtype, qShape.Length == 0 ? Shape.Scalar : Shape.Adopt((long[])qShape.Clone()), true);
-                using (var na = NDArray.PackForVStringStore(NDArray.PythonLiteral(PositiveNaN), line.dtype))
+                using (var nanLiteral = NDArray.PythonLiteral(PositiveNaN))
+                using (var na = NDArray.PackForVStringStore(nanLiteral, line.dtype))
                     np.copyto(full, na, "unsafe");
                 // `[()]` of a 0-d array is its Python object (the NA); of an array it is a VIEW of the whole array (NumPy's
                 // result does not own its data). The caller's scope reclaims `full`; the view keeps its storage.
                 return qShape.Length == 0 ? full.MarkReductionScalar() : full.view();
             }
-            using var kept = nans == 0 ? null : line[np.logical_not(nan)];
+            // NumPy's _remove_nan_1d order, not a mask selection: the partition that picks the element sorts what is left,
+            // and texts equal under NpyString_cmp (the same bytes up to a shared NUL) keep the order they arrive in.
+            using var kept = nans == 0 ? null : RemoveNaN1D(line, nan, nans);
             return QuantileText.Compute(op, kept ?? line, q, qShape, qIsInteger, null, null, method, false);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_remove_nan_1d</c> over a <c>StringDType</c> line holding NaN-like NAs (not all of them): a copy whose
+        ///     first NaN slots are filled, in order, with the non-NaN elements of the last <c>nans</c> slots, cut to its first
+        ///     <c>n - nans</c> elements — NOT the NaN-free elements in input order. The order matters wherever ties do: the
+        ///     partition that picks a quantile's element sorts this array, and texts equal under <c>NpyString_cmp</c> keep the
+        ///     order they arrive in (probed: a <c>np.nanpercentile(..., method='nearest')</c> over tied texts picks by it).
+        /// </summary>
+        /// <param name="line">The 1-D line.</param>
+        /// <param name="nan">Its NaN mask (<c>np.isnan(line)</c>).</param>
+        /// <param name="nans">The number of NaNs (1 to <c>line.size - 1</c>).</param>
+        /// <returns>A new 1-D array of the line's descriptor (a view of the filled copy, as NumPy's <c>arr1d[:-s.size]</c>).</returns>
+        /// <remarks>Scoped by the caller's boundary: the copy, the tail views and the positions are reclaimed there; the
+        ///     returned view keeps the copy's storage.</remarks>
+        private static NDArray RemoveNaN1D(NDArray line, NDArray nan, long nans)
+        {
+            long n = line.size;
+            var arr = line.copy();
+            // enonan = arr1d[-s.size:][~c[-s.size:]]; arr1d[s[:enonan.size]] = enonan; return arr1d[:-s.size]
+            using var tailMask = nan[$"{n - nans}:"];
+            using var tailKeep = np.logical_not(tailMask);
+            using var tail = arr[$"{n - nans}:"];
+            using var enonan = tail[tailKeep];
+            if (enonan.size > 0)
+            {
+                using var positions = np.flatnonzero(nan);
+                using var head = positions[$":{enonan.size}"];
+                arr[head] = enonan;
+            }
+            return arr[$":{n - nans}"];
         }
 
         // =============================================================================================================
@@ -660,8 +695,10 @@ namespace NumSharp.Backends.Strings
                 {
                     if (!NDStringUfuncs.IsText(a))
                         return null;
+                    // np.nanmean of empty StringDType text refuses in every form (EmptyNanMean never returns for it); the
+                    // disposal only keeps an impossible result from waiting for the finalizer.
                     if (NDStringUfuncs.IsVString(a))
-                        EmptyNanMean(a, axes, null, false);
+                        EmptyNanMean(a, axes, null, false)?.Dispose();
                     // Fixed-width text: np.nanmean's add.reduce refusal.
                     return NDStringUfuncs.AddNotCompatible(a.dtype, "reduce");
                 }

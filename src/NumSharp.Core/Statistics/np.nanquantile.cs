@@ -61,8 +61,8 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, true);
             return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true,
-                emptyReturnsNaN: true, ignoreNaN: true);
+                default, keepdims, qIsScalar: true,
+                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
         }
 
         /// <summary>
@@ -119,8 +119,8 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, false);
             return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false,
-                emptyReturnsNaN: true, ignoreNaN: true);
+                default, keepdims, qIsScalar: false,
+                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
         }
 
         /// <summary>
@@ -184,8 +184,8 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axis, true);
             return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true,
-                emptyReturnsNaN: true, ignoreNaN: true);
+                default, keepdims, qIsScalar: true,
+                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
         }
 
         /// <summary>
@@ -249,16 +249,19 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axis, false);
             return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false,
-                emptyReturnsNaN: true, ignoreNaN: true);
+                default, keepdims, qIsScalar: false,
+                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
         }
 
         /// <summary>
-        ///     NDArray-q overload — accepts a 0-D or 1-D NDArray of quantile values.
-        ///     Higher-rank q is rejected (NumPy raises "q must be a scalar or 1d").
+        ///     NDArray-q overload — NumPy's <c>np.nanquantile(a, q_array)</c>: q of any real dtype, of rank 0 to 2 (a 2-d q
+        ///     keeps both axes in front of the result; rank 3 and above is refused after the axis checks).
         /// </summary>
         /// <param name="a">The data.</param>
-        /// <param name="q">A 0-d or 1-d array of quantiles in [0, 1].</param>
+        /// <param name="q">An array of quantiles in [0, 1]. An integer or bool q makes NumPy's 'linear' virtual index
+        ///     <c>(n - 1) * q</c> an integer, which it TAKES instead of interpolating (the data's dtype:
+        ///     <c>np.nanquantile([1, 2, 3], np.array(1))</c> is the int64 3), and an array q is a STRONG float64 weight
+        ///     (<c>np.nanquantile(f32, np.array(0.5))</c> is float64).</param>
         /// <param name="axis">The axis to reduce, or null for the flattened data.</param>
         /// <param name="out">An optional output array.</param>
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
@@ -270,8 +273,10 @@ namespace NumSharp
         ///     between instances of 'float' and 'numpy.str_'</c> for a 1-d q of fewer than 10 elements, <c>q.min()</c>'s
         ///     <c>minimum</c> refusal otherwise). Text data: NumPy's NaN test (<c>isnan</c> has no text loop), or the
         ///     add.reduce refusal of <c>np.nanmean</c> for empty text data.</exception>
-        /// <exception cref="ArgumentException">A q of rank above 1, or a quantile outside [0, 1] (NumPy's ValueError
-        ///     texts).</exception>
+        /// <exception cref="ValueError">A quantile outside [0, 1] (<c>Quantiles must be in the range [0, 1]</c>), an empty q
+        ///     of rank other than 1 (its <c>q.min()</c>), an unknown method (checked only when some slice holds a value), a q
+        ///     of rank above 2 (<c>q must be a scalar or 1d</c>, unless every slice is all NaN), or an axis repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
         /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
@@ -293,41 +298,195 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+            return NanQuantileOfArrayQ(a, q, axis.HasValue ? new[] { axis.Value } : null, axis, @out, overwrite_input,
+                method, keepdims);
+        }
+
+        /// <summary>
+        ///     NDArray-q overload over SEVERAL axes at once — NumPy's <c>np.nanquantile(a, q_array, axis=(i, j))</c>: the
+        ///     reduced axes are merged into one, the result's leading axes are q's, and an EMPTY axis list reduces nothing.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">An array of quantiles in [0, 1], of rank 0 to 2 (see the one-axis overload for the integer take
+        ///     and the strong weight).</param>
+        /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
+        ///     data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The quantiles of the non-NaN values over the reduced axes; <paramref name="out"/> itself when one is
+        ///     given; for empty numeric data, NumPy's <c>np.nanmean(a, axis)</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="q"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex ("a must be an array of real numbers", NumPy's first
+        ///     statement); a text <paramref name="q"/> (its [0, 1] check refuses); text data (NumPy's NaN test: <c>isnan</c>
+        ///     has no text loop), after the axis checks.</exception>
+        /// <exception cref="ValueError">A quantile outside [0, 1], an empty q of rank other than 1, an unknown method, a q of
+        ///     rank above 2 (unless every slice is all NaN), or an axis repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/> (its NaN-like NAs removed, the rest
+        ///     taking <c>np.quantile</c>'s rules; an all-NaN slice gives the NA object): a line of two or more elements
+        ///     holding a None-like NA (<c>Cannot compare null that is not a nan-like value</c>), or the store into
+        ///     <paramref name="out"/> (NumPy's setitem texts, e.g. <c>could not convert string to float: 'b'</c>).</exception>
+        /// <exception cref="NotSupportedException">A NEP 55 <c>StringDType</c> reduction along an axis whose row result NumPy
+        ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
+        ///     dtype.</exception>
+        /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain, as for every
+        ///     tuple-axis overload.</remarks>
+        public static NDArray nanquantile(NDArray a, NDArray q, int[] axis,
+            NDArray @out = null, bool overwrite_input = false,
+            string method = "linear", bool keepdims = false)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            return NanQuantileOfArrayQ(a, q, axis, null, @out, overwrite_input, method, keepdims);
+        }
+
+        /// <summary>
+        ///     The q-th quantile ignoring NaNs for a Python INT q (a C# integer literal): NumPy's <c>q = np.asanyarray(q)</c>
+        ///     makes it an int64 array, whose 'linear' virtual index <c>(n - 1) * q</c> is an integer that NumPy TAKES
+        ///     instead of interpolating — the data's own dtype and element (<c>np.nanquantile([1, 2, 3], 1)</c> is the int64
+        ///     3, <c>np.nanquantile([1., inf, nan], 1)</c> is inf where interpolating at 1.0 makes <c>inf - inf</c>).
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">The quantile: 0 or 1 (anything else is outside [0, 1]).</param>
+        /// <param name="axis">The axis to reduce, or null for the flattened data.</param>
+        /// <param name="out">An optional output array.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The quantile of the non-NaN values with the axis reduced (a scalar result over every axis).</returns>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex, or text data (NumPy's NaN test).</exception>
+        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1] (<c>Quantiles must be in the range [0,
+        ///     1]</c>), or an unknown method.</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/> (its NaN-like NAs removed, the rest
+        ///     taking <c>np.quantile</c>'s rules; an all-NaN slice gives the NA object): a line of two or more elements
+        ///     holding a None-like NA (<c>Cannot compare null that is not a nan-like value</c>), or the store into
+        ///     <paramref name="out"/> (NumPy's setitem texts, e.g. <c>could not convert string to float: 'b'</c>).</exception>
+        /// <exception cref="NotSupportedException">A NEP 55 <c>StringDType</c> reduction along an axis whose row result NumPy
+        ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
+        ///     dtype.</exception>
+        /// <remarks>
+        ///     C# binds an integer literal here rather than to the <see cref="double"/> overload (a conversion to
+        ///     <see cref="long"/> is the better one), which is what makes <c>np.nanquantile(a, 1)</c> NumPy's call. The
+        ///     Python int is WEAK for the result dtype (NumPy's <c>weak_q</c>): an interpolating method keeps float16 /
+        ///     float32 data's dtype.
+        /// </remarks>
+        public static NDArray nanquantile(NDArray a, long q,
+            int? axis = null, NDArray @out = null, bool overwrite_input = false,
+            string method = "linear", bool keepdims = false)
+        {
+            // `q = np.asanyarray(q)` of a Python int: a 0-d int64 array, weak for the result dtype (weak_q). It is read
+            // into the quantile list and never returned, so it is released here.
+            using NDArray qArray = NDArray.PythonLiteral(q);
+            return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims);
+        }
+
+        /// <summary>
+        ///     The q-th quantile ignoring NaNs over SEVERAL axes for a Python INT q (see the <see cref="long"/> overload with
+        ///     one axis for NumPy's rule): the integer index is taken, whatever the data.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">The quantile: 0 or 1.</param>
+        /// <param name="axis">The axes to reduce; null reduces the flattened data.</param>
+        /// <param name="out">An optional output array.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The quantile of the non-NaN values over the reduced axes.</returns>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex, or text data (NumPy's NaN test).</exception>
+        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1], an unknown method, or an axis
+        ///     repeats.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/> (its NaN-like NAs removed, the rest
+        ///     taking <c>np.quantile</c>'s rules; an all-NaN slice gives the NA object): a line of two or more elements
+        ///     holding a None-like NA (<c>Cannot compare null that is not a nan-like value</c>), or the store into
+        ///     <paramref name="out"/> (NumPy's setitem texts, e.g. <c>could not convert string to float: 'b'</c>).</exception>
+        /// <exception cref="NotSupportedException">A NEP 55 <c>StringDType</c> reduction along an axis whose row result NumPy
+        ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
+        ///     dtype.</exception>
+        public static NDArray nanquantile(NDArray a, long q, int[] axis,
+            NDArray @out = null, bool overwrite_input = false,
+            string method = "linear", bool keepdims = false)
+        {
+            // `q = np.asanyarray(q)` of a Python int: a 0-d int64 array, weak for the result dtype (weak_q). It is read
+            // into the quantile list and never returned, so it is released here.
+            using NDArray qArray = NDArray.PythonLiteral(q);
+            return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.nanquantile</c> for a q ARRAY, statement for statement: the complex refusal; a text q answered by
+        ///     its [0, 1] check; <c>_quantile_is_valid(q)</c> at any rank; then the data — StringDType through its NaN-like
+        ///     NAs, fixed-width text refused by <c>isnan</c> after the axis checks, numbers through the engine, which checks
+        ///     q's rank, the method name and the axes in NumPy's order.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">The quantiles (any real dtype, any rank; null refused).</param>
+        /// <param name="axisArr">The reduced axes, or null for the flattened data.</param>
+        /// <param name="axis">The single axis when the caller had one (the empty-data answer is <c>np.nanmean(a, axis)</c>),
+        ///     else null.</param>
+        /// <param name="out">An optional output array.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method's name.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The quantiles of the non-NaN values.</returns>
+        /// <exception cref="Exception">The public overloads' errors.</exception>
+        private static NDArray NanQuantileOfArrayQ(NDArray a, NDArray q, int[] axisArr, int? axis, NDArray @out,
+            bool overwrite_input, string method, bool keepdims)
+        {
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             // Text q: NumPy's answer comes from its [0, 1] check on q, before the data or q's rank is looked at; an empty q
-            // passes it, and with empty numeric data NumPy then returns np.nanmean(a, axis) (the helper's null).
+            // passes it, and only with empty numeric data does NumPy go on (the helper's null), to np.nanmean(a, axis) —
+            // the engine's empty-input answer, which runs before it reads q.
             if (Backends.Strings.NDStringUfuncs.IsVString(q) || Backends.Strings.NDStringUfuncs.IsString(q))
             {
                 var textQ = Backends.Strings.NDStringUfuncs.IsVString(q)
-                    ? Backends.Strings.NDVStringStatistics.QuantileVStringQ("nanquantile", a, q, method, axis.HasValue ? new[] { axis.Value } : null)
-                    : Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("nanquantile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
+                    ? Backends.Strings.NDVStringStatistics.QuantileVStringQ("nanquantile", a, q, method, axisArr)
+                    : Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("nanquantile", a, q, method, axisArr);
                 if (textQ is not null)
                     throw textQ;
-                return np.nanmean(a, axis, keepdims: keepdims);
+                return QuantileEngine.Compute(a, Array.Empty<double>(), axisArr, @out, overwrite_input, QuantileMethod.Linear,
+                    keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true);
             }
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-            {
-                // StringDType data: NumPy validates q (any rank: `_quantile_is_valid`), then reads the data; q's rank is
-                // checked per line, by the quantile of what is left after the NaN-like NAs are removed.
-                double[] qText = QArrayFromNDArray(q);
-                ValidateQuantileArray(q, qText);
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axis.HasValue ? new[] { axis.Value } : null, @out, method, keepdims);
-            }
-            if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
-            bool qIsScalar = q.ndim == 0;
             double[] qArr = QArrayFromNDArray(q);
-            for (int i = 0; i < qArr.Length; i++) ValidateQuantile(qArr[i]);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
-            // text itself (NDStringUfuncs.QuantileAnswer).
+            // `_quantile_is_valid(q)` at any rank (an empty q of rank other than 1 fails its q.min()).
+            ValidateQuantileArray(q, qArr);
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                // StringDType data: NumPy validates q (above), then reads the data; q's rank is checked per line, by the
+                // quantile of what is left after the NaN-like NAs are removed.
+                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, qArr, (long[])q.Shape.dimensions.Clone(),
+                    IsIntegerQuantile(q), axisArr, @out, method, keepdims);
+            bool qIsScalar = q.ndim == 0;
+            // Fixed-width text: NumPy checks the axes and then meets isnan, which has no text loop (q's rank is never
+            // reached), or np.nanmean's add.reduce refusal for empty text (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, qIsScalar);
-            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar,
-                emptyReturnsNaN: true, ignoreNaN: true);
+            // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. An integer
+            // (or bool) q takes the element at the integer virtual index (integerQ). q's rank (a 2-d q keeps both axes) and
+            // the method name are checked inside the engine, in NumPy's order.
+            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
+                emptyReturnsNaN: true, ignoreNaN: true, weakQ: q.WasPythonLiteral,
+                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), methodName: method,
+                integerQ: IsIntegerQuantile(q));
         }
     }
 }

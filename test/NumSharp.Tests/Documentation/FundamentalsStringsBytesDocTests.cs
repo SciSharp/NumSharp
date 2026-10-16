@@ -664,6 +664,14 @@ namespace NumSharp.Tests.Documentation
             noLoop.Should().Throw<TypeError>().WithMessage(
                 "ufunc 'maximum' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None");
 
+            // NumPy's NpyString_cmp: strncmp stops at the NUL both texts share, so the two texts are equal; array_equal is
+            // (a1 == a2).all() with these rules, and the NaN-like NA is equal only under equal_nan.
+            var t2 = np.dtypes.StringDType();
+            (np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2)).ToArray<bool>().Should().Equal(true);
+            np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2)).Should().BeTrue();
+            np.array_equal(t, t).Should().BeFalse("the NA is not equal to itself");
+            np.array_equal(t, t, equal_nan: true).Should().BeTrue();
+
             var o = np.empty(new Shape(3), np.dtype("U8"));
             np.add(t, "!", o).ToString(true).Should().Be("array(['pear!', 'fig!', ''], dtype='<U8')");
         }

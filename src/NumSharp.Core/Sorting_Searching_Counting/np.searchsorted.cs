@@ -343,14 +343,21 @@ namespace NumSharp
 
         /// <summary>
         ///     <c>np.searchsorted</c> when the haystack or the keys are <c>StringDType</c> — NumPy's <c>PyArray_SearchSorted</c>:
-        ///     the side; the descriptor <c>PyArray_DescrFromObject(v, a.dtype)</c> (StringDType with StringDType of a compatible
-        ///     NA object, or with U, gives the StringDType descriptor holding the NA object; anything else fails to promote and
-        ///     gives object); the keys converted to it, then the haystack (its rank checked first) — a U ARRAY refuses the
-        ///     'safe' cast into StringDType, a Python str key is packed; the sorter. Then NumPy's generic binary search over
-        ///     the StringDType compare (<see cref="Backends.Sorting.VStringSearch.SearchSorted"/>) or over Python objects
+        ///     the side; the descriptor <c>PyArray_DescrFromObject(v, a.dtype)</c>, which is
+        ///     <c>PyArray_PromoteTypes(v.dtype, a.dtype)</c> with the KEYS first (StringDType with StringDType of a compatible
+        ///     NA object, or with U, promotes; anything else fails to promote and gives object); the keys converted to it,
+        ///     then the haystack (its rank checked first) — a U ARRAY refuses the 'safe' cast into StringDType, a Python str
+        ///     key is packed; the sorter. Then NumPy's generic binary search over the StringDType compare
+        ///     (<see cref="Backends.Sorting.VStringSearch.SearchSorted"/>) or over Python objects
         ///     (<see cref="Backends.Sorting.VStringSearch.SearchSortedObjects"/>), which runs even for an empty haystack: the
         ///     first key is compared with itself, and each key with the one before.
         /// </summary>
+        /// <remarks>
+        ///     The promoted descriptor holds the present NA object and the FIRST operand's <c>coerce</c> flag (NumPy's
+        ///     <c>common_instance</c> reads <c>dtype1-&gt;coerce</c> twice), and a U operand counts as the default
+        ///     <c>StringDType()</c> (its cast's default descriptor). Only error texts can show it: a U-array key into a
+        ///     <c>StringDType(coerce=False)</c> haystack fails naming <c>StringDType()</c>, not the haystack's descriptor.
+        /// </remarks>
         /// <param name="a">The haystack.</param>
         /// <param name="v">The keys (a 0-d array for a scalar key; a <see cref="NDArray.WasPythonStr"/> array is a Python
         ///     str).</param>
@@ -369,17 +376,18 @@ namespace NumSharp
         {
             ValidateSearchSide(side);
             bool vT = Backends.Strings.NDStringUfuncs.IsVString(v), aT = Backends.Strings.NDStringUfuncs.IsVString(a);
-            // The common descriptor (null: promotion failed, the object path).
+            // The common descriptor (null: promotion failed, the object path). NumPy's handle_promotion calls
+            // PyArray_PromoteTypes(keys descriptor, haystack descriptor) — the keys FIRST — and turns a failure (two
+            // different NA objects, or StringDType with a non-U class) into the object dtype instead of raising.
             DType common = null;
             if (vT && aT)
             {
                 if (VStringParameters.CompatibleNA(v.dtype.VString, a.dtype.VString, out _, out _))
-                    common = v.dtype.VString.HasNAObject ? v.dtype : a.dtype;
+                    common = DTypePromotion.PromoteTypes(v.dtype, a.dtype);
             }
-            else if (vT && a.typecode == NPTypeCode.String && a.dtype.kind == 'U')
-                common = v.dtype;
-            else if (aT && v.typecode == NPTypeCode.String && v.dtype.kind == 'U')
-                common = a.dtype;
+            else if ((vT && a.typecode == NPTypeCode.String && a.dtype.kind == 'U')
+                     || (aT && v.typecode == NPTypeCode.String && v.dtype.kind == 'U'))
+                common = DTypePromotion.PromoteTypes(v.dtype, a.dtype);
 
             // The keys to the descriptor: only a U array can fail ('same_kind' into StringDType); a Python str is packed.
             if (common is not null)

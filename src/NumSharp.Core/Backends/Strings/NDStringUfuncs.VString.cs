@@ -319,11 +319,15 @@ namespace NumSharp.Backends.Strings
         {
             // A bool loop into a TEXT out= (S / U / T): NumPy's output cast formats the bools ('True' / 'False'); the bools
             // are computed into a temporary and cast into out= under where= (the guard checked the cast and the broadcast).
+            // A comparison computes the temporary under where= as well: its loop reads the cells directly (no input cast),
+            // and NumPy's masked inner loop never compares a masked-off pair, so a None-like NA there must not raise. The
+            // logical ufuncs keep the full temporary: their inputs are cast to bool, a cast that raises for no cell (an NA
+            // reads False, probed against 2.4.2), so computing the masked-off slots too is unobservable.
             bool boolLoop = output.typecode == NPTypeCode.Boolean;
             bool textOut = boolLoop && @out is not null && @out.typecode == NPTypeCode.String;
             if (NDStringComparison.IsComparison(ufunc))
                 return textOut
-                    ? NDStringArithmetic.CastInto(@out, where, () => NDVStringComparison.Execute(ufunc, x1, x2, null, null))
+                    ? NDStringArithmetic.CastInto(@out, where, () => NDVStringComparison.Execute(ufunc, x1, x2, null, where))
                     : NDVStringComparison.Execute(ufunc, x1, x2, @out, where);
             switch (ufunc)
             {

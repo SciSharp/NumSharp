@@ -22,7 +22,11 @@ namespace NumSharp {
         /// </remarks>
         /// <remarks>Text: two strings of one class compare their text (zero-padded, unsigned code units); any other pair with
         ///     a string operand has no <c>equal</c> loop, so the <c>==</c> operator's all-False array makes it False unless the
-        ///     broadcast is empty.</remarks>
+        ///     broadcast is empty. A NEP 55 <c>StringDType</c> operand compares with <c>StringDType</c> or <c>U</c> text through
+        ///     NumPy's <c>NpyString_cmp</c> (<c>'a\0c'</c> equals <c>'a\0b'</c>: the bytes after a shared NUL are not compared)
+        ///     and its NA rules (a NaN-like NA is never equal; a None-like NA reads as <c>''</c>).</remarks>
+        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ (NumPy's comparison refuses the
+        ///     pair).</exception>
         public static bool array_equiv(NDArray a1, NDArray a2)
         {
             using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -35,6 +39,11 @@ namespace NumSharp {
             // Non-broadcastable shapes short-circuit to False before any element comparison.
             if (!np.are_broadcastable(a1, a2))
                 return false;
+
+            // StringDType first (IsString refuses it): (a1 == a2).all() through the StringDType comparison, or NumPy's
+            // all-False array for a pair equal has no loop for (S, numbers, bool).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a1) || Backends.Strings.NDStringUfuncs.IsVString(a2))
+                return AllEqualVString(a1, a2);
 
             // Text: (a1 == a2).all() — a pair equal has no loop for gets the operator's all-False array, so only an empty
             // broadcast is equivalent; two strings of one class compare their text (the equal kernel, broadcasting).

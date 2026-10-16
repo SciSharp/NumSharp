@@ -37,7 +37,9 @@ namespace NumSharp.Backends.Strings
     ///     the iterator's ARRAYMASK operand, one kernel call per mask run). The iterator never buffers or copies a
     ///     <c>StringDType</c> input (no cast, no COPY_IF_OVERLAP: a bool output cannot share memory with cells), because the
     ///     kernel decodes the cells through their own buffer's arena. A non-bool <c>out=</c> receives the bool results
-    ///     through <see cref="np.copyto(NDArray, NDArray, string, NDArray)"/> (NumPy's output cast: <c>True</c> → 1).
+    ///     through <see cref="np.copyto(NDArray, NDArray, string, NDArray)"/> (NumPy's output cast: <c>True</c> → 1); the
+    ///     bools are computed under the <c>where=</c> mask first, so a masked-off pair is never compared (NumPy's masked
+    ///     inner loop runs only the selected runs — an NA there raises nothing).
     ///     </para>
     /// </remarks>
     internal static class NDVStringComparison
@@ -83,12 +85,15 @@ namespace NumSharp.Backends.Strings
 
                 var dims = NDStringUfuncs.BroadcastDims(x1, x2, @out, where);
                 // A non-bool out= is cast into from a bool temporary (no buffered iterator: the kernels read the cells
-                // through their arenas, which a buffered StringDType operand would not have).
-                result = @out is not null && !castOut ? @out : new NDArray(NPTypeCode.Boolean, ResultShape(dims, x1, x2, castOut ? null : where), false);
+                // through their arenas, which a buffered StringDType operand would not have). The temporary is computed
+                // under the where= mask too: NumPy's masked inner loop never compares a masked-off pair (a None-like NA
+                // there must not raise), and np.copyto below writes only the selected slots, so the temporary's
+                // masked-off bytes are never read.
+                result = @out is not null && !castOut ? @out : new NDArray(NPTypeCode.Boolean, ResultShape(dims, x1, x2, where), false);
                 if (result.size != 0)
                 {
                     var kernel = ILKernelGenerator.GetVStringCompareKernel(op, swap ? 1 : 0) ?? ManagedKernel(op, swap ? 1 : 0);
-                    RunLocked(kernel, t1, t2, result, castOut ? null : where, swap, code);
+                    RunLocked(kernel, t1, t2, result, where, swap, code);
                 }
                 if (!castOut)
                     return result;

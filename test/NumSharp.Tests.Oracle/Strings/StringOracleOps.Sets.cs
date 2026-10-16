@@ -64,8 +64,7 @@ namespace NumSharp.Tests.Strings
                 "quantile" or "nanquantile" => false,
                 _ => throw new InvalidOperationException($"the string oracle has no quantile '{name}'"),
             };
-            // Section tsort's nan forms (np.nanquantile / np.nanpercentile over StringDType): the same q and axis forms,
-            // except a Python int q (their overloads have none; the generator does not emit it).
+            // Section tsort's nan forms (np.nanquantile / np.nanpercentile over StringDType): the same q and axis forms.
             if (name is "nanquantile" or "nanpercentile")
                 return NanQuantileKeywords(p, ops, a, percentile, method, keepdims, @out, axes, axis);
             switch (Str(p, "qkind"))
@@ -114,9 +113,9 @@ namespace NumSharp.Tests.Strings
 
         /// <summary>
         ///     One <c>np.nanquantile</c> / <c>np.nanpercentile</c> call (section tsort) through the overload NumPy's call ports
-        ///     to: a Python float a <see cref="double"/>, a list a <see cref="double"/>[], an array q an <see cref="NDArray"/>
-        ///     (one axis only: the NDArray-q overloads take an <see cref="int"/>? axis); one axis an <see cref="int"/>, a tuple
-        ///     an <see cref="int"/>[].
+        ///     to: a Python float a <see cref="double"/>, a list a <see cref="double"/>[], a Python int a <see cref="long"/>
+        ///     (np.nanpercentile has no integer overload: C# binds its double one, the value NumPy's true_divide reads), an
+        ///     array q an <see cref="NDArray"/>; one axis an <see cref="int"/>, a tuple an <see cref="int"/>[].
         /// </summary>
         /// <param name="p">The case parameters.</param>
         /// <param name="ops">The operands.</param>
@@ -128,8 +127,7 @@ namespace NumSharp.Tests.Strings
         /// <param name="axes">A tuple axis, or null.</param>
         /// <param name="axis">One axis, or null.</param>
         /// <returns>The call's result.</returns>
-        /// <exception cref="InvalidOperationException">A q kind these functions do not take (a Python int, an array q with a
-        ///     tuple axis).</exception>
+        /// <exception cref="InvalidOperationException">A q kind the oracle does not know.</exception>
         private static object NanQuantileKeywords(Dictionary<string, JsonElement> p, NDArray[] ops, NDArray a, bool percentile,
             string method, bool keepdims, NDArray @out, int[] axes, int? axis)
         {
@@ -153,15 +151,26 @@ namespace NumSharp.Tests.Strings
                     return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
                                       : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
                 }
-                case "arr" when axes is null:
+                case "i":
+                {
+                    long q = p["q"].GetInt64();
+                    if (percentile)
+                        return axes is not null ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
+                                                : np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims);
+                    return axes is not null ? np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims)
+                                            : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                }
+                case "arr":
                 {
                     NDArray q = ops[Int(p, "q_op")];
+                    if (axes is not null)
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims);
                     return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
                                       : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
                 }
             }
-            throw new InvalidOperationException($"the string oracle has no nan-quantile q kind '{Str(p, "qkind")}'" +
-                                                (axes is null ? "" : " with a tuple axis"));
+            throw new InvalidOperationException($"the string oracle has no nan-quantile q kind '{Str(p, "qkind")}'");
         }
     }
 }

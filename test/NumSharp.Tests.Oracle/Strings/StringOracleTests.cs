@@ -624,6 +624,57 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         internal const string ListDeferredVariable = "NUMSHARP_STRING_ORACLE_DEFERRED";
 
+        /// <summary>
+        ///     The environment variable naming a directory of randomized soak corpora — fresh random texts, NA kinds,
+        ///     layouts, sizes and keyword combinations for the computing families, recorded from NumPy 2.4.2 by
+        ///     <c>python test/oracle/soak_strings_oracle.py --seeds … --out DIR</c>; <see cref="StringSoak"/> replays them
+        ///     and is Inconclusive when it is unset (every per-push run).
+        /// </summary>
+        internal const string SoakDirVariable = "NUMSHARP_STRING_ORACLE_SOAK_DIR";
+
+        /// <summary>
+        ///     The randomized soak: replays every <c>*.jsonl</c> file of the directory in <see cref="SoakDirVariable"/>
+        ///     with the committed sections' comparator (<see cref="ReplayOne"/>: values, dtype, shape, layout, NumPy's
+        ///     exact errors, and the same computed excuses). Every soak case is phase 1, so a deferral is a failure.
+        /// </summary>
+        /// <remarks>
+        ///     The committed sections gate one fixed matrix each; the soak draws a new one per seed, so a run with fresh
+        ///     seeds reaches input combinations no committed case holds. The generator's <c>manifest.json</c> (printed when
+        ///     present) lists the (seed, family) workers NumPy crashed, which contribute no cases.
+        /// </remarks>
+        [TestMethod]
+        [DoNotParallelize]
+        public void StringSoak()
+        {
+            string dir = Environment.GetEnvironmentVariable(SoakDirVariable);
+            if (string.IsNullOrEmpty(dir))
+                Assert.Inconclusive($"{SoakDirVariable} is not set: no randomized string-oracle soak corpus to replay.");
+            Assert.IsTrue(System.IO.Directory.Exists(dir), $"{SoakDirVariable}={dir} is not a directory");
+            string manifest = System.IO.Path.Combine(dir, "manifest.json");
+            if (System.IO.File.Exists(manifest))
+                Console.WriteLine($"[strings/soak] {System.IO.File.ReadAllText(manifest)}");
+            var files = System.IO.Directory.GetFiles(dir, "*.jsonl");
+            // Ordinal order: a run is deterministic whatever order the file system lists the files in.
+            Array.Sort(files, StringComparer.Ordinal);
+            Assert.IsTrue(files.Length > 0, $"{SoakDirVariable}={dir} holds no *.jsonl soak corpus");
+            var cases = StringOracleCorpus.LoadFiles(files);
+            var failures = new List<string>();
+            foreach (var c in cases)
+            {
+                var outcome = ReplayOne(c, out var message);
+                // A soak case is phase 1: NumSharp must answer it now, so a deferral counts as a divergence.
+                if (outcome == Outcome.Deferred)
+                    failures.Add($"{c.Id} [{c.Layout}]: deferred to the computational phase: {message}");
+                else if (outcome == Outcome.Failed)
+                    failures.Add($"{c.Id} [{c.Layout}]: {message}");
+            }
+            Console.WriteLine($"[strings/soak] {cases.Count} cases in {files.Length} file(s), {failures.Count} failed");
+            foreach (var f in failures)
+                Console.WriteLine("  " + f);
+            if (failures.Count > 0)
+                Assert.Fail($"{failures.Count}/{cases.Count} soak cases diverged from NumPy:\n  " + string.Join("\n  ", failures.Take(80)));
+        }
+
         /// <summary>Replays every case of one section and fails with the list of divergences.</summary>
         /// <param name="section">The section prefix of the case ids.</param>
         private static void Run(string section)
@@ -758,6 +809,11 @@ namespace NumSharp.Tests.Strings
                     ExcusedOrders.TryAdd(c.Id, orderExcuse);
                     result = InNumPyOrder(c.Expected, result, diffs);
                 }
+                // The tie divergence (TieExcuse): NumSharp's elements that are TIED with NumPy's under NumPy's own string
+                // comparison are taken as NumPy's, so the comparison below still requires everything else.
+                var tieExcuse = TieExcuse(c);
+                if (tieExcuse != null && TakeNumPyTieRepresentatives(c.Expected, result))
+                    ExcusedTies.TryAdd(c.Id, tieExcuse);
                 // The one class divergence of section strchararray (ClassExcuse): the result's class is compared with the
                 // class NumSharp's typed API returns there, everything else with NumPy's answer.
                 var classExcuse = ClassExcuse(c);
@@ -1047,11 +1103,104 @@ namespace NumSharp.Tests.Strings
             if (c.Op == "unique_api" && p.TryGetValue("name", out var name) && name.ValueKind == JsonValueKind.String
                 && name.GetString() == "unique_values")
                 return "np.unique_values of text: NumPy's unordered_set hash order, NumSharp's sorted order (the same set)";
+            // `if axis is None or ar.ndim == 1`: a 1-D input's axis is only range-checked, and the flat path runs.
             if (c.Op == "unique" && p.TryGetValue("sorted", out var sorted) && !sorted.GetBoolean()
                 && !p["ri"].GetBoolean() && !p["rv"].GetBoolean() && !p["rc"].GetBoolean()
-                && p["axis"].ValueKind == JsonValueKind.Null)
+                && (p["axis"].ValueKind == JsonValueKind.Null || c.Operands.Length > 0 && c.Operands[0].Shape.Length == 1))
                 return "np.unique(sorted=False) of text: NumPy's unordered_set hash order, NumSharp's sorted order (the same set)";
             return null;
+        }
+
+        /// <summary>
+        ///     The cases whose StringDType elements compared EQUAL by NumPy's string comparison but not byte for byte were
+        ///     taken as NumPy's (<see cref="TieExcuse"/>), keyed by case id with the reason.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedTies = new();
+
+        /// <summary>
+        ///     The tie divergence of NumPy's hash route (randomized soak cases only, marked <c>hash_ties</c> by the
+        ///     generator when the operands hold two such values). NumPy's <c>NpyString_cmp</c> is <c>strncmp</c> over the common
+        ///     length, then the sizes, so two texts with the same bytes up to a NUL they share and the same size compare
+        ///     EQUAL while differing after it (<c>'a\0b'</c> and <c>'a\0c'</c>). The values-only <c>np.unique</c> hashes the
+        ///     FULL bytes (<c>unique_vstring</c>: FNV-1a + memcmp), keeps both, and sorts the hash set's iteration order with
+        ///     its unstable sort, so tied values come out in the C++ library's hash order — and <c>np.union1d</c> /
+        ///     <c>np.intersect1d</c> / <c>np.setdiff1d</c> without <c>assume_unique</c> (and numpy.ma's set routines), built on
+        ///     it, keep whichever tied value lands first. Neither is reproducible in C#; NumSharp keeps tied values in input
+        ///     order (a stable choice).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when every element must match byte for byte.</returns>
+        private static string TieExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Error is not null || c.Params is null)
+                return null;
+            if (!c.Params.TryGetValue("hash_ties", out var ties) || ties.ValueKind != JsonValueKind.True)
+                return null;
+            return "StringDType values tied under NumPy's strncmp comparison: the hash route's order / representative";
+        }
+
+        /// <summary>
+        ///     Replaces, IN PLACE, each element of a StringDType result (an array, or a masked array's data) that is tied
+        ///     with NumPy's element at the same position — both NA, or texts with the same bytes up to and including their
+        ///     first NUL and the same UTF-8 length — by NumPy's text, so the full comparison afterwards sees NumPy's
+        ///     representative. Elements that are not tied are left alone (the comparison reports them).
+        /// </summary>
+        /// <param name="exp">NumPy's answer (<c>array</c> or <c>masked</c> with <c>values</c>).</param>
+        /// <param name="r">NumSharp's fresh result.</param>
+        /// <returns>True when at least one element was replaced (the excuse was used).</returns>
+        private static unsafe bool TakeNumPyTieRepresentatives(JsonElement exp, object r)
+        {
+            NDArray a = r switch
+            {
+                NDMaskedArray m when !ReferenceEquals(m, np.ma.masked) => m.data,
+                NDArray x => x,
+                _ => null,
+            };
+            if (a is null || !a.Storage.IsVString || !exp.TryGetProperty("values", out var values)
+                || a.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+                return false;
+            var items = values.EnumerateArray().ToArray();
+            if (items.Length != a.size)
+                return false;
+            bool used = false;
+            for (long i = 0; i < items.Length; i++)
+            {
+                var w = items[i];
+                if (w.ValueKind == JsonValueKind.Object && w.TryGetProperty("na", out _))
+                    continue;
+                long off = a.Shape.TransformOffset(i);
+                byte* cell = slice.Address + off * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+                if (NumSharp.Backends.Strings.VStringAllocator.isnull(cell))
+                    continue;
+                string want = (string)StringOracleCorpus.Decode(w), got = (string)slice.GetIndex(off);
+                if (want == got || !TiedUnderStrncmp(System.Text.Encoding.UTF8.GetBytes(want), System.Text.Encoding.UTF8.GetBytes(got)))
+                    continue;
+                slice.SetIndex(off, want);
+                used = true;
+            }
+            return used;
+        }
+
+        /// <summary>
+        ///     Whether NumPy's <c>NpyString_cmp</c> calls two texts equal: <c>strncmp</c> over the shorter length stops at the
+        ///     first byte that differs or at a NUL both share, and only equal sizes then make the texts equal — so the texts
+        ///     are tied exactly when their sizes agree and their bytes agree up to and including the first NUL.
+        /// </summary>
+        /// <param name="x">One text's UTF-8 bytes.</param>
+        /// <param name="y">The other's.</param>
+        /// <returns>True when NumPy compares them equal.</returns>
+        private static bool TiedUnderStrncmp(byte[] x, byte[] y)
+        {
+            if (x.Length != y.Length)
+                return false;
+            for (int k = 0; k < x.Length; k++)
+            {
+                if (x[k] != y[k])
+                    return false;
+                if (x[k] == 0)
+                    return true;
+            }
+            return true;
         }
 
         /// <summary>

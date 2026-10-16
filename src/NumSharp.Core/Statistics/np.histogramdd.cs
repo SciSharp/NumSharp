@@ -327,9 +327,12 @@ namespace NumSharp
                 {
                     // A text column: NumPy's searchsorted in the text descriptor common to the column and the edges, then the
                     // rightmost-edge comparison (text against a number compares unequal everywhere, as NumPy's == answers).
-                    NDArray textIdx = np.searchsorted(edges[i], cols[i], "right");
-                    NDArray textOnEdge = cols[i] == edges[i]["-1"];
-                    Ncount[i] = textIdx - textOnEdge.astype(NPTypeCode.Int64);
+                    // The temporaries are this iteration's own (only the difference is kept).
+                    using NDArray textIdx = np.searchsorted(edges[i], cols[i], "right");
+                    using NDArray lastEdge = edges[i]["-1"];
+                    using NDArray textOnEdge = cols[i] == lastEdge;
+                    using NDArray onEdge = textOnEdge.astype(NPTypeCode.Int64);
+                    Ncount[i] = textIdx - onEdge;
                     continue;
                 }
                 NPTypeCode cmp = promote_types(edges[i].typecode, cols[i].typecode);

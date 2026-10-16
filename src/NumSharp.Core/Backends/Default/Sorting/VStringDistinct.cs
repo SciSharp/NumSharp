@@ -18,18 +18,23 @@ using NumSharp.Backends.Unmanaged.Pooling;
 //   themselves without it), never equal to a text. The set is packed into a fresh array of the input's descriptor (an NA
 //   entry packed as an NA) and, with sorted=True, sorted in place with the default kind — so a None-like NA among two or
 //   more distinct values raises the sort's ValueError, a NaN-like NA goes last, and an NA read as a default string sits
-//   among the texts equal to it (in the hash set's order, which no other library reproduces).
+//   among the texts equal to it (in the hash set's order, which no other library reproduces). The set keeps one entry per
+//   BYTE content while the sort orders by NpyString_cmp (strncmp: a NUL both texts share ends the byte comparison), so
+//   byte-different texts equal up to a shared NUL ('a\0c', 'a\0b') are two entries that the sort leaves in the hash set's
+//   order too.
 //
 // HOW THIS FILE GETS THE SAME ANSWERS
 //   The same values: an open-addressing table (power-of-two capacity grown at half load, linear probing, the hash stored
 //   beside each slot) collects the FIRST occurrence of every distinct text — unless the texts are mostly distinct (after
 //   an eighth of the array, at most ProbeTexts texts, the repeats among them estimate the whole array's distinct count;
 //   later the table itself is watched), where the pass gives up and the route sorts every text (a stable argsort of the
-//   array itself when it holds no NA) and drops adjacent duplicates. A text of at most 15 bytes in its cell hashes from its two cell words, masked to its size, in a few
+//   array itself when it holds no NA) and drops the duplicates of each byte content within each run of NpyString_cmp-equal
+//   texts. A text of at most 15 bytes in its cell hashes from its two cell words, masked to its size, in a few
 //   instructions; every other text from its bytes — the same function, so equal texts hash alike wherever they live. The
 //   NA cells are kept apart (one entry under equal_nan, each otherwise), and the entries are ordered as NumPy's sort orders
-//   them: texts by their bytes, the NaN-like NAs last, NAs read as a default string right after the texts equal to that
-//   string (NumPy's place among those equal values is its hash set's order: the values are the same either way).
+//   them: texts by NpyString_cmp, the NaN-like NAs last, NAs read as a default string right after the texts equal to that
+//   string (NumPy's place among equal values — those, and byte-different texts equal up to a shared NUL — is its hash
+//   set's order; NumSharp keeps first occurrences first: the same values either way).
 // =============================================================================
 
 namespace NumSharp.Backends.Sorting
@@ -280,9 +285,18 @@ namespace NumSharp.Backends.Sorting
                     ordered[k] = texts[ord[k]];
             if (!dedupe)
                 return ordered;
-            // Drop adjacent duplicates (equal texts are adjacent in byte order): compare each with the last kept one; the
-            // stable order keeps the first occurrence of each.
+            // Drop duplicates. NumPy's hash route keeps one entry per BYTE content (memcmp), while the sorted order groups
+            // texts by NpyString_cmp, under which byte-different texts equal up to a NUL they share are equal: so the texts
+            // of one byte content are adjacent only within a run of NpyString_cmp-equal texts, not always next to each
+            // other. A text with no NUL is NpyString_cmp-equal to its own bytes only, so its copies ARE adjacent: the last
+            // kept text decides (the common case, one compare). A text with a NUL may share its run with byte-different
+            // texts, so each such run keeps its byte contents and drops a later copy of any of them (the stable order lists
+            // first occurrences first).
             var kept = new List<long>(m);
+            List<IntPtr> runBufs = null;
+            List<long> runSizes = null;
+            byte* lastBuf = null;
+            long lastSize = -1;
             var allocator = sorted.Storage.VStringSlice.Allocator;
             allocator.acquire_allocator();
             try
@@ -291,18 +305,45 @@ namespace NumSharp.Backends.Sorting
                 byte* cells = (byte*)sorted.Address + sorted.Shape.offset * (long)cell;
                 long stride = sorted.Shape.strides[0] * (long)cell;
                 byte* arena = allocator.ArenaBase;
-                byte* lastBuf = null;
-                long lastSize = -1;
                 for (int k = 0; k < m; k++)
                 {
                     // ord[k] indexes the sorted operand (the array itself, or the subset whose cells hold the same texts as
                     // ar's at texts[ord[k]]).
-                    NDVStringCells.Load(cells + ord[k] * stride, arena, out byte* buf, out long size);
-                    if (lastSize >= 0 && size == lastSize && SameBytes(buf, lastBuf, size))
+                    byte* c = cells + ord[k] * stride;
+                    NDVStringCells.Load(c, arena, out byte* buf, out long size);
+                    // The last kept text again (copies of one byte content are adjacent within their run).
+                    if (size == lastSize && SameBytes(buf, lastBuf, size))
                         continue;
+                    bool hasNul = NDVStringCells.NulLengthInPlace(c, buf, size) < size;
+                    if (!hasNul)
+                    {
+                        // A text without a NUL starts a run of its own bytes.
+                        runBufs?.Clear();
+                        runSizes?.Clear();
+                    }
+                    else if (runBufs is { Count: > 0 } && NDVStringCells.Order(buf, size, (byte*)runBufs[0], runSizes[0]) == 0)
+                    {
+                        // The current run of NUL texts: a byte content it already kept is a duplicate.
+                        bool duplicate = false;
+                        for (int r = 0; r < runBufs.Count && !duplicate; r++)
+                            duplicate = runSizes[r] == size && SameBytes(buf, (byte*)runBufs[r], size);
+                        if (duplicate)
+                            continue;
+                    }
+                    else
+                    {
+                        // A NUL text that starts a new run.
+                        (runBufs ??= new List<IntPtr>()).Clear();
+                        (runSizes ??= new List<long>()).Clear();
+                    }
                     kept.Add(ordered[k]);
                     lastBuf = buf;
                     lastSize = size;
+                    if (hasNul)
+                    {
+                        runBufs.Add((IntPtr)buf);
+                        runSizes.Add(size);
+                    }
                 }
             }
             finally
@@ -394,6 +435,42 @@ namespace NumSharp.Backends.Sorting
             {
                 ulong tail = 0;
                 for (int b = 0; i < size; i++, b += 8)
+                    tail |= (ulong)buf[i] << b;
+                h ^= tail;
+                h *= 0x94D049BB133111EBUL;
+                h ^= h >> 29;
+            }
+            h ^= h >> 30;
+            h *= 0xBF58476D1CE4E5B9UL;
+            h ^= h >> 27;
+            h *= 0x94D049BB133111EBUL;
+            h ^= h >> 31;
+            return h;
+        }
+
+        /// <summary>
+        ///     The hash of a text's <c>NpyString_cmp</c> equality class: <see cref="Hash"/>'s mixing over the comparison prefix
+        ///     (<see cref="NDVStringCells.NulLength"/>: the bytes up to and including the first NUL) seeded with the full size,
+        ///     so texts equal under <c>NpyString_cmp</c> (the same size, the same prefix, any bytes after the NUL) hash alike.
+        /// </summary>
+        /// <param name="buf">The text.</param>
+        /// <param name="size">Its size.</param>
+        /// <returns>The hash.</returns>
+        internal static ulong ClassHash(byte* buf, long size)
+        {
+            long len = NDVStringCells.NulLength(buf, size);
+            ulong h = 0x9E3779B97F4A7C15UL ^ (ulong)size;
+            long i = 0;
+            for (; i + 8 <= len; i += 8)
+            {
+                h ^= Unsafe.ReadUnaligned<ulong>(buf + i);
+                h *= 0xBF58476D1CE4E5B9UL;
+                h ^= h >> 31;
+            }
+            if (i < len)
+            {
+                ulong tail = 0;
+                for (int b = 0; i < len; i++, b += 8)
                     tail |= (ulong)buf[i] << b;
                 h ^= tail;
                 h *= 0x94D049BB133111EBUL;
@@ -610,7 +687,10 @@ namespace NumSharp.Backends.Sorting
 
         /// <summary>
         ///     A set of UTF-8 texts with owned copies (<c>np.isin</c>'s strings of the test set): built from any source, then
-        ///     probed with texts read in place.
+        ///     probed with texts read in place. Membership is NumPy's <c>==</c> of StringDType text, <c>NpyString_cmp</c>
+        ///     equality: the same size and the same bytes up to and including the first NUL (<c>'a\0c'</c> finds
+        ///     <c>'a\0b'</c>) — so the texts hash by that comparison prefix and their size (<see cref="ClassHash"/>), not by
+        ///     all their bytes.
         /// </summary>
         internal sealed class ByteTextSet : IDisposable
         {
@@ -647,7 +727,7 @@ namespace NumSharp.Backends.Sorting
             /// <exception cref="OutOfMemoryException">The copy cannot be allocated.</exception>
             internal void Add(byte* buf, long size)
             {
-                ulong h = Hash(buf, size);
+                ulong h = ClassHash(buf, size);
                 if (Find(buf, size, h) >= 0)
                     return;
                 if (2 * (Count + 1) > _offset.Length)
@@ -681,7 +761,7 @@ namespace NumSharp.Backends.Sorting
             /// <param name="buf">The text.</param>
             /// <param name="size">Its size.</param>
             /// <returns>True when present.</returns>
-            internal bool Contains(byte* buf, long size) => Find(buf, size, Hash(buf, size)) >= 0;
+            internal bool Contains(byte* buf, long size) => Find(buf, size, ClassHash(buf, size)) >= 0;
 
             /// <summary>The slot holding an equal text, or -1.</summary>
             /// <param name="buf">The text.</param>

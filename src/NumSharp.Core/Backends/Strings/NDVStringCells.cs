@@ -93,6 +93,13 @@ namespace NumSharp.Backends.Strings
     ///     heap string, an NA, the all-zero cell of a never-written element) takes the per-pair slow path.
     ///     </para>
     ///     <para>
+    ///     <b>The NUL exception.</b> <c>NpyString_cmp</c> is <c>strncmp</c> over the common prefix, then the sizes, so a NUL
+    ///     both texts share ends the byte comparison (<c>'a\0c' == 'a\0b'</c>; see <see cref="Order"/>). The masked-cell and
+    ///     first-word compares order bytes past such a NUL, so every fast path first tests A's text for a NUL
+    ///     (<see cref="ShortHasNul"/>, a predictable branch: real text rarely holds one) and hands such a pair to
+    ///     <see cref="Order"/>.
+    ///     </para>
+    ///     <para>
     ///     <b>No allocator object.</b> The primitives take raw arena bases, so an IL kernel calls them with no managed state;
     ///     the caller reads the bases with the allocators locked (<see cref="VStringAllocator.ArenaBase"/>).
     ///     </para>
@@ -216,26 +223,41 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's <c>NpyString_cmp</c>: the common prefix byte by byte (unsigned — UTF-8 byte order is code-point order),
-        ///     then the shorter text is the smaller.
+        ///     NumPy's <c>NpyString_cmp</c> (<c>static_string.c</c>): <c>strncmp</c> over the common prefix, then the sizes. The
+        ///     bytes decide at their first difference (unsigned — UTF-8 byte order is code-point order) UNLESS a NUL both texts
+        ///     share comes first: <c>strncmp</c> stops there and answers 0, and the sizes decide (the longer text is the
+        ///     greater, equal sizes are equal), the bytes after the NUL never counting.
         /// </summary>
         /// <param name="a">The first text.</param>
         /// <param name="sa">Its size.</param>
         /// <param name="b">The second text.</param>
         /// <param name="sb">Its size.</param>
-        /// <returns>Negative, zero or positive.</returns>
-        /// <remarks>One vectorized <see cref="MemoryExtensions.SequenceCompareTo{T}(ReadOnlySpan{T}, ReadOnlySpan{T})"/> for a
-        ///     common prefix that fits a span (every real text); <see cref="OrderLong"/> past <see cref="int.MaxValue"/>
-        ///     bytes. Measured on 24-byte arena texts with a 21-byte common prefix: 5.6 ns a pair with the cells' loads, where
-        ///     an 8-byte word loop took 11 ns (its data-dependent exit mispredicts).</remarks>
+        /// <returns>-1, 0 or 1.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     The NUL rule is observable and easy to miss: <c>'a\0c' == 'a\0b'</c> is True, <c>'a\0c' &lt; 'a\0bb'</c> is True
+        ///     (the sizes decide after the shared NUL), and every StringDType comparison, sort, search, extreme, set routine
+        ///     and order statistic of NumPy inherits it (probed against 2.4.2). A NUL in only one text is an ordinary byte
+        ///     difference (0 is the smallest byte). <see cref="OrderBytes"/> keeps the plain byte order where a caller
+        ///     already accounted for the NULs (the sort compares texts truncated at their first NUL).
+        ///     </para>
+        ///     <para>
+        ///     One vectorized scan (<see cref="StrncmpStop"/>) finds the first difference or the first NUL of A in a single
+        ///     pass; <see cref="OrderLong"/> past <see cref="int.MaxValue"/> common bytes.
+        ///     </para>
+        /// </remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static int Order(byte* a, long sa, byte* b, long sb)
         {
             long common = Math.Min(sa, sb);
             if (common > int.MaxValue)
                 return OrderLong(a, sa, b, sb);
-            int c = new ReadOnlySpan<byte>(a, (int)common).SequenceCompareTo(new ReadOnlySpan<byte>(b, (int)common));
-            return c != 0 ? c : sa.CompareTo(sb);
+            int i = StrncmpStop(a, b, (int)common);
+            // strncmp stopped on a byte difference: that byte decides; it stopped on a NUL both share (a[i] == b[i] == 0), or
+            // ran out of common bytes: the sizes decide.
+            if (i < common && a[i] != b[i])
+                return a[i] < b[i] ? -1 : 1;
+            return sa.CompareTo(sb);
         }
 
         /// <summary><see cref="Order"/> for a common prefix past <see cref="int.MaxValue"/> bytes: chunk by chunk.</summary>
@@ -243,7 +265,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="sa">Its size.</param>
         /// <param name="b">The second text.</param>
         /// <param name="sb">Its size.</param>
-        /// <returns>Negative, zero or positive.</returns>
+        /// <returns>-1, 0 or 1.</returns>
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int OrderLong(byte* a, long sa, byte* b, long sb)
         {
@@ -252,13 +274,190 @@ namespace NumSharp.Backends.Strings
             while (done < common)
             {
                 int chunk = (int)Math.Min(common - done, int.MaxValue);
-                int c = new ReadOnlySpan<byte>(a + done, chunk).SequenceCompareTo(new ReadOnlySpan<byte>(b + done, chunk));
-                if (c != 0)
-                    return c;
+                int i = StrncmpStop(a + done, b + done, chunk);
+                if (i < chunk)
+                {
+                    // A byte difference decides; a shared NUL ends the byte comparison (the sizes decide, below).
+                    byte x = a[done + i], y = b[done + i];
+                    if (x != y)
+                        return x < y ? -1 : 1;
+                    break;
+                }
                 done += chunk;
             }
             return sa.CompareTo(sb);
         }
+
+        /// <summary>
+        ///     The plain byte order of two texts: the common prefix byte by byte (unsigned), then the shorter text first —
+        ///     <c>memcmp</c> semantics, an embedded NUL an ordinary byte. NOT NumPy's <c>NpyString_cmp</c> for raw texts (see
+        ///     <see cref="Order"/>); it is NumPy's order for texts already TRUNCATED at their first NUL (the sort's comparison
+        ///     prefixes, <see cref="NulLength"/>) once the sizes break the ties.
+        /// </summary>
+        /// <param name="a">The first text.</param>
+        /// <param name="sa">Its size.</param>
+        /// <param name="b">The second text.</param>
+        /// <param name="sb">Its size.</param>
+        /// <returns>Negative, zero or positive.</returns>
+        /// <remarks>One vectorized <see cref="MemoryExtensions.SequenceCompareTo{T}(ReadOnlySpan{T}, ReadOnlySpan{T})"/> for a
+        ///     common prefix that fits a span (every real text); chunk by chunk past <see cref="int.MaxValue"/> bytes.</remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static int OrderBytes(byte* a, long sa, byte* b, long sb)
+        {
+            long common = Math.Min(sa, sb);
+            long done = 0;
+            while (common - done > int.MaxValue)
+            {
+                int c0 = new ReadOnlySpan<byte>(a + done, int.MaxValue).SequenceCompareTo(new ReadOnlySpan<byte>(b + done, int.MaxValue));
+                if (c0 != 0)
+                    return c0;
+                done += int.MaxValue;
+            }
+            int c = new ReadOnlySpan<byte>(a + done, (int)(common - done)).SequenceCompareTo(new ReadOnlySpan<byte>(b + done, (int)(common - done)));
+            return c != 0 ? c : sa.CompareTo(sb);
+        }
+
+        /// <summary>
+        ///     Where <c>strncmp(a, b, n)</c> stops: the first index below <paramref name="n"/> whose bytes differ or whose byte
+        ///     of A is NUL (both are then NUL — the bytes before it are equal), or <paramref name="n"/> when it runs out.
+        /// </summary>
+        /// <param name="a">The first text (at least <paramref name="n"/> readable bytes).</param>
+        /// <param name="b">The second text (at least <paramref name="n"/> readable bytes).</param>
+        /// <param name="n">The bytes to compare.</param>
+        /// <returns>The stop index, 0 to <paramref name="n"/>.</returns>
+        /// <remarks>32 (then 16) bytes a step where the hardware has the vectors: one compare for the difference, one for the
+        ///     NUL, their union's lowest set bit — never a load past <paramref name="n"/>; the tail byte by byte.</remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static int StrncmpStop(byte* a, byte* b, int n)
+        {
+            int i = 0;
+            if (Vector256.IsHardwareAccelerated)
+            {
+                for (; i + 32 <= n; i += 32)
+                {
+                    Vector256<byte> va = Vector256.Load(a + i), vb = Vector256.Load(b + i);
+                    // A lane stops strncmp when its bytes differ or A's byte is NUL.
+                    uint stop = (~Vector256.Equals(va, vb) | Vector256.Equals(va, Vector256<byte>.Zero)).ExtractMostSignificantBits();
+                    if (stop != 0)
+                        return i + System.Numerics.BitOperations.TrailingZeroCount(stop);
+                }
+            }
+            if (Vector128.IsHardwareAccelerated)
+            {
+                for (; i + 16 <= n; i += 16)
+                {
+                    Vector128<byte> va = Vector128.Load(a + i), vb = Vector128.Load(b + i);
+                    uint stop = (~Vector128.Equals(va, vb) | Vector128.Equals(va, Vector128<byte>.Zero)).ExtractMostSignificantBits();
+                    if (stop != 0)
+                        return i + System.Numerics.BitOperations.TrailingZeroCount(stop);
+                }
+            }
+            for (; i < n; i++)
+                if (a[i] != b[i] || a[i] == 0)
+                    return i;
+            return n;
+        }
+
+        /// <summary>
+        ///     The length of a text's comparison prefix under <c>NpyString_cmp</c>: its bytes up to and including the first NUL,
+        ///     or the whole text without one. Two texts order as their prefixes do in plain byte order (<see cref="OrderBytes"/>,
+        ///     a proper prefix first), ties broken by the full sizes — the sort's keys rely on this.
+        /// </summary>
+        /// <param name="buf">The text.</param>
+        /// <param name="size">Its size.</param>
+        /// <returns>The prefix length, 0 to <paramref name="size"/>.</returns>
+        /// <remarks>
+        ///     Why the prefix order is <c>NpyString_cmp</c>: a first difference inside both prefixes is the first difference
+        ///     before any NUL both share (a prefix holds its NUL only as its last byte), equal prefixes end on a shared NUL
+        ///     or are whole equal texts (the sizes decide either way), and a proper prefix holds no NUL, so it is the whole of
+        ///     its text, the shorter one.
+        /// </remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long NulLength(byte* buf, long size)
+        {
+            long done = 0;
+            while (size - done > int.MaxValue)
+            {
+                int z0 = new ReadOnlySpan<byte>(buf + done, int.MaxValue).IndexOf((byte)0);
+                if (z0 >= 0)
+                    return done + z0 + 1;
+                done += int.MaxValue;
+            }
+            int z = new ReadOnlySpan<byte>(buf + done, (int)(size - done)).IndexOf((byte)0);
+            return z >= 0 ? done + z + 1 : size;
+        }
+
+        /// <summary>
+        ///     <see cref="NulLength"/> for a text read in place by <see cref="Load"/>: one 16-byte compare answers a text in its
+        ///     cell (16 readable bytes) and the first 16 bytes of any text of 16 bytes or more; the rest of a longer text scans
+        ///     on. The sort's per-element load, where the span scan's call was most of the cost of a short text.
+        /// </summary>
+        /// <param name="cell">The text's cell.</param>
+        /// <param name="buf">The text, as <see cref="Load"/> returned it (the cell itself for a short text).</param>
+        /// <param name="size">Its size.</param>
+        /// <returns>The prefix length, 0 to <paramref name="size"/>.</returns>
+        /// <remarks>A text of 1 to 15 bytes outside its cell (none in practice: such texts are stored in the cell) has no 16
+        ///     readable bytes promised, so it takes the plain <see cref="NulLength"/>.</remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long NulLengthInPlace(byte* cell, byte* buf, long size)
+        {
+            if (Vector128.IsHardwareAccelerated && (buf == cell || size >= 16))
+            {
+                uint z = Vector128.Equals(Vector128.Load(buf), Vector128<byte>.Zero).ExtractMostSignificantBits();
+                if (size <= 16)
+                {
+                    // Only the text's own bytes count (a short cell's byte 15 and stale bytes past the size never do).
+                    z &= (uint)((1L << (int)size) - 1);
+                    return z != 0 ? System.Numerics.BitOperations.TrailingZeroCount(z) + 1 : size;
+                }
+                if (z != 0)
+                    return System.Numerics.BitOperations.TrailingZeroCount(z) + 1;
+                if (size <= 32)
+                {
+                    // The last 16 bytes (they overlap the first window for a text under 32 bytes): only the lanes past the
+                    // first window count, the lowest set one is the first NUL after it.
+                    uint t = Vector128.Equals(Vector128.Load(buf + size - 16), Vector128<byte>.Zero).ExtractMostSignificantBits()
+                             & ~((1u << (int)(32 - size)) - 1);
+                    return t != 0 ? size - 16 + System.Numerics.BitOperations.TrailingZeroCount(t) + 1 : size;
+                }
+                return 16 + NulLength(buf + 16, size - 16);
+            }
+            return NulLength(buf, size);
+        }
+
+        /// <summary>
+        ///     Whether a SHORT cell's text (its first <paramref name="s"/> bytes) holds a NUL: the fast paths' signal to leave
+        ///     the masked-cell compares, which order bytes past a NUL, for the exact <see cref="Order"/>.
+        /// </summary>
+        /// <param name="cell">The short cell.</param>
+        /// <param name="h">Its high word (bytes 8–15).</param>
+        /// <param name="s">The text's size (0–15).</param>
+        /// <returns>True when a NUL lies inside the text.</returns>
+        /// <remarks>One 16-byte compare against zero, its byte mask cut to the size (the bytes past it, stale ones possibly,
+        ///     and byte 15 never count): four instructions on every x64 / arm64 host. Without vector hardware the bytes past
+        ///     the size and byte 15 are forced to 0xFF before the zero-byte test <c>(v - 0x01…01) &amp; ~v &amp; 0x80…80</c>,
+        ///     which is exact for "some byte is zero". Rare in real text, so the branch on it predicts.</remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static bool ShortHasNul(byte* cell, ulong h, int s)
+        {
+            if (Vector128.IsHardwareAccelerated)
+                return (Vector128.Equals(Vector128.Load(cell), Vector128<byte>.Zero).ExtractMostSignificantBits()
+                        & ((1u << s) - 1)) != 0;
+            ulong lo = Unsafe.ReadUnaligned<ulong>(cell) | ~s_masks[s];
+            ulong hi = h | ~s_masks[16 + s];
+            const ulong ones = 0x0101_0101_0101_0101UL, highs = 0x8080_8080_8080_8080UL;
+            return ((((lo - ones) & ~lo) | ((hi - ones) & ~hi)) & highs) != 0;
+        }
+
+        /// <summary>
+        ///     Whether an 8-byte word read from a text holds a zero byte (every byte of it inside the text): the first-word
+        ///     fast paths' NUL test.
+        /// </summary>
+        /// <param name="w">The word (any byte order).</param>
+        /// <returns>True when some byte is zero.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        private static bool WordHasNul(ulong w)
+            => ((w - 0x0101_0101_0101_0101UL) & ~w & 0x8080_8080_8080_8080UL) != 0;
 
         /// <summary>
         ///     Whether a cell can take the short fast path: a short string (byte 15's flags nibble is
@@ -291,6 +490,11 @@ namespace NumSharp.Backends.Strings
                 ulong d = ((Unsafe.ReadUnaligned<ulong>(a) ^ Unsafe.ReadUnaligned<ulong>(b)) & s_masks[s])
                           | ((ha ^ hb) & s_masks[16 + s]);
                 bool equal = fa == fb & d == 0;
+                // NpyString_cmp disagrees with the masked cells only for two texts of one size whose bytes differ after a
+                // NUL they share (strncmp stops at it: 'a\0c' == 'a\0b'). Equal cells and different sizes are already right,
+                // so only that pair tests A's text for a NUL (a predictable branch: real text rarely holds one).
+                if (!equal && fa == fb && ShortHasNul(a, ha, s))
+                    return Decide(Order(a, s, b, s), negate ? TextCompareOp.NotEqual : TextCompareOp.Equal);
                 return (byte)((equal ? 1 : 0) ^ (negate ? 1 : 0));
             }
             return ComparePairSlow(a, b, aux, negate ? TextCompareOp.NotEqual : TextCompareOp.Equal);
@@ -313,7 +517,9 @@ namespace NumSharp.Backends.Strings
         {
             ulong ha = Unsafe.ReadUnaligned<ulong>(a + 8), hb = Unsafe.ReadUnaligned<ulong>(b + 8);
             uint fa = (uint)(ha >> 56), fb = (uint)(hb >> 56);
-            if (IsShort(fa) && IsShort(fb))
+            // A NUL inside A's text can end strncmp before the masked cells' first difference (the sizes then decide): such
+            // a pair, rare in real text, takes the exact Order of the out-of-line path.
+            if (IsShort(fa) && IsShort(fb) && !ShortHasNul(a, ha, (int)(fa & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK)))
             {
                 int sa = (int)(fa & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
                 int sb = (int)(fb & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
@@ -328,10 +534,11 @@ namespace NumSharp.Backends.Strings
                 return r ? (byte)1 : (byte)0;
             }
             // Two non-NA cells, at least one outside its cell: their first eight bytes as big-endian words decide most pairs
-            // of different texts without the out-of-line path (an arena text against a short scalar, random arena texts).
+            // of different texts without the out-of-line path (an arena text against a short scalar, random arena texts) —
+            // unless A's first word holds a NUL inside its text, where strncmp may stop before the words' first difference.
             if (((fa | fb) & VStringAllocator.NPY_STRING_MISSING) == 0
-                && TryFirstWord(a, fa, ha, aux->ArenaA, out ulong wa) & TryFirstWord(b, fb, hb, aux->ArenaB, out ulong wb)
-                && wa != wb)
+                && TryFirstWord(a, fa, ha, aux->ArenaA, out ulong wa, out bool nulA) & TryFirstWord(b, fb, hb, aux->ArenaB, out ulong wb, out _)
+                && wa != wb && !nulA)
                 return wa < wb ? (byte)1 : (byte)0;
             return ComparePairSlow(a, b, aux, orEqual ? TextCompareOp.LessEqual : TextCompareOp.Less);
         }
@@ -346,19 +553,25 @@ namespace NumSharp.Backends.Strings
         /// <param name="h">Its high word.</param>
         /// <param name="arena">Its allocator's arena base.</param>
         /// <param name="word">Receives the word (0 for an empty text).</param>
+        /// <param name="nul">Receives whether the text holds a NUL the word may have read past (a short text: anywhere inside
+        ///     it; an arena or heap text: inside the word) — the caller then does not decide by the words, because
+        ///     <c>strncmp</c> could stop at that NUL before their first difference.</param>
         /// <returns>False for an arena cell whose allocator has no arena (a corrupt cell: the caller's out-of-line path raises
         ///     NumPy's error for it).</returns>
         /// <remarks>A short cell has 16 readable bytes and an arena or heap text at least 16, so the 8-byte read never leaves
         ///     its text; an emptied vstring (size 0) reads nothing.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
-        private static bool TryFirstWord(byte* cell, uint f, ulong h, byte* arena, out ulong word)
+        private static bool TryFirstWord(byte* cell, uint f, ulong h, byte* arena, out ulong word, out bool nul)
         {
             if (IsShort(f))
             {
-                word = BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(cell) & s_masks[Math.Min(f & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK, 8u)]);
+                uint s = f & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK;
+                word = BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(cell) & s_masks[Math.Min(s, 8u)]);
+                nul = ShortHasNul(cell, h, (int)s);
                 return true;
             }
             word = 0;
+            nul = false;
             if ((h & SizeMask) == 0)
                 return true;
             byte* text;
@@ -368,7 +581,9 @@ namespace NumSharp.Backends.Strings
                 text = arena + Unsafe.ReadUnaligned<ulong>(cell);
             else
                 return false;
-            word = BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(text));
+            ulong raw = Unsafe.ReadUnaligned<ulong>(text);
+            nul = WordHasNul(raw);
+            word = BinaryPrimitives.ReverseEndianness(raw);
             return true;
         }
 
@@ -384,11 +599,16 @@ namespace NumSharp.Backends.Strings
         /// <param name="hb">B's high word.</param>
         /// <param name="fb">B's byte 15.</param>
         /// <returns>True when A's text orders before B's (<c>NpyString_cmp &lt; 0</c>).</returns>
+        /// <remarks>A NUL inside A's text can end <c>strncmp</c> before the masked cells' first difference (the sizes then
+        ///     decide): that pair, rare in real text, takes the exact <see cref="Order"/> (a predictable branch; the
+        ///     masked-cell form stays branch-free).</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static bool ShortLess(byte* a, ulong ha, uint fa, byte* b, ulong hb, uint fb)
         {
             int sa = (int)(fa & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
             int sb = (int)(fb & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
+            if (ShortHasNul(a, ha, sa))
+                return Order(a, sa, b, sb) < 0;
             ulong xa = BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(a) & s_masks[sa]);
             ulong xb = BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(b) & s_masks[sb]);
             ulong ya = BinaryPrimitives.ReverseEndianness(ha & s_masks[32 + sa]);
@@ -429,8 +649,8 @@ namespace NumSharp.Backends.Strings
         ///     <see cref="ComparePairNA"/>. The NA handling's interpolated messages used to sit in this method, whose frame then
         ///     zeroed a string handler on every call: 17.4 ns a pair of 24-byte arena texts, against 5.6 ns for the loads and
         ///     the compare alone. The size and first-word tests serve <c>==</c> / <c>!=</c> only: an ordering reaches this
-        ///     method after <see cref="Less"/> found the first words equal, so a first-word test could only repeat that work
-        ///     (the mutation pass showed the earlier form never decided an ordering), and a size difference does not order.
+        ///     method after <see cref="Less"/> found the first words equal (or found a NUL in A that the word compare cannot
+        ///     judge), so a first-word test could only repeat that work, and a size difference does not order.
         /// </remarks>
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static byte ComparePairSlow(byte* a, byte* b, VStringPairAux* aux, TextCompareOp op)
@@ -441,12 +661,20 @@ namespace NumSharp.Backends.Strings
                 return ComparePairNA(na, nb, ba, sa, bb, sb, aux, op);
             // NpyString_cmp is 0 only for two texts of one size: an EQUALITY pair of different sizes is unequal without
             // reading either text (a short text against one outside its cell always is), and two texts of one size of eight
-            // bytes or more whose first eight bytes differ are unequal without the span compare. An ordering skips both
-            // tests: Less compared the first words inline before calling here, so an ordering arrives with equal first words
-            // (or with an NA or a corrupt cell, handled above).
-            if (op <= TextCompareOp.NotEqual
-                && (sa != sb || (sa >= 8 && Unsafe.ReadUnaligned<ulong>(ba) != Unsafe.ReadUnaligned<ulong>(bb))))
-                return op == TextCompareOp.NotEqual ? (byte)1 : (byte)0;
+            // bytes or more whose first eight bytes differ are unequal without the span compare — unless A's first word
+            // holds a NUL, after which strncmp ignores the bytes (the words may then differ past a shared NUL). An ordering
+            // skips both tests: Less compared the first words inline before calling here.
+            if (op <= TextCompareOp.NotEqual)
+            {
+                if (sa != sb)
+                    return op == TextCompareOp.NotEqual ? (byte)1 : (byte)0;
+                if (sa >= 8)
+                {
+                    ulong wa = Unsafe.ReadUnaligned<ulong>(ba);
+                    if (wa != Unsafe.ReadUnaligned<ulong>(bb) && !WordHasNul(wa))
+                        return op == TextCompareOp.NotEqual ? (byte)1 : (byte)0;
+                }
+            }
             return Decide(Order(ba, sa, bb, sb), op);
         }
 

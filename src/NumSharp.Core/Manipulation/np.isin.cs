@@ -67,13 +67,15 @@ namespace NumSharp
                         + "maximum integer of the datatype. Please set `kind` to None or 'sort'.");
             }
 
-            // Empty element -> empty boolean result shaped like element (value irrelevant).
+            // Empty element -> empty boolean result shaped like element (value irrelevant). Every NumPy path ends in
+            // `_isin(...).reshape(element.shape)`, so even this answer is a VIEW of a fresh 1-D array (flags.owndata
+            // False); allocating outShape directly returned an owner.
             if (ar1.size == 0)
-                return np.zeros(outShape, NPTypeCode.Boolean);
+                return np.zeros(new Shape(ar1.size), NPTypeCode.Boolean).reshape(outShape);
 
-            // Empty test set -> nothing is a member (all invert).
+            // Empty test set -> nothing is a member (all invert); a view of the 1-D answer, as above.
             if (ar2.size == 0)
-                return np.full(outShape, invert, NPTypeCode.Boolean);
+                return np.full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
 
             // assume_unique is a NumPy speed hint that skips deduplication; our sort/table paths need no
             // dedup, so it changes nothing here and the result is ALWAYS the correct membership (see the

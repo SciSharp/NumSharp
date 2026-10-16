@@ -898,9 +898,10 @@ namespace NumSharp
         ///     DType with.</exception>
         /// <remarks>
         ///     NumPy's <c>unique</c> calls compute (the hash of unmasked text, the sort of fixed-width text) before the
-        ///     refusals that decide these routines, and those computations cannot fail and cannot change the refusal: the
-        ///     refusals depend only on dtypes, on which operands are masked arrays, on whether a mask holds a True, and on
-        ///     emptiness. So each <c>unique</c> is replaced by a STAND-IN with exactly those properties — the operand
+        ///     refusals that decide these routines, and those computations cannot change the refusal: the refusals depend
+        ///     only on dtypes, on which operands are masked arrays, on whether a mask holds a True, and on emptiness. They can
+        ///     fail only through a <c>StringDType</c> sort's NA rule (a None-like NA meeting another entry), which the
+        ///     stand-in reproduces. So each <c>unique</c> is replaced by a STAND-IN with exactly those properties — the operand
         ///     flattened, its mask kept (<see cref="UniqueStandIn"/>) — after the refusal <c>unique</c> makes itself. The
         ///     joins are NumPy's (<see cref="concatenate"/>: its promotion error and its mask), and the argsort / sort steps
         ///     refuse as NumPy's do (<see cref="SetOpArgsort"/>, and <see cref="SortInPlace"/>'s rule: only with a True in
@@ -942,15 +943,37 @@ namespace NumSharp
         /// <returns>The flattened masked stand-in.</returns>
         /// <exception cref="TypeError">A masked <c>StringDType</c> operand that NumPy argsorts (with <paramref name="inverse"/>,
         ///     or when a slot is masked: <c>ar.sort()</c> of a masked array is its argsort).</exception>
-        /// <remarks>A PLAIN <c>StringDType</c> operand goes through <c>np.unique</c> proper (ndarray's argsort / the hash),
-        ///     which computes without a refusal; an unmasked masked array takes the hash path. Both are stand-ins without a
-        ///     mask, as NumPy's results are. A mask with a True stays in the stand-in: NumPy's sorted unique keeps one masked
-        ///     slot, which is what the join's sort reads.</remarks>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand NumPy's <c>np.unique</c> sorts without a mask (ndarray's
+        ///     argsort for <paramref name="inverse"/>, the hash set's sort otherwise) whose None-like NA meets another entry:
+        ///     the sort's <c>Cannot compare null that is not a nan-like value</c>, raised by this operand's unique before
+        ///     anything later.</exception>
+        /// <remarks>A PLAIN <c>StringDType</c> operand goes through <c>np.unique</c> proper (ndarray's argsort / the hash);
+        ///     an unmasked masked array takes the hash path. Those computations refuse only through the sort's NA rule, so
+        ///     for a None-like NA object they are run here (the real statements compute them again, a cost paid only by a
+        ///     <c>StringDType</c> set routine over a None-like descriptor); both are stand-ins without a mask, as NumPy's
+        ///     results are. A mask with a True stays in the stand-in: NumPy's sorted unique keeps one masked slot, which is
+        ///     what the join's sort reads.</remarks>
         private NDMaskedArray UniqueStandIn(object x, bool inverse)
         {
             if (x is NDMaskedArray m && m._data.Storage.IsVString && (inverse || m._mask is not null && np.any(m._mask)))
                 ThrowIfUnsuitableExtremum(m._data, "minimum");
-            return ravel(asarray(x));
+            var flat = ravel(asarray(x));
+            // NumPy computes this operand's unique before the next statement: a None-like NA beside another entry makes its
+            // sort raise there (ndarray's argsort compares every element of a line of two or more; the hash set's sort every
+            // entry), whatever the other operand would raise later.
+            if (flat._data.Storage.IsVString
+                && Backends.Strings.NDVStringCells.RuleOf(flat._data.dtype) == Backends.Strings.VStringNARule.Null)
+            {
+                if (inverse)
+                {
+                    using var order = np.argsort(flat._data);
+                }
+                else
+                {
+                    using NDArray values = np.unique(flat._data);
+                }
+            }
+            return flat;
         }
     }
 }

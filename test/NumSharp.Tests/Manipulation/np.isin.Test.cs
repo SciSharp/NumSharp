@@ -262,5 +262,26 @@ namespace NumSharp.Tests.Manipulation
             np.isin(element, test, assume_unique: true)
                 .array_equal(np.array(new[] { false, false })).Should().BeTrue();
         }
+
+        /// <summary>
+        ///     Every NumPy path ends in <c>_isin(...).reshape(element.shape)</c>, so the answer is always a VIEW of a fresh
+        ///     1-D array (<c>flags.owndata</c> False) — the empty-operand answers included.
+        /// </summary>
+        [TestMethod]
+        public void EmptyOperand_AnswerIsAViewLikeEveryOther()
+        {
+            using var emptyElement = np.isin(np.zeros(new Shape(0, 3), np.int64), np.array(new long[] { 1, 2 }));
+            emptyElement.shape.Should().Equal(0L, 3L);
+            emptyElement.flags.owndata.Should().BeFalse();
+            using var emptyTest = np.isin(np.array(new long[] { 1, 2 }), np.zeros(new Shape(0), np.int64));
+            emptyTest.flags.owndata.Should().BeFalse();
+            emptyTest.ToArray<bool>().Should().Equal(false, false);
+            using var inverted = np.isin(np.array(new long[] { 1, 2 }), np.zeros(new Shape(0), np.int64), invert: true);
+            inverted.flags.owndata.Should().BeFalse();
+            inverted.ToArray<bool>().Should().Equal(true, true);
+            using var floats = np.isin(np.zeros(new Shape(2, 0)), np.array(new[] { 1.5 }));
+            floats.shape.Should().Equal(2L, 0L);
+            floats.flags.owndata.Should().BeFalse();
+        }
     }
 }

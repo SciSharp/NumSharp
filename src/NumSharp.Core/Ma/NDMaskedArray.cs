@@ -302,8 +302,12 @@ namespace NumSharp
                 return _data.view();
 
             // A number given for TEXT data is formatted by `_check_fill_value` before the mask is read; the formatting
-            // cannot fail, so with nothing masked the data is the answer and the next phase's formatting is never needed.
+            // cannot fail, so with nothing masked the data is the answer and the next phase's formatting is never needed —
+            // except into a StringDType(coerce=False), whose setitem takes only a str: there `_check_fill_value` raises
+            // numpy.ma's "Cannot convert fill_value 0 to dtype StringDType(coerce=False)" whatever the mask holds (the
+            // check below raises it).
             if (fill_value is not null && _data.typecode == NPTypeCode.String
+                                       && !(_data.Storage.IsVString && !_data.dtype.coerce)
                                        && MaskedArrayModule.FormatsAsText(fill_value) && !np.any(_mask))
                 return _data.view();
 

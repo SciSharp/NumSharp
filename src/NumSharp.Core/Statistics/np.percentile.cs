@@ -60,7 +60,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
+                default, keepdims, qIsScalar: true, methodName: method);
         }
 
         /// <summary>
@@ -123,7 +123,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, qFracs, new long[] { qFracs.Length }, false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, qFracs, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
+                default, keepdims, qIsScalar: false, methodName: method);
         }
 
         /// <summary>
@@ -184,7 +184,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
+                default, keepdims, qIsScalar: true, methodName: method);
         }
 
         /// <summary>
@@ -252,7 +252,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, qFracs, new long[] { qFracs.Length }, false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, qFracs, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
+                default, keepdims, qIsScalar: false, methodName: method);
         }
 
         /// <summary>
@@ -313,30 +313,16 @@ namespace NumSharp
                 // np.true_divide(q, 100) is float64 whatever q held: percentile never takes the integer index.
                 return QuantileOfText("percentile", a, PercentileFractions(q), (long[])q.Shape.dimensions.Clone(), false,
                     axis.HasValue ? new[] { axis.Value } : null, @out, method, keepdims, chararray);
-            if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             bool qIsScalar = q.ndim == 0;
-            double[] qArr;
-            if (q.ndim == 0)
-            {
-                double v = QuantileValueAt(q, 0);
-                ValidatePercentile(v);
-                qArr = new[] { v / 100.0 };
-            }
-            else
-            {
-                qArr = new double[q.size];
-                for (long i = 0; i < q.size; i++)
-                {
-                    double v = QuantileValueAt(q, i);
-                    ValidatePercentile(v);
-                    qArr[i] = v / 100.0;
-                }
-            }
+            // `np.true_divide(q, 100)` and `_quantile_is_valid` at any rank; q's rank is `_quantile_ureduce_func`'s check,
+            // after the axes, inside the engine (a 2-d q keeps both axes).
+            double[] qArr = PercentileFractions(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // weak_q = type(q) in (int, float): only a C# number (its 0-d array marked WasPythonLiteral) keeps float16 /
             // float32 data's dtype under interpolation; an array q, 0-d included, is a strong float64.
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar, weakQ: q.WasPythonLiteral);
+                default, keepdims, qIsScalar, weakQ: q.WasPythonLiteral, methodName: method,
+                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone());
         }
 
         /// <summary>
@@ -399,10 +385,11 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, fractions, (long[])q.Shape.dimensions.Clone(), false, axis, @out,
                     method, keepdims, chararray);
-            if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
-            // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64.
+            // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. q's rank
+            // is checked after the axes, inside the engine (a 2-d q keeps both axes).
             return QuantileEngine.Compute(a, fractions, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: q.ndim == 0, weakQ: q.WasPythonLiteral);
+                default, keepdims, qIsScalar: q.ndim == 0, weakQ: q.WasPythonLiteral, methodName: method,
+                qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone());
         }
 
         /// <summary>

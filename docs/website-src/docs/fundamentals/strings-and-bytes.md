@@ -686,6 +686,16 @@ np.isnan(t);                    // [False False  True]
 np.maximum(t, "x");             // TypeError: ufunc 'maximum' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None
 ```
 
+Texts compare as NumPy's `NpyString_cmp` compares them: `strncmp` over the shorter length, then the sizes. `strncmp` stops at the first byte that differs or at a NUL both texts share, so two texts with the same bytes up to a shared NUL and the same size are EQUAL (`'a\0c' == 'a\0b'`), and a NUL is smaller than any byte it meets (`'a\0' < 'ab'`). Fixed-width `U` text compares every code point instead. `np.array_equal` and `np.array_equiv` are `(a1 == a2).all()` with these rules: a NaN-like NA is never equal unless `equal_nan: true` matches the NA positions (through `np.isnan`), and a pair that has no comparison loop (`S`, numbers) is NumPy's all-`False` array, so only an empty one is equal:
+
+```csharp
+var t2 = np.dtypes.StringDType();
+np.array(new object[] { "a\0c" }, t2) == np.array(new object[] { "a\0b" }, t2);   // [ True]
+np.array_equal(np.array(new object[] { "a\0c", "x" }, t2), np.array(new object[] { "a\0b", "x" }, t2));   // True
+np.array_equal(t, t);                                           // False: the NA is not equal to itself
+np.array_equal(t, t, equal_nan: true);                          // True
+```
+
 A result takes the operands' common NA object (two different NA objects have no loop) and the first operand's `coerce`. `out=` follows NumPy's descriptor resolution: a `StringDType` out receives the loop's result as it is, and an out of another dtype receives the result of the default `StringDType()` through NumPy's output cast, so an NA becomes `''` in a `U` or `S` out:
 
 ```csharp
@@ -696,7 +706,7 @@ Two short texts compare inside their 16-byte cells, a text in the arena is read 
 
 ### Ordering `StringDType` text
 
-`np.sort`, `np.argsort`, `ndarray.sort`, `np.partition`, `np.argpartition`, `np.lexsort`, `np.searchsorted`, `np.unique` and the Array-API unique family, `np.isin`, the set routines, `np.median`, `np.quantile`, `np.percentile`, their nan forms and numpy.ma's `sort` / `argsort` / `median` / `unique` order `StringDType` text with NumPy's results, for every memory layout and axis. Texts compare by their UTF-8 bytes, a text before every longer text that starts with it. Missing data follows the NA object, as NumPy's sort compares it:
+`np.sort`, `np.argsort`, `ndarray.sort`, `np.partition`, `np.argpartition`, `np.lexsort`, `np.searchsorted`, `np.unique` and the Array-API unique family, `np.isin`, the set routines, `np.median`, `np.quantile`, `np.percentile`, their nan forms and numpy.ma's `sort` / `argsort` / `median` / `unique` order `StringDType` text with NumPy's results, for every memory layout and axis. Texts compare by their UTF-8 bytes up to a NUL both texts share, a text before every longer text that starts with it (NumPy's `NpyString_cmp`, see [Computing on `StringDType` text](#computing-on-stringdtype-text)). Two texts that differ only after a shared NUL are equal: a stable sort keeps them in their input order, `np.unique` with a `return_*` flag keeps the first of them, and the values-only `np.unique` (and the set routines built on it) keeps both, because NumPy hashes the full bytes — in its hash table's order, which NumSharp replaces with their input order. Missing data follows the NA object, as NumPy's sort compares it:
 
 - A NaN-like NA sorts after every text, and the NAs keep their input order.
 - A string NA reads as its text (the descriptor's default string).
@@ -787,7 +797,8 @@ NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp
 - The `bytes` to `StringDType` cast does not validate UTF-8, so a later read of the element raises. NumSharp raises the `UnicodeDecodeError` at the cast.
 - The `StringDType` to `complex` cast writes the real part into the imaginary part too (so `np.sort_complex(['2', '1'])` is `[1+1j, 2+2j]`).
 - `np.lexsort` with a `StringDType` key that is not contiguous along the axis (a transposed 2-D key, a stepped or reversed view) crashes the process (an access violation).
-- `np.argsort` of a broadcast `StringDType` view misorders texts that live in the arena (a 16-byte text lands before shorter, smaller ones). The same array copied sorts right.
+- `np.argsort(view, axis=None)` of a `StringDType` view that is not C-contiguous (broadcast, reversed, transposed, stepped) misorders texts that live in the arena (a 17-byte text lands before its 16-byte prefix). The same view copied, `np.sort`, an explicit axis, the partitions and `ndarray.sort` sort right.
+- An empty `StringDType` text times a negative count hangs: `multiply` converts the count to `size_t`, its overflow check multiplies it by the size 0, and the repeat loop runs 2^64 - 1 times. NumSharp returns the empty text.
 - `np.searchsorted` loads the haystack's cells with the keys' allocator, so a haystack text in its arena raises `MemoryError: Failed to load string in string comparison` or reads another array's arena.
 - The default-kind sort crashes the process when its introsort spends its depth budget: the heapsort fallback reads its method context as an array. NumSharp's heapsort answers, in the order `np.argpartition` gives.
 - A short string copied onto itself (`a[...] = a[:1]`) becomes `''`.

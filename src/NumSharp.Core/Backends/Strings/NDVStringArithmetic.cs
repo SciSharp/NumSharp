@@ -878,10 +878,14 @@ namespace NumSharp.Backends.Strings
         /// <param name="fb">B's byte 15.</param>
         /// <param name="hb">B's high word.</param>
         /// <returns>-1, 0 or 1.</returns>
+        /// <remarks>A NUL inside A's text can end NumPy's <c>strncmp</c> before the masked cells' first difference (the sizes
+        ///     then decide, see <see cref="NDVStringCells.Order"/>): that pair, rare in real text, takes the exact order.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static int ShortOrder(byte* a, uint fa, ulong ha, byte* b, uint fb, ulong hb)
         {
             int sa = (int)(fa & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK), sb = (int)(fb & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
+            if (NDVStringCells.ShortHasNul(a, ha, sa))
+                return NDVStringCells.Order(a, sa, b, sb);
             ulong la = Unsafe.ReadUnaligned<ulong>(a) & s_masks[sa], lb = Unsafe.ReadUnaligned<ulong>(b) & s_masks[sb];
             if (la != lb)
                 return System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(la) < System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(lb) ? -1 : 1;

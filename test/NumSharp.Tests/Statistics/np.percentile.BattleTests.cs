@@ -105,12 +105,21 @@ public class np_percentile_BattleTests
         p.shape.Should().Equal(new long[] { 3 });
     }
 
+    /// <summary>
+    ///     NumPy keeps a 2-d q's two axes in front of the result and refuses rank 3 and above
+    ///     (<c>_quantile_ureduce_func</c>'s <c>q must be a scalar or 1d</c>, a ValueError): probed against 2.4.2,
+    ///     <c>np.percentile([1, 2, 3], [[25, 50], [75, 100]])</c> is <c>[[1.5, 2.0], [2.5, 3.0]]</c>. (This test asserted
+    ///     a refusal of every q of rank 2 until the 2026-10-16 validation pass.)
+    /// </summary>
     [TestMethod]
-    public void Percentile_NDArrayQ_HigherRank_Throws()
+    public void Percentile_NDArrayQ_TwoDimensionalKeepsBothAxes_ThreeDimensionalThrows()
     {
         var a = np.array(new long[] { 1, 2, 3 });
-        Action act = () => np.percentile(a, np.array(new double[,] { { 25, 50 }, { 75, 100 } }));
-        act.Should().Throw<ArgumentException>();
+        var p = np.percentile(a, np.array(new double[,] { { 25, 50 }, { 75, 100 } }));
+        p.shape.Should().Equal(new long[] { 2, 2 });
+        p.ToArray<double>().Should().Equal(1.5, 2.0, 2.5, 3.0);
+        Action act = () => np.percentile(a, np.zeros(new Shape(1, 1, 1)));
+        act.Should().Throw<ValueError>().WithMessage("q must be a scalar or 1d");
     }
 
     // ── methods ─────────────────────────────────────────────────────────

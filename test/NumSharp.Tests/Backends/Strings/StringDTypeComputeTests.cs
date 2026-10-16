@@ -584,5 +584,65 @@ namespace NumSharp.Tests.Backends.Strings
             Action none = () => np.@char.multiply(A(TNone, "ab", null), np.array(2L));
             none.Should().Throw<ValueError>().WithMessage("Can only multiply by integers");
         }
+
+        /// <summary>
+        ///     NumPy 2.4.2 HANGS on an empty <c>StringDType</c> text times a negative count: its multiply converts the count
+        ///     to <c>size_t</c>, the overflow check multiplies it by the size 0 and passes, and the repeat loop then runs
+        ///     2^64 - 1 times copying nothing. NumSharp returns the answer that loop would end with, the empty text (a
+        ///     non-empty text still raises NumPy's overflow error).
+        /// </summary>
+        [TestMethod]
+        [Misaligned]
+        public void Multiply_EmptyTextTimesANegativeCount_IsTheEmptyText()
+        {
+            using var r = np.multiply(A(T, "", "ab"), np.array(new long[] { -1, 2 }));
+            V(r).Should().Equal("", "abab");
+            using var first = np.multiply(np.array(long.MinValue), A(T, ""));
+            V(first).Should().Equal("");
+            Action nonEmpty = () => np.multiply(A(T, "a"), np.array(-1L));
+            nonEmpty.Should().Throw<OverflowException>().WithMessage("Overflow encountered in string multiply");
+        }
+
+        /// <summary>
+        ///     A comparison with <c>where=</c> into an <c>out=</c> of another dtype (a <c>U</c> or an integer array) compares
+        ///     only the selected pairs: NumPy's masked inner loop never meets a masked-off None-like NA, which an ordering
+        ///     would refuse, and the masked-off slots of <c>out=</c> keep their contents.
+        /// </summary>
+        [TestMethod]
+        public void Comparison_WhereIntoACastOut_ComparesOnlyTheSelectedPairs()
+        {
+            using var a = A(TNone, "a", null, "b", "");
+            using var b = A(TNone, "x", "y", null, "z");
+            using var mask = np.array(new[] { true, false, false, true });
+            using var textOut = np.array(new[] { "-", "-", "-", "-" }, np.dtype("U5"));
+            np.less(a, b, @out: textOut, where: mask);
+            V(textOut).Should().Equal("True", "-", "-", "True");
+            using var intOut = np.full(new Shape(4), 7, np.int32);
+            np.less(a, b, @out: intOut, where: mask);
+            V(intOut).Should().Equal(1, 7, 7, 1);
+        }
+
+        /// <summary>
+        ///     A masked <c>StringDType</c> reduction lays its fresh result out as NumPy's reduction iterator does: the input
+        ///     AND the <c>where=</c> mask vote on the axis order, and where they disagree C order wins — a permuted input with
+        ///     a C-ordered mask gives a C result, the same input without a mask the input's own order.
+        /// </summary>
+        [TestMethod]
+        public void MaskedReduction_ResultLayoutFollowsTheInputAndTheMask()
+        {
+            using var flat = np.array(Enumerable.Range(0, 12).Select(i => (object)((char)('a' + i)).ToString()).ToArray(), T);
+            using var cube = flat.reshape(3, 2, 2);
+            using var x = cube.transpose(new[] { 2, 1, 0 });   // (2, 2, 3), element strides (1, 2, 4)
+            using var mask = np.ones(new Shape(2, 2, 3), np.@bool);
+            mask[0, 0, 0] = false;
+            using var masked = np.max(x, axis: 1, keepdims: true, initial: A(T, "a")["0"], where: mask);
+            masked.shape.Should().Equal(2L, 1L, 3L);
+            masked.strides.Should().Equal(48L, 48L, 16L);
+            masked.flags.c_contiguous.Should().BeTrue();
+            V(masked.copy()).Should().Equal("c", "g", "k", "d", "h", "l");
+            using var plain = np.max(x, axis: 1, keepdims: true);
+            plain.strides.Should().Equal(16L, 32L, 32L);
+            plain.flags.c_contiguous.Should().BeFalse();
+        }
     }
 }

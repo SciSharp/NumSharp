@@ -60,7 +60,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
+                default, keepdims, qIsScalar: true, methodName: method);
         }
 
         /// <summary>
@@ -118,7 +118,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
+                default, keepdims, qIsScalar: false, methodName: method);
         }
 
         /// <summary>
@@ -179,7 +179,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
+                default, keepdims, qIsScalar: true, methodName: method);
         }
 
         /// <summary>
@@ -242,7 +242,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
-                QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
+                default, keepdims, qIsScalar: false, methodName: method);
         }
 
         /// <summary>
@@ -310,22 +310,22 @@ namespace NumSharp
                 return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
                     axisArr, @out, method, keepdims, chararray);
             }
-            if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             bool qIsScalar = q.ndim == 0;
             double[] qArr = QArrayFromNDArray(q);
-            for (int i = 0; i < qArr.Length; i++) ValidateQuantile(qArr[i]);
-            var parsed = QuantileEngine.ParseMethod(method);
+            // `_quantile_is_valid(q)` at any rank (an empty q of rank other than 1 fails its q.min()); q's rank is
+            // `_quantile_ureduce_func`'s check, after the axes, inside the engine (a 2-d q keeps both axes).
+            ValidateQuantileArray(q, qArr);
             // NumPy 2.4: `q = np.asanyarray(q)` whatever q is, so an integer (or bool) q — a Python int or bool among
             // them, over any data — makes 'linear's virtual index (n - 1) * q an integer, and _quantile then takes the
             // element there (its "supports_integers" path) instead of interpolating: exactly the 'lower' selection, with
             // the data's own dtype (np.quantile(int_array, np.array([0, 1])) is an int64 array, not float64, and
-            // np.quantile([1., inf], 1) is inf where the interpolation would make inf - inf).
-            if (parsed == QuantileMethod.Linear && IsIntegerQuantile(q))
-                parsed = QuantileMethod.Lower;
-            // weak_q = type(q) in (int, float): only a C# number (its 0-d array marked WasPythonLiteral) keeps float16 /
-            // float32 data's dtype under interpolation; an array q, 0-d included, is a strong float64.
-            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, parsed, keepdims, qIsScalar,
-                weakQ: q.WasPythonLiteral);
+            // np.quantile([1., inf], 1) is inf where the interpolation would make inf - inf) — integerQ. weak_q =
+            // type(q) in (int, float): only a C# number (its 0-d array marked WasPythonLiteral) keeps float16 / float32
+            // data's dtype under interpolation; an array q, 0-d included, is a strong float64. The method name and q's
+            // rank (a 2-d q keeps both axes) are checked inside, in NumPy's order.
+            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
+                weakQ: q.WasPythonLiteral, qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(),
+                methodName: method, integerQ: IsIntegerQuantile(q));
         }
 
         /// <summary>
@@ -392,16 +392,15 @@ namespace NumSharp
                 return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
                     axis, @out, method, keepdims, chararray);
             }
-            if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             double[] qArr = QArrayFromNDArray(q);
-            for (int i = 0; i < qArr.Length; i++) ValidateQuantile(qArr[i]);
-            var parsed = QuantileEngine.ParseMethod(method);
-            // An integer (or bool) q: 'linear' takes the element at the integer virtual index (see the one-axis overload).
-            if (parsed == QuantileMethod.Linear && IsIntegerQuantile(q))
-                parsed = QuantileMethod.Lower;
-            // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64.
-            return QuantileEngine.Compute(a, qArr, axis, @out, overwrite_input, parsed, keepdims, qIsScalar: q.ndim == 0,
-                weakQ: q.WasPythonLiteral);
+            // `_quantile_is_valid(q)` at any rank; q's rank is checked after the axes, inside the engine.
+            ValidateQuantileArray(q, qArr);
+            // An integer (or bool) q: 'linear' takes the element at the integer virtual index (integerQ, see the one-axis
+            // overload). weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong
+            // float64.
+            return QuantileEngine.Compute(a, qArr, axis, @out, overwrite_input, default, keepdims, qIsScalar: q.ndim == 0,
+                weakQ: q.WasPythonLiteral, qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone(),
+                methodName: method, integerQ: IsIntegerQuantile(q));
         }
 
         /// <summary>

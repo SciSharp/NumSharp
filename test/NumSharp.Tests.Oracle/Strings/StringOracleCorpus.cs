@@ -120,6 +120,24 @@ namespace NumSharp.Tests.Strings
             }
         }
 
+        /// <summary>
+        ///     Reads every case of the given JSON-lines files, in the order given: the randomized soak corpora of
+        ///     <c>test/oracle/soak_strings_oracle.py</c>, which live outside the committed corpus directory.
+        /// </summary>
+        /// <param name="files">The files (one case per non-empty line, the committed sections' format).</param>
+        /// <returns>The cases, file by file and in file order within a file.</returns>
+        /// <exception cref="FileNotFoundException">A file does not exist.</exception>
+        /// <exception cref="JsonException">A line is not a case.</exception>
+        internal static List<Case> LoadFiles(IEnumerable<string> files)
+        {
+            var cases = new List<Case>();
+            foreach (var file in files)
+                foreach (var line in File.ReadLines(file, Encoding.ASCII))
+                    if (line.Length > 0)
+                        cases.Add(JsonSerializer.Deserialize<Case>(line, Json));
+            return cases;
+        }
+
         /// <summary>Reads every case of every section file.</summary>
         /// <returns>The cases, file by file (in <see cref="CorpusFiles"/> order) and in file order within a file.</returns>
         /// <exception cref="FileNotFoundException">No section file was copied next to the test assembly.</exception>

@@ -40,6 +40,71 @@ namespace NumSharp {
         }
 
         /// <summary>
+        ///     NumPy's <c>array_equal</c> when an operand is NEP 55 <c>StringDType</c>, statement by statement: a shape
+        ///     mismatch is False; without <c>equal_nan</c>, <c>(a1 == a2).all()</c> (<see cref="AllEqualVString"/>); with it,
+        ///     the same object is True, and otherwise <c>isnan</c> runs on both (only bool and the signed integers are NumPy's
+        ///     no-NaN dtypes, so a <c>StringDType</c> operand always reaches it: True at a NaN-like NA, while <c>S</c> / <c>U</c>
+        ///     text refuses it), the NaN positions must agree, and the rest compare with <c>==</c>.
+        /// </summary>
+        /// <param name="a">The first array (not null).</param>
+        /// <param name="b">The second array (not null).</param>
+        /// <param name="equal_nan">NumPy's <c>equal_nan</c>.</param>
+        /// <returns>NumPy's answer.</returns>
+        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ (the comparison's <c>Cannot find
+        ///     a compatible null string value for null strings 'nan' and 'None'</c>); with <paramref name="equal_nan"/>, an
+        ///     <c>S</c> / <c>U</c> operand (<c>isnan</c> has no string loop).</exception>
+        /// <remarks>
+        ///     <c>==</c> over <c>StringDType</c> is NumPy's <c>NpyString_cmp</c>: <c>'a\0c'</c> equals <c>'a\0b'</c> (the bytes
+        ///     after a NUL both share are not compared), a NaN-like NA equals nothing (itself included — only
+        ///     <paramref name="equal_nan"/> matches NA positions), a None-like NA reads as <c>''</c>.
+        /// </remarks>
+        private static bool ArrayEqualVString(NDArray a, NDArray b, bool equal_nan)
+        {
+            var da = a.Shape.dimensions;
+            var db = b.Shape.dimensions;
+            if (da.Length != db.Length)
+                return false;
+            for (int d = 0; d < da.Length; d++)
+                if (da[d] != db[d])
+                    return false;
+            if (!equal_nan)
+                return AllEqualVString(a, b);
+            if (ReferenceEquals(a, b))
+                return true;
+            // `a1nan, a2nan = isnan(a1), isnan(a2)` — in this order, so an S / U first operand is the one refused.
+            using var aNaN = np.isnan(a);
+            using var bNaN = np.isnan(b);
+            using (var samePlaces = np.equal(aNaN, bNaN))
+                if (!np.all(samePlaces))
+                    return false;
+            // `(a1[~a1nan] == a2[~a1nan]).all()`: both selected by the FIRST operand's NaN positions.
+            using var keep = np.logical_not(aNaN);
+            using var aRest = a[keep];
+            using var bRest = b[keep];
+            return AllEqualVString(aRest, bRest);
+        }
+
+        /// <summary>
+        ///     <c>bool((a1 == a2).all())</c> with a <c>StringDType</c> operand: the <c>StringDType</c> comparison (NA rules
+        ///     and broadcasting included) when <c>equal</c> has a loop for the pair — <c>StringDType</c> with
+        ///     <c>StringDType</c> or <c>U</c> — and otherwise NumPy's all-False array (<c>S</c>, numbers, bool), which is
+        ///     True only when the broadcast is empty.
+        /// </summary>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand (shapes already known to broadcast).</param>
+        /// <returns>Whether every element compared equal.</returns>
+        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ.</exception>
+        internal static bool AllEqualVString(NDArray a, NDArray b)
+        {
+            static bool Compares(NDArray x) => Backends.Strings.NDStringUfuncs.IsVString(x)
+                                                || (x.typecode == NPTypeCode.String && x.dtype.kind == 'U');
+            if (!(Compares(a) && Compares(b)))
+                return Shape.ResolveReturnShape(a.Shape, b.Shape).size == 0;
+            using var equal = np.equal(a, b);
+            return np.all(equal);
+        }
+
+        /// <summary>
         ///     True if two arrays have the same shape and all elements are equal, False otherwise.
         /// </summary>
         /// <param name="a">First input array.</param>
@@ -56,10 +121,12 @@ namespace NumSharp {
         ///     NO broadcasting. Mirrors <c>numpy.array_equal(a1, a2, equal_nan=False)</c> (NumPy 2.4.2).
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
-        /// <exception cref="TypeError">A string operand with <paramref name="equal_nan"/> and two different arrays of one shape
-        ///     (NumPy's <c>isnan</c> has no string loop). Without it, two strings of one class compare their text and other
-        ///     string pairs are answered from shape and dtype (a shape mismatch, or no <c>equal</c> loop, is False; empty
-        ///     arrays are True).</exception>
+        /// <exception cref="TypeError">A fixed-width string operand with <paramref name="equal_nan"/> and two different arrays
+        ///     of one shape (NumPy's <c>isnan</c> has no string loop). Without it, two strings of one class compare their text
+        ///     and other string pairs are answered from shape and dtype (a shape mismatch, or no <c>equal</c> loop, is False;
+        ///     empty arrays are True). A <c>StringDType</c> operand compares through its own <c>==</c> (NumPy's NA rules: two
+        ///     different NA objects raise its TypeError) and, with <paramref name="equal_nan"/>, its <c>isnan</c> (a NaN-like
+        ///     NA is a NaN).</exception>
         public static bool array_equal(NDArray a, NDArray b, bool equal_nan = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, b);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -67,6 +134,9 @@ namespace NumSharp {
             // NDArray == null convention). Guarding here also keeps a.array_equal(...) from throwing.
             if (a is null)
                 return b is null;
+            // StringDType first (IsString refuses it): NumPy's statements over the StringDType comparison and isnan.
+            if (b is not null && (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b)))
+                return ArrayEqualVString(a, b, equal_nan);
             // Text: NumPy's statements decide by shape and dtype until (a1 == a2).all() compares text (the next phase).
             if (b is not null && (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)))
                 return ArrayEqualText(a, b, equal_nan);

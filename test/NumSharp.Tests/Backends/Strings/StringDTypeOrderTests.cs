@@ -441,5 +441,62 @@ namespace NumSharp.Tests.Backends.Strings
             using var sorted = np.sort_complex(A(T, "2", "1"));
             V(sorted).Should().Equal(new Complex(1, 0), new Complex(2, 0));
         }
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>np.argsort(view, axis=None)</c> of a non-contiguous <c>StringDType</c> view misorders its arena
+        ///     texts (a 17-byte text before a 16-byte prefix of it), while <c>np.sort(view, axis=None)</c>, an axis, the
+        ///     partitions and <c>ndarray.sort</c> order them right. NumSharp's argsort gives the answer NumPy gives for the
+        ///     view's copy.
+        /// </summary>
+        [TestMethod]
+        [Misaligned]
+        public void ArgSort_NonContiguousView_AxisNone_SortsLikeItsCopy()
+        {
+            using var b = A(T, "b", "c", new string('a', 17), new string('a', 16));
+            using var square = b.reshape(2, 2);
+            using var view = square["::-1, ::-1"];
+            using var order = np.argsort(view, null, kind: "stable");
+            // NumPy's argsort of view.copy(); NumPy's own argsort of the view gives [1, 0, 3, 2].
+            L(order).Should().Equal(0L, 1L, 3L, 2L);
+            using var sorted = np.sort(view, null);
+            V(sorted).Should().Equal(new string('a', 16), new string('a', 17), "b", "c");
+        }
+
+        /// <summary>
+        ///     The nan forms remove the NaN-like NAs as NumPy's <c>_remove_nan_1d</c> does — the first NaN slots filled with the
+        ///     non-NaN elements of the last ones, not a mask selection in input order — and the partition that picks the
+        ///     element keeps texts tied under <c>NpyString_cmp</c> in that order: <c>['\0x', nan, '\0y', 'z', nan, '\0w']</c>
+        ///     becomes <c>['\0x', '\0w', '\0y', 'z']</c>, so the element at index 1 is <c>'\0w'</c>.
+        /// </summary>
+        [TestMethod]
+        public void NanQuantile_TiedTexts_FollowNumPysNaNRemovalOrder()
+        {
+            using var a = A(TNaN, "\0x", double.NaN, "\0y", "z", double.NaN, "\0w");
+            using (var r = np.nanquantile(a, 0.34, method: "lower"))
+                r.GetAtIndex(0).Should().Be("\0w");
+            using (var r = np.nanquantile(a, 0.67, method: "nearest"))
+                r.GetAtIndex(0).Should().Be("\0y");
+            using (var r = np.nanpercentile(a, 50.0, method: "lower"))
+                r.GetAtIndex(0).Should().Be("\0w");
+        }
+
+        /// <summary>
+        ///     <c>np.searchsorted</c> converts the keys to <c>PyArray_PromoteTypes(keys, haystack)</c>, whose
+        ///     <c>common_instance</c> takes the present NA object and the FIRST operand's <c>coerce</c>, a <c>U</c> operand
+        ///     counting as <c>StringDType()</c> — so a <c>U</c>-array key into a <c>coerce=False</c> haystack is refused naming
+        ///     <c>StringDType()</c>, not the haystack's descriptor.
+        /// </summary>
+        [TestMethod]
+        public void SearchSorted_UKeys_AreRefusedNamingThePromotedDescriptor()
+        {
+            using var hay = np.array(new object[] { "a", "b" }, np.dtypes.StringDType(coerce: false));
+            Action plain = () => np.searchsorted(hay, np.array(new[] { "a" }));
+            plain.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast array data from dtype('<U1') to StringDType() according to the rule 'safe'");
+            using var hayNA = np.array(new object[] { "a", "b" }, np.dtypes.StringDType(na_object: null, coerce: false));
+            Action withNA = () => np.searchsorted(hayNA, np.array(new[] { "a" }));
+            withNA.Should().Throw<TypeError>()
+                .WithMessage("Cannot cast array data from dtype('<U1') to StringDType(na_object=None) according to the rule 'safe'");
+        }
     }
 }

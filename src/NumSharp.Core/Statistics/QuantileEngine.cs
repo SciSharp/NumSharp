@@ -60,29 +60,42 @@ namespace NumSharp.Statistics
         internal static QuantileMethod ParseMethod(string method)
         {
             if (method == null) throw new ArgumentNullException(nameof(method));
+            if (TryParseMethod(method, out var parsed))
+                return parsed;
+            // _quantile's `raise ValueError(f"{method!r} is not a valid method. Use one of: "
+            // f"{_QuantileMethods.keys()}")`, verbatim: the name's Python repr, then the dict's key view in its
+            // insertion order (ValueError is an ArgumentException, so existing catches still see it).
+            throw new ValueError(
+                $"{Backends.Printing.PyRepr.Str(method)} is not a valid method. Use one of: dict_keys(['inverted_cdf', " +
+                "'averaged_inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf', 'hazen', 'weibull', " +
+                "'linear', 'median_unbiased', 'normal_unbiased', 'lower', 'higher', 'midpoint', 'nearest'])");
+        }
+
+        /// <summary>
+        ///     <see cref="ParseMethod"/> without the error: whether <paramref name="method"/> is one of NumPy's thirteen
+        ///     names. <see cref="Compute"/> uses it to raise the unknown-name error where NumPy's <c>_quantile</c> does.
+        /// </summary>
+        /// <param name="method">The method name (case-sensitive; null is not a name).</param>
+        /// <param name="parsed">The method, or <see cref="QuantileMethod.Linear"/> when the name is unknown.</param>
+        /// <returns>True for a known name.</returns>
+        internal static bool TryParseMethod(string method, out QuantileMethod parsed)
+        {
             switch (method)
             {
-                case "linear":                    return QuantileMethod.Linear;
-                case "lower":                     return QuantileMethod.Lower;
-                case "higher":                    return QuantileMethod.Higher;
-                case "nearest":                   return QuantileMethod.Nearest;
-                case "midpoint":                  return QuantileMethod.Midpoint;
-                case "inverted_cdf":              return QuantileMethod.InvertedCdf;
-                case "averaged_inverted_cdf":     return QuantileMethod.AveragedInvertedCdf;
-                case "closest_observation":      return QuantileMethod.ClosestObservation;
-                case "interpolated_inverted_cdf": return QuantileMethod.InterpolatedInvertedCdf;
-                case "hazen":                     return QuantileMethod.Hazen;
-                case "weibull":                   return QuantileMethod.Weibull;
-                case "median_unbiased":           return QuantileMethod.MedianUnbiased;
-                case "normal_unbiased":           return QuantileMethod.NormalUnbiased;
-                default:
-                    // _quantile's `raise ValueError(f"{method!r} is not a valid method. Use one of: "
-                    // f"{_QuantileMethods.keys()}")`, verbatim: the name's Python repr, then the dict's key view in its
-                    // insertion order (ValueError is an ArgumentException, so existing catches still see it).
-                    throw new ValueError(
-                        $"{Backends.Printing.PyRepr.Str(method)} is not a valid method. Use one of: dict_keys(['inverted_cdf', " +
-                        "'averaged_inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf', 'hazen', 'weibull', " +
-                        "'linear', 'median_unbiased', 'normal_unbiased', 'lower', 'higher', 'midpoint', 'nearest'])");
+                case "linear":                    parsed = QuantileMethod.Linear; return true;
+                case "lower":                     parsed = QuantileMethod.Lower; return true;
+                case "higher":                    parsed = QuantileMethod.Higher; return true;
+                case "nearest":                   parsed = QuantileMethod.Nearest; return true;
+                case "midpoint":                  parsed = QuantileMethod.Midpoint; return true;
+                case "inverted_cdf":              parsed = QuantileMethod.InvertedCdf; return true;
+                case "averaged_inverted_cdf":     parsed = QuantileMethod.AveragedInvertedCdf; return true;
+                case "closest_observation":      parsed = QuantileMethod.ClosestObservation; return true;
+                case "interpolated_inverted_cdf": parsed = QuantileMethod.InterpolatedInvertedCdf; return true;
+                case "hazen":                     parsed = QuantileMethod.Hazen; return true;
+                case "weibull":                   parsed = QuantileMethod.Weibull; return true;
+                case "median_unbiased":           parsed = QuantileMethod.MedianUnbiased; return true;
+                case "normal_unbiased":           parsed = QuantileMethod.NormalUnbiased; return true;
+                default:                          parsed = QuantileMethod.Linear; return false;
             }
         }
 
@@ -95,7 +108,7 @@ namespace NumSharp.Statistics
         /// <param name="axisArr">The reduced axes, or null for the flattened data.</param>
         /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
         /// <param name="overwrite_input">Whether the data may be partitioned in place (a copy is staged anyway).</param>
-        /// <param name="method">The estimation method.</param>
+        /// <param name="method">The estimation method (ignored when <paramref name="methodName"/> is given).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
         /// <param name="qIsScalar">Whether q is a scalar: the result then has no leading q axis.</param>
         /// <param name="emptyReturnsNaN">np.median's rule: an empty reduced line yields NaN instead of raising.</param>
@@ -117,8 +130,31 @@ namespace NumSharp.Statistics
         ///     a q ARRAY, 0-d included, whose float64 weight promotes the result to float64
         ///     (<c>np.quantile(f32, np.array(0.5))</c> is float64). Null (the default) reads <paramref name="qIsScalar"/>,
         ///     the rule of the callers that pass a C# number for a scalar q.</param>
+        /// <param name="qShape">The dims of a q ARRAY of rank 1 or more (its values are <paramref name="q"/>, in C order):
+        ///     the result's leading axes. NumPy keeps a 2-d q's two axes (<c>np.quantile(a, q.reshape(2, 2))</c> is
+        ///     <c>(2, 2)</c>) and refuses rank 3 and above (<c>_quantile_ureduce_func</c>: <c>q must be a scalar or 1d</c>),
+        ///     after the axis checks. Null: one leading axis of <c>q.Length</c> unless <paramref name="qIsScalar"/>.</param>
+        /// <param name="methodName">The method as the caller named it, checked where NumPy's <c>_quantile</c> reads
+        ///     <c>_QuantileMethods[method]</c>: after the axis and rank checks, before the boolean subtract, and never by the
+        ///     nan forms when every slice is all NaN (their answer is then NaN in the data's dtype, whatever the name). Null:
+        ///     <paramref name="method"/> was parsed by the caller (np.median's fixed 'linear').</param>
+        /// <param name="integerQ">Whether q is an integer (or bool) array: 'linear''s virtual index <c>(n - 1) * q</c> is
+        ///     then an integer, which NumPy's <c>_quantile</c> takes instead of interpolating (its "supports_integers"
+        ///     path) — the 'lower' selection, in the data's dtype.</param>
         /// <returns>The quantiles; <paramref name="out"/> itself when one is given; a read-only 0-d result for a scalar q
         ///     over every axis (NumPy's scalar).</returns>
+        /// <exception cref="ValueError">A q of rank above 2 (<paramref name="qShape"/>), except for the nan forms over data
+        ///     that is NaN everywhere, where every slice returns <c>np.full(q.shape, nan)</c> before NumPy reaches the
+        ///     check.</exception>
+        /// <remarks>
+        ///     <b>The nan forms' all-NaN slices.</b> NumPy's <c>_nanquantile_1d</c> returns
+        ///     <c>np.full(q.shape, np.nan, dtype=arr1d.dtype)</c> for a slice holding nothing but NaN — the DATA's dtype even
+        ///     when a strong q array makes every other slice float64 — and <c>np.apply_along_axis</c> allocates its result
+        ///     from the FIRST slice's answer. So float16 / float32 data with a q array gives a result of the data's dtype
+        ///     exactly when the first slice (the only one for a flat reduction) is all NaN, the other slices' float64
+        ///     answers rounded into it (probed 2.4.2: <c>np.nanquantile([[nan, nan], [1, 2]] as float32, np.array(0.5),
+        ///     axis=1)</c> is float32 <c>[nan, 1.5]</c>; with the rows swapped it is float64).
+        /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="q"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
         /// <exception cref="ValueError">An axis repeats.</exception>
@@ -132,7 +168,8 @@ namespace NumSharp.Statistics
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
             bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
-            bool medianMean = false, bool? weakQ = null)
+            bool medianMean = false, bool? weakQ = null, long[] qShape = null, string methodName = null,
+            bool integerQ = false)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -154,6 +191,32 @@ namespace NumSharp.Statistics
             // reported before the boolean subtract below (np.quantile(bool, 0.5, axis=5) is NumPy's AxisError).
             if (axisArr != null)
                 NormalizeAxes(axisArr, a.ndim);
+
+            // `_quantile_ureduce_func`'s first statement refuses a q of rank above 2, after the axis checks (and, for the
+            // nan forms, after the empty-input return above). The nan forms reach it per slice and only for a slice that
+            // still holds a value once its NaNs are removed, so over data that is NaN everywhere every slice answers
+            // `np.full(q.shape, nan)` in the data's dtype instead (probed 2.4.2: (2, 2, 2) NaNs, float32 for float32 data).
+            if (qShape is { Length: > 2 })
+            {
+                if (!(ignoreNaN && IsFloatTc(a.typecode) && AllNaN(a)))
+                    throw new ValueError("q must be a scalar or 1d");
+                return AllNaNSlicesResult(a, axisArr, keepdims, qShape, @out);
+            }
+
+            // The method name, where NumPy's `_quantile` looks it up: after the axis and rank checks, before the boolean
+            // subtract. The nan forms reach `_quantile` only through a slice that still holds a value once its NaNs are
+            // removed, so over data that is NaN everywhere an unknown name raises nothing and every slice answers NaN.
+            if (methodName != null && !TryParseMethod(methodName, out method))
+            {
+                if (ignoreNaN && IsFloatTc(a.typecode) && AllNaN(a))
+                    return AllNaNSlicesResult(a, axisArr, keepdims,
+                        qIsScalar ? Array.Empty<long>() : qShape ?? new long[] { q.Length }, @out);
+                ParseMethod(methodName);   // throws NumPy's ValueError (or ArgumentNullException for a null name)
+            }
+            // An integer (or bool) q: 'linear''s virtual index is an integer, which `_quantile` takes ("supports_integers")
+            // instead of interpolating: the 'lower' selection.
+            if (integerQ && method == QuantileMethod.Linear)
+                method = QuantileMethod.Lower;
 
             // NumPy raises TypeError for boolean input with a continuous (interpolating)
             // method: the underlying lerp performs `b - a` and boolean subtraction is
@@ -226,30 +289,25 @@ namespace NumSharp.Statistics
             }
 
             // ── Output shape: q's shape (if non-scalar) prepended to the reduced shape. ──
+            // A 2-d q keeps both axes: the kernel writes q index j's row block at j * outerSize, which in a C-contiguous
+            // (q0, q1, outer...) buffer is exactly element (j / q1, j % q1) — the same bytes as a (q0 * q1, outer...) one.
             int qLen = q.Length;
+            long[] qDims = qIsScalar ? Array.Empty<long>() : qShape ?? new long[] { qLen };
             int outerDims = staged.ndim - 1;
             long[] outShape;
             if (axisArr == null)
             {
-                outShape = qIsScalar ? Array.Empty<long>() : new long[] { qLen };
+                outShape = (long[])qDims.Clone();
             }
             else
             {
-                long[] keepShape = new long[outerDims];
-                for (int i = 0; i < outerDims; i++) keepShape[i] = staged.Shape.dimensions[i];
-                if (qIsScalar)
-                {
-                    outShape = keepShape;
-                }
-                else
-                {
-                    outShape = new long[outerDims + 1];
-                    outShape[0] = qLen;
-                    for (int i = 0; i < outerDims; i++) outShape[i + 1] = keepShape[i];
-                }
+                outShape = new long[qDims.Length + outerDims];
+                for (int i = 0; i < qDims.Length; i++) outShape[i] = qDims[i];
+                for (int i = 0; i < outerDims; i++) outShape[qDims.Length + i] = staged.Shape.dimensions[i];
             }
+            int qNdim = qDims.Length;
 
-            NDArray resultRaw = new NDArray(outTypeCode, qIsScalar && outerDims == 0 ? new Shape() : Shape.Adopt(outShape));
+            NDArray resultRaw = new NDArray(outTypeCode, outShape.Length == 0 ? new Shape() : Shape.Adopt(outShape));
 
             // ── Empty reduction axis ──
             // The IL/Complex row kernels assume at least one element per row and index
@@ -265,10 +323,10 @@ namespace NumSharp.Statistics
                     throw new IndexOutOfRangeException(
                         "index -1 is out of bounds for axis 0 with size 0");
                 FillWithNaN(resultRaw, outTypeCode);
-                return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+                return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
             }
             if (outerSize == 0)
-                return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+                return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
 
             // ── Pre-compute the sorted list of buffer indices the partition needs to touch. ──
             // For continuous methods that's (floor, ceil) per q; discrete methods touch one
@@ -345,14 +403,89 @@ namespace NumSharp.Statistics
                 if (rowKManaged != null) ArrayPool<int>.Shared.Return(rowKManaged);
             }
 
-            return FinalizeResult(resultRaw, a, axisArr, keepdims, qIsScalar, @out);
+            // The nan forms' all-NaN FIRST slice (see the remarks): np.apply_along_axis allocates its result from the
+            // first slice's answer, `np.full(q.shape, nan, dtype=arr1d.dtype)` when that slice holds only NaN, so a strong
+            // q over float16 / float32 data (the only case where the computed dtype differs from the data's) gives the
+            // data's dtype, every other slice's float64 answer rounded into it. Staged row 0 is NumPy's first slice: the
+            // reduced axes are innermost and the kept ones in C order, as np.ndindex walks them.
+            if (nanAware && outTypeCode != a.typecode && FirstRowAllNaN(staged, outerSize, n))
+                resultRaw = resultRaw.astype(a.typecode);
+
+            return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
+        }
+
+        /// <summary>
+        ///     Whether every element of a float array is NaN, the nan forms' all-NaN slice test. The first element settles
+        ///     the common case without a pass; only an array that starts with a NaN pays the vectorized <c>isnan</c> +
+        ///     <c>all</c> reduction (its temporary released here).
+        /// </summary>
+        /// <param name="x">A non-empty float16 / float32 / float64 array (any layout).</param>
+        /// <returns>True when no element is a number.</returns>
+        private static bool AllNaN(NDArray x)
+        {
+            if (!double.IsNaN(Utilities.Converts.ToDouble(x.GetAtIndex(0))))
+                return false;
+            using var nan = np.isnan(x);
+            return np.all(nan);
+        }
+
+        /// <summary>
+        ///     Whether the first reduced line of the staged data (row 0 of its <c>(outer, n)</c> view: NumPy's first slice)
+        ///     holds nothing but NaN.
+        /// </summary>
+        /// <param name="staged">The staged data: the reduced axis innermost and contiguous.</param>
+        /// <param name="outerSize">The number of lines.</param>
+        /// <param name="n">The length of each line (at least 1).</param>
+        /// <returns>True when line 0 is all NaN.</returns>
+        private static bool FirstRowAllNaN(NDArray staged, long outerSize, int n)
+        {
+            if (outerSize == 1)
+                return AllNaN(staged);
+            using var lines = staged.reshape(Shape.Adopt(new[] { outerSize, (long)n }));
+            using var first = lines[0];
+            return AllNaN(first);
+        }
+
+        /// <summary>
+        ///     The nan forms' answer for a q of rank above 2 over data that is NaN everywhere: every slice is
+        ///     <c>np.full(q.shape, np.nan, dtype=arr1d.dtype)</c> (NumPy never reaches the rank check), stacked as
+        ///     <c>np.apply_along_axis</c> stacks them: q's axes first, then the kept axes.
+        /// </summary>
+        /// <param name="a">The data (float, all NaN, non-empty).</param>
+        /// <param name="axisArr">The reduced axes (already validated), or null for the flattened data.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="qShape">q's dims (rank 3 or more).</param>
+        /// <param name="out">An optional output array of the result's shape.</param>
+        /// <returns>The NaN result in the data's dtype; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        private static NDArray AllNaNSlicesResult(NDArray a, int[] axisArr, bool keepdims, long[] qShape, NDArray @out)
+        {
+            var dims = new List<long>(qShape);
+            if (axisArr != null)
+            {
+                var reduced = new HashSet<int>(NormalizeAxes(axisArr, a.ndim));
+                for (int i = 0; i < a.ndim; i++)
+                    if (!reduced.Contains(i))
+                        dims.Add(a.Shape.dimensions[i]);
+            }
+            var result = new NDArray(a.typecode, Shape.Adopt(dims.ToArray()));
+            FillWithNaN(result, a.typecode);
+            return FinalizeResult(result, a, axisArr, keepdims, qShape.Length, @out);
         }
 
         /// <summary>keepdims / out= plumbing shared by the normal and empty-axis paths.</summary>
+        /// <param name="resultRaw">The computed result: q's axes, then the kept axes.</param>
+        /// <param name="a">The data.</param>
+        /// <param name="axisArr">The reduced axes, or null.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="qNdim">How many leading axes are q's (0 for a scalar q).</param>
+        /// <param name="out">An optional output array.</param>
+        /// <returns>The result, or <paramref name="out"/> itself.</returns>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         private static NDArray FinalizeResult(
-            NDArray resultRaw, NDArray a, int[] axisArr, bool keepdims, bool qIsScalar, NDArray @out)
+            NDArray resultRaw, NDArray a, int[] axisArr, bool keepdims, int qNdim, NDArray @out)
         {
-            NDArray result = ApplyKeepdims(resultRaw, a, axisArr, keepdims, qIsScalar);
+            NDArray result = ApplyKeepdims(resultRaw, a, axisArr, keepdims, qNdim);
 
             if (@out is not null)
             {
@@ -635,11 +768,21 @@ namespace NumSharp.Statistics
             return DefaultEngine.normalize_axis_tuple(axes, ndim);
         }
 
-        internal static NDArray ApplyKeepdims(NDArray result, NDArray source, int[] axisArr, bool keepdims, bool qIsScalar)
+        /// <summary>
+        ///     <c>_ureduce</c>'s keepdims: the result reshaped so every reduced axis of the data is back with length one,
+        ///     after q's leading axes.
+        /// </summary>
+        /// <param name="result">The result: q's axes, then the kept axes.</param>
+        /// <param name="source">The data.</param>
+        /// <param name="axisArr">The reduced axes, or null for all of them.</param>
+        /// <param name="keepdims">Whether to keep the reduced axes (false returns <paramref name="result"/>).</param>
+        /// <param name="qNdim">How many leading axes of <paramref name="result"/> are q's.</param>
+        /// <returns>The reshaped view, or <paramref name="result"/> itself.</returns>
+        internal static NDArray ApplyKeepdims(NDArray result, NDArray source, int[] axisArr, bool keepdims, int qNdim)
         {
             if (!keepdims) return result;
 
-            int qDim = qIsScalar ? 0 : 1;
+            int qDim = qNdim;
             int srcNd = source.ndim;
 
             long[] outShape;
@@ -648,7 +791,7 @@ namespace NumSharp.Statistics
             if (axisArr == null)
             {
                 outShape = new long[qDim + srcNd];
-                if (!qIsScalar) outShape[0] = result.Shape.dimensions[0];
+                for (int i = 0; i < qDim; i++) outShape[i] = result.Shape.dimensions[i];
                 for (int i = 0; i < srcNd; i++) outShape[qDim + i] = 1;
             }
             else
@@ -656,7 +799,7 @@ namespace NumSharp.Statistics
                 int[] norm = NormalizeAxes(axisArr, srcNd);
                 var axisSet = new HashSet<int>(norm);
                 outShape = new long[qDim + srcNd];
-                if (!qIsScalar) outShape[0] = result.Shape.dimensions[0];
+                for (int i = 0; i < qDim; i++) outShape[i] = result.Shape.dimensions[i];
 
                 int srcIdx = qDim;
                 for (int i = 0; i < srcNd; i++)

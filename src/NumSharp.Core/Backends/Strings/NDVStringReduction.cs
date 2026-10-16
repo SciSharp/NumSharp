@@ -223,7 +223,9 @@ namespace NumSharp.Backends.Strings
             NDArray result = @out is not null && !castOut
                 ? @out
                 : new NDArray(DTypeRegistry.VString.Descr(loopDescr.VString.HasNAObject, loopDescr.VString.na_object, loopDescr.VString.coerce),
-                              dims.Length == 0 ? Shape.Scalar : (scalarInput ? Shape.Adopt(dims) : Shape.ReductionOutputShape(dims, a.Shape, ax)),
+                              // NumPy's reduction iterator lays the result out over the input AND the where= mask
+                              // (both vote on the axis order; a disagreement keeps C order).
+                              dims.Length == 0 ? Shape.Scalar : (scalarInput ? Shape.Adopt(dims) : Shape.ReductionOutputShape(dims, a.Shape, ax, where?.Shape)),
                               true);
             // COPY_IF_OVERLAP: a caller's StringDType out that may share cells with the input reduces a copy of the input
             // (NumPy's iterator copies the operand; its first-element copy then reads the original, which is the same text).

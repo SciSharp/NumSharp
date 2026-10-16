@@ -362,10 +362,31 @@ namespace NumSharp
         ///     a C-only allocation reordered them.
         /// </remarks>
         internal static Shape ReductionOutputShape(long[] outputDims, Shape input, int axis)
+            => ReductionOutputShape(outputDims, input, axis, null);
+
+        /// <summary>
+        ///     <see cref="ReductionOutputShape(long[], Shape, int)"/> for a reduction with a <c>where=</c> mask: NumPy's
+        ///     reduction iterator (<c>PyUFunc_ReduceWrapper</c>) holds the mask as its third operand, so the mask votes in
+        ///     <c>npyiter_find_best_axis_ordering</c> next to the input, and where the two disagree on a pair of axes C order
+        ///     wins (probed 2.4.2: a <c>(4, 4, 3)</c> input of element strides <c>(1, 12, 4)</c> reduced along axis 1 under a
+        ///     C-ordered mask gives a C result, element strides <c>(3, 3, 1)</c>; the input alone votes for <c>(1, 12, 4)</c>).
+        /// </summary>
+        /// <param name="outputDims">The result's dims (see the overload). Adopted: pass a fresh array.</param>
+        /// <param name="input">The reduced array's shape.</param>
+        /// <param name="axis">The reduced axis, already normalized.</param>
+        /// <param name="where">The mask's shape — broadcast to <paramref name="input"/>'s dims or of fewer / extent-1 axes,
+        ///     whose stride-0 or extent-1 axes abstain as in NpyIter — or null when there is no mask.</param>
+        /// <returns>A fresh, offset-0, dense shape of <paramref name="outputDims"/>.</returns>
+        internal static Shape ReductionOutputShape(long[] outputDims, Shape input, int axis, Shape? where)
         {
             int nd = input.NDim;
             bool keepdimsForm = outputDims.Length == nd;
-            var full = NpyIterOutputShape((long[])input.dimensions.Clone(), new ReadOnlySpan<Shape>(in input));
+            // The voters: the input, then the mask (the allocated result has no strides yet and cannot vote).
+            Shape full;
+            if (where is { } mask)
+                full = NpyIterOutputShape((long[])input.dimensions.Clone(), new[] { input, mask });
+            else
+                full = NpyIterOutputShape((long[])input.dimensions.Clone(), new ReadOnlySpan<Shape>(in input));
             int[] outerFirst = full.DenseAxisOrder();
 
             // npyiter_new_temp_array: strides assigned walking the iteration order innermost first; a dropped reduced axis
