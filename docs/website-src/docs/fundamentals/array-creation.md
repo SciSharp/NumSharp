@@ -52,6 +52,20 @@ np.array([1, 2, 3], np.float64);     // [1. 2. 3.] as float64
 np.array([1, 2, 3], np.int8);        // int8
 ```
 
+### Text and character inputs
+
+```csharp
+var unicode = np.array(new[] { "cat", "bird" });                    // U4, width inferred
+var fixedBytes = np.array(new[] { "cat", "bird" }, "S8");         // S8, ASCII conversion
+var variable = np.array(new[] { "cat", "bird" }, np.dtype("T")); // StringDType()
+var codeUnits = np.array(new[] { 'a', 'b' });                        // Char, not U1
+NDArray textScalar = "cat";                                        // 0-d U3, not a char vector
+```
+
+`S` widths count bytes and `U` widths count Unicode code points; long writes truncate. `StringDType` has no fixed text width and can carry `na_object` / `coerce` settings. Pass **`template.dtype`**, not `template.typecode`, to preserve these parameters.
+
+A direct `byte[]` / jagged `byte[][]` passed to `np.array` is numeric data. Use an `object[]` of `byte[]` values for an `S` array, or `np.frombuffer(bytes, "S8")` for fixed-size byte records. This differs from the text-specific arguments of `np.@char`, where a `byte[]` means one bytestring. See [Strings, bytes and chararrays](strings-and-bytes.md).
+
 ### The int32-vs-int64 gotcha
 
 `np.array(int[])` produces **int32** (it follows the .NET `int` type), but `np.arange` and most intrinsic integer functions produce **int64** (NumPy 2.x's integer default):
@@ -120,7 +134,7 @@ np.vander(np.array([1, 2, 3, 4]), 3);
 
 ### N-D constructors
 
-`zeros`, `ones`, `empty`, and `full` take a shape and default to **float64**:
+`zeros`, `ones` and `empty` default to **float64**; `full` infers its dtype from the fill value. All take an explicit dtype. For text, `zeros(..., "U8")` and `zeros(..., "T")` give empty strings, `ones` gives `"1"`, and `full` stores the fill value as text:
 
 ```csharp
 np.zeros((2, 3));                      // 2×3 of 0.0  (float64)
@@ -278,7 +292,8 @@ Slices are views. Use `.copy()` when you need independence - see [Copies and vie
 
 ## Related reading
 
-- [Data types](../dtypes.md) - the 15 dtypes and how inference and promotion work.
+- [Data types](../dtypes.md) - numeric and text descriptors, inference and promotion.
+- [Strings, bytes and chararrays](strings-and-bytes.md) - fixed widths, variable-width text, NA values and C# input forms.
 - [Copies and views](copies-and-views.md) - the memory-sharing rules behind step 3.
 - [I/O with NumSharp](io.md) - reading and writing arrays (step 4).
 - [NumPy array creation guide](https://numpy.org/doc/stable/user/basics.creation.html) - the upstream article.

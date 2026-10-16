@@ -51,8 +51,8 @@ namespace NumSharp
     /// <summary>
     ///     NumPy's <c>numpy.char.chararray</c>: a string array (<c>S</c> or <c>U</c>) whose single elements come back with
     ///     their trailing whitespace stripped (<c>c[0]</c> of <c>['ab  ']</c> is <c>'ab'</c>) and whose views and copies
-    ///     stay chararrays. Create one with <see cref="np.CharModule.chararray"/>, <see cref="np.CharModule.array"/> or
-    ///     <see cref="np.CharModule.asarray"/>, or view an existing string array with
+    ///     stay chararrays. Create one with <see cref="CharModule.chararray"/>, <see cref="CharModule.array"/> or
+    ///     <see cref="CharModule.asarray"/>, or view an existing string array with
     ///     <see cref="NDArray.view(DType, Type)"/>. NumPy keeps the class for backward compatibility with Numarray and
     ///     recommends plain <c>S</c> / <c>U</c> arrays and the <c>np.char</c> / <c>np.strings</c> functions for new code.
     /// </summary>

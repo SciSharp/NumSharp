@@ -23,9 +23,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="sep">The separator (null for whitespace; see <see cref="CharModule.split"/>).</param>
         /// <param name="maxsplit">The most splits per element (null or negative for no limit).</param>
-        /// <returns>NumPy's object array of lists.</returns>
+        /// <returns>A disposable <see cref="NDListArray"/> representing NumPy's object array of lists; the caller must
+        ///     dispose the holder explicitly, even when array work runs inside an <see cref="NDScope"/>.</returns>
         /// <exception cref="TypeError">See <see cref="CharModule.split"/>.</exception>
-        /// <exception cref="OverflowException">A maxsplit past <c>Py_ssize_t</c>.</exception>
+        /// <exception cref="System.OverflowException">A maxsplit past <c>Py_ssize_t</c>.</exception>
         /// <exception cref="ValueError">An empty separator.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> element, separator or word above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
@@ -37,9 +38,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="sep">The separator (null for whitespace).</param>
         /// <param name="maxsplit">The most splits per element, from the right.</param>
-        /// <returns>NumPy's object array of lists.</returns>
+        /// <returns>A disposable <see cref="NDListArray"/> representing NumPy's object array of lists; the caller must
+        ///     dispose the holder explicitly, even when array work runs inside an <see cref="NDScope"/>.</returns>
         /// <exception cref="TypeError">See <see cref="CharModule.rsplit"/>.</exception>
-        /// <exception cref="OverflowException">A maxsplit past <c>Py_ssize_t</c>.</exception>
+        /// <exception cref="System.OverflowException">A maxsplit past <c>Py_ssize_t</c>.</exception>
         /// <exception cref="ValueError">An empty separator.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> element, separator or word above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
@@ -50,7 +52,8 @@ namespace NumSharp
         ///     unstripped (a trailing line boundary is not lost to the chararray's strip).
         /// </summary>
         /// <param name="keepends">Whether each line keeps its boundary (Python's truth rule; null is false).</param>
-        /// <returns>NumPy's object array of lists.</returns>
+        /// <returns>A disposable <see cref="NDListArray"/> representing NumPy's object array of lists; the caller must
+        ///     dispose the holder explicitly, even when array work runs inside an <see cref="NDScope"/>.</returns>
         /// <exception cref="TypeError">See <see cref="CharModule.splitlines"/>.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> element, keepends value or line above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
@@ -66,7 +69,7 @@ namespace NumSharp
         /// <exception cref="TypeError">See <see cref="CharModule.join(object, object)"/>.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> separator or sequence above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="seq"/> is an empty <see cref="NDListArray"/> passed as an
+        /// <exception cref="System.NotSupportedException"><paramref name="seq"/> is an empty <see cref="NDListArray"/> passed as an
         ///     object (call <see cref="join(NDListArray)"/>).</exception>
         public NDArray join(object seq) => np.@char.join(this, seq);
 

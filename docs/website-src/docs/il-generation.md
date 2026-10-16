@@ -19,9 +19,7 @@ and edge-case semantics survive the trip into hand-written machine code.
 
 ## At a Glance
 
-The kernel layer is large, and every figure below is measured from the
-checked-in source (see [Refreshing the Inventory](#refreshing-the-inventory)),
-never estimated:
+The tables below preserve a **numeric-kernel inventory snapshot** (see [Refreshing the Inventory](#refreshing-the-inventory)). They predate the text-kernel families described in [Text kernels](#text-kernels-are-descriptor-aware), so their file/factory counts are not current totals for the whole library:
 
 | The system in numbers | |
 | --- | ---: |
@@ -32,7 +30,7 @@ never estimated:
 | `DynamicMethod` kernel factories | 57 |
 | Distinct generated-kernel caches | 45 |
 | Binary / unary / reduction / comparison ops | 17 / 35 / 20 / 6 |
-| Dtypes every kernel must handle | 15 |
+| Numeric/Boolean/Char storage types in this matrix | 15 |
 | Binary memory-layout paths | 5 |
 | Total kernel source | ~48,000 lines |
 | Raw IL instructions emitted by hand | ~7,000 |
@@ -156,6 +154,28 @@ type utilities. Only the loop-driving model differs.
 | Reflection or intrinsic lookup behavior | `VectorMethodCache.cs` / `ScalarMethodCache.cs` | Eligibility checks and emitters must agree on which runtime methods exist. |
 | Cache observability or test reset | `GeneratedDelegates.cs` | Public live counts and internal clear hooks are centralized there. |
 
+
+### Text kernels are descriptor-aware
+
+The numeric type switch is not the whole dtype system. `S`, `U` and `StringDType`
+share `NPTypeCode.String`, but differ in element layout, width, ownership and NA rules.
+A text kernel must resolve the **descriptor**, not treat that enum as one CLR type.
+
+- `ILKernelGenerator.Text*` emits fixed-width comparison, truth, concatenation and
+  repetition loops with width-specialized chunks and broadcast stages. NDIter supplies
+  strides and masks; the rows form handles short runs without a call per element.
+- `ILKernelGenerator.Text.VString` uses allocator-aware helpers over `T` cells.
+  Inline text can be processed inside the cell; longer text and NA cells follow the
+  descriptor's rules. Output strings belong to the destination's allocator, never
+  to an allocator referenced by a raw copied cell.
+- Text sorting/searching uses prefix keys and NumPy's ordering rules; text/number
+  casts use the shared format/parse machinery and descriptor-aware transfers.
+- The numeric `NDExpr` compiler does **not** thereby gain string leaves:
+  `np.evaluate` still refuses text. Use ordinary text operations instead.
+
+See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for the
+implemented public surface, and [String operands and buffers](NDIter.md#string-operands-and-buffers)
+for the iterator contract.
 
 ## Source Inventory
 
@@ -774,8 +794,10 @@ care about: how many kernels this process has compiled.
    sizes - no managed allocations in the hot body.
 5. **Separate path selection from loop emission.** The house style is a
    dispatcher, then path-specific `Generate*` methods, then `Emit*Loop` helpers.
-6. **Handle all 15 dtypes,** or document the unsupported ones and give them a
-   clear fallback.
+6. **Make dtype support explicit.** Cover the 15 numeric/Boolean/Char storage types
+   where the operation applies, and dispatch `S` / `U` / `T` through their descriptors.
+   Unsupported combinations need the appropriate refusal or a correct fallback, never
+   a raw numeric loop over text cells.
 7. **Preserve view semantics.** Offset is already in the base pointer; strides
    must handle non-contiguous, negative, and broadcast cases.
 8. **Add NumPy-derived tests** - contiguous, strided, broadcast, empty/scalar,

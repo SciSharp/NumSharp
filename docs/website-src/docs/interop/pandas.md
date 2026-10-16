@@ -110,7 +110,14 @@ opt-in, not ordinary Pandas-to-Pandas CoW isolation.
 | numeric categorical / sparse | no | categorical values / dense numeric values |
 | complex64 | no NumSharp view | widens to NumSharp complex128 on copy |
 | text column of `str` (`'str'`, `object`) | no: `to_numpy()` is an object array, nothing to share | a NumSharp `StringDType()` copy |
-| text with a missing value (`NaN`, `pd.NA`), mixed object, datetime, timedelta, timezone, `MultiIndex` values | unsupported | unsupported: no corresponding NumSharp dtype (the refusal names the first non-`str` element) |
+| text column projected as an object array containing a missing value (`None`, `NaN`, `pd.NA`) | no | refused by the object-array import policy; convert explicitly to a NumPy `StringDType` with a representable NA object first |
+| mixed object, datetime, timedelta, timezone, `MultiIndex` values | unsupported | no corresponding general object/time storage in NumSharp |
+
+**Missing text is supported by NumSharp's `StringDType`.** The direct Pandas limitation above is the
+projection: the bridge does not guess an NA policy for an arbitrary object array. Convert that
+projection in Python to `np.dtypes.StringDType(na_object=None)` (or another supported sentinel) and
+copy it through `ToNDArray()`. `pd.NA` itself has no C# sentinel representation, so normalize it first.
+See [How text crosses](pythonnet-numpy.md#how-does-text-cross).
 
 Axis labels, names, duplicate columns, and hierarchical row labels are Pandas metadata. The adapter
 returns only the two-dimensional value matrix, exactly like `DataFrame.to_numpy()`.
@@ -139,7 +146,7 @@ because the name already exists.
 
 - scalar, empty Series, zero-row frames, zero-column frames, empty RangeIndex, and 1×1 frames;
 - C/F layouts, positive strides, reversed negative strides, and storage offsets;
-- all 15 NumSharp source dtypes, including Char→uint16 and Decimal→float64 boundaries;
+- all 15 numeric/Boolean/Char source dtypes, including Char→uint16 and Decimal→float64 boundaries;
 - NaN payloads, infinities, signed zero, unsigned maxima, and complex values;
 - mixed blocks, nullable missing values, categorical, sparse, object and semantic time dtypes;
 - duplicate labels and MultiIndex axes;
@@ -172,7 +179,7 @@ because the name already exists.
 | 10 | complex64 copy-widens while View declines | [`Complex64ViewDeclines_AndCopyWidensToNumSharpComplex128`][gate-edge] |
 | 11 | empty and degenerate ranks/shapes/dtypes are preserved | [`EmptyAndDegenerateShapes_PreserveRankShapeAndResolvedDtype`][gate-edge] |
 | 12 | positive and negative Series strides preserve logical values | [`PositiveAndNegativeStridedSeries_PreserveLogicalOffsetsAndStrides`][gate-edge] |
-| 13 | all 15 NumSharp source dtypes round-trip through a numeric Series | [`All15NumSharpDtypes_RoundTripThroughPandasNumericSeries`][gate-edge] |
+| 13 | all 15 numeric/Boolean/Char source dtypes round-trip through a numeric Series | [`All15NumSharpDtypes_RoundTripThroughPandasNumericSeries`][gate-edge] |
 | 14 | labels are metadata; duplicate/MultiIndex axes do not alter value order | [`AxisLabelsDuplicatesAndMultiIndex_AreMetadataOnly_ValuesKeepTwoDimensionalOrder`][gate-edge] |
 | 15 | derived NumSharp views retain Pandas storage after Python wrappers die | [`DerivedNumSharpView_KeepsPandasStorageAliveAfterAllPythonWrappersDie`][gate-edge] |
 | 16 | View/Copy/Auto and adapter-disable policies remain distinct | [`CodecModes_RespectPandasViewCopyAutoAndExplicitAdapterDisable`][gate-edge] |

@@ -6,16 +6,18 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     NumPy's <c>numpy.strings</c> module: the vectorized string operations over fixed-width <c>S</c> / <c>U</c> arrays.
-        ///     Strings phase 2 fills it subphase by subphase (P2.3: <see cref="add"/> and <see cref="multiply"/>; the length,
-        ///     search, strip, pad and case families follow in P2.5 / P2.6).
+        ///     NumPy's <c>numpy.strings</c> module over fixed-width <c>S</c> / <c>U</c> and variable-width
+        ///     <c>StringDType</c> text. The public <see cref="add"/> and <see cref="multiply"/> functions concatenate and
+        ///     repeat elements; length, search, strip, pad, case and codec APIs are not public yet.
+        ///     Use ordinary <c>np.sort</c>, <c>np.unique</c> and comparison functions for the implemented ordering operations.
         /// </summary>
         /// <remarks>
         ///     A C# <see cref="string"/> argument of a <c>numpy.strings</c> function is NumPy's Python <c>str</c> — a 0-d <c>U</c>
-        ///     scalar of its length (<see cref="NDArray.Scalar(object)"/>): text is the only thing these parameters can mean, so
-        ///     NumSharp's legacy <c>string → NDArray</c> conversion (a char array) does not apply here. A <c>byte[]</c> stays a
-        ///     numeric <c>uint8</c> array; build an <c>S</c> scalar with <see cref="NDArray.Scalar(object)"/> for NumPy's
-        ///     <c>bytes</c>.
+        ///     scalar of its length (<see cref="NDArray.Scalar(object)"/>), just as the ordinary implicit
+        ///     <c>string → NDArray</c> conversion is. It neither parses numeric text nor constructs a vector of chars.
+        ///     A <c>byte[]</c> stays a numeric <c>uint8</c> array here; build an <c>S</c> scalar with
+        ///     <see cref="NDArray.Scalar(object)"/> for NumPy's <c>bytes</c>. This differs from the text-specific
+        ///     <c>np.@char</c> arguments, which interpret a <c>byte[]</c> as one bytestring.
         ///     <para>
         ///     <c>[ModuleName("np.strings")]</c> files its members under NumPy's <c>numpy.strings</c> in the API inventory
         ///     (<c>coverage/NumSharp.Tools.ApiInventory</c>), whose guard refuses a public nested static class of <c>np</c>

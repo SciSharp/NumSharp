@@ -37,6 +37,22 @@ Every arithmetic (`+ - * / %`, unary `-`), comparison (`== != < > <= >=`), and l
 
 ---
 
+## Text ufuncs
+
+Ufuncs are not limited to numbers. `np.add` concatenates text, and the six comparison ufuncs compare strings with broadcasting, `out=` and `where=`. Fixed-width `S` / `U` repetition needs a sized output when calling `np.multiply` directly; `np.strings.multiply(a, i)` sizes one for you. A `StringDType` (`T`) operand can allocate its variable-width result through `np.multiply` or `*`.
+
+```csharp
+var names = np.array(new[] { "cat", "dog" });
+var tagged = np.add(names, "!");                   // ['cat!' 'dog!']
+var repeated = np.strings.multiply(names, 2);     // ['catcat' 'dogdog']
+var text = names.astype(np.dtypes.StringDType());
+var joined = np.sum(text);                        // 'catdog': concatenation, not numeric addition
+```
+
+The dtype determines which loops exist. `np.sum(names)` and `np.max(names)` refuse fixed-width strings as NumPy does, while their `T` forms compute. `np.sqrt` has no text loop. `np.equal` does **not** strip whitespace; the legacy `np.@char.equal` function does and has no ufunc `out=` / `where=` parameters. See [Text operations](strings-and-bytes.md#available-text-operations) for the supported families and NA rules.
+
+---
+
 ## Broadcasting
 
 Ufuncs apply [broadcasting](../broadcasting.md) so inputs of different shapes still combine - a size-1 dimension is stepped with stride 0 (the same stored element feeds every position along that axis):
@@ -69,7 +85,7 @@ var x = np.array([1, 2, 3], np.int8);
 (x + np.array([1])).dtype;         // int32 - the int32 array (strong) forces promotion
 ```
 
-Full promotion rules and the 15×15 table are in [Data types → Type promotion](../dtypes.md#type-promotion) and [NumPy Compliance](../compliance.md).
+Numeric promotion and descriptor-based text promotion are described in [Data types → Type promotion](../dtypes.md#type-promotion) and [NumPy Compliance](../compliance.md). A text width or `StringDType` NA policy cannot be represented by the numeric 15×15 enum table.
 
 ---
 
@@ -152,6 +168,8 @@ Chaining ufuncs (`a * b + c`) normally allocates an intermediate per operation. 
 NDArray r = np.evaluate((NDExpr)a * b + 2);                 // fused a*b+2, one pass
 NDArray s = np.evaluate(NDExpr.Sum((NDExpr)a * b));         // fused sum(a*b), no temp
 ```
+
+**Fusion is currently numeric-only.** Text operands (`S`, `U`, `T`) raise `StringComputationNotSupportedException` in `np.evaluate`; use the ordinary text functions above instead.
 
 This is the NumSharp analog of `numexpr.evaluate` - measured 3–6× faster than the equivalent NumPy chain on large arrays. Per-node dtypes follow the same NEP 50 rules as the individual ufuncs. See [NDIter](../NDIter.md) and the API reference.
 

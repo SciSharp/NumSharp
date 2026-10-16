@@ -27,7 +27,8 @@ TOOL = HERE / "NumSharp.Tools.TestInventory" / "NumSharp.Tools.TestInventory.csp
 TOOL_DLL = HERE / "NumSharp.Tools.TestInventory" / "bin" / "Release" / "net8.0" / "NumSharp.Tools.TestInventory.dll"
 CORPUS = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "corpus"
 SCHEMA_VERSION = 2
-GENERATOR_VERSION = "1.3.0"
+# Distinguish the corrected phase-tag wording from snapshots that called every phase-2 case deferred.
+GENERATOR_VERSION = "1.3.1"
 OUTPUT_FILES = ("tests-oracle-report.json", "tests-oracle-report.csv", "summary.md", "tests-oracle-manifest.json")
 
 PROJECT_ROOTS = {
@@ -220,6 +221,22 @@ def corpus_op(path: Path, case: dict[str, Any]) -> str | None:
 
 
 def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Inventory committed contracts without running them or inferring a pass/deferral count.
+
+    Returns:
+        File summaries, operation summaries and aggregate counts. String phase tags remain provenance,
+        not implementation status; host-pin metadata is excluded from executable contract totals.
+
+    Raises:
+        OSError: A required corpus file or archive cannot be read.
+        UnicodeError: A corpus file is not valid UTF-8.
+        json.JSONDecodeError: A case or archive manifest is not valid JSON.
+        zipfile.BadZipFile: The NPY oracle archive is invalid.
+        KeyError: A required archive member or schema field is absent.
+        TypeError: A schema value has an incompatible type.
+        ValueError: Schema values cannot be ordered or counted as expected.
+        SystemExit: No string-oracle section files are present, which would make the inventory incomplete.
+    """
     files: list[dict[str, Any]] = []
     op_stats: dict[str, dict[str, Any]] = {}
     serialized_rows = contract_rows = metadata_rows = unmapped_contract_rows = 0
@@ -355,8 +372,8 @@ def scan_oracle() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str,
     npy_cases = len(npy_manifest.get("cases", []))
     # The string oracle (Stage D): its own schema (section-prefixed ids, a phase per case), one file per section
     # (strings_<section>.jsonl; a single strings.jsonl until 2026-10-13, split before it reached GitHub's 100 MiB
-    # limit), replayed by NumSharp.Tests.Oracle/Strings. Phase-2 cases are NumPy computations on text, gated as
-    # "deferred" until NumSharp computes them; they are real replay contracts and count as cases.
+    # limit), replayed by NumSharp.Tests.Oracle/Strings. The phase tag classifies a contract's origin, not its
+    # current implementation status: shipped phase-2 computations keep that tag. Only a replay can count deferrals.
     strings_dir = ROOT / "test" / "NumSharp.Tests.Oracle" / "Strings" / "corpus"
     strings_paths = sorted(strings_dir.glob("strings_*.jsonl"))
     if not strings_paths:
@@ -508,6 +525,19 @@ def csv_text(tests: list[dict[str, Any]]) -> str:
 
 
 def summary_text(report: dict[str, Any]) -> str:
+    """Render inventory counts without presenting a phase tag as an execution result.
+
+    Args:
+        report: Validated report from ``render``, including test and oracle summary dictionaries.
+
+    Returns:
+        Markdown for the published summary; phase-2 counts classify contracts, not pending work.
+
+    Raises:
+        KeyError: A required report field is absent.
+        TypeError: A report container or count has an incompatible type.
+        ValueError: A count does not support the numeric formatting used by the summary.
+    """
     tests = report["summary"]["tests"]
     oracle = report["summary"]["oracle"]
     lines = [
@@ -525,7 +555,7 @@ def summary_text(report: dict[str, Any]) -> str:
         f"| FuzzMatrix methods | {tests['fuzzMatrixMethods']:,} |",
         f"| Corpus Oracle test cases | {oracle['corpusRows']:,} |",
         f"| Specialized flags/layout/NPY/string test cases | {oracle['specializedOracleCases']:,} |",
-        f"| String dtype test cases (phase 2, deferred) | {oracle['stringOracleCases']:,} "
+        f"| String dtype test cases (phase-2-tagged subset, not pending work) | {oracle['stringOracleCases']:,} "
         f"({oracle['stringOraclePhase2Cases']:,}) |",
         f"| Total Oracle test cases | {oracle['totalSerializedContracts']:,} |",
         f"| Oracle operation keys | {oracle['opKeys']:,} |",

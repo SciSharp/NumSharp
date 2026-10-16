@@ -1,6 +1,6 @@
 #!/bin/bash
 # Auto-generate llms.txt and llms-full.txt from actual documentation
-# Parses toc.yml, markdown files, and API metadata - no hardcoded content
+# Includes source markdown and API metadata, plus a compact hand-maintained dtype/API primer.
 
 set -e
 
@@ -81,6 +81,10 @@ parse_toc() {
 # ============================================================================
 # Generate llms.txt
 # ============================================================================
+# Generate llms.txt from the published top-level and fundamentals guides, so the text guide is not omitted.
+# Arguments: none; reads SRC_DIR, OUTPUT_DIR and SITE_URL from the script configuration.
+# Returns: 0 after writing the summary. Filesystem/tool failures terminate the script under set -e.
+# The explicit fundamentals glob includes the string guide without exposing the unreleased interop pages.
 generate_llms_txt() {
     local output="$OUTPUT_DIR/llms.txt"
 
@@ -122,9 +126,10 @@ QUICKSTART
     echo "" >> "$output"
 
     if [ -d "$SRC_DIR/docs" ]; then
-        for md_file in "$SRC_DIR/docs/"*.md; do
+        for md_file in "$SRC_DIR/docs/"*.md "$SRC_DIR/docs/fundamentals/"*.md; do
             if [ -f "$md_file" ]; then
-                filename=$(basename "$md_file" .md)
+                filename=${md_file#"$SRC_DIR/docs/"}
+                filename=${filename%.md}
                 title=$(extract_title "$md_file")
                 desc=$(extract_description "$md_file")
                 echo "- [$title](${SITE_URL}/docs/${filename}.html): $desc" >> "$output"
@@ -184,7 +189,15 @@ API_FALLBACK
     cat >> "$output" << 'TYPES'
 ## Supported Data Types
 
-bool, byte, short, ushort, int, uint, long, ulong, float, double, decimal, char
+Numeric/Boolean/Char storage: bool, sbyte, byte, short, ushort, int, uint, long, ulong,
+Half, float, double, decimal, char, System.Numerics.Complex.
+
+Text: fixed-width bytes (S), fixed-width UCS-4 Unicode (U), variable-width UTF-8 StringDType (T).
+All three text families share NPTypeCode.String; preserve the full array.dtype descriptor for widths
+and StringDType's na_object/coerce settings. C# char is a separate 2-byte UTF-16 code unit.
+np.@char is the numpy.char module; NDCharArray is its fixed-width string subclass, and NDListArray
+holds split results. Storage, conversion, ordering, membership, concatenation and repetition work;
+additional np.strings transform/Unicode APIs and fused text expressions are still pending.
 
 ## Key Concepts
 
@@ -208,6 +221,10 @@ TYPES
 # ============================================================================
 # Generate llms-full.txt
 # ============================================================================
+# Include the same published guides as llms.txt, retaining full text rather than just descriptions.
+# Arguments: none; reads SRC_DIR and OUTPUT_DIR from the script configuration.
+# Returns: 0 after writing the document. Filesystem/tool failures terminate the script under set -e.
+# Keep the index and body globs identical so every advertised fundamentals article has its content included.
 generate_llms_full_txt() {
     local output="$OUTPUT_DIR/llms-full.txt"
 
@@ -228,7 +245,7 @@ generate_llms_full_txt() {
     [ ! -d "$docs_dir" ] && docs_dir="$SRC_DIR/articles"
 
     if [ -d "$docs_dir" ]; then
-        for md_file in "$docs_dir/"*.md; do
+        for md_file in "$docs_dir/"*.md "$docs_dir/fundamentals/"*.md; do
             if [ -f "$md_file" ] && [[ "$(basename "$md_file")" != "toc.yml" ]]; then
                 title=$(extract_title "$md_file")
                 echo "$toc_num. $title" >> "$output"
@@ -241,7 +258,7 @@ generate_llms_full_txt() {
 
     # Concatenate all documentation files
     if [ -d "$docs_dir" ]; then
-        for md_file in "$docs_dir/"*.md; do
+        for md_file in "$docs_dir/"*.md "$docs_dir/fundamentals/"*.md; do
             if [ -f "$md_file" ] && [[ "$(basename "$md_file")" != "toc.yml" ]]; then
                 echo "" >> "$output"
                 # Strip YAML frontmatter and include content

@@ -108,6 +108,19 @@ Round-trips `savetxt` (byte-exact values). Parameters mirror NumPy: `dtype` (def
 
 On 1,000 to 1,000,000 rows (pinned to two cores), NumSharp reads integer text 2.6 to 2.7 times as fast as NumPy and float text 1.3 to 1.6 times. Float parsing is bounded by `double.Parse`, the analog of NumPy's `strtod`.
 
+### Text columns and mixed tables
+
+`loadtxt` can read `S`, `U` and `StringDType` columns, not just numbers. Keep heterogeneous columns in separate arrays, or load all fields as text and cast selected columns:
+
+```csharp
+var lines = new[] { "Rex,9", "Fido,3" };
+var labels = np.loadtxt(lines, dtype: np.dtypes.StringDType(), delimiter: ",", usecols: new[] { 0 });
+var ages = np.loadtxt(lines, dtype: np.int32, delimiter: ",", usecols: new[] { 1 });
+// labels: ['Rex' 'Fido']; ages: [9 3]
+```
+
+Choose a sized `U` / `S` when truncation is intentional, or `StringDType` to keep whole fields. Use `fmt: "%s"` when writing text arrays with `savetxt`; its default numeric format is not a text format. A StringDType missing object is written as its text (`None`, `nan`, etc.), so a text-file round trip needs an explicit dtype/converter to restore the missing-value policy. `.npy` / `.npz` preserve the descriptor; loading a `T` member requires `allow_pickle: true`.
+
 ### Text encodings
 
 `encoding:` takes any name Python's `codecs.lookup` resolves (`"utf-16le"`, `"Windows-1252"`, `"L1"`, …), for these codecs, all exactly as CPython implements them, with CPython's error texts:
@@ -161,6 +174,8 @@ var view = np.frombuffer(buf, np.float32);    // reinterpret bytes (no copy of t
 `tofile`/`fromfile` are the headerless raw path - you must know the dtype and byte order yourself (there is no self-describing header, unlike `.npy`). With a `sep`, `tofile` writes text instead: `format % (item,)` for each element, where `item` is the Python object NumPy's `getitem` returns. So every float dtype formats as a Python `float` (a `float32` 0.1 writes `0.10000000149011612`), and a `bool` is an `int` (`'%x'` of `true` writes `1`). Each element's text must be ASCII (`UnicodeEncodeError` otherwise, where NumPy 2.4.2 crashes); `sep` and `format` may not hold a NUL or a lone surrogate, which is checked before the file is opened. `np.frombuffer` reinterprets an existing .NET buffer as an array of a given dtype and is the general bridge for interop - see [Any library via np.frombuffer](../interop/np-frombuffer.md).
 
 ---
+
+**The raw binary route is for fixed-layout data, including `S` / `U`, not `StringDType`.** `T` cells cannot be persisted as independent raw values: binary `tofile`, `fromfile`, `fromstring` and `frombuffer` refuse them. Use the StringDType `.npy` / `.npz` or text-file routes instead.
 
 ## Size limits
 

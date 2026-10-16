@@ -149,9 +149,11 @@ element, so they import as the empty vector `(0,)`, never as a one-element 0-d a
 
 ## Dtypes
 
-`System.Numerics.Tensors` containers are **unconstrained generics** over an unmanaged `T` - there is no
-dtype enum and no fixed element-type table. So **all 15 NumSharp dtypes cross zero-copy as their own CLR
-type**; nothing is refused and nothing is converted:
+The bridge's methods constrain `T` to **unmanaged CLR element types**. The 15 numeric/Boolean/Char
+storage types below cross as themselves; no conversion is needed for those types. **Text dtypes
+`S`, `U` and `StringDType` do not cross through this bridge**: their packed representation is not a
+`Tensor<string>` backing array. Use NumSharp's text accessors to materialize .NET values when needed,
+or the [pythonnet text bridge](pythonnet-numpy.md#how-does-text-cross) for NumPy arrays.
 
 | NumSharp | Crosses as | Note |
 |---|---|---|
@@ -201,6 +203,8 @@ away. `System.Numerics.Tensors` does not compute NumSharp operations - which is 
 `Tensor<T>`/`TensorSpan<T>`, and reading such tensors back.
 
 ## Claims ledger
+
+The dtype claims in this ledger cover the 15 unmanaged CLR types listed above, not the text families.
 
 | # | Claim | Gate |
 |---|---|---|

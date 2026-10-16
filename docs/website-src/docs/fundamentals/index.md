@@ -23,10 +23,10 @@ If you have written NumPy before, these pages are the fastest way to map that kn
 | [Array creation](array-creation.md) | The six ways to make an `NDArray` - from .NET sequences, intrinsic functions, joins, disk, raw bytes, and random | [basics.creation](https://numpy.org/doc/stable/user/basics.creation.html) |
 | [Indexing on NDArray](indexing.md) | Basic indexing (views), advanced indexing (copies), boolean masks, the flat iterator, and assignment | [basics.indexing](https://numpy.org/doc/stable/user/basics.indexing.html) |
 | [I/O with NumSharp](io.md) | The byte-exact `.npy`/`.npz` stack, text I/O (`loadtxt`/`savetxt`), and raw-binary I/O | [basics.io](https://numpy.org/doc/stable/user/basics.io.html) |
-| [Data types](../dtypes.md) | The 15 supported dtypes, how they map to NumPy, dtype strings, promotion, and the two types with no NumPy analog | [basics.types](https://numpy.org/doc/stable/user/basics.types.html) |
+| [Data types](../dtypes.md) | Numeric and text descriptors, NumPy mappings, promotion, and the .NET-specific Decimal and Char types | [basics.types](https://numpy.org/doc/stable/user/basics.types.html) |
 | [Broadcasting](../broadcasting.md) | How arrays of different shapes combine in arithmetic - the shape rules and the stride-0 mechanism | [basics.broadcasting](https://numpy.org/doc/stable/user/basics.broadcasting.html) |
 | [Copies and views](copies-and-views.md) | Which operations share memory and which duplicate it, and how to tell | [basics.copies](https://numpy.org/doc/stable/user/basics.copies.html) |
-| [Arrays of strings and bytes](strings-and-bytes.md) | The `Char` dtype, why NumPy's string/bytes dtypes are not ported, and what to use instead | [basics.strings](https://numpy.org/doc/stable/user/basics.strings.html) |
+| [Strings, bytes and chararrays](strings-and-bytes.md) | Fixed-width S/U, variable-width StringDType, missing values, text computation, numpy.char and NDCharArray; how they differ from C# Char | [basics.strings](https://numpy.org/doc/stable/user/basics.strings.html) |
 | [Structured arrays](structured-arrays.md) | Why NumSharp does not implement record/structured dtypes, and the .NET-idiomatic alternatives | [basics.rec](https://numpy.org/doc/stable/user/basics.rec.html) |
 | [Universal functions (ufunc) basics](ufuncs.md) | Elementwise ops, `out=`/`where=`/`dtype=`, broadcasting, casting, and reductions | [basics.ufuncs](https://numpy.org/doc/stable/user/basics.ufuncs.html) |
 
@@ -39,7 +39,7 @@ If you have written NumPy before, these pages are the fastest way to map that kn
 NumSharp's goal is that ported NumPy code behaves identically. So each article follows its NumPy source closely - same concepts, same section order, the same worked examples - but:
 
 - **Code is C#, not Python.** `np.zeros((2, 3))`, `arr["1:3, :2"]`, `arr.astype(np.float64)`. Python slice literals (`a[1:5:2]`) become **strings** in C# (`a["1:5:2"]`) because C# has no slice syntax - see [Indexing](indexing.md).
-- **The 15 NumSharp dtypes stand in for NumPy's set.** NumSharp adds `Decimal` and `Char` (no NumPy analog) and omits `complex64`, the string/bytes/void/object dtypes, `datetime64`/`timedelta64`, and structured dtypes. Each article says plainly where a NumPy feature has no NumSharp counterpart and what to use instead.
+- **Text is array data too.** Alongside its 15 numeric/Boolean/Char storage types, NumSharp supports NumPy's `S`, `U` and `StringDType` text families. A descriptor carries the width or missing-value policy; `Char` remains a separate UTF-16 code-unit type. Object, void and structured arrays, native `complex64` storage and datetime/timedelta storage are still outside the supported array types. Each article distinguishes implemented behavior from the remaining gaps.
 - **Divergences are documented, never silent.** Where NumSharp cannot match NumPy exactly (e.g. a C# `int[]` is a *strong* array that wraps on downcast, where a Python list is *weak* and raises), the article flags it. Behavioral differences are gated in the test suite under the `Misaligned` category.
 
 ---

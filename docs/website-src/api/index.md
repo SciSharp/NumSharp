@@ -18,7 +18,10 @@ The essential types for working with NumSharp.
 | @NumSharp.np | Static API class (like `import numpy as np` in Python) |
 | @NumSharp.Shape | Array dimensions and strides |
 | @NumSharp.Slice | Slice specification for array indexing |
-| @NumSharp.Generic.NDArray`1 | Generic typed wrapper for type-safe access |
+| @NumSharp.Generic.NDArray`1 | Generic typed wrapper for unmanaged CLR element types; use `NDArray` for text |
+| @NumSharp.DType | Full dtype descriptor, including text width or StringDType parameters |
+| @NumSharp.NDCharArray | NumPy's fixed-width `chararray`, with stripping element access and comparisons |
+| @NumSharp.NDListArray | Disposable split-result container: one list of text pieces per element |
 
 ### Quick Example
 
@@ -72,6 +75,28 @@ Functions for combining multiple arrays.
 | `np.vstack(arrays)` | Stack arrays vertically (row-wise) |
 | `np.hstack(arrays)` | Stack arrays horizontally (column-wise) |
 | `np.dstack(arrays)` | Stack arrays depth-wise (along 3rd axis) |
+
+---
+
+## Strings, Bytes and Character Arrays
+
+`NDArray` stores all three NumPy text families. See [Strings, bytes and chararrays](../docs/fundamentals/strings-and-bytes.md) for creation, truncation, encoding, NA values and the current operation-by-operation support.
+
+| API | Behavior |
+|-----|----------|
+| `np.array(string[])`, `np.dtype("U8")` / `np.str_` | Fixed-width UCS-4 text; width in code points |
+| `np.dtype("S8")` / `np.bytes_` | Fixed-width bytes; `item()` returns `byte[]` |
+| `np.dtypes.StringDType(...)`, `np.dtype("T")` | Variable-width UTF-8 with optional `na_object` and `coerce` |
+| `np.strings.add`, `np.strings.multiply` | Elementwise concatenation and repetition |
+| `np.sort`, `np.searchsorted`, `np.unique`, `np.isin`, set routines | Compute on `S`, `U` and `T` |
+| `np.sum`, `np.cumsum`, `np.max`, `np.min` over `T` | Concatenation / lexical reductions; `S` / `U` have NumPy's refusals |
+| `np.@char.equal` … `np.@char.greater_equal`, `compare_chararrays` | Fixed-width comparisons that strip trailing ASCII whitespace |
+| `np.@char.add`, `np.@char.multiply` | Concatenation / repetition; multiply maps type errors to NumPy's ValueError |
+| `np.@char.array`, `np.@char.asarray`, `np.@char.chararray` | Construct `NDCharArray`, NumPy's `chararray` |
+| `np.@char.split`, `rsplit`, `splitlines` | Return `NDListArray`; dispose the result explicitly |
+| `np.@char.join` | Join each element's characters, not array elements |
+
+`char` is a C# keyword, hence `np.@char`. The module still converts to the legacy **Char dtype** in dtype parameters; that 2-byte UTF-16 code-unit type is distinct from the text dtypes and `NDCharArray`. The `np.strings` length, search, transform and Unicode families are still pending; their names are not a claim of current availability.
 
 ---
 
@@ -364,7 +389,7 @@ These types are for advanced users extending NumSharp or understanding its inter
 
 ## Supported Data Types
 
-NumSharp supports 15 public array dtypes:
+The 15 numeric/Boolean/Char storage types are listed below. The three text families use the descriptor-based `String` lane after the table; an enum value is not the full dtype.
 
 | NPTypeCode | C# Type | NumPy Equivalent |
 |------------|---------|------------------|
@@ -383,9 +408,11 @@ NumSharp supports 15 public array dtypes:
 | Double | `double` | `np.float64` |
 | Decimal | `decimal` | (no equivalent) |
 | Complex | `System.Numerics.Complex` | `np.complex128` |
+| String | UCS-4 / bytes / UTF-8 cells | `np.str_` (`U`), `np.bytes_` (`S`), `np.dtypes.StringDType()` (`T`) |
 
-`NPTypeCode.Empty`, `NPTypeCode.String`, and the `NPTypeCode.Float` alias are enum/compatibility
-values, not additional public array dtypes. `Float` resolves to `Single`.
+`NPTypeCode.String` is a real storage lane, shared by three different descriptor classes. Use `arr.dtype`, `np.dtype("U8")`, `np.dtype("S8")` or `np.dtypes.StringDType(...)` to keep the width, encoding and NA policy. `NDArray<string>` is not the storage representation.
+
+`NPTypeCode.Empty` is a sentinel; `NPTypeCode.Float` is an alias of `Single`, not another dtype.
 
 ---
 

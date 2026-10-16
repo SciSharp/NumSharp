@@ -26,8 +26,19 @@
     href: buffering.md
   - name: Copies and views
     href: fundamentals/copies-and-views.md
-  - name: Arrays of strings and bytes
+  - name: Strings, bytes & chararrays
     href: fundamentals/strings-and-bytes.md
+    items:
+    - name: Choosing a text dtype
+      href: fundamentals/strings-and-bytes.md#choosing-a-text-representation
+    - name: StringDType & missing values
+      href: fundamentals/strings-and-bytes.md#variable-width-text-stringdtype
+    - name: numpy.char & NDCharArray
+      href: fundamentals/strings-and-bytes.md#the-numpychar-module
+    - name: Splitting & joining
+      href: fundamentals/strings-and-bytes.md#splitting-and-joining-split-rsplit-splitlines-and-join
+    - name: C# Char is not a string dtype
+      href: fundamentals/strings-and-bytes.md#the-char-dtype
   - name: Structured arrays
     href: fundamentals/structured-arrays.md
   - name: Universal functions (ufunc) basics

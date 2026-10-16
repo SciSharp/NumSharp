@@ -105,6 +105,14 @@ That separation is intentional: index-only and boxed convenience APIs should not
 
 Like `NDIterRef`, `np.broadcast(...)` has **no explicit operand-count cap** - NumPy caps the multi-iterator at 64 (`NPY_MAXARGS`); NumSharp sizes per-operand structures dynamically (see [Divergences from NumPy](#divergences-from-numpy)).
 
+### String operands and buffers
+
+`np.nditer` supports `S`, `U` and `StringDType` (`T`) operands with their **full descriptors**, including fixed widths, byte order, NA objects and coercion. Use `op_dtypes: new DType[] { "U8" }` for a text iteration dtype, not an `NPTypeCode.String` entry. Text ↔ text and text ↔ number buffered casts run their descriptor-aware transfer loops.
+
+A `T` operand requires **`refs_ok`**, even when a buffer casts it to another dtype. Each `T` buffer owns an allocator, and fills, flushes and iterator copies duplicate strings rather than copying raw cells. Operand views use the allocator of the memory they actually reference. Dispose the iterator to flush pending writes and release those allocators. The unmanaged CLR `ref T` / `Span<T>` iteration extensions are not a `ref string` interface.
+
+The buffering used by these routes is NumPy's core/outer buffering port, including buffered reductions, `grow_inner`, buffer reuse and masked write-back. Older numeric-only descriptions below should not be used to infer that a `T` cell is an ordinary 16-byte value. See [Iterating text](iterating-and-enumerating.md#iterating-text) for an application example and [StringDType iteration](fundamentals/strings-and-bytes.md#iterating-with-npnditer) for casts and write-back.
+
 ### Typed iteration - unboxed elements and Span chunks
 
 A NumSharp extension with no NumPy counterpart: Python has no unboxed generics, so `np.nditer`'s `it[0]` must hand back an array object. NumSharp's can hand back a **reference**.
@@ -238,7 +246,7 @@ Other deliberate differences:
 
 - **Flag bit layout.** NumSharp reserves low bits 0-7 for the compatibility flags (`SourceBroadcast`, `SourceContiguous`, `DestinationContiguous`). NumPy-parity flags (`IDENTPERM`, `HASINDEX`, `REDUCE`, ...) sit at bits 8-15. Transfer flags pack into the top byte at shift 24. Semantics match NumPy; positions do not.
 - **Two stride units.** NumPy's axis data is byte-strided. NumSharp keeps source-array axis strides in **elements** (`state.Strides`) and scales them with `SrcElementSizes`; `BufStrides` and the `NDInnerLoopFunc` contract are **bytes**. Whole-array DirectIL helpers receive element strides. Mixing these units is a correctness bug, not a performance detail.
-- **No Python object support.** `REFS_OK`, garbage collection hooks, and `NDIter_GetBufferNeedsAPI` are no-ops. All cast routines are written assuming the data is plain unmanaged bytes.
+- **No general Python-object dtype.** This does not make `REFS_OK` a no-op: `StringDType` holds references to text storage, requires the flag and uses allocator-aware transfers. Fixed-width text also needs descriptor-sized copies and casts; not every operand can be handled as a numeric CLR lane.
 - **Int64 indexing.** Iteration counters are `long`. This matches 64-bit NumPy's `npy_intp`; the difference appears on 32-bit hosts, where NumPy's index type is pointer-sized.
 - **NumSharp-only internal flag.** `PARALLEL_SAFE` records a construction-time range-splitting judgment. It is metadata for planned/selected parallel drivers, not automatic parallel execution by `ForEach`.
 - **Typed empty iteration.** `np.nditer<T>` and `np.nditer_chunks<T>` treat an empty array as an empty C# collection. The managed parity wrapper follows NumPy and requires `zerosize_ok`.
@@ -383,6 +391,7 @@ There are four mostly-disjoint flag enums. A quick reference:
 | `C_INDEX`, `F_INDEX` | Track a flat index in C or F order |
 | `MULTI_INDEX` | Track per-dim coords (needed for `GetMultiIndex`) |
 | `EXTERNAL_LOOP` | Caller handles inner dim - iterator returns inner-dim-sized chunks |
+| `REFS_OK` | Permit reference-holding dtypes, required for `StringDType` even when the iteration dtype is numeric |
 | `COMMON_DTYPE` | Find common dtype across all operands and cast to it |
 | `REDUCE_OK` | Allow reduction operands (needed for axis reductions) |
 | `BUFFERED` | Enable operand buffering (required with cross-type casting) |

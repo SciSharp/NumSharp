@@ -64,6 +64,21 @@ Run them in a `dotnet run` file-based app, LINQPad, a console project, or a C# n
 
 ---
 
+NumSharp also holds homogeneous **text** arrays: labels, categories, fixed-width byte fields and variable-width strings. Their shapes, views and indexing work like numeric arrays; their valid operations depend on the text dtype. They are not restricted to a .NET `string[]` beside your numeric arrays.
+
+## Arrays of text
+
+```csharp
+var labels = np.array(new[] { "pear", "fig", "apple", "fig" }); // U5
+var sorted = np.sort(labels);                                  // ['apple' 'fig' 'fig' 'pear']
+var (values, counts) = np.unique(labels, return_counts: true);   // ['apple' 'fig' 'pear'], [1 2 1]
+var first = labels.item(0);                                    // "pear", a C# string
+```
+
+The default string array is **fixed-width Unicode**: here each element has room for five code points, so a longer write would be cut. Use `np.array(texts, np.dtypes.StringDType())` for text that can grow, or `np.dtypes.StringDType(na_object: null)` for missing values. Byte strings use `S`, and C# `char` values remain a separate UTF-16 code-unit dtype. The [strings and chararrays guide](fundamentals/strings-and-bytes.md) explains all four and `np.@char` (NumPy's `numpy.char`).
+
+---
+
 ## What is an "array"?
 
 An array stores data in a grid. A **1-D** array is like a list; a **2-D** array like a table; a **3-D** array like a stack of tables; and so on to any number of dimensions - which is why the type is called `NDArray` (**N-D**imensional array).
@@ -689,7 +704,7 @@ np.savetxt("np.csv", a, fmt: "%.2f", delimiter: ",", header: "1,2,3,4");
 
 `np.loadtxt` reads columns with `usecols`, skips headers with `skiprows`, and takes a `delimiter` - see [I/O with NumSharp](fundamentals/io.md).
 
-> **Mixed / labeled CSVs** (string *and* numeric columns, like a `music.csv` with an `Artist` name column) don't fit a single homogeneous `NDArray`, and NumSharp has no structured dtype (its fixed-width string arrays hold text, but one array holds one dtype). For those, use a .NET CSV/dataframe library or pandas through the [pythonnet bridge](interop/pandas.md), then hand the numeric columns to NumSharp. See [Structured arrays](fundamentals/structured-arrays.md) for why and the alternatives.
+> **Mixed / labeled CSVs** still need one dtype per `NDArray`, not one dtype per column. Read text columns with `np.loadtxt(..., dtype: np.dtypes.StringDType(), usecols: ...)` and numeric columns into separate numeric arrays, or load every field as text and cast selected columns. This does not create a structured dtype. A .NET dataframe library or [pandas](interop/pandas.md) is another option for heterogeneous tables; see [Structured arrays](fundamentals/structured-arrays.md).
 
 ---
 

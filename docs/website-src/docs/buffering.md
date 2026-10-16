@@ -60,6 +60,17 @@ For external memory (via `np.frombuffer()` with a dispose callback), the caller 
 
 ---
 
+## Text buffers are descriptor-dependent
+
+- **`S<n>`** stores `n` bytes per element. A byte buffer can be viewed with `np.frombuffer(buffer, "S8")`.
+- **`U<n>`** stores `n` UCS-4 code points, four bytes each. It is not the UTF-16 representation of a .NET `string` or `char[]`; encode/convert before interpreting bytes as `U`.
+- **`StringDType` (`T`)** stores 16-byte cells whose long texts belong to an allocator. `nbytes` counts the cells, not the full text allocation. `tobytes()` may include process-local pointers and is not a value serialization. `np.frombuffer(..., "T")`, `.data` and dtype-reinterpreting views are refused; use `np.array`, `astype`, `copyto` or the supported file/interop routes.
+- **A managed `string[]` cannot be pinned as NumPy text.** Its elements are object references, not adjacent `S` / `U` units or `T` cells. `np.array(string[])` converts the values into packed text storage.
+
+Preserve **`arr.dtype`**, not `arr.typecode`, when passing text between APIs. Views share their owner's storage (including a `T` allocator); a copy duplicates the values into independent storage. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md).
+
+---
+
 ## Creating Arrays from Buffers
 
 The most common scenario is interpreting an existing buffer as a NumSharp array. Maybe you've read a binary file, received a network packet, or have data from a native library. You want to work with it as an NDArray without copying gigabytes of data.
@@ -276,33 +287,9 @@ Console.WriteLine(independent[0]); // 1 - independent copy
 
 ### Memory Lifetime
 
-When you create a view, you're responsible for keeping the source alive:
+A view over a managed `byte[]` or supported unmanaged-element `T[]` **pins and roots the source**. Returning that view from a method is safe even when the source variable was local: the pin belongs to the shared storage and is released when the last array reference releases it.
 
-```csharp
-NDArray GetData()
-{
-    byte[] localBuffer = new byte[1024];
-    FillWithData(localBuffer);
-    return np.frombuffer(localBuffer, typeof(float));
-    // BUG: localBuffer can be GC'd after this returns!
-}
-```
-
-The returned NDArray points into `localBuffer`, but once `GetData()` returns, nothing holds a reference to `localBuffer`. The GC might collect it, and the NDArray becomes a dangling pointer.
-
-The fix is either to copy:
-
-```csharp
-return np.frombuffer(localBuffer, typeof(float)).copy();
-```
-
-Or to let NumSharp own the memory by using a different approach:
-
-```csharp
-var arr = np.zeros<float>(256);  // NumSharp owns this memory
-FillWithData(arr);
-return arr;
-```
+A raw native pointer is different. Without an ownership callback, NumSharp cannot keep its allocation alive; the caller must not free or reuse it until every view is finished. `.copy()` detaches the values when independent ownership is needed. This distinction also applies to fixed-width text viewed over a byte buffer.
 
 ---
 
@@ -549,20 +536,7 @@ var arr = np.frombuffer(buf, typeof(int), offset: 96);  // OK, reads 1 int
 
 ### Access Violation / Segmentation Fault
 
-Usually means you're accessing freed memory:
-
-```csharp
-NDArray arr;
-{
-    byte[] localBuffer = new byte[1024];
-    arr = np.frombuffer(localBuffer, typeof(float));
-}
-// localBuffer may be GC'd here
-
-arr[0] = 1.0f;  // CRASH: accessing freed memory
-```
-
-Fix: either copy the data or ensure the buffer outlives the NDArray.
+Check borrowed native pointers, disposed arrays, and raw `Unsafe` views first: none may outlive the memory it reads. A `byte[]` passed directly to `np.frombuffer` is pinned and rooted, so merely leaving the local variable's scope is **not** a use-after-free. For `StringDType`, also check that no code copied or edited packed cells as if they were ordinary bytes; use the descriptor-aware APIs instead.
 
 ### Memory Leak
 

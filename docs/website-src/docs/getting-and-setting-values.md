@@ -30,6 +30,27 @@ The asymmetry on fancy/boolean indexing is deliberate and matches NumPy: **readi
 
 ---
 
+## Reading and writing text
+
+For `S`, `U` and `StringDType` arrays, use the **descriptor-aware** indexers and `item()`:
+
+```csharp
+var names = np.array(new[] { "cat", "dog" }, "U4");
+string name = (string)names.item(0); // "cat"
+names[1] = "zebras";               // "zebr": a U4 store truncates
+var text = names.astype(np.dtypes.StringDType(na_object: null));
+text[1] = null;                     // a missing value, not "None"
+object value = text.item(1);        // null
+```
+
+An `S` element is a `byte[]`; a `U` element is a `string`; a `T` element is a `string` or its configured NA object. `NDArray.AsStringArray(a)` materializes string values in C order; use `item()` / `tolist()` when missing objects must remain distinct from text.
+
+**`GetString` / `SetString` read and write a vector of `Char` code units as one string.** They are not the element accessors for `S`, `U` or `T`. Nor can a typed raw accessor or `Span<string>` view the packed text storage.
+
+`NDCharArray` adds another rule: `c[0].item()` returns the whitespace-stripped element, while `c.item(0)` returns its unstripped stored value. A stripped element is a read-only stand-in, not a write-through view; assign through `c[0] = value` to update the array. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md).
+
+---
+
 ## Getting values
 
 ### Whole sub-arrays - the indexer

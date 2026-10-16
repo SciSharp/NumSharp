@@ -94,6 +94,23 @@ With float steps `arange` can't predict the element count exactly (floating-poin
 
 ---
 
+## Text arrays
+
+Strings use the same `NDArray`, indexing and broadcasting model as numbers:
+
+```csharp
+var names = np.array(new[] { "cat", "dog", "bird" }); // U4: inferred fixed width
+var matches = names == "cat";                         // [True False False]
+var ordered = np.sort(names);                         // ['bird' 'cat' 'dog']
+var doubled = np.strings.multiply(names, 2);          // ['catcat' 'dogdog' 'birdbird']
+var growing = names.astype(np.dtypes.StringDType());  // variable-width UTF-8
+growing[0] = "a much longer label";                   // no fixed-width truncation
+```
+
+Use `"S8"` for fixed-width byte strings, `"U8"` for eight Unicode code points, or `np.dtypes.StringDType(na_object: null)` for variable-width text with a missing-value sentinel. A C# `'a'` is a **Char code unit**; `"a"` is a **string**. NumPy's legacy `numpy.char` module is **`np.@char`** in C#, and `np.@char.array(...)` creates an `NDCharArray` with whitespace-stripping element access and comparisons. See [Strings, bytes and chararrays](fundamentals/strings-and-bytes.md) for the implemented functions and remaining transform APIs.
+
+---
+
 ## Printing arrays
 
 Printing an `NDArray` (via `ToString()` / `Console.WriteLine`) lays it out like nested lists: the last axis left-to-right, the second-to-last top-to-bottom, higher axes separated by a blank line.

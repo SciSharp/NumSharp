@@ -6,8 +6,8 @@
       <h1>NumSharp</h1>
     </div>
     <p class="ns-home-lede">
-      A .NET port of NumPy focused on API parity, unmanaged NDArray storage,
-      view semantics, broadcasting, and runtime-generated SIMD kernels.
+      A .NET port of NumPy for numeric arrays, Unicode strings, byte strings, and
+      variable-width text, with shared-memory views, broadcasting, and runtime-generated SIMD kernels.
     </p>
     <div class="ns-home-actions" aria-label="Primary documentation links">
       <a class="ns-home-button ns-home-button-primary" href="docs/intro.md">Start with NDArray</a>
@@ -46,7 +46,12 @@ Console.WriteLine(a + b);  // [1 3 5 7 9]</code></pre>
       <a class="ns-doc-card" href="docs/dtypes.md">
         <span>Types</span>
         <strong>Dtypes</strong>
-        <p>The 15 supported types, .NET and NumPy mappings, promotion, casting, and SIMD coverage.</p>
+        <p>Numeric and text dtypes, .NET and NumPy mappings, promotion, casting, and SIMD coverage.</p>
+      </a>
+      <a class="ns-doc-card" href="docs/fundamentals/strings-and-bytes.md">
+        <span>Text</span>
+        <strong>Strings, bytes &amp; chararrays</strong>
+        <p>Fixed-width S/U, StringDType with missing values, np.@char, text operations, and C# Char.</p>
       </a>
       <a class="ns-doc-card" href="docs/broadcasting.md">
         <span>Semantics</span>

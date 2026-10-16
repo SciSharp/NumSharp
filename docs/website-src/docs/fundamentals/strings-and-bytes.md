@@ -1,14 +1,60 @@
-# Working with arrays of strings and bytes
+# Strings, bytes and character arrays
 
-NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `bytes_` (`S`, bytes). It stores, reads, writes, converts, copies, casts and prints them byte for byte like NumPy 2.4.2.
+NumSharp supports NumPy's **fixed-width Unicode (`U`), fixed-width bytes (`S`) and variable-width `StringDType` (`T`)** as real array dtypes. Create them, index and reshape them, compare and sort them, convert between text and numbers, and exchange them with files or embedded NumPy. No Python runtime is needed for NumSharp's own text operations.
 
-Conversion between text and numbers works as in NumPy: a number written into a text array is its scalar's `str()`, and a text cast to a number is parsed by Python's `int()`, `float()` or `complex()`, with NumPy's errors.
+`np.@char` is the C# spelling of **`numpy.char`**, and `NDCharArray` is its **`chararray`** subclass. Neither is the same thing as NumSharp's existing **`Char` dtype**, which stores individual .NET UTF-16 code units. Use the table below to choose deliberately.
 
-Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition, sorting, searching, unique values, the set routines, histograms and quantiles compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add`, `multiply` and its `chararray` class (`np.@char`). The other `np.strings` functions are a later stage (NumSharp's `np.strings` has `add` and `multiply` so far). Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+## Choosing a text representation
 
-NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too. It computes its comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and reductions (`np.sum`, `np.cumsum`, `np.max`, `np.argmax`, ...), and its sorts, searches, unique values, set routines and order statistics, with NumPy's ordering of missing values (see [Computing on `StringDType` text](#computing-on-stringdtype-text) and [Ordering `StringDType` text](#ordering-stringdtype-text)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
+| What you need | Use | Important consequence |
+|---------------|-----|-----------------------|
+| A fixed number of Unicode code points per element | `np.array(new[] { "cat", "bird" }, "U8")` | 32 bytes per element; longer writes truncate to 8 code points |
+| Fixed-width byte strings / binary fields | `np.dtype("S8")` | 8 bytes per element; `item()` returns `byte[]`; conversion from Unicode uses ASCII |
+| Text of varying lengths, optionally with missing values | `np.dtypes.StringDType()` or `np.dtype("T")` | No fixed text width; each element has a 16-byte cell plus any separately stored payload |
+| NumPy's legacy whitespace-stripping character-array behavior | `np.@char.array(...)` → `NDCharArray` | `S` / `U` storage with different element-access and comparison rules |
+| A .NET array of UTF-16 code units | `np.array(new[] { 'a', 'b' })` → `Char` | 2 bytes per element, unsigned-integer behavior; not `U1`, `S1` or `StringDType` |
 
-<!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
+```csharp
+using NumSharp;
+
+using var scope = NDScope.Open(); // Reclaim arrays created by this example when it ends.
+var labels = np.array(new[] { "pear", "fig", "apple", "fig" }); // U5
+var sorted = np.sort(labels);                                  // ['apple' 'fig' 'fig' 'pear']
+var (values, counts) = np.unique(labels, return_counts: true);   // ['apple' 'fig' 'pear'], [1 2 1]
+var repeated = np.strings.multiply(labels, 2);                 // ['pearpear' 'figfig' 'appleapple' 'figfig']
+
+var nullable = np.dtypes.StringDType(na_object: null);
+var notes = np.array(new object[] { "short", null }, nullable);
+notes[0] = "This text can grow without a fixed-width truncation.";
+var missing = notes.item(1);                                   // null, not the text "None"
+```
+
+Examples below show focused calls; use `using` or an `NDScope` around array work in an application. `NDListArray` split results and `np.nditer` iterators are disposable holders: **dispose those explicitly**, since an `NDScope` reclaims arrays, not holders.
+
+## Available text operations
+
+This is the implemented `strings`-branch surface, not a claim that every NumPy string function has landed.
+
+| Capability | `S` / `U` | `StringDType` (`T`) |
+|------------|-----------|--------------------|
+| Creation, element access, views, copies, indexing and movement | Supported | Supported; copies duplicate text into their own allocator |
+| Number ↔ text casts, printing, `loadtxt` / `savetxt` | Supported | Supported, including NA objects and `coerce` |
+| Comparisons, truth, concatenation and repetition | Supported; direct `np.multiply` needs `out=` | Supported; `*` allocates its variable-width result |
+| Sorts, searches, unique values, membership and set routines | Supported | Supported with NumPy's NA rules; `unique(axis=...)` has NumPy's restrictions |
+| Quantiles that select an element | Supported, including `weights=` with `method: "inverted_cdf"` | Supported; nan forms recognize NaN-like NA values |
+| `sum` / `cumsum`, `maximum` / `minimum`, `max` / `min` | NumPy refuses these fixed-width text loops | Supported: concatenation or lexical selection, not numeric arithmetic |
+| `.npy` / `.npz` | Direct string dtype payloads | NumPy's restricted StringDType pickle; loading requires `allow_pickle: true` |
+| Python bridge | Shared-memory views or copies | Copies through NumPy's string C API |
+
+`np.@char` provides its stripping comparisons, `add`, `multiply`, `array`, `asarray`, `chararray`, `join`, `split`, `rsplit` and `splitlines`. Its split results are `NDListArray`, not general object arrays.
+
+**Still pending:** the `np.strings` length/search/strip/pad/replace/partition/slice APIs and the Unicode predicates, case mapping, formatting, translation and codec functions, together with their `np.@char` and chararray counterparts. The public `np.strings` surface currently has `add` and `multiply`; do not mistake the internal length helper for a public `str_len` API. `chararray.partition(sep)` exists but defers. Text in `np.evaluate` is not implemented. See [Remaining gaps and NumPy refusals](#what-is-not-computed-yet) for the distinction between a pending route and an operation NumPy itself rejects.
+
+<!-- The overview, descriptor/Char boundaries, logical-not refusal and weighted-quantile example are also
+     asserted by NumSharp.Tests.Documentation.TextOverviewDocTests on both target frameworks. -->
+
+<!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests covers the detailed examples below;
+     TextOverviewDocTests covers the additions noted above. Section → method(s):
      The two string dtypes → TwoStringDtypes_WidthAndItemSize, TwoStringDtypes_RawBytes
      Creating string arrays → Creating_FromCSharpValues, Creating_BytesNeedObjectArray
      Reading and writing elements → Elements_ReadAndWrite, CharVectorApi_RefusesStringArrays
@@ -67,7 +113,7 @@ NDArray.Scalar("abc");                               // 'abc', a 0-d <U3 array
 np.frombuffer(Encoding.ASCII.GetBytes("abcdef"), "S3");   // [b'abc', b'def'], no copy
 ```
 
-A C# `string` is NumPy's `str`, and a `byte[]` is NumPy's `bytes`. Build an `S` array from byte values with an `object[]`:
+A C# `string` is one text value. **A `byte[]` passed directly to `np.array` is a numeric `uint8` array**, not a byte-string scalar. Build an `S` array from byte-string values with an `object[]`, or use `NDArray.Scalar((object)bytes)` for one `S` scalar:
 
 ```csharp
 np.array(new object[] { Encoding.ASCII.GetBytes("ab"), Encoding.ASCII.GetBytes("cde") });   // [b'ab', b'cde'], |S3
@@ -191,7 +237,7 @@ np.prod(np.array(new[] { "1.5", "2", "4" }), (int?)null, np.float64);   // 12.0 
 
 With `where=`, NumPy also parses the CURRENT text of `out` into the loop's number type before it computes, so a masked-off `'x'` in a float loop raises `ValueError`.
 
-> **Breaking change:** a C# string converts to a 0-d `U` array, as `np.array(str)` does in NumPy. `NDArray x = "[1, 2, 3]"` is `array('[1, 2, 3]', dtype='<U9')`. It no longer parses the numbers in the text. Parse explicitly with `astype`.
+> **Breaking change:** a C# string converts to a 0-d `U` array, as `np.array(str)` does in NumPy. `NDArray x = "[1, 2, 3]"` is `array('[1, 2, 3]', dtype='<U9')`. It no longer parses a numeric list. `astype` parses an individual numeric text (`np.array("1.5").astype(np.float64)`), not list syntax. For delimited numbers use `np.fromstring("1, 2, 3", sep: ",")` without the brackets.
 
 ---
 
@@ -223,7 +269,7 @@ A `bytes` array against a `str` array has no comparison loop in NumPy: `==` is a
 
 ### Truth values
 
-A string is `True` when it is not empty, that is when any code unit is not NUL. A string of spaces and the text `'False'` are `True`. `astype(bool)`, `np.any`, `np.all`, `np.nonzero`, `np.count_nonzero`, `np.where`, `np.compress`, the logical ufuncs, `np.place` and `np.putmask` masks, and `np.trim_zeros` read it:
+A string is `True` when it is not empty, that is when any code unit is not NUL. A string of spaces and the text `'False'` are `True`. `astype(bool)`, `np.any`, `np.all`, `np.nonzero`, `np.count_nonzero`, `np.where`, `np.compress`, `np.logical_and` / `np.logical_or` / `np.logical_xor`, `np.place` and `np.putmask` masks, and `np.trim_zeros` read it. `np.logical_not` has no text loop, as in NumPy; invert an explicitly computed Boolean array instead:
 
 ```csharp
 np.array(new[] { "", "a", " " }).astype(np.@bool);   // [False  True  True]
@@ -351,6 +397,13 @@ Some results follow from how NumPy computes them:
 - **`np.histogram`** of text needs explicit edges, as text or as numbers. Number edges are compared as text, so a count can come out negative, as in NumPy: `np.histogram(np.array(new[] { "1", "5", "10", "30", "2" }), np.array(new long[] { 0, 5, 10 }))` counts `[ 4 -2]` (`"10"` sorts before `"5"` as text).
 - **`np.quantile` and `np.percentile`** compute the methods that pick an element: `lower`, `higher`, `nearest`, `inverted_cdf`, `closest_observation`, and `linear` with an integer `q` (`np.quantile(fruit, 1)` is `'pear'`). The other methods interpolate, which subtracts text, so NumPy raises a `TypeError` and NumSharp raises the same one. `np.percentile` divides `q` by 100 first, so its `linear` method always interpolates.
 
+- **Weighted quantiles** pick an element without interpolation, using only `method: "inverted_cdf"`. Weights must be non-negative and broadcast according to NumPy's reduced-axis rules. The selected value keeps the data's dtype:
+
+  ```csharp
+  var fruit = np.array(new[] { "pear", "fig", "apple" });
+  np.quantile(fruit, 0.5, method: "inverted_cdf", weights: np.array(new[] { 1.0, 3.0, 1.0 })); // 'fig'
+  ```
+
 Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inputs every call, 1,000 and 100,000 strings): every call measured ran at least 1.5 times as fast as NumPy, 4.2 times in the geometric mean. `np.unique` of text with few distinct values hashes the strings and sorts only the distinct ones, as NumPy does; past 1 in 16 distinct strings it sorts every string, which is faster for mostly distinct text (11 times NumPy's speed on 100,000 random strings). The slowest cases, 1.5 to 2 times NumPy's speed, are weighted histograms (each block's weights are summed in NumPy's tie order) and `np.unique` along an axis of small arrays.
 
 ### The `numpy.char` module
@@ -361,6 +414,8 @@ Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inp
 - `compare_chararrays(a1, a2, cmp, rstrip)` runs the comparison `cmp` (`"=="`, `"!="`, `"<"`, `"<="`, `">"` or `">="`, as a `string` or a `byte[]`), with the strip when `rstrip` is `true`.
 - `add` is `np.add`.
 - `multiply` is `np.strings.multiply`, but a count that is not an integer gives NumPy's `ValueError("Can only multiply by integers")`.
+- `array`, `asarray` and `chararray` construct [`NDCharArray`](#the-chararray-class).
+- `split`, `rsplit`, `splitlines` and `join` compute over text elements; see [Splitting and joining](#splitting-and-joining-split-rsplit-splitlines-and-join).
 
 ```csharp
 var padded = np.array(new[] { "cat  ", "dog\t", "bird" });
@@ -372,7 +427,7 @@ np.@char.multiply(np.array(new[] { "ab", "c" }), 3);      // ['ababab' 'ccc'], <
 np.@char.multiply(padded, 2.5);                           // ValueError: Can only multiply by integers
 ```
 
-The array arguments are NumPy's array_likes: an `NDArray`, a C# `string` (NumPy's `str`), a `byte[]` (NumPy's `bytes`), a `string[]` or a `byte[][]` (a list of `bytes`). Two strings give a 0-d result. An `S` array against a `U` array is NumPy's `NotImplemented`, which NumSharp returns as `null`. A `StringDType` array is NumPy's `TypeError: comparison of non-string arrays`.
+The array arguments are NumPy's array_likes: an `NDArray`, a C# `string` (NumPy's `str`), a `byte[]` (NumPy's `bytes` **in this module**), a `string[]` or a `byte[][]` (a list of `bytes`). Two strings give a 0-d result. **For the stripping comparisons**, an `S` array against a `U` array is NumPy's `NotImplemented`, returned as `null`, and `StringDType` is refused with `TypeError: comparison of non-string arrays`. That restriction is not module-wide: `add`, `multiply` and the split/join family also accept `StringDType`.
 
 `np.@char` also converts to the `Char` dtype, its meaning before the module existed, so `astype(np.@char)` and `a.dtype == np.@char` still work. Read a descriptor member through a cast: `((DType)np.@char).itemsize`.
 
@@ -426,15 +481,15 @@ An `S` chararray against `U` text is NumPy's `NotImplemented`. Then a plain arra
 The members:
 
 - `sort()` sorts in place. `argsort()` and `searchsorted()` return plain arrays.
-- `argmax()`, `argmin()` and `argpartition()` raise `ValueError: Can only create a chararray from string data.`, because NumPy creates their index result as a chararray. With `out:` they write the indices into the given array.
+- `argmax()` and `argmin()` raise `ValueError: Can only create a chararray from string data.`, because NumPy creates their index result as a chararray; giving them a plain `out:` allows the result. `argpartition()` has the same finalize error but no `out` parameter.
 - `partition(sep)` is the string partition of `np.@char.partition` (not computed yet). So `np.partition(c, 1)`, `np.median(c)`, `np.quantile(c, ...)` and `np.percentile(c, ...)` raise NumPy's `TypeError: chararray.partition() got an unexpected keyword argument 'axis'`.
 
 The `np.*` functions treat a chararray the way NumPy does:
 
 - **The result is a chararray** when NumPy calls a method of the array or views it with `np.asanyarray`: `np.reshape`, `np.ravel`, `np.transpose`, `np.squeeze`, `np.sort`, `np.repeat`, `np.tile`, `np.flip`, `np.take`, the split functions, `np.zeros_like` and the other `*_like` functions, `np.copy(c, subok: true)`.
 - **The result is a chararray view** when it is the text result of a ufunc (`np.add`, `np.strings.multiply`) or of `np.insert`, `np.delete`, `np.unique` and the other functions that wrap their result. The view does not own its data.
-- **The result is a plain array** when NumPy converts with `np.asarray`: `np.concatenate`, `np.stack`, `np.where`, `np.append`, `np.asarray` and the set routines.
-- **The call raises the `ValueError`** when NumPy creates a result that is not text as a chararray: `np.argmax`, `np.argmin` and `np.argpartition` without `out:`, `np.zeros_like(c, np.float64)`, and the logical ufuncs over a chararray of at most 8,192 elements (NumPy copies a short input into the loop's bool dtype as a chararray).
+- **The result is a plain array** when NumPy converts with `np.asarray`: `np.concatenate`, `np.stack`, `np.where`, `np.append`, `np.asarray`, `np.intersect1d`, `np.union1d` and `np.setxor1d`. `np.setdiff1d` instead wraps its text result as a chararray view.
+- **The call raises the `ValueError`** when NumPy creates a non-text result as a chararray: `np.argmax` / `np.argmin` without `out:`, `np.argpartition`, and `np.zeros_like(c, np.float64)`. A ufunc's preliminary cast can also trigger it: an unmasked logical ufunc copies a 0-d or short 1-d chararray into its bool loop dtype as a chararray (up to `np.getbufsize()`, normally 8,192 elements). This is not a general size limit on chararray operations.
 
 ```csharp
 np.sort(c);                                    // a chararray
@@ -462,7 +517,7 @@ Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): 
 
 ```csharp
 var words = np.array(new[] { "a b  c", "  lead trail  ", "" });
-NDListArray w = np.@char.split(words);          // [list(['a', 'b', 'c']) list(['lead', 'trail']) list([])]
+using NDListArray w = np.@char.split(words);    // [list(['a', 'b', 'c']) list(['lead', 'trail']) list([])]
 np.@char.split(words, " ");                     // empty pieces where two separators touch
 np.@char.rsplit(words, maxsplit: 1);            // ['a b', 'c'], ['  lead', 'trail'], []
 np.@char.splitlines(np.array(new[] { "a\nb\r\nc" }), true);   // [list(['a\n', 'b\r\n', 'c'])]
@@ -519,7 +574,7 @@ np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.
 np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
-**NumPy computes on the text.** NumSharp computes it too, over `S`, `U` and `StringDType` text: comparisons, truth values, concatenation and repetition, sorting, searching, unique values, set routines, histograms, quantiles and the conversions between text and numbers (over `StringDType` also `maximum` / `minimum` and the reductions). The other `np.strings` functions are a later stage: NumSharp's `np.strings` has `add` and `multiply` so far. A NumSharp route that has no text form yet throws `StringComputationNotSupportedException`, a `NotSupportedException`; `np.evaluate` over text is one:
+**NumPy computes on the text.** NumSharp implements these families over `S`, `U` and `StringDType`: comparisons, truth values, concatenation and repetition, sorting, searching, unique values, set routines, histograms, quantiles and the conversions between text and numbers (over `StringDType` also `maximum` / `minimum` and the reductions). The other `np.strings` functions are a later stage: NumSharp's `np.strings` has `add` and `multiply` so far. A NumSharp route that has no text form yet throws `StringComputationNotSupportedException`, a `NotSupportedException`; `np.evaluate` over text is one:
 
 ```csharp
 var t = names.astype(np.dtypes.StringDType());
@@ -595,7 +650,7 @@ For what is not computed yet, convert to .NET and compute there. For example, `N
 
 ## Variable-width text: `StringDType`
 
-NumPy 2's `StringDType` (`T`, NEP 55) has no width. Each element is a 16-byte cell: a text of up to 15 UTF-8 bytes sits in the cell itself, a longer text in an arena that belongs to the array's buffer, and a text that a later write makes longer than its slot moves to the heap. NumSharp stores `StringDType` arrays with NumPy's cell layout byte for byte (`tobytes()` returns the same bytes as NumPy), with its missing-data objects, its coercion rules and its casts.
+NumPy 2's `StringDType` (`T`, NEP 55) has no fixed text width. Each element is a 16-byte cell: up to 15 UTF-8 bytes sit inside it, longer text lives in an arena owned by the buffer, and a longer rewrite may move the text to the heap. NumSharp follows NumPy's packed layout, missing-data and coercion rules. **`itemsize` is 16 and `nbytes` counts cells only**, not all text memory. **`tobytes()` is not a portable serialization**: cells can contain offsets or process-local pointers. Use `np.save` or the supported text readers and writers to persist values; never reconstruct a `T` array by copying those cells into another buffer.
 
 Comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and the reductions compute on `StringDType` text (see [Computing on `StringDType` text](#computing-on-stringdtype-text)), and so do the sorts, searches, unique values, set routines and order statistics (see [Ordering `StringDType` text](#ordering-stringdtype-text)). The other `np.strings` functions are a later stage, as for `S` and `U`.
 
@@ -663,9 +718,9 @@ using (var it = np.nditer(t, new[] { "refs_ok", "buffered" }, new[] { "readwrite
 
 ### Computing on `StringDType` text
 
-The six comparisons, the truth values (`astype(bool)`, `np.any`, `np.nonzero`, the logical ufuncs, `np.where`), `np.isnan`, `add`, `multiply`, `maximum`, `minimum` and the reductions `np.sum`, `np.cumsum`, `np.max`, `np.min`, `np.argmax`, `np.argmin` and `np.trace` compute over `StringDType` text with NumPy's results, for every memory layout, with `out=`, `where=`, `axis=` and `keepdims=` where NumPy takes them. A `U` array or a C# `string` (NumPy's `str`) may meet a `StringDType` array in a comparison and in `add`; `maximum` and `minimum` take two `StringDType` arrays only, as in NumPy. Missing data follows the NA object:
+The six comparisons, the truth values (`astype(bool)`, `np.any`, `np.nonzero`, `logical_and` / `logical_or` / `logical_xor`, `np.where`), `np.isnan`, `add`, `multiply`, `maximum`, `minimum` and the reductions `np.sum`, `np.cumsum`, `np.max`, `np.min`, `np.argmax`, `np.argmin` and `np.trace` compute over `StringDType` text with NumPy's results, for every memory layout, with `out=`, `where=`, `axis=` and `keepdims=` where NumPy takes them. A `U` array or a C# `string` (NumPy's `str`) may meet a `StringDType` array in a comparison and in `add`; `maximum` and `minimum` take two `StringDType` arrays only, as in NumPy. Missing data follows the NA object:
 
-- A NaN-like NA (`na_object: double.NaN`) behaves as NaN does: every comparison with it is `False`, `!=` included; arithmetic on it gives the NA; `maximum`, `minimum` and the reductions return it, because it orders after every text.
+- A NaN-like NA (`na_object: double.NaN`) makes every comparison with it `False`, **`!=` included**. Concatenation and repetition propagate it. Lexical selection treats it as greater than every text: `maximum` / `max` select NA, while `minimum` / `min` select a text when one is available. `argmax` returns the **last** NaN-like NA, not the first.
 - A string NA (`na_object: "NA"`) computes as its text.
 - A `None`-like NA (`na_object: null`) is equal to another NA and unequal to any text; an ordering or arithmetic with it raises NumPy's `ValueError`.
 
@@ -708,7 +763,7 @@ Two short texts compare inside their 16-byte cells, a text in the arena is read 
 
 `np.sort`, `np.argsort`, `ndarray.sort`, `np.partition`, `np.argpartition`, `np.lexsort`, `np.searchsorted`, `np.unique` and the Array-API unique family, `np.isin`, the set routines, `np.median`, `np.quantile`, `np.percentile`, their nan forms and numpy.ma's `sort` / `argsort` / `median` / `unique` order `StringDType` text with NumPy's results, for every memory layout and axis. Texts compare by their UTF-8 bytes up to a NUL both texts share, a text before every longer text that starts with it (NumPy's `NpyString_cmp`, see [Computing on `StringDType` text](#computing-on-stringdtype-text)). Two texts that differ only after a shared NUL are equal: a stable sort keeps them in their input order, `np.unique` with a `return_*` flag keeps the first of them, and the values-only `np.unique` (and the set routines built on it) keeps both, because NumPy hashes the full bytes — in its hash table's order, which NumSharp replaces with their input order. Missing data follows the NA object, as NumPy's sort compares it:
 
-- A NaN-like NA sorts after every text, and the NAs keep their input order.
+- A NaN-like NA sorts after every text. The **stable** kinds preserve the NAs' input order; the default introsort gives NumPy's algorithm-dependent permutation.
 - A string NA reads as its text (the descriptor's default string).
 - A `None`-like NA raises NumPy's `ValueError` at the first comparison that meets it, so in any line of two or more elements. A line of one element compares nothing.
 
@@ -874,7 +929,7 @@ letters.typecode;        // NPTypeCode.Char
 InfoOf<char>.Size;       // 2  (actual memory footprint)
 ```
 
-**`Char` is not NumPy's `<U1` or `S1`.** NumPy's `<U1` is a 4-byte code point, and `S1` is one byte. NumSharp's `Char` is a 2-byte UTF-16 unit that behaves like a 2-byte integer in arithmetic. For text, use a `U` array. The full details and the itemsize quirk are in [Data types → Char](../dtypes.md#numsharp-specific-types-decimal-and-char).
+**`Char` is not NumPy's `<U1` or `S1`.** NumPy's `<U1` is a 4-byte code point, and `S1` is one byte. NumSharp's `Char` is a 2-byte UTF-16 unit that behaves like a 2-byte integer in arithmetic. For text, use a `U` array. The descriptor reports `itemsize == 2` and `kind == 'u'`. See [Data types → Char](../dtypes.md#numsharp-specific-types-decimal-and-char).
 
 ---
 
@@ -921,7 +976,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-A NumSharp route that has no text form yet: `np.evaluate` over text, or one of the few calls built on the `np.strings` functions NumSharp does not have yet (its `np.strings` has `add` and `multiply` so far). Every NumPy computation over `S`, `U` and `StringDType` text that NumSharp exposes works. Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+A route NumSharp exposes but has not implemented for text yet, such as `np.evaluate` or `chararray.partition(sep)`, raises this exception. Other pending names, such as `np.strings.upper`, are not public APIs yet and therefore do not compile. This does **not** mean the string dtype is unsupported: creation, movement, conversion and the [available text operations](#available-text-operations) work. Convert values to .NET (`NDArray.AsStringArray`, `item`) for an application-specific transformation, or keep that operation in NumPy; .NET casing is not a promise of NumPy's Unicode-version or truncation behavior.
 
 ### "`ValueError: could not convert string to float`"
 A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.
@@ -933,7 +988,7 @@ A C# string is NumPy's `str`: a 0-d `U` array. Write the number itself (`NDArray
 A jagged `byte[][]` is numeric data in C#. Pass an `object[]` of `byte[]` values to get an `S` array.
 
 ### "My value was cut"
-A string array has a fixed width. Writing a longer value cuts it, as NumPy does. Use a wider dtype: `arr.astype("U10")`.
+An `S` / `U` array has a fixed width. Writing a longer value cuts it, as NumPy does. Use a wider descriptor (`arr.astype("U10")`) or convert to `np.dtypes.StringDType()` when future writes must grow.
 
 ### "`UnicodeEncodeError` when I cast to `S`"
 A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U` array.

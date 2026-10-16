@@ -19,7 +19,7 @@ np.dtype("3int8, float32");             // throws
 // there is no np.dtype([("x","f4"),("y","i4")]) form at all
 ```
 
-The rejection is tested (`test/NumSharp.Tests/Creation/DTypeStringParityTests.cs`) with an explicit throw assertion, and it is deliberate rather than an oversight - a structured dtype pulls in field offsets, alignment/padding rules, titles, sub-array fields, unions, `recarray` attribute access, and multi-field view semantics, none of which have a natural home in NumSharp's numeric, single-dtype `NDArray`.
+The rejection is tested (`test/NumSharp.Tests/Creation/DTypeStringParityTests.cs`) with an explicit throw assertion, and it is deliberate rather than an oversight - a structured dtype pulls in field offsets, alignment/padding rules, titles, sub-array fields, unions, `recarray` attribute access, and multi-field view semantics, none of which have a natural home in NumSharp's single-dtype `NDArray`.
 
 ### Why NumSharp leaves them out
 
@@ -28,7 +28,7 @@ Structured arrays exist in NumPy for two jobs, and .NET already does both well:
 - **Interfacing with C structs / binary blobs.** In .NET this is what `struct` layout, `System.Runtime.InteropServices`, `BinaryReader`, and `Span<byte>` are for - with compile-time field types and no dtype-string parsing.
 - **Lightweight tabular data.** NumPy's own docs steer tabular work toward pandas/xarray because the C-struct memory layout has poor cache behavior for column operations. In .NET the idiomatic answers are a `class`/`record` list, a columnar set of `NDArray`s, or a dedicated dataframe library.
 
-So NumSharp keeps `NDArray` numeric and homogeneous, and points structured use cases at the tools built for them.
+So NumSharp keeps each `NDArray` homogeneous: a numeric **or text** column, not a record with several field dtypes. String support does not require structured-array support.
 
 ---
 
@@ -40,14 +40,14 @@ The closest analog, and usually the *fastest* for analytics - one array per fiel
 
 ```csharp
 // NumPy: x = np.array([('Rex', 9, 81.0)], dtype=[('name','U10'),('age','i4'),('weight','f4')])
-var names   = new[] { "Rex", "Fido" };            // string[]  (text stays .NET)
+var names   = np.array(new[] { "Rex", "Fido" }); // U4 text column
 var age     = np.array([9, 3]);           // int32 column
 var weight  = np.array([81.0f, 27.0f]);   // float32 column
 
 // "x['age']" → the age column directly:
 age;                                              // [9 3]
 // row 0 → gather across columns:
-(names[0], age[0], weight[0]);
+(names.item(0), age.item(0), weight.item(0)); // ("Rex", 9, 81f)
 ```
 
 Numeric operations vectorize per column (`age + 1`, `weight * 2`), which is exactly what structured arrays are *slow* at.
@@ -116,8 +116,8 @@ Use a .NET `record`/`class` - you get `pet.Age` with compile-time checking, whic
 
 ## Related reading
 
-- [Data types](../dtypes.md) - the 15 supported dtypes and why unsupported ones throw.
-- [Arrays of strings and bytes](strings-and-bytes.md) - the other unsupported NumPy dtype family.
+- [Data types](../dtypes.md) - supported numeric and text descriptors, and the unsupported families.
+- [Strings, bytes and chararrays](strings-and-bytes.md) - supported text columns without a record dtype.
 - [Array creation](array-creation.md) - building the parallel arrays that replace records.
 - [Any library via np.frombuffer](../interop/np-frombuffer.md) - reading packed binary records.
 - [NumPy structured-arrays guide](https://numpy.org/doc/stable/user/basics.rec.html) - the upstream article.
