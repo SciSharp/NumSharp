@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
@@ -640,12 +642,41 @@ namespace NumSharp
         /// <param name="nsample">The items selected per variate.</param>
         /// <param name="numVariates">The number of variates.</param>
         /// <param name="variates">The zeroed output, <paramref name="numVariates"/> rows of <paramref name="numColors"/>.</param>
-        /// <exception cref="OutOfMemoryException">The <paramref name="total"/>-entry work array cannot be allocated.</exception>
+        /// <exception cref="OutOfMemoryException">The <paramref name="total"/>-entry work array of the dense representation
+        ///     cannot be allocated.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy allocates the whole <paramref name="total"/>-entry array (8 bytes an item) and fills it before the first
+        ///     draw, although each variate touches only the positions its <c>nsample</c> swaps reach. When those swaps reach
+        ///     a small part of the urn (<see cref="UsesSparseCountChoices"/>), the array is represented sparsely instead:
+        ///     a position holds its initial color until a swap writes it (<see cref="SparseCountChoices"/>). Both
+        ///     representations run the same shuffle (<see cref="ShuffleAndCountVariates{TChoices}"/>), with the same draws
+        ///     in the same order, so the variates and the generator's state afterwards are NumPy's either way:
+        ///     <c>multivariate_hypergeometric([10**9, 1], 1, method='count')</c> draws its one item without NumPy's 8 GB
+        ///     array.
+        ///     </para>
+        ///     <para>
+        ///     The one observable difference is the failure NumPy reports when its array cannot be allocated
+        ///     (<c>MemoryError</c>): an urn too large for memory but sampled lightly succeeds here. A dense call that
+        ///     cannot allocate throws <see cref="OutOfMemoryException"/> with NumPy's text, before any draw, as NumPy does.
+        ///     </para>
+        /// </remarks>
         private unsafe void MultivariateHypergeometricCount(long total, long numColors, long* colors, long nsample,
                                                             long numVariates, long* variates)
         {
             if ((total == 0) || (nsample == 0) || (numVariates == 0))
                 return;
+
+            // NumPy shuffles the smaller side: selecting more than half the items is the complement of selecting the rest.
+            bool moreThanHalf = nsample > (total / 2);
+            long steps = moreThanHalf ? total - nsample : nsample;
+
+            if (UsesSparseCountChoices(total, steps, numVariates))
+            {
+                var sparse = new SparseCountChoices(numColors, colors, steps, numVariates);
+                ShuffleAndCountVariates(sparse, total, numColors, colors, steps, moreThanHalf, numVariates, variates);
+                return;
+            }
 
             // The work array goes through NumSharp's pooled allocator (a raw native allocation would bypass the pool
             // accounting); its failure is NumPy's MemoryError, with NumPy's text.
@@ -666,68 +697,238 @@ namespace NumSharp
                     for (long j = 0; j < colors[i]; ++j)
                         choices[k++] = (ulong)i;
 
-                bool moreThanHalf = nsample > (total / 2);
-                if (moreThanHalf)
-                    nsample = total - nsample;
-
-                // Every Fisher-Yates step draws at least one word: its bound total - j - 1 is at least 1, because
-                // nsample <= total / 2 after the complement. When every bound also fits 32 bits (total - 1 <= 2^32 - 1)
-                // the steps draw next_uint32 words only, so a 32-bit read-ahead owed the steps still to come never draws
-                // past NumPy's stream. Larger urns draw 64-bit words for their first steps and stay per-draw.
-                // The read-ahead's cursor lives in locals (a by-reference buffer would keep its position in memory, and
-                // every step would wait on a store-to-load round trip); its refill rule is DrawBuffer32's.
-                bool readAhead = total - 1 <= 0xFFFFFFFFL;
-                uint* buf = stackalloc uint[DrawBuffer32.Capacity];
-                int pos = 0, avail = 0;
-                lock (_bitGenerator.@lock)
-                    for (long i = 0, row = 0; i < numVariates * numColors; i += numColors, row++)
-                    {
-                        long rowsAfter = numVariates - row - 1;
-                        // Fisher-Yates over the first nsample entries only: choices[:nsample] is then a random sample.
-                        for (long j = 0; j < nsample; ++j)
-                        {
-                            long k;
-                            if (readAhead)
-                            {
-                                // random_interval(total - j - 1): the bound is at least 1 (see above), so gen_mask is one lzcnt.
-                                ulong max = (ulong)(total - j - 1);
-                                ulong mask = ulong.MaxValue >> BitOperations.LeadingZeroCount(max);
-                                ulong value;
-                                do
-                                {
-                                    if (pos == avail)
-                                    {
-                                        // The steps still owed, this one included: (nsample - j) now + nsample per later
-                                        // row, saturated (only a lower bound matters; a refill takes at most the capacity).
-                                        long owed = nsample - j;
-                                        owed = rowsAfter > (long.MaxValue - owed) / nsample ? long.MaxValue : owed + rowsAfter * nsample;
-                                        avail = owed < DrawBuffer32.Capacity ? (int)owed : DrawBuffer32.Capacity;
-                                        _bitGenerator.FillUInt32(buf, avail);
-                                        pos = 0;
-                                    }
-                                    value = buf[pos++] & mask;
-                                } while (value > max);
-                                k = j + (long)value;
-                            }
-                            else
-                            {
-                                k = j + (long)BoundedIntegers.RandomInterval(_bitGenerator, (ulong)(total - j - 1));
-                            }
-                            ulong tmp = choices[k];
-                            choices[k] = choices[j];
-                            choices[j] = tmp;
-                        }
-                        // Count each color in choices[:nsample].
-                        for (long j = 0; j < nsample; ++j)
-                            variates[i + (long)choices[j]] += 1;
-                        if (moreThanHalf)
-                            for (long k = 0; k < numColors; ++k)
-                                variates[i + k] = colors[k] - variates[i + k];
-                    }
+                var dense = new DenseCountChoices(choices);
+                ShuffleAndCountVariates(dense, total, numColors, colors, steps, moreThanHalf, numVariates, variates);
             }
             finally
             {
                 work.DangerousFree(); // the raw pooled buffer is private to this call
+            }
+        }
+
+        /// <summary>
+        ///     The shuffle-and-count loop of NumPy's <c>random_multivariate_hypergeometric_count</c>, over either
+        ///     representation of its work array: per variate, <paramref name="nsample"/> Fisher-Yates swaps over the first
+        ///     positions, then a count of the colors those positions hold.
+        /// </summary>
+        /// <typeparam name="TChoices">The work array's representation; a struct, so each one gets its own compiled loop
+        ///     with the element access inlined.</typeparam>
+        /// <param name="choices">The work array, holding each color index once per item; the shuffle carries it from one
+        ///     variate to the next, as NumPy's does. Passed by value: both representations are readonly structs over
+        ///     storage they share with their copies, and a local copy lets the JIT keep the dense array's pointer in a
+        ///     register.</param>
+        /// <param name="total">The number of items (the work array's length).</param>
+        /// <param name="numColors">The number of colors.</param>
+        /// <param name="colors">The items per color.</param>
+        /// <param name="nsample">The swaps per variate: the sample size, or its complement when <paramref name="moreThanHalf"/>.</param>
+        /// <param name="moreThanHalf">Whether the caller asked for more than half the items, so each count is turned into
+        ///     its complement against <paramref name="colors"/>.</param>
+        /// <param name="numVariates">The number of variates.</param>
+        /// <param name="variates">The zeroed output, <paramref name="numVariates"/> rows of <paramref name="numColors"/>.</param>
+        /// <remarks>
+        ///     Runs under the bit generator's lock for the whole call, as NumPy's loop runs under <c>self.lock</c>: a
+        ///     concurrent draw from the same generator cannot interleave with a variate.
+        /// </remarks>
+        private unsafe void ShuffleAndCountVariates<TChoices>(TChoices choices, long total, long numColors, long* colors,
+                                                              long nsample, bool moreThanHalf, long numVariates, long* variates)
+            where TChoices : struct, ICountChoices
+        {
+            // Every Fisher-Yates step draws at least one word: its bound total - j - 1 is at least 1, because
+            // nsample <= total / 2 after the complement. When every bound also fits 32 bits (total - 1 <= 2^32 - 1)
+            // the steps draw next_uint32 words only, so a 32-bit read-ahead owed the steps still to come never draws
+            // past NumPy's stream. Larger urns draw 64-bit words for their first steps and stay per-draw.
+            // The read-ahead's cursor lives in locals (a by-reference buffer would keep its position in memory, and
+            // every step would wait on a store-to-load round trip); its refill rule is DrawBuffer32's.
+            bool readAhead = total - 1 <= 0xFFFFFFFFL;
+            uint* buf = stackalloc uint[DrawBuffer32.Capacity];
+            int pos = 0, avail = 0;
+            lock (_bitGenerator.@lock)
+                for (long i = 0, row = 0; i < numVariates * numColors; i += numColors, row++)
+                {
+                    long rowsAfter = numVariates - row - 1;
+                    // Fisher-Yates over the first nsample entries only: choices[:nsample] is then a random sample.
+                    for (long j = 0; j < nsample; ++j)
+                    {
+                        long k;
+                        if (readAhead)
+                        {
+                            // random_interval(total - j - 1): the bound is at least 1 (see above), so gen_mask is one lzcnt.
+                            ulong max = (ulong)(total - j - 1);
+                            ulong mask = ulong.MaxValue >> BitOperations.LeadingZeroCount(max);
+                            ulong value;
+                            do
+                            {
+                                if (pos == avail)
+                                {
+                                    // The steps still owed, this one included: (nsample - j) now + nsample per later
+                                    // row, saturated (only a lower bound matters; a refill takes at most the capacity).
+                                    long owed = nsample - j;
+                                    owed = rowsAfter > (long.MaxValue - owed) / nsample ? long.MaxValue : owed + rowsAfter * nsample;
+                                    avail = owed < DrawBuffer32.Capacity ? (int)owed : DrawBuffer32.Capacity;
+                                    _bitGenerator.FillUInt32(buf, avail);
+                                    pos = 0;
+                                }
+                                value = buf[pos++] & mask;
+                            } while (value > max);
+                            k = j + (long)value;
+                        }
+                        else
+                        {
+                            k = j + (long)BoundedIntegers.RandomInterval(_bitGenerator, (ulong)(total - j - 1));
+                        }
+                        choices.Swap(j, k);
+                    }
+                    // Count each color in choices[:nsample].
+                    for (long j = 0; j < nsample; ++j)
+                        variates[i + choices.Get(j)] += 1;
+                    if (moreThanHalf)
+                        for (long k = 0; k < numColors; ++k)
+                            variates[i + k] = colors[k] - variates[i + k];
+                }
+        }
+
+        /// <summary>
+        ///     Items below which the count method always keeps NumPy's dense work array: up to this size the array is
+        ///     at most 8 MiB, and filling it costs less than a hash-map entry per swap would.
+        /// </summary>
+        internal const long SparseCountChoicesMinTotal = 1L << 20;
+
+        /// <summary>
+        ///     The count method represents its work array sparsely only when its swaps reach at most
+        ///     <c>total / SparseCountChoicesDensity</c> positions. A sparse entry costs about 4x an array element in
+        ///     memory and about 10x in time; at this ratio the sparse array is smaller than the dense one and does less
+        ///     work than filling it.
+        /// </summary>
+        internal const long SparseCountChoicesDensity = 64;
+
+        /// <summary>
+        ///     Test hook: forces the count method's work-array representation on the calling thread
+        ///     (<c>true</c> sparse, <c>false</c> dense, <c>null</c> the size rule of <see cref="UsesSparseCountChoices"/>),
+        ///     so a test can run one urn through both and compare the variates and the generator state.
+        /// </summary>
+        [ThreadStatic]
+        internal static bool? CountChoicesSparseOverride;
+
+        /// <summary>
+        ///     Whether the count method represents its work array sparsely: the urn is large
+        ///     (<see cref="SparseCountChoicesMinTotal"/>) and the call's swaps reach a small part of it
+        ///     (<see cref="SparseCountChoicesDensity"/>).
+        /// </summary>
+        /// <param name="total">The number of items.</param>
+        /// <param name="steps">The swaps per variate (after the complement), zero or more.</param>
+        /// <param name="numVariates">The number of variates, one or more.</param>
+        /// <returns>True for the sparse representation, false for NumPy's dense array.</returns>
+        private static bool UsesSparseCountChoices(long total, long steps, long numVariates)
+        {
+            if (CountChoicesSparseOverride is bool forced)
+                return forced;
+            if (total < SparseCountChoicesMinTotal)
+                return false;
+            // The call's swaps, saturated: each touches at most two positions, so this bounds the sparse entries.
+            long swaps = steps == 0 ? 0 : numVariates > long.MaxValue / steps ? long.MaxValue : steps * numVariates;
+            return swaps <= total / SparseCountChoicesDensity;
+        }
+
+        /// <summary>
+        ///     The work array of the count method, as <see cref="ShuffleAndCountVariates{TChoices}"/> uses it: read a
+        ///     position's color, swap two positions.
+        /// </summary>
+        private interface ICountChoices
+        {
+            /// <summary>The color index the work array holds at <paramref name="position"/>.</summary>
+            /// <param name="position">A position in <c>[0, total)</c>.</param>
+            /// <returns>The color index, in <c>[0, numColors)</c>.</returns>
+            long Get(long position);
+
+            /// <summary>Swaps the colors at <paramref name="j"/> and <paramref name="k"/> (NumPy's <c>tmp = choices[k];
+            ///     choices[k] = choices[j]; choices[j] = tmp</c>).</summary>
+            /// <param name="j">The Fisher-Yates step's position, in <c>[0, total)</c>.</param>
+            /// <param name="k">The drawn position, in <c>[j, total)</c>; equal to <paramref name="j"/> leaves both as they are.</param>
+            void Swap(long j, long k);
+        }
+
+        /// <summary>NumPy's representation: one color index per item, in a native array the caller owns.</summary>
+        private readonly unsafe struct DenseCountChoices : ICountChoices
+        {
+            /// <summary>The <c>total</c>-entry array, filled with each color index once per item.</summary>
+            private readonly ulong* _choices;
+
+            /// <summary>Wraps the filled array; the caller frees it after the shuffle.</summary>
+            /// <param name="choices">The filled <c>total</c>-entry array.</param>
+            public DenseCountChoices(ulong* choices) => _choices = choices;
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public long Get(long position) => (long)_choices[position];
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Swap(long j, long k)
+            {
+                ulong tmp = _choices[k];
+                _choices[k] = _choices[j];
+                _choices[j] = tmp;
+            }
+        }
+
+        /// <summary>
+        ///     The same array, stored as the positions the shuffle has written: any other position still holds its
+        ///     initial color, found from the colors' cumulative ends.
+        /// </summary>
+        private readonly unsafe struct SparseCountChoices : ICountChoices
+        {
+            /// <summary><c>_ends[c] = colors[0] + ... + colors[c]</c>: position <c>p</c> starts with the first color whose
+            ///     end exceeds <c>p</c> (a color with no items has the end of the color before it, and is never found).</summary>
+            private readonly long[] _ends;
+
+            /// <summary>The positions a swap has written, with the color each holds now.</summary>
+            private readonly Dictionary<long, long> _written;
+
+            /// <summary>Builds the cumulative ends and an empty set of written positions.</summary>
+            /// <param name="numColors">The number of colors, at least one.</param>
+            /// <param name="colors">The items per color.</param>
+            /// <param name="steps">The swaps per variate, to size the map.</param>
+            /// <param name="numVariates">The number of variates, to size the map.</param>
+            public SparseCountChoices(long numColors, long* colors, long steps, long numVariates)
+            {
+                _ends = new long[numColors];
+                long end = 0;
+                for (long c = 0; c < numColors; c++)
+                    _ends[c] = end += colors[c];
+                // Each swap writes two positions; the first variate alone writes up to 2 * steps distinct ones.
+                // The capacity is a hint, so it is capped rather than computed exactly.
+                long expected = Math.Min(2 * steps + 1, 1L << 20);
+                _written = new Dictionary<long, long>((int)expected);
+            }
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public long Get(long position) => _written.TryGetValue(position, out long color) ? color : InitialColor(position);
+
+            /// <inheritdoc/>
+            public void Swap(long j, long k)
+            {
+                long atK = Get(k);
+                long atJ = j == k ? atK : Get(j);
+                _written[k] = atJ;
+                _written[j] = atK;
+            }
+
+            /// <summary>The color position <paramref name="position"/> holds before any swap (a binary search of the ends).</summary>
+            /// <param name="position">A position in <c>[0, total)</c>.</param>
+            /// <returns>The first color whose cumulative end exceeds <paramref name="position"/>.</returns>
+            private long InitialColor(long position)
+            {
+                int lo = 0, hi = _ends.Length - 1;
+                while (lo < hi)
+                {
+                    int mid = (int)((uint)(lo + hi) >> 1);
+                    if (_ends[mid] > position)
+                        hi = mid;
+                    else
+                        lo = mid + 1;
+                }
+                return lo;
             }
         }
 
