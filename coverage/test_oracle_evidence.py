@@ -29,7 +29,7 @@ from pathlib import Path
 import generate_coverage as coverage
 import oracle_evidence as oe
 from numpy_documentation import documentation_url
-from object_surfaces import object_surface_rows
+from object_surfaces import class_member_rows, object_surface_rows, scalar_type_rows
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -321,6 +321,7 @@ class CommittedCorpusTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Join the committed corpus against the generator's NumPy row universe (no dotnet inventory needed)."""
         cls.np = coverage.load_numpy()
         cls.map = oe.load_map()
         exports = coverage.public_exports(cls.np)
@@ -329,6 +330,12 @@ class CommittedCorpusTests(unittest.TestCase):
         rows += object_surface_rows(cls.np, {"objectTypes": {}}, seen, root=ROOT,
                                     source_base_url=coverage.NUMSHARP_SOURCE_BASE_URL,
                                     signature=coverage.numpy_signature, documentation_url=documentation_url)
+        # The scalar types' and the other classes' member rows (generator 1.14.0), as the generator emits them.
+        rows += scalar_type_rows(cls.np, seen, signature=coverage.numpy_signature, documentation_url=documentation_url)
+        rows += class_member_rows(cls.np, list(rows), seen, {}, root=ROOT,
+                                  source_base_url=coverage.NUMSHARP_SOURCE_BASE_URL,
+                                  signature=coverage.numpy_signature, documentation_url=documentation_url,
+                                  category_of=coverage.member_category, excluded=coverage.compat_excluded)
         # NumSharp-only rows come from the dotnet inventory in the real generator. Synthesize the ones
         # the map names plus the ones the automatic rules must find (np.evaluate, the N-D polynomial
         # evaluation twins) so the join sees the same id universe without building the tool.
@@ -386,12 +393,19 @@ class CommittedCorpusTests(unittest.TestCase):
             # tier. So the row is partly pinned, like np.fft.fft, and not "pinned" as a whole.
             self.assertGreater(normal.contracts - normal.portable, 0, "legacy normal's values are host-libm pinned")
             self.assertLessEqual(normal.portable, normal.errors, "only error contracts of normal are portable")
-        # "ndarray" is the constructor np.ndarray(shape, dtype, buffer, offset, strides, order) (ndarray_ctor.jsonl);
-        # "viewflags:getitem" is the array-object oracle's a[key] (view_flags.jsonl), attached to the type as get is. The
-        # weak_scalar tier's section S stores C# literals through ndarray.__setitem__'s routes (weak_scalar:setitem_*).
+        # "ndarray" is the constructor np.ndarray(shape, dtype, buffer, offset, strides, order) (ndarray_ctor.jsonl).
+        self.assertEqual({"ndarray"}, self.evidence("numpy.ndarray").keys)
+        # Python protocols have rows since generator 1.14.0. The index oracle's get / set and the array-object
+        # oracle's a[key] ("viewflags:getitem", view_flags.jsonl) attached to the class until then; the protocol
+        # keys the matrix and surface tiers gate resolve through the matrix / ndarray prefix rules. The weak_scalar
+        # tier's section S stores C# literals through ndarray.__setitem__'s routes (weak_scalar:setitem_*).
         setitems = {f"weak_scalar:setitem_{r}" for r in ("int", "neg", "slice", "empty", "ellipsis", "fancy", "mask")}
-        self.assertEqual({"get", "set", "ndarray.__len__", "ndarray", "viewflags:getitem"} | setitems,
-                         self.evidence("numpy.ndarray").keys)
+        self.assertEqual({"get", "viewflags:getitem"}, self.evidence("numpy.ndarray.__getitem__").keys)
+        self.assertEqual({"set"} | setitems, self.evidence("numpy.ndarray.__setitem__").keys)
+        self.assertEqual({"ndarray.__len__"}, self.evidence("numpy.ndarray.__len__").keys)
+        for name in ("__add__", "__mul__", "__getitem__", "__imul__", "__repr__"):
+            self.assertIn(f"matrix.{name}", self.evidence(f"numpy.matrix.{name}").keys)
+            self.assertNotIn(f"matrix.{name}", self.evidence("numpy.matrix").keys)
         # "write_only" = Char arrays written as NumPy's '<U1' and compared byte for byte (they read back as strings).
         self.assertEqual({"npy:header", "npy:npy", "npy:write_only"}, self.evidence("numpy.save").keys)
         self.assertEqual({"npy:npz:compressed"}, self.evidence("numpy.savez_compressed").keys)

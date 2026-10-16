@@ -6,17 +6,22 @@ Run after building NumSharp.Tools.ApiInventory:
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
+import operator
 import subprocess
+import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
 
 import generate_coverage as coverage
 from numpy_documentation import documentation_url
-from object_surfaces import (enrich_object_classes, object_surface_rows, ufunc_method_rejection,
+from object_surfaces import (REFUSED_PROTOCOLS, REVIEWED_PROTOCOL_ADAPTERS, class_member_rows,
+                             enrich_object_classes, object_surface_rows, protocol_credit, ufunc_method_rejection,
                              ufunc_protocol_methods)
 
 
@@ -123,16 +128,26 @@ class ObjectSurfaceTests(unittest.TestCase):
     def test_masked_array_and_vectorize_members_credit_their_numsharp_owners(self):
         """numpy.ma.MaskedArray maps to NDMaskedArray and numpy.vectorize to Vectorized.
 
-        Without an owner type every member read missing (94 MaskedArray rows, NumSharp implements 77);
+        Without an owner type every member read missing (94 named MaskedArray rows, NumSharp implements 77);
         each credit comes from a member NDMaskedArray declares itself (it has no NDArray base), and the
-        members NumSharp lacks stay missing.
+        members NumSharp lacks stay missing. Since generator 1.14.0 the class's 86 Python protocols are
+        listed too, 26 of them credited through NDMaskedArray's operators, indexer and ToString.
         """
         masked = [row for row in self.rows if row["object_type"] == "numpy.ma.MaskedArray" and row["kind"] != "class"]
-        credited = [row for row in masked if row["status"] == "available"]
-        self.assertEqual(94, len(masked))
+        named = [row for row in masked if not row.get("python_protocol")]
+        credited = [row for row in named if row["status"] == "available"]
+        self.assertEqual(94, len(named))
         self.assertEqual(77, len(credited))
         for row in credited:
             self.assertEqual("NumSharp.NDMaskedArray." + row["name"], row["numsharp_target"], row["id"])
+            self.assertTrue(row["numsharp_source_paths"], row["id"])
+        protocols = [row for row in masked if row.get("python_protocol")]
+        self.assertEqual(86, len(protocols))
+        aliases = [row for row in protocols if row["status"] == "available"]
+        self.assertEqual(26, len(aliases))
+        for row in aliases:
+            self.assertEqual("alias", row["availability"], row["id"])
+            self.assertTrue(row["numsharp_target"].startswith("NumSharp.NDMaskedArray."), row["id"])
             self.assertTrue(row["numsharp_source_paths"], row["id"])
         for gap in ("ctypes", "dump", "dumps", "flags", "setfield", "toflex", "torecords", "sharedmask"):
             self.assertEqual("missing", self.by_id[f"numpy.ma.MaskedArray.{gap}"]["status"], gap)
@@ -249,11 +264,220 @@ class ObjectSurfaceTests(unittest.TestCase):
             np.divmod.reduce([1, 2])
 
     def test_object_inventory_includes_inherited_declaration_ownership(self):
-        self.assertEqual(5, self.inventory["schemaVersion"])
+        self.assertEqual(6, self.inventory["schemaVersion"])
+        # Schema 6: every type carries its operators, each overload with its operand types and declaring type.
+        self.assertTrue(all(isinstance(entry.get("operators"), list) for entry in self.inventory["objectTypes"].values()))
+        ndarray_add = next(op for op in self.inventory["objectTypes"]["NumSharp.NDArray"]["operators"]
+                           if op["name"] == "op_Addition")
+        self.assertIn(["NumSharp.NDArray", "NumSharp.NDArray"], [o["parameterTypes"] for o in ndarray_add["overloads"]])
+        self.assertTrue(all(o["declaringType"] == "NumSharp.NDArray" for o in ndarray_add["overloads"]))
+        matrix_add = next(op for op in self.inventory["objectTypes"]["NumSharp.NDMatrix"]["operators"]
+                          if op["name"] == "op_Addition")
+        # FlattenHierarchy hands NDMatrix NDArray's static operators too; the declaring type tells them apart.
+        self.assertEqual({"NumSharp.NDArray", "NumSharp.NDMatrix"}, {o["declaringType"] for o in matrix_add["overloads"]})
         generic_array = self.inventory["objectTypes"]["NumSharp.Generic.NDArray`1"]
         inherited = next(member for member in generic_array["methods"] if member["name"] == "reshape")
         self.assertIn("NumSharp.NDArray", inherited["declaringTypes"])
         self.assertFalse(any(member["name"] == "GetType" for member in generic_array["methods"]))
+
+    def test_ndarray_protocols_credit_csharp_operators_indexers_and_casts(self):
+        """ndarray's Python protocols are credited by NDArray's own members, operators, indexer and casts.
+
+        A protocol NumSharp spells with a member of the protocol's name is exact; one C# spells with an operator,
+        a cast or ToString is an alias. Python operators without a C# symbol (//, **, @, abs) and the in-place
+        protocols, which C#'s compound assignment does not implement (`a += b` rebinds `a`), stay missing.
+        """
+        expected = {
+            "__add__": ("alias", "op_Addition"), "__radd__": ("alias", "op_Addition"),
+            "__rsub__": ("alias", "op_Subtraction"), "__truediv__": ("alias", "op_Division"),
+            "__mod__": ("alias", "op_Modulus"), "__xor__": ("alias", "op_ExclusiveOr"),
+            "__lshift__": ("alias", "op_LeftShift"), "__lt__": ("alias", "op_LessThan"),
+            "__eq__": ("alias", "op_Equality"), "__neg__": ("alias", "op_UnaryNegation"),
+            "__invert__": ("alias", "op_OnesComplement"), "__int__": ("alias", "op_Explicit"),
+            "__float__": ("alias", "op_Explicit"), "__complex__": ("alias", "op_Explicit"),
+            "__bool__": ("alias", "op_Explicit"), "__str__": ("alias", "ToString"), "__repr__": ("alias", "ToString"),
+            "__getitem__": ("exact", "__getitem__"), "__setitem__": ("exact", "__setitem__"),
+            "__len__": ("exact", "__len__"), "__iter__": ("exact", "__iter__"), "__contains__": ("exact", "__contains__"),
+        }
+        for name, (availability, member) in expected.items():
+            row = self.by_id[f"numpy.ndarray.{name}"]
+            self.assertEqual(("available", availability, "NumSharp.NDArray." + member),
+                             (row["status"], row["availability"], row["numsharp_target"]), name)
+            self.assertTrue(row["python_protocol"], name)
+            self.assertTrue(row["numsharp_source_paths"], name)
+            self.assertEqual("ndarray", row["surface"], name)
+        for name in ("__iadd__", "__imul__", "__itruediv__", "__floordiv__", "__pow__", "__matmul__", "__abs__",
+                     "__index__", "__divmod__", "__array__", "__array_interface__", "__dlpack__", "__copy__"):
+            self.assertEqual("missing", self.by_id[f"numpy.ndarray.{name}"]["status"], name)
+        # A protocol NumPy fills only to refuse, and one NumPy declares absent.
+        self.assertEqual("not_applicable", self.by_id["numpy.ndarray.__delitem__"]["applicability"])
+        self.assertNotIn("numpy.ndarray.__hash__", self.by_id)
+        # The invented ids of the hand-written interop list are gone.
+        self.assertFalse(any(row_id.startswith("numpy.ndarray.interop.") for row_id in self.by_id))
+
+    def test_reflected_protocols_need_an_overload_for_another_left_operand(self):
+        """`x + p` reaches __radd__ only when x is not a poly1d, so `operator +(poly1d, poly1d)` does not credit it.
+
+        poly1d declares `operator *(double, poly1d)`, the reflected product, and no addition with another type on
+        the left (C# would bind `2.0 + p` to NDArray's operator through poly1d's conversion to its coefficients,
+        adding 2 to every coefficient instead of to the constant term).
+        """
+        self.assertEqual("available", self.by_id["numpy.poly1d.__add__"]["status"])
+        self.assertEqual("missing", self.by_id["numpy.poly1d.__radd__"]["status"])
+        self.assertEqual(("available", "NumSharp.poly1d.op_Multiply"),
+                         (self.by_id["numpy.poly1d.__rmul__"]["status"], self.by_id["numpy.poly1d.__rmul__"]["numsharp_target"]))
+        self.assertEqual("available", self.by_id["numpy.matrix.__radd__"]["status"])  # operator +(object, NDMatrix)
+        # NDArray has only operator <<(NDArray, NDArray) and (NDArray, object), but converts every C# scalar
+        # implicitly, so `5 << a` compiles and __rlshift__ is credited; poly1d converts nothing to itself.
+        self.assertEqual("available", self.by_id["numpy.ndarray.__rlshift__"]["status"])
+        self.assertIn("converted implicitly", self.by_id["numpy.ndarray.__rlshift__"]["notes"])
+        self.assertEqual(np.poly1d([1, 2]) + 2, 2 + np.poly1d([1, 2]))  # NumPy: polyadd from either side
+
+    def test_matrix_and_masked_array_protocols_follow_their_own_types(self):
+        """NDMatrix's Python-named members credit exactly; NDMaskedArray has no == operator, so __eq__ stays missing."""
+        for name in ("__mul__", "__imul__", "__pow__", "__ipow__", "__rmul__", "__rpow__", "__array_priority__"):
+            row = self.by_id[f"numpy.matrix.{name}"]
+            self.assertEqual(("available", "exact", "NumSharp.NDMatrix." + name),
+                             (row["status"], row["availability"], row["numsharp_target"]), name)
+        self.assertEqual("NumSharp.NDMatrix.op_Addition", self.by_id["numpy.matrix.__add__"]["numsharp_target"])
+        # C# compiles `m1 == m2` for NDMaskedArray as reference equality, which is not NumPy's elementwise ==.
+        for name in ("__eq__", "__ne__", "__lshift__", "__pos__"):
+            self.assertEqual("missing", self.by_id[f"numpy.ma.MaskedArray.{name}"]["status"], name)
+        self.assertEqual("NumSharp.NDMaskedArray.op_LessThan", self.by_id["numpy.ma.MaskedArray.__lt__"]["numsharp_target"])
+
+    def test_reviewed_protocol_adapters_credit_only_what_numsharp_documents(self):
+        """Every reviewed adapter credits its row; a ToString that ports repr() never credits __str__."""
+        for (owner, name), (member, _fragment, _evidence) in REVIEWED_PROTOCOL_ADAPTERS.items():
+            row = self.by_id[f"numpy.{owner}.{name}"]
+            self.assertEqual(("available", "alias"), (row["status"], row["availability"]), row["id"])
+            self.assertTrue(row["numsharp_target"].endswith("." + member), row["id"])
+            self.assertIn("Reviewed protocol adapter", row["notes"], row["id"])
+            self.assertTrue(row["numsharp_source_paths"], row["id"])
+        # finfo.ToString and poly1d.ToString render NumPy's repr; Generator.ToString NumPy's str (repr adds the
+        # address); NpzFile's enumeration yields key/value pairs where Python's iter() yields keys.
+        for row_id in ("numpy.finfo.__str__", "numpy.poly1d.__str__", "numpy.random.Generator.__repr__",
+                       "numpy.lib.npyio.NpzFile.__iter__", "numpy.nditer.__next__", "numpy.ndindex.__next__"):
+            self.assertEqual("missing", self.by_id[row_id]["status"], row_id)
+        self.assertEqual("NumSharp.np.FlatIterator.next", self.by_id["numpy.flatiter.__next__"]["numsharp_target"])
+
+    def test_protocol_credit_rules_on_synthetic_types(self):
+        """The general C# spellings, on a synthetic type: what each rule accepts and what it refuses."""
+        owner = "NumSharp.Owner"
+
+        def op(name, params, ret=owner, declaring=owner):
+            return {"name": name, "overloads": [{"signature": f"{ret} {name}()", "returnType": ret,
+                                                 "parameterTypes": params, "declaringType": declaring}]}
+
+        def grouped(entries):
+            # The inventory lists each CLR operator name once, with all its overloads.
+            merged = {}
+            for entry in entries:
+                merged.setdefault(entry["name"], []).extend(entry["overloads"])
+            return [{"name": name, "overloads": overloads} for name, overloads in merged.items()]
+
+        inventory = {"methods": [], "properties": [], "operators": grouped([
+            op("op_Addition", [owner, owner]),
+            op("op_Subtraction", ["double", owner]),
+            # A base type's cast applies to the owner; a cast TO the owner converts nothing from it.
+            op("op_Explicit", ["NumSharp.Base"], "int", "NumSharp.Base"),
+            op("op_Implicit", ["double"], owner),
+            # A cast the owner declares FROM another type converts nothing from the owner.
+            op("op_Explicit", ["NumSharp.Other"], "double"),
+            # A base type's operator returns the base class, so it does not implement the owner's protocol.
+            op("op_Multiply", ["NumSharp.Base", "NumSharp.Base"], "NumSharp.Base", "NumSharp.Base"),
+        ])}
+
+        def credit(name, type_inventory=inventory):
+            return protocol_credit("synthetic", name, owner, type_inventory)
+
+        self.assertEqual("op_Addition", credit("__add__").member)
+        # Only (Owner, Owner): Python calls __radd__ for another left type, which converts implicitly here (the
+        # op_Implicit from double), so C# binds the owner's operator; without that conversion it would not.
+        self.assertEqual("op_Addition", credit("__radd__").member)
+        without_conversion = {**inventory, "operators": [entry for entry in inventory["operators"]
+                                                         if entry["name"] != "op_Implicit"]}
+        self.assertIsNone(credit("__radd__", without_conversion))
+        self.assertEqual("op_Subtraction", credit("__rsub__").member)  # (double, Owner)
+        self.assertIsNone(credit("__sub__"))
+        self.assertEqual("op_Explicit", credit("__int__").member)
+        self.assertIsNone(credit("__float__"))
+        self.assertIsNone(credit("__mul__"))
+        self.assertIsNone(credit("__iadd__"))  # no C# spelling writes into the left operand
+        self.assertIsNone(credit("__getitem__"))  # no indexer
+        indexed = {"properties": [{"name": "Item", "kind": "property", "signatures": ["int Item[int i] { get; }"]}]}
+        self.assertEqual("Item", credit("__getitem__", indexed).member)
+        self.assertIsNone(credit("__setitem__", indexed))  # a getter-only indexer cannot assign
+        # numpy.matrix's casts are NDArray's, inherited (C# applies a base class's conversion to a subclass).
+        row = self.by_id["numpy.matrix.__int__"]
+        self.assertEqual(("available", "NumSharp.NDMatrix.op_Explicit"), (row["status"], row["numsharp_target"]))
+        self.assertTrue(row["numsharp_source_paths"])
+
+    def test_a_stale_reviewed_adapter_fails_the_run(self):
+        """A reviewed adapter whose NumSharp member disappeared raises instead of silently reading missing."""
+        with self.assertRaisesRegex(ValueError, "REVIEWED_PROTOCOL_ADAPTERS"):
+            protocol_credit("poly1d", "__call__", "NumSharp.poly1d", {"methods": [], "properties": [], "operators": []})
+        with self.assertRaisesRegex(ValueError, "REVIEWED_PROTOCOL_ADAPTERS"):
+            protocol_credit("ndarray", "__repr__", "NumSharp.NDArray",
+                            {"methods": [{"name": "ToString", "kind": "method", "signatures": ["string ToString()"]}]})
+
+    def test_refused_protocols_are_refused_by_numpy(self):
+        """Every REFUSED_PROTOCOLS entry is a protocol NumPy rejects for every call, checked on a real instance."""
+        with tempfile.TemporaryDirectory() as folder:
+            mapped = np.memmap(Path(folder) / "m.bin", dtype=np.int64, mode="w+", shape=(3,))
+            structured = np.zeros(2, dtype=[("a", "i4"), ("b", "f8")])
+            # numpy.matrix warns on construction (PendingDeprecationWarning, the class NumPy discourages); the test
+            # needs one instance, not the warning in the run's output.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", PendingDeprecationWarning)
+                matrix = np.matrix([[1, 2]])
+            instances = {
+                "ndarray": np.arange(3), "matrix": matrix, "recarray": structured.view(np.recarray),
+                "char.chararray": np.char.array(["a", "b"]), "memmap": mapped,
+                "ma.MaskedArray": np.ma.array([1, 2], mask=[0, 1]),
+                "ma.mrecords.MaskedRecords": importlib.import_module("numpy.ma.mrecords").fromarrays([[1, 2], [3.0, 4.0]]),
+                "record": np.rec.array(structured)[0], "flatiter": np.arange(3).flat,
+                "nditer": np.nditer(np.arange(3), op_flags=[["readwrite"]]), "ndarray.flags": np.arange(3).flags,
+                "void": structured[0], "dtypes.StringDType": np.dtypes.StringDType(),
+            }
+            orderings = {"__lt__": operator.lt, "__le__": operator.le, "__gt__": operator.gt, "__ge__": operator.ge}
+            for (owner, name) in REFUSED_PROTOCOLS:
+                value = instances[owner]
+                if name == "__delitem__":
+                    for key in (0, "a", "WRITEABLE", Ellipsis):
+                        with self.assertRaises((ValueError, TypeError, KeyError, AttributeError), msg=(owner, key)):
+                            del value[key]
+                else:
+                    with self.assertRaises(TypeError, msg=(owner, name)):
+                        orderings[name](value, value)
+                if f"numpy.{owner}.{name}" in self.by_id:
+                    self.assertEqual("not_applicable", self.by_id[f"numpy.{owner}.{name}"]["applicability"], owner)
+            # Release the memmap before the folder is removed: Windows refuses to delete a mapped file.
+            instances.clear()
+            del mapped
+
+    def test_class_members_credit_the_type_matched_numsharp_type(self):
+        """A class's members are credited against the NumSharp type of its simple name, case-sensitively.
+
+        NumSharp.AxisError has Axis and NDim, so numpy.exceptions.AxisError.axis and .ndim stay missing; mapping
+        the class to a type that does declare ndim (NumSharp.DType, a stand-in) credits it with source evidence.
+        """
+        class_row = {"id": "numpy.exceptions.AxisError", "origin": "numpy", "kind": "class", "name": "AxisError",
+                     "category": "Exceptions & warnings", "disposition": "candidate"}
+        common = dict(root=ROOT, source_base_url="https://example.test/", signature=signature,
+                      documentation_url=documentation_url)
+        real = {row["id"]: row for row in class_member_rows(
+            np, [class_row], set(), self.inventory, types_by_simple_name={"AxisError": "NumSharp.AxisError"}, **common)}
+        self.assertEqual({"numpy.exceptions.AxisError.axis", "numpy.exceptions.AxisError.ndim",
+                          "numpy.exceptions.AxisError.__str__"}, set(real))
+        self.assertTrue(all(row["status"] == "missing" for row in real.values()))
+        self.assertIn("NumSharp.AxisError", real["numpy.exceptions.AxisError.axis"]["notes"])
+        stand_in = {row["id"]: row for row in class_member_rows(
+            np, [class_row], set(), self.inventory, types_by_simple_name={"AxisError": "NumSharp.DType"}, **common)}
+        ndim = stand_in["numpy.exceptions.AxisError.ndim"]
+        self.assertEqual(("available", "exact", "NumSharp.DType.ndim"),
+                         (ndim["status"], ndim["availability"], ndim["numsharp_target"]))
+        self.assertTrue(any("DType" in path for path in ndim["numsharp_source_paths"]))
+        self.assertEqual("missing", stand_in["numpy.exceptions.AxisError.axis"]["status"])
 
     def test_preexisting_flatiter_class_is_enriched_without_changing_scope(self):
         flatiter = {
