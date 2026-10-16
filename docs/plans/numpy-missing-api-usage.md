@@ -7,6 +7,20 @@ Measured 2026-10-15 (generator 1.12.0 rows) and 2026-10-16 (rows generator 1.13.
 `gh api search/code`. Row-level data: `numpy-missing-api-usage.csv` beside this file. APIs marked † had no
 catalog row before generator 1.13.0 (see "Detected by generator 1.13.0").
 
+## Implemented since
+
+- **2026-10-16 (journey4): the scalar-type hierarchy and `numpy.typing`** - 20 of the rows below, 963,105 files summed
+  (overlapping): `np.integer` (1st), `numpy.typing` (2nd), `numpy.typing.NDArray` (3rd), `np.floating` (4th), `np.number`
+  (5th), `np.generic` (12th), `numpy.typing.ArrayLike` (16th), `np.longdouble`, `np.complexfloating`, `np.typecodes`,
+  `numpy.typing.DTypeLike`, `np.True_`, `np.signedinteger`, `np.False_`, `np.inexact`, `np.unsignedinteger`,
+  `np.character`, `np.sctypeDict`, `np.flexible`, `numpy.typing.NBitBase`. The abstract classes are `NDScalarType`
+  objects (NumPy's class surface, `np.issubdtype` / `np.isdtype` / `np.dtype` / `np.finfo` / `np.iinfo` integration),
+  and every row but `numpy.typing` and its four members is oracle-verified (the surface tier's scalar-type section,
+  3,245 cases; a typing alias names a C# type and has no value to compare).
+  Still missing from the family, each for a reason: `np.complex64` and its `Complex64DType` (NumSharp has one complex
+  width), `np.object_`, `np.str_`, `np.bytes_`, `np.void` (no such dtypes on journey4; the strings branch has `str_` and
+  `bytes_`), and `np.ScalarType` (a tuple of Python built-in classes and NumPy classes, which has no faithful C# form).
+
 ## How the numbers were made
 
 - **Phrase per API**, e.g. `"np.genfromtxt"`, `"np.char.upper"`, `"np.maximum.reduce"`. A class whose members are

@@ -97,6 +97,15 @@ namespace NumSharp
         public static readonly DType float64 = float_;
         public static readonly DType @double = float_;
 
+        /// <summary>
+        ///     <c>numpy.longdouble</c> (C <c>long double</c>) — the <see cref="float64"/> descriptor itself, as
+        ///     <see cref="clongdouble"/> is <see cref="complex128"/>: NumSharp has no extended precision, and on NumPy's
+        ///     win-amd64 build a <c>long double</c> IS a 64-bit double (<c>np.dtype(np.longdouble) == np.dtype('d')</c>
+        ///     there). NumPy still keeps a distinct class with type code <c>'g'</c> and type number 13, so
+        ///     <c>np.issubdtype(np.float64, np.longdouble)</c> is False in NumPy and True here.
+        /// </summary>
+        public static readonly DType longdouble = float_;
+
         // ---- Complex ----
         // NumSharp's Complex = System.Numerics.Complex = two 64-bit floats (complex128).
         // There is NO complex64 in NumSharp — any attempt to use it throws.

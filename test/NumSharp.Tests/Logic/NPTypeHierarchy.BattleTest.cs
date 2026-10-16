@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp.Tests.Logic;
 
 /// <summary>
@@ -30,39 +32,39 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public void Int16_BelongsTo_Generic() =>
-        np.issubdtype(NPTypeCode.Int16, "generic").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int16, np.generic).Should().BeTrue();
 
     [TestMethod]
     public void Int16_BelongsTo_Number() =>
-        np.issubdtype(NPTypeCode.Int16, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int16, np.number).Should().BeTrue();
 
     [TestMethod]
     public void Int16_BelongsTo_Integer() =>
-        np.issubdtype(NPTypeCode.Int16, "integer").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int16, np.integer).Should().BeTrue();
 
     [TestMethod]
     public void Int16_BelongsTo_SignedInteger() =>
-        np.issubdtype(NPTypeCode.Int16, "signedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int16, np.signedinteger).Should().BeTrue();
 
     [TestMethod]
     public void Int16_NotBelongsTo_UnsignedInteger() =>
-        np.issubdtype(NPTypeCode.Int16, "unsignedinteger").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Int16, np.unsignedinteger).Should().BeFalse();
 
     [TestMethod]
     public void Int16_NotBelongsTo_Inexact() =>
-        np.issubdtype(NPTypeCode.Int16, "inexact").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Int16, np.inexact).Should().BeFalse();
 
     [TestMethod]
     public void Int16_NotBelongsTo_Floating() =>
-        np.issubdtype(NPTypeCode.Int16, "floating").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Int16, np.floating).Should().BeFalse();
 
     [TestMethod]
     public void Int32_BelongsTo_SignedInteger() =>
-        np.issubdtype(NPTypeCode.Int32, "signedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int32, np.signedinteger).Should().BeTrue();
 
     [TestMethod]
     public void Int64_BelongsTo_SignedInteger() =>
-        np.issubdtype(NPTypeCode.Int64, "signedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int64, np.signedinteger).Should().BeTrue();
 
     // ==========================================================================
     // UNSIGNED INTEGERS: belong to generic, number, integer, unsignedinteger
@@ -70,35 +72,35 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public void Byte_BelongsTo_Generic() =>
-        np.issubdtype(NPTypeCode.Byte, "generic").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, np.generic).Should().BeTrue();
 
     [TestMethod]
     public void Byte_BelongsTo_Number() =>
-        np.issubdtype(NPTypeCode.Byte, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, np.number).Should().BeTrue();
 
     [TestMethod]
     public void Byte_BelongsTo_Integer() =>
-        np.issubdtype(NPTypeCode.Byte, "integer").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, np.integer).Should().BeTrue();
 
     [TestMethod]
     public void Byte_BelongsTo_UnsignedInteger() =>
-        np.issubdtype(NPTypeCode.Byte, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, np.unsignedinteger).Should().BeTrue();
 
     [TestMethod]
     public void Byte_NotBelongsTo_SignedInteger() =>
-        np.issubdtype(NPTypeCode.Byte, "signedinteger").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Byte, np.signedinteger).Should().BeFalse();
 
     [TestMethod]
     public void UInt16_BelongsTo_UnsignedInteger() =>
-        np.issubdtype(NPTypeCode.UInt16, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.UInt16, np.unsignedinteger).Should().BeTrue();
 
     [TestMethod]
     public void UInt32_BelongsTo_UnsignedInteger() =>
-        np.issubdtype(NPTypeCode.UInt32, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.UInt32, np.unsignedinteger).Should().BeTrue();
 
     [TestMethod]
     public void UInt64_BelongsTo_UnsignedInteger() =>
-        np.issubdtype(NPTypeCode.UInt64, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.UInt64, np.unsignedinteger).Should().BeTrue();
 
     // ==========================================================================
     // FLOATING: belong to generic, number, inexact, floating
@@ -106,35 +108,35 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public void Single_BelongsTo_Generic() =>
-        np.issubdtype(NPTypeCode.Single, "generic").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Single, np.generic).Should().BeTrue();
 
     [TestMethod]
     public void Single_BelongsTo_Number() =>
-        np.issubdtype(NPTypeCode.Single, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Single, np.number).Should().BeTrue();
 
     [TestMethod]
     public void Single_BelongsTo_Inexact() =>
-        np.issubdtype(NPTypeCode.Single, "inexact").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Single, np.inexact).Should().BeTrue();
 
     [TestMethod]
     public void Single_BelongsTo_Floating() =>
-        np.issubdtype(NPTypeCode.Single, "floating").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Single, np.floating).Should().BeTrue();
 
     [TestMethod]
     public void Single_NotBelongsTo_Integer() =>
-        np.issubdtype(NPTypeCode.Single, "integer").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Single, np.integer).Should().BeFalse();
 
     [TestMethod]
     public void Single_NotBelongsTo_ComplexFloating() =>
-        np.issubdtype(NPTypeCode.Single, "complexfloating").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Single, np.complexfloating).Should().BeFalse();
 
     [TestMethod]
     public void Double_BelongsTo_Floating() =>
-        np.issubdtype(NPTypeCode.Double, "floating").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Double, np.floating).Should().BeTrue();
 
     [TestMethod]
     public void Decimal_BelongsTo_Floating() =>
-        np.issubdtype(NPTypeCode.Decimal, "floating").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Decimal, np.floating).Should().BeTrue();
 
     // ==========================================================================
     // COMPLEX: belong to generic, number, inexact, complexfloating
@@ -142,27 +144,27 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public void Complex_BelongsTo_Generic() =>
-        np.issubdtype(NPTypeCode.Complex, "generic").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Complex, np.generic).Should().BeTrue();
 
     [TestMethod]
     public void Complex_BelongsTo_Number() =>
-        np.issubdtype(NPTypeCode.Complex, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Complex, np.number).Should().BeTrue();
 
     [TestMethod]
     public void Complex_BelongsTo_Inexact() =>
-        np.issubdtype(NPTypeCode.Complex, "inexact").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Complex, np.inexact).Should().BeTrue();
 
     [TestMethod]
     public void Complex_BelongsTo_ComplexFloating() =>
-        np.issubdtype(NPTypeCode.Complex, "complexfloating").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Complex, np.complexfloating).Should().BeTrue();
 
     [TestMethod]
     public void Complex_NotBelongsTo_Floating() =>
-        np.issubdtype(NPTypeCode.Complex, "floating").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Complex, np.floating).Should().BeFalse();
 
     [TestMethod]
     public void Complex_NotBelongsTo_Integer() =>
-        np.issubdtype(NPTypeCode.Complex, "integer").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Complex, np.integer).Should().BeFalse();
 
     // ==========================================================================
     // BOOLEAN: belongs to generic ONLY (NumPy 2.x critical behavior!)
@@ -170,27 +172,27 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public void Bool_BelongsTo_Generic() =>
-        np.issubdtype(NPTypeCode.Boolean, "generic").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Boolean, np.generic).Should().BeTrue();
 
     [TestMethod]
     public void Bool_BelongsTo_Boolean() =>
-        np.issubdtype(NPTypeCode.Boolean, "boolean").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Boolean, "bool").Should().BeTrue();
 
     [TestMethod]
     public void Bool_NotBelongsTo_Number() =>
-        np.issubdtype(NPTypeCode.Boolean, "number").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Boolean, np.number).Should().BeFalse();
 
     [TestMethod]
     public void Bool_NotBelongsTo_Integer() =>
-        np.issubdtype(NPTypeCode.Boolean, "integer").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Boolean, np.integer).Should().BeFalse();
 
     [TestMethod]
     public void Bool_NotBelongsTo_SignedInteger() =>
-        np.issubdtype(NPTypeCode.Boolean, "signedinteger").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Boolean, np.signedinteger).Should().BeFalse();
 
     [TestMethod]
     public void Bool_NotBelongsTo_UnsignedInteger() =>
-        np.issubdtype(NPTypeCode.Boolean, "unsignedinteger").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Boolean, np.unsignedinteger).Should().BeFalse();
 
     #endregion
 
@@ -417,34 +419,43 @@ public class NPTypeHierarchyBattleTest
 
     #endregion
 
-    #region Category Alias Tests
+    #region Families are scalar classes; strings are dtype strings (NumPy 2.4.2)
 
+    /// <summary>The signed family is the class <c>np.signedinteger</c> (the old "signed" string alias is gone: NumPy has none).</summary>
     [TestMethod]
-    public void CategoryAlias_Signed_EqualsSignedInteger()
+    public void SignedFamily_IsTheSignedIntegerClass()
     {
-        np.issubdtype(NPTypeCode.Int32, "signed").Should().BeTrue();
-        np.issubdtype(NPTypeCode.Byte, "signed").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Int32, np.signedinteger).Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, np.signedinteger).Should().BeFalse();
+        new Action(() => np.issubdtype(NPTypeCode.Int32, "signed")).Should().Throw<NotSupportedException>()
+            .WithMessage("data type 'signed' not understood");
     }
 
+    /// <summary>The unsigned family is the class <c>np.unsignedinteger</c>.</summary>
     [TestMethod]
-    public void CategoryAlias_Unsigned_EqualsUnsignedInteger()
+    public void UnsignedFamily_IsTheUnsignedIntegerClass()
     {
-        np.issubdtype(NPTypeCode.Byte, "unsigned").Should().BeTrue();
-        np.issubdtype(NPTypeCode.Int32, "unsigned").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Byte, np.unsignedinteger).Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int32, np.unsignedinteger).Should().BeFalse();
     }
 
+    /// <summary>"float" is NumPy's name for float64, not the floating family: float32 is not "float".</summary>
     [TestMethod]
-    public void CategoryAlias_Float_EqualsFloating()
+    public void FloatString_IsFloat64()
     {
         np.issubdtype(NPTypeCode.Double, "float").Should().BeTrue();
         np.issubdtype(NPTypeCode.Int32, "float").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Single, "float").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Single, np.floating).Should().BeTrue();
     }
 
+    /// <summary>"complex" is NumPy's name for complex128.</summary>
     [TestMethod]
-    public void CategoryAlias_Complex_EqualsComplexFloating()
+    public void ComplexString_IsComplex128()
     {
         np.issubdtype(NPTypeCode.Complex, "complex").Should().BeTrue();
         np.issubdtype(NPTypeCode.Double, "complex").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Complex, np.complexfloating).Should().BeTrue();
     }
 
     #endregion
@@ -455,9 +466,9 @@ public class NPTypeHierarchyBattleTest
     public void Char_TreatedAsUnsignedInteger()
     {
         // Char is treated like uint16 in NumSharp
-        np.issubdtype(NPTypeCode.Char, "unsignedinteger").Should().BeTrue();
-        np.issubdtype(NPTypeCode.Char, "integer").Should().BeTrue();
-        np.issubdtype(NPTypeCode.Char, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Char, np.unsignedinteger).Should().BeTrue();
+        np.issubdtype(NPTypeCode.Char, np.integer).Should().BeTrue();
+        np.issubdtype(NPTypeCode.Char, np.number).Should().BeTrue();
     }
 
     [TestMethod]

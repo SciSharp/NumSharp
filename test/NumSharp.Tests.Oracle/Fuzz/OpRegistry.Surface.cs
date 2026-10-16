@@ -53,6 +53,12 @@ namespace NumSharp.Tests.Fuzz
                     return np.linalg.trace(ops[0], SurfInt(p, "offset"), SurfDType(p, "dtype"));
                 case "histogram_bin_edges": return HistogramBinEdges(p, ops);
                 case "array_equiv": return NDArray.Scalar(np.array_equiv(ops[0], ops[1]));
+                // The scalar-type section: a class's isinstance / issubclass checks, np.True_ / np.False_ and
+                // np.longdouble's array facets.
+                case "sctype": return ScalarTypeCheck(p, ops);
+                case "True_": return BoolScalarFacet(np.True_, p);
+                case "False_": return BoolScalarFacet(np.False_, p);
+                case "longdouble": return LongDoubleFacet(p);
                 case "shares_memory":
                 case "may_share_memory":
                     return MemoryPredicate(op, p, ops);
@@ -266,6 +272,9 @@ namespace NumSharp.Tests.Fuzz
                 case "binary_repr":
                     return np.binary_repr(PyInt(p["num"]), SurfNullableInt(p, "width"));
                 case "typename": return np.typename(SurfStr(p, "char"));
+                // The scalar-type section: a class's own attributes, np.typecodes.
+                case "sctype": return ScalarTypeAttribute(p);
+                case "typecodes": return TypeCodes(p);
                 case "datetime_data":
                 {
                     var (unit, count) = np.datetime_data(SurfStr(p, "dtype"));
@@ -296,7 +305,7 @@ namespace NumSharp.Tests.Fuzz
 
         // ---- dtype results ----------------------------------------------------------------------------------------
 
-        /// <summary>The surface tier's dtype ops: ndarray.dtype, finfo.dtype, iinfo.dtype.</summary>
+        /// <summary>The surface tier's dtype ops: ndarray.dtype, finfo.dtype, iinfo.dtype (of a dtype string or of a scalar class), np.sctypeDict's values and np.longdouble.</summary>
         /// <param name="op">The corpus op key.</param>
         /// <param name="p">The case params.</param>
         /// <param name="ops">The reconstructed operands.</param>
@@ -306,8 +315,14 @@ namespace NumSharp.Tests.Fuzz
             => op switch
             {
                 "ndarray.dtype" => ops[0].dtype.typecode,
+                // finfo / iinfo of a scalar CLASS (the scalar-type section) rather than of a dtype string.
+                "finfo.dtype" when IsScalarTypeDtypeCase(p) => ScalarTypeDtype("finfo", p),
+                "iinfo.dtype" when IsScalarTypeDtypeCase(p) => ScalarTypeDtype("iinfo", p),
                 "finfo.dtype" => np.finfo(SurfStr(p, "dtype")).dtype.typecode,
                 "iinfo.dtype" => np.iinfo(SurfStr(p, "dtype")).dtype.typecode,
+                // The scalar-type section's relatives: np.sctypeDict's dtype per key, np.longdouble.
+                "sctypeDict" => np.sctypeDict[SurfStr(p, "key")].typecode,
+                "longdouble" => np.longdouble.typecode,
                 _ => throw new NotSupportedException($"dtype op '{op}' is not registered in OpRegistry"),
             };
 

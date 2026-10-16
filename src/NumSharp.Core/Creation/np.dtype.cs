@@ -424,6 +424,28 @@ namespace NumSharp
             => ApplyDescrKeywords(dtype ?? throw new ArgumentNullException(nameof(dtype)), copy, metadata);
 
         /// <summary>
+        ///     The descriptor of a NumPy scalar CLASS — <c>np.dtype(np.float64)</c> where <c>np.float64</c> is the class: a
+        ///     concrete class gives its builtin descriptor (the same object <c>np.dtype("f8")</c> returns; the generic
+        ///     <c>dtype('&lt;M8')</c> singleton for <c>datetime64</c>), and an ABSTRACT class raises NumPy's
+        ///     <see cref="TypeError"/>, since it has no dtype.
+        /// </summary>
+        /// <param name="sctype">The scalar class (<c>(NDScalarType)np.float64</c>, an element of <c>np.floating.__subclasses__()</c>, <see cref="integer"/>, ...).</param>
+        /// <param name="align">NumPy's <c>align=</c>; no effect on a non-structured dtype.</param>
+        /// <param name="copy">NumPy's <c>copy=</c>: a fresh copy of the class singleton instead of the singleton.</param>
+        /// <param name="metadata">NumPy's <c>metadata=</c>: a dictionary to attach (always gives a fresh descriptor); null means "not given".</param>
+        /// <returns>The class's canonical descriptor, or a fresh copy when <paramref name="copy"/> or <paramref name="metadata"/> asks for one.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sctype"/> is null.</exception>
+        /// <exception cref="TypeError">
+        ///     <paramref name="sctype"/> is abstract — NumPy's texts, verbatim: <c>Converting 'np.integer' or
+        ///     'np.signedinteger' to a dtype is not allowed</c>, <c>Converting `np.inexact` or `np.floating` to a dtype not
+        ///     allowed</c> (also for <c>np.number</c>), <c>Converting `np.unsignedinteger` to a dtype is not allowed</c>,
+        ///     <c>Converting `np.complex` to a dtype is not allowed.</c>, <c>Converting `np.character` to a dtype is not
+        ///     allowed</c>, <c>Converting `np.generic` to a dtype is not allowed.</c> (also for <c>np.flexible</c>).
+        /// </exception>
+        public static DType dtype(NDScalarType sctype, bool align = false, bool copy = false, IReadOnlyDictionary<string, object> metadata = null)
+            => ApplyDescrKeywords((sctype ?? throw new ArgumentNullException(nameof(sctype))).ToDescriptor(), copy, metadata);
+
+        /// <summary>
         ///     The keyword half of NumPy's <c>arraydescr_new</c> (<c>np.dtype(obj, align, copy, metadata)</c>), applied to the
         ///     descriptor the positional argument converted to, in NumPy's statement order: <c>copy</c> copies only a class
         ///     singleton (NumPy's <c>fields == None</c> test); <c>metadata</c> then always yields a fresh descriptor whose

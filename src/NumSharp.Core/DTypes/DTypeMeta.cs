@@ -99,6 +99,16 @@ namespace NumSharp
         private DType _singleton;
 
         /// <summary>
+        ///     The NumPy scalar CLASS of this dtype class (NumPy's <c>DType.type</c> as a class object, e.g.
+        ///     <c>numpy.float64</c>), built on first use by <see cref="NDScalarType.Of(DTypeMeta)"/> and published with one
+        ///     compare-exchange, so every reader gets the same object. Identity is load-bearing: <c>issubclass</c> and
+        ///     <c>isinstance</c> compare scalar classes by reference, as Python compares class objects
+        ///     (<c>np.dtype('f8').type is np.float64</c>). Null until first asked for; it stays null on an abstract class,
+        ///     which has no descriptors to ask for it.
+        /// </summary>
+        internal NDScalarType _scalarType;
+
+        /// <summary>
         ///     Builds a DType class. Called by the registry / subclasses only — every class is a singleton reachable via
         ///     <see cref="DTypeRegistry"/> and <c>np.dtypes</c>.
         /// </summary>

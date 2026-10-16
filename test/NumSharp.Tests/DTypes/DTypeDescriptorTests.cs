@@ -484,15 +484,15 @@ namespace NumSharp.Tests.DTypes
             np.issubdtype(np.dtype(">i4"), np.dtype("i4")).Should().BeTrue();
             np.issubdtype(np.dtype("i4"), np.dtype("i8")).Should().BeFalse();
             np.issubdtype(np.dtype("m8"), np.dtype("M8")).Should().BeFalse();
-            np.issubdtype(np.dtype("M8"), "generic").Should().BeTrue();
-            np.issubdtype(np.dtype("M8"), "number").Should().BeFalse("Datetime doesn't fit in any category");
-            np.issubdtype(np.dtype("m8"), "signedinteger").Should().BeTrue("Timedelta is an integer with an associated unit");
-            np.issubdtype(np.dtype("m8"), "integer").Should().BeTrue();
-            np.issubdtype(np.dtype("m8"), "number").Should().BeTrue();
-            np.issubdtype(np.dtype("m8"), "floating").Should().BeFalse();
-            np.issubdtype("i4", "integer").Should().BeTrue("a dtype string binds the dtype grammar, not the char-array conversion");
-            np.issubdtype("M8[ns]", "generic").Should().BeTrue();
-            np.issubdtype(np.dtype("?"), "integer").Should().BeFalse("NumPy 2.x: bool is not an integer");
+            np.issubdtype(np.dtype("M8"), np.generic).Should().BeTrue();
+            np.issubdtype(np.dtype("M8"), np.number).Should().BeFalse("Datetime doesn't fit in any category");
+            np.issubdtype(np.dtype("m8"), np.signedinteger).Should().BeTrue("Timedelta is an integer with an associated unit");
+            np.issubdtype(np.dtype("m8"), np.integer).Should().BeTrue();
+            np.issubdtype(np.dtype("m8"), np.number).Should().BeTrue();
+            np.issubdtype(np.dtype("m8"), np.floating).Should().BeFalse();
+            np.issubdtype("i4", np.integer).Should().BeTrue("a dtype string binds the dtype grammar, not the char-array conversion");
+            np.issubdtype("M8[ns]", np.generic).Should().BeTrue();
+            np.issubdtype(np.dtype("?"), np.integer).Should().BeFalse("NumPy 2.x: bool is not an integer");
         }
 
         [TestMethod]
