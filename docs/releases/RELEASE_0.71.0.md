@@ -8,7 +8,7 @@
   - `np.*` - **+48 functions**.
   - `np.random.*` - every NumPy bit generator, the whole `Generator` distribution surface, and a legacy `RandomState` that is NumPy's own sampler code line for line, all byte-identical streams.
   - `np.ma.*` - the masked-array module; `np.emath.*` - the automatic-domain math module.
-- **`DType` is NumPy's two-level dtype model** - `NDArray.dtype` returns a `numpy.dtype`-shaped descriptor, with `np.dtypes`, byte order and `datetime64` / `timedelta64` descriptors.
+- **`DType` is NumPy's two-level dtype model** - `NDArray.dtype` returns a `numpy.dtype`-shaped descriptor, with `np.dtypes`, byte order and `datetime64` / `timedelta64` descriptors, and NumPy's scalar classes (`np.integer`, `np.floating`, `np.number`, ...) with `np.typing`.
 - **Reductions on NumPy's own schedules** - `max`, `min`, `ptp`, `nanmax`, `nanmin`, `argmax` and the fused `np.evaluate` reductions match NumPy bit for bit, down to the sign of a ±0 tie and a NaN's payload, and most of them run faster.
 - **~60 NumPy-parity and memory-safety fixes**, **15 measured speedups** and **20 breaking changes** - every line traced to one of 145 cited commits out of the release's 348.
 - **1 new NuGet package** - **NumSharp.Interop.System.Numerics.Tensors**, a zero-copy bridge to .NET's `Tensor<T>` / `TensorSpan<T>`.
@@ -107,6 +107,12 @@ One optional companion package ships for the first time, co-versioned with **Num
   - `isalignedstruct`, `metadata`, `len(dtype)` / `dtype[key]` (`__len__` / `__getitem__`) and `np.dtype(dtype, align, copy, metadata)`; the dtype classes under NumPy's own names (`type`, `_abstract`, `_parametric`, `_legacy`, `_is_numeric`, `singleton`, `type_num`, `default_descr()`, `common_dtype()`, `ensure_canonical()`, `castingimpls`, `DTypeFlags.NPY_DT_*`, `DType.NPY_NATIVE` and the other byte-order macros) - `6f11dc5a`.
   - Non-native byte orders (`np.dtype(">i4")`) and `datetime64` / `timedelta64` descriptors that parse, print, promote and cast-check (no datetime storage yet).
   - `promote_types`, `result_type`, `can_cast`, `issubdtype`, `isdtype` - `DType` overloads with NEP 50 weak scalars.
+- `np.integer`, `np.floating`, `np.number` and the rest of NumPy's scalar-type hierarchy - the abstract classes as the new `NDScalarType`, the class behind every dtype (`a.dtype.type`) and `np.typing`, held to NumPy 2.4.2 by a 3,245-case oracle section (the most-used NumPy names NumSharp lacked: `np.integer` alone appears in ~203K GitHub files) - `6821b6ee`.
+  - `generic`, `number`, `integer`, `signedinteger`, `unsignedinteger`, `inexact`, `floating`, `complexfloating`, `flexible`, `character` - the abstract classes.
+  - `np.issubdtype(a.dtype, np.integer)`, `np.isdtype(dt, np.floating)`, `np.dtype(cls)`, `np.finfo(cls)`, `np.iinfo(cls)` - the type tests and conversions take classes, with NumPy's identity rules and error texts.
+  - `__name__`, `__mro__`, `__bases__`, `__subclasses__()`, `__instancecheck__` (isinstance), `__subclasscheck__` (issubclass) - the class surface.
+  - `np.typecodes`, `np.sctypeDict`, `np.True_`, `np.False_`, `np.longdouble` - the relatives.
+  - `np.typing.NDArray`, `ArrayLike`, `DTypeLike`, `NBitBase` - each names the C# type that plays the alias's role (`npt.NDArray[np.float64]` is `NDArray<double>`).
 - Typed iteration and .NET interop -
   - `np.flat<T>(a)` / `a.flatiter.AsTyped<T>()` - typed by-`ref` C-order flat iteration - `fa2e8521`.
   - `np.ndenumerate<T>(a).AsRef()`, `np.ndindex(...).AsSpans()` - allocation-free enumeration - `afb0d5ce`.
@@ -250,6 +256,7 @@ One optional companion package ships for the first time, co-versioned with **Num
   - The promotion family (`result_type`, `promote_types`, `find_common_type`, `common_type`, ...) returns `DType`, and `isdtype` rejects `issubdtype`'s vocabulary (`"floating"`), as NumPy does.
 - `finfo.dtype` / `iinfo.dtype` return `DType` (were `NPTypeCode`), and the pythonnet dtype maps take `DType` - `ea080d8e`.
 - pythonnet text: numpy's `<U1` and a 4-byte `wchar_t` buffer import as a `U1` view (were a `Char` copy, which refused astral characters); `np.bytes_` imports as a 0-d `S<n>` (was `n` uint8 values); `FromNumpyDtypeStr` / `FromBufferFormat` return `DType` (were `NPTypeCode`); an object array of `str` (a pandas text column) decodes as a `StringDType` copy (it failed); the codec's Auto encode of a `StringDType` array is a copy, and `ToTorch` refuses text - `748acccb`.
+- `np.issubdtype`'s string argument is a dtype string, as in NumPy: the category names are gone (`np.issubdtype(x, "integer")` raises `data type 'integer' not understood`, and `np.issubdtype(np.float32, "float")` is False because `"float"` is float64); pass the class, `np.issubdtype(x, np.integer)` - `6821b6ee`.
 - Casting-rule strings are case-sensitive like NumPy (`"Safe"` raises `ValueError`) - `896f02b2`.
 - On Windows, `np.int32` / `np.int64` report the local NumPy's LLP64 type numbers and chars (`7` / `'l'` and `9` / `'q'`; they were hard-coded to Linux's `5` / `'i'` and `7` / `'l'`) - `72e4d29c`.
 - A write to a read-only array raises NumPy's `ValueError` (was `NumSharpException`); it derives from `ArgumentException`, so `catch (NumSharpException)` no longer catches it - `f319b657`.
