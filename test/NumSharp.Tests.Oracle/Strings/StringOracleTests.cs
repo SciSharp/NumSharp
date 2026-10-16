@@ -344,6 +344,38 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void SetRoutinesAndStatistics() => Run("strsets");
 
         /// <summary>
+        ///     Section tcomp (strings phase 2, P2.T): comparisons and truth values over NEP 55 <c>StringDType</c> text — the
+        ///     six comparison ufuncs between two <c>StringDType</c> operands of every NA kind (none, <c>None</c>, NaN, a
+        ///     sentinel string, coerce off) and against <c>U</c> on either side, over the catalog's layouts and broadcasts,
+        ///     with short / medium / long / non-ASCII / NUL-holding texts and NA cells; the C# operators with a string
+        ///     operand; <c>out=</c>, <c>where=</c> and <c>dtype=</c>; NumPy's refusals (two incompatible NA objects, the
+        ///     <c>None</c>-like rule's ordering error, another class); the truth readers (<c>astype(bool)</c>, any / all /
+        ///     count_nonzero with an axis, nonzero / flatnonzero / argwhere, the logical ufuncs) and <c>np.isnan</c>. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeComparisons() => Run("tcomp");
+
+        /// <summary>
+        ///     Section tarith (strings phase 2, P2.T): <c>np.add</c>, <c>np.multiply</c> (a <c>StringDType</c> text times an
+        ///     integer count of every width, either order), <c>np.maximum</c> and <c>np.minimum</c> over <c>StringDType</c>
+        ///     operands of every NA kind and against <c>U</c>, over the catalog's layouts and broadcasts; the C# operators;
+        ///     <c>out=</c> (a <c>StringDType</c> out of another NA kind, an <c>S</c> / <c>U</c> out, the input itself),
+        ///     <c>where=</c>; NumPy's refusals (the NA rules' errors, the repetition overflow, two incompatible NA objects,
+        ///     counts that are not integers). Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeArithmetic() => Run("tarith");
+
+        /// <summary>
+        ///     Section treduce (strings phase 2, P2.T): reductions over <c>StringDType</c> text — <c>np.sum</c>,
+        ///     <c>np.cumsum</c>, <c>np.max</c> / <c>np.min</c> (with <c>initial=</c>, <c>where=</c>, <c>out=</c>),
+        ///     <c>np.argmax</c> / <c>np.argmin</c>, the nan forms, <c>np.trace</c>, along every axis with keepdims over the
+        ///     catalog's layouts, the NA kinds' rules, empty and 0-d inputs; and the statistics that compute a sum or the
+        ///     extremes first and then meet NumPy's refusal (<c>np.mean</c> / <c>np.average</c> / <c>np.nanmean</c>,
+        ///     <c>np.var</c> / <c>np.std</c> and the nan forms, <c>np.ptp</c>): the division's or the subtraction's words for
+        ///     an ndarray, Python's for a 0-d result, and the NaN-like NA's one answer. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeReductions() => Run("treduce");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -395,12 +427,11 @@ namespace NumSharp.Tests.Strings
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
             // P2.2 milestone C answered the last fixed-width deferrals (reductions 14, straxis 50, strshape 84, strsurface 54,
-            // strma 6 before it): every section that holds only S / U computations is strict. tma: StringDType computations
-            // (P2.T and the StringDType part of P2.2).
-            ["tma"] = 437,
-            // strchar: np.char.add of StringDType (2) and np.char.multiply of StringDType by an integer (1), which NumPy
-            // computes and NumSharp's StringDType arithmetic (a later subphase) defers.
-            ["strchar"] = 3,
+            // strma 6 before it): every section that holds only S / U computations is strict. P2.T computes on StringDType
+            // (the comparisons, the truth values, add / multiply / maximum / minimum, the reductions and statistics, numpy.ma
+            // over them: tma 437 → 5, strchar 3 → 0); tma keeps the sorts that StringDType's part of P2.2 answers — np.median
+            // (2), np.sort (2) and np.unique (1) of numpy.ma over StringDType.
+            ["tma"] = 5,
         };
 
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
@@ -412,7 +443,8 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strsets",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strsets", "tcomp", "tarith",
+                "treduce",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -616,6 +648,9 @@ namespace NumSharp.Tests.Strings
             // np.char.array of an empty str / bytes, or with itemsize 0: NumPy's `len(obj) // itemsize` raises Python's
             // ZeroDivisionError; .NET's class with that meaning is DivideByZeroException (the message is matched verbatim).
             ["ZeroDivisionError"] = new[] { "DivideByZeroException" },
+            // StringDType's allocation failures (`Failed to allocate string in add`, a repetition whose byte count wraps)
+            // raise MemoryError; .NET's class with that meaning is OutOfMemoryException (the message is matched verbatim).
+            ["MemoryError"] = new[] { "OutOfMemoryException" },
         };
 
         /// <summary>Compares NumSharp's exception with NumPy's: a corresponding class and the identical message.</summary>
@@ -1320,7 +1355,24 @@ namespace NumSharp.Tests.Strings
         /// <param name="result">NumSharp's result.</param>
         /// <returns>The element, or <paramref name="result"/>.</returns>
         private static object VStringElementOr(object result)
-            => result is NDArray nd && nd.ndim == 0 && nd.Storage.IsVString ? nd.Storage.GetAtIndex(0) : result;
+        {
+            // numpy.ma returns the Python str of an unmasked 0-d reduction (ma.sum over StringDType text); NumSharp keeps a
+            // 0-d masked array — the module's convention, as AsArray reads it — whose data holds that element.
+            if (UnmaskedScalarData(result) is { } data)
+                result = data;
+            return result is NDArray nd && nd.ndim == 0 && nd.Storage.IsVString ? nd.Storage.GetAtIndex(0) : result;
+        }
+
+        /// <summary>
+        ///     The data of an unmasked 0-d masked array — numpy.ma's NumPy scalar result, which NumSharp keeps as a 0-d masked
+        ///     array (<see cref="AsArray"/> unwraps it the same way) — or null for any other result.
+        /// </summary>
+        /// <param name="result">The call's result.</param>
+        /// <returns>The 0-d data array, or null.</returns>
+        private static NDArray UnmaskedScalarData(object result)
+            => result is NDMaskedArray m && !ReferenceEquals(m, np.ma.masked) && m.data.ndim == 0 && ReferenceEquals(m.mask, np.ma.nomask)
+                ? m.data
+                : null;
 
         /// <summary>
         ///     The generator's <c>_mask_heap</c>: cells as lowercase hex with the bytes that hold a heap pointer zeroed (a cell
@@ -1377,6 +1429,9 @@ namespace NumSharp.Tests.Strings
         /// </summary>
         private static object AsValue(object r)
         {
+            // An unmasked 0-d masked array stands for numpy.ma's NumPy scalar (ma.sum of NaN-like NA text is the float nan).
+            if (UnmaskedScalarData(r) is { } data)
+                r = data;
             switch (r)
             {
                 case NDArray nd when nd.ndim == 0:

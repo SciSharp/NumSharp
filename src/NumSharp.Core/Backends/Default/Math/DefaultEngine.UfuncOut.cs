@@ -231,13 +231,33 @@ namespace NumSharp.Backends
         /// Comparison/predicate ufuncs have bool-output loops ONLY: a dtype=
         /// request other than bool has no loop to select — NumPy raises the
         /// no-loop TypeError (probed 2.4.2: equal(a,b,dtype=f64/i32) and
-        /// isnan(x,dtype=f64) raise; dtype=bool is a legal no-op).
+        /// isnan(x,dtype=f64) raise; dtype=bool is a legal no-op). With a
+        /// <c>StringDType</c> operand the refusal is the new-style dispatcher's,
+        /// which names the operands' classes and the requested one
+        /// (<c>ufunc 'equal' did not contain a loop with signature matching types
+        /// (StringDType, StringDType) -&gt; Float64DType</c>); legacy operands keep
+        /// the type resolver's "No loop matching ..." text.
         /// </summary>
-        private static void ValidateBoolLoopDtype(NPTypeCode? dtype, string ufuncName)
+        /// <param name="dtype">The resolved dtype= request, or null.</param>
+        /// <param name="ufuncName">The ufunc NumPy names.</param>
+        /// <param name="x1">The first operand, or null (a caller that predates the StringDType words).</param>
+        /// <param name="x2">The second operand, or null (a unary ufunc).</param>
+        /// <exception cref="IncorrectTypeException">A non-bool request over legacy operands.</exception>
+        /// <exception cref="TypeError">A non-bool request with a <c>StringDType</c> operand.</exception>
+        private static void ValidateBoolLoopDtype(NPTypeCode? dtype, string ufuncName, NDArray x1 = null, NDArray x2 = null)
         {
-            if (dtype.HasValue && dtype.Value != NPTypeCode.Boolean)
-                throw new IncorrectTypeException(
-                    $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
+            if (!dtype.HasValue || dtype.Value == NPTypeCode.Boolean)
+                return;
+            if (Strings.NDStringUfuncs.IsVString(x1) || Strings.NDStringUfuncs.IsVString(x2))
+            {
+                // The StringDType loops register with the new-style dispatcher: its refusal prints the operand classes.
+                var inputs = x2 is null
+                    ? new[] { Strings.NDStringUfuncs.DispatchClass(x1) }
+                    : new[] { Strings.NDStringUfuncs.DispatchClass(x1), Strings.NDStringUfuncs.DispatchClass(x2) };
+                throw Strings.NDStringUfuncs.VStringNoLoop(ufuncName, inputs, DTypeRegistry.FromTypeCode(dtype.Value).ToString());
+            }
+            throw new IncorrectTypeException(
+                $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
         }
 
         /// <inheritdoc cref="ValidateUnaryInputCast"/>

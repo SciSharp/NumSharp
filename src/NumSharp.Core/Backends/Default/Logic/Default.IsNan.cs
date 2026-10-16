@@ -22,6 +22,10 @@ namespace NumSharp.Backends
         public override NDArray IsNan(NDArray a, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "isnan", a, null, @out, where);
+            // StringDType has an isnan loop of its own (an NA cell of a NaN-like descriptor is True); its checks run in
+            // NumPy's order inside, a numeric dtype= other than bool being the dispatcher's refusal.
+            if (Strings.NDStringUfuncs.IsVString(a))
+                return Strings.NDStringUfuncs.VStringIsNaN(a, typeCode, @out, where);
             // typeCode is validate-only: isnan has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
             ValidateBoolLoopDtype(typeCode, "isnan");

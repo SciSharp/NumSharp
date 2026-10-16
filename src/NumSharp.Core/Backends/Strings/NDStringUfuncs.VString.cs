@@ -149,28 +149,28 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The <c>StringDType</c> descriptor a text loop over two operands produces: the common instance of two
-        ///     <c>StringDType</c> descriptors (an NA object wins over none), else the one <c>StringDType</c> operand's.
+        ///     The <c>StringDType</c> descriptor a text loop over two operands produces — NumPy's
+        ///     <c>binary_resolve_descriptors</c> after the promoter cast a <c>U</c> operand to a default <c>StringDType()</c>:
+        ///     the two NA objects' compatible one (the present one, the first when both are) and the FIRST descriptor's
+        ///     <c>coerce</c> (so <c>'z' + t</c> of a <c>coerce=False</c> <c>t</c> gives a coercing result, probed).
         /// </summary>
         /// <param name="x1">The first operand.</param>
         /// <param name="x2">The second operand.</param>
         /// <returns>The result descriptor (used to name the loop in an output-cast refusal and to type an empty result).</returns>
         private static DType TextLoopResult(NDArray x1, NDArray x2)
         {
-            if (IsVString(x1) && IsVString(x2))
+            var d1 = IsVString(x1) ? x1.dtype : DTypeRegistry.VString.default_descr();
+            var d2 = IsVString(x2) ? x2.dtype : DTypeRegistry.VString.default_descr();
+            try
             {
-                try
-                {
-                    return DTypePromotion.PromoteTypes(x1.dtype, x2.dtype);
-                }
-                catch (Exception e) when (e is TypeError or DTypePromotionError)
-                {
-                    // Two different NA objects have no common instance; the loop's own resolution raises that later
-                    // (a computation), so the first operand's descriptor names the loop here.
-                    return x1.dtype;
-                }
+                return NDVStringArithmetic.BinaryOutputDescr(d1, d2);
             }
-            return IsVString(x1) ? x1.dtype : x2.dtype;
+            catch (TypeError)
+            {
+                // Two different NA objects have no compatible one: the loop's resolution raises that next
+                // (VStringNAConflict), so the first operand's descriptor names the loop here.
+                return d1;
+            }
         }
 
         /// <summary>
@@ -193,10 +193,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="loop">The <c>dtype=</c> request, or null.</param>
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <returns>The exception to throw (never null): <see cref="ValueError"/> for a read-only out,
-        ///     <see cref="ArgumentException"/> for a non-bool mask or an output cast the <c>isnan</c> loop refuses,
-        ///     <see cref="TypeError"/> for the refusal, <see cref="StringComputationNotSupportedException"/> for
-        ///     <c>isnan</c>.</returns>
+        /// <returns>The exception to throw: <see cref="ValueError"/> for a read-only out, <see cref="ArgumentException"/>
+        ///     for a non-bool mask or an output cast the <c>isnan</c> loop refuses, <see cref="TypeError"/> for the refusal;
+        ///     null when <c>isnan</c> computes (<see cref="VStringIsNaN"/>).</returns>
         internal static Exception VStringUnaryAnswer(string ufunc, NDArray x, NPTypeCode? loop, NDArray @out, NDArray where)
         {
             var parse = OutWhereError(@out, where);
@@ -207,6 +206,49 @@ namespace NumSharp.Backends.Strings
             if (VStringLoopOutput(ufunc, x, null) is { } output && (!IsNumericLoop(loop) || loop == NPTypeCode.Boolean))
                 return VStringComputeAnswer(ufunc, x, null, @out, where, output);
             return VStringNoLoop(ufunc, new[] { DispatchClass(x) }, LoopOutputClass(loop), UfuncOutputs(ufunc));
+        }
+
+        /// <summary>
+        ///     NumPy's <c>isnan</c> over a <c>StringDType</c> array (<c>string_isnan_strided_loop</c>): <c>True</c> exactly for
+        ///     an NA cell of a descriptor whose NA object is NaN-like, <c>False</c> everywhere else (an NA of a <c>None</c>-like
+        ///     or string descriptor included), after NumPy's checks in its order.
+        /// </summary>
+        /// <param name="x">The <c>StringDType</c> array.</param>
+        /// <param name="loop">The <c>dtype=</c> request, or null (only bool keeps the loop).</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns><paramref name="out"/> itself, or a fresh bool array in NumPy's output layout.</returns>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, an <paramref name="out"/> the bool output
+        ///     cannot be cast to (same_kind), or operands that do not broadcast.</exception>
+        /// <exception cref="TypeError">A numeric <paramref name="loop"/> other than bool (the dispatcher's refusal).</exception>
+        internal static NDArray VStringIsNaN(NDArray x, NPTypeCode? loop, NDArray @out, NDArray where)
+        {
+            var answer = VStringUnaryAnswer("isnan", x, loop, @out, where);
+            if (answer is not null)
+                throw answer;
+            // A fresh result takes NumPy's ufunc output layout (the input and the mask vote); with out= the flags are a
+            // temporary of the input's dimensions, cast (and broadcast) into out= under where= (NumPy's output cast).
+            var dims = @out is null ? BroadcastDims(x, null, null, where) : (long[])x.Shape.dimensions.Clone();
+            var shape = dims.Length == 0 ? Shape.NewScalar()
+                : Shape.NpyIterOutputShape(dims, where is null || @out is not null ? new[] { x.Shape } : new[] { x.Shape, where.Shape });
+            var flags = new NDArray(NPTypeCode.Boolean, shape, true);
+            try
+            {
+                // Zero-filled: a descriptor without a NaN-like NA has no True cell. Masked-off elements of a fresh result are
+                // unspecified in NumPy (uninitialized); here they hold the flag of their own element.
+                if (flags.size != 0 && x.dtype.VString.has_nan_na)
+                    NDVStringArithmetic.FillIsNaN(x, flags);
+                if (@out is null)
+                    return flags;
+                np.copyto(@out, flags, "unsafe", where);
+                return @out;
+            }
+            finally
+            {
+                if (@out is not null)
+                    flags.Dispose();
+            }
         }
 
         /// <summary>
@@ -221,9 +263,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="loop">The <c>dtype=</c> request, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <param name="computed">The computing loop's output descriptor, or null when the answer is a refusal (the caller
-        ///     builds an empty result from it when the broadcast is empty).</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <param name="computed">The computing loop's output descriptor when every check passed (the answer is then null and
+        ///     the caller computes, or builds an empty result from it when the broadcast is empty); null for a refusal.</param>
+        /// <returns>The exception to throw, or null when the call computes (<paramref name="computed"/> is then set).</returns>
         internal static Exception VStringBinaryAnswer(string ufunc, NDArray x1, NDArray x2, NDArray @out, NPTypeCode? loop,
             NDArray where, out DType computed)
         {
@@ -235,7 +277,7 @@ namespace NumSharp.Backends.Strings
                 && (!IsNumericLoop(loop) || loop == NPTypeCode.Boolean && output.typecode == NPTypeCode.Boolean))
             {
                 var answer = VStringComputeAnswer(ufunc, x1, x2, @out, where, output);
-                if (answer is StringComputationNotSupportedException)
+                if (answer is null)
                     computed = output;
                 return answer;
             }
@@ -243,9 +285,60 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The checks NumPy makes between finding a <c>StringDType</c> loop and running it — the cast of the loop's
-        ///     output into <c>out=</c> (same_kind), then the broadcast of every operand — and, once they pass, the phase-2
-        ///     deferral of the computation.
+        ///     Runs the <c>StringDType</c> loop of a binary ufunc whose checks all passed (<see cref="VStringBinaryAnswer"/>
+        ///     returned null) over a non-empty broadcast: the six comparisons (<see cref="NDVStringComparison"/>), the logical
+        ///     ufuncs over the operands' truth (the bool cast of each text operand, then the bool loop), the concatenation,
+        ///     the repetition and the elementwise <c>maximum</c> / <c>minimum</c> (<see cref="NDVStringArithmetic"/>).
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <param name="output">The loop's output descriptor (bool, or the <c>StringDType</c> result).</param>
+        /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
+        /// <exception cref="ValueError">An NA the loop's rule refuses (an ordering or a concatenation of a <c>None</c>-like
+        ///     NA, NumPy's texts).</exception>
+        /// <exception cref="TypeError">A repetition of a <c>None</c>-like NA (<c>Cannot multiply null that is not a nan-like
+        ///     value</c>).</exception>
+        /// <exception cref="OverflowException">A repetition past <c>2^63 - 1</c> bytes (<c>Overflow encountered in string
+        ///     multiply</c>).</exception>
+        /// <exception cref="InvalidOperationException">A ufunc without a computing <c>StringDType</c> loop (a routing bug).</exception>
+        private static NDArray VStringCompute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
+        {
+            // A bool loop into a TEXT out= (S / U / T): NumPy's output cast formats the bools ('True' / 'False'); the bools
+            // are computed into a temporary and cast into out= under where= (the guard checked the cast and the broadcast).
+            bool boolLoop = output.typecode == NPTypeCode.Boolean;
+            bool textOut = boolLoop && @out is not null && @out.typecode == NPTypeCode.String;
+            if (NDStringComparison.IsComparison(ufunc))
+                return textOut
+                    ? NDStringArithmetic.CastInto(@out, where, () => NDVStringComparison.Execute(ufunc, x1, x2, null, null))
+                    : NDVStringComparison.Execute(ufunc, x1, x2, @out, where);
+            switch (ufunc)
+            {
+                case "logical_and":
+                case "logical_or":
+                case "logical_xor":
+                    return textOut
+                        ? NDStringArithmetic.CastInto(@out, where, () => LogicalOverTruth(ufunc, x1, x2, null, null))
+                        : LogicalOverTruth(ufunc, x1, x2, @out, where);
+                case "add":
+                    return NDVStringArithmetic.Add(x1, x2, @out, where, output);
+                case "multiply":
+                    return NDVStringArithmetic.Multiply(x1, x2, @out, where, output);
+                case "maximum":
+                case "minimum":
+                    return NDVStringArithmetic.MaximumMinimum(ufunc == "maximum", x1, x2, @out, where, output);
+                default:
+                    throw ComputingLoopMisrouted(ufunc);
+            }
+        }
+
+        /// <summary>
+        ///     The checks NumPy makes between finding a <c>StringDType</c> loop and running it, in its order: the loop's
+        ///     descriptor resolution (two NA objects must be compatible — the comparison, <c>add</c>, <c>maximum</c> and
+        ///     <c>minimum</c> loops refuse two different ones), the cast of the loop's output into <c>out=</c> (same_kind), then
+        ///     the broadcast of every operand.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="x1">The first input.</param>
@@ -253,43 +346,127 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
         /// <param name="output">The loop's output descriptor.</param>
-        /// <returns>The output-cast refusal (<see cref="ArgumentException"/>, NumPy's UFuncTypeError text), the broadcast
-        ///     refusal, or the <see cref="StringComputationNotSupportedException"/> of the computation.</returns>
+        /// <returns>The NA refusal (<see cref="TypeError"/>, <c>Cannot find a compatible null string value for null strings
+        ///     'None' and 'nan'</c>), the output-cast refusal (<see cref="ArgumentException"/>, NumPy's UFuncTypeError text),
+        ///     the broadcast refusal, or null when the loop computes.</returns>
+        /// <remarks>
+        ///     The output descriptor of a <c>StringDType</c> loop (<c>add</c>, <c>multiply</c>, <c>maximum</c>,
+        ///     <c>minimum</c>) depends on <paramref name="out"/>: NumPy's <c>resolve_descriptors</c> hands every operand to the
+        ///     loop through <c>PyArray_CastDescrToDType(descr, StringDType)</c>, so a <c>StringDType</c> out= IS the loop's
+        ///     output (its own NA object and coerce, no cast to check), while any other out= becomes the cast's default
+        ///     <c>StringDType()</c> — which is what the refusal names whatever NA object the inputs carry (probed:
+        ///     <c>Cannot cast ufunc 'add' output from StringDType() to dtype('float64') with casting rule 'same_kind'</c>
+        ///     for <c>na_object=nan</c> inputs).
+        /// </remarks>
         private static Exception VStringComputeAnswer(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where, DType output)
         {
-            if (@out is not null && !DTypeCasting.CanCastTypeTo(output, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
-                return new ArgumentException(
-                    $"Cannot cast ufunc '{ufunc}' output from {output.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
-            var broadcast = BroadcastError(x1, x2, @out, where);
-            if (broadcast is not null)
-                return broadcast;
-            return NextPhaseVString(ufunc, IsVString(x1) ? x1.dtype : x2.dtype);
+            if (VStringNAConflict(ufunc, x1, x2) is { } conflict)
+                return conflict;
+            if (@out is not null)
+            {
+                bool textLoop = output.Meta == DTypeRegistry.VString;
+                // A StringDType out= is the text loop's own output descriptor: nothing is cast.
+                if (!(textLoop && IsVString(@out)))
+                {
+                    var produced = textLoop ? DTypeRegistry.VString.default_descr() : output;
+                    if (!DTypeCasting.CanCastTypeTo(produced, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                        return new ArgumentException(
+                            $"Cannot cast ufunc '{ufunc}' output from {produced.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+                }
+            }
+            return BroadcastError(x1, x2, @out, where);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>stringdtype_compatible_na</c> check in the resolve_descriptors of the comparison, <c>add</c>,
+        ///     <c>maximum</c> and <c>minimum</c> loops: two <c>StringDType</c> operands whose NA objects are both present and
+        ///     unequal (by NumPy's <c>na_eq_cmp</c>) have no loop to run. A <c>U</c> operand is cast to a default descriptor
+        ///     (no NA object) first, so it never conflicts; the other loops (<c>multiply</c>, the logical ufuncs, <c>isnan</c>)
+        ///     have one <c>StringDType</c> operand at most.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="x1">The first input.</param>
+        /// <param name="x2">The second input, or null.</param>
+        /// <returns>NumPy's <see cref="TypeError"/> (<c>Cannot find a compatible null string value for null strings 'None'
+        ///     and 'nan'</c>, each NA object as its <c>repr()</c>), or null.</returns>
+        private static TypeError VStringNAConflict(string ufunc, NDArray x1, NDArray x2)
+        {
+            if (!IsVString(x1) || !IsVString(x2))
+                return null;
+            if (!(NDStringComparison.IsComparison(ufunc) || ufunc is "add" or "maximum" or "minimum"))
+                return null;
+            var p1 = x1.dtype.VString;
+            var p2 = x2.dtype.VString;
+            if (VStringParameters.CompatibleNA(p1, p2, out _, out _))
+                return null;
+            return new TypeError(
+                $"Cannot find a compatible null string value for null strings '{NDPyObject.Repr(p1.na_object)}' and " +
+                $"'{NDPyObject.Repr(p2.na_object)}'");
         }
 
         /// <summary>
         ///     NumPy's answer for a reduction-style function over a <c>StringDType</c> array once the axis was validated: the
         ///     reduction ufunc's loop resolution (<c>multiply</c>, <c>fmax</c>, <c>fmin</c> have no <c>StringDType</c> loop: the
         ///     dispatcher's refusal with <c>None</c> — or the <c>dtype=</c> class — in the output slot; a <c>dtype=</c> request
-        ///     refuses every loop, the <c>StringDType</c> loops producing only <c>StringDType</c>), then for <c>add</c> /
-        ///     <c>maximum</c> / <c>minimum</c> the reduction's own checks (one axis at most: the loop is not reorderable; an
-        ///     empty reduction with a non-empty result has no identity), then the computation (phase 2).
+        ///     refuses every loop, the <c>StringDType</c> loops producing only <c>StringDType</c>; a <c>StringDType</c>
+        ///     <c>out=</c> must have an NA object compatible with the input's), then for <c>add</c> / <c>maximum</c> /
+        ///     <c>minimum</c> the reduction's own checks (one axis at most: the loop is not reorderable; an empty reduction with
+        ///     a non-empty result has no identity). Null when the reduction computes.
         /// </summary>
         /// <param name="op">The NumPy function name (<c>"sum"</c>, <c>"prod"</c>, <c>"max"</c>, <c>"cumsum"</c>, ...).</param>
         /// <param name="a">The <c>StringDType</c> array.</param>
         /// <param name="axes">The reduced axes, normalized (null for every axis).</param>
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
         /// <param name="out">The <c>out=</c> array, or null: its class takes the reduction signature's first slot.</param>
-        /// <returns>The exception to throw (never null).</returns>
-        /// <remarks>
-        ///     <c>np.mean</c> / <c>np.var</c> / <c>np.std</c> / <c>np.average</c> / the nan-variants reach NumPy's
-        ///     <c>umr_sum</c> first, so they share <c>add</c>'s checks; their later division fails only after the sum computed
-        ///     (phase 2). <c>np.median</c> sorts first (a computation) and only an EMPTY input reaches its mean's refusal.
-        /// </remarks>
+        /// <returns>The exception to throw, or null when NumPy computes the call (<see cref="NDVStringReduction"/>: the sum /
+        ///     max / min / accumulation and the arg-reductions return; <c>np.mean</c>'s family, <c>np.var</c>'s and
+        ///     <c>np.ptp</c> compute their sum / extremes and then meet NumPy's later refusal). <c>np.median</c> sorts first
+        ///     (strings plan P2.2 over <c>StringDType</c>): an empty input reaches its mean's refusal, anything else is still
+        ///     deferred.</returns>
         internal static Exception VStringReduceAnswer(string op, NDArray a, int[] axes, DType dtype, NDArray @out = null)
+        {
+            if (VStringReduceLoopAnswer(op, a, dtype, @out) is { } refusal)
+                return refusal;
+            string ufunc = ReduceUfuncOf(op, out bool accumulate);
+            if (ufunc is null)
+                return null;
+            if (op == "median")
+                // np.median sorts (computes) before its mean; only an empty input reaches the mean's add.reduce refusal.
+                return a.size == 0 && axes is null
+                    ? new ValueError($"zero-size array to reduction operation {ufunc} which has no identity")
+                    : NextPhaseVString(op, a.dtype);
+            if (accumulate)
+                return null;
+            return (Exception)VStringNotReorderable(ufunc, a, axes) ?? VStringNoIdentity(ufunc, a, axes);
+        }
+
+        /// <summary>
+        ///     The loop resolution part of <see cref="VStringReduceAnswer"/> (<c>reducelike_promote_and_resolve</c>, which
+        ///     NumPy runs before <c>PyUFunc_ReduceWrapper</c>'s own checks): <c>multiply</c>, <c>fmax</c> and <c>fmin</c> have
+        ///     no <c>StringDType</c> loop, a <c>dtype=</c> request has none either, an <c>out=</c> of another class has none
+        ///     (<c>add</c> pairs <c>StringDType</c> with <c>StrDType</c>, <c>maximum</c> / <c>minimum</c> with
+        ///     <c>StringDType</c> only), and a <c>StringDType</c> <c>out=</c> must have an NA object compatible with the
+        ///     input's.
+        /// </summary>
+        /// <param name="op">The NumPy function name (<c>"sum"</c>, <c>"max"</c>, <c>"cumsum"</c>, ...).</param>
+        /// <param name="a">The <c>StringDType</c> array.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="out">The <c>out=</c> array, or null: its class takes the reduction signature's first slot.</param>
+        /// <returns>The refusal, or null when a <c>StringDType</c> loop resolves (also for the arg-reductions, which compute
+        ///     without a ufunc). A function that sorts first (the median family, the sorts and searches) is P2.2's
+        ///     <c>StringDType</c> part: its deferral.</returns>
+        /// <remarks>
+        ///     The keyword route of <c>np.max</c> / <c>np.min</c> (<see cref="NDVStringReduction.MaxMinNumPy"/>) and
+        ///     <c>np.trace</c>'s reduction (<see cref="NDVStringReduction.SumNumPy"/>) run NumPy's <c>out=</c> /
+        ///     <c>where=</c> / <c>initial=</c> checks after this and <see cref="VStringNotReorderable"/>, and before
+        ///     <see cref="VStringNoIdentity"/> — exactly where <c>PyUFunc_ReduceWrapper</c> runs them.
+        /// </remarks>
+        internal static Exception VStringReduceLoopAnswer(string op, NDArray a, DType dtype, NDArray @out)
         {
             string ufunc = ReduceUfuncOf(op, out bool accumulate);
             if (ufunc is null)
-                return NextPhaseVString(op, a.dtype);
+                // The arg-reductions compute (the dtype's ArgFunc); the sorts and searches are P2.2's StringDType part.
+                return op is "argmax" or "argmin" or "nanargmax" or "nanargmin" ? null : NextPhaseVString(op, a.dtype);
             string input = a.dtype.Meta.ToString();
             // The reduction signature's first slot: dtype= wins, then the out's class, else None.
             string first = dtype is not null ? dtype.Meta.ToString() : @out is not null ? DispatchClass(@out) : "None";
@@ -302,30 +479,140 @@ namespace NumSharp.Backends.Strings
             // maximum / minimum with StringDType only.
             if (@out is not null && !IsVString(@out) && !(ufunc == "add" && @out.dtype.Meta == DTypeRegistry.Str))
                 return VStringNoLoop(ufunc, new[] { first, input });
-            if (op == "median")
-                // np.median sorts (computes) before its mean; only an empty input reaches the mean's add.reduce refusal.
-                return a.size == 0 && axes is null
-                    ? new ValueError($"zero-size array to reduction operation {ufunc} which has no identity")
-                    : NextPhaseVString(op, a.dtype);
-            if (!accumulate)
+            // The loop's descriptor resolution over (out, input, out): two NA objects must be compatible (the out first).
+            if (IsVString(@out) && !VStringParameters.CompatibleNA(@out.dtype.VString, a.dtype.VString, out _, out _))
+                return new TypeError(
+                    $"Cannot find a compatible null string value for null strings '{NDPyObject.Repr(@out.dtype.VString.na_object)}' " +
+                    $"and '{NDPyObject.Repr(a.dtype.VString.na_object)}'");
+            // add.accumulate's enforce_uniform_args: the accumulator descriptor (the out's) must be equivalent to the input's,
+            // and NumPy's string-to-string cast from a descriptor WITH an NA object to one without is unsafe (lossy), so an
+            // out with an NA object over an input without one is refused (the reverse is a no-cast). Any other out is the
+            // cast's default StringDType(), which is equivalent to every input.
+            if (accumulate && IsVString(@out) && @out.dtype.VString.HasNAObject && !a.dtype.VString.HasNAObject)
             {
-                int nd = a.ndim;
-                int reducedCount = axes?.Length ?? nd;
-                if (reducedCount > 1)
-                    return new ValueError($"reduction operation '{ufunc}' is not reorderable, so at most one axis may be specified");
-                long reduced = 1, result = 1;
-                var dims = a.Shape.dimensions ?? Array.Empty<long>();
-                for (int i = 0; i < nd; i++)
-                {
-                    if (axes is null || Array.IndexOf(axes, i) >= 0)
-                        reduced *= dims[i];
-                    else
-                        result *= dims[i];
-                }
-                if (reduced == 0 && result != 0)
-                    return new ValueError($"zero-size array to reduction operation {ufunc} which has no identity");
+                string o = @out.dtype.ToString(true);
+                return new TypeError(
+                    $"the resolved dtypes are not compatible with add.accumulate. Resolved ({o}, {a.dtype.ToString(true)}, {o})");
             }
-            return NextPhaseVString(op, a.dtype);
+            return null;
+        }
+
+        /// <summary>
+        ///     <c>PyUFunc_ReduceWrapper</c>'s first check: the <c>StringDType</c> <c>add</c> / <c>maximum</c> /
+        ///     <c>minimum</c> loops are not reorderable (their result depends on the order the elements meet), so a reduction
+        ///     over two or more axes is refused before anything is read.
+        /// </summary>
+        /// <param name="ufunc">The ufunc NumPy names.</param>
+        /// <param name="a">The reduced array.</param>
+        /// <param name="axes">The reduced axes, normalized (null for every axis).</param>
+        /// <returns>The <see cref="ValueError"/> (<c>reduction operation 'add' is not reorderable, so at most one axis may
+        ///     be specified</c>), or null.</returns>
+        internal static ValueError VStringNotReorderable(string ufunc, NDArray a, int[] axes)
+            => (axes?.Length ?? a.ndim) > 1
+                ? new ValueError($"reduction operation '{ufunc}' is not reorderable, so at most one axis may be specified")
+                : null;
+
+        /// <summary>
+        ///     <c>PyArray_CopyInitialReduceValues</c>' refusal (a reduction without an identity and without <c>initial=</c>):
+        ///     an empty reduced extent with a non-empty result has no first element to start from.
+        /// </summary>
+        /// <param name="ufunc">The ufunc NumPy names.</param>
+        /// <param name="a">The reduced array.</param>
+        /// <param name="axes">The reduced axes, normalized (null for every axis).</param>
+        /// <returns>The <see cref="ValueError"/> (<c>zero-size array to reduction operation add which has no
+        ///     identity</c>), or null.</returns>
+        internal static ValueError VStringNoIdentity(string ufunc, NDArray a, int[] axes)
+        {
+            int nd = a.ndim;
+            long reduced = 1, result = 1;
+            var dims = a.Shape.dimensions ?? Array.Empty<long>();
+            for (int i = 0; i < nd; i++)
+            {
+                if (axes is null || Array.IndexOf(axes, i) >= 0)
+                    reduced *= dims[i];
+                else
+                    result *= dims[i];
+            }
+            return reduced == 0 && result != 0
+                ? new ValueError($"zero-size array to reduction operation {ufunc} which has no identity")
+                : null;
+        }
+
+        /// <summary>
+        ///     The guard of a <c>StringDType</c> reduction that COMPUTES: runs NumPy's checks in its order (a direct
+        ///     <c>ufunc.reduce</c>'s <c>dtype=</c> class check, the axis, <c>np.mean</c>'s family's later class check, an empty
+        ///     arg-reduction, then <see cref="VStringReduceAnswer"/>) and reports whether the caller computes.
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The reduced array.</param>
+        /// <param name="axis">The <c>axis</c> argument, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="out">The <c>out=</c> array, or null (its read-only check runs where NumPy runs it: before the axis
+        ///     for a direct <c>ufunc.reduce</c>, after it otherwise).</param>
+        /// <param name="loopOnly">True to stop after the loop resolution (<see cref="VStringReduceLoopAnswer"/>): the caller
+        ///     runs <c>PyUFunc_ReduceWrapper</c>'s checks itself, with the out's shape check between the reorderable and the
+        ///     identity checks (<see cref="NDVStringReduction.SumNumPy"/>).</param>
+        /// <returns>False for an input that is not <c>StringDType</c> (the caller's own path continues); true when the
+        ///     <c>StringDType</c> reduction computes.</returns>
+        /// <exception cref="ValueError">A read-only out, an arg-reduction over an empty line, an N-D reduction over every
+        ///     axis (not reorderable), or an empty reduction without identity.</exception>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's refusal (a <c>dtype=</c> request, an out of another class, two incompatible
+        ///     NA objects).</exception>
+        /// <exception cref="StringComputationNotSupportedException"><c>np.median</c> of a non-empty input (P2.2 over
+        ///     <c>StringDType</c>).</exception>
+        internal static bool VStringReduces(string op, NDArray a, int? axis, DType dtype = null, NDArray @out = null, bool loopOnly = false)
+        {
+            if (!IsVString(a))
+                return false;
+            // np.trace's C reduction reaches the ufunc after its diagonal's axis checks (the caller's), so its dtype= check
+            // and its out's read-only check both come after the axis, in that order.
+            bool outFirst = AxisRuleOf(op) == ReduceAxisRule.UfuncReduce && op != "trace";
+            if (@out is not null && outFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            PreReduceDTypeCheck(op, dtype);
+            ValidateReduceAxis(op, a.ndim, axis);
+            PostReduceDTypeCheck(op, dtype);
+            if (@out is not null && !outFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            if (EmptyArgReductionError(op, a, axis) is { } emptyArg)
+                throw emptyArg;
+            var refusal = loopOnly
+                ? VStringReduceLoopAnswer(op, a, dtype, @out)
+                : VStringReduceAnswer(op, a, ReducedAxes(a, axis), dtype, @out);
+            if (refusal is not null)
+                throw refusal;
+            return true;
+        }
+
+        /// <summary>
+        ///     <see cref="VStringReduces(string, NDArray, int?, DType, NDArray, bool)"/> for a tuple <c>axis</c>: the read-only
+        ///     out (a direct <c>ufunc.reduce</c> parses it first), every axis checked and then repeats, the out's read-only
+        ///     check of the functions that meet it later, then <see cref="VStringReduceAnswer"/> (two or more axes are not
+        ///     reorderable; an empty tuple reduces nothing).
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The reduced array.</param>
+        /// <param name="axes">The tuple (not null).</param>
+        /// <param name="out">The <c>out=</c> array, or null.</param>
+        /// <returns>False for an input that is not <c>StringDType</c>; true when the <c>StringDType</c> reduction computes.</returns>
+        /// <exception cref="ValueError">A read-only out, a repeated axis, two or more axes (not reorderable), or an empty
+        ///     reduction without identity.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal.</exception>
+        internal static bool VStringReducesAxes(string op, NDArray a, int[] axes, NDArray @out = null)
+        {
+            if (!IsVString(a))
+                return false;
+            bool outFirst = AxisRuleOf(op) == ReduceAxisRule.UfuncReduce;
+            if (@out is not null && outFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            ValidateReduceAxes(op, a.ndim, axes);
+            if (@out is not null && !outFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            if (VStringReduceAnswer(op, a, ReducedAxes(a, axes), null, @out) is { } refusal)
+                throw refusal;
+            return true;
         }
 
         /// <summary>

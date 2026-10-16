@@ -24,6 +24,10 @@ namespace NumSharp
             // 0-d input accepts 0 and -1), then resolves its loop on (out, a) and refuses text with its verbatim text; see
             // NDStringUfuncs.ReduceError / ReduceOutError.
             if (a is null) throw new ArgumentNullException(nameof(a));
+            // StringDType: _ptp computes both extremes (maximum.reduce into the out, minimum.reduce) and then meets NumPy's
+            // subtraction of what Python holds: NDVStringStatistics.Ptp.
+            if (Backends.Strings.NDStringUfuncs.VStringReduces("ptp", a, axis, null, @out))
+                return Backends.Strings.NDVStringStatistics.Ptp(a, axis, @out, keepdims);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
 
             var maxRes = np.amax(a, axis, keepdims);
@@ -57,6 +61,14 @@ namespace NumSharp
             // Text (input or out=): NumPy's maximum.reduce checks the tuple (every axis, then "duplicate value in
             // 'axis'"), then refuses text on (out, a) with its verbatim text; see NDStringUfuncs.ReduceError / ReduceOutError.
             if (a is null) throw new ArgumentNullException(nameof(a));
+            // StringDType: maximum.reduce's tuple checks and loop resolution, then one axis computes (NDVStringStatistics.Ptp);
+            // no axis reduces nothing, so the extremes are the elements themselves (an ndarray: subtract has no loop).
+            if (axis is not null && Backends.Strings.NDStringUfuncs.VStringReducesAxes("ptp", a, axis, @out))
+            {
+                if (axis.Length == 1)
+                    return Backends.Strings.NDVStringStatistics.Ptp(a, axis[0], @out, keepdims);
+                return Backends.Strings.NDVStringStatistics.PtpOverNoAxis(a, @out);
+            }
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
             if (axis is null) return ptp(a, (int?)null, @out, keepdims);
 

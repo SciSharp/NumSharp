@@ -73,8 +73,12 @@ namespace NumSharp.Backends
         internal NDArray VarStdNumPy(NDArray arr, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
             DType outDtype = null, bool sumOnly = false)
         {
+            // StringDType: _var computes the keepdims sum and then meets NumPy's division (or, for a 0-d input, Python's
+            // division and `arr - arrmean`): NDVStringStatistics.Var. _std calls _var first, so the answers are var's.
+            if (Strings.NDStringUfuncs.VStringReduces(takeSqrt ? "std" : "var", arr, axis_, dtype))
+                return Strings.NDVStringStatistics.Var(takeSqrt ? "std" : "var", arr, Strings.NDStringUfuncs.ReducedAxes(arr, axis_), dtype);
             // NumPy computes var/std as _var: _count_reduce_items normalizes the axis first, then its add.reduce reads
-            // dtype= and refuses text (same text for both).
+            // dtype= and refuses fixed-width text (same text for both).
             Strings.NDStringUfuncs.ThrowIfReduce(takeSqrt ? "std" : "var", arr, axis_, dtype);
             var shape = arr.Shape;
 

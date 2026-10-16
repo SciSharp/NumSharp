@@ -27,8 +27,12 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumsum(s.a, s.axis, s.dtype, s.@out), @out);
-            // Text, or a string dtype= request: NumPy's _replace_nan leaves text alone and its accumulate validates the
-            // axis (a 0-d input ravels first), then refuses with its verbatim text; see NDStringUfuncs.ReduceError.
+            // StringDType is not inexact: _replace_nan leaves it alone and nancumsum IS np.cumsum, which computes.
+            if (Backends.Strings.NDStringUfuncs.VStringReduces("nancumsum", a, axis, dtype, @out))
+                return Backends.Strings.NDVStringReduction.CumSum(a, axis, @out);
+            // Fixed-width text, or a string dtype= request: NumPy's _replace_nan leaves text alone and its accumulate
+            // validates the axis (a 0-d input ravels first), then refuses with its verbatim text; see
+            // NDStringUfuncs.ReduceError.
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nancumsum", a, axis, @out, dtype);
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.

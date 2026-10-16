@@ -70,12 +70,16 @@ namespace NumSharp.Backends.Strings
         ///     above U+10FFFF (its first unit above it, every later unit zero).</exception>
         internal static NDArray Truth(NDArray text, Flavor flavor, char order = 'K')
         {
-            if (!NDStringUfuncs.IsString(text))
+            bool vstring = NDStringUfuncs.IsVString(text);
+            if (!vstring && !NDStringUfuncs.IsString(text))
                 throw new ArgumentException($"A truth array is computed from a string array, not {text?.dtype}.", nameof(text));
             var result = new NDArray(NPTypeCode.Boolean, ResultShape(text.Shape, order), false);
             try
             {
-                Fill(text, result, flavor);
+                if (vstring)
+                    FillVString(text, result, flavor);
+                else
+                    Fill(text, result, flavor);
                 return result;
             }
             catch
@@ -84,6 +88,75 @@ namespace NumSharp.Backends.Strings
                 throw;
             }
         }
+
+        /// <summary>
+        ///     The truth of every <c>StringDType</c> cell of <paramref name="text"/> into <paramref name="result"/> (same
+        ///     dimensions, any layouts): NumPy's <c>string_to_bool</c> (<see cref="Flavor.Cast"/>) or the dtype's
+        ///     <c>nonzero</c> (<see cref="Flavor.Nonzero"/>) — a non-NA text is true when non-empty, and the two routes differ
+        ///     only for an NA cell (<see cref="NDVStringCells.NaTruth"/>: a NaN-like NA is True on both, another non-string NA
+        ///     False on both, and a string NA False on the nonzero route but, by NumPy's inverted test, True on the cast route
+        ///     exactly when the NA string is empty). Neither route raises.
+        /// </summary>
+        /// <param name="text">The <c>StringDType</c> array.</param>
+        /// <param name="result">A bool array of the same dimensions.</param>
+        /// <param name="flavor">The route.</param>
+        /// <remarks>
+        ///     The kernel reads only each cell's flags byte and size field (no arena), with the allocator locked for the call as
+        ///     NumPy's loop locks it (a concurrent writer of the same buffer waits). One kernel call when both arrays walk one
+        ///     linear order, else an NDIter pass over the cells (no cast, so no buffer).
+        /// </remarks>
+        private static unsafe void FillVString(NDArray text, NDArray result, Flavor flavor)
+        {
+            if (result.size == 0)
+                return;
+            byte naTruth = NDVStringCells.NaTruth(text.dtype, flavor == Flavor.Cast);
+            var kernel = ILKernelGenerator.GetVStringTruthKernel(naTruth) ?? ManagedVStringKernel(naTruth);
+            var allocator = text.Storage.VStringSlice.Allocator;
+            const int cell = VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            allocator.acquire_allocator();
+            try
+            {
+                var ts = text.Shape;
+                var rs = result.Shape;
+                if (ts.IsContiguous && rs.IsContiguous || ts.IsFContiguous && rs.IsFContiguous)
+                {
+                    void** ptrs = stackalloc void*[2];
+                    long* strides = stackalloc long[2];
+                    ptrs[0] = (byte*)text.Address + ts.offset * (long)cell;
+                    ptrs[1] = (byte*)result.Address + rs.offset;
+                    strides[0] = cell;
+                    strides[1] = 1;
+                    kernel(ptrs, strides, result.size, null);
+                    GC.KeepAlive(text);
+                    GC.KeepAlive(result);
+                    return;
+                }
+                // REFS_OK: a StringDType operand "holds references" (its cells point into an arena or the heap).
+                using var iter = NDIterRef.AdvancedNew(2, new[] { text, result },
+                    NDIterGlobalFlags.EXTERNAL_LOOP | NDIterGlobalFlags.REFS_OK, NPY_ORDER.NPY_KEEPORDER, NPY_CASTING.NPY_SAFE_CASTING,
+                    new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }, opDescrs: new DType[2]);
+                iter.ForEach(kernel);
+            }
+            finally
+            {
+                allocator.release_allocator();
+            }
+        }
+
+        /// <summary>
+        ///     The <c>StringDType</c> truth as a managed <see cref="NDInnerLoopFunc"/> (hosts without dynamic code; the IL
+        ///     kernel is tested against it): the same cell helper in a C# loop.
+        /// </summary>
+        /// <param name="naTruth">The truth of an NA cell.</param>
+        /// <returns>The kernel.</returns>
+        internal static unsafe NDInnerLoopFunc ManagedVStringKernel(byte naTruth)
+            => (dataptrs, strides, count, auxdata) =>
+            {
+                byte* p = (byte*)dataptrs[0], po = (byte*)dataptrs[1];
+                long sp = strides[0], so = strides[1];
+                for (long i = 0; i < count; i++, p += sp, po += so)
+                    *po = NDVStringCells.Truth(p, naTruth);
+            };
 
         /// <summary>
         ///     Writes the truth of every element of <paramref name="text"/> into <paramref name="result"/> (same dimensions,

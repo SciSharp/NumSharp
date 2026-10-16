@@ -375,7 +375,7 @@ namespace NumSharp.Backends
         public override NDArray Compare(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "equal", lhs, rhs, @out, where);
-            ValidateBoolLoopDtype(typeCode, "equal");
+            ValidateBoolLoopDtype(typeCode, "equal", lhs, rhs);
             // Two strings of one class compare their text (NDStringComparison's kernels, through the guard); any other pair
             // with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("equal", lhs, rhs, @out, typeCode, where) is { } textResult)
@@ -386,7 +386,7 @@ namespace NumSharp.Backends
         public override NDArray NotEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "not_equal", lhs, rhs, @out, where);
-            ValidateBoolLoopDtype(typeCode, "not_equal");
+            ValidateBoolLoopDtype(typeCode, "not_equal", lhs, rhs);
             // Two strings of one class compare their text (NDStringComparison's kernels, through the guard); any other pair
             // with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("not_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
@@ -397,7 +397,7 @@ namespace NumSharp.Backends
         public override NDArray Less(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "less", lhs, rhs, @out, where);
-            ValidateBoolLoopDtype(typeCode, "less");
+            ValidateBoolLoopDtype(typeCode, "less", lhs, rhs);
             // Two strings of one class compare their text (NDStringComparison's kernels, through the guard); any other pair
             // with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("less", lhs, rhs, @out, typeCode, where) is { } textResult)
@@ -408,7 +408,7 @@ namespace NumSharp.Backends
         public override NDArray LessEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "less_equal", lhs, rhs, @out, where);
-            ValidateBoolLoopDtype(typeCode, "less_equal");
+            ValidateBoolLoopDtype(typeCode, "less_equal", lhs, rhs);
             // Two strings of one class compare their text (NDStringComparison's kernels, through the guard); any other pair
             // with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("less_equal", lhs, rhs, @out, typeCode, where) is { } textResult)
@@ -419,7 +419,7 @@ namespace NumSharp.Backends
         public override NDArray Greater(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "greater", lhs, rhs, @out, where);
-            ValidateBoolLoopDtype(typeCode, "greater");
+            ValidateBoolLoopDtype(typeCode, "greater", lhs, rhs);
             // Two strings of one class compare their text (NDStringComparison's kernels, through the guard); any other pair
             // with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("greater", lhs, rhs, @out, typeCode, where) is { } textResult)
@@ -430,7 +430,7 @@ namespace NumSharp.Backends
         public override NDArray GreaterEqual(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "greater_equal", lhs, rhs, @out, where);
-            ValidateBoolLoopDtype(typeCode, "greater_equal");
+            ValidateBoolLoopDtype(typeCode, "greater_equal", lhs, rhs);
             // Two strings of one class compare their text (NDStringComparison's kernels, through the guard); any other pair
             // with a string has no loop.
             if (Strings.NDStringUfuncs.BinaryGuard("greater_equal", lhs, rhs, @out, typeCode, where) is { } textResult)

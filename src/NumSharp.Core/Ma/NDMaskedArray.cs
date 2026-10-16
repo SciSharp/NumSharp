@@ -4990,6 +4990,13 @@ namespace NumSharp
                 // becomes float64 — then ma.true_divide by the count, which masks a non-finite or domain quotient.
                 result = MaDivideLikeNumPy(MaMultiplyByStrongOneLikeNumPy(dsum), cnt);
             }
+            else if (dsum._data.Storage.IsVString)
+            {
+                // A 0-d StringDType sum is the element's Python object (a str, or the NA object): Python's `dsum * 1.`, then
+                // `/ cnt` — a str cannot be repeated by a float, None has no product, a NaN-like NA divides.
+                result = new NDMaskedArray(Backends.Strings.NDVStringStatistics.MaskedMeanOfScalar(
+                    dsum._data.Storage.GetAtIndex(0), cnt.GetInt64()), null);
+            }
             else
             {
                 // A 0-d sum is a numpy SCALAR: plain scalar arithmetic, nothing masked. `np.float32 * 1.` stays float32 (the
@@ -5353,6 +5360,10 @@ namespace NumSharp
         /// <returns>The difference in <c>result_type(a, b)</c>.</returns>
         private static NDArray StrongSubtract(NDArray a, NDArray b)
         {
+            // StringDType has no subtract loop: NumPy's umath.subtract refuses the pair by class (StringDType, Float64DType)
+            // before any promotion is computed, so the ufunc gets the operands as they are and raises its no-loop text.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b))
+                return np.subtract(a, b);
             var rt = np.result_type(a.dtype, b.dtype);
             // The layout is voted by the ORIGINAL operands: a cast copy would carry its own (C) strides.
             var r = UfuncResultBuffer(rt, a, b);
@@ -5498,6 +5509,10 @@ namespace NumSharp
         {
             var da = dsum._data;
             var one = NDArray.Scalar(1.0);
+            // A StringDType sum: umath.multiply(da, np.array(1.)) has no loop for (StringDType, Float64DType) — the ufunc
+            // raises its no-loop text (a promotion here would raise DTypePromotionError instead).
+            if (da.Storage.IsVString)
+                return new NDMaskedArray(np.multiply(da, one), dsum._mask);
             var (ca, cb) = StrongCast(da, one);
             // The layout is voted by the original operands, as in StrongSubtract.
             var result = UfuncResultBuffer(ca.dtype, da, one);

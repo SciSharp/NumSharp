@@ -139,11 +139,9 @@ namespace NumSharp.Backends.Strings
         ///     not yet (the sorts and arg-reductions).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int? axis = null)
         {
-            // A StringDType input: no truth route yet (a truth test reads the text, phase 2); the shape-decided answers run
-            // on the bool stand-in like the fixed-width ones.
-            if (IsVString(a))
-                return VStringStandIn(op, a, axis);
-            if (!IsString(a))
+            // A StringDType operand is tested first (IsString refuses it loudly).
+            bool vstring = IsVString(a);
+            if (!vstring && !IsString(a))
                 return null;
             if (TruthFlavorOf(op) is { } flavor)
             {
@@ -151,8 +149,18 @@ namespace NumSharp.Backends.Strings
                 ValidateReduceAxis(op, a.ndim, axis);
                 if (op is "nonzero" && a.ndim == 0)
                     throw new ValueError(NonZero0dMessage);
+                // count_nonzero WITH an axis is `a.astype(bool).sum(axis)` for StringDType: NumPy's np.character test, which
+                // sends S / U through `a != ''`, is False for StringDType, so its count reads the CAST route (an NA of an
+                // empty-string NA descriptor counts there, probed), while count_nonzero without an axis reads the nonzero
+                // function.
+                if (vstring && op is "count_nonzero" && axis is not null)
+                    flavor = NDStringTruth.Flavor.Cast;
                 return NDStringTruth.Truth(a, flavor);
             }
+            // A StringDType sort or arg-reduction: the shape-decided answers run on the bool stand-in like the fixed-width
+            // ones.
+            if (vstring)
+                return VStringStandIn(op, a, axis);
             ThrowIfComputes(op, a, axis);
             return BoolStandIn(a);
         }
@@ -186,15 +194,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="StringComputationNotSupportedException"><paramref name="op"/> is not a truth test (no caller passes one).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int[] axes)
         {
-            if (IsVString(a))
-            {
-                // A tuple axis only reaches any / all: an empty input reads no element, anything else is a truth test.
-                ValidateReduceAxes(op, a.ndim, axes);
-                if (a.size != 0)
-                    throw NextPhaseVString(op, a.dtype);
-                return BoolStandIn(a);
-            }
-            if (!IsString(a))
+            // A StringDType operand is tested first (IsString refuses it loudly); its truth test is the same cast route.
+            if (!IsVString(a) && !IsString(a))
                 return null;
             ValidateReduceAxes(op, a.ndim, axes);
             if (TruthFlavorOf(op) is { } flavor)

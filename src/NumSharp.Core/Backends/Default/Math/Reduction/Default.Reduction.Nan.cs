@@ -20,8 +20,11 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         public override NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false)
         {
-            // Text, or a string dtype= request: NumPy's nansum checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // StringDType is not inexact: _replace_nan leaves it alone and nansum IS np.sum, which computes.
+            if (Strings.NDStringUfuncs.VStringReduces("nansum", a, axis))
+                return Strings.NDVStringReduction.Sum(a, axis, keepdims, null);
+            // Fixed-width text, or a string dtype= request: NumPy's nansum checks its arguments first (the axis, and the
+            // dtype= class where NumPy reads it), then refuses with its verbatim text.
             Strings.NDStringUfuncs.ThrowIfReduce("nansum", a, axis);
             var arr = a;
             var shape = arr.Shape;

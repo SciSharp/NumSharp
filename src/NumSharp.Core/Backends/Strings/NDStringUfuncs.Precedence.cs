@@ -177,10 +177,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
         /// <param name="x1">The first input.</param>
         /// <param name="x2">The second input, or null for a unary ufunc.</param>
-        /// <returns>True for a string request of <c>add</c> over two strings of one class.</returns>
+        /// <returns>True for a string request of <c>add</c> over two strings of one class; false whenever an operand holds
+        ///     <c>StringDType</c> text (no <c>StringDType</c> loop produces a fixed-width class, so NumPy refuses the request
+        ///     instead: <see cref="ThrowIfStringCall"/>).</returns>
         internal static bool IsIgnoredStringRequest(string ufunc, DType dtype, NDArray x1, NDArray x2)
-            => ufunc == "add" && x2 is not null && IsStringRequest(dtype) && IsString(x1) && IsString(x2)
-               && x1.dtype.Meta == x2.dtype.Meta;
+            => ufunc == "add" && x2 is not null && IsStringRequest(dtype) && !IsVString(x1) && !IsVString(x2)
+               && IsString(x1) && IsString(x2) && x1.dtype.Meta == x2.dtype.Meta;
 
         /// <summary>
         ///     <c>np.add</c> under a string <c>dtype=</c> request whose operands are NOT two strings of one class (those ignore
@@ -214,7 +216,10 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static NDArray AddUnderStringRequest(DType dtype, NDArray x1, NDArray x2, NDArray @out, NDArray where)
         {
-            if (x2 is null || !IsStringRequest(dtype) || IsIgnoredStringRequest("add", dtype, x1, x2))
+            // A StringDType operand has no loop producing a fixed-width class: the caller's dtype guard refuses the request
+            // with the operands' classes (probed: add(t, u, dtype='U') names (StringDType, StrDType) -> StrDType).
+            if (x2 is null || !IsStringRequest(dtype) || IsVString(x1) || IsVString(x2)
+                || IsIgnoredStringRequest("add", dtype, x1, x2))
                 return null;
             DefaultEngine.ThrowIfNotGeneralDType(dtype);
             ThrowIfOutWhereInvalid(@out, where);
@@ -697,7 +702,7 @@ namespace NumSharp.Backends.Strings
                 PostReduceDTypeCheck(op, dtype);
                 if (EmptyArgReductionError(op, a, axis) is { } emptyArg)
                     throw emptyArg;
-                throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), dtype);
+                throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), dtype) ?? ComputingLoopMisrouted(op);
             }
             bool request = IsStringRequest(dtype);
             if (!request && !IsString(a))
@@ -746,7 +751,7 @@ namespace NumSharp.Backends.Strings
                 if (!outFirst && !@out.Shape.IsWriteable)
                     throw new ValueError("output array is read-only");
                 if (IsVString(a))
-                    throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), null, @out);
+                    throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), null, @out) ?? ComputingLoopMisrouted(op);
                 // A numeric (or fixed-width) input into a StringDType out: no loop pairs them with StringDType.
                 throw VStringNoLoop(ufunc, new[] { DispatchClass(@out), DispatchClass(a) });
             }
@@ -791,7 +796,7 @@ namespace NumSharp.Backends.Strings
                 if (!outFirst && !@out.Shape.IsWriteable)
                     throw new ValueError("output array is read-only");
                 if (IsVString(a))
-                    throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), null, @out);
+                    throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), null, @out) ?? ComputingLoopMisrouted(op);
                 throw VStringNoLoop(ufunc, new[] { DispatchClass(@out), DispatchClass(a) });
             }
             if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
@@ -945,7 +950,7 @@ namespace NumSharp.Backends.Strings
                 PreReduceDTypeCheck(op, dtype);
                 ValidateReduceAxes(op, a.ndim, axes);
                 PostReduceDTypeCheck(op, dtype);
-                throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), dtype);
+                throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), dtype) ?? ComputingLoopMisrouted(op);
             }
             bool request = IsStringRequest(dtype);
             if (!request && !IsString(a))
@@ -972,16 +977,26 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The <c>dtype=</c> class check of <c>np.mean</c>'s family, whose Python layer validates the axis
-        ///     (<c>_count_reduce_items</c>) before its <c>umr_sum</c> reads the request.
+        ///     The <c>dtype=</c> checks NumPy makes AFTER the axis: the class check of <c>np.mean</c>'s family, whose Python
+        ///     layer validates the axis (<c>_count_reduce_items</c>) before its <c>umr_sum</c> reads the request; and for the
+        ///     C reductions that pass the request on as a type NUMBER (<c>np.trace</c>, the accumulations), the ufunc's
+        ///     <c>_get_dtype</c> refusal of a new-style class: the number of a <c>StringDType</c> request becomes the default
+        ///     <c>StringDType()</c> INSTANCE, which a ufunc refuses whatever the input (probed:
+        ///     <c>np.cumsum(u, dtype=StringDType())</c> and <c>np.trace(t, dtype=StringDType())</c> are the TypeError, after
+        ///     an out-of-bounds axis and before a read-only out).
         /// </summary>
         /// <param name="op">The NumPy function name.</param>
         /// <param name="dtype">The request, or null.</param>
-        /// <exception cref="TypeError">A detailed descriptor.</exception>
+        /// <exception cref="TypeError">A detailed descriptor (the mean family), or a new-style descriptor (the type-number
+        ///     reductions).</exception>
         private static void PostReduceDTypeCheck(string op, DType dtype)
         {
-            if (dtype is not null && op is "mean" or "var" or "std" or "nanmean" or "nanvar" or "nanstd")
+            if (dtype is null)
+                return;
+            if (op is "mean" or "var" or "std" or "nanmean" or "nanvar" or "nanstd")
                 DefaultEngine.ThrowIfNotGeneralDType(dtype);
+            else if (op is "trace" or "cumsum" or "cumprod" or "nancumsum" or "nancumprod" && !dtype.Meta._legacy)
+                throw new TypeError(DefaultEngine.NewStyleDTypeInstanceText);
         }
 
         /// <summary>

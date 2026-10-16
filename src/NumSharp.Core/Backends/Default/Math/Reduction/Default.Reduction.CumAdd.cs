@@ -26,6 +26,9 @@ namespace NumSharp.Backends
         {
             // Text, or a string dtype= request: NumPy's cumsum checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // StringDType: NumPy's add.accumulate computes (strings plan D18) once its checks passed.
+            if (Strings.NDStringUfuncs.VStringReduces("cumsum", arr, axis_, dtype))
+                return Strings.NDVStringReduction.CumSum(arr, axis_, null);
             Strings.NDStringUfuncs.ThrowIfReduce("cumsum", arr, axis_, dtype);
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // NumPy: cumsum on boolean arrays treats True as 1 and False as 0, returning int64

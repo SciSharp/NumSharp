@@ -810,28 +810,32 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     Computing on <c>StringDType</c> is phase 2: a comparison of two StringDType arrays (or StringDType with
-        ///     <c>U</c>) refuses with NumSharp's phase-2 text — except an EMPTY broadcast, which the shape decides — and so
-        ///     does <c>np.sum</c>, whose <c>add.reduce</c> NumPy runs through StringDType's own <c>add</c> loop (the
-        ///     concatenation of the texts) once its checks pass.
+        ///     Computing on <c>StringDType</c> (strings phase 2, P2.T): a comparison of two StringDType arrays, or of
+        ///     StringDType with <c>U</c>, gives NumPy's flags (an EMPTY broadcast an empty bool array), and <c>np.sum</c> runs
+        ///     StringDType's own <c>add</c> loop: the concatenation of the texts (probed: <c>np.sum(np.array(['a'], T()))</c> is
+        ///     <c>'a'</c>). The whole contract is <see cref="StringDTypeComputeTests"/> and the oracle's <c>tcomp</c> /
+        ///     <c>tarith</c> / <c>treduce</c> sections.
         /// </summary>
         [TestMethod]
-        public void Computation_IsPhaseTwo()
+        public void Computation_ComparesAndConcatenates()
         {
             using var a = A("a");
             using var b = A("a");
-            Action eq = () => _ = a == b;
-            eq.Should().Throw<StringComputationNotSupportedException>().WithMessage("equal is not supported for StringDType() arrays yet*");
-            Action ne = () => _ = a != np.array(new[] { "a" });
-            ne.Should().Throw<StringComputationNotSupportedException>().WithMessage("not_equal is not supported*");
+            using (var eq = a == b)
+                ((bool)eq.Storage.GetAtIndex(0)).Should().BeTrue();
+            using (var ne = a != np.array(new[] { "a" }))
+                ((bool)ne.Storage.GetAtIndex(0)).Should().BeFalse();
             using var empty = np.array(new string[0], T);
             using (var r = empty == b)
             {
                 r.size.Should().Be(0);
                 r.dtype.Should().Be(np.@bool);
             }
-            Action sum = () => np.sum(a);
-            sum.Should().Throw<StringComputationNotSupportedException>().WithMessage("sum is not supported for StringDType() arrays yet*");
+            using (var sum = np.sum(A("a", "bc")))
+            {
+                sum.ndim.Should().Be(0);
+                sum.Storage.GetAtIndex(0).Should().Be("abc");
+            }
         }
 
         /// <summary>

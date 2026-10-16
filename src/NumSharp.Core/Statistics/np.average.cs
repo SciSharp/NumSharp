@@ -176,6 +176,18 @@ namespace NumSharp
             // Text: NumPy's average normalizes the axis tuple first (normalize_axis_tuple with argname "axis": "axis: axis 9
             // is out of bounds ...", "repeated axis in `axis` argument"), then a.mean (add.reduce) refuses text — or, with
             // weights, sums them with result_type(a, weights), a SIZED string descriptor ufuncs refuse by class.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+            {
+                // StringDType: the axis tuple normalized (average's argument name), then a.mean(axis) — or, with weights,
+                // result_type and the weights' sum — computing until NumPy's statement refuses (NDVStringStatistics.Average).
+                Backends.Strings.NDStringUfuncs.ValidateReduceAxes("average", a.ndim, axis);
+                var avg = Backends.Strings.NDVStringStatistics.Average(a, Backends.Strings.NDStringUfuncs.ReducedAxes(a, axis), weights, keepdims);
+                if (!returned)
+                    return (scope.Returns(avg), null);
+                // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns.
+                var sclValue = NDArray.Scalar((double)a.size / avg.size);
+                return (scope.Returns(avg), scope.Returns(sclValue));
+            }
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.AverageAnswer(a, axis, weights);
 

@@ -266,6 +266,10 @@ namespace NumSharp.Tests.Strings
             // sections strshape and strsurface.
             if (TryInvokeSets(c.Op, p, ops, out var sets))
                 return sets;
+            // Sections tcomp / tarith / treduce (computing on StringDType, P2.T): the reductions with NumPy's keywords, the
+            // statistics, np.trace and the integer operator live in their own partial; the rest replays through shared ops.
+            if (TryInvokeVCompute(c.Op, p, ops, out var vcomputed))
+                return vcomputed;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

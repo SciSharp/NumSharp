@@ -9318,11 +9318,606 @@ def gen_strsets():
     _quant("pct-outside", t1, name="percentile", q=101.0, method="lower")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Sections tcomp / tarith / treduce: computing on NEP 55 StringDType text (strings phase 2, P2.T), strict
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Every NA kind the StringDType loops tell apart: no NA object, None (the ordering / add / multiply refusals), a NaN (the
+# missing value orders last and propagates), a sentinel string (it reads as its text), and coerce off.
+T_COMPUTE_SPECS = [TD, TDN, TDNAN, TDS, TDC]
+# Same-layout kinds the computing loops walk differently: contiguous 1-D / 2-D / 3-D, F-ordered, transposed, stepped,
+# reversed, offset, a reversed step, a column, a new axis, broadcast rows / columns, 0-d, one element, 5-D, empty.
+T_COMPUTE_LAYOUTS = ["c1", "c2", "c3", "f2", "t3", "s1", "s2", "r1", "r2", "o1", "rs", "col", "nx", "bc", "bcol", "z0",
+                     "one", "d5", "e1", "e2", "e3"]
+# The texts a comparison pair meets: short (in the cell), medium and long (arena / heap), the 15 / 16 boundary, NULs,
+# non-ASCII and supplementary-plane characters, and the empty string.
+T_CMP_POOL = ["a", "ab", "", "abc", "m" * 16, "m" * 15, "é" * 8, "q" * 20, "a\x00", "\U0001F600", "中文", "zz", "s" * 300,
+              "a\x00b", "Ü", "x y"]
+
+
+def _t_label(spec):
+    """A short label of a TSpec for case layouts: ``T``, ``TN`` (None), ``TNAN``, ``TS`` (a string sentinel), ``TC``."""
+    if spec.na is _ABSENT:
+        return "T" if spec.coerce else "TC"
+    if spec.na is None:
+        return "TN" if spec.coerce else "TNC"
+    if isinstance(spec.na, float):
+        return "TNAN"
+    return "TS"
+
+
+def _t_derived(spec, src, seed):
+    """Values for a binary loop's second StringDType operand, position by position from the first operand's values: the
+    same text, its prefix one character shorter, the text with a character appended, or the text with a NUL appended (a
+    longer text that compares greater), so equal texts, prefixes and longer texts meet; an NA object stays the first
+    operand's NA object (a value of another kind for a descriptor without one: its ``str()``).
+
+    :param spec: the second operand's TSpec.
+    :param src: the first operand's values (texts and NA objects).
+    :param seed: the derivation's phase.
+    :returns: the derived values.
+    """
+    out = []
+    for i, v in enumerate(src):
+        if not isinstance(v, str):
+            out.append(v if spec.na is not _ABSENT and spec.coerce else str(v))
+            continue
+        k = (i + seed) % 4
+        out.append(v if k == 0 else v[:-1] if k == 1 else v + "z" if k == 2 else v + "\x00")
+    return out
+
+
+def _t_pair(spec1, l1, spec2, l2, seed=0, pool=None):
+    """Two StringDType operands for a binary loop: the first from ``t_values`` over ``pool``, the second derived from it
+    position by position (``_t_derived``) when both layouts have the same base length, else built independently.
+
+    :param spec1: the first TSpec.
+    :param l1: the first layout.
+    :param spec2: the second TSpec.
+    :param l2: the second layout.
+    :param seed: the pool / derivation phase.
+    :param pool: the texts (``T_CMP_POOL`` by default).
+    :returns: two (base, view) pairs.
+    """
+    pool = pool or T_CMP_POOL
+    n1, build1 = LAYOUTS[l1]
+    n2, build2 = LAYOUTS[l2]
+    v1 = t_values(spec1, n1, seed, pool, na_every=4)
+    v2 = _t_derived(spec2, v1, seed) if n1 == n2 else t_values(spec2, n2, seed + 3, pool, na_every=5)
+    b1 = np.array(v1, dtype=spec1.build()) if n1 else np.zeros(0, dtype=spec1.build())
+    b2 = np.array(v2, dtype=spec2.build()) if n2 else np.zeros(0, dtype=spec2.build())
+    return (b1, build1(b1)), (b2, build2(b2))
+
+
+def gen_tcomp():
+    """Section tcomp: the six comparisons over StringDType operands (both StringDType, StringDType against U on either
+    side, the operators with a Python str), out= / where= / dtype=, NumPy's refusals, the truth readers and np.isnan."""
+    # A. Both operands StringDType of one descriptor: every NA kind x every layout kind (the second operand derived from the
+    #    first: equal texts, prefixes, longer texts, NA cells meeting NA cells and texts).
+    for spec in T_COMPUTE_SPECS:
+        for layout in T_COMPUTE_LAYOUTS:
+            o1, o2 = _t_pair(spec, layout, spec, layout, seed=1)
+            for name in CMP_OPS:
+                add("tcomp", "ufunc", params={"name": name}, operands=[o1, o2],
+                    call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:{layout}")
+    # B. Layout pairs that broadcast (or must refuse to), for the no-NA and the NaN-NA descriptors.
+    for spec in [TD, TDNAN]:
+        for l1, l2 in CMP_CROSS:
+            o1, o2 = _t_pair(spec, l1, spec, l2, seed=2)
+            for name in CMP_OPS:
+                add("tcomp", "ufunc", params={"name": name}, operands=[o1, o2],
+                    call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:{l1},{l2}")
+    # C. Two descriptors: compatible NA objects (one absent), incompatible ones (NumPy's TypeError), coerce mixes, and
+    #    the NA rule of the FIRST descriptor deciding.
+    for s1, s2 in [(TD, TDN), (TDN, TD), (TDN, TDNAN), (TDNAN, TDN), (TDS, TD), (TD, TDS), (TDNAN, TDS), (TDS, TDNAN),
+                   (TDS, TSpec("other")), (TDN, TDNC), (TDC, TD), (TD, TDC), (TDNAN, TSpec(float("nan")))]:
+        o1, o2 = _t_pair(s1, "c1", s2, "c1", seed=3)
+        for name in CMP_OPS:
+            add("tcomp", "ufunc", params={"name": name}, operands=[o1, o2],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(s1)},{_t_label(s2)}")
+    # D. StringDType against U (a U operand is cast to the default StringDType) on either side, against S and numbers (no
+    #    loop), over the layouts that broadcast.
+    for spec in [TD, TDN, TDNAN, TDS]:
+        for layout in ["c2", "bc", "z0", "e2", "f2"]:
+            o1 = t_operand(spec, layout, seed=4, pool=T_CMP_POOL)
+            vals = [v if isinstance(v, str) else "NA" for v in t_values(spec, LAYOUTS[layout][0], 5, T_CMP_POOL, na_every=4)]
+            bu = np.array([v.replace("\x00", "") for v in vals], dtype="U20") if vals else np.zeros(0, "U20")
+            ou = (bu, LAYOUTS[layout][1](bu))
+            for name in CMP_OPS:
+                add("tcomp", "ufunc", params={"name": name}, operands=[o1, ou],
+                    call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:{layout},U")
+                add("tcomp", "ufunc", params={"name": name}, operands=[ou, o1],
+                    call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"U,{_t_label(spec)}:{layout}")
+    o1 = t_operand(TD, "c2", seed=6, pool=T_CMP_POOL)
+    for other in [plain(np.array([b"a", b"bc", b""] * 4, dtype="S3").reshape(3, 4)), num_operand(np.arange(12).reshape(3, 4)),
+                  num_operand(np.array(1.5)), num_operand(np.array([True, False, True, True]))]:
+        for name in ["equal", "less"]:
+            add("tcomp", "ufunc", params={"name": name}, operands=[o1, other],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout="T,other")
+            add("tcomp", "ufunc", params={"name": name}, operands=[other, o1],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout="other,T")
+    # E. The operators with a Python str on either side (NumPy's weak str: a StringDType operand compares it as text).
+    for spec in [TD, TDN, TDNAN, TDS]:
+        for layout in ["c2", "z0", "e2"]:
+            for sym in ["==", "!=", "<", "<=", ">", ">="]:
+                for text in ["", "a", "NA", "nan", "é" * 8]:
+                    for side in ["right", "left"]:
+                        b, v = t_operand(spec, layout, seed=7, pool=T_CMP_POOL)
+                        add("tcomp", "operator_text", params={"op": sym, "text": enc(text), "side": side},
+                            operands=[(b, v)], call=lambda a, s=sym, t=text, sd=side: _text_op(s, t, a, sd),
+                            layout=f"{_t_label(spec)}:{layout}")
+    # F. out= (bool, integer, float, complex, text outs: the bool loop's output cast), where= masks, dtype=.
+    for spec in [TD, TDNAN]:
+        for name in CMP_OPS:
+            o1, o2 = _t_pair(spec, "c2", spec, "bc", seed=8)
+            for odt in ["?", "i1", "f8", "c16", "U5"]:
+                out = target(np.zeros((3, 4), dtype=odt))
+                add("tcomp", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "dtype": None},
+                    operands=[o1, o2, out], call=lambda x, y, o, f=getattr(np, name): f(x, y, out=o),
+                    layout=f"{_t_label(spec)}:out:{odt}")
+            for mask in [np.array([[1, 0, 1, 0]], bool), np.eye(3, 4, dtype=bool), np.zeros((3, 4), bool)]:
+                out = target(np.ones((3, 4), dtype=bool))
+                add("tcomp", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "where": 3, "dtype": None},
+                    operands=[o1, o2, out, plain(mask)],
+                    call=lambda x, y, o, w, f=getattr(np, name): f(x, y, out=o, where=w), layout=f"{_t_label(spec)}:where")
+            for dt in ["?", "f8"]:
+                add("tcomp", "ufunc_kw", params={"name": name, "nin": 2, "dtype": dt}, operands=[o1, o2],
+                    call=lambda x, y, d=dt, f=getattr(np, name): f(x, y, dtype=d), layout=f"{_t_label(spec)}:dtype:{dt}")
+    # G. Truth values: astype(bool) (NumPy's truth of an NA: True for NaN, the string NA's own text, the default otherwise),
+    #    any / all / count_nonzero flat and along an axis, nonzero / flatnonzero / argwhere, the logical ufuncs, isnan.
+    for spec in T_COMPUTE_SPECS:
+        for layout in T_COMPUTE_LAYOUTS:
+            b, v = t_operand(spec, layout, seed=9, pool=["", "a", "", "bc", "m" * 16, "\x00", "q" * 20])
+            add("tcomp", "astype", params={"dtype": "?", "casting": "unsafe", "order": "K", "copy": True},
+                operands=[(b, v)], call=lambda a: a.astype(bool, order="K", casting="unsafe", copy=True),
+                layout=f"{_t_label(spec)}:{layout}")
+            for name in ["any", "all", "count_nonzero"] + ([] if v.ndim == 0 else ["nonzero", "flatnonzero", "argwhere"]):
+                add("tcomp", "call", params={"name": name}, operands=[(b, v)],
+                    call=lambda a, f=getattr(np, name): f(a), layout=f"{_t_label(spec)}:{layout}")
+            if v.ndim >= 1:
+                for name in ["any", "all", "count_nonzero"]:
+                    for axis in [0, -1]:
+                        for keepdims in [False, True]:
+                            add("tcomp", "truth_axis", params={"name": name, "axis": axis, "keepdims": keepdims},
+                                operands=[(b, v)],
+                                call=lambda a, f=getattr(np, name), ax=axis, kd=keepdims: f(a, axis=ax, keepdims=kd),
+                                layout=f"{_t_label(spec)}:{layout}")
+            add("tcomp", "ufunc", params={"name": "isnan"}, operands=[(b, v)], call=lambda a: np.isnan(a),
+                layout=f"{_t_label(spec)}:{layout}")
+            add("tcomp", "ufunc", params={"name": "logical_not"}, operands=[(b, v)], call=lambda a: np.logical_not(a),
+                layout=f"{_t_label(spec)}:{layout}")
+    for name in ["logical_and", "logical_or", "logical_xor"]:
+        for spec in [TD, TDN, TDNAN, TDS]:
+            o1, o2 = _t_pair(spec, "c2", spec, "bc", seed=10, pool=["", "a", "", "bc"])
+            add("tcomp", "ufunc", params={"name": name}, operands=[o1, o2], call=lambda x, y, f=getattr(np, name): f(x, y),
+                layout=f"{_t_label(spec)}:T,T")
+            add("tcomp", "ufunc", params={"name": name}, operands=[o1, num_operand(np.array([[0, 1, 2, 0]] * 3))],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:T,num")
+            add("tcomp", "ufunc", params={"name": name}, operands=[o1, plain(np.array([["", "a", "b", ""]] * 3))],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:T,U")
+    for spec in [TDNAN, TDN, TD]:
+        b, v = t_operand(spec, "c2", seed=11, pool=T_CMP_POOL)
+        for odt in ["?", "i1", "f8"]:
+            out = target(np.ones((3, 4), dtype=odt))
+            add("tcomp", "ufunc_kw", params={"name": "isnan", "nin": 1, "out": 1, "dtype": None}, operands=[(b, v), out],
+                call=lambda x, o: np.isnan(x, out=o), layout=f"{_t_label(spec)}:isnan:out:{odt}")
+        out = target(np.ones((3, 4), dtype=bool))
+        add("tcomp", "ufunc_kw", params={"name": "isnan", "nin": 1, "out": 1, "where": 2, "dtype": None},
+            operands=[(b, v), out, plain(np.eye(3, 4, dtype=bool))], call=lambda x, o, w: np.isnan(x, out=o, where=w),
+            layout=f"{_t_label(spec)}:isnan:where")
+
+
+def gen_tarith():
+    """Section tarith: add / multiply / maximum / minimum over StringDType operands, the operators, out= / where= and the
+    refusals."""
+    # A. add and maximum / minimum, both operands StringDType of one descriptor, every NA kind x every layout kind.
+    for spec in T_COMPUTE_SPECS:
+        for layout in T_COMPUTE_LAYOUTS:
+            o1, o2 = _t_pair(spec, layout, spec, layout, seed=21, pool=T_POOL)
+            for name in ["add", "maximum", "minimum"]:
+                add("tarith", "ufunc", params={"name": name}, operands=[o1, o2],
+                    call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:{layout}")
+    for spec in [TD, TDNAN]:
+        for l1, l2 in CMP_CROSS:
+            o1, o2 = _t_pair(spec, l1, spec, l2, seed=22, pool=T_POOL)
+            for name in ["add", "maximum", "minimum"]:
+                add("tarith", "ufunc", params={"name": name}, operands=[o1, o2],
+                    call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)}:{l1},{l2}")
+    # B. Two descriptors (the output takes the compatible NA object and the FIRST operand's rules), U on either side, S /
+    #    numbers / bool (no loop).
+    for s1, s2 in [(TD, TDN), (TDN, TD), (TDN, TDNAN), (TDS, TD), (TD, TDS), (TDNAN, TDS), (TDC, TD), (TD, TDC),
+                   (TDN, TDNC)]:
+        o1, o2 = _t_pair(s1, "c1", s2, "c1", seed=23, pool=T_POOL)
+        for name in ["add", "maximum", "minimum"]:
+            add("tarith", "ufunc", params={"name": name}, operands=[o1, o2],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(s1)},{_t_label(s2)}")
+    for spec in [TD, TDN, TDNAN, TDS]:
+        o1 = t_operand(spec, "c2", seed=24, pool=T_POOL)
+        ou = plain(np.array([["x", "", "yz", "é"]] * 3, dtype="U3"))
+        for name in ["add", "maximum", "minimum"]:
+            add("tarith", "ufunc", params={"name": name}, operands=[o1, ou],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"{_t_label(spec)},U")
+            add("tarith", "ufunc", params={"name": name}, operands=[ou, o1],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout=f"U,{_t_label(spec)}")
+    o1 = t_operand(TD, "c2", seed=25, pool=T_POOL)
+    for other in [plain(np.array([[b"a", b"", b"cd", b"e"]] * 3, dtype="S2")), num_operand(np.arange(12).reshape(3, 4)),
+                  num_operand(np.array(1.5)), num_operand(np.array(True))]:
+        for name in ["add", "maximum", "minimum", "subtract"]:
+            add("tarith", "ufunc", params={"name": name}, operands=[o1, other],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout="T,other")
+            add("tarith", "ufunc", params={"name": name}, operands=[other, o1],
+                call=lambda x, y, f=getattr(np, name): f(x, y), layout="other,T")
+    # C. multiply: the text times a count (0-d counts, per-element counts, a broadcast column, every integer width, the
+    #    count first), the NA rules (None refuses, NaN stays NA, a string NA repeats its text), the refusals (a float /
+    #    bool / text count, the repetition past the size limit).
+    for spec in T_COMPUTE_SPECS:
+        for layout in ["c1", "c2", "f2", "t3", "r2", "bc", "z0", "one", "e2", "d5"]:
+            b, v = t_operand(spec, layout, seed=26, pool=T_POOL)
+            counts = [plain(np.array(c)) for c in (2, 0, -1, 3)] + [plain((np.arange(v.size).reshape(v.shape) % 5) - 1)]
+            for c in counts:
+                add("tarith", "ufunc", params={"name": "multiply"}, operands=[(b, v), c],
+                    call=lambda x, y: np.multiply(x, y), layout=f"{_t_label(spec)}:{layout}")
+            add("tarith", "ufunc", params={"name": "multiply"}, operands=[plain(np.array(2)), (b, v)],
+                call=lambda x, y: np.multiply(x, y), layout=f"{_t_label(spec)}:{layout}:countfirst")
+    b, v = t_operand(TD, "c2", seed=27, pool=T_POOL)
+    for dt in ["i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8"]:
+        add("tarith", "ufunc", params={"name": "multiply"}, operands=[(b, v), plain(np.array([3], dtype=dt))],
+            call=lambda x, y: np.multiply(x, y), layout=f"count:{dt}")
+    for value, dt in [(2**63 + 5, "u8"), (2**62, "i8"), (2**61 + 1, "i8"), (-(2**63), "i8"), (2**40, "i8")]:
+        add("tarith", "ufunc", params={"name": "multiply"}, operands=[(b, v), plain(np.array(value, dtype=dt))],
+            call=lambda x, y: np.multiply(x, y), layout=f"count:{value}")
+    for c in [plain(np.array(True)), plain(np.array(2.0)), plain(np.array([[2.5]])), t_operand(TD, "c1", seed=28)]:
+        add("tarith", "ufunc", params={"name": "multiply"}, operands=[(b, v), c], call=lambda x, y: np.multiply(x, y),
+            layout="count:other")
+    # D. The operators: + with a Python str on either side, * with a Python int on either side.
+    for spec in [TD, TDN, TDNAN, TDS]:
+        for layout in ["c2", "z0", "e2", "t3"]:
+            for text in ["", "a", "NA", "é" * 8, "q" * 20]:
+                for side in ["right", "left"]:
+                    b, v = t_operand(spec, layout, seed=29, pool=T_POOL)
+                    add("tarith", "operator_text", params={"op": "+", "text": enc(text), "side": side},
+                        operands=[(b, v)], call=lambda a, t=text, sd=side: _text_op("+", t, a, sd),
+                        layout=f"{_t_label(spec)}:{layout}")
+            for count in [0, 1, 3, -2]:
+                for side in ["right", "left"]:
+                    b, v = t_operand(spec, layout, seed=30, pool=T_POOL)
+                    add("tarith", "t_operator_int", params={"op": "*", "value": count, "side": side}, operands=[(b, v)],
+                        call=lambda a, c=count, sd=side: a * c if sd == "right" else c * a,
+                        layout=f"{_t_label(spec)}:{layout}")
+    # E. out=: a StringDType out of the result's descriptor and of other NA kinds, an S / U out (the output cast), a
+    #    numeric out, where= masks (masked-off cells keep their text).
+    for name, second in [("add", "text"), ("maximum", "text"), ("minimum", "text"), ("multiply", "count")]:
+        for spec in [TD, TDNAN, TDN]:
+            o1 = t_operand(spec, "c2", seed=31, pool=T_POOL)
+            o2 = t_operand(spec, "bc", seed=32, pool=T_POOL) if second == "text" else plain(np.array([[0, 1, 2, 3]] * 3))
+            for out_spec in ["T", "TN", "TNAN", "U9", "U2", "S9", "f8"]:
+                if out_spec in ("T", "TN", "TNAN"):
+                    ospec = {"T": TD, "TN": TDN, "TNAN": TDNAN}[out_spec]
+                    out = t_plain(np.array([["k"] * 4] * 3, dtype=ospec.build()))
+                else:
+                    out = target(np.zeros((3, 4), dtype=out_spec))
+                add("tarith", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "dtype": None}, operands=[o1, o2, out],
+                    call=lambda x, y, o, f=getattr(np, name): f(x, y, out=o), layout=f"{_t_label(spec)}:out:{out_spec}")
+                if CASES[-1].get("error", {}).get("type") == "SystemError":
+                    _pop_case()
+            for mask in [np.array([[1, 0, 1, 0]], bool), np.eye(3, 4, dtype=bool), np.zeros((3, 4), bool)]:
+                out = t_plain(np.array([["k" * 20] * 4] * 3, dtype=spec.build()))
+                add("tarith", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "where": 3, "dtype": None},
+                    operands=[o1, o2, out, plain(mask)],
+                    call=lambda x, y, o, w, f=getattr(np, name): f(x, y, out=o, where=w), layout=f"{_t_label(spec)}:where")
+                # A cast out under where=: NumPy's masked loop runs only where the mask is set, so a refused NA that the
+                # mask hides raises nothing and the masked-off cells keep their text.
+                uout = target(np.full((3, 4), "q", dtype="U9"))
+                add("tarith", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "where": 3, "dtype": None},
+                    operands=[o1, o2, uout, plain(mask)],
+                    call=lambda x, y, o, w, f=getattr(np, name): f(x, y, out=o, where=w),
+                    layout=f"{_t_label(spec)}:where:U9")
+    for spec in [TDN, TDNAN]:
+        base = np.array([spec.na, "a", "bc"], dtype=spec.build())
+        for name, second in [("add", "text"), ("maximum", "text"), ("multiply", "count")]:
+            other = (base, base) if second == "text" else plain(np.array([2, 3, 1]))
+            for mask in [[False, True, True], [True, False, True]]:
+                for odt in ["U9", TD, TDN]:
+                    out = target(np.full(3, "q", dtype=odt if isinstance(odt, str) else odt.build()))
+                    add("tarith", "ufunc_kw", params={"name": name, "nin": 2, "out": 2, "where": 3, "dtype": None},
+                        operands=[(base, base), other, out, plain(np.array(mask))],
+                        call=lambda x, y, o, w, f=getattr(np, name): f(x, y, out=o, where=w),
+                        layout=f"{_t_label(spec)}:where:hiddenNA:{odt if isinstance(odt, str) else _t_label(odt)}")
+    # F. dtype= requests: the StringDType loops have no other output (a class or a descriptor instance).
+    o1, o2 = _t_pair(TD, "c1", TD, "c1", seed=33)
+    for name in ["add", "maximum", "minimum"]:
+        for dt in ["f8", "U", TD]:
+            add("tarith", "ufunc_kw", params={"name": name, "nin": 2, "dtype": senc(dt)}, operands=[o1, o2],
+                call=lambda x, y, d=dt, f=getattr(np, name): f(x, y, dtype=d if isinstance(d, str) else sbuild(d)),
+                layout=f"dtype:{dt if isinstance(dt, str) else 'T'}")
+
+
+def _t_red(name, a, axis, keepdims, dtype, out, initial, where):
+    """One reduction of section treduce, spelled with exactly the keywords the C# replay passes (``t_red``): an absent
+    ``initial`` / ``where`` / ``out`` / ``dtype`` is left out of the call.
+
+    :param name: the NumPy function.
+    :param a: the array.
+    :param axis: the axis, or None.
+    :param keepdims: keepdims (only for the functions that take it).
+    :param dtype: the dtype request (a dtype string or a TSpec) or None.
+    :param out: the out array or None.
+    :param initial: the initial value, or ``_ABSENT``.
+    :param where: the mask, or None.
+    :returns: NumPy's result.
+    """
+    f = getattr(np, name)
+    kw = {"axis": axis}
+    if dtype is not None:
+        kw["dtype"] = dtype if isinstance(dtype, str) else sbuild(dtype)
+    if out is not None:
+        kw["out"] = out
+    if name in ("sum", "max", "min", "amax", "amin", "nanmax", "nanmin", "argmax", "argmin", "nanargmax", "nanargmin",
+                "nansum", "prod", "nanprod"):
+        kw["keepdims"] = keepdims
+    if initial is not _ABSENT:
+        kw["initial"] = initial
+    if where is not None:
+        kw["where"] = where
+    return f(a, **kw)
+
+
+def _t_red_case(name, operands, axis=None, keepdims=False, dtype=None, out_index=None, initial=_ABSENT, where_index=None,
+                layout=""):
+    """Records one ``t_red`` case of section treduce.
+
+    :param name: the NumPy function.
+    :param operands: the operands (the array first; the out and the mask at their indices).
+    :param axis: the axis, or None.
+    :param keepdims: keepdims.
+    :param dtype: the dtype request, or None.
+    :param out_index: the out's operand index, or None.
+    :param initial: the initial value, or ``_ABSENT``.
+    :param where_index: the mask's operand index, or None.
+    :param layout: the case's layout label.
+    """
+    params = {"name": name, "axis": axis, "keepdims": keepdims}
+    if dtype is not None:
+        params["dtype"] = senc(dtype)
+    if out_index is not None:
+        params["out"] = out_index
+    if initial is not _ABSENT:
+        params["initial"] = enc(initial)
+    if where_index is not None:
+        params["where"] = where_index
+
+    def call(*ops):
+        return _t_red(name, ops[0], axis, keepdims, dtype, ops[out_index] if out_index is not None else None, initial,
+                      ops[where_index] if where_index is not None else None)
+
+    add("treduce", "t_red", params=params, operands=operands, call=call, layout=layout)
+
+
+def _t_stat(name, a, axis, keepdims, dtype, ddof, out, weights):
+    """One statistic of section treduce, spelled as the C# replay's ``t_stat`` calls it.
+
+    :param name: the NumPy function (mean / average / nanmean / var / std / nanvar / nanstd / ptp / median).
+    :param a: the array.
+    :param axis: the axis, or None.
+    :param keepdims: keepdims.
+    :param dtype: the dtype request, or None.
+    :param ddof: the ddof (var / std forms), or None.
+    :param out: the out (ptp), or None.
+    :param weights: the weights (average), or None.
+    :returns: NumPy's result.
+    """
+    f = getattr(np, name)
+    kw = {"axis": axis}
+    if name != "average" or keepdims:
+        kw["keepdims"] = keepdims
+    if dtype is not None:
+        kw["dtype"] = dtype
+    if ddof is not None:
+        kw["ddof"] = ddof
+    if out is not None:
+        kw["out"] = out
+    if weights is not None:
+        kw["weights"] = weights
+    return f(a, **kw)
+
+
+def _t_stat_case(name, operands, axis=None, keepdims=False, dtype=None, ddof=None, out_index=None, weights_index=None,
+                 layout=""):
+    """Records one ``t_stat`` case of section treduce (see ``_t_stat``)."""
+    params = {"name": name, "axis": axis, "keepdims": keepdims}
+    if dtype is not None:
+        params["dtype"] = dtype
+    if ddof is not None:
+        params["ddof"] = ddof
+    if out_index is not None:
+        params["out"] = out_index
+    if weights_index is not None:
+        params["weights"] = weights_index
+
+    def call(*ops):
+        return _t_stat(name, ops[0], axis, keepdims, dtype, ddof, ops[out_index] if out_index is not None else None,
+                       ops[weights_index] if weights_index is not None else None)
+
+    add("treduce", "t_stat", params=params, operands=operands, call=call, layout=layout)
+
+
+def gen_treduce():
+    """Section treduce: np.sum / cumsum / max / min / argmax / argmin and their nan forms over StringDType along every
+    axis, the keywords (initial=, where=, out=, dtype=), np.trace, and the statistics that compute first and refuse after."""
+    full_layouts = ["c1", "c2", "c3", "f2", "t3", "s2", "r2", "rs", "bc", "bcol", "nx", "z0", "one", "d5", "e1", "e2", "e3"]
+    # A. Every reduction along every axis (None, 0, -1, 1 for two or more dimensions) with and without keepdims, every
+    #    NA kind (a None-like NA refuses at its first addition / comparison, a NaN-like one propagates / orders last).
+    for spec in T_COMPUTE_SPECS:
+        for layout in full_layouts:
+            b, v = t_operand(spec, layout, seed=41, pool=T_POOL, na_every=4 if spec is not TDN else 7)
+            axes = [None, 0, -1] + ([1] if v.ndim >= 2 else [])
+            for axis in axes:
+                for name in ["sum", "max", "min", "argmax", "argmin"]:
+                    for keepdims in [False, True]:
+                        _t_red_case(name, [(b, v)], axis=axis, keepdims=keepdims, layout=f"{_t_label(spec)}:{layout}")
+                _t_red_case("cumsum", [(b, v)], axis=axis, layout=f"{_t_label(spec)}:{layout}")
+            for name in ["nansum", "nancumsum", "nanargmax", "nanargmin", "amax", "amin"]:
+                _t_red_case(name, [(b, v)], axis=None if v.ndim != 1 else 0, layout=f"{_t_label(spec)}:{layout}")
+    # NA lanes that the rules decide: a lone NA, NA first / last, all NA, the None-like NA alone in a lane.
+    for spec in [TDN, TDNAN, TDS]:
+        for vals in [[spec.na], [spec.na, "a"], ["a", spec.na], [spec.na, spec.na], ["b", spec.na, "c", spec.na, "a"]]:
+            base = np.array(vals, dtype=spec.build())
+            for name in ["sum", "max", "min", "argmax", "argmin", "cumsum"]:
+                _t_red_case(name, [(base, base)], layout=f"{_t_label(spec)}:na{len(vals)}")
+            m = np.array([vals, vals[::-1]], dtype=spec.build())
+            mb, mv = t_plain(m)
+            for name in ["sum", "max", "min", "argmax", "argmin", "cumsum"]:
+                for axis in [0, 1]:
+                    _t_red_case(name, [(mb, mv)], axis=axis, layout=f"{_t_label(spec)}:na2d")
+    # B. Keywords: initial= (a text, an integer under coerce, the NA object, a text under coerce=False), where= with and
+    #    without initial=, out= (StringDType of the same / another NA kind, S / U, numeric, wrong shape), dtype=.
+    for spec in [TD, TDNAN, TDS, TDC]:
+        b, v = t_operand(spec, "c2", seed=42, pool=T_POOL)
+        for name in ["max", "min"]:
+            for initial in ["", "zz", "m" * 20, 5, spec.na if spec.na is not _ABSENT else "NA"]:
+                for axis in [None, 0, 1] if spec is TD else [1]:
+                    _t_red_case(name, [(b, v)], axis=axis, initial=initial, layout=f"{_t_label(spec)}:initial")
+            for mask in [np.array([[1, 0, 1, 0]], bool), np.eye(3, 4, dtype=bool), np.zeros((3, 4), bool)]:
+                for initial in [_ABSENT, "", "zz"]:
+                    _t_red_case(name, [(b, v), plain(mask)], axis=1, initial=initial, where_index=1,
+                                layout=f"{_t_label(spec)}:where")
+            eb, ev = t_operand(spec, "e2", seed=43, pool=T_POOL)
+            _t_red_case(name, [(eb, ev)], axis=0, initial="q", layout=f"{_t_label(spec)}:initial:empty")
+    for spec in [TD, TDNAN, TDN]:
+        b, v = t_operand(spec, "c2", seed=44, pool=T_POOL, na_every=4 if spec is not TDN else 0)
+        for name in ["max", "min"]:
+            for out_spec in ["T", "TN", "TNAN", "U9", "f8", "T3"]:
+                if out_spec in ("T", "TN", "TNAN"):
+                    ospec = {"T": TD, "TN": TDN, "TNAN": TDNAN}[out_spec]
+                    out = target(np.array(["k"] * 3, dtype=ospec.build()))
+                elif out_spec == "T3":
+                    out = target(np.array(["k"] * 4, dtype=TD.build()))
+                else:
+                    out = target(np.zeros(3, dtype=out_spec))
+                _t_red_case(name, [(b, v), out], axis=1, out_index=1, layout=f"{_t_label(spec)}:out:{out_spec}")
+        for name in ["argmax", "argmin"]:
+            for odt in ["i8", "i4", "u8", "f8"]:
+                out = target(np.zeros(3, dtype=odt))
+                _t_red_case(name, [(b, v), out], axis=1, out_index=1, layout=f"{_t_label(spec)}:out:{odt}")
+            out = target(np.zeros((3, 1), dtype="i8"))
+            _t_red_case(name, [(b, v), out], axis=1, keepdims=True, out_index=1, layout=f"{_t_label(spec)}:out:keepdims")
+        for name in ["cumsum", "nancumsum"]:
+            for out_spec in ["T", "TNAN", "U30", "U2", "wrong"]:
+                if out_spec in ("T", "TNAN"):
+                    ospec = {"T": TD, "TNAN": TDNAN}[out_spec]
+                    out = t_plain(np.array([["k"] * 4] * 3, dtype=ospec.build()))
+                elif out_spec == "wrong":
+                    out = target(np.array(["k"] * 12, dtype=TD.build()))
+                else:
+                    out = target(np.zeros((3, 4), dtype=out_spec))
+                _t_red_case(name, [(b, v), out], axis=1, out_index=1, layout=f"{_t_label(spec)}:out:{out_spec}")
+        for name in ["sum", "cumsum"]:
+            for dt in ["f8", "U", TD]:
+                _t_red_case(name, [(b, v)], axis=1, dtype=dt, layout=f"{_t_label(spec)}:dtype")
+    # The accumulation's out= on NumPy's two paths. The DIRECT path (1-D, a StringDType out) returns at once for an empty
+    # input or an empty out and otherwise wants the input's exact dimensions; the ITERATOR path (2-D, a U out) raises the
+    # iterator's op_axes / remapped-broadcast / non-broadcastable texts, accepts an out with more dimensions (its
+    # trailing axes stay at index 0), broadcasts the input on the other axes and writes only the input's extent along
+    # the axis. A U out casts the default StringDType() result: an NA first element is the input's na_name, a later NA
+    # reads as ''. (A 0-d StringDType out over a 1-D input crashes NumPy 2.4.2 on its direct path: not generated.)
+    m2 = np.array([["a", "b"], ["c", "d"]], dtype=TD.build())
+    col = np.array([["a"], ["bb"]], dtype=TD.build())
+    row = np.array([["x", "yy", "z"]], dtype=TD.build())
+    v3 = np.array(["a", "b", "c"], dtype=TD.build())
+    e0 = np.zeros(0, dtype=TD.build())
+    kfill = lambda shape, dt=TD: np.full(shape, "k", dtype=dt.build() if isinstance(dt, TSpec) else dt)
+    for arr, axis, out_arr, label in [
+            (m2, 0, kfill(2), "acc:2d:out1d"), (m2, 0, kfill((2, 3)), "acc:2d:outwide"),
+            (m2, 0, kfill((3, 2)), "acc:2d:outtall"), (m2, 0, kfill((2, 2, 2)), "acc:2d:out3d"),
+            (m2, 1, kfill((2, 2, 3)), "acc:2d:out3d:axis1"), (m2, 0, kfill((1, 2)), "acc:2d:outrow"),
+            (m2, 1, kfill((2, 1)), "acc:2d:outcol"), (m2, 1, kfill((2, 2), "U5"), "acc:2d:U5"),
+            (m2, 0, kfill((2, 2), "U1"), "acc:2d:U1"), (m2, None, kfill(4), "acc:flat:out4"),
+            (m2, None, kfill(3), "acc:flat:out3"), (m2, None, kfill((2, 2)), "acc:flat:out2d"),
+            (col, 0, kfill((2, 3)), "acc:bcast:col"), (row, 0, kfill((2, 3)), "acc:bcast:rowaxis"),
+            (row, 1, kfill((4, 3)), "acc:bcast:row"), (v3, None, kfill(2), "acc:1d:short"),
+            (v3, None, kfill(4), "acc:1d:long"), (v3, None, kfill((1, 3)), "acc:1d:2dout"),
+            (v3, None, kfill(0), "acc:1d:emptyout"), (e0, None, kfill(5), "acc:emptyin"),
+            (v3, None, kfill(2, "U5"), "acc:1d:U:short"), (v3, None, kfill((1, 3), "U5"), "acc:1d:U:row"),
+            (v3, None, np.array("k", dtype="U5"), "acc:1d:U:0d"), (v3, 0, kfill((3, 2), "U5"), "acc:1d:U:extra")]:
+        ab, av = t_plain(arr)
+        _t_red_case("cumsum", [(ab, av), target(out_arr)], axis=axis, out_index=1, layout=f"T:{label}")
+    for spec in [TDNAN, TDN, TDS]:
+        for vals in [[spec.na, "a", "b"], ["a", spec.na, "b"], [spec.na, spec.na]]:
+            base = np.array(vals, dtype=spec.build())
+            for odt in ["U9", TD]:
+                out = target(np.full(len(vals), "k", dtype=odt if isinstance(odt, str) else odt.build()))
+                _t_red_case("cumsum", [(base, base), out], out_index=1,
+                            layout=f"{_t_label(spec)}:acc:firstna:{odt if isinstance(odt, str) else 'T'}")
+            # np.trace's add.reduce into a U out: the same first-element cast (the diagonal starts with the NA).
+            sq = np.array([vals[0], "x", "y", vals[1]], dtype=spec.build())
+            sb, sv = t_plain(sq.reshape(2, 2))
+            add("treduce", "t_trace", params={"offset": 0, "axis1": 0, "axis2": 1, "dtype": None, "out": 1},
+                operands=[(sb, sv), target(np.array("", dtype="U9"))], call=lambda a, o: np.trace(a, out=o),
+                layout=f"{_t_label(spec)}:trace:firstna:U9")
+    # C. The statistics: the sum / extremes compute, then NumPy's next statement refuses in the operands' words (an ndarray
+    #    against the divide / subtract loops, a 0-d result as its Python object); the NaN-like NA's mean is np.float64(nan).
+    for spec in [TD, TDN, TDNAN, TDS]:
+        for layout in ["c1", "c2", "f2", "bc", "z0", "one", "e1", "e2"]:
+            for vals_seed, na_every in [(45, 4), (46, 0)]:
+                b, v = t_operand(spec, layout, seed=vals_seed, pool=T_POOL, na_every=na_every)
+                for name in ["mean", "average", "nanmean", "var", "std", "nanvar", "nanstd", "ptp"]:
+                    for axis in [None, 0] if v.ndim >= 1 else [None]:
+                        for keepdims in [False, True]:
+                            _t_stat_case(name, [(b, v)], axis=axis, keepdims=keepdims, layout=f"{_t_label(spec)}:{layout}")
+        for vals in [["x"]] + ([[spec.na]] if spec.na is not _ABSENT else []):
+            base = np.array(vals, dtype=spec.build())
+            z = base.reshape(())
+            for name in ["mean", "average", "nanmean", "var", "std", "nanvar", "nanstd", "ptp"]:
+                _t_stat_case(name, [(base, base)], layout=f"{_t_label(spec)}:lone")
+                _t_stat_case(name, [(base, z)], layout=f"{_t_label(spec)}:lone0d")
+    b, v = t_operand(TD, "c2", seed=47, pool=T_POOL)
+    for name in ["mean", "var", "std", "nanmean", "nanvar", "nanstd"]:
+        _t_stat_case(name, [(b, v)], axis=0, dtype="f8", layout="T:dtype")
+    for ddof in [0, 1, 5]:
+        _t_stat_case("var", [(b, v)], axis=1, ddof=ddof, layout="T:ddof")
+    for wdt in ["i8", "f8"]:
+        _t_stat_case("average", [(b, v), plain(np.ones((3, 4), dtype=wdt))], axis=1, weights_index=1, layout=f"T:weights:{wdt}")
+    _t_stat_case("average", [(b, v), t_plain(np.array([["a"] * 4] * 3, dtype=TD.build()))], axis=1, weights_index=1,
+                 layout="T:weights:T")
+    for out_spec in ["T", "U5"]:
+        out = target(np.array(["k"] * 3, dtype=TD.build())) if out_spec == "T" else target(np.zeros(3, dtype=out_spec))
+        _t_stat_case("ptp", [(b, v), out], axis=1, out_index=1, layout=f"T:ptp:out:{out_spec}")
+    # D. np.trace: the diagonal's add.reduce along its last axis (2-D, 3-D, offsets, out=, dtype=), every NA kind.
+    for spec in [TD, TDN, TDNAN, TDS]:
+        for shape, axes in [((3, 3), (0, 1)), ((3, 4), (0, 1)), ((2, 3, 3), (1, 2)), ((3, 2, 3), (0, 2)), ((0, 3), (0, 1))]:
+            n = int(np.prod(shape))
+            base = np.array(t_values(spec, n, 48, T_POOL, na_every=5), dtype=spec.build()) if n else np.zeros(0, spec.build())
+            view = base.reshape(shape)
+            for offset in [0, 1, -1]:
+                add("treduce", "t_trace", params={"offset": offset, "axis1": axes[0], "axis2": axes[1], "dtype": None},
+                    operands=[(base, view)], call=lambda a, o=offset, ax=axes: np.trace(a, offset=o, axis1=ax[0], axis2=ax[1]),
+                    layout=f"{_t_label(spec)}:{shape}")
+    base = np.array(t_values(TD, 9, 49, T_POOL), dtype=TD.build())
+    view = base.reshape(3, 3)
+    for out_spec in ["T", "TN", "U9", "wrong"]:
+        if out_spec in ("T", "TN"):
+            out = t_plain(np.array("k", dtype=(TD if out_spec == "T" else TDN).build()))
+        elif out_spec == "wrong":
+            out = target(np.array(["k", "k"], dtype=TD.build()))
+        else:
+            out = target(np.array("", dtype="U9"))
+        add("treduce", "t_trace", params={"offset": 0, "axis1": 0, "axis2": 1, "dtype": None, "out": 1},
+            operands=[(base, view), out], call=lambda a, o: np.trace(a, out=o), layout=f"T:trace:out:{out_spec}")
+    for dt in ["f8", TD]:
+        add("treduce", "t_trace", params={"offset": 0, "axis1": 0, "axis2": 1, "dtype": senc(dt)}, operands=[(base, view)],
+            call=lambda a, d=dt: np.trace(a, dtype=d if isinstance(d, str) else sbuild(d)), layout="T:trace:dtype")
+    # E. The reductions with no StringDType loop: multiply / fmax / fmin.
+    for spec in T_COMPUTE_SPECS:
+        b, v = t_operand(spec, "c1", seed=50, pool=T_POOL)
+        for name in ["prod", "nanprod", "cumprod", "nancumprod", "nanmax", "nanmin"]:
+            _t_red_case(name, [(b, v)], layout=f"{_t_label(spec)}:noloop")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strsets]
+              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strsets, gen_tcomp, gen_tarith, gen_treduce]
 
 
 def main():

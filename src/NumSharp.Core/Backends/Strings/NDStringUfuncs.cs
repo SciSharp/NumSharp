@@ -121,11 +121,23 @@ namespace NumSharp.Backends.Strings
         {
             // A StringDType operand first: the fixed-width test below refuses it loudly (its answers read fixed-width units).
             if (IsVString(x1) || IsVString(x2))
-                throw VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
+                throw VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _) ?? ComputingLoopMisrouted(ufunc);
             if (!IsString(x1) && !IsString(x2))
                 return;
             throw BinaryError(ufunc, x1, x2, @out, loop, where);
         }
+
+        /// <summary>
+        ///     The error of a refusal-only guard reached by a call whose <c>StringDType</c> loop COMPUTES (a comparison, a
+        ///     logical ufunc, <c>add</c>, <c>multiply</c>, <c>maximum</c>, <c>minimum</c>, <c>isnan</c>): such a call must go
+        ///     through the computing guards (<see cref="BinaryGuard"/>, the <c>isnan</c> route), so this is a wiring error
+        ///     inside NumSharp, never a user's error.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <returns>The exception (not thrown).</returns>
+        private static InvalidOperationException ComputingLoopMisrouted(string ufunc)
+            => new InvalidOperationException(
+                $"ufunc '{ufunc}' has a StringDType loop that computes; its caller must route the call through the computing guard.");
 
         /// <summary>
         ///     The guard of a binary ufunc whose loop can COMPUTE on text (the comparisons, the logical ufuncs, <c>add</c>):
@@ -158,16 +170,16 @@ namespace NumSharp.Backends.Strings
         {
             if (IsVString(x1) || IsVString(x2))
             {
-                // A StringDType loop computes (phase 2) unless the broadcast is EMPTY: the shapes then decide NumPy's result,
-                // an empty array of the loop's output (or out= itself, untouched), exactly as for the fixed-width loops.
+                // A StringDType loop computes once every check passed; an EMPTY broadcast computes nothing, so the shapes
+                // decide NumPy's result: an empty array of the loop's output (or out= itself, untouched), exactly as for the
+                // fixed-width loops.
                 var vError = VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out DType vComputed);
-                if (vComputed is not null)
-                {
-                    var vDims = BroadcastDims(x1, x2, @out, where);
-                    if (ShapeSize(vDims) == 0)
-                        return @out ?? new NDArray(vComputed, vDims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(vDims), true);
-                }
-                throw vError;
+                if (vError is not null)
+                    throw vError;
+                var vDims = BroadcastDims(x1, x2, @out, where);
+                if (ShapeSize(vDims) == 0)
+                    return @out ?? new NDArray(vComputed, vDims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(vDims), true);
+                return VStringCompute(ufunc, x1, x2, @out, where, vComputed);
             }
             if (!IsString(x1) && !IsString(x2))
                 return null;
@@ -221,9 +233,10 @@ namespace NumSharp.Backends.Strings
             try
             {
                 // The truth arrays keep the operands' memory order ('K'), so the bool loop's output layout follows them as
-                // NumPy's follows the cast operands.
-                t1 = IsString(x1) ? NDStringTruth.Truth(x1, NDStringTruth.Flavor.Cast) : null;
-                t2 = IsString(x2) ? NDStringTruth.Truth(x2, NDStringTruth.Flavor.Cast) : null;
+                // NumPy's follows the cast operands. A StringDType operand is tested first (IsString refuses it): its cast
+                // route reads an NA by the descriptor's rule (NDVStringCells.NaTruth).
+                t1 = IsVString(x1) || IsString(x1) ? NDStringTruth.Truth(x1, NDStringTruth.Flavor.Cast) : null;
+                t2 = IsVString(x2) || IsString(x2) ? NDStringTruth.Truth(x2, NDStringTruth.Flavor.Cast) : null;
                 NDArray a = t1 ?? x1, b = t2 ?? x2;
                 return ufunc switch
                 {
@@ -305,7 +318,7 @@ namespace NumSharp.Backends.Strings
         internal static Exception BinaryError(string ufunc, NDArray x1, NDArray x2, NDArray @out, NPTypeCode? loop,
             NDArray where = null)
             => IsVString(x1) || IsVString(x2)
-                ? VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _)
+                ? VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _) ?? ComputingLoopMisrouted(ufunc)
                 : BinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
 
         /// <summary>
@@ -412,7 +425,7 @@ namespace NumSharp.Backends.Strings
             NDArray where = null)
         {
             if (IsVString(x))
-                throw VStringUnaryAnswer(ufunc, x, loop, @out, where);
+                throw VStringUnaryAnswer(ufunc, x, loop, @out, where) ?? ComputingLoopMisrouted(ufunc);
             if (!IsString(x))
                 return;
             throw UnaryError(ufunc, x, loop, @out, where);
@@ -431,7 +444,7 @@ namespace NumSharp.Backends.Strings
         internal static Exception UnaryError(string ufunc, NDArray x, NPTypeCode? loop, NDArray @out = null, NDArray where = null)
         {
             if (IsVString(x))
-                return VStringUnaryAnswer(ufunc, x, loop, @out, where);
+                return VStringUnaryAnswer(ufunc, x, loop, @out, where) ?? ComputingLoopMisrouted(ufunc);
             // NumPy parses out= and where= before it resolves the loop.
             var parse = OutWhereError(@out, where);
             if (parse is not null)
@@ -471,7 +484,7 @@ namespace NumSharp.Backends.Strings
         internal static void ThrowIfReduce(string op, NDArray a)
         {
             if (IsVString(a))
-                throw VStringReduceAnswer(op, a, null, null);
+                throw VStringReduceAnswer(op, a, null, null) ?? ComputingLoopMisrouted(op);
             if (!IsString(a))
                 return;
             throw ReduceError(op, a);
@@ -898,22 +911,24 @@ namespace NumSharp.Backends.Strings
             => new StringComputationNotSupportedException(
                 $"{op} is not supported for fixed-width string arrays yet ({descr.ToString(true)}): NumSharp's string support " +
                 "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, conversion " +
-                "between text and numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting and " +
-                "searching. The rest of string computation (the set routines, the np.strings functions) is the next phase.");
+                "between text and numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting, " +
+                "searching, unique values, the set routines, histograms and quantiles. The rest of string computation (the " +
+                "np.strings functions and the calls built on them) is the next phase.");
 
         /// <summary>
-        ///     The phase-2 deferral of a NEP 55 <c>StringDType</c> computation: a call NumPy answers by computing on
-        ///     <c>StringDType</c> text (its comparisons, <c>add</c> / <c>maximum</c> / <c>minimum</c> loops, sorting, the
-        ///     <c>np.strings</c> functions). Phase 1 holds <c>StringDType</c> text as data only.
+        ///     The phase-2 deferral of a NEP 55 <c>StringDType</c> computation this phase does not run yet: a call NumPy
+        ///     answers by sorting, searching or set-combining <c>StringDType</c> text (<c>np.sort</c>, <c>np.unique</c>,
+        ///     <c>np.searchsorted</c>, <c>np.median</c>, the set routines) or by an <c>np.strings</c> function. The comparisons,
+        ///     truth values, <c>add</c> / <c>multiply</c> / <c>maximum</c> / <c>minimum</c> and the reductions compute (P2.T).
         /// </summary>
         /// <param name="op">The NumPy function or ufunc name.</param>
         /// <param name="descr">The <c>StringDType</c> descriptor named in the message.</param>
         /// <returns>The exception (not thrown).</returns>
         internal static StringComputationNotSupportedException NextPhaseVString(string op, DType descr)
             => new StringComputationNotSupportedException(
-                $"{op} is not supported for {descr} arrays yet: NumSharp holds NEP 55 StringDType text as data (storage, " +
-                "element access, copying, indexing, casts, printing); computing on it (comparisons, concatenation, sorting " +
-                "and searching, the np.strings functions) is phase 2 of the string support (docs/plans/strings-phase2.md).");
+                $"{op} is not supported for {descr} arrays yet: NumSharp computes NEP 55 StringDType text's comparisons, " +
+                "truth values, add / multiply / maximum / minimum and reductions; sorting, searching, the set routines and the " +
+                "np.strings functions over it are phase 2 of the string support (docs/plans/strings-phase2.md).");
 
         /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's
@@ -923,13 +938,11 @@ namespace NumSharp.Backends.Strings
         /// <param name="lhs">The left operand.</param>
         /// <param name="rhs">The right operand.</param>
         /// <param name="notEqual">True for <c>!=</c>.</param>
-        /// <returns>The bool result, or null when both operands are strings of one class (NumPy compares the text; the
-        ///     caller raises <see cref="NextPhase(string, NDArray)"/>).</returns>
+        /// <returns>The bool result, or null when NumPy's ufunc has a loop for the pair and compares the text: two strings of
+        ///     one class, or a NEP 55 <c>StringDType</c> operand with a <c>StringDType</c> or <c>U</c> one (the caller then runs
+        ///     the engine's comparison, whose string guard computes it).</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's ValueError, raised by the same
         ///     workaround when it allocates the result).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A NEP 55 <c>StringDType</c> operand meets another
-        ///     <c>StringDType</c> or a <c>U</c> operand and the broadcast result holds elements: NumPy registers string loops for
-        ///     those pairs and compares the text, which is phase 2 for <c>StringDType</c>.</exception>
         /// <remarks>
         ///     <c>StringDType</c> registers <c>equal</c> / <c>not_equal</c> loops for <c>(T, T)</c>, <c>(T, U)</c> and
         ///     <c>(U, T)</c> only (probed 2.4.2): <c>T == S</c>, <c>T == 5</c> and <c>T == True</c> have no loop and take the
@@ -942,16 +955,11 @@ namespace NumSharp.Backends.Strings
                 return null;
             if (d1.Meta is VStringDTypeMeta || d2.Meta is VStringDTypeMeta)
             {
+                // StringDType with StringDType or U: NumPy's equal / not_equal loop compares the text (the engine's string
+                // guard runs it, an empty broadcast included).
                 var other = d1.Meta is VStringDTypeMeta ? d2 : d1;
                 if (other.Meta is VStringDTypeMeta || other.Meta == DTypeRegistry.Str)
-                {
-                    // NumPy compares the text. An EMPTY broadcast result compares nothing (the shape decides it); anything
-                    // else is the comparison loop of StringDType, phase 2.
-                    var computed = Shape.ResolveReturnShape(lhs.Shape, rhs.Shape);
-                    if (computed.size == 0)
-                        return new NumSharp.Generic.NDArray<bool>(computed.Clean(), fillZeros: true);
-                    throw NextPhaseVString(notEqual ? "not_equal" : "equal", d1.Meta is VStringDTypeMeta ? d1 : d2);
-                }
+                    return null;
             }
             // The workaround allocates its result through an iterator over both operands, so a broadcast failure is
             // still reported; the values are a constant that needs no element of either operand. The typed array is

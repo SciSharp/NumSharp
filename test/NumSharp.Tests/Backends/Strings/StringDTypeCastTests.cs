@@ -114,6 +114,47 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     The string-to-bool cast finds a corrupt cell wherever it sits in a run — inside the four-cells-a-step scan of an
+        ///     allocator without an arena as well as in its scalar tail and in a strided view — and raises NumPy's error; an
+        ///     emptied arena cell (size 0), an NA and a never-written cell load without the arena and read as False.
+        /// </summary>
+        [TestMethod]
+        public unsafe void CorruptCell_AnywhereInARun_IsTheBoolCastError()
+        {
+            const string Message = "Failed to load string in string to bool cast";
+            foreach (int n in new[] { 4, 5, 8, 9 })
+            {
+                for (int k = 0; k < n; k++)
+                {
+                    using var a = np.empty(new Shape(n), T);
+                    byte* cell = a.Storage.VStringSlice.Address + 16 * k;
+                    *(ulong*)cell = 1;
+                    *(ulong*)(cell + 8) = 20UL | (0x40UL << 56);
+                    try
+                    {
+                        Action whole = () => a.astype(np.dtype("?"));
+                        whole.Should().Throw<OutOfMemoryException>().WithMessage(Message, $"n={n}, corrupt cell {k}");
+                        using var strided = a[$"{k % 2}::2"];
+                        Action stepped = () => strided.astype(np.dtype("?"));
+                        stepped.Should().Throw<OutOfMemoryException>().WithMessage(Message, $"n={n}, corrupt cell {k}, step 2");
+                    }
+                    finally
+                    {
+                        // The buffer's release frees every cell: the corrupt one must be gone first.
+                        new Span<byte>(cell, 16).Clear();
+                    }
+                }
+            }
+            using var clean = np.empty(new Shape(9), np.dtypes.StringDType(na_object: null));
+            byte* c = clean.Storage.VStringSlice.Address;
+            *(ulong*)(c + 16 + 8) = 0x40UL << 56; // an emptied arena string: size 0, so NpyString_load needs no arena
+            *(ulong*)(c + 80 + 8) = 0x80UL << 56; // an NA (pack_null over a never-written cell)
+            using var flags = clean.astype(np.dtype("?"));
+            for (int i = 0; i < 9; i++)
+                flags.GetBoolean(i).Should().BeFalse($"cell {i}");
+        }
+
+        /// <summary>
         ///     Between <c>StringDType</c> descriptors: NA stays NA when the target has an NA object (None to nan), and becomes the
         ///     NA object's <c>str()</c> when it has none; into <c>U</c> / <c>S</c> an NA reads as its <c>str()</c> and a text is
         ///     cut by code points; into numbers a non-ASCII text is CPython's int() error quoting it; float64 NaN becomes NA

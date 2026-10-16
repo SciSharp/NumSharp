@@ -20,8 +20,12 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumsum(s.arr, s.axis, s.typeCode, s.@out), @out);
-            // Text (input or out=): add.accumulate's loop on (out, arr) answers after the axis (ReduceOutError); without
-            // out= the engine's guard answers (ReduceError).
+            // StringDType: add.accumulate computes (strings plan D18) once NumPy's checks passed (the axis, the dtype= and
+            // out= loop resolution); the out receives the accumulation itself, or its cast into an S / U out.
+            if (Backends.Strings.NDStringUfuncs.VStringReduces("cumsum", arr, axis, typeCode, @out))
+                return Backends.Strings.NDVStringReduction.CumSum(arr, axis, @out);
+            // Fixed-width text (input or out=): add.accumulate's loop on (out, arr) answers after the axis (ReduceOutError);
+            // without out= the engine's guard answers (ReduceError).
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("cumsum", arr, axis, @out, typeCode);
             // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
             // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout

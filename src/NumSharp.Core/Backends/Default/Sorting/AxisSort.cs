@@ -501,15 +501,19 @@ namespace NumSharp.Backends.Sorting
             // A fixed-width string operand has no type-code element size (its width is its descriptor's): the descriptor
             // construction sizes it, a null entry keeping each operand's own descriptor (no cast).
             DType[] descrs = null;
+            var globalFlags = NDIterGlobalFlags.None;
             foreach (var op in ops)
             {
                 if (op.typecode == NPTypeCode.String)
                 {
-                    descrs = new DType[ops.Length];
-                    break;
+                    descrs ??= new DType[ops.Length];
+                    // A NEP 55 StringDType operand "holds references" (its cells point into an arena or the heap): NDIter
+                    // refuses it without REFS_OK. The line kernels read its cells in place (no cast, no buffer).
+                    if (op.Storage.IsVString)
+                        globalFlags |= NDIterGlobalFlags.REFS_OK;
                 }
             }
-            var iter = NDIterRef.AdvancedNew(ops.Length, ops, NDIterGlobalFlags.None,
+            var iter = NDIterRef.AdvancedNew(ops.Length, ops, globalFlags,
                 NPY_ORDER.NPY_CORDER, NPY_CASTING.NPY_NO_CASTING, flags, null, ndim - 1, opAxes, opDescrs: descrs);
             try { iter.ForEach(kern, aux); }
             finally { iter.Dispose(); }

@@ -23,7 +23,7 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "isfinite", a, null, @out, where);
             // typeCode is validate-only: isfinite has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
-            ValidateBoolLoopDtype(typeCode, "isfinite");
+            ValidateBoolLoopDtype(typeCode, "isfinite", a);
             // isfinite has no string loop; under dtype=bool the input cast to the bool loop is what fails (probed).
             Strings.NDStringUfuncs.ThrowIfUnary("isfinite", a, UfuncLoopCode(dtype));
 

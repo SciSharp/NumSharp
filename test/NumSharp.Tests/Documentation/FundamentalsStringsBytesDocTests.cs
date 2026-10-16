@@ -432,20 +432,23 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later stage: computing on <c>StringDType</c> text — its unique values and its
-        ///     comparison refuse with <see cref="StringComputationNotSupportedException"/> (a
-        ///     <see cref="NotSupportedException"/>) — while the same calls over <c>U</c> text compute; a string <c>dtype=</c>
-        ///     request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated).
+        ///     What the doc page still lists as a later stage: the sorts, searches and set routines over <c>StringDType</c> text
+        ///     — its unique values refuse with <see cref="StringComputationNotSupportedException"/> (a
+        ///     <see cref="NotSupportedException"/>) — while its comparison computes (strings phase 2, P2.T) and the same calls
+        ///     over <c>U</c> text compute; a string <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers
+        ///     written as text, then concatenated).
         /// </summary>
         [TestMethod]
         public void Computing_NextPhase()
         {
             var names = Names();
             var t = names.astype(np.dtypes.StringDType());
+            using (var eq = t == t)
+                eq.ToArray<bool>().Should().Equal(true, true, true);
             Action unique = () => np.unique(t);
             unique.Should().Throw<StringComputationNotSupportedException>();
-            Action compare = () => _ = t == t;
-            compare.Should().Throw<StringComputationNotSupportedException>();
+            Action sort = () => np.sort(t);
+            sort.Should().Throw<StringComputationNotSupportedException>();
             NDArray.AsStringArray((NDArray)np.unique(names)).Should().Equal("bird", "cat", "dog");
             np.isin(names, np.array(new[] { "cow" })).ToArray<bool>().Should().Equal(false, false, false);
             NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
@@ -635,6 +638,36 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "Computing on StringDType text" examples, with a NaN-like NA: the comparisons (every one False with the
+        ///     NA, <c>!=</c> included), <c>add</c> / <c>multiply</c> propagating the NA, <c>maximum</c> / <c>minimum</c> and
+        ///     the reductions ordering it last, <c>isnan</c>, the default <c>StringDType()</c> result cast into a <c>U</c> out
+        ///     (the NA becomes <c>''</c>) and <c>maximum</c>'s missing <c>U</c> loop. Every value probed from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_Computing()
+        {
+            var nan = np.dtypes.StringDType(na_object: double.NaN);
+            var t = np.array(new object[] { "pear", "fig", double.NaN }, nan);
+            var u = np.array(new object[] { "kiwi", "apple", "plum" }, nan);
+            (t < "grape").ToArray<bool>().Should().Equal(false, true, false);
+            (t != u).ToArray<bool>().Should().Equal(true, true, false);
+            (t + "!").ToString(true).Should().Be("array(['pear!', 'fig!', nan], dtype=StringDType(na_object=nan))");
+            (t * 2).ToString(true).Should().Be("array(['pearpear', 'figfig', nan], dtype=StringDType(na_object=nan))");
+            np.maximum(t, u).ToString(true).Should().Be("array(['pear', 'fig', nan], dtype=StringDType(na_object=nan))");
+            np.minimum(t, u).ToString(true).Should().Be("array(['kiwi', 'apple', 'plum'], dtype=StringDType(na_object=nan))");
+            np.sum(t["0:2"]).item().Should().Be("pearfig");
+            np.cumsum(t).ToString(true).Should().Be("array(['pear', 'pearfig', nan], dtype=StringDType(na_object=nan))");
+            np.argmax(t).Should().Be(2);
+            np.isnan(t).ToArray<bool>().Should().Equal(false, false, true);
+            Action noLoop = () => np.maximum(t, "x");
+            noLoop.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'maximum' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None");
+
+            var o = np.empty(new Shape(3), np.dtype("U8"));
+            np.add(t, "!", o).ToString(true).Should().Be("array(['pear!', 'fig!', ''], dtype='<U8')");
+        }
+
+        /// <summary>
         ///     The "Text files" examples: loadtxt with a converter whose null is the NA object and a whole-line field;
         ///     savetxt formatting the NA object itself (its <c>str()</c>, its own type's <c>%d</c>) and the Mismatch error;
         ///     tofile's text mode and fromfile's refusal.
@@ -683,7 +716,18 @@ namespace NumSharp.Tests.Documentation
             ((Action)(() => np.frombuffer(new byte[16], "T"))).Should().Throw<ValueError>()
                 .WithMessage("cannot create an OBJECT array from memory buffer");
             ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<ArgumentException>();
-            ((Action)(() => { var _ = t == t; })).Should().Throw<StringComputationNotSupportedException>();
+            // A sort of two or more texts reads them (one element is decided by the shape and copies).
+            ((Action)(() => np.sort(np.array(new[] { "b", "a" }, np.dtypes.StringDType())))).Should().Throw<StringComputationNotSupportedException>();
+
+            // The NumPy-bug list: a 1-D accumulation into a 0-d out (NumPy crashes) is the wrong-size error, and maximum
+            // with a None-like NA into an S out of non-ASCII texts (NumPy's SystemError) is the loop's own ValueError.
+            using var one = np.array("", np.dtypes.StringDType());
+            ((Action)(() => np.cumsum(np.array(new[] { "a", "b" }, np.dtypes.StringDType()), null, null, one)))
+                .Should().Throw<IncorrectShapeException>().WithMessage("provided out is the wrong size for the accumulation.");
+            var none = np.dtypes.StringDType(na_object: null);
+            var withNA = np.array(new object[] { null, "été" }, none);
+            ((Action)(() => np.maximum(withNA, np.array(new object[] { "x", "y" }, none), np.empty(new Shape(2), np.dtype("S4")))))
+                .Should().Throw<ValueError>().WithMessage("Cannot compare null that is not a nan-like value");
         }
 
         /// <summary>

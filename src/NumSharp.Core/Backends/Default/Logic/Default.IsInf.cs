@@ -24,7 +24,7 @@ namespace NumSharp.Backends
             NPTypeCode? typeCode = UfuncLoopCode(dtype, "isinf", a, null, @out, where);
             // typeCode is validate-only: isinf has bool-output loops only
             // (NumPy: dtype=bool is a no-op, anything else raises no-loop).
-            ValidateBoolLoopDtype(typeCode, "isinf");
+            ValidateBoolLoopDtype(typeCode, "isinf", a);
             // isinf has no string loop; under dtype=bool the input cast to the bool loop is what fails (probed).
             Strings.NDStringUfuncs.ThrowIfUnary("isinf", a, UfuncLoopCode(dtype));
 

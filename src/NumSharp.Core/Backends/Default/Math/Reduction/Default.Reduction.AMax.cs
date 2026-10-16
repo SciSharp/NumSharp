@@ -33,6 +33,9 @@ namespace NumSharp.Backends
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("max", arr, axis_, dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceAMax(p, axis_, keepdims, dtype));
+            // StringDType: NumPy's maximum.reduce computes (strings plan D18) once its checks passed.
+            if (Strings.NDStringUfuncs.VStringReduces("max", arr, axis_, dtype))
+                return Strings.NDVStringReduction.MaxMin(true, arr, axis_, keepdims, null, null, null);
             Strings.NDStringUfuncs.ThrowIfReduce("max", arr, axis_, dtype);
             // The ufunc reduce's axis check, before every shortcut below (empty, 0-d and one-element inputs included).
             ReductionArguments.CheckReduceAxis(arr.ndim, axis_);

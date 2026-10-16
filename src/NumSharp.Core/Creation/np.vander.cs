@@ -46,8 +46,9 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsVString(x))
             {
                 DTypePromotion.PromoteTypes(x.dtype, np.int64);
-                // The promotion never succeeds for StringDType; this keeps the method total if that ever changes.
-                throw Backends.Strings.NDStringUfuncs.NextPhaseVString("vander", x.dtype);
+                // The promotion never succeeds for StringDType (no common DType with Int64DType); reaching this line would
+                // be a promotion-table bug, not a NumPy answer.
+                throw new InvalidOperationException("promote_types(StringDType, int64) unexpectedly found a common DType.");
             }
 
             // NumPy: dtype = promote_types(x.dtype, int) — `int` is intp (int64 on 64-bit). Text absorbs int64 as a

@@ -1478,6 +1478,12 @@ namespace NumSharp.Backends
             // checks — maximum / minimum / fmax / fmin have no text loop, so that resolution is the answer.
             ReductionArguments.ValidateParsedArguments(@out, @where);
             bool[] flags = ReductionArguments.AxisFlags(a.ndim, axis);
+            // StringDType in the input or the out: the StringDType loops' resolution (maximum / minimum compute, fmax / fmin
+            // have none), then PyUFunc_ReduceWrapper's checks and the reduction (initial= packed into the StringDType loop).
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsVString(@out))
+                return Strings.NDVStringReduction.MaxMinNumPy(
+                    op switch { MinMaxOp.Max => "max", MinMaxOp.Min => "min", MinMaxOp.FMax => "nanmax", _ => "nanmin" },
+                    a, axis, @out, keepdims, initial, @where);
             if (Strings.NDStringUfuncs.IsString(a) || Strings.NDStringUfuncs.IsString(@out))
                 throw Strings.NDStringUfuncs.NoLoop(funcname, (@out ?? a).dtype, a.dtype);
             ReductionArguments.ValidateOperands(a, flags, keepdims, @out, @where, funcname);

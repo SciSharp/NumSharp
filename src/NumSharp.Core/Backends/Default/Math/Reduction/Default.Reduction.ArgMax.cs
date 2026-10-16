@@ -19,16 +19,22 @@ namespace NumSharp.Backends
         ///     ValueError, which a string array raises as <see cref="ValueError"/>).</exception>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the input's rank (rank 1 for a 0-d input, which
         ///     NumPy ravels first) — checked before anything else, for every dtype.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements: NumPy compares the text (the <c>StringDType</c> part of the next phase). An empty result or lines of
-        ///     one element give their zero indices.</exception>
+        /// <exception cref="ValueError">An empty reduced line (<c>attempt to get argmax of an empty sequence</c>), or a
+        ///     <c>StringDType</c> comparison that meets a <c>None</c>-like NA (<c>Cannot compare null that is not a nan-like
+        ///     value</c>).</exception>
         /// <remarks>
-        ///     An <c>S</c> / <c>U</c> array is compared as NumPy's <c>STRING_argmax</c> / <c>UNICODE_argmax</c> compare it
+        ///     A <c>StringDType</c> array is compared by its dtype's ArgFunc (<see cref="Strings.NDVStringReduction.ArgMaxMin"/>:
+        ///     NumPy's <c>compare</c>, a NaN-like NA greater than any text). An <c>S</c> / <c>U</c> array is compared as
+        ///     NumPy's <c>STRING_argmax</c> / <c>UNICODE_argmax</c> compare it
         ///     (unsigned code units over the item width; the first maximum of each line
         ///     wins), by <see cref="Sorting.TextArgReduce"/>.
         /// </remarks>
         public override NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false)
         {
+            // StringDType first (the S / U test below refuses it): the dtype's ArgFunc over the cells (NumPy's `compare`, a
+            // NaN-like NA greater than any text) once NumPy's checks passed (the axis, the empty-sequence error).
+            if (Strings.NDStringUfuncs.VStringReduces("argmax", arr, axis_))
+                return Strings.NDVStringReduction.ArgMaxMin(true, arr, axis_, keepdims);
             // Fixed-width text: NumPy's argmax checks the axis (a 0-d input ravels first) and refuses an empty line; where
             // it compares nothing (an empty result, lines of one element) the indices are all 0 and the bool stand-in of the
             // same shape computes them through the numeric path; otherwise the text is compared (TextArgReduce).
@@ -41,12 +47,6 @@ namespace NumSharp.Backends
                     return Sorting.TextArgReduce.ArgReduce(arr, axis_, keepdims, max: true);
                 using var textStandIn = Strings.NDStringUfuncs.BoolStandIn(arr);
                 return ReduceArgMax(textStandIn, axis_, keepdims);
-            }
-            // StringDType: the same checks and shape-decided answers, the text comparison deferred (ReduceStandIn throws).
-            if (Strings.NDStringUfuncs.ReduceStandIn("argmax", arr, axis_) is { } standIn)
-            {
-                using (standIn)
-                    return ReduceArgMax(standIn, axis_, keepdims);
             }
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)

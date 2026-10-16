@@ -447,18 +447,41 @@ namespace NumSharp.Backends.Strings
         /// <param name="d">The first bool.</param>
         /// <param name="ds">The destination byte stride.</param>
         /// <param name="n">The number of elements.</param>
-        /// <param name="allocator">The source's allocator (locked).</param>
+        /// <param name="allocator">The source's allocator (locked; unused: the truth needs no text).</param>
         /// <param name="naTruth">The truth value of an NA element (1 or 0).</param>
-        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        /// <remarks>
+        ///     NumPy's loop loads each string (<c>NpyString_load</c>) only to read its size, which the cell itself holds: the
+        ///     cell's flags byte and size field decide (<see cref="NDVStringCells.Truth"/>; four contiguous cells a step,
+        ///     <see cref="NDVStringCells.TruthRun"/>), so an arena or heap text is never touched — the per-element arena read
+        ///     was most of the cast's cost (a 24-byte arena text: 2.9 → ~1 ns an element). NumPy's only error here,
+        ///     <c>Failed to load string in string to bool cast</c>, needs an arena cell of an allocator without an arena (a
+        ///     corrupt cell, which no NumSharp operation produces): an allocator without an arena is scanned for one
+        ///     (<see cref="NDVStringCells.AnyArenaCell"/>), and a run that holds one takes NumPy's per-element loop.
+        /// </remarks>
+        /// <exception cref="OutOfMemoryException">A corrupt cell: <c>Failed to load string in string to bool cast</c>.</exception>
         private static void ToBoolRun(byte* s, long ss, byte* d, long ds, long n, VStringAllocator allocator, byte naTruth)
         {
-            for (long i = 0; i < n; i++, s += ss, d += ds)
+            // NpyString_load fails only for an arena cell of an allocator without an arena: only such an allocator is
+            // scanned for one, and a run that holds one takes NumPy's per-element loop, which raises at it.
+            if (allocator.ArenaBase == null && NDVStringCells.AnyArenaCell(s, ss, n))
             {
-                if (Load(s, allocator, out _, out long size, "string to bool cast"))
-                    *d = naTruth;
-                else
-                    *d = size == 0 ? (byte)0 : (byte)1;
+                for (long i = 0; i < n; i++, s += ss, d += ds)
+                {
+                    if (Load(s, allocator, out _, out long size, "string to bool cast"))
+                        *d = naTruth;
+                    else
+                        *d = size == 0 ? (byte)0 : (byte)1;
+                }
+                return;
             }
+            // A contiguous run of cells into contiguous bools: the four-cells-a-step form.
+            if (ss == VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING && ds == 1)
+            {
+                NDVStringCells.TruthRun(s, d, n, naTruth);
+                return;
+            }
+            for (long i = 0; i < n; i++, s += ss, d += ds)
+                *d = NDVStringCells.Truth(s, naTruth);
         }
 
         /// <summary>

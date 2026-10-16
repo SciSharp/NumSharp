@@ -55,7 +55,7 @@ namespace NumSharp
             // Text: no NaN mask (not inexact), so this is NumPy's argmax, which runs its checks — the empty length, then
             // out= — before it compares the text; the engine then compares (or, where nothing is compared, computes the zero
             // indices on a bool stand-in), and out= receives the indices as NumPy writes them.
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 NanArgTextChecks(a, axis, @out, keepdims, "argmax");
                 return NanArgWriteOut(a.TensorEngine.ReduceArgMax(a, axis, keepdims), @out, "argmax");
@@ -111,7 +111,7 @@ namespace NumSharp
             ValidateNanArgAxis(a, axis);
             // Text: NumPy's argmin checks the empty length and out= before it compares (see nanargmax); the engine
             // compares, and out= receives the indices.
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 NanArgTextChecks(a, axis, @out, keepdims, "argmin");
                 return NanArgWriteOut(a.TensorEngine.ReduceArgMin(a, axis, keepdims), @out, "argmin");

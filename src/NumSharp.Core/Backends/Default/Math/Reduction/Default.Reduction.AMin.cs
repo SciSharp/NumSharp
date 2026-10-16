@@ -32,6 +32,9 @@ namespace NumSharp.Backends
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("min", arr, axis_, dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceAMin(p, axis_, keepdims, dtype));
+            // StringDType: NumPy's minimum.reduce computes (strings plan D18) once its checks passed.
+            if (Strings.NDStringUfuncs.VStringReduces("min", arr, axis_, dtype))
+                return Strings.NDVStringReduction.MaxMin(false, arr, axis_, keepdims, null, null, null);
             Strings.NDStringUfuncs.ThrowIfReduce("min", arr, axis_, dtype);
             // The ufunc reduce's axis check, before every shortcut below (empty, 0-d and one-element inputs included).
             ReductionArguments.CheckReduceAxis(arr.ndim, axis_);

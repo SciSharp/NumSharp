@@ -215,6 +215,19 @@ namespace NumSharp.Backends.Strings
         /// <summary>The arena's used bytes (diagnostic).</summary>
         internal long ArenaUsed => (long)_arenaCursor;
 
+        /// <summary>
+        ///     The arena's first byte (null before the first arena string): the base an arena cell's OFFSET is added to. The
+        ///     <c>StringDType</c> kernels read it once per call and decode cells with it (<see cref="NDVStringCells.Load"/>)
+        ///     instead of calling <see cref="load"/> per element.
+        /// </summary>
+        /// <remarks>
+        ///     Valid only while the lock is held AND nothing allocates in this allocator: an arena string's allocation can
+        ///     reallocate the arena (<see cref="ArenaMalloc"/>), which moves every arena text. A loop whose output allocator is
+        ///     also an input's must therefore re-read the base after each allocation, or copy the input text first (NumPy's
+        ///     in-place temporaries).
+        /// </remarks>
+        internal byte* ArenaBase => _arena;
+
         /// <summary>True once the owning buffer was released and <see cref="ClearAndFree"/> ran (diagnostic).</summary>
         internal bool IsFreed => _freed;
 
@@ -403,8 +416,17 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="size">The UTF-8 size.</param>
         /// <returns>The bytes, prefix included.</returns>
+        /// <remarks>Inlined and branch-free (sign masks: <c>(limit - size) &gt;&gt; 63</c> is all ones past the limit): the size
+        ///     passes call it once per element over text whose sizes straddle the 15- and 255-byte lines at random, where the
+        ///     JIT's compare-and-branch form mispredicted half the time. Valid for every size below 2^62.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static long ArenaBytesForText(long size)
-            => size <= NPY_SHORT_STRING_MAX_SIZE ? 0 : size <= NPY_MEDIUM_STRING_MAX_SIZE ? size + 1 : size + 8;
+        {
+            long overShort = (NPY_SHORT_STRING_MAX_SIZE - size) >> 63;
+            long overMedium = (NPY_MEDIUM_STRING_MAX_SIZE - size) >> 63;
+            // the size prefix: one byte for a medium text, eight for a long one; nothing at all for a short text
+            return (size + 1 + (7 & overMedium)) & overShort;
+        }
 
         /// <summary>Whether this allocator holds any medium, long or heap string (a copy of its cells may need arena space).</summary>
         internal bool HoldsLongStrings => _arenaCursor > 0 || HeapStrings > 0;
@@ -708,6 +730,53 @@ namespace NumSharp.Backends.Strings
                 s[15] = (byte)(NPY_STRING_INITIALIZED | NPY_STRING_OUTSIDE_ARENA | size);
             }
             return 0;
+        }
+
+        /// <summary>
+        ///     The bump-pointer form of <see cref="newemptysize"/> for a FRESH cell — all zero, never written, so nothing to free
+        ///     and no arena slot to reuse — and a medium or long text that fits the arena's free capacity (a fresh output's
+        ///     arena is reserved from its size pass): it leaves exactly the bytes <c>NpyString_newemptysize</c> →
+        ///     <c>heap_or_arena_allocate</c> → <c>arena_malloc</c> leave (the size prefix, the offset, and the size field with
+        ///     <c>INITIALIZED</c> — plus <c>LONG</c> past 255 bytes — in byte 15), without the general path's per-call checks.
+        /// </summary>
+        /// <param name="cell">The fresh cell (all zero).</param>
+        /// <param name="size">The text size: more than <see cref="NPY_SHORT_STRING_MAX_SIZE"/> (a short text belongs in its
+        ///     cell).</param>
+        /// <returns>The first text byte (the caller writes <paramref name="size"/> bytes there; valid until the arena next
+        ///     grows), or null when the text does not fit the free capacity or a test scheduled an allocation failure — the
+        ///     caller then takes <see cref="newemptysize"/>, which grows the arena (or fails) exactly as NumPy does.</returns>
+        /// <remarks>
+        ///     The fast path skips <see cref="InjectedFailure"/>'s countdown entirely while any failure is scheduled (one
+        ///     volatile read), so a fault-injection test still sees its failure at the scheduled allocation of the general path.
+        ///     A text of size 0 must not come here (NumPy packs the empty string without an allocation).
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal byte* AppendFresh(byte* cell, long size)
+        {
+            bool medium = (ulong)size <= NPY_MEDIUM_STRING_MAX_SIZE;
+            // one byte (medium) or one size_t (long) in front of the text holds its allocation size (arena_malloc)
+            ulong storage = medium ? (ulong)size + 1 : (ulong)size + 8;
+            if (_arenaSize - _arenaCursor < storage || s_faultInjectionArmed)
+                return null;
+            byte* p = _arena + _arenaCursor;
+            ulong flags;
+            if (medium)
+            {
+                *p = (byte)size;
+                p += 1;
+                flags = NPY_STRING_INITIALIZED;
+            }
+            else
+            {
+                Unsafe.WriteUnaligned(p, (ulong)size);
+                p += 8;
+                flags = NPY_STRING_INITIALIZED | NPY_STRING_LONG;
+            }
+            // The cell: the offset into the arena (bytes 0-7), then the size with the flags in byte 15.
+            Unsafe.WriteUnaligned(cell, (ulong)(p - _arena));
+            Unsafe.WriteUnaligned(cell + 8, (ulong)size | (flags << 56));
+            _arenaCursor += storage;
+            return p;
         }
 
         /// <summary>
