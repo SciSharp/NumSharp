@@ -87,7 +87,26 @@ the nan forms / the methods, `np.searchsorted`, `np.digitize`, the bin search of
 (see "Text searches"). Its set routines and statistics compute since milestone C (2026-10-16): `np.unique` with every
 flag and axis and the Array-API unique family, `np.isin`, the four set routines, `np.lexsort`, `np.sort_complex`,
 `np.histogram` / `histogram_bin_edges`, the take path of `np.quantile` / `np.percentile` (see "Text set routines"). No
-`S` / `U` computation is deferred; `StringDType` computations are left (P2.T, then P2.2 over `T`).
+`S` / `U` computation is deferred.
+**`StringDType` computes since P2.T (2026-10-16, `450f930b`; plan state log).** The six comparisons over (`T`, `T`) /
+(`T`, `U`) and their operators, the truth readers and `np.isnan`, `add` / `multiply` / `maximum` / `minimum`, `np.sum` /
+`np.cumsum` / `np.max` / `np.min` / `np.argmax` / `np.argmin` / `np.trace`, the statistics that refuse after computing,
+`np.char.add` / `multiply` and numpy.ma over `T`, with NumPy's NA rules (NaN-like: every comparison False, `!=` too,
+propagates, orders last; string NA: its text; `None`-like: equal to an NA, ordering and arithmetic raise) and descriptor
+resolution (the operands' common NA object, the first operand's `coerce`; a `T` out is the loop's own output, any other
+out receives the default `StringDType()` through the output cast, so an NA is `''` in a `U` out). Code:
+`Backends/Strings/NDVString{Cells,Comparison,Arithmetic,Reduction,Statistics}.cs` + `ILKernelGenerator.Text.VString.cs`
+(IL kernels over NDIter). Design rules: two short cells compare INSIDE their cells as a masked 128-bit big-endian key, no
+branch on the data; a pair outside its cells decides by the first eight bytes inline; everything else is out of line
+(`ComparePairSlow`, `NoInlining` arena forms: inlined beside the short forms they made the JIT spill registers on every
+element); the truth readers read only byte 15 and the size field (four cells a step on AVX2); a fresh output reserves its
+arena ONCE from a size pass and appends at the cursor (`VStringAllocator.AppendFresh`); `maximum` / `minimum` reserve the
+larger text of each pair and skip the pass over cell-only inputs. TRAPS: a short text stored over a freed arena cell
+keeps the old offset's high bytes past its size (`NpyString_newemptysize` writes only byte 15), so every reader masks;
+`pack_empty` leaves a never-written cell all zero; `string_to_bool` reads `default_string.size == 0` for a string NA
+(`na_object=''` is True). Gates: oracle `tcomp` / `tarith` / `treduce` (12,111 cases, zero excuses),
+`StringDTypeComputeTests` (raw-cell and arena-reservation tests included). Left: P2.2 over `T` (sorts, searches, set
+routines, `np.median`: 4 deferral sites, 5 `tma` cases).
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs
