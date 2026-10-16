@@ -4,9 +4,9 @@ NumSharp has NumPy's two fixed-width text dtypes: `str_` (`U`, Unicode) and `byt
 
 Conversion between text and numbers works as in NumPy: a number written into a text array is its scalar's `str()`, and a text cast to a number is parsed by Python's `int()`, `float()` or `complex()`, with NumPy's errors.
 
-Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition, sorting, searching, unique values, the set routines, histograms and quantiles compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add`, `multiply` and its `chararray` class (`np.@char`). The other `np.strings` functions throw `StringComputationNotSupportedException` until their stage lands. Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
+Computing on text arrives in stages. Comparisons, truth values, concatenation, repetition, sorting, searching, unique values, the set routines, histograms and quantiles compute now, with NumPy's results, and so do the `numpy.char` module's comparisons, `add`, `multiply` and its `chararray` class (`np.@char`). The other `np.strings` functions are a later stage (NumSharp's `np.strings` has `add` and `multiply` so far). Where NumPy itself refuses a call (`np.sum` of text, `np.sqrt` of text), NumSharp raises NumPy's exception with NumPy's message.
 
-NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too. It computes its comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and reductions (`np.sum`, `np.cumsum`, `np.max`, `np.argmax`, ...); sorting, searching and the set routines over it are the next stage (see [Computing on `StringDType` text](#computing-on-stringdtype-text)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
+NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, casts, prints, goes to `.npy` files and through `np.loadtxt` / `np.savetxt` as in NumPy too. It computes its comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and reductions (`np.sum`, `np.cumsum`, `np.max`, `np.argmax`, ...), and its sorts, searches, unique values, set routines and order statistics, with NumPy's ordering of missing values (see [Computing on `StringDType` text](#computing-on-stringdtype-text) and [Ordering `StringDType` text](#ordering-stringdtype-text)). NumPy's raw `void` (`V`) and `object` (`O`) dtypes stay unsupported.
 
 <!-- Tests: NumSharp.Tests.Documentation.FundamentalsStringsBytesDocTests - every code example on this page is executed and asserted in test/NumSharp.Tests/Documentation/FundamentalsStringsBytesDocTests.cs. Section → method(s):
      The two string dtypes → TwoStringDtypes_WidthAndItemSize, TwoStringDtypes_RawBytes
@@ -17,7 +17,7 @@ NumPy 2's variable-width `StringDType` (`T`) stores, reads, writes, copies, cast
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
      Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_Searching, Computing_CharModule, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
-     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Computing, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
+     Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Computing, StringDType_Ordering, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
      Byte streams via np.frombuffer → Bytes_ViaFrombuffer -->
@@ -467,13 +467,13 @@ np.sum(names);    // TypeError: the resolved dtypes are not compatible with add.
 np.sqrt(names);   // TypeError: ufunc 'sqrt' not supported for the input types, ...
 ```
 
-**NumPy computes on the text.** NumSharp computes it too for `S` and `U` text: comparisons, truth values, concatenation and repetition, sorting, searching, unique values, set routines, histograms, quantiles and the conversions between text and numbers. For `StringDType` text it computes the comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and the reductions; sorting, searching, unique values, the set routines and `np.median` over `StringDType` are the next stage, and there NumSharp throws `StringComputationNotSupportedException`, a `NotSupportedException`:
+**NumPy computes on the text.** NumSharp computes it too, over `S`, `U` and `StringDType` text: comparisons, truth values, concatenation and repetition, sorting, searching, unique values, set routines, histograms, quantiles and the conversions between text and numbers (over `StringDType` also `maximum` / `minimum` and the reductions). The other `np.strings` functions are a later stage: NumSharp's `np.strings` has `add` and `multiply` so far. A NumSharp route that has no text form yet throws `StringComputationNotSupportedException`, a `NotSupportedException`; `np.evaluate` over text is one:
 
 ```csharp
 var t = names.astype(np.dtypes.StringDType());
-t == t;          // [ True  True  True]: computed
-np.unique(t);    // the next stage: StringComputationNotSupportedException
-np.sort(t);      // the next stage: StringComputationNotSupportedException
+t == t;                               // [ True  True  True]: computed
+np.unique(t);                         // ['bird' 'cat' 'dog']: computed
+np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException: a fused expression computes on numbers
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
@@ -545,7 +545,7 @@ For what is not computed yet, convert to .NET and compute there. For example, `N
 
 NumPy 2's `StringDType` (`T`, NEP 55) has no width. Each element is a 16-byte cell: a text of up to 15 UTF-8 bytes sits in the cell itself, a longer text in an arena that belongs to the array's buffer, and a text that a later write makes longer than its slot moves to the heap. NumSharp stores `StringDType` arrays with NumPy's cell layout byte for byte (`tobytes()` returns the same bytes as NumPy), with its missing-data objects, its coercion rules and its casts.
 
-Comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and the reductions compute on `StringDType` text (see [Computing on `StringDType` text](#computing-on-stringdtype-text)). Sorting, searching, unique values, the set routines, `np.median` and the `np.strings` functions are the next phase; until then those calls throw `StringComputationNotSupportedException`, or the `NotSupportedException` of a route that has no `StringDType` form yet.
+Comparisons, truth values, concatenation, repetition, `maximum` / `minimum` and the reductions compute on `StringDType` text (see [Computing on `StringDType` text](#computing-on-stringdtype-text)), and so do the sorts, searches, unique values, set routines and order statistics (see [Ordering `StringDType` text](#ordering-stringdtype-text)). The other `np.strings` functions are a later stage, as for `S` and `U`.
 
 ### Creating `StringDType` arrays
 
@@ -642,6 +642,46 @@ np.add(t, "!", np.empty(new Shape(3), np.dtype("U8")));   // ['pear!' 'fig!' '']
 
 Two short texts compare inside their 16-byte cells, a text in the arena is read only as far as its first difference, and a new result reserves its arena once at the exact size its texts take. Measured against NumPy 2.4.2 on the same machine (pinned to two cores, 1,000 and 100,000 elements, texts of 6 to 24 bytes: ASCII, non-ASCII, with a long common prefix, with missing elements): all 200 cells run 1.5 to 47 times as fast as NumPy, 3.3 times in the geometric mean. Comparisons run 1.6 to 4.5 times as fast, `add` / `multiply` 2.0 to 3.7, `maximum` / `minimum` 1.9 to 3.6, truth values and `np.isnan` 1.7 to 6.3, `np.max` / `np.min` 1.5 to 4.4, `np.cumsum` 1.8 to 5.9, `np.argmax` 4.9 to 15 and `np.sum` 2.7 to 47.
 
+### Ordering `StringDType` text
+
+`np.sort`, `np.argsort`, `ndarray.sort`, `np.partition`, `np.argpartition`, `np.lexsort`, `np.searchsorted`, `np.unique` and the Array-API unique family, `np.isin`, the set routines, `np.median`, `np.quantile`, `np.percentile`, their nan forms and numpy.ma's `sort` / `argsort` / `median` / `unique` order `StringDType` text with NumPy's results, for every memory layout and axis. Texts compare by their UTF-8 bytes, a text before every longer text that starts with it. Missing data follows the NA object, as NumPy's sort compares it:
+
+- A NaN-like NA sorts after every text, and the NAs keep their input order.
+- A string NA reads as its text (the descriptor's default string).
+- A `None`-like NA raises NumPy's `ValueError` at the first comparison that meets it, so in any line of two or more elements. A line of one element compares nothing.
+
+```csharp
+var nan = np.dtypes.StringDType(na_object: double.NaN);
+var t = np.array(new object[] { "pear", double.NaN, "fig", "apple", "fig" }, nan);
+np.sort(t);                                                // ['apple' 'fig' 'fig' 'pear' nan]
+np.argsort(t, kind: "stable");                             // [3 2 4 0 1]
+np.unique(t);                                              // ['apple' 'fig' 'pear' nan]
+np.searchsorted(np.sort(t), np.array(new object[] { "grape" }, nan));   // [3]
+np.isin(t, np.array(new object[] { "fig" }, nan));         // [False False  True False  True]
+var none = np.dtypes.StringDType(na_object: null);
+np.sort(np.array(new object[] { "b", null }, none));       // ValueError: Cannot compare null that is not a nan-like value
+np.sort(t, kind: "heapsort");                              // RuntimeError: unsupported sort kind
+```
+
+NumPy's default kind is an introsort, and NumSharp reproduces its order of equal texts, as for `S` and `U`. `kind: "heapsort"` raises NumPy's `RuntimeError`, because `StringDType` registers no heapsort.
+
+The order statistics compute what NumPy computes, and refuse where NumPy refuses:
+
+- `np.median` sorts, then takes the mean of the middle elements. Their sum is text, whose division NumPy refuses with a `TypeError`, so a median exists only when the middle elements are NaN-like NAs (NaN).
+- `np.quantile` and `np.percentile` pick an element with the selection methods, as for `S` and `U`. An interpolating method reads the two neighbours and subtracts them, which raises Python's `TypeError` (`unsupported operand type(s) for -: 'str' and 'str'`).
+- The nan forms drop the NaN-like NAs first. An all-NaN slice gives the NA itself.
+
+```csharp
+var s = np.array(new[] { "b", "a", "c" }, np.dtypes.StringDType());
+np.quantile(s, 0.5, method: "lower");   // 'b'
+np.quantile(s, 0.5);                    // TypeError: unsupported operand type(s) for -: 'str' and 'str'
+np.median(s);                           // TypeError: ufunc 'divide' not supported for the input types, ...
+```
+
+`np.unique_values` (and `np.unique` with `sorted: false` and no `return_*` flag) hashes the texts in NumPy and returns them in its hash table's order; NumSharp returns them sorted, the same values. An `axis` over two or more dimensions raises NumPy's `TypeError`, because its structured path cannot hold `StringDType` fields.
+
+Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inputs every call, 1,000 and 100,000 texts of five kinds: random 8-letter words, 8 repeated words, 24-byte URLs that live in the arena, 6-character non-Latin words, and words with missing elements): all 168 calls measured ran 1.8 to 32 times as fast as NumPy, 7.8 times in the geometric mean. The sorts and partitions ran 2.2 to 32 times as fast, `np.lexsort` 6.5 to 22, `np.searchsorted` 3.4 to 5.8, `np.unique` 2.2 to 13, `np.unique_values` 1.8 to 4.6, `np.isin` 9.6 to 24, the set routines 2.9 to 12 and the quantiles 9 to 21. NumPy's sorts call a comparison function for every pair they compare; NumSharp sorts 8-byte prefix keys and replays NumPy's order of equal texts only where it can differ. `np.unique` hashes the texts when they repeat and sorts them when they are mostly distinct, judged from the repeats among its first texts (an eighth of the array, 256 to 4,096). (`np.intersect1d` was measured with `assume_unique: true`: on these inputs NumPy's default path crashes in the sort of the joined unique values, the heapsort-fallback bug listed under "What `StringDType` refuses".)
+
 ### Text files: `loadtxt`, `savetxt` and `tofile`
 
 `np.loadtxt` reads every field of a `StringDType` column whole, whatever its length. A field equal to a string NA object is a missing element, and a converter's result is stored as `a[...] = value` stores it. So with `na_object: null`, a converter that returns `null` makes the element missing:
@@ -684,7 +724,8 @@ Measured against NumPy 2.4.2 on the same machine (pinned to two cores, 1,000 to 
 | `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
 | `np.ndarray(shape, "T", buffer: ...)` | `ArgumentException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses |
 | `np.fromfile`, `np.fromstring` and `tofile`'s binary mode with `StringDType` | NumPy's errors (`Cannot read into object array`, `OSError` for the binary write) |
-| Sorting, searching, unique values, the set routines, `np.median`, `np.strings.*` | `StringComputationNotSupportedException` or `NotSupportedException` (phase 2) |
+| `np.unique(..., axis: k)` over two or more dimensions | NumPy's `TypeError`: its structured path cannot hold `StringDType` fields |
+| A `np.nanquantile` / `np.nanmedian` row whose result is a `None` NA | `NotSupportedException`. NumPy builds an `object` array, a dtype NumSharp does not have |
 
 NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp gives the correct answer:
 
@@ -692,7 +733,11 @@ NumPy 2.4.2 has bugs on `StringDType` that NumSharp does not reproduce; NumSharp
 - `ndarray.byteswap()` over a `StringDType` array crashes the process (a segmentation fault). A cell has no byte order (the descriptor's `byteorder` is `'|'`), so NumSharp returns a copy, and with `inplace: true` the array itself.
 - `np.choose`, `np.put` and `np.putmask` copy the cells raw: an arena string gives garbage.
 - The `bytes` to `StringDType` cast does not validate UTF-8, so a later read of the element raises. NumSharp raises the `UnicodeDecodeError` at the cast.
-- The `StringDType` to `complex` cast writes the real part into the imaginary part too.
+- The `StringDType` to `complex` cast writes the real part into the imaginary part too (so `np.sort_complex(['2', '1'])` is `[1+1j, 2+2j]`).
+- `np.lexsort` with a `StringDType` key that is not contiguous along the axis (a transposed 2-D key, a stepped or reversed view) crashes the process (an access violation).
+- `np.argsort` of a broadcast `StringDType` view misorders texts that live in the arena (a 16-byte text lands before shorter, smaller ones). The same array copied sorts right.
+- `np.searchsorted` loads the haystack's cells with the keys' allocator, so a haystack text in its arena raises `MemoryError: Failed to load string in string comparison` or reads another array's arena.
+- The default-kind sort crashes the process when its introsort spends its depth budget: the heapsort fallback reads its method context as an array. NumSharp's heapsort answers, in the order `np.argpartition` gives.
 - A short string copied onto itself (`a[...] = a[:1]`) becomes `''`.
 - A buffered `np.nditer` with a `StringDType` input and an allocated `StringDType` output raises `MemoryError: Failed to load string in StringDType getitem` when the loop reads its own output, and `String deallocation failed in clear loop` when the iterator closes.
 - `np.loadtxt` keeps the `StringDType` instance it is given as its result's descriptor, so a second call with the same instance corrupts the first result (`MemoryError: Failed to load string in StringDType getitem` when it is read). NumSharp gives every result its own allocator.
@@ -813,7 +858,7 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 ## Troubleshooting
 
 ### "`StringComputationNotSupportedException`: ... is the next phase"
-NumPy computes this call on `StringDType` text, and NumSharp does not compute it on `StringDType` yet: sorting, searching, unique values, the set routines, `np.median` and the `np.strings` functions are the next stage (every computation over `S` and `U` text works). Cast to a fixed width (`arr.astype("U10")`), convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
+A NumSharp route that has no text form yet: `np.evaluate` over text, or one of the few calls built on the `np.strings` functions NumSharp does not have yet (its `np.strings` has `add` and `multiply` so far). Every NumPy computation over `S`, `U` and `StringDType` text that NumSharp exposes works. Convert the values to .NET (`NDArray.AsStringArray`, `item`) and use LINQ, or keep the computation in NumPy.
 
 ### "`ValueError: could not convert string to float`"
 A cast from text to a number parses every element, as NumPy does. Clean the text first, or keep it as text.
@@ -863,7 +908,7 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.histogram` / `np.histogram_bin_edges` | NumPy's results with text or number edges (compared as text), weights and density |
 | `np.quantile` / `np.percentile` | NumPy's results for the methods that pick an element; the interpolating methods raise NumPy's `TypeError` |
 | NumPy's refusals (`np.sum`, `np.sqrt`, ...) | NumPy's exception and message |
-| `np.dtypes.StringDType(...)` / `np.dtype("T")` | NumPy's variable-width `StringDType`: storage, element access, copies, gathers, scatters, casts and printing as NumPy's; comparisons, truth values, `add` / `multiply` / `maximum` / `minimum` and the reductions compute with NumPy's results; sorting, searching and the set routines throw `StringComputationNotSupportedException` (phase 2) |
+| `np.dtypes.StringDType(...)` / `np.dtype("T")` | NumPy's variable-width `StringDType`: storage, element access, copies, gathers, scatters, casts and printing as NumPy's; comparisons, truth values, `add` / `multiply` / `maximum` / `minimum`, the reductions, the sorts, searches, unique values, set routines and order statistics compute with NumPy's results and its ordering of missing values |
 | `np.dtype("V7")` / `"O"` | `NotSupportedException` |
 | `NPTypeCode.Char` | A 2-byte UTF-16 code unit dtype, written to `.npy` as `<U1` |
 | `np.frombuffer(byte[], dtype)` | Reinterprets raw bytes as an array, string dtypes included |

@@ -13,10 +13,11 @@ namespace NumSharp
         /// <returns>Sorted 1-D array of unique values that are in only one of the input arrays.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.setxor1d.html</remarks>
         /// <exception cref="UnicodeDecodeError">A <c>U</c> result over <c>S</c> text holding a non-ASCII byte.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer depends on its
-        ///     text (the <c>StringDType</c> part of NumSharp's next phase). Fixed-width text runs NumPy's statements: each
-        ///     input's <c>np.unique</c>, the concatenation (numbers formatted into text, bytes decoded beside str), the sort
-        ///     and the flags of values that occur once.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no common
+        ///     DType with (a number, bool, <c>S</c> bytes): NumPy's verbatim promotion text.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
         [NDScoped]
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {

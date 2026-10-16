@@ -42,8 +42,10 @@
         ///     np.argmax.</c>).</exception>
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, floats,
         ///     complex, text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
+        ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
+        ///     value</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argmax.html
         ///     <para>
@@ -122,8 +124,10 @@
         ///     np.argmin.</c>).</exception>
         /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64 (uint64, floats,
         ///     complex, text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
+        ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
+        ///     value</c>).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argmin.html
         ///     <para>

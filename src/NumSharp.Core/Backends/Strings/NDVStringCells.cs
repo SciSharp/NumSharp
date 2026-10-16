@@ -124,7 +124,10 @@ namespace NumSharp.Backends.Strings
         private static readonly ulong* s_masks = BuildMasks();
 
         /// <summary>A static empty text for empty vstring cells (NumPy's <c>EMPTY_STRING</c>): a non-null pointer to nothing.</summary>
-        private static readonly byte* s_empty = (byte*)NativeMemory.AllocZeroed(1);
+        /// <remarks>The allocator's one shared constant (<see cref="VStringAllocator.EmptyString"/>), not a block of its own:
+        ///     NumPy has a single <c>EMPTY_STRING</c>, and a reader-local copy was one more raw native allocation for the
+        ///     chokepoint gate to pin. Never written through, never freed.</remarks>
+        private static readonly byte* s_empty = VStringAllocator.EmptyString;
 
         /// <summary>Builds <see cref="s_masks"/>.</summary>
         /// <returns>The 48-word table.</returns>

@@ -607,8 +607,18 @@ namespace NumSharp.Backends.Strings
             return 0;
         }
 
-        /// <summary>A static empty text (NumPy's <c>EMPTY_STRING</c>) for empty vstring cells.</summary>
-        private static readonly byte* EmptyString = (byte*)NativeMemory.AllocZeroed(1);
+        /// <summary>
+        ///     The process's one static empty text (NumPy's <c>EMPTY_STRING</c>): the non-null pointer to nothing that a read of
+        ///     an empty vstring cell hands out, here and in the readers outside the allocator (<c>NDVStringCells</c>'s cell
+        ///     loads, <c>VStringSort</c>'s NA-as-default-string reads).
+        /// </summary>
+        /// <remarks>
+        ///     One 1-byte block allocated once and never freed (the native-allocation chokepoint gate pins this site). Shared
+        ///     rather than allocated per reader, as NumPy shares its one constant. Never write through it and never free it:
+        ///     every empty text in the process is this pointer, and a caller that treats it as an owned buffer corrupts them
+        ///     all. Its single byte is zero, so a reader that dereferences it as a C string sees an empty one.
+        /// </remarks>
+        internal static readonly byte* EmptyString = (byte*)NativeMemory.AllocZeroed(1);
 
         /// <summary>
         ///     The allocation for a new string of <paramref name="size"/> bytes in a cell (<c>heap_or_arena_allocate</c>): a cell

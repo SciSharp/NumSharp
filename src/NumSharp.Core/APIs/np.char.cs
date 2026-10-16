@@ -266,8 +266,8 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="out"/> cannot receive the result, or the operands do not
         ///     broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="IncorrectShapeException">The two operands do not broadcast.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A NEP 55 <c>StringDType</c> operand: NumPy computes
-        ///     that concatenation; NumSharp's <c>StringDType</c> arithmetic is a later subphase.</exception>
+        /// <remarks>A NEP 55 <c>StringDType</c> operand computes through <c>np.add</c>'s <c>StringDType</c> loop (with a
+        ///     <c>StringDType</c> or <c>U</c> partner; NumPy's NA rules and its incompatible-NA TypeError apply).</remarks>
         [NDScoped]
         public NDArray add(object x1, object x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => np.add(TextOperand(x1, nameof(x1)), TextOperand(x2, nameof(x2)), @out, where, dtype);
@@ -290,9 +290,9 @@ namespace NumSharp
         /// <exception cref="OverflowException">A string's <c>len * i</c> exceeds <c>sys.maxsize</c> ("Overflow encountered
         ///     in string multiply"): an OverflowError, not a TypeError, so it passes through.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="a"/> and <paramref name="i"/> do not broadcast.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A NEP 55 <c>StringDType</c> <paramref name="a"/> with an
-        ///     integer count: NumPy computes it (<c>a * i</c>); NumSharp's <c>StringDType</c> arithmetic is a later
-        ///     subphase.</exception>
+        /// <remarks>A NEP 55 <c>StringDType</c> <paramref name="a"/> with an integer count computes NumPy's <c>a * i</c>
+        ///     (<see cref="np.strings.multiply(NDArray, NDArray)"/>'s <c>StringDType</c> branch); a TypeError there is re-raised
+        ///     as the ValueError above, as for every class.</remarks>
         [NDScoped]
         public NDArray multiply(object a, object i)
         {

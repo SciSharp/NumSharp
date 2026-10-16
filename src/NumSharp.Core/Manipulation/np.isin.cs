@@ -39,6 +39,10 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
+            // StringDType (tested first: IsString refuses it): its descriptor has objects, so NumPy always takes the loop
+            // path, folded here into set lookups with NumPy's NA answers (IsinVString).
+            if (Backends.Strings.NDStringUfuncs.IsVString(element) || Backends.Strings.NDStringUfuncs.IsVString(test_elements))
+                return IsinVString(element, test_elements, invert, kind);
             // Text: NumPy's _isin statements over the text kernels (IsinText): its loop path for a small set, its sort path
             // otherwise — each with NumPy's own answer, also where the two paths disagree on a text / number pair.
             if (Backends.Strings.NDStringUfuncs.IsString(element) || Backends.Strings.NDStringUfuncs.IsString(test_elements))

@@ -28,6 +28,27 @@ namespace NumSharp.Backends
             => InternalArray.Slice(count == 0 ? 0 : offset, count);
 
         /// <summary>
+        ///     The length of a broadcast sub-array's slice, ended at the buffer's end: the parent's buffer size counts from
+        ///     the parent's FIRST element and the slice from the sub-array's, so past the first row the requested length runs
+        ///     off the end of the buffer (row i of <c>np.broadcast_to(b, (3, n)).T</c> starts at element i and asked for all
+        ///     n).
+        /// </summary>
+        /// <param name="offset">The sub-array's first element in the buffer.</param>
+        /// <param name="length">The requested length.</param>
+        /// <returns>The length, at most the elements from <paramref name="offset"/> to the buffer's end (never negative).</returns>
+        /// <remarks>
+        ///     A broadcast view's strides are stride 0 or non-negative, so it reaches only elements its parent reaches: the
+        ///     clamped slice still covers every element the view reads. A numeric slice never checked its length (the view
+        ///     read inside the buffer anyway); a <c>StringDType</c> cell slice does, and refused the row
+        ///     (<c>np.apply_along_axis</c> along an axis of a broadcast <c>StringDType</c> array).
+        /// </remarks>
+        private long ClampToBuffer(long offset, long length)
+        {
+            long available = InternalArray.Count - offset;
+            return length > available ? Math.Max(available, 0) : length;
+        }
+
+        /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="IStorage.DType"/>).
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -181,9 +202,9 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
+                    : shape.size);
                 // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
                 // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
                 // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
@@ -251,9 +272,9 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
+                    : shape.size);
                 // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
                 // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
                 // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
@@ -346,9 +367,9 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(longDims, ndims);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
+                    : shape.size);
                 // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
                 // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
                 // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset
@@ -417,9 +438,9 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                long sliceSize = shape.IsBroadcasted
+                long sliceSize = ClampToBuffer(offset, shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
-                    : shape.size;
+                    : shape.size);
                 // The slice below starts at the element GetSubshape names, so the view's shape starts at 0 — except for an
                 // EMPTY index list, where GetSubshape returns this shape itself with offset 0 (the slice then starts at the
                 // buffer's first element) and the shape's own offset must stay: a row of a broadcast at a non-zero offset

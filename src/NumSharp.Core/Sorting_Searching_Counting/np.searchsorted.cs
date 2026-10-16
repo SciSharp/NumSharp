@@ -29,6 +29,14 @@ namespace NumSharp
         public static long searchsorted(NDArray a, int v, string side = "left", NDArray sorter = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // StringDType (tested first: IsString refuses it): a Python int has no common descriptor with it, so NumPy
+            // searches Python objects (a str against an int raises its TypeError; an empty haystack compares nothing).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+            {
+                using var key = NDArray.Scalar(v);
+                using var answer = SearchSortedVStringAnswer(a, key, side, sorter);
+                return answer.GetInt64();
+            }
             // Text: NumPy's checks run first, and an empty haystack answers without a comparison.
             if (Backends.Strings.NDStringUfuncs.IsString(a))
             {
@@ -58,6 +66,13 @@ namespace NumSharp
         public static long searchsorted(NDArray a, double v, string side = "left", NDArray sorter = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // StringDType: a Python float has no common descriptor with it — NumPy searches Python objects.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+            {
+                using var key = NDArray.Scalar(v);
+                using var answer = SearchSortedVStringAnswer(a, key, side, sorter);
+                return answer.GetInt64();
+            }
             // Text: NumPy's checks run first, and an empty haystack answers without a comparison.
             if (Backends.Strings.NDStringUfuncs.IsString(a))
             {
@@ -100,6 +115,10 @@ namespace NumSharp
         public static NDArray searchsorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, v, sorter);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
+            // StringDType (tested first: IsString refuses it): NumPy's descriptor resolution, conversions and binary search
+            // over the StringDType compare, or over Python objects when the operands have no common StringDType.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(v))
+                return SearchSortedVStringAnswer(a, v, side, sorter);
             // Text: NumPy's checks run first, and no key / an empty haystack answers without a comparison.
             if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(v))
                 return SearchSortedTextAnswer(a, v, side, sorter);
@@ -320,6 +339,88 @@ namespace NumSharp
 
             NDArray sorterTyped = sorter is null ? null : EnsureContiguousInt64(sorter);
             return Backends.Sorting.TextSearch.SearchSorted(haystack, keys, side == "left", sorterTyped);
+        }
+
+        /// <summary>
+        ///     <c>np.searchsorted</c> when the haystack or the keys are <c>StringDType</c> — NumPy's <c>PyArray_SearchSorted</c>:
+        ///     the side; the descriptor <c>PyArray_DescrFromObject(v, a.dtype)</c> (StringDType with StringDType of a compatible
+        ///     NA object, or with U, gives the StringDType descriptor holding the NA object; anything else fails to promote and
+        ///     gives object); the keys converted to it, then the haystack (its rank checked first) — a U ARRAY refuses the
+        ///     'safe' cast into StringDType, a Python str key is packed; the sorter. Then NumPy's generic binary search over
+        ///     the StringDType compare (<see cref="Backends.Sorting.VStringSearch.SearchSorted"/>) or over Python objects
+        ///     (<see cref="Backends.Sorting.VStringSearch.SearchSortedObjects"/>), which runs even for an empty haystack: the
+        ///     first key is compared with itself, and each key with the one before.
+        /// </summary>
+        /// <param name="a">The haystack.</param>
+        /// <param name="v">The keys (a 0-d array for a scalar key; a <see cref="NDArray.WasPythonStr"/> array is a Python
+        ///     str).</param>
+        /// <param name="side">The side name.</param>
+        /// <param name="sorter">The sorter, or null.</param>
+        /// <returns>The int64 insertion points, of the keys' shape (0-d for a 0-d key).</returns>
+        /// <exception cref="ArgumentException">An unknown side.</exception>
+        /// <exception cref="TypeError">A U array converted to StringDType (<c>Cannot cast array data from dtype('&lt;U1') to
+        ///     StringDType() according to the rule 'safe'</c>; <c>scalar</c> for a 0-d one), a sorter error, or the first
+        ///     comparison Python refuses on the object path (<c>'&lt;' not supported between instances of 'str' and
+        ///     'int'</c>).</exception>
+        /// <exception cref="ValueError">The haystack is not 1-D, a sorter error, a sorter index outside the haystack that the
+        ///     search reaches, or a comparison that touched a None-like NA.</exception>
+        [NDScoped]
+        private static NDArray SearchSortedVStringAnswer(NDArray a, NDArray v, string side, NDArray sorter)
+        {
+            ValidateSearchSide(side);
+            bool vT = Backends.Strings.NDStringUfuncs.IsVString(v), aT = Backends.Strings.NDStringUfuncs.IsVString(a);
+            // The common descriptor (null: promotion failed, the object path).
+            DType common = null;
+            if (vT && aT)
+            {
+                if (VStringParameters.CompatibleNA(v.dtype.VString, a.dtype.VString, out _, out _))
+                    common = v.dtype.VString.HasNAObject ? v.dtype : a.dtype;
+            }
+            else if (vT && a.typecode == NPTypeCode.String && a.dtype.kind == 'U')
+                common = v.dtype;
+            else if (aT && v.typecode == NPTypeCode.String && v.dtype.kind == 'U')
+                common = a.dtype;
+
+            // The keys to the descriptor: only a U array can fail ('same_kind' into StringDType); a Python str is packed.
+            if (common is not null)
+                ThrowIfUnsafeTextCast(v, common, allowPythonStr: true);
+            if (a.ndim > 1)
+                throw new ValueError("object too deep for desired array");
+            if (a.ndim < 1)
+                throw new ValueError("object of too small depth for desired array");
+            if (common is not null)
+                ThrowIfUnsafeTextCast(a, common, allowPythonStr: false);
+            ValidateSearchSorter(sorter, a.size);
+            NDArray sorterTyped = sorter is null ? null : EnsureContiguousInt64(sorter);
+            bool left = side == "left";
+            if (common is null)
+                return Backends.Sorting.VStringSearch.SearchSortedObjects(a, v, left, sorterTyped);
+            // A Python str key becomes a StringDType key of the common descriptor: NumPy packs the str itself (setitem), so
+            // its trailing NULs are kept, where the 0-d U array standing for it drops them.
+            NDArray keys = vT ? v : NDArray.PackForVStringStore(v, common);
+            return Backends.Sorting.VStringSearch.SearchSorted(a, keys, left, sorterTyped, common);
+        }
+
+        /// <summary>
+        ///     NumPy's 'safe' conversion check of a search operand into the StringDType descriptor: a <c>U</c> array cannot be
+        ///     cast safely (U → StringDType is 'same_kind'); a StringDType operand can (the common descriptor only adds the
+        ///     other's NA object).
+        /// </summary>
+        /// <param name="x">The operand.</param>
+        /// <param name="common">The StringDType descriptor.</param>
+        /// <param name="allowPythonStr">Whether a <see cref="NDArray.WasPythonStr"/> operand (a Python str, which NumPy packs
+        ///     instead of casting) is accepted.</param>
+        /// <exception cref="TypeError">A U array (<c>Cannot cast array data from dtype('&lt;U1') to StringDType() according
+        ///     to the rule 'safe'</c>; <c>scalar</c> for a 0-d array).</exception>
+        private static void ThrowIfUnsafeTextCast(NDArray x, DType common, bool allowPythonStr)
+        {
+            if (Backends.Strings.NDStringUfuncs.IsVString(x))
+                return;
+            if (allowPythonStr && x.WasPythonStr)
+                return;
+            throw new TypeError(
+                $"Cannot cast {(x.ndim == 0 ? "scalar" : "array data")} from {x.dtype.ToString(true)} to {common.ToString(true)} " +
+                "according to the rule 'safe'");
         }
 
         /// <summary>

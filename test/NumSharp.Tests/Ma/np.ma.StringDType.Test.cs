@@ -85,15 +85,21 @@ namespace NumSharp.Tests.Ma
 
         /// <summary>
         ///     <c>ma.unique</c>: a masked slot makes <c>_unique1d</c> sort the masked array (the refusal); without one NumPy
-        ///     hashes the text — a computation (phase 2) unless at most one element is ordered, which is answered.
+        ///     hashes the text and sorts the distinct values (strings phase 2, P2.2 over <c>StringDType</c>): NumPy's
+        ///     <c>masked_array(data=['ab', 'c', 'de'], mask=False)</c>, its mask <c>nomask</c>.
         /// </summary>
         [TestMethod]
         public void Unique_MaskedRefuses_UnmaskedIsHashedOrShapeDecided()
         {
             Action masked = () => np.ma.unique(MT());
             masked.Should().Throw<TypeError>().WithMessage("Unsuitable type StringDType() for calculating minimum.");
-            Action three = () => np.ma.unique(np.ma.array(np.array(new[] { "ab", "c", "de" }, T)));
-            three.Should().Throw<StringComputationNotSupportedException>().WithMessage("unique is not supported for StringDType() arrays yet*");
+            var three = np.ma.unique(np.ma.array(np.array(new[] { "de", "c", "ab", "c" }, T)));
+            three.shape.Should().Equal(3L);
+            three._data.GetAtIndex(0).Should().Be("ab");
+            three._data.GetAtIndex(1).Should().Be("c");
+            three._data.GetAtIndex(2).Should().Be("de");
+            three.dtype.Should().Be(T);
+            ReferenceEquals(three.mask, np.ma.nomask).Should().BeTrue();
 
             var empty = np.ma.unique(MTe());
             empty.size.Should().Be(0);

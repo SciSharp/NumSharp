@@ -145,8 +145,10 @@ namespace NumSharp
         /// <returns>The 1-D masked array of unique values; it inherits a masked operand's hard-mask flag and fill value
         ///     (converted to the dtype).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer sorts or
-        ///     compares the strings (computing on <c>StringDType</c> is phase 2's next stage); fixed-width text computes.</exception>
+        /// <exception cref="TypeError">A masked <c>StringDType</c> operand with a masked element: the masked sort's argsort
+        ///     refuses it (<c>Unsuitable type StringDType() for calculating minimum.</c>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
+        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>
         ///     NumPy's <c>np.unique(ar1).view(MaskedArray)</c>, whose <c>_unique1d</c> runs with the subclass:
         ///     <c>ar = ar.flatten()</c>; without a masked element the integer / complex dtypes take the hash path (sorted
@@ -175,8 +177,10 @@ namespace NumSharp
         /// <returns>The <see cref="UniqueResult"/>: the values (see <see cref="unique(object)"/>) and the requested int64
         ///     index arrays.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ar1"/> is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer sorts or
-        ///     compares the strings (computing on <c>StringDType</c> is phase 2's next stage); fixed-width text computes.</exception>
+        /// <exception cref="TypeError">A masked <c>StringDType</c> operand that NumPy argsorts (<paramref name="return_inverse"/>,
+        ///     or a masked element): <c>Unsuitable type StringDType() for calculating minimum.</c></exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
+        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>
         ///     With a flag NumPy argsorts instead of sorting in place (<c>perm = ar.argsort(kind='mergesort' if
         ///     return_index else 'quicksort')</c>, <c>aux = ar[perm]</c>), then <c>perm[mask]</c> and <c>inv_idx[perm] =
@@ -231,7 +235,8 @@ namespace NumSharp
         /// <param name="index">The first-occurrence indices, or null.</param>
         /// <param name="inverse">The inverse indices, shaped like <paramref name="source"/>, or null.</param>
         /// <returns><c>aux[mask]</c>: the unique values, attributes from the flattened copy.</returns>
-        /// <exception cref="StringComputationNotSupportedException">The answer reads text.</exception>
+        /// <exception cref="TypeError">A masked <c>StringDType</c> source the masked argsort refuses.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> sort that compares a None-like NA.</exception>
         private NDMaskedArray Unique1d(NDMaskedArray source, bool return_index, bool return_inverse, out NDArray index, out NDArray inverse)
         {
             index = null;
@@ -350,7 +355,6 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The masked operand.</param>
         /// <returns>The int64 permutation (of the flattened array from two dimensions on, NumPy's deprecated default).</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with keys to compare.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand, whatever it holds: <c>Unsuitable type StringDType() for
         ///     calculating minimum.</c> (see <see cref="ThrowIfUnsuitableExtremum(NDArray,string)"/>).</exception>
         /// <remarks>
@@ -418,9 +422,10 @@ namespace NumSharp
         ///     <c>self[...] = np.take_along_axis(self, sidx, axis=-1)</c> through the masked setter.
         /// </summary>
         /// <param name="x">A masked array no caller holds (a flattened or concatenated copy).</param>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with keys to compare.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand with a mask: the argsort's <c>Unsuitable type</c>
-        ///     refusal (without a mask NumPy sorts the text: phase 2, or nothing to order).</exception>
+        ///     refusal (without a mask the text is sorted).</exception>
+        /// <exception cref="ValueError">An unmasked <c>StringDType</c> operand of two or more elements holding a None-like
+        ///     NA: the sort's NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>
         ///     In place, not through <see cref="sort(object,int?,bool,object)"/>: that one sorts a COPY, which NumPy's
         ///     <c>np.array(a, copy=True, subok=True)</c> finalizes (converting a stored text fill to the dtype), while
@@ -456,7 +461,8 @@ namespace NumSharp
         ///     stable order, and for float32 / float64 lines longer than one element NumPy's canonical NaN.
         /// </summary>
         /// <param name="data">A writeable array no caller holds.</param>
-        /// <exception cref="StringComputationNotSupportedException">Text with two or more elements to order.</exception>
+        /// <exception cref="ValueError"><c>StringDType</c> text of two or more elements to order that holds a None-like NA
+        ///     (NumPy's <c>Cannot compare null that is not a nan-like value</c>).</exception>
         /// <remarks>
         ///     NumPy's default kind is unstable: equal values with different bits (<c>+0.0</c> / <c>-0.0</c>) land in a
         ///     host-dependent order. NumSharp keeps the STABLE order (<see cref="np.argsort(NDArray,int?)"/> + a gather),
@@ -508,7 +514,8 @@ namespace NumSharp
         /// <param name="other">The right operand, the same shape.</param>
         /// <param name="equal">True for <c>==</c>, false for <c>!=</c>.</param>
         /// <returns>The masked boolean comparison: its data and its mask only (a soft array with no fill value).</returns>
-        /// <exception cref="StringComputationNotSupportedException">Text values to compare (an unmasked slot).</exception>
+        /// <exception cref="ValueError"><c>StringDType</c> values to compare (an unmasked slot) holding a None-like NA: the
+        ///     comparison's NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>
         ///     NumSharp does not overload <c>==</c> / <c>!=</c> on masked arrays (they would shadow reference equality), so
         ///     the set operations call this directly. Where every slot is masked the values never decide the answer, so
@@ -547,7 +554,7 @@ namespace NumSharp
         /// <param name="other">The right operand, the same shape.</param>
         /// <param name="equal">True for <c>==</c>, false for <c>!=</c>.</param>
         /// <returns>The plain boolean comparison data.</returns>
-        /// <exception cref="StringComputationNotSupportedException">Text values to compare.</exception>
+        /// <exception cref="ValueError">See <see cref="MaskedEquality"/>.</exception>
         private NDArray MaskedEqualityData(NDMaskedArray self, NDMaskedArray other, bool equal)
             => MaskedEquality(self, other, equal)._data;
 
@@ -568,8 +575,6 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="assume_unique"/> with a 0-d <paramref name="ar1"/> (<c>len() of
         ///     unsized object</c>).</exception>
         /// <exception cref="ValueError"><paramref name="assume_unique"/> with operands np.concatenate cannot join.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings, or
-        ///     formats numbers into text.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand: the argsort's <c>Unsuitable type ... for calculating
         ///     minimum.</c> (of a masked <paramref name="ar1"/>'s inverse unique, of a masked <paramref name="ar2"/>'s sort, or
         ///     of the concatenation), whichever NumPy reaches first.</exception>
@@ -675,7 +680,7 @@ namespace NumSharp
         /// <exception cref="TypeError">See <see cref="in1d"/>.</exception>
         /// <exception cref="ValueError">See <see cref="in1d"/>; also <paramref name="assume_unique"/> with an N-D
         ///     <paramref name="element"/>, whose flags cannot take its shape.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="in1d"/>.</exception>
+        /// <exception cref="TypeError">See <see cref="in1d"/>.</exception>
         /// <remarks>
         ///     NumPy's <c>element = ma.asarray(element)</c> (which keeps a masked operand's mask, fill value and hardness),
         ///     then <c>in1d(element, test_elements, ...).reshape(element.shape)</c>. The flags are masked wherever NumPy's
@@ -704,7 +709,8 @@ namespace NumSharp
         ///     concatenates them as given; the answer for non-unique inputs is then undefined).</param>
         /// <returns>The masked array of common values, in the promoted dtype.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
+        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand: <c>Unsuitable type ... for calculating minimum.</c> (a
         ///     masked operand's unique, or the joined copy's masked sort).</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with.</exception>
@@ -740,7 +746,8 @@ namespace NumSharp
         /// <param name="assume_unique">Treat both inputs as already unique (NumPy skips the two <c>unique</c> calls).</param>
         /// <returns>The masked array of the symmetric difference, in the promoted dtype.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
+        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand: <c>Unsuitable type ... for calculating minimum.</c> (a
         ///     masked operand's unique, or the joined copy's masked sort).</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with.</exception>
@@ -788,7 +795,10 @@ namespace NumSharp
         /// <param name="ar2">Second operand.</param>
         /// <returns>The masked array of the union, in the promoted dtype.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> join with a masked element: the masked sort's argsort refuses it
+        ///     (<c>Unsuitable type StringDType() for calculating minimum.</c>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
+        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <remarks>NumPy's <c>unique(ma.concatenate((ar1, ar2), axis=None))</c>.
         ///     <para>Scoped by hand: the joined copy is reclaimed; only the result's data and mask leave.</para></remarks>
         public NDMaskedArray union1d(object ar1, object ar2)
@@ -807,7 +817,8 @@ namespace NumSharp
         ///     (NumPy's <c>ma.asarray(ar1).ravel()</c>) and <paramref name="ar2"/> is used as given.</param>
         /// <returns>The masked array of <paramref name="ar1"/>'s remaining values.</returns>
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text whose answer sorts or compares the strings.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA (an NA object that
+        ///     is neither a string nor NaN-like): NumPy's <c>Cannot compare null that is not a nan-like value</c>.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand: <c>Unsuitable type ... for calculating minimum.</c> (a
         ///     masked operand's unique, or in1d's argsort of the joined uniques).</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class it has no common DType with.</exception>
@@ -876,7 +887,7 @@ namespace NumSharp
         /// <summary>
         ///     A dry run of NumPy's set-routine statements over a <c>StringDType</c> operand, up to its first comparison of
         ///     text: raises the refusal NumPy reaches there, or returns when the routine goes on to compute (the real
-        ///     statements then run, deferring the computation or answering an empty input).
+        ///     statements then run: the text computations, or the answer of an empty input).
         /// </summary>
         /// <param name="kind">The routine.</param>
         /// <param name="ar1">The first operand.</param>
@@ -914,7 +925,7 @@ namespace NumSharp
                     return;
                 default:
                     // `aux.sort()`: a mask holding a True takes the masked argsort, which refuses StringDType; without one
-                    // NumPy sorts the text (the real statements defer that, or order nothing).
+                    // NumPy sorts the text (the real statements sort it, or order nothing).
                     if (joined._mask is not null && np.any(joined._mask))
                         ThrowIfUnsuitableExtremum(joined._data, "minimum");
                     return;

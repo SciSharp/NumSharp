@@ -6,7 +6,7 @@ namespace NumSharp.Backends.Strings
 {
     /// <summary>
     ///     NumPy 2.4.2's ufunc layer for NEP 55 <c>StringDType</c> operands (strings phase 1, P1.7d): which calls COMPUTE on
-    ///     the text (phase 2 — a <see cref="StringComputationNotSupportedException"/> once NumPy's checks passed) and the
+    ///     the text (strings phase 2: their own routes, which these guards hand back to once NumPy's checks passed) and the
     ///     exact refusal of every other call, raised in NumPy's order. Every guard of this class (<see cref="ThrowIfUnary"/>,
     ///     <see cref="ThrowIfBinary"/>, <see cref="BinaryGuard"/>, the reduction guards) tests <see cref="IsVString"/> FIRST,
     ///     because the fixed-width answers behind them read the text as fixed-width units.
@@ -43,6 +43,17 @@ namespace NumSharp.Backends.Strings
         /// <remarks>Test this BEFORE <see cref="IsString"/>, which refuses a <c>StringDType</c> operand loudly (its callers
         ///     are fixed-width routes).</remarks>
         internal static bool IsVString(NDArray a) => a is not null && a.typecode == NPTypeCode.String && a.Storage.IsVString;
+
+        /// <summary>
+        ///     True when <paramref name="a"/> holds text of either kind: fixed-width (<c>S</c> / <c>U</c>) or NEP 55
+        ///     <c>StringDType</c>. A null operand is not.
+        /// </summary>
+        /// <param name="a">The operand, or null.</param>
+        /// <returns>True for a string array.</returns>
+        /// <remarks>For a route whose statements serve both kinds (NumPy's own composition reaches the right kernels for
+        ///     each, e.g. the histogram's sort + searchsorted loop); it never throws, where <see cref="IsString"/> refuses a
+        ///     <c>StringDType</c> operand.</remarks>
+        internal static bool IsText(NDArray a) => IsVString(a) || IsString(a);
 
         /// <summary>
         ///     The class NumPy's ufunc dispatcher names for an operand in a refusal: the DTypeMeta of the operand's descriptor,
@@ -447,9 +458,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> array, or null: its class takes the reduction signature's first slot.</param>
         /// <returns>The exception to throw, or null when NumPy computes the call (<see cref="NDVStringReduction"/>: the sum /
         ///     max / min / accumulation and the arg-reductions return; <c>np.mean</c>'s family, <c>np.var</c>'s and
-        ///     <c>np.ptp</c> compute their sum / extremes and then meet NumPy's later refusal). <c>np.median</c> sorts first
-        ///     (strings plan P2.2 over <c>StringDType</c>): an empty input reaches its mean's refusal, anything else is still
-        ///     deferred.</returns>
+        ///     <c>np.ptp</c> compute their sum / extremes and then meet NumPy's later refusal). <c>np.median</c> computes too:
+        ///     its <c>StringDType</c> route (<see cref="NDVStringStatistics.Median"/>: the sort, then the mean's refusals)
+        ///     answers before every guard that asks this table, so null for it.</returns>
         internal static Exception VStringReduceAnswer(string op, NDArray a, int[] axes, DType dtype, NDArray @out = null)
         {
             if (VStringReduceLoopAnswer(op, a, dtype, @out) is { } refusal)
@@ -458,10 +469,10 @@ namespace NumSharp.Backends.Strings
             if (ufunc is null)
                 return null;
             if (op == "median")
-                // np.median sorts (computes) before its mean; only an empty input reaches the mean's add.reduce refusal.
-                return a.size == 0 && axes is null
-                    ? new ValueError($"zero-size array to reduction operation {ufunc} which has no identity")
-                    : NextPhaseVString(op, a.dtype);
+                // np.median computes over StringDType: its own route (NDVStringStatistics.Median) sorts, slices the middle and
+                // meets the mean's refusals before any guard asks this table, so a caller reaching here is told it computes
+                // (a refusal-only guard then reports the wiring error).
+                return null;
             if (accumulate)
                 return null;
             return (Exception)VStringNotReorderable(ufunc, a, axes) ?? VStringNoIdentity(ufunc, a, axes);
@@ -479,9 +490,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="a">The <c>StringDType</c> array.</param>
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
         /// <param name="out">The <c>out=</c> array, or null: its class takes the reduction signature's first slot.</param>
-        /// <returns>The refusal, or null when a <c>StringDType</c> loop resolves (also for the arg-reductions, which compute
-        ///     without a ufunc). A function that sorts first (the median family, the sorts and searches) is P2.2's
-        ///     <c>StringDType</c> part: its deferral.</returns>
+        /// <returns>The refusal, or null when a <c>StringDType</c> loop resolves — and for every function without a
+        ///     reduction ufunc (the arg-reductions, <c>np.nanmedian</c>, the sorts and searches), which compute over
+        ///     <c>StringDType</c> through their own routes.</returns>
         /// <remarks>
         ///     The keyword route of <c>np.max</c> / <c>np.min</c> (<see cref="NDVStringReduction.MaxMinNumPy"/>) and
         ///     <c>np.trace</c>'s reduction (<see cref="NDVStringReduction.SumNumPy"/>) run NumPy's <c>out=</c> /
@@ -492,8 +503,9 @@ namespace NumSharp.Backends.Strings
         {
             string ufunc = ReduceUfuncOf(op, out bool accumulate);
             if (ufunc is null)
-                // The arg-reductions compute (the dtype's ArgFunc); the sorts and searches are P2.2's StringDType part.
-                return op is "argmax" or "argmin" or "nanargmax" or "nanargmin" ? null : NextPhaseVString(op, a.dtype);
+                // No reduction ufunc: the arg-reductions (the dtype's ArgFunc), np.nanmedian (NDVStringStatistics.NanMedian)
+                // and the sorts and searches (VStringSort / VStringSearch) all compute over StringDType.
+                return null;
             string input = a.dtype.Meta.ToString();
             // The reduction signature's first slot: dtype= wins, then the out's class, else None.
             string first = dtype is not null ? dtype.Meta.ToString() : @out is not null ? DispatchClass(@out) : "None";
@@ -541,28 +553,28 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     <c>PyArray_CopyInitialReduceValues</c>' refusal (a reduction without an identity and without <c>initial=</c>):
-        ///     an empty reduced extent with a non-empty result has no first element to start from.
+        ///     a reduced axis of length 0 has no first element to start from — whatever the result's size.
         /// </summary>
         /// <param name="ufunc">The ufunc NumPy names.</param>
         /// <param name="a">The reduced array.</param>
         /// <param name="axes">The reduced axes, normalized (null for every axis).</param>
         /// <returns>The <see cref="ValueError"/> (<c>zero-size array to reduction operation add which has no
         ///     identity</c>), or null.</returns>
+        /// <remarks>
+        ///     NumPy tests each REDUCED axis of the operand (<c>shape_orig[idim] == 0</c>) before it copies the first
+        ///     elements, so an empty result does not exempt the call: <c>np.sum(np.zeros((0, 0), T), axis=0)</c> and
+        ///     <c>np.max(np.zeros((0, 0, 2), T), axis=1)</c> raise, while <c>np.sum(np.zeros((2, 0), T), axis=0)</c> (a reduced
+        ///     axis of length 2, an empty result) returns an empty array. A reduction over no axis reduces nothing and never
+        ///     refuses.
+        /// </remarks>
         internal static ValueError VStringNoIdentity(string ufunc, NDArray a, int[] axes)
         {
             int nd = a.ndim;
-            long reduced = 1, result = 1;
             var dims = a.Shape.dimensions ?? Array.Empty<long>();
             for (int i = 0; i < nd; i++)
-            {
-                if (axes is null || Array.IndexOf(axes, i) >= 0)
-                    reduced *= dims[i];
-                else
-                    result *= dims[i];
-            }
-            return reduced == 0 && result != 0
-                ? new ValueError($"zero-size array to reduction operation {ufunc} which has no identity")
-                : null;
+                if ((axes is null || Array.IndexOf(axes, i) >= 0) && dims[i] == 0)
+                    return new ValueError($"zero-size array to reduction operation {ufunc} which has no identity");
+            return null;
         }
 
         /// <summary>
@@ -586,8 +598,6 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="TypeError">NumPy's refusal (a <c>dtype=</c> request, an out of another class, two incompatible
         ///     NA objects).</exception>
-        /// <exception cref="StringComputationNotSupportedException"><c>np.median</c> of a non-empty input (P2.2 over
-        ///     <c>StringDType</c>).</exception>
         internal static bool VStringReduces(string op, NDArray a, int? axis, DType dtype = null, NDArray @out = null, bool loopOnly = false)
         {
             if (!IsVString(a))
@@ -676,7 +686,8 @@ namespace NumSharp.Backends.Strings
         ///     The shape-decided guard of a function that computes on <c>StringDType</c> text (the truth tests, the counts, the
         ///     index searches, the sorts and arg-reductions): NumPy's checks first (the axis, the empty arg-reduction, the 0-d
         ///     <c>nonzero</c>), then the bool stand-in when the shape decides the answer (an empty input, a line of one
-        ///     element), else the phase-2 deferral.
+        ///     element). A function that computes over <c>StringDType</c> (the sorts, the arg-reductions) answers through its
+        ///     own route before this guard: reaching the end here is a wiring error.
         /// </summary>
         /// <param name="op">The NumPy function name.</param>
         /// <param name="a">The <c>StringDType</c> array.</param>
@@ -684,7 +695,8 @@ namespace NumSharp.Backends.Strings
         /// <returns>The bool stand-in the caller's numeric path runs on (owned by the caller).</returns>
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">An arg-reduction over an empty line, or <c>nonzero</c> of a 0-d array.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on the text (phase 2).</exception>
+        /// <exception cref="InvalidOperationException">A call whose answer the shape does not decide: its <c>StringDType</c>
+        ///     route computes it and must run before this guard (a wiring error inside NumSharp).</exception>
         private static NDArray VStringStandIn(string op, NDArray a, int? axis)
         {
             ValidateReduceAxis(op, a.ndim, axis);
@@ -694,7 +706,10 @@ namespace NumSharp.Backends.Strings
                 throw new ValueError(NonZero0dMessage);
             if (ShapeDecides(op, a, axis))
                 return BoolStandIn(a);
-            throw NextPhaseVString(op, a.dtype);
+            // Every StringDType sort, search and arg-reduction computes through its own route (VStringSort, VStringSearch,
+            // NDVStringReduction): none hands a computing call to this guard.
+            throw new InvalidOperationException(
+                $"{op} computes over StringDType; its caller must take its StringDType route before the shape-decided guard.");
         }
 
         /// <summary>

@@ -11,7 +11,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <returns>Index of the maximum value in the flattened array (NumPy intp = int64).</returns>
-        /// <exception cref="ValueError">All-NaN slice encountered.</exception>
+        /// <exception cref="ValueError">All-NaN slice encountered; or a <c>StringDType</c> line of two or more elements that
+        ///     holds an NA whose NA object is neither a string nor NaN-like (<c>np.argmax</c>'s <c>Cannot compare null that is
+        ///     not a nan-like value</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
         ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
@@ -42,17 +44,22 @@ namespace NumSharp
         /// <param name="keepdims">If true, the reduced axes are left in the result as dimensions with size one
         ///     (with <paramref name="axis"/> <c>null</c> the result has shape <c>(1,) * a.ndim</c>, like NumPy).</param>
         /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
-        /// <exception cref="ValueError">All-NaN slice encountered.</exception>
+        /// <exception cref="ValueError">All-NaN slice encountered; or a <c>StringDType</c> line of two or more elements that
+        ///     holds an NA whose NA object is neither a string nor NaN-like (<c>np.argmax</c>'s <c>Cannot compare null that is
+        ///     not a nan-like value</c>).</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements: NumPy compares the text (the <c>StringDType</c> part of the next phase). An <c>S</c> / <c>U</c> array
-        ///     is <c>np.argmax</c> / <c>np.argmin</c> of the text and computes (its <c>_replace_nan</c> leaves an array that
-        ///     is not inexact alone).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
         ///     written.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html
+        ///     <para>Text of every class (<c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c>) is <c>np.argmax</c> /
+        ///     <c>np.argmin</c> of the text: NumPy's <c>_replace_nan</c> leaves an array that is not inexact alone, so a
+        ///     <c>StringDType</c> NA is ordered by the argmax rules (a NaN-like NA is the greatest value, a None-like NA in a
+        ///     line of two or more elements raises their <see cref="ValueError"/>), never skipped as a NaN.</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
@@ -85,7 +92,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <returns>Index of the minimum value in the flattened array (NumPy intp = int64).</returns>
-        /// <exception cref="ValueError">All-NaN slice encountered.</exception>
+        /// <exception cref="ValueError">All-NaN slice encountered; or a <c>StringDType</c> line of two or more elements that
+        ///     holds an NA whose NA object is neither a string nor NaN-like (<c>np.argmax</c>'s <c>Cannot compare null that is
+        ///     not a nan-like value</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
         ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
@@ -113,17 +122,22 @@ namespace NumSharp
         /// <param name="keepdims">If true, the reduced axes are left in the result as dimensions with size one
         ///     (with <paramref name="axis"/> <c>null</c> the result has shape <c>(1,) * a.ndim</c>, like NumPy).</param>
         /// <returns>Array of int64 indices (or a 0-d scalar for the flattened form); <paramref name="out"/> when given.</returns>
-        /// <exception cref="ValueError">All-NaN slice encountered.</exception>
+        /// <exception cref="ValueError">All-NaN slice encountered; or a <c>StringDType</c> line of two or more elements that
+        ///     holds an NA whose NA object is neither a string nor NaN-like (<c>np.argmax</c>'s <c>Cannot compare null that is
+        ///     not a nan-like value</c>).</exception>
         /// <exception cref="AxisError">Axis out of bounds (reports the original axis, like NumPy).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements: NumPy compares the text (the <c>StringDType</c> part of the next phase). An <c>S</c> / <c>U</c> array
-        ///     is <c>np.argmax</c> / <c>np.argmin</c> of the text and computes (its <c>_replace_nan</c> leaves an array that
-        ///     is not inexact alone).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
         ///     the int64 index result as the subclass (<c>Can only create a chararray from string
         ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
         ///     written.</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html
+        ///     <para>Text of every class (<c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c>) is <c>np.argmax</c> /
+        ///     <c>np.argmin</c> of the text: NumPy's <c>_replace_nan</c> leaves an array that is not inexact alone, so a
+        ///     <c>StringDType</c> NA is ordered by the argmax rules (a NaN-like NA is the greatest value, a None-like NA in a
+        ///     line of two or more elements raises their <see cref="ValueError"/>), never skipped as a NaN.</para>
+        /// </remarks>
         [NDScoped]
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {

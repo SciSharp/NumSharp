@@ -40,8 +40,10 @@ namespace NumSharp
         ///     <paramref name="stable"/>, or an <paramref name="order"/>.</exception>
         /// <exception cref="AxisError">The axis is out of bounds (a 0-d array ravels first, so it accepts 0 and -1).</exception>
         /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of NumSharp's next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
+        ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
+        ///     value</c>, raised after the lines before it were sorted).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public NDArray argsort(int? axis = -1, string kind = null, object order = null, bool? stable = null)
             => AxisSort.ArgSort(this, axis, SortKindArguments.Resolve(kind, order, stable));
     }

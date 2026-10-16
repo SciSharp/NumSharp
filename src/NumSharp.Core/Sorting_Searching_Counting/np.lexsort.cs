@@ -31,9 +31,10 @@ namespace NumSharp
         /// <exception cref="TypeError">No key (<c>need sequence of keys with len &gt; 0 in lexsort</c>).</exception>
         /// <exception cref="ValueError">Keys of different shapes (<c>all keys need to be the same shape</c>).</exception>
         /// <exception cref="AxisError">The axis is out of bounds for the keys' rank.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> key along lines of two or more
-        ///     elements (the <c>StringDType</c> part of NumSharp's next phase). Fixed-width text keys (<c>S</c> / <c>U</c>) sort
-        ///     by their text with the stable string argsort, as NumPy's do.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> key line of two or more elements holding an NA whose NA object
+        ///     is neither NaN-like nor a string (<c>Cannot compare null that is not a nan-like value</c>). Text keys sort by
+        ///     their text: fixed-width ones (<c>S</c> / <c>U</c>) with the stable string argsort, <c>StringDType</c> ones with
+        ///     NumPy's timsort (two adjacent NaN-like NAs of a line come out reversed, as in NumPy).</exception>
         [NDScoped]
         public static NDArray lexsort(NDArray[] keys, int axis = -1)
         {
@@ -81,13 +82,47 @@ namespace NumSharp
             // Every pass asks for the STABLE kind: NumPy's PyArray_LexSort runs each key's NPY_STABLESORT argsort, and a
             // text key's default kind would be NumPy's introsort, whose order of equal strings is not the stable one (a
             // numeric key's argsort is one stable order for every kind).
-            var perm = np.argsort(keys[0], ax, kind: "stable");
+            // A StringDType key has no legacy stable argsort: NumPy runs npy_atimsort with the dtype's compare over the
+            // running index array, whose run detection reverses adjacent NaN-like NAs — VStringSort.LexPass re-sorts the
+            // permutation in place exactly so (the first key's pass starts from the identity, as NumPy's index array does).
+            NDArray perm;
+            if (Backends.Strings.NDStringUfuncs.IsVString(keys[0]))
+            {
+                perm = IdentityPermutation(first, ax);
+                VStringSort.LexPass(keys[0], perm, ax);
+            }
+            else
+                perm = np.argsort(keys[0], ax, kind: "stable");
             for (int j = 1; j < keys.Length; j++)
             {
+                if (Backends.Strings.NDStringUfuncs.IsVString(keys[j]))
+                {
+                    VStringSort.LexPass(keys[j], perm, ax);
+                    continue;
+                }
                 var g = np.argsort(np.take_along_axis(keys[j], perm, ax), ax, kind: "stable");
                 perm = np.take_along_axis(perm, g, ax);
             }
             return perm;
+        }
+
+        /// <summary>
+        ///     NumPy's initial lexsort index array (<c>iptr[i] = i</c> along the axis): a fresh, writeable, C-contiguous int64
+        ///     array of <paramref name="like"/>'s dimensions holding each element's index along <paramref name="axis"/>.
+        /// </summary>
+        /// <param name="like">The keys' shape donor (at least one dimension).</param>
+        /// <param name="axis">The normalised axis.</param>
+        /// <returns>The identity permutation of every line.</returns>
+        private static NDArray IdentityPermutation(NDArray like, int axis)
+        {
+            var dims = like.Shape.dimensions;
+            var lineShape = new long[dims.Length];
+            for (int d = 0; d < dims.Length; d++)
+                lineShape[d] = d == axis ? dims[d] : 1;
+            // arange along the axis, broadcast over the other axes and materialized (the pass rewrites it in place).
+            using var line = np.arange(dims[axis]).reshape(Shape.Adopt(lineShape));
+            using var broadcast = np.broadcast_to(line, Shape.Adopt((long[])dims.Clone()));
+            return broadcast.copy();
         }
 
         /// <summary>
@@ -102,8 +137,8 @@ namespace NumSharp
         /// <exception cref="TypeError">A 0-d array or an empty first axis (<c>need sequence of keys with len &gt; 0 in
         ///     lexsort</c>).</exception>
         /// <exception cref="AxisError">The axis is out of bounds for a key's rank.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of keys along lines of two or
-        ///     more elements (the <c>StringDType</c> part of NumSharp's next phase); fixed-width text keys sort by their text.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> key line holding a None-like NA (see
+        ///     <see cref="lexsort(NDArray[], int)"/>).</exception>
         /// <remarks>
         ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
         ///     ends with <c>np.concatenate</c>), which drops the class.

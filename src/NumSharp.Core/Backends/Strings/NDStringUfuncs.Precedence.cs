@@ -710,10 +710,9 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">An arg reduction (<c>argmax</c>, <c>argmin</c>, <c>nanargmax</c>,
         ///     <c>nanargmin</c>) over an empty reduced length.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> input whose reduction NumPy computes
-        ///     (computing on <c>StringDType</c> is phase 2's next stage).</exception>
-        /// <exception cref="InvalidOperationException">A fixed-width text input of a function the guard's table does not name
-        ///     (a wiring error inside NumSharp: every computing reduction answers before the guard).</exception>
+        /// <exception cref="InvalidOperationException">A fixed-width text input of a function the guard's table does not name,
+        ///     or a <c>StringDType</c> input whose reduction computes (a wiring error inside NumSharp: every computing reduction
+        ///     answers before the guard).</exception>
         internal static void ThrowIfReduce(string op, NDArray a, int? axis, DType dtype = null)
         {
             if (IsVString(a))
@@ -962,10 +961,9 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">A detailed <c>dtype=</c>, or NumPy's refusal.</exception>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="ValueError">An axis appears twice.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> input whose reduction NumPy computes
-        ///     (computing on <c>StringDType</c> is phase 2's next stage).</exception>
-        /// <exception cref="InvalidOperationException">A fixed-width text input of a function the guard's table does not name
-        ///     (a wiring error inside NumSharp: every computing reduction answers before the guard).</exception>
+        /// <exception cref="InvalidOperationException">A fixed-width text input of a function the guard's table does not name,
+        ///     or a <c>StringDType</c> input whose reduction computes (a wiring error inside NumSharp: every computing reduction
+        ///     answers before the guard).</exception>
         internal static void ThrowIfReduce(string op, NDArray a, int[] axes, DType dtype = null)
         {
             if (IsVString(a))
@@ -1088,6 +1086,11 @@ namespace NumSharp.Backends.Strings
                 long neighbour = NumSharp.Statistics.QuantileText.EmptyAxisNeighbour(parsed, q is null ? 0.5 : q[0]);
                 return new IndexError($"index {neighbour} is out of bounds for axis 0 with size 0");
             }
+            if (IsVString(a))
+                // StringDType: the answer depends on the neighbours' VALUES (two NaN NA objects interpolate into NaN, a str
+                // and a float are refused by name), which QuantileText.Compute reads after its sort
+                // (NDVStringStatistics.QuantileInterpolate).
+                return null;
 
             int remaining = axes is null ? 0 : a.ndim - axes.Length;
             return QuantileError(op, a, method, scalarResult: qIsScalar && remaining == 0);

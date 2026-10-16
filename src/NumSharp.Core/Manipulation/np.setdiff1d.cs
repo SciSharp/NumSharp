@@ -19,9 +19,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.setdiff1d.html</remarks>
         /// <exception cref="UnicodeDecodeError">The membership test's sort path decodes <c>S</c> text holding a byte that is
         ///     not ASCII (see <c>np.isin</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose answer depends on its
-        ///     text (the <c>StringDType</c> part of NumSharp's next phase). Fixed-width text runs NumPy's statements over the
-        ///     text kernels (<c>np.unique</c>, <c>np.isin</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
         [NDScoped]
         public static NDArray setdiff1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {

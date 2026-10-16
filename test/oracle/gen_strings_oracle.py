@@ -10441,8 +10441,8 @@ def _t_stat(name, a, axis, keepdims, dtype, ddof, out, weights):
 
 
 def _t_stat_case(name, operands, axis=None, keepdims=False, dtype=None, ddof=None, out_index=None, weights_index=None,
-                 layout=""):
-    """Records one ``t_stat`` case of section treduce (see ``_t_stat``)."""
+                 layout="", section="treduce"):
+    """Records one ``t_stat`` case of section treduce, or of ``section`` (tsort's median / nanmedian; see ``_t_stat``)."""
     params = {"name": name, "axis": axis, "keepdims": keepdims}
     if dtype is not None:
         params["dtype"] = dtype
@@ -10457,7 +10457,7 @@ def _t_stat_case(name, operands, axis=None, keepdims=False, dtype=None, ddof=Non
         return _t_stat(name, ops[0], axis, keepdims, dtype, ddof, ops[out_index] if out_index is not None else None,
                        ops[weights_index] if weights_index is not None else None)
 
-    add("treduce", "t_stat", params=params, operands=operands, call=call, layout=layout)
+    add(section, "t_stat", params=params, operands=operands, call=call, layout=layout)
 
 
 def gen_treduce():
@@ -10632,12 +10632,545 @@ def gen_treduce():
             _t_red_case(name, [(b, v)], layout=f"{_t_label(spec)}:noloop")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section tsort: sorting, searching, the set routines and the order statistics over NEP 55 StringDType (strings phase 2,
+# P2.2 over StringDType)
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Texts for the sorts: every cell kind (short, arena, heap), embedded NULs ('a' < 'a\x00' < 'ab'), non-ASCII and
+# supplementary-plane text, and texts equal in their first 8 / 15 bytes.
+T_SORT_POOL = ["", "a", "a\x00", "ab", "abc", "b", "bb", "c", "x" * 15, "x" * 14, "é", "NB", "m" * 16, "q" * 300, "中文",
+               "\U0001F600", "ab\x00", "xxxxxxxxy"]
+# The bulk of the sort cases: the same kinds of text without the heap-sized one (every case carries its operand's and its
+# result's values, so a 300-character text repeated over the catalog would dominate the section's size).
+T_SORT_SHORT = [v for v in T_SORT_POOL if len(v) < 100]
+# The layouts whose sorts also get the heap-sized text.
+T_SORT_LONG_LAYOUTS = ("c1", "c2", "t3")
+# Haystack texts of the searches stay in their cells (at most 15 UTF-8 bytes): NumPy 2.4.2's searchsorted loads haystack
+# cells with the KEYS' allocator, so an arena or heap haystack text raises MemoryError or reads another array's arena — a
+# NumPy bug NumSharp does not reproduce. Keys may be any length.
+T_SEARCH_POOL = ["", "a", "a\x00", "ab", "abc", "b", "bb", "c", "x" * 15, "x" * 14, "é", "NB", "中文"]
+T_SET_POOL = ["pear", "fig", "apple", "", "fi", "fig\x00x", "kiwi", "m" * 20, "é"]
+T_ORDER_SPECS = [TD, TDN, TDNAN, TDS, TDC]
+
+
+def _ts_values(rng, n, pool, spec, na_rate):
+    """``n`` values drawn from ``pool``, each an NA (the spec's NA object) with probability ``na_rate`` when it has one."""
+    vals = []
+    for _ in range(n):
+        if spec.na is not _ABSENT and rng.random() < na_rate:
+            vals.append(spec.na)
+        else:
+            vals.append(pool[int(rng.integers(0, len(pool)))])
+    return vals
+
+
+def _ts_array(vals, spec):
+    """A StringDType array of ``vals`` (an empty one keeps the descriptor)."""
+    return np.array(vals, dtype=spec.build()) if vals else np.zeros(0, dtype=spec.build())
+
+
+def _ts_sorted(arr):
+    """``arr`` sorted with NumPy's stable sort when it can be (a None-like NA refuses: then as is)."""
+    try:
+        return arr[np.argsort(arr, kind="stable")]
+    except Exception:  # noqa: BLE001 -- an unsortable haystack is searched as is
+        return arr
+
+
+def gen_tsort():
+    """Section tsort: StringDType's part of P2.2. Every case is phase 1: NumSharp sorts, searches and runs the set routines
+    and the order statistics over ``StringDType``, so it must match NumPy now.
+
+    * the sort family (``np.sort`` / ``np.argsort`` / ``np.partition`` / ``np.argpartition`` / ``ndarray.sort``) over every
+      NA kind and every layout of the catalog, every axis, the kinds (``heapsort`` refused), NumPy's ordering of missing
+      values (a NaN-like NA last, a string NA as its text, a None-like NA refused in a line of two or more), categorical
+      data around the introsort's insertion boundary and the mergesort's runs;
+    * ``np.lexsort`` (NaN-like NAs in adjacent runs: NumPy's timsort keeps them reversed), mixed with numeric and ``U``
+      keys;
+    * ``np.searchsorted`` (sides, sorters, ``U`` / numeric / bytes keys and their refusals, NA keys of every kind) and
+      ``np.digitize``;
+    * ``np.unique`` (every flag, ``equal_nan``, ``sorted``), the Array-API family (``unique_values`` is NumPy's hash order:
+      an excused order), ``np.isin`` and the four set routines between StringDType, ``U``, bytes and numbers;
+    * ``np.sort_complex`` (its parse errors and missing data; NumPy 2.4.2's StringDType-to-complex cast stores the real part
+      in both parts, so only zeros are compared as values);
+    * ``np.histogram`` / ``histogram_bin_edges`` / ``histogram2d`` / ``histogramdd`` over StringDType data, edges and weights;
+    * ``np.quantile`` / ``np.percentile`` / ``np.nanquantile`` / ``np.nanpercentile`` (every method, q forms, axes,
+      keepdims, ``out=``, a StringDType q), ``np.median`` / ``np.nanmedian``;
+    * numpy.ma's ``sort`` / ``argsort`` / ``median`` / ``unique`` over StringDType masked arrays.
+    """
+    rng = np.random.default_rng(20261016 + 7)
+
+    # ---- the sort family over the catalog ------------------------------------------------------------------------------
+    sort_layouts = ["c1", "c2", "c3", "f2", "t3", "s1", "s2", "r1", "r2", "rs", "o1", "col", "nx", "bc", "bcol", "z0",
+                    "one", "d5", "e1", "e2", "e3"]
+    argsort_kws = [{}, {"kind": "stable"}, {"kind": "heapsort"}, {"stable": True}]
+    sort_kws = [{}, {"kind": "stable"}, {"kind": "heapsort"}]
+    for spec in T_ORDER_SPECS:
+        for na_every in ([5, 0] if spec is TDN else [5]):
+            for lay in sort_layouts:
+                # A broadcast layout holds texts of at most 15 bytes: NumPy 2.4.2's argsort of a broadcast StringDType view
+                # misorders arena texts (np.argsort(np.broadcast_to(b, (3, 4)), axis=None) puts a 16-byte text before
+                # shorter, smaller ones; the same array copied sorts right) — a NumPy bug NumSharp does not reproduce.
+                def make(s=spec, l=lay, ne=na_every):
+                    pool = T_SEARCH_POOL if l in ("bc", "bcol") else T_SORT_POOL if l in T_SORT_LONG_LAYOUTS else T_SORT_SHORT
+                    return t_operand(s, l, seed=11, pool=pool, na_every=ne)
+                op = make()
+                view = op[1]
+                axes = [None] + list(range(-1, view.ndim)) if view.ndim else [None, -1]
+                label = f"{_t_label(spec)}{'' if na_every else '-nona'}:{lay}"
+                for ax in axes:
+                    for kw in argsort_kws:
+                        add("tsort", "argsort_kw", params=_sort_params(kw, axis=ax), operands=[op], layout=label,
+                            call=lambda a, x=ax, k=kw: np.argsort(a, axis=x, **k))
+                    for kw in sort_kws:
+                        add("tsort", "sort_kw", params=_sort_params(kw, axis=ax), operands=[op], layout=label,
+                            call=lambda a, x=ax, k=kw: np.sort(a, axis=x, **k))
+                    if view.ndim > 0:
+                        n_axis = view.size if ax is None else view.shape[ax]
+                        for kth in ([-1, 0] if n_axis > 1 else [0]):
+                            add("tsort", "partition_kw", params={"axis": ax, "kth": kth}, operands=[op], layout=label,
+                                call=lambda a, x=ax, k=kth: np.partition(a, k, axis=x))
+                            add("tsort", "argpartition_kw", params={"axis": ax, "kth": kth}, operands=[op], layout=label,
+                                call=lambda a, x=ax, k=kth: np.argpartition(a, k, axis=x))
+                    if ax is not None and view.ndim > 0 and view.flags.writeable:
+                        # One value sort (every kind sorts the same values) and the heapsort refusal.
+                        for kw in ({}, {"kind": "heapsort"}):
+                            add("tsort", "ndsort_kw", params=_sort_params(kw, axis=ax), operands=[make()], layout=label,
+                                mutate=0, call=lambda a, x=ax, k=kw: a.sort(axis=x, **k))
+
+    # Categorical data with duplicates and NAs: the insertion-only boundary (16 / 17), the introsort's partitions and the
+    # mergesort's runs; NaN-like NAs at the ends, in the middle and everywhere.
+    for spec in (TD, TDNAN, TDS):
+        for n in (2, 15, 16, 17, 18, 33, 100, 1000):
+            for k in (2, 6):
+                for na_rate in ((0.0, 0.3) if spec.na is not _ABSENT else (0.0,)):
+                    vals = _ts_values(rng, n, T_SORT_SHORT[:k] + ["zz"], spec, na_rate)
+                    arr = _ts_array(vals, spec)
+                    lab = f"{_t_label(spec)}:cat-n{n}k{k}na{na_rate}"
+                    kws = argsort_kws if n in (17, 100) else [{}, {"kind": "stable"}]
+                    for kw in kws:
+                        add("tsort", "argsort_kw", params=_sort_params(kw, axis=-1), operands=[plain(arr)], layout=lab,
+                            call=lambda a, k=kw: np.argsort(a, **k))
+                    add("tsort", "sort_kw", params=_sort_params({}, axis=-1), operands=[plain(arr)], layout=lab,
+                        call=lambda a: np.sort(a))
+                    if n in (16, 17, 100):
+                        for kth in (0, n // 2, -1):
+                            add("tsort", "partition_kw", params={"axis": -1, "kth": kth}, operands=[plain(arr)],
+                                layout=lab, call=lambda a, kk=kth: np.partition(a, kk))
+                            add("tsort", "argpartition_kw", params={"axis": -1, "kth": kth}, operands=[plain(arr)],
+                                layout=lab, call=lambda a, kk=kth: np.argpartition(a, kk))
+    # NA placement on the edges: a lone NA, NAs first / last / interleaved, NA-only lines, a None-like NA alone (no compare).
+    for spec in (TDN, TDNAN, TDS):
+        for vals in ([spec.na], [spec.na, "a"], ["a", spec.na], [spec.na, spec.na], ["b", spec.na, "c", spec.na, "a"],
+                     [spec.na, "", spec.na, "a\x00"]):
+            arr = _ts_array(vals, spec)
+            lab = f"{_t_label(spec)}:na{len(vals)}"
+            for kw in argsort_kws:
+                add("tsort", "argsort_kw", params=_sort_params(kw, axis=-1), operands=[plain(arr)], layout=lab,
+                    call=lambda a, k=kw: np.argsort(a, **k))
+            add("tsort", "sort_kw", params=_sort_params({}, axis=-1), operands=[plain(arr)], layout=lab,
+                call=lambda a: np.sort(a))
+            m = np.array([vals, vals[::-1]], dtype=spec.build())
+            for ax in (0, 1):
+                add("tsort", "argsort_kw", params=_sort_params({"kind": "stable"}, axis=ax), operands=[t_plain(m)],
+                    layout=f"{lab}:2d", call=lambda a, x=ax: np.argsort(a, axis=x, kind="stable"))
+
+    # ---- np.lexsort ----------------------------------------------------------------------------------------------------
+    def lexsort_case(layout, keys, axis=-1):
+        add("tsort", "lexsort", params={"axis": axis}, operands=keys, layout=layout,
+            call=lambda *ks, x=axis: np.lexsort(ks, axis=x))
+
+    for spec in T_ORDER_SPECS:
+        for n in (5, 17, 40, 300):
+            k1 = own(_ts_array(_ts_values(rng, n, ["b", "a", "c", "ab", ""], spec, 0.25), spec))
+            k2 = own(_ts_array(_ts_values(rng, n, ["x", "y"], spec, 0.25), spec))
+            kn = own(rng.integers(0, 3, n))
+            ku = own(np.array(_pick(rng, n, ["q", "p", "pq"]), dtype="<U2"))
+            lab = f"{_t_label(spec)}:n{n}"
+            lexsort_case(f"{lab}:T", [k1])
+            lexsort_case(f"{lab}:TT", [k1, k2])
+            lexsort_case(f"{lab}:Ti", [k1, kn])
+            lexsort_case(f"{lab}:iT", [kn, k1])
+            lexsort_case(f"{lab}:UT", [ku, k1])
+            lexsort_case(f"{lab}:TU", [k1, ku])
+    # Adjacent NaN-like NAs in the primary key (NumPy's timsort run detection reverses them) and in a secondary key.
+    for vals in ([np.nan, np.nan, "a"], ["a", np.nan, np.nan, np.nan], [np.nan] * 5, ["b", np.nan, "a", np.nan, np.nan]):
+        k = own(np.array(vals, dtype=TDNAN.build()))
+        lexsort_case(f"T-NaN:{len(vals)}runs", [k])
+        lexsort_case(f"T-NaN:{len(vals)}runs:sec", [own(np.arange(len(vals))[::-1].copy()), k])
+    # Keys contiguous along the axis only: NumPy 2.4.2 CRASHES (access violation) in np.lexsort when a StringDType key is
+    # not — axis 0 of a C-ordered 2-D key, a stepped or reversed 1-D view — on its copy-to-buffer path (a NumPy bug;
+    # NumSharp's answer is pinned by the unit tests).
+    m1 = t_plain(np.array(_pick(rng, 12, ["b", "a", "c", "ab"]), dtype=TD.build()).reshape(3, 4))
+    m2 = t_plain(np.array(_pick(rng, 12, ["x", "y", np.nan]), dtype=TDNAN.build()).reshape(3, 4))
+    for ax in (1, -1, 2):
+        lexsort_case(f"T:2d-ax{ax}", [m1, m2], axis=ax)
+    lexsort_case("T:0d", [t_plain(np.array("b", dtype=TD.build()))], axis=0)
+    lexsort_case("T:e", [own(np.zeros(0, TD.build())), own(np.zeros(0, TD.build()))])
+
+    # ---- np.searchsorted / np.digitize ---------------------------------------------------------------------------------
+    def search(layout, hay, keys, side="left", sorter=None, method=False):
+        ops = [hay, keys] + ([sorter] if sorter is not None else [])
+        if method:
+            call = lambda h, k, *s, sd=side: h.searchsorted(k, side=sd, sorter=s[0] if s else None)
+        else:
+            call = lambda h, k, *s, sd=side: np.searchsorted(h, k, side=sd, sorter=s[0] if s else None)
+        add("tsort", "ndsearchsorted" if method else "searchsorted_kw",
+            params={"side": side, "sorter": sorter is not None}, operands=ops, layout=layout, call=call)
+
+    key_pool = T_SEARCH_POOL + ["x" * 20, "y" * 300, "é" * 9]
+    for hspec in (TD, TDN, TDNAN, TDS):
+        for n in (0, 1, 5, 16, 40):
+            for na_rate in ((0.0, 0.3) if hspec.na is not _ABSENT else (0.0,)):
+                hay_arr = _ts_sorted(_ts_array(_ts_values(rng, n, T_SEARCH_POOL, hspec, na_rate), hspec))
+                hay = own(hay_arr)
+                for kspec in (TD, TDN, TDNAN, TDS):
+                    keys = own(_ts_array(_ts_values(rng, 8, key_pool, kspec, 0.3), kspec))
+                    for side in ("left", "right"):
+                        search(f"{_t_label(hspec)}{n}na{na_rate}:{_t_label(kspec)}", hay, keys, side)
+                search(f"{_t_label(hspec)}{n}na{na_rate}:T0d", hay, t_plain(np.array("b", dtype=TD.build())))
+                search(f"{_t_label(hspec)}{n}na{na_rate}:T2d", hay, t_plain(_ts_array(
+                    _ts_values(rng, 6, key_pool, hspec, 0.2), hspec).reshape(2, 3)))
+                search(f"{_t_label(hspec)}{n}na{na_rate}:U", hay, own(np.array(["b", "a"], dtype="<U1")))
+                search(f"{_t_label(hspec)}{n}na{na_rate}:i", hay, own(np.array([1, 5])))
+                search(f"{_t_label(hspec)}{n}na{na_rate}:f", hay, own(np.array([1.5, np.nan])))
+                search(f"{_t_label(hspec)}{n}na{na_rate}:S", hay, own(np.array([b"a"], dtype="|S1")))
+                search(f"{_t_label(hspec)}{n}na{na_rate}:method", hay, own(np.array(["b", "zz"], dtype=TD.build())),
+                       method=True)
+                if n:
+                    perm = rng.permutation(n)
+                    search(f"{_t_label(hspec)}{n}na{na_rate}:sorter", own(hay_arr[perm].copy()), own(
+                        np.array(["b", "a"], dtype=TD.build())), "left", own(np.argsort(perm).astype(np.int64)))
+                    bad = np.argsort(perm).astype(np.int64)
+                    bad[-1] = n + 3
+                    search(f"{_t_label(hspec)}{n}na{na_rate}:badsorter", hay, own(np.array(["b"], dtype=TD.build())),
+                           "right", own(bad))
+    for haystack, key in ((np.array(["a", "b"]), np.array(["b"], dtype=TDNAN.build())),
+                          (np.array([1.0, 2.0]), np.array(["a"], dtype=TD.build())),
+                          (np.array([b"a", b"b"]), np.array(["a"], dtype=TD.build())),
+                          (np.array([], dtype=float), np.array(["a"], dtype=TD.build()))):
+        search(f"{haystack.dtype.str}-in-T", own(haystack), own(key))
+    for xspec in (TD, TDN, TDNAN):
+        for n in (0, 1, 4):
+            x = own(_ts_array(_ts_values(rng, n, T_SEARCH_POOL, xspec, 0.3), xspec))
+            for bins in (np.array([1.0, 2.0]), np.array([2.0, 1.0]), np.array([1.0, 1.0]), np.zeros(0)):
+                for right in (False, True):
+                    add("tsort", "digitize", params={"right": right}, operands=[x, num_operand(bins)],
+                        layout=f"{_t_label(xspec)}{n}:bins{len(bins)}", call=lambda a, b, r=right: np.digitize(a, b, right=r))
+            for bins_arr in (np.array(["a", "b", "x" * 15], dtype=TD.build()), np.array(["x", "b"], dtype=TD.build()),
+                             np.array(["a", np.nan], dtype=TDNAN.build())):
+                add("tsort", "digitize", params={"right": False}, operands=[x, own(bins_arr)],
+                    layout=f"{_t_label(xspec)}{n}:Tbins", call=lambda a, b: np.digitize(a, b))
+    add("tsort", "digitize", params={"right": False}, operands=[own(np.array([1.0, 2.5])),
+                                                                own(np.array(["1", "2"], dtype=TD.build()))],
+        layout="f8-x:Tbins", call=lambda a, b: np.digitize(a, b))
+
+    # ---- np.unique, the Array-API family, np.isin and the set routines -------------------------------------------------
+    flags_all = [(False, False, False), (True, False, False), (False, True, False), (False, False, True),
+                 (True, True, True), (True, False, True)]
+    for spec in T_ORDER_SPECS:
+        for n, na_rate in ((0, 0.0), (1, 0.0), (7, 0.3), (40, 0.25), (300, 0.1), (500, 0.05)):
+            if spec is TDN and na_rate and n > 7:
+                na_rate = 0.0 if n == 300 else na_rate
+            arr = _ts_array(_ts_values(rng, n, T_SET_POOL, spec, na_rate), spec)
+            op = own(arr)
+            lab = f"{_t_label(spec)}:n{n}na{na_rate}"
+            for ri, rv, rc in (flags_all if n in (7, 40, 300) else flags_all[:1] + flags_all[4:5]):
+                add("tsort", "unique", params={"ri": ri, "rv": rv, "rc": rc, "axis": None}, operands=[op], layout=lab,
+                    call=lambda a, i=ri, v=rv, c=rc: np.unique(a, return_index=i, return_inverse=v, return_counts=c))
+            for en in (True, False):
+                for srt in (True, False):
+                    add("tsort", "unique", params={"ri": False, "rv": False, "rc": False, "axis": None, "equal_nan": en,
+                                                   "sorted": srt}, operands=[op], layout=lab,
+                        call=lambda a, e=en, s=srt: np.unique(a, equal_nan=e, sorted=s))
+            for name in ("unique_values", "unique_counts", "unique_inverse", "unique_all"):
+                add("tsort", "unique_api", params={"name": name}, operands=[op], layout=lab,
+                    call=lambda a, f=getattr(np, name): f(a))
+        for lay in ("c2", "f2", "t3", "s2", "r2", "bc", "z0", "e2", "nx"):
+            op = t_operand(spec, lay, seed=21, pool=T_SET_POOL, na_every=5 if spec is not TDN else 0)
+            v = op[1]
+            for ax in [None] + ([0, -1] if v.ndim else []):
+                add("tsort", "unique", params={"ri": True, "rv": True, "rc": True, "axis": ax}, operands=[op],
+                    layout=f"{_t_label(spec)}:{lay}",
+                    call=lambda a, x=ax: np.unique(a, return_index=True, return_inverse=True, return_counts=True, axis=x))
+
+    def isin_case(layout, x, y, *, assume_unique=False, invert=False, kind=None):
+        params = {"assume_unique": assume_unique, "invert": invert, "kind": kind}
+        add("tsort", "isin", params=params, operands=[x, y], layout=layout,
+            call=lambda a, b, au=assume_unique, iv=invert, k=kind: np.isin(a, b, assume_unique=au, invert=iv, kind=k))
+
+    for xspec in T_ORDER_SPECS:
+        x = own(_ts_array(_ts_values(rng, 12, T_SET_POOL, xspec, 0.25), xspec))
+        for yspec in (TD, TDN, TDNAN, TDS):
+            y = own(_ts_array(_ts_values(rng, 5, T_SET_POOL, yspec, 0.3), yspec))
+            for iv in (False, True):
+                isin_case(f"{_t_label(xspec)}-{_t_label(yspec)}", x, y, invert=iv)
+            isin_case(f"{_t_label(xspec)}-{_t_label(yspec)}:sort", x, y, kind="sort")
+        for y, ykey in ((own(np.array(["fig", "pear\x00", "zz"], dtype="<U5")), "U"),
+                        (own(np.array([b"fig", b"x"], dtype="|S3")), "S"), (own(np.arange(-2, 3)), "i"),
+                        (own(np.array([np.nan, 1.5])), "f")):
+            isin_case(f"{_t_label(xspec)}-{ykey}", x, y)
+            isin_case(f"{ykey}-{_t_label(xspec)}", y, x)
+        isin_case(f"{_t_label(xspec)}-table", x, own(np.array(["a"], dtype=TD.build())), kind="table")
+        isin_case(f"{_t_label(xspec)}-au", x, x, assume_unique=True)
+    for key, x in (("2d", t_plain(np.array(_pick(rng, 12, T_SET_POOL), dtype=TD.build()).reshape(3, 4))),
+                   ("0d", t_plain(np.array("fig", dtype=TD.build()))), ("e", own(np.zeros(0, TD.build()))),
+                   ("t3", t_operand(TD, "t3", seed=2, pool=T_SET_POOL))):
+        isin_case(f"T{key}", x, own(np.array(["fig", "pear", "a"], dtype=TD.build())))
+        isin_case(f"T{key}-big", x, own(np.array(_pick(rng, 60, T_SET_POOL), dtype=TD.build())))
+
+    def setop(layout, name, x, y, assume_unique=False, return_indices=False):
+        params = {"name": name, "assume_unique": assume_unique, "return_indices": return_indices}
+        if name == "intersect1d":
+            call = lambda a, b, au=assume_unique, ri=return_indices: np.intersect1d(a, b, assume_unique=au,
+                                                                                     return_indices=ri)
+        elif name == "union1d":
+            call = lambda a, b: np.union1d(a, b)
+        else:
+            call = lambda a, b, f=getattr(np, name), au=assume_unique: f(a, b, assume_unique=au)
+        add("tsort", "setop", params=params, operands=[x, y], layout=layout, call=call)
+
+    set_pairs = []
+    for spec in T_ORDER_SPECS:
+        for n1, n2 in ((5, 4), (40, 33), (600, 400)):
+            na1 = 0.0 if spec is TDN and n1 > 5 else 0.2
+            a = own(_ts_array(_ts_values(rng, n1, T_SET_POOL, spec, na1), spec))
+            b = own(_ts_array(_ts_values(rng, n2, T_SET_POOL + ["plum"], spec, na1), spec))
+            set_pairs.append((f"{_t_label(spec)}{n1}", a, b))
+        set_pairs.append((f"{_t_label(spec)}-U", own(_ts_array(_ts_values(rng, 6, T_SET_POOL, spec, 0.2), spec)),
+                          own(np.array(["fig", "zz"], dtype="<U3"))))
+        set_pairs.append((f"U-{_t_label(spec)}", own(np.array(["fig", "zz", "fig"], dtype="<U3")),
+                          own(_ts_array(_ts_values(rng, 6, T_SET_POOL, spec, 0.2), spec))))
+    set_pairs += [("NaN-None", own(np.array(["a", np.nan], dtype=TDNAN.build())), own(np.array(["a", None], dtype=TDN.build()))),
+                  ("NaN-NA", own(np.array(["a", np.nan], dtype=TDNAN.build())), own(np.array(["a", "NA"], dtype=TDS.build()))),
+                  ("T-e", own(np.array(["b", "a", "b"], dtype=TD.build())), own(np.zeros(0, TD.build()))),
+                  ("T-2d", t_plain(np.array([["b", "a"], ["c", "a"]], dtype=TD.build())),
+                   t_plain(np.array([["a", "z"]], dtype=TD.build()))),
+                  ("T-i", own(np.array(["1", "2"], dtype=TD.build())), own(np.array([1, 2])))]
+    for key, x, y in set_pairs:
+        for name in ("intersect1d", "union1d", "setdiff1d", "setxor1d"):
+            setop(key, name, x, y)
+            if name != "union1d":
+                setop(key, name, x, y, assume_unique=True)
+        setop(key, "intersect1d", x, y, return_indices=True)
+
+    # ---- np.sort_complex -----------------------------------------------------------------------------------------------
+    # NumPy 2.4.2's StringDType-to-complex cast stores the REAL part in both parts ('3' becomes 3+3j), a bug NumSharp does
+    # not reproduce: the values compared are zeros; everything else is an error NumPy raises before or in the cast.
+    for spec in (TD, TDN, TDNAN, TDS):
+        for vals in (["0", "0", "+0"], ["0"], [], ["1+2j", "j1"], ["x"], ["0", spec.na] if spec.na is not _ABSENT else
+                     ["0", "0x1"], ["0", "1e1e1"], [spec.na] if spec.na is not _ABSENT else ["  "]):
+            arr = _ts_array(vals, spec)
+            add("tsort", "sort_complex", operands=[own(arr)], layout=f"{_t_label(spec)}:{len(vals)}",
+                call=lambda a: np.sort_complex(a))
+        arr2 = _ts_array(["0", "0", "0", "0"], spec).reshape(2, 2)
+        add("tsort", "sort_complex", operands=[t_plain(arr2)], layout=f"{_t_label(spec)}:2d", call=lambda a: np.sort_complex(a))
+        add("tsort", "sort_complex", operands=[t_plain(np.array("0", dtype=spec.build()))], layout=f"{_t_label(spec)}:0d",
+            call=lambda a: np.sort_complex(a))
+
+    # ---- histograms ----------------------------------------------------------------------------------------------------
+    def hist(layout, fn, data, bins, *, weights=None, density=False, rng_=None, second=None):
+        ops = [data] + ([second] if second is not None else [])
+        params = {"fn": fn, "range": _json_floats(rng_) if rng_ is not None else None, "density": density}
+        if isinstance(bins, tuple):
+            params["bins_op"] = len(ops)
+            ops.append(bins)
+            params["bins"] = None
+        else:
+            params["bins"] = bins
+        if weights is not None:
+            params["weights_op"] = len(ops)
+            ops.append(weights)
+
+        def call(*views, p=params, r=rng_):
+            a = views[0]
+            b = views[p["bins_op"]] if "bins_op" in p else p["bins"]
+            w = views[p["weights_op"]] if "weights_op" in p else None
+            rr = tuple(r) if r is not None else None
+            if p["fn"] == "histogram_bin_edges":
+                return np.histogram_bin_edges(a, b, rr, w)
+            if p["fn"] == "histogram":
+                return np.histogram(a, b, rr, density=p["density"], weights=w)
+            yy = views[1]
+            if p["fn"] == "histogram2d":
+                return np.histogram2d(a, yy, b, (rr, rr) if rr else None)
+            bb = [b, b] if isinstance(b, np.ndarray) and b.ndim == 1 else b
+            H, edges = np.histogramdd([a, yy], bb, (rr, rr) if rr else None)
+            return (H,) + tuple(edges)
+
+        add("tsort", "hist", params=params, operands=ops, layout=layout, call=call)
+
+    for spec in (TD, TDN, TDNAN, TDS):
+        for vals in (["b", "a", "zz", "", "a"], ["b"], [], [spec.na, spec.na] if spec.na is not _ABSENT else ["a", "a"],
+                     ["b", spec.na, "c"] if spec.na is not _ABSENT else ["b", "c"]):
+            data = own(_ts_array(vals, spec))
+            lab = f"{_t_label(spec)}:{len(vals)}"
+            for edges in (np.array(["a", "b", "z"], dtype=spec.build()), np.array(["c", "a"], dtype=spec.build()),
+                          np.array(["a"], dtype=spec.build())):
+                hist(f"{lab}:Tedges{len(edges)}", "histogram", data, own(edges))
+                hist(f"{lab}:Tedges{len(edges)}:density", "histogram", data, own(edges), density=True)
+                hist(f"{lab}:Tedges{len(edges)}:edges", "histogram_bin_edges", data, own(edges))
+            hist(f"{lab}:Uedges", "histogram", data, own(np.array(["a", "c"])))
+            hist(f"{lab}:fedges", "histogram", data, num_operand(np.array([0.0, 1.0])))
+            for b in (3, "auto"):
+                hist(f"{lab}:bins{b}", "histogram", data, b)
+                hist(f"{lab}:bins{b}:range", "histogram", data, b, rng_=(0.0, 1.0))
+            if vals:
+                w = own(np.ones(len(vals)))
+                hist(f"{lab}:w", "histogram", data, own(np.array(["a", "zz"], dtype=spec.build())), weights=w)
+                hist(f"{lab}:Tw", "histogram", data, own(np.array(["a", "zz"], dtype=spec.build())),
+                     weights=own(_ts_array(["x"] * len(vals), spec)))
+    hist("U-data:Tedges", "histogram", own(np.array(["b", "a"])), own(np.array(["a", "c"], dtype=TD.build())))
+    hist("f-data:Tedges", "histogram", num_operand(np.array([0.5, 1.5])), own(np.array(["a", "c"], dtype=TD.build())))
+    hist("f-data:Tw", "histogram", num_operand(np.array([0.5, 1.5])), 2, weights=own(np.array(["x", "y"], dtype=TD.build())))
+    for fn in ("histogram2d", "histogramdd"):
+        for xs, ys, key in ((np.array(["b", "a"], dtype=TD.build()), np.array(["c", "d"], dtype=TD.build()), "TT"),
+                            (np.array(["b", "a"], dtype=TD.build()), np.array([1.0, 2.0]), "Tf"),
+                            (np.array([1.0, 2.0]), np.array([0.5, 1.5]), "ff")):
+            sec = own(ys) if ys.dtype.kind == "T" else num_operand(ys)
+            first = own(xs) if xs.dtype.kind == "T" else num_operand(xs)
+            hist(f"{fn}:{key}:2", fn, first, 2, second=sec)
+            hist(f"{fn}:{key}:Tedges", fn, first, own(np.array(["a", "c", "e"], dtype=TD.build())), second=sec)
+            hist(f"{fn}:{key}:range", fn, first, 2, rng_=(0.0, 1.0), second=sec)
+
+    # ---- the quantile family, np.median and np.nanmedian -----------------------------------------------------------------
+    methods = ["inverted_cdf", "averaged_inverted_cdf", "closest_observation", "interpolated_inverted_cdf", "hazen",
+               "weibull", "linear", "median_unbiased", "normal_unbiased", "lower", "higher", "midpoint", "nearest"]
+
+    def quant(layout, op, *, name="quantile", q=0.5, qkind="f", axis=None, method="lower", keepdims=False, out=None):
+        ops = [op]
+        params = {"name": name, "qkind": qkind, "method": method, "keepdims": keepdims,
+                  "axis": list(axis) if isinstance(axis, tuple) else axis}
+        if qkind == "arr":
+            params["q_op"] = len(ops)
+            ops.append(q)
+        else:
+            params["q"] = q
+        if out is not None:
+            params["out_op"] = len(ops)
+            ops.append(out)
+
+        def call(*views, p=params):
+            a = views[0]
+            qq = views[p["q_op"]] if p["qkind"] == "arr" else p["q"]
+            o = views[p["out_op"]] if "out_op" in p else None
+            ax = tuple(p["axis"]) if isinstance(p["axis"], list) else p["axis"]
+            kw = {"axis": ax, "method": p["method"], "keepdims": p["keepdims"]}
+            if o is not None:
+                kw["out"] = o
+            return getattr(np, p["name"])(a, qq, **kw)
+
+        add("tsort", "quant_kw", params=params, operands=ops, layout=layout, mutate=params.get("out_op"), call=call)
+
+    quant_data = {
+        "T5": lambda s: _ts_array(["b", "a", "zz", "", "m" * 20], s),
+        "NaN-mid": lambda s: _ts_array(["b", s.na, "a"] if s.na is not _ABSENT else ["b", "c", "a"], s),
+        "NaN-all": lambda s: _ts_array([s.na, s.na] if s.na is not _ABSENT else ["q", "q"], s),
+        "one": lambda s: _ts_array(["x"], s),
+        "oneNA": lambda s: _ts_array([s.na] if s.na is not _ABSENT else ["y"], s),
+        "e": lambda s: _ts_array([], s),
+    }
+    for spec in (TD, TDN, TDNAN, TDS):
+        for dkey, build in quant_data.items():
+            arr = build(spec)
+            lab = f"{_t_label(spec)}:{dkey}"
+            for name in ("quantile", "nanquantile"):
+                for method in methods:
+                    quant(lab, own(arr), name=name, q=0.5, method=method)
+                    quant(lab, own(arr), name=name, q=1.0, method=method)
+                for method in ("lower", "linear", "hazen"):
+                    quant(lab, own(arr), name=name, q=[0.0, 0.75], qkind="fl", method=method)
+                    quant(lab, own(arr), name=name, q=0.5, method=method, keepdims=True)
+                    quant(lab, own(arr), name=name, q=own(np.array([0, 1])), qkind="arr", method=method)
+                    quant(lab, own(arr), name=name, q=own(np.array(1)), qkind="arr", method=method)
+                if name == "quantile":
+                    # A Python int q: 'linear' takes the element (nanquantile's C# overloads have no integer q).
+                    quant(lab, own(arr), name=name, q=1, qkind="i", method="linear")
+            for name in ("percentile", "nanpercentile"):
+                for method in ("lower", "nearest", "linear", "midpoint"):
+                    quant(lab, own(arr), name=name, q=50.0, method=method)
+                    quant(lab, own(arr), name=name, q=[0.0, 100.0], qkind="fl", method=method)
+        for lay in ("c2", "f2", "t3", "bc", "e2", "nx"):
+            op = t_operand(spec, lay, seed=31, pool=T_SORT_SHORT, na_every=4 if spec is not TDN else 0)
+            v = op[1]
+            axes = [None, 0, -1] + ([(0, 1)] if v.ndim >= 2 else [])
+            for ax in axes:
+                for name in ("quantile", "nanquantile"):
+                    for method in ("lower", "linear", "nearest"):
+                        quant(f"{_t_label(spec)}:{lay}", op, name=name, q=0.5, axis=ax, method=method)
+                        quant(f"{_t_label(spec)}:{lay}", op, name=name, q=[0.25, 1.0], qkind="fl", axis=ax, method=method)
+                    quant(f"{_t_label(spec)}:{lay}", op, name=name, q=0.5, axis=ax, method="lower", keepdims=True)
+    # out=: the take path's checks (the out's class and descriptor), the interpolation's add / subtract into the out, the
+    # nan forms' setitem.
+    for dspec, dvals in ((TD, ["b", "a"]), (TDNAN, [np.nan, np.nan]), (TDNAN, ["b", np.nan, "a"]), (TDN, ["b", None])):
+        arr = _ts_array(dvals, dspec)
+        for odt in ("T", "TNAN", "TN", "U3", "U1", "S3", "f8", "f4", "i8", "?", "c16"):
+            o = target(np.array("k", dtype={"T": TD, "TNAN": TDNAN, "TN": TDN}[odt].build())) if odt.startswith("T") else \
+                target(np.zeros((), dtype=odt))
+            for name, method in (("quantile", "lower"), ("quantile", "linear"), ("nanquantile", "lower"),
+                                 ("nanquantile", "linear")):
+                quant(f"{_t_label(dspec)}{len(dvals)}:out:{odt}", own(arr), name=name, q=0.5, method=method, out=o)
+        bad = target(np.zeros(2, dtype="f8"))
+        quant(f"{_t_label(dspec)}:out:wrongshape", own(arr), name="quantile", q=0.5, method="lower", out=bad)
+    # A StringDType q: _quantile_is_valid's comparisons and minimum, then the virtual index over the text.
+    for qvals, qkey in ((["0.5"], "str1"), ([np.nan, "a"], "nanstr"), (["a", np.nan], "strnan"), ([], "empty"),
+                        (["0.5"] * 12, "str12")):
+        qspec = TDNAN if any(isinstance(v, float) for v in qvals) else TD
+        q_op = own(_ts_array(qvals, qspec))
+        for name in ("quantile", "nanquantile", "percentile", "nanpercentile"):
+            for method in (["linear", "lower", "higher", "nearest", "inverted_cdf", "hazen", "weibull",
+                            "interpolated_inverted_cdf", "bogus"] if qkey == "empty" else ["linear"]):
+                for data in (num_operand(np.array([1.0, 2.0, 3.0])), own(np.array(["b", "a"], dtype=TD.build()))):
+                    quant(f"Tq:{qkey}", data, name=name, q=q_op, qkind="arr", method=method)
+    quant("Tq:0d", num_operand(np.array([1.0, 2.0])), q=t_plain(np.array("0.5", dtype=TD.build())), qkind="arr")
+    quant("Tq:2d", num_operand(np.array([1.0, 2.0])), q=t_plain(np.array([["0.5"]], dtype=TD.build())), qkind="arr")
+
+    def stat(layout, name, op, axis=None, keepdims=False, out_index=None, extra=()):
+        _t_stat_case(name, [op] + list(extra), axis=axis, keepdims=keepdims, out_index=out_index, layout=layout,
+                     section="tsort")
+
+    for spec in (TD, TDN, TDNAN, TDS):
+        for dkey, build in quant_data.items():
+            arr = build(spec)
+            for name in ("median", "nanmedian"):
+                stat(f"{_t_label(spec)}:{dkey}", name, own(arr))
+                stat(f"{_t_label(spec)}:{dkey}", name, own(arr), keepdims=True)
+        for lay in ("c2", "f2", "t3", "bc", "e2", "e3", "z0"):
+            op = t_operand(spec, lay, seed=33, pool=T_SORT_SHORT, na_every=4 if spec is not TDN else 0)
+            for name in ("median", "nanmedian"):
+                for ax in [None, 0, -1] if op[1].ndim else [None]:
+                    stat(f"{_t_label(spec)}:{lay}", name, op, axis=ax)
+    for odt in ("T", "U3", "f8"):
+        o = target(np.array("k", dtype=TD.build())) if odt == "T" else target(np.zeros((), dtype=odt))
+        for dvals, dspec in ((["b"], TD), ([np.nan, np.nan], TDNAN), (["b", None], TDN)):
+            for name in ("median", "nanmedian"):
+                stat(f"{_t_label(dspec)}:out:{odt}", name, own(_ts_array(dvals, dspec)), out_index=1, extra=[o])
+    for n in (599, 600):
+        wide = np.array([[np.nan] * n, ["b"] * n], dtype=TDNAN.build())
+        stat(f"T-NaN:{n}cols", "nanmedian", t_plain(wide), axis=1)
+        stat(f"T-NaN:{n}cols:nan", "nanmedian", t_plain(wide[:1]), axis=1)
+
+    # ---- numpy.ma over StringDType -------------------------------------------------------------------------------------
+    unary = _strma_unary_table()
+    T, TN, TNAN, TS = (s.build() for s in (TD, TDN, TDNAN, TDS))
+    margs = [("nomask", MArg(["b", "a", "c"], spec=T)), ("mask", MArg(["b", "a", "c"], [0, 1, 0], spec=T)),
+             ("allfalse", MArg(["b", "a", "c"], [0, 0, 0], spec=T)), ("2d", MArg([["b", "a"], ["d", "c"]], spec=T)),
+             ("nan", MArg(["b", float("nan"), "a", float("nan")], spec=TNAN)), ("none", MArg(["b", None], spec=TN)),
+             ("noneone", MArg([None], spec=TN)), ("sna", MArg(["b", "NA", "a"], spec=TS)),
+             ("e", MArg(np.zeros(0, T))), ("e2", MArg(np.zeros((0, 2), T))), ("one", MArg(["x"], spec=T))]
+    for name in ("sort", "argsort", "median", "unique", "sort_end_false"):
+        for key, arg in margs:
+            add_ma("ma1", params={"name": name}, args=[arg], layout=key, call=lambda x, f=unary[name]: f(x),
+                   section="tsort", phase=1)
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strsets,
-              gen_tcomp, gen_tarith, gen_treduce]
+              gen_tcomp, gen_tarith, gen_treduce, gen_tsort]
 
 
 def main():

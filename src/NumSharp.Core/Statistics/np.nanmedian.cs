@@ -11,6 +11,28 @@ namespace NumSharp
         ///     to 1 ULP), so <c>medianMean: true</c> is REQUIRED. A slice that is entirely NaN (or
         ///     empty) yields NaN, matching NumPy's "All-NaN slice" behaviour.
         /// </summary>
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text: see the exceptions).</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or null for the flattened data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The NaN-ignoring median; <paramref name="out"/> itself when one is given. Over a NEP 55
+        ///     <c>StringDType</c> array a median exists only for an all-NaN reduction: its NA object (a read-only 0-d
+        ///     <c>StringDType</c> array, NumPy's Python object), or <c>np.float64(nan)</c> where NumPy's mean of NaN-like NAs
+        ///     gives it.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Fixed-width text data that NumPy's NaN test (or, for empty data, its <c>nanmean</c>)
+        ///     refuses (its verbatim text). A <c>StringDType</c> array: the median's mean refuses the concatenated text;
+        ///     along an axis shorter than 600 numpy.ma's median refuses first (<c>Unsuitable type StringDType() for
+        ///     calculating minimum.</c>); <paramref name="keepdims"/> over NumPy's Python-object result (<c>'float' object is
+        ///     not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array: a None-like NA in a sorted line of two or more elements
+        ///     (<c>Cannot compare null that is not a nan-like value</c>), an empty input's mean (no identity), or the store into
+        ///     <paramref name="out"/> (NumPy's setitem texts, e.g. <c>cannot convert float NaN to integer</c>).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> reduction along a long axis whose row result NumPy
+        ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
+        ///     dtype.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanmedian.html</remarks>
         public static NDArray nanmedian(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
@@ -21,6 +43,10 @@ namespace NumSharp
             // Text: NumPy sends EMPTY data to np.nanmean(a, axis, out=out) first (whose add.reduce resolves on (out, a));
             // otherwise its _ureduce normalizes the axis (a 0-d input refuses every axis) and the NaN test refuses text;
             // see NDStringUfuncs.ReduceError / ReduceOutError.
+            // StringDType: np.nanmean for an empty input, else the NaN-like NAs removed and the median of the rest (numpy.ma's
+            // median along an axis shorter than 600, np.apply_along_axis along a longer one).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                return Backends.Strings.NDVStringStatistics.NanMedian(a, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims);
             if (a is not null && a.size == 0)
                 Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
@@ -46,13 +72,15 @@ namespace NumSharp
         /// <returns>The NaN-ignoring median over the reduced axes; <paramref name="out"/> itself when one is
         ///     given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-        /// <exception cref="ValueError">An axis repeats.</exception>
+        /// <exception cref="ValueError">An axis repeats; or a <c>StringDType</c> array's errors (see the one-axis overload: a
+        ///     None-like NA in a sorted line, an empty input's mean, the store into <paramref name="out"/>).</exception>
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty text data, its <c>nanmean</c>)
-        ///     refuses (its verbatim text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array NumPy partitions (computing on
-        ///     <c>StringDType</c> is phase 2's next stage).</exception>
+        ///     refuses (its verbatim text); a <c>StringDType</c> array's median, numpy.ma or keepdims refusals (see the
+        ///     one-axis overload).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> row result NumPy stores in an OBJECT array (see the
+        ///     one-axis overload).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule (NumPy's nanmedian of a matrix calls <c>matrix.sum</c> with <c>keepdims</c> and raises
         ///     TypeError for every axis).</remarks>
@@ -63,6 +91,9 @@ namespace NumSharp
             // Text: NumPy sends EMPTY data to np.nanmean(a, axis, out=out) first (whose add.reduce resolves on (out, a));
             // otherwise its _ureduce normalizes the tuple (every axis, then repeats) and the NaN test refuses text; see
             // NDStringUfuncs.ReduceError / ReduceOutError.
+            // StringDType: see the one-axis overload.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                return Backends.Strings.NDVStringStatistics.NanMedian(a, axis, @out, keepdims);
             if (a is not null && a.size == 0)
                 Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);

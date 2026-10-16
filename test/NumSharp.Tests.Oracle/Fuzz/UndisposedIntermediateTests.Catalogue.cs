@@ -180,7 +180,8 @@ namespace NumSharp.Tests.Fuzz
             // collection inside THIS entry's measurement (MeasureExactTraffic's own hygiene) would finalize them and read
             // as this entry dropping the references — a false over-disposal (fixture V once fell 11 -> 1 inside a
             // chararray comparison entry). Finalizing that young garbage before the snapshot charges each entry with its own
-            // changes only (a gen-1 collection: cheap, independent of the heap size).
+            // changes only (a gen-1 collection: cheap, independent of the heap size); older garbage the measurement's hygiene
+            // still finalizes is the ledger's DropMayBeFinalization case (OwnershipLedger.DrainAndRebase).
             ScopeAudit.Quiesce();
             // The fixture's arrays as they are before THIS entry: an earlier entry may legitimately have materialized a
             // masked fixture's fill, so each entry is judged on its own changes.

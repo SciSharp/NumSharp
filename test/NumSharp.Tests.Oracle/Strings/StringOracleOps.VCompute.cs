@@ -98,7 +98,8 @@ namespace NumSharp.Tests.Strings
         }
 
         /// <summary>
-        ///     A statistic of section treduce with the generator's keywords: <c>name</c>, <c>axis</c> (int or None),
+        ///     A statistic of section treduce (and tsort's median / nanmedian) with the generator's keywords: <c>name</c>,
+        ///     <c>axis</c> (int or None),
         ///     <c>keepdims</c>, and the optional <c>dtype</c>, <c>ddof</c>, <c>out</c> (an operand index, np.ptp) and
         ///     <c>weights</c> (an operand index, np.average) — spelled as NumSharp's overloads take them (np.mean takes
         ///     <c>dtype=</c> with an explicit axis only, which the generator always gives).
@@ -136,6 +137,11 @@ namespace NumSharp.Tests.Strings
                     return np.nanstd(a, axis, keepdims, ddof ?? 0, dt);
                 case "ptp":
                     return np.ptp(a, axis, @out, keepdims);
+                case "median":
+                    // Section tsort: NumPy sorts the text, slices the middle and calls mean.
+                    return np.median(a, axis, @out, false, keepdims);
+                case "nanmedian":
+                    return np.nanmedian(a, axis, @out, false, keepdims);
                 case var other:
                     throw new InvalidOperationException($"the string oracle has no StringDType statistic '{other}'");
             }

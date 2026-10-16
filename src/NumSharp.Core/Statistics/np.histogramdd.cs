@@ -232,7 +232,15 @@ namespace NumSharp
             // NumPy's stacking formats the number columns and decodes bytes beside str before it reads a bin.
             DType stacked = StackedSampleDescr(cols);
             bool textSample = stacked?.Meta is StringDTypeMeta;
-            cols = textSample ? CastColumnsToStacked(cols, stacked) : PromoteColumnsToCommon(cols);
+            // A StringDType column: NumPy's stack is that StringDType (with StringDType / U columns) or, beside numbers, an
+            // object array whose columns keep their own values — every column then computes in its own dtype here.
+            bool vstringSample = false;
+            foreach (var col in cols)
+                vstringSample |= Backends.Strings.NDStringUfuncs.IsVString(col);
+            if (vstringSample)
+                cols = stacked is not null ? CastColumnsToStacked(cols, stacked) : cols;
+            else
+                cols = textSample ? CastColumnsToStacked(cols, stacked) : PromoteColumnsToCommon(cols);
 
             int D = cols.Length;
             long N = D == 0 ? 0 : cols[0].size;
@@ -256,7 +264,7 @@ namespace NumSharp
                 {
                     edges[i] = earr;
                     // Fewer than two text edges have nothing to compare; two or more are compared by the string greater kernel.
-                    if (Backends.Strings.NDStringUfuncs.IsString(earr))
+                    if (Backends.Strings.NDStringUfuncs.IsText(earr))
                     {
                         if (earr.size > 1 && TextEdgesDecrease(earr))
                             throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
@@ -292,12 +300,12 @@ namespace NumSharp
 
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)
                 // `dedges[i] = np.diff(edges[i])`: text edges have no subtract loop (any length — even an empty diff resolves it).
-                if (Backends.Strings.NDStringUfuncs.IsString(edges[i]))
+                if (Backends.Strings.NDStringUfuncs.IsText(edges[i]))
                     throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", edges[i].dtype, edges[i].dtype);
                 dedges[i] = np.diff(edges[i]);
             }
 
-            if (textSample && N == 0)
+            if ((textSample || vstringSample) && N == 0)
             {
                 // With no points the searches, the rightmost-edge comparisons and the bincount see nothing, so the
                 // counts are the empty numeric sample's. (With points, every column already is the stacked text dtype:
@@ -315,7 +323,7 @@ namespace NumSharp
             var Ncount = new NDArray[D];
             for (int i = 0; i < D; i++)
             {
-                if (textSample && N > 0)
+                if ((textSample || Backends.Strings.NDStringUfuncs.IsVString(cols[i])) && N > 0)
                 {
                     // A text column: NumPy's searchsorted in the text descriptor common to the column and the edges, then the
                     // rightmost-edge comparison (text against a number compares unequal everywhere, as NumPy's == answers).
@@ -349,7 +357,7 @@ namespace NumSharp
             foreach (int nb in nbin) minlen *= nb;
 
             NDArray w1d = weights is null ? null : np.ravel(weights);
-            if (Backends.Strings.NDStringUfuncs.IsString(w1d))
+            if (Backends.Strings.NDStringUfuncs.IsText(w1d))
             {
                 // np.bincount converts the weights with a SAFE cast to float64 — after its empty-input early return, which
                 // never reads them (so no points means the plain zero counts).
@@ -594,7 +602,7 @@ namespace NumSharp
                         _ => NumericBelowOne(item.Value),
                     };
                 case NDArray nd:
-                    if (Backends.Strings.NDStringUfuncs.IsString(nd))
+                    if (Backends.Strings.NDStringUfuncs.IsText(nd))
                         throw new TypeError(
                             $"ufunc 'less' did not contain a loop with signature matching types ({nd.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
                     return NumericBelowOne(nd.GetAtIndex(0));
@@ -664,8 +672,30 @@ namespace NumSharp
                 return null;
             DType common = cols[0].dtype;
             for (int i = 1; i < cols.Length; i++)
-                common = DTypePromotion.PromoteTypes(common, cols[i].dtype);
+            {
+                try
+                {
+                    common = DTypePromotion.PromoteTypes(common, cols[i].dtype);
+                }
+                catch (DTypePromotionError) when (AnyVString(cols))
+                {
+                    // StringDType beside a number has no common DType: NumPy's stack is then an OBJECT array, whose columns
+                    // keep their own values (null: no stacked descriptor).
+                    return null;
+                }
+            }
             return common;
+        }
+
+        /// <summary>Whether any column holds NEP 55 <c>StringDType</c> text.</summary>
+        /// <param name="cols">The columns.</param>
+        /// <returns>True when one does.</returns>
+        private static bool AnyVString(NDArray[] cols)
+        {
+            foreach (var col in cols)
+                if (Backends.Strings.NDStringUfuncs.IsVString(col))
+                    return true;
+            return false;
         }
 
         /// <summary>Raise NumPy's dimension-mismatch error when a bin sequence length differs from the sample rank.</summary>

@@ -43,11 +43,11 @@ namespace NumSharp.Backends.Sorting
         {
             ValidateKindOrder(kind, order);
             // Text: NumPy checks the axis and the kth bounds, then (a string having no partition function) sorts every
-            // line with npy_quicksort, so the partition IS the sorted copy.
-            if (Strings.NDStringUfuncs.IsString(a))
+            // line with npy_quicksort, so the partition IS the sorted copy (StringDType first: IsString refuses it).
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsString(a))
             {
                 TextChecks("partition", a, axis, () => WidenKth(kth));
-                return AxisSort.SortText(a, axis);
+                return Strings.NDStringUfuncs.IsVString(a) ? AxisSort.SortVString(a, axis, stable: false) : AxisSort.SortText(a, axis);
             }
             if (axis == null)
             {
@@ -81,10 +81,10 @@ namespace NumSharp.Backends.Sorting
             ValidateKindOrder(kind, order);
             KthTooDeepCheck(kth);
             // Text: the axis, then the kth dtype and bounds, then the sort NumPy partitions a string with.
-            if (Strings.NDStringUfuncs.IsString(a))
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsString(a))
             {
                 TextChecks("partition", a, axis, () => ExtractKthValues(kth));
-                return AxisSort.SortText(a, axis);
+                return Strings.NDStringUfuncs.IsVString(a) ? AxisSort.SortVString(a, axis, stable: false) : AxisSort.SortText(a, axis);
             }
             if (axis == null)
             {
@@ -113,7 +113,7 @@ namespace NumSharp.Backends.Sorting
         {
             ValidateKindOrder(kind, order);
             // Text: the axis, writeability and the kth bounds, then NumPy sorts every line in place.
-            if (Strings.NDStringUfuncs.IsString(a))
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsString(a))
             {
                 TextPartitionInPlace(a, axis, () => WidenKth(kth));
                 return;
@@ -146,7 +146,7 @@ namespace NumSharp.Backends.Sorting
             ValidateKindOrder(kind, order);
             KthTooDeepCheck(kth);
             // Text: the axis, writeability, then the kth dtype and bounds, then the in-place sort of every line.
-            if (Strings.NDStringUfuncs.IsString(a))
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsString(a))
             {
                 TextPartitionInPlace(a, axis, () => ExtractKthValues(kth));
                 return;
@@ -182,11 +182,15 @@ namespace NumSharp.Backends.Sorting
             if (a.ndim == 0)
                 a = a.reshape(1);
             // Text: the axis (a 0-d input ravelled above), then the kth bounds, then NumPy's generic introsort fallback
-            // (npy_aquicksort), which compares as the string introsort does: argpartition is the default argsort.
-            if (Strings.NDStringUfuncs.IsString(a))
+            // (npy_aquicksort), which compares as the string introsort does: argpartition is the default argsort. Over
+            // StringDType that fallback receives the real array, so where the argsort loop crashes NumPy (its heapsort
+            // fallback) argpartition still answers — with the port's heapsort.
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsString(a))
             {
                 TextChecks("argpartition", a, axis, () => WidenKth(kth));
-                return AxisSort.ArgSortText(a, axis, stable: false);
+                return Strings.NDStringUfuncs.IsVString(a)
+                    ? AxisSort.ArgSortVString(a, axis, stable: false)
+                    : AxisSort.ArgSortText(a, axis, stable: false);
             }
             if (axis == null)
             {
@@ -219,10 +223,12 @@ namespace NumSharp.Backends.Sorting
             if (a.ndim == 0)
                 a = a.reshape(1);
             // Text: the axis, then the kth dtype and bounds, then the default argsort (NumPy's generic introsort fallback).
-            if (Strings.NDStringUfuncs.IsString(a))
+            if (Strings.NDStringUfuncs.IsVString(a) || Strings.NDStringUfuncs.IsString(a))
             {
                 TextChecks("argpartition", a, axis, () => ExtractKthValues(kth));
-                return AxisSort.ArgSortText(a, axis, stable: false);
+                return Strings.NDStringUfuncs.IsVString(a)
+                    ? AxisSort.ArgSortVString(a, axis, stable: false)
+                    : AxisSort.ArgSortText(a, axis, stable: false);
             }
             if (axis == null)
             {
@@ -292,13 +298,21 @@ namespace NumSharp.Backends.Sorting
             PrepKth(kth(), n, a.size);
             if (a.size == 0 || n <= 1)
                 return;
+            bool vstring = Strings.NDStringUfuncs.IsVString(a);
             if (axis == null)
             {
                 // NumSharp's flatten-in-place extension: one line over the whole (contiguous) buffer.
-                TextSort.SortLines(a.reshape(a.size), 0);
+                if (vstring)
+                    VStringSort.SortLinesInPlace(a.reshape(a.size), 0, stable: false);
+                else
+                    TextSort.SortLines(a.reshape(a.size), 0);
                 return;
             }
-            TextSort.SortLines(a, AxisSort.NormalizeAxis(axis.Value, a.ndim));
+            int line = AxisSort.NormalizeAxis(axis.Value, a.ndim);
+            if (vstring)
+                VStringSort.SortLinesInPlace(a, line, stable: false);
+            else
+                TextSort.SortLines(a, line);
         }
 
         /// <summary>Widen an int[] kth to the long[] the cores take (NumPy's kth is intp).

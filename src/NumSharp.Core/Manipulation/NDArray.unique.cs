@@ -92,12 +92,14 @@ namespace NumSharp
         /// <param name="sorted">Accepted for API parity; NumSharp always returns sorted output.</param>
         /// <returns>The sorted unique values.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose answer depends on its text
-        ///     (the <c>StringDType</c> part of NumSharp's next phase). Fixed-width text (<c>S</c> / <c>U</c>) computes.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (NumPy's structured
+        ///     path refuses it).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, with an NA
+        ///     among two or more distinct values (NumPy's sort refuses to compare it).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
         public NDArray unique(int? axis = null, bool equal_nan = true, bool sorted = true)
         {
-            // NumPy's axis check for text, and StringDType's deferral (its sorts are the next phase).
+            // NumPy's axis checks for text (StringDType's structured-path refusal included).
             ThrowIfTextUnique(this, axis);
             // Delegate to the tuple path with all return flags false, then take the values. The
             // kwargs path uses the optimized sort+mask algorithm (NaN-partition for floats, plain
@@ -129,9 +131,11 @@ namespace NumSharp
         ///     null the inverse has the input's shape (NumPy's <c>inv_idx.reshape(ar.shape)</c>: <c>()</c> for a 0-d input,
         ///     <c>(0, 3)</c> for an empty <c>(0, 3)</c> one).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose answer depends on its text
-        ///     (the <c>StringDType</c> part of NumSharp's next phase); one with at most one element to order is answered.
-        ///     Fixed-width text (<c>S</c> / <c>U</c>) computes NumPy's answer (<see cref="UniqueText"/>).</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (NumPy's structured
+        ///     path refuses it).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, where
+        ///     NumPy's sort compares an NA (<see cref="UniqueVString"/>). Text computes NumPy's answer: fixed-width text through
+        ///     <see cref="UniqueText"/>, <c>StringDType</c> through <see cref="UniqueVString"/>.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public NDArray[] unique(
             bool return_index,
@@ -141,17 +145,23 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
-            // sorted is a no-op: NumSharp cannot reproduce NumPy's non-portable sorted=False hash
+            // sorted does not change the values: NumSharp cannot reproduce NumPy's non-portable sorted=False hash
             // order (integer/complex/text, values-only), so it always returns the deterministic sorted
-            // result — identical AS A SET, and consistent with the unique_values family.
-            _ = sorted;
+            // result — identical AS A SET, and consistent with the unique_values family. Over StringDType it decides one
+            // thing NumPy's does: without the sort, a None-like NA is never compared (and never refused).
 
             // Text: NumPy's axis check first. StringDType is tested first (IsString refuses it: its fixed-width readers would
-            // misread the 16-byte cells) and defers unless the shape decides the answer, which the bool stand-in computes and
-            // the input's own strings fill; fixed-width text computes NumPy's statements (NDArray.unique.Text.cs).
+            // misread the 16-byte cells) and computes NumPy's flat path (NDArray.unique.VString.cs); fixed-width text
+            // computes NumPy's statements (NDArray.unique.Text.cs).
             ThrowIfTextUnique(this, axis);
             if (Backends.Strings.NDStringUfuncs.IsVString(this))
-                return UniqueTextByShape(this, return_index, return_inverse, return_counts, axis, equal_nan);
+            {
+                var vstringOutputs = UniqueVString(this, return_index, return_inverse, return_counts, equal_nan, sorted);
+                // The flat path reshapes the inverse to the input's shape, as the numeric path.
+                if (return_inverse)
+                    ReshapeFlatInverseToInput(vstringOutputs, return_index ? 2 : 1);
+                return vstringOutputs;
+            }
             if (Backends.Strings.NDStringUfuncs.IsString(this))
             {
                 var textOutputs = UniqueText(this, return_index, return_inverse, return_counts, axis);
@@ -181,25 +191,21 @@ namespace NumSharp
         /// <summary>
         ///     The checks of <c>np.unique</c> over text that come before its computation: an explicit axis must be in range
         ///     (NumPy's <c>np.moveaxis</c> re-raised as <c>AxisError(axis, ndim)</c>, or <c>normalize_axis_index</c> for a 1-D
-        ///     input: the same text). A <c>StringDType</c> array then defers unless at most one element is ordered (its sorts
-        ///     are the next phase; <see cref="ThrowIfVStringUnique"/>); fixed-width text goes on to compute. Does nothing
-        ///     for a numeric array.
+        ///     input: the same text), and a <c>StringDType</c> array refuses the structured path of an axis over two or more
+        ///     dimensions (<see cref="ThrowIfVStringUnique"/>). Does nothing for a numeric array.
         /// </summary>
         /// <param name="a">The array <c>unique</c> was called on.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="op">The NumPy function named in the next-phase message (<c>unique</c>, <c>unique_values</c>, …).</param>
         /// <exception cref="AxisError">A string array with an out-of-range <paramref name="axis"/> (<c>axis 9 is out of
         ///     bounds for array of dimension 1</c>; a 0-d array refuses every axis).</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (see
         ///     <see cref="ThrowIfVStringUnique"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array with two or more elements to
-        ///     order.</exception>
-        internal static void ThrowIfTextUnique(NDArray a, int? axis, string op = "unique")
+        internal static void ThrowIfTextUnique(NDArray a, int? axis)
         {
             // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
             {
-                ThrowIfVStringUnique(a, axis, op);
+                ThrowIfVStringUnique(a, axis);
                 return;
             }
             if (!Backends.Strings.NDStringUfuncs.IsString(a))
@@ -210,22 +216,19 @@ namespace NumSharp
 
         /// <summary>
         ///     The guard of <c>np.unique</c> (and the Array-API family) over NEP 55 <c>StringDType</c> text, in NumPy 2.4.2's
-        ///     order. The flat path (<c>axis=None</c>, or a 1-D input whose axis passed <c>normalize_axis_index</c>) hashes the
-        ///     text, or argsorts it when an index output is asked for — a computation (phase 2) unless at most one element is
-        ///     ordered, which this lets through for <see cref="UniqueTextByShape"/>. An axis over two or more dimensions takes
-        ///     the structured path, which cannot hold <c>StringDType</c> fields.
+        ///     order: the flat path (<c>axis=None</c>, or a 1-D input whose axis passed <c>normalize_axis_index</c>) computes
+        ///     (<see cref="UniqueVString"/>); an axis over two or more dimensions takes the structured path, which cannot hold
+        ///     <c>StringDType</c> fields.
         /// </summary>
         /// <param name="a">The <c>StringDType</c> array.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="op">The NumPy function named in the next-phase message.</param>
         /// <exception cref="AxisError">The axis is out of bounds (<c>np.moveaxis</c>'s check re-raised as
         ///     <c>AxisError(axis, ndim)</c>, or <c>normalize_axis_index</c> for a 1-D input: the same text).</exception>
         /// <exception cref="TypeError">An axis over two or more dimensions: <c>The axis argument to unique is not supported
         ///     for dtype StringDType()</c> (the structured view of the rows refuses <c>StringDType</c> fields), or — for rows of
         ///     zero width, which skip that view — <c>Cannot change data-type for array of references.</c> (the field-less
         ///     result's view back as <c>StringDType</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two or more elements to order (phase 2).</exception>
-        private static void ThrowIfVStringUnique(NDArray a, int? axis, string op)
+        private static void ThrowIfVStringUnique(NDArray a, int? axis)
         {
             if (axis is { } ax)
             {
@@ -244,63 +247,6 @@ namespace NumSharp
                     throw new TypeError("Cannot change data-type for array of references.");
                 }
             }
-            if (a.size > 1)
-                throw Backends.Strings.NDStringUfuncs.NextPhaseVString(op, a.dtype);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>np.unique</c> over <c>StringDType</c> text whose answer the shape decides (<see cref="ThrowIfTextUnique"/> passed): the
-        ///     index outputs (first occurrences, inverse, counts) do not depend on the values over such a shape, so they come
-        ///     from the same call on a bool stand-in of the input's shape; the values are the input's own strings — none for
-        ///     an empty result, the single element (flattened) for <c>axis=None</c>, the single slab (the input itself) for an
-        ///     axis. With an axis, the values are built as NumPy's <c>reshape_uniq</c> builds them: a C-contiguous buffer of
-        ///     the slabs, the axis first, viewed back with <c>np.moveaxis</c> (so the result is a view, like NumPy's).
-        /// </summary>
-        /// <param name="a">The string array.</param>
-        /// <param name="return_index">Also return the first-occurrence indices.</param>
-        /// <param name="return_inverse">Also return the reconstruction indices.</param>
-        /// <param name="return_counts">Also return the counts.</param>
-        /// <param name="axis">The axis, or null.</param>
-        /// <param name="equal_nan">NumPy's NaN switch (no NaN in text; passed through).</param>
-        /// <returns>The outputs in NumPy's order: [values, index?, inverse?, counts?]; values in <paramref name="a"/>'s dtype.</returns>
-        private static NDArray[] UniqueTextByShape(NDArray a, bool return_index, bool return_inverse, bool return_counts,
-            int? axis, bool equal_nan)
-        {
-            using var standIn = Backends.Strings.NDStringUfuncs.BoolStandIn(a);
-            var outputs = standIn.unique(return_index, return_inverse, return_counts, axis, equal_nan);
-            // The stand-in's bool values are replaced (and released); every other output is int64 and kept as it is.
-            using (var boolValues = outputs[0])
-            {
-                if (axis is not { } ax || a.ndim == 1)
-                {
-                    // aux[mask] in NumPy (the flat path also serves a 1-D input with an axis): a fresh 1-D array.
-                    outputs[0] = boolValues.size == 0 ? new NDArray(a.dtype, Shape.Vector(0), true) : a.flatten();
-                }
-                else
-                {
-                    int norm = ax < 0 ? ax + a.ndim : ax;
-                    // The slab buffer has the result's dimensions with the axis moved first: (n, *rest).
-                    var dims = boolValues.Shape.dimensions;
-                    var movedDims = new long[dims.Length];
-                    movedDims[0] = dims[norm];
-                    for (int d = 0, k = 1; d < dims.Length; d++)
-                        if (d != norm)
-                            movedDims[k++] = dims[d];
-                    // One slab is the input's own, copied in C order; an empty result holds no element.
-                    NDArray slabs;
-                    if (boolValues.size == 0)
-                        slabs = new NDArray(a.dtype, Shape.Adopt(movedDims), true);
-                    else
-                    {
-                        using var moved = np.moveaxis(a, norm, 0);
-                        slabs = moved.copy();
-                    }
-                    outputs[0] = np.moveaxis(slabs, 0, norm);
-                    // The moveaxis view holds its own counted reference to the slab buffer.
-                    slabs.Dispose();
-                }
-            }
-            return outputs;
         }
 
         /// <summary>

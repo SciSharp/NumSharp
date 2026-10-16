@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using NumSharp;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 using NumSharp.Tests.Utilities;
 
@@ -432,11 +433,11 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
-        ///     What the doc page still lists as a later stage: the sorts, searches and set routines over <c>StringDType</c> text
-        ///     — its unique values refuse with <see cref="StringComputationNotSupportedException"/> (a
-        ///     <see cref="NotSupportedException"/>) — while its comparison computes (strings phase 2, P2.T) and the same calls
-        ///     over <c>U</c> text compute; a string <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers
-        ///     written as text, then concatenated).
+        ///     The "What is not computed yet" examples: the comparison and the unique values of <c>StringDType</c> text compute
+        ///     (strings phase 2, P2.T and P2.2 over <c>StringDType</c>), as the same calls over <c>U</c> text do; a string
+        ///     <c>dtype=</c> request of <c>np.add</c> over numbers computes (the numbers written as text, then concatenated);
+        ///     <c>np.evaluate</c> over text, a NumSharp route without a text form, throws
+        ///     <see cref="StringComputationNotSupportedException"/> (a <see cref="NotSupportedException"/>).
         /// </summary>
         [TestMethod]
         public void Computing_NextPhase()
@@ -445,17 +446,17 @@ namespace NumSharp.Tests.Documentation
             var t = names.astype(np.dtypes.StringDType());
             using (var eq = t == t)
                 eq.ToArray<bool>().Should().Equal(true, true, true);
-            Action unique = () => np.unique(t);
-            unique.Should().Throw<StringComputationNotSupportedException>();
-            Action sort = () => np.sort(t);
-            sort.Should().Throw<StringComputationNotSupportedException>();
+            NDArray.AsStringArray((NDArray)np.unique(t)).Should().Equal("bird", "cat", "dog");
+            NDArray.AsStringArray(np.sort(t)).Should().Equal("bird", "cat", "dog");
             NDArray.AsStringArray((NDArray)np.unique(names)).Should().Equal("bird", "cat", "dog");
             np.isin(names, np.array(new[] { "cow" })).ToArray<bool>().Should().Equal(false, false, false);
             NDArray.AsStringArray(np.add(np.array(new[] { 1.5 }), np.array(new[] { 1.5 }), dtype: "U")).Should().Equal("1.51.5");
+            Action fused = () => np.evaluate((NDExpr)names + names);
+            fused.Should().Throw<StringComputationNotSupportedException>();
             // StringComputationNotSupportedException is a NotSupportedException.
-            unique.Should().Throw<NotSupportedException>();
+            fused.Should().Throw<NotSupportedException>();
 
-            // The .NET route until then.
+            // The .NET route for the np.strings functions NumSharp does not have yet.
             NDArray.AsStringArray(names).Select(s => s.ToUpper()).Should().Equal("CAT", "DOG", "BIRD");
         }
 
@@ -668,6 +669,38 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "Ordering StringDType text" examples (strings phase 2, P2.2 over <c>StringDType</c>): a NaN-like NA sorting
+        ///     after every text in the sort, the stable argsort, the unique values, the search and <c>np.isin</c>; a None-like
+        ///     NA refused at the first comparison; the heapsort kind <c>StringDType</c> does not register; the order
+        ///     statistics picking an element or refusing. Every value and message probed from NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void StringDType_Ordering()
+        {
+            var nan = np.dtypes.StringDType(na_object: double.NaN);
+            var t = np.array(new object[] { "pear", double.NaN, "fig", "apple", "fig" }, nan);
+            // NumPy's repr wraps here (the line would pass 75 characters): the dtype goes on its own line.
+            np.sort(t).ToString(true).Should().Be(
+                "array(['apple', 'fig', 'fig', 'pear', nan],\n      dtype=StringDType(na_object=nan))");
+            np.argsort(t, kind: "stable").ToArray<long>().Should().Equal(3L, 2L, 4L, 0L, 1L);
+            ((NDArray)np.unique(t)).ToString(true).Should().Be(
+                "array(['apple', 'fig', 'pear', nan], dtype=StringDType(na_object=nan))");
+            np.searchsorted(np.sort(t), np.array(new object[] { "grape" }, nan)).ToArray<long>().Should().Equal(3L);
+            np.isin(t, np.array(new object[] { "fig" }, nan)).ToArray<bool>().Should().Equal(false, false, true, false, true);
+            var none = np.dtypes.StringDType(na_object: null);
+            ((Action)(() => np.sort(np.array(new object[] { "b", null }, none)))).Should().Throw<ValueError>()
+                .WithMessage("Cannot compare null that is not a nan-like value");
+            ((Action)(() => np.sort(t, kind: "heapsort"))).Should().Throw<RuntimeError>().WithMessage("unsupported sort kind");
+
+            var s = np.array(new[] { "b", "a", "c" }, np.dtypes.StringDType());
+            np.quantile(s, 0.5, method: "lower").item().Should().Be("b");
+            ((Action)(() => np.quantile(s, 0.5))).Should().Throw<TypeError>()
+                .WithMessage("unsupported operand type(s) for -: 'str' and 'str'");
+            ((Action)(() => np.median(s))).Should().Throw<TypeError>()
+                .WithMessage("ufunc 'divide' not supported for the input types, *");
+        }
+
+        /// <summary>
         ///     The "Text files" examples: loadtxt with a converter whose null is the NA object and a whole-line field;
         ///     savetxt formatting the NA object itself (its <c>str()</c>, its own type's <c>%d</c>) and the Mismatch error;
         ///     tofile's text mode and fromfile's refusal.
@@ -716,8 +749,9 @@ namespace NumSharp.Tests.Documentation
             ((Action)(() => np.frombuffer(new byte[16], "T"))).Should().Throw<ValueError>()
                 .WithMessage("cannot create an OBJECT array from memory buffer");
             ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<ArgumentException>();
-            // A sort of two or more texts reads them (one element is decided by the shape and copies).
-            ((Action)(() => np.sort(np.array(new[] { "b", "a" }, np.dtypes.StringDType())))).Should().Throw<StringComputationNotSupportedException>();
+            // The structured path of np.unique along an axis cannot hold StringDType fields (NumPy's TypeError).
+            ((Action)(() => np.unique(np.array(new object[,] { { "a", "b" }, { "a", "b" } }, np.dtypes.StringDType()), axis: 0)))
+                .Should().Throw<TypeError>().WithMessage("The axis argument to unique is not supported for dtype StringDType()");
 
             // The NumPy-bug list: a 1-D accumulation into a 0-d out (NumPy crashes) is the wrong-size error, and maximum
             // with a None-like NA into an S out of non-ASCII texts (NumPy's SystemError) is the loop's own ValueError.
@@ -728,6 +762,19 @@ namespace NumSharp.Tests.Documentation
             var withNA = np.array(new object[] { null, "été" }, none);
             ((Action)(() => np.maximum(withNA, np.array(new object[] { "x", "y" }, none), np.empty(new Shape(2), np.dtype("S4")))))
                 .Should().Throw<ValueError>().WithMessage("Cannot compare null that is not a nan-like value");
+
+            // A nan-quantile row whose result is a None NA: NumPy builds an object array, NumSharp has no object dtype.
+            ((Action)(() => np.nanquantile(np.array(new object[,] { { null }, { null } }, none), 0.5, 1, method: "lower")))
+                .Should().Throw<NotSupportedException>();
+
+            // The new entries of the NumPy-bug list: a non-contiguous lexsort key (NumPy crashes), an arena haystack
+            // (NumPy's MemoryError) and the complex cast (NumPy copies the real part into the imaginary part).
+            var keys = np.array(new object[,] { { "b", "a" }, { "a", "b" }, { "a", "a" } }, np.dtypes.StringDType());
+            np.lexsort(keys.T, -1).ToArray<long>().Should().Equal(2L, 0L, 1L);
+            var hay = np.array(new object[] { new string('a', 20), new string('b', 20), new string('c', 20) }, np.dtypes.StringDType());
+            np.searchsorted(hay, np.array(new object[] { "b" }, np.dtypes.StringDType())).ToArray<long>().Should().Equal(1L);
+            np.sort_complex(np.array(new[] { "2", "1" }, np.dtypes.StringDType())).ToString(true)
+                .Should().Be("array([1.+0.j, 2.+0.j])");
         }
 
         /// <summary>

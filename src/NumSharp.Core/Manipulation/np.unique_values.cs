@@ -220,9 +220,10 @@ namespace NumSharp
         ///     order that is not portable (both contain the same set); float dtypes are sorted on both sides.
         ///     The Array API leaves the order unspecified.
         /// </remarks>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
-        ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
-        ///     shape). Fixed-width text (<c>S</c> / <c>U</c>) computes NumPy's answer.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt NEP 55 <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        ///     text). A <c>StringDType</c> array otherwise computes without raising: NumPy's values-only <c>sorted=False</c>
+        ///     pass hashes the texts and compares no NA (the values come back sorted here, NumPy's hash set keeps its own
+        ///     order — the same set).</exception>
         // NDScoped: the hash/sort internals' temps are reclaimed; the values are yielded.
         [NDScoped]
         public static NDArray unique_values(NDArray x)
@@ -234,12 +235,13 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(x))
                 return NDCharArrayBoundary.Wrapped(x, static s => unique_values(s));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy hashes text (sorts it with an index output); a StringDType array is deferred here unless at most one
-            // element is ordered, fixed-width text computes in the instance unique.
-            NDArray.ThrowIfTextUnique(x, null, "unique_values");
+            // NumPy hashes text (sorts it with an index output); text of every class computes in the instance unique (this
+            // guard refuses only StringDType's structured axis path, which no axis-less call reaches).
+            NDArray.ThrowIfTextUnique(x, null);
             // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
             if (Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x))
-                return x.unique(return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false)[0];
+                return x.unique(return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false,
+                                sorted: false)[0];
             return x.uniqueValuesFast();
         }
 
@@ -254,9 +256,10 @@ namespace NumSharp
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
         ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_counts.html</remarks>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
-        ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
-        ///     shape). Fixed-width text (<c>S</c> / <c>U</c>) computes NumPy's answer.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: the hash/sort internals are reclaimed; the weaver yields both result-struct
         // members (values, counts) by decomposing the returned UniqueCountsResult's fields.
         [NDScoped]
@@ -272,9 +275,9 @@ namespace NumSharp
                 return new UniqueCountsResult(kept[0], kept[1]);
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text: a StringDType array is deferred here unless at most one element is ordered; fixed-width
-            // text computes in the instance unique.
-            NDArray.ThrowIfTextUnique(x, null, "unique_counts");
+            // NumPy sorts text: text of every class computes in the instance unique (this guard refuses only StringDType's
+            // structured axis path, which no axis-less call reaches).
+            NDArray.ThrowIfTextUnique(x, null);
             var r = Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x)
                 ? x.unique(return_index: false, return_inverse: false, return_counts: true, axis: null, equal_nan: false)
                 : x.uniqueCountsFast();
@@ -294,9 +297,10 @@ namespace NumSharp
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
         ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_inverse.html</remarks>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
-        ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
-        ///     shape). Fixed-width text (<c>S</c> / <c>U</c>) computes NumPy's answer.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
         // inverse — the two UniqueInverseResult fields. ReshapeInverseToInput returns a view of r[1]
         // (or r[1] itself for 0-d); the un-yielded r[1] base is reclaimed, its buffer kept alive by
@@ -314,9 +318,9 @@ namespace NumSharp
                 return new UniqueInverseResult(kept[0], kept[1]);
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text: a StringDType array is deferred here unless at most one element is ordered; fixed-width
-            // text computes in the instance unique below.
-            NDArray.ThrowIfTextUnique(x, null, "unique_inverse");
+            // NumPy sorts text: text of every class computes in the instance unique below (this guard refuses only
+            // StringDType's structured axis path, which no axis-less call reaches).
+            NDArray.ThrowIfTextUnique(x, null);
             var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
                              axis: null, equal_nan: false);
             return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
@@ -335,9 +339,10 @@ namespace NumSharp
         ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
         ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_all.html</remarks>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
-        ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
-        ///     shape). Fixed-width text (<c>S</c> / <c>U</c>) computes NumPy's answer.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields all four UniqueAllResult members (values,
         // indices, inverse_indices, counts) by decomposing the struct's fields.
         [NDScoped]
@@ -353,9 +358,9 @@ namespace NumSharp
                 return new UniqueAllResult(kept[0], kept[1], kept[2], kept[3]);
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text: a StringDType array is deferred here unless at most one element is ordered; fixed-width
-            // text computes in the instance unique below.
-            NDArray.ThrowIfTextUnique(x, null, "unique_all");
+            // NumPy sorts text: text of every class computes in the instance unique below (this guard refuses only
+            // StringDType's structured axis path, which no axis-less call reaches).
+            NDArray.ThrowIfTextUnique(x, null);
             var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
                              axis: null, equal_nan: false);
             return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);

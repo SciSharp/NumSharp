@@ -28,7 +28,7 @@ namespace NumSharp.Backends.Strings
     ///     (every <c>None</c> operand raises).
     ///     </para>
     /// </remarks>
-    internal static class NDVStringStatistics
+    internal static partial class NDVStringStatistics
     {
         // =============================================================================================================
         // mean / average / nanmean

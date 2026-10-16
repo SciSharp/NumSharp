@@ -508,6 +508,19 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeReductions() => Run("treduce");
 
         /// <summary>
+        ///     Section tsort (strings phase 2, P2.2 over <c>StringDType</c>): sorting, searching, the set routines and the
+        ///     order statistics over <c>StringDType</c> text — <c>np.sort</c> / <c>np.argsort</c> / <c>np.partition</c> /
+        ///     <c>np.argpartition</c> / <c>ndarray.sort</c> with NumPy's ordering of missing values (a NaN-like NA last, a
+        ///     string NA as its text, a None-like NA refused in a line of two or more) over every NA kind and layout,
+        ///     <c>np.lexsort</c>, <c>np.searchsorted</c> / <c>np.digitize</c>, <c>np.unique</c> and its Array-API family,
+        ///     <c>np.isin</c> and the set routines, <c>np.sort_complex</c>, the histograms, the quantile family with every
+        ///     method (the interpolating methods' neighbours, a StringDType q), <c>np.median</c> / <c>np.nanmedian</c> and
+        ///     numpy.ma's sort / argsort / median / unique. Strict, except <c>np.unique_values</c>' hash order (an excused
+        ///     order).
+        /// </summary>
+        [TestMethod] public void StringDTypeSortingAndStatistics() => Run("tsort");
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -548,22 +561,22 @@ namespace NumSharp.Tests.Strings
         }
 
         /// <summary>
-        ///     The most cases each section may defer to the computational phase (see the class remarks): the deferrals
-        ///     left are the set routines (unique and its variants, isin, the 1-D set operations), lexsort, sort_complex,
-        ///     np.histogram and the quantiles over text, and every computation over <c>StringDType</c>. Sorting <c>S</c> /
+        ///     The most cases each section may defer to the computational phase (see the class remarks). Sorting <c>S</c> /
         ///     <c>U</c> text computes since P2.2 milestone A (it lowered the ceilings: reductions 32 → 24, straxis 130 → 90,
         ///     strshape 190 → 142, strma 113 → 18); searching it (argmax / argmin and the nan forms, searchsorted, digitize,
         ///     histogram2d / histogramdd's bin search) since milestone B (reductions 24 → 14, straxis 90 → 50, strshape
-        ///     142 → 84, strvalid 5 → 0, strsurface 67 → 54, strma 18 → 6). A section not listed may defer nothing.
+        ///     142 → 84, strvalid 5 → 0, strsurface 67 → 54, strma 18 → 6); the set routines, lexsort, sort_complex,
+        ///     np.histogram and the quantiles over text since milestone C; computing on <c>StringDType</c> since P2.T, and
+        ///     ordering it since P2.2 over <c>StringDType</c>. The one deferral left is <c>chararray.partition(sep)</c>
+        ///     (numpy.char phase 3), the string method that lands with phase 5. A section not listed may defer nothing.
         /// </summary>
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
             // P2.2 milestone C answered the last fixed-width deferrals (reductions 14, straxis 50, strshape 84, strsurface 54,
             // strma 6 before it): every section that holds only S / U computations is strict. P2.T computes on StringDType
             // (the comparisons, the truth values, add / multiply / maximum / minimum, the reductions and statistics, numpy.ma
-            // over them: tma 437 → 5, strchar 3 → 0); tma keeps the sorts that StringDType's part of P2.2 answers — np.median
-            // (2), np.sort (2) and np.unique (1) of numpy.ma over StringDType.
-            ["tma"] = 5,
+            // over them: tma 437 → 5, strchar 3 → 0), and StringDType's part of P2.2 the sorts, searches, set routines and
+            // order statistics (tma 5 → 0: numpy.ma's median, sort and unique over StringDType).
             // numpy.char phase 3: chararray.partition(sep) is the STRING partition NumPy computes; NumSharp's lands with the
             // string methods (phase 5).
             ["strcharops"] = 22,
@@ -580,7 +593,7 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn",
                 "strsets", "tcomp", "tarith",
-                "treduce",
+                "treduce", "tsort",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -1011,7 +1024,7 @@ namespace NumSharp.Tests.Strings
         ///     them only for <c>sorted=True</c>: <c>np.unique_values</c> (always <c>sorted=False</c>) and <c>np.unique(...,
         ///     sorted=False)</c> without flags or an axis keep that order, the C++ library's hash, not reproducible in C#.
         ///     NumSharp returns them sorted (documented on <see cref="np.unique_values"/>, the numeric dtypes' same
-        ///     divergence).
+        ///     divergence); a <c>StringDType</c> result is reordered by its values (<see cref="InNumPyOrderVString"/>).
         /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>The reason, or null when the order must match NumPy's.</returns>
@@ -1041,6 +1054,9 @@ namespace NumSharp.Tests.Strings
         /// <returns>The reordered result (a fresh C-contiguous array, as NumPy's), or <paramref name="r"/>.</returns>
         private static object InNumPyOrder(JsonElement exp, object r, List<string> diffs)
         {
+            if (r is NDArray t && t.ndim == 1 && t.Storage.IsVString && exp.GetProperty("kind").GetString() == "array"
+                && exp.TryGetProperty("values", out var values))
+                return InNumPyOrderVString(values, t, diffs);
             if (r is not NDArray a || a.ndim != 1 || exp.GetProperty("kind").GetString() != "array"
                 || !exp.TryGetProperty("buffer", out var buffer) || buffer.ValueKind != JsonValueKind.String
                 || a.dtype.str != exp.GetProperty("dtype").GetString() || a.dtype.itemsize == 0)
@@ -1063,6 +1079,46 @@ namespace NumSharp.Tests.Strings
                 {
                     diffs.Add($"NumSharp's values are not NumPy's set: NumPy's element {i} (bytes {want}) is missing");
                     return r;
+                }
+            }
+            return a[np.array(order)];
+        }
+
+        /// <summary>
+        ///     <see cref="InNumPyOrder"/> for a 1-D <c>StringDType</c> result, whose expectation lists VALUES (a text, or
+        ///     <c>{"na": true}</c> for an NA cell): each of NumPy's values is found among NumSharp's (an NA and a text equal to a
+        ///     string NA object are different values) and NumSharp's array is gathered in NumPy's order.
+        /// </summary>
+        /// <param name="values">NumPy's encoded values.</param>
+        /// <param name="a">NumSharp's 1-D <c>StringDType</c> result (distinct values: a unique result).</param>
+        /// <param name="diffs">Receives the divergence when one of NumPy's values is not among NumSharp's.</param>
+        /// <returns>The reordered result, or <paramref name="a"/> when the lengths differ (the comparison reports that).</returns>
+        private static unsafe object InNumPyOrderVString(JsonElement values, NDArray a, List<string> diffs)
+        {
+            var items = values.EnumerateArray().ToArray();
+            if (items.Length != a.size || a.Storage.InternalArray is not NumSharp.Backends.Unmanaged.VStringArraySlice slice)
+                return a;
+            // The key of an element: "\u0001NA" for an NA cell, "\u0000" + the text otherwise (no text starts with \u0001
+            // after the \u0000 prefix, so the two families never collide).
+            var position = new Dictionary<string, long>(items.Length);
+            for (long i = 0; i < items.Length; i++)
+            {
+                long off = a.Shape.TransformOffset(i);
+                byte* cell = slice.Address + off * NumSharp.Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+                string key = NumSharp.Backends.Strings.VStringAllocator.isnull(cell) ? "\u0001NA" : "\u0000" + (string)slice.GetIndex(off);
+                position[key] = i;
+            }
+            var order = new long[items.Length];
+            for (int i = 0; i < items.Length; i++)
+            {
+                var w = items[i];
+                string key = w.ValueKind == JsonValueKind.Object && w.TryGetProperty("na", out _)
+                    ? "\u0001NA"
+                    : "\u0000" + (string)StringOracleCorpus.Decode(w);
+                if (!position.TryGetValue(key, out order[i]))
+                {
+                    diffs.Add($"NumSharp's values are not NumPy's set: NumPy's element {i} is missing");
+                    return a;
                 }
             }
             return a[np.array(order)];

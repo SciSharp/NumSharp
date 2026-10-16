@@ -7,7 +7,8 @@ namespace NumSharp.Tests.Strings
 {
     /// <summary>
     ///     The string oracle's ops for section <c>strsets</c> (<c>gen_strsets</c>, strings phase 2, P2.2 milestone C):
-    ///     <c>np.quantile</c> / <c>np.percentile</c> with every q form, axis form, method, keepdims and <c>out=</c>. The
+    ///     <c>np.quantile</c> / <c>np.percentile</c> with every q form, axis form, method, keepdims and <c>out=</c> (and
+    ///     section tsort's <c>np.nanquantile</c> / <c>np.nanpercentile</c>). The
     ///     section's <c>np.unique</c>, Array-API unique, <c>np.isin</c>, set-routine, <c>np.lexsort</c>,
     ///     <c>np.sort_complex</c> and histogram cases replay through the ops of sections strshape and strsurface
     ///     (<c>unique</c>, <c>unique_api</c>, <c>isin</c>, <c>setop</c>, <c>lexsort</c>, <c>sort_complex</c>, <c>hist</c>),
@@ -59,10 +60,14 @@ namespace NumSharp.Tests.Strings
             int? axis = axisElement.ValueKind == JsonValueKind.Number ? axisElement.GetInt32() : null;
             bool percentile = name switch
             {
-                "percentile" => true,
-                "quantile" => false,
+                "percentile" or "nanpercentile" => true,
+                "quantile" or "nanquantile" => false,
                 _ => throw new InvalidOperationException($"the string oracle has no quantile '{name}'"),
             };
+            // Section tsort's nan forms (np.nanquantile / np.nanpercentile over StringDType): the same q and axis forms,
+            // except a Python int q (their overloads have none; the generator does not emit it).
+            if (name is "nanquantile" or "nanpercentile")
+                return NanQuantileKeywords(p, ops, a, percentile, method, keepdims, @out, axes, axis);
             switch (Str(p, "qkind"))
             {
                 case "f":
@@ -105,6 +110,58 @@ namespace NumSharp.Tests.Strings
                 }
             }
             throw new InvalidOperationException($"the string oracle has no q kind '{Str(p, "qkind")}'");
+        }
+
+        /// <summary>
+        ///     One <c>np.nanquantile</c> / <c>np.nanpercentile</c> call (section tsort) through the overload NumPy's call ports
+        ///     to: a Python float a <see cref="double"/>, a list a <see cref="double"/>[], an array q an <see cref="NDArray"/>
+        ///     (one axis only: the NDArray-q overloads take an <see cref="int"/>? axis); one axis an <see cref="int"/>, a tuple
+        ///     an <see cref="int"/>[].
+        /// </summary>
+        /// <param name="p">The case parameters.</param>
+        /// <param name="ops">The operands.</param>
+        /// <param name="a">The data.</param>
+        /// <param name="percentile">np.nanpercentile instead of np.nanquantile.</param>
+        /// <param name="method">The method name.</param>
+        /// <param name="keepdims">keepdims.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <param name="axes">A tuple axis, or null.</param>
+        /// <param name="axis">One axis, or null.</param>
+        /// <returns>The call's result.</returns>
+        /// <exception cref="InvalidOperationException">A q kind these functions do not take (a Python int, an array q with a
+        ///     tuple axis).</exception>
+        private static object NanQuantileKeywords(Dictionary<string, JsonElement> p, NDArray[] ops, NDArray a, bool percentile,
+            string method, bool keepdims, NDArray @out, int[] axes, int? axis)
+        {
+            switch (Str(p, "qkind"))
+            {
+                case "f":
+                {
+                    double q = p["q"].GetDouble();
+                    if (axes is not null)
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                }
+                case "fl":
+                {
+                    double[] q = p["q"].EnumerateArray().Select(e => e.GetDouble()).ToArray();
+                    if (axes is not null)
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                }
+                case "arr" when axes is null:
+                {
+                    NDArray q = ops[Int(p, "q_op")];
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                }
+            }
+            throw new InvalidOperationException($"the string oracle has no nan-quantile q kind '{Str(p, "qkind")}'" +
+                                                (axes is null ? "" : " with a tuple axis"));
         }
     }
 }

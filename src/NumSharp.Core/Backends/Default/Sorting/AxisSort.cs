@@ -47,8 +47,8 @@ namespace NumSharp.Backends.Sorting
         /// <returns>The sorted copy.</returns>
         /// <exception cref="AxisError">The axis is out of bounds (a 0-d input refuses every axis: NumPy's sort does not ravel
         ///     it first).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (NumPy compares the text: the <c>StringDType</c> part of the next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding an NA whose NA object is
+        ///     neither NaN-like nor a string.</exception>
         public static NDArray Sort(NDArray a, int? axis) => Sort(a, axis, NPY_SORTKIND.NPY_QUICKSORT);
 
         /// <summary>
@@ -67,22 +67,21 @@ namespace NumSharp.Backends.Sorting
         ///     it first).</exception>
         /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>),
         ///     after the axis check.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase). Lines of at most one element come back as copies.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding an NA whose NA object is
+        ///     neither NaN-like nor a string (<c>Cannot compare null that is not a nan-like value</c>).</exception>
         [NDScoped]
         public static NDArray Sort(NDArray a, int? axis, NPY_SORTKIND kind)
         {
             if (Strings.NDStringUfuncs.IsVString(a))
             {
                 // StringDType: the sort loop's refusal of the heapsort kind follows the axis check (PyArray_Sort resolves
-                // the loop after check_and_adjust_axis); the text comparison itself is the StringDType part of the next
-                // phase, and a line of at most one element (or none) is copied below without one.
+                // the loop after check_and_adjust_axis); then the copy is sorted with NumPy's NA ordering (VStringSort).
                 Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
                 if (kind == NPY_SORTKIND.NPY_HEAPSORT)
                     throw UnsupportedSortKind();
-                Strings.NDStringUfuncs.ThrowIfComputes("sort", a, axis);
+                return SortVString(a, axis, kind == NPY_SORTKIND.NPY_STABLESORT);
             }
-            else if (Strings.NDStringUfuncs.IsString(a))
+            if (Strings.NDStringUfuncs.IsString(a))
                 return SortText(a, axis);
 
             if (axis == null)
@@ -99,10 +98,9 @@ namespace NumSharp.Backends.Sorting
         /// <summary>ndarray.sort: sorts <paramref name="a"/> in place along the axis.</summary>
         /// <param name="a">The array, sorted in place.</param>
         /// <param name="axis">The axis, or null (NumSharp's flatten-in-place extension).</param>
-        /// <exception cref="ValueError">The array is read-only (<c>sort array is read-only</c>).</exception>
+        /// <exception cref="ValueError">The array is read-only (<c>sort array is read-only</c>), or a <c>StringDType</c> line
+        ///     of two or more elements holds an NA whose NA object is neither NaN-like nor a string.</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
         public static void SortInPlace(NDArray a, int? axis) => SortInPlace(a, axis, NPY_SORTKIND.NPY_QUICKSORT);
 
         /// <summary>
@@ -113,23 +111,32 @@ namespace NumSharp.Backends.Sorting
         /// <param name="a">The array, sorted in place.</param>
         /// <param name="axis">The axis, or null (NumSharp's flatten-in-place extension).</param>
         /// <param name="kind">The kind (see <see cref="Sort(NDArray, int?, NPY_SORTKIND)"/>).</param>
-        /// <exception cref="ValueError">The array is read-only (<c>sort array is read-only</c>).</exception>
+        /// <exception cref="ValueError">The array is read-only (<c>sort array is read-only</c>), or a <c>StringDType</c> line
+        ///     of two or more elements holds an NA whose NA object is neither NaN-like nor a string (<c>Cannot compare null
+        ///     that is not a nan-like value</c>: the lines before it are sorted, that line is left as it was where NumPy
+        ///     leaves it in the order its failing comparisons produced).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
         /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
         [NDScoped]
         public static void SortInPlace(NDArray a, int? axis, NPY_SORTKIND kind)
         {
             if (Strings.NDStringUfuncs.IsVString(a))
             {
-                // StringDType: NumPy's checks in PyArray_Sort's order, then the shape-decided answer or the deferral.
+                // StringDType: NumPy's checks in PyArray_Sort's order (axis, writeability, the loop's kind), then every
+                // line's cells permuted in place (VStringSort; a line of at most one element is left as it is).
                 Strings.NDStringUfuncs.ValidateReduceAxis("sort", a.ndim, axis);
                 if (!a.Shape.IsWriteable)
                     throw new ValueError("sort array is read-only");
                 if (kind == NPY_SORTKIND.NPY_HEAPSORT)
                     throw UnsupportedSortKind();
-                Strings.NDStringUfuncs.ThrowIfComputes("sort", a, axis);
+                bool stable = kind == NPY_SORTKIND.NPY_STABLESORT;
+                if (axis == null)
+                {
+                    // NumSharp's flatten-in-place extension: one line over the whole (contiguous) buffer.
+                    VStringSort.SortLinesInPlace(a.reshape(a.size), 0, stable);
+                    return;
+                }
+                VStringSort.SortLinesInPlace(a, NormalizeAxis(axis.Value, a.ndim), stable);
                 return;
             }
             if (Strings.NDStringUfuncs.IsString(a))
@@ -172,14 +179,16 @@ namespace NumSharp.Backends.Sorting
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <returns>A fresh int64 array of indices.</returns>
         /// <exception cref="AxisError">The axis is out of bounds (for a 0-d input, outside rank 1).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding an NA whose NA object is
+        ///     neither NaN-like nor a string.</exception>
         public static NDArray ArgSort(NDArray a, int? axis) => ArgSort(a, axis, NPY_SORTKIND.NPY_QUICKSORT);
 
         /// <summary>
         ///     np.argsort with a resolved kind. Over <c>S</c> / <c>U</c> text the default and heapsort kinds give NumPy's
         ///     introsort permutation (ties in its order) and the stable kind the stable one (<see cref="TextSort.ArgSortLines"/>);
-        ///     NumSharp's numeric argsort is one stable order for every kind.
+        ///     over <c>StringDType</c> text the default kind gives NumPy's introsort permutation and the stable kind the stable
+        ///     one, the NaN-like NAs last (<see cref="VStringSort.ArgSortLines"/>); NumSharp's numeric argsort is one stable
+        ///     order for every kind.
         /// </summary>
         /// <param name="a">The array.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
@@ -188,8 +197,8 @@ namespace NumSharp.Backends.Sorting
         /// <exception cref="AxisError">The axis is out of bounds (for a 0-d input, outside rank 1).</exception>
         /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>):
         ///     NumPy's argsort resolves its loop BEFORE it checks the axis.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of the next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding an NA whose NA object is
+        ///     neither NaN-like nor a string (<c>Cannot compare null that is not a nan-like value</c>).</exception>
         [NDScoped]
         public static NDArray ArgSort(NDArray a, int? axis, NPY_SORTKIND kind)
         {
@@ -201,11 +210,7 @@ namespace NumSharp.Backends.Sorting
             if (a.ndim == 0)
                 a = a.reshape(1);
             if (Strings.NDStringUfuncs.IsVString(a))
-            {
-                // StringDType: the shape-decided answer runs on the bool stand-in; anything else defers (next phase).
-                using var vstandIn = Strings.NDStringUfuncs.ReduceStandIn("argsort", a, axis);
-                return ArgSort(vstandIn, axis, NPY_SORTKIND.NPY_QUICKSORT);
-            }
+                return ArgSortVString(a, axis, kind == NPY_SORTKIND.NPY_STABLESORT);
             if (Strings.NDStringUfuncs.IsString(a))
                 return ArgSortText(a, axis, kind == NPY_SORTKIND.NPY_STABLESORT);
             if (axis == null)
@@ -274,6 +279,63 @@ namespace NumSharp.Backends.Sorting
             int ax = NormalizeAxis(axis.Value, a.ndim);
             var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
             TextSort.ArgSortLines(a, ret, ax, stable);
+            return ret;
+        }
+
+        /// <summary>
+        ///     np.sort over <c>StringDType</c> text once the axis and the kind were checked: NumPy's
+        ///     <c>a.flatten()</c> (<c>axis=None</c>) or <c>a.copy(order='K')</c>, then every line of the copy sorted in place
+        ///     (<see cref="VStringSort.SortLinesInPlace"/>: the copy's cells permuted, NumPy's NA order).
+        /// </summary>
+        /// <param name="a">The <c>StringDType</c> array (only read).</param>
+        /// <param name="axis">The axis (already validated), or null for the flattened array.</param>
+        /// <param name="stable">True for the stable kind.</param>
+        /// <returns>The sorted copy (its own allocator).</returns>
+        /// <exception cref="ValueError">A line of two or more elements holding a None-like NA (NumPy's comparison refusal).</exception>
+        /// <remarks>Internal: <see cref="AxisPartition"/>'s <c>StringDType</c> route is this sort with the default kind
+        ///     (NumPy's partition falls back to its quicksort).</remarks>
+        internal static NDArray SortVString(NDArray a, int? axis, bool stable)
+        {
+            if (axis == null)
+            {
+                // flatten is a C-order copy with its own allocator, sorted in place below.
+                var flat = a.flatten();
+                VStringSort.SortLinesInPlace(flat, 0, stable);
+                return flat;
+            }
+            int ax = NormalizeAxis(axis.Value, a.ndim);
+            var res = a.copy('K');
+            VStringSort.SortLinesInPlace(res, ax, stable);
+            return res;
+        }
+
+        /// <summary>
+        ///     np.argsort over <c>StringDType</c> text (a 0-d input already ravelled): NumPy's axis check, then every line's
+        ///     indices (<see cref="VStringSort.ArgSortLines"/>) — a line of one element gets 0, as <c>_new_argsortlike</c>
+        ///     writes it.
+        /// </summary>
+        /// <param name="a">The <c>StringDType</c> array (only read; any layout).</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="stable">True for the stable kind.</param>
+        /// <returns>A fresh, C-contiguous int64 array of indices.</returns>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="ValueError">A line of two or more elements holding a None-like NA.</exception>
+        /// <remarks>Internal: <see cref="AxisPartition"/>'s <c>StringDType</c> route is this argsort with the default kind,
+        ///     and <c>np.unique</c>'s sort path uses it.</remarks>
+        internal static NDArray ArgSortVString(NDArray a, int? axis, bool stable)
+        {
+            Strings.NDStringUfuncs.ValidateReduceAxis("argsort", a.ndim, axis);
+            if (axis == null)
+            {
+                // ravel is a view of a C-contiguous input and a C-order copy of any other; the sort only reads it.
+                var line = a.ravel();
+                var outFlat = new NDArray(NPTypeCode.Int64, Shape.Vector(a.size), false);
+                VStringSort.ArgSortLines(line, outFlat, 0, stable);
+                return outFlat;
+            }
+            int ax = NormalizeAxis(axis.Value, a.ndim);
+            var ret = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])a.Shape.dimensions.Clone()), false);
+            VStringSort.ArgSortLines(a, ret, ax, stable);
             return ret;
         }
 

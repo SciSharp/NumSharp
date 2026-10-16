@@ -7667,6 +7667,11 @@ namespace NumSharp
             using var scope = NDScope.Open();
             var mask = (a as NDMaskedArray)?._mask;
             var d = AsData(a);
+            // A StringDType MASKED array without a mask: numpy.ma's own _median (the data sorted, then the masked mean,
+            // whose sum is an ndarray and whose divide refuses). A plain array takes np.median below, as NumPy's
+            // `if not hasattr(a, 'mask')` does.
+            if (mask is null && a is NDMaskedArray && d.Storage.IsVString)
+                throw NDVStringStatistics.MaskedMedian(d, axis);
             if (mask is null)
                 return Yield(scope, new NDMaskedArray(np.median(d, axis, null, false, keepdims), null));
             // TEXT with a mask: NumPy's _median sorts the strings (a computation that cannot fail; its axis check comes

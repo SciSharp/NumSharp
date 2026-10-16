@@ -489,11 +489,13 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="op">The NumPy function name (<c>"sum"</c>, <c>"cumprod"</c>, <c>"nanmax"</c>, ...).</param>
         /// <param name="a">The reduced array.</param>
-        /// <exception cref="TypeError">NumPy refuses the reduction for string operands (its verbatim text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> operand whose reduction NumPy computes
-        ///     (<see cref="NextPhaseVString"/>: computing on <c>StringDType</c> is phase 2's next stage).</exception>
+        /// <exception cref="TypeError">NumPy refuses the reduction for string operands (its verbatim text), or a
+        ///     <c>StringDType</c> operand's loop resolution refuses (see <see cref="VStringReduceAnswer"/>).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> operand's reduction checks refuse (two or more reduced axes are
+        ///     not reorderable; an empty reduction has no identity).</exception>
         /// <exception cref="InvalidOperationException">A fixed-width text operand of a function <see cref="ReduceError"/>
-        ///     does not name: a wiring error inside NumSharp (every computing reduction answers before this guard).</exception>
+        ///     does not name, or a <c>StringDType</c> operand whose reduction computes: a wiring error inside NumSharp (every
+        ///     computing reduction answers before this guard).</exception>
         internal static void ThrowIfReduce(string op, NDArray a)
         {
             if (IsVString(a))
@@ -875,11 +877,17 @@ namespace NumSharp.Backends.Strings
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="operands">The operand descriptors, in call order.</param>
         /// <returns>The exception (not thrown).</returns>
+        /// <remarks>
+        ///     A NEP 55 <c>StringDType</c> operand prints as its DType CLASS (<c>&lt;class 'numpy.dtypes.StringDType'&gt;</c>),
+        ///     because NumPy's new-style dispatcher, not the legacy type resolver, refuses those operands and names the
+        ///     classes it searched for (<see cref="VStringNoLoop"/>); a fixed-width operand prints as its descriptor. The
+        ///     text sites that reach this helper (a histogram's edge widths, its weights' running total) see both kinds.
+        /// </remarks>
         internal static TypeError NoLoop(string ufunc, params DType[] operands)
         {
             var reprs = new string[operands.Length];
             for (int i = 0; i < reprs.Length; i++)
-                reprs[i] = operands[i].ToString(true);
+                reprs[i] = operands[i].Meta is VStringDTypeMeta ? operands[i].Meta.ToString() : operands[i].ToString(true);
             return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({string.Join(", ", reprs)}) -> None");
         }
 
@@ -904,9 +912,11 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The refusal for a call NumPy answers by computing on text that NumSharp does not compute yet (the set routines,
-        ///     lexsort, np.histogram and the quantiles over text, the <c>np.strings</c> functions beyond <c>add</c> /
-        ///     <c>multiply</c>): those are the next stages of NumSharp's string support.
+        ///     The refusal for a call NumPy answers by computing on fixed-width text that NumSharp does not compute yet: the
+        ///     <c>np.strings</c> functions beyond <c>add</c> / <c>multiply</c> and the calls built on them (strings phase 2,
+        ///     P2.7: a string ufunc's computing loop, <c>np.evaluate</c> over text, the FFT of text, <c>np.pad</c>'s
+        ///     <c>linear_ramp</c> of text, a multiply reduction of repeat counts into a text <c>out=</c>). The sorts,
+        ///     searches, unique values, set routines, histograms and quantiles over text compute (P2.2).
         /// </summary>
         /// <param name="op">The NumPy function or ufunc name.</param>
         /// <param name="a">A string operand of the call; its descriptor is named in the message.</param>
@@ -927,21 +937,6 @@ namespace NumSharp.Backends.Strings
                 "between text and numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting, " +
                 "searching, unique values, the set routines, histograms and quantiles. The rest of string computation (the " +
                 "np.strings functions and the calls built on them) is the next phase.");
-
-        /// <summary>
-        ///     The phase-2 deferral of a NEP 55 <c>StringDType</c> computation this phase does not run yet: a call NumPy
-        ///     answers by sorting, searching or set-combining <c>StringDType</c> text (<c>np.sort</c>, <c>np.unique</c>,
-        ///     <c>np.searchsorted</c>, <c>np.median</c>, the set routines) or by an <c>np.strings</c> function. The comparisons,
-        ///     truth values, <c>add</c> / <c>multiply</c> / <c>maximum</c> / <c>minimum</c> and the reductions compute (P2.T).
-        /// </summary>
-        /// <param name="op">The NumPy function or ufunc name.</param>
-        /// <param name="descr">The <c>StringDType</c> descriptor named in the message.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static StringComputationNotSupportedException NextPhaseVString(string op, DType descr)
-            => new StringComputationNotSupportedException(
-                $"{op} is not supported for {descr} arrays yet: NumSharp computes NEP 55 StringDType text's comparisons, " +
-                "truth values, add / multiply / maximum / minimum and reductions; sorting, searching, the set routines and the " +
-                "np.strings functions over it are phase 2 of the string support (docs/plans/strings-phase2.md).");
 
         /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's

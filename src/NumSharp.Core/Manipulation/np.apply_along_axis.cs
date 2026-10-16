@@ -133,8 +133,12 @@ namespace NumSharp
             // tiny slice with a fast func); anything else falls back to the view+copyto path, which
             // reproduces NumPy's broadcast-on-assign and cast for a differing result. The span form
             // needs a 32-bit byte count, so it is gated on the whole buffer fitting int.MaxValue.
-            long resBytes = res0.size * buff.dtypesize;
-            bool useSpanWrite = buff.nbytes <= int.MaxValue;
+            // A StringDType cell is a pointer or an arena offset into ITS array's allocator: copying the raw bytes into the
+            // buffer would leave the buffer's cells pointing at the result's storage (and its element size is not a byte
+            // count a route may use). Those go through copyto, which writes each text into the buffer's own allocator; the
+            // test comes first because the byte counts below refuse a StringDType array.
+            bool useSpanWrite = !buff.Storage.IsVString && buff.nbytes <= int.MaxValue;
+            long resBytes = useSpanWrite ? res0.size * buff.dtypesize : 0;
             Span<byte> buffBytes = useSpanWrite ? buff.Unsafe.Bytes() : default;
 
             WriteSlot(buff, buffBytes, useSpanWrite, 0, ind0, res0, resDims, resBytes);

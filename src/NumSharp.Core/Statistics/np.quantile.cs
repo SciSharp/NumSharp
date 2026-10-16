@@ -9,12 +9,39 @@ namespace NumSharp
         ///     Compute the q-th quantile of the data along the specified axis.
         ///     <paramref name="q"/> must be in the range [0, 1].
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.quantile.html</remarks>
+        /// <param name="a">The data (any real dtype; text — <c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c> — takes NumPy's take
+        ///     path or its refusal, see the exceptions).</param>
+        /// <param name="q">The quantile, in [0, 1].</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or null for the flattened data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The quantile; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
+        /// <exception cref="ValueError">A quantile outside [0, 1] (<c>Quantiles must be in the range [0, 1]</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="method"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="method"/> is not one of NumPy's names, or
+        ///     <paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Fixed-width text data with an interpolating method (NumPy subtracts the text), an
+        ///     <paramref name="out"/> that does not cast safely to the data, or keepdims over a 0-d result.</exception>
+        /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take: <c>cannot do a non-empty take
+        ///     from an empty axes.</c>, or an index out of bounds).</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.quantile.html</remarks>
         public static NDArray quantile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -27,9 +54,10 @@ namespace NumSharp
             ValidateQuantile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
+            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
+            // a StringDType array reads the two neighbours before _lerp refuses them).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
@@ -39,8 +67,35 @@ namespace NumSharp
         ///     Compute the q-th quantiles of the data along the specified axis.
         ///     Each value in <paramref name="q"/> must be in [0, 1]. Result's first axis is q.
         /// </summary>
+        /// <param name="a">The data (any real dtype; text — <c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c> — takes NumPy's take
+        ///     path or its refusal, see the exceptions).</param>
+        /// <param name="q">The quantiles, each in [0, 1].</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or null for the flattened data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The quantiles, q's axis first; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
+        /// <exception cref="ValueError">A quantile outside [0, 1] (<c>Quantiles must be in the range [0, 1]</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="q"/> or <paramref name="method"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="method"/> is not one of NumPy's names, or
+        ///     <paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Fixed-width text data with an interpolating method (NumPy subtracts the text), an
+        ///     <paramref name="out"/> that does not cast safely to the data, or keepdims over a 0-d result.</exception>
+        /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take: <c>cannot do a non-empty take
+        ///     from an empty axes.</c>, or an index out of bounds).</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
@@ -57,9 +112,10 @@ namespace NumSharp
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
+            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
+            // a StringDType array reads the two neighbours before _lerp refuses them).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
@@ -70,7 +126,8 @@ namespace NumSharp
         ///     one before the partition, so the result keeps only the other axes (0-d when every axis is reduced), and an
         ///     EMPTY axis list reduces nothing (each element is its own quantile).
         /// </summary>
-        /// <param name="a">The data (any real dtype; fixed-width text takes NumPy's take path or its refusal, see the exceptions).</param>
+        /// <param name="a">The data (any real dtype; text — <c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c> — takes NumPy's take
+        ///     path or its refusal, see the exceptions).</param>
         /// <param name="q">The quantile, in [0, 1].</param>
         /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
         ///     data.</param>
@@ -92,6 +149,15 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">The reduced axes hold no element (NumPy's IndexError text).</exception>
         /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take: <c>cannot do a non-empty take from
         ///     an empty axes.</c>, or an index out of bounds).</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (the median / percentile / quantile family's gap class).</remarks>
@@ -108,8 +174,9 @@ namespace NumSharp
             RejectComplexQuantileData(a);
             ValidateQuantile(q);
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
-            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
+            // a StringDType array reads the two neighbours before _lerp refuses them).
+            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
@@ -119,7 +186,8 @@ namespace NumSharp
         ///     The q-th quantiles over SEVERAL axes at once (NumPy's tuple <c>axis</c>): the result's first axis is q, the
         ///     reduced axes are merged into one before the partition, and an EMPTY axis list reduces nothing.
         /// </summary>
-        /// <param name="a">The data (any real dtype; fixed-width text takes NumPy's take path or its refusal, see the exceptions).</param>
+        /// <param name="a">The data (any real dtype; text — <c>S</c>, <c>U</c>, NEP 55 <c>StringDType</c> — takes NumPy's take
+        ///     path or its refusal, see the exceptions).</param>
         /// <param name="q">The quantiles, each in [0, 1].</param>
         /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened
         ///     data.</param>
@@ -143,6 +211,15 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException">The reduced axes hold no element (NumPy's IndexError text).</exception>
         /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take: <c>cannot do a non-empty take from
         ///     an empty axes.</c>, or an index out of bounds).</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (with a list of quantiles NumPy even raises a matrix-product error).</remarks>
@@ -160,8 +237,9 @@ namespace NumSharp
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
-            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
+            // a StringDType array reads the two neighbours before _lerp refuses them).
+            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
@@ -193,6 +271,15 @@ namespace NumSharp
         ///     an empty axes.</c>, or an index out of bounds).</exception>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
@@ -208,13 +295,15 @@ namespace NumSharp
             if (q is null) throw new ArgumentNullException(nameof(q));
             // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
             // data or q's rank is looked at.
+            if (Backends.Strings.NDStringUfuncs.IsVString(q))
+                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ("quantile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
             if (Backends.Strings.NDStringUfuncs.IsString(q))
                 throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("quantile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text data: NumPy accepts a q of any rank up to 2 (_quantile_ureduce_func refuses rank 3 and above, after the
             // range and axis checks), so the text route runs before the numeric path's rank check.
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
             {
                 double[] qText = QArrayFromNDArray(q);
                 ValidateQuantileArray(q, qText);
@@ -267,6 +356,15 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
         /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take, or the interpolating methods'
         ///     neighbour lookup).</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain, as for every
         ///     tuple-axis overload (see the <see cref="double"/>-q one).</remarks>
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
@@ -282,10 +380,12 @@ namespace NumSharp
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             // Text q: NumPy's answer comes from its [0, 1] check, before the data or q's rank is looked at.
+            if (Backends.Strings.NDStringUfuncs.IsVString(q))
+                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ("quantile", a, q, method, axis);
             if (Backends.Strings.NDStringUfuncs.IsString(q))
                 throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("quantile", a, q, method, axis);
             // Text data: q's rank is NumPy's check after the axes (rank 3 and above refused), so it runs in the text route.
-            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
             {
                 double[] qText = QArrayFromNDArray(q);
                 ValidateQuantileArray(q, qText);
@@ -321,6 +421,15 @@ namespace NumSharp
         /// <returns>The quantile with the axis reduced (a scalar result over every axis).</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers".</exception>
         /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1] ("Quantiles must be in the range [0, 1]").</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         /// <remarks>
         ///     C# binds an integer literal here rather than to the <see cref="double"/> overload (a conversion to
         ///     <see cref="long"/> is the better one), which is what makes <c>np.quantile(a, 0)</c> NumPy's call: over int
@@ -352,6 +461,15 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="a"/> is complex.</exception>
         /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1], or an axis repeats.</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="TypeError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: an interpolating method (NumPy's
+        ///     <c>_lerp</c> subtracts the two neighbours: <c>unsupported operand type(s) for -: 'str' and 'str'</c>, or no
+        ///     <c>subtract</c> loop for a non-scalar result), an <paramref name="out"/> that does not cast safely to the data
+        ///     (the take path) or receive <c>_lerp</c>'s float64, or keepdims over NumPy's Python-object result
+        ///     (<c>string indices must be integers, not 'tuple'</c>, <c>'float' object is not subscriptable</c>).</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> <paramref name="a"/>: a line of two or more elements
+        ///     holding a None-like NA (the sort's <c>Cannot compare null that is not a nan-like value</c>), or the unsafe
+        ///     write-back into a numeric <paramref name="out"/> that cannot parse a string (<c>could not convert string to
+        ///     float: 'a'</c>).</exception>
         public static NDArray quantile(NDArray a, long q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)

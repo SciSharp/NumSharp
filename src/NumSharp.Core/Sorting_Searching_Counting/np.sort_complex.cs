@@ -22,14 +22,17 @@ namespace NumSharp
         ///     NaN floats sort to the end (→ <c>nan+0j</c>); complex sorts lexicographically with NumPy's
         ///     any-NaN-part-last ordering. A 0-d input leaks <c>ndarray.sort()</c>'s own
         ///     "axis -1 is out of bounds for array of dimension 0" — exactly as NumPy leaks it.
+        ///     <para>A <c>StringDType</c> text converts with the value Python's <c>complex()</c> parses: NumPy 2.4.2's
+        ///     StringDType to complex loop stores the REAL part into both parts (<c>'1+2j'</c> becomes <c>1+1j</c>, <c>'-0'</c>
+        ///     becomes <c>-0-0j</c>), a bug NumSharp's cast does not reproduce.</para>
         /// </remarks>
         /// <exception cref="AxisError">A 0-d array (<c>axis -1 is out of bounds for array of dimension 0</c>, which NumPy's
         ///     <c>b.sort()</c> raises).</exception>
         /// <exception cref="ValueError">Text that is not a complex number (<c>complex() arg is a malformed string</c>): NumPy
         ///     sorts the text, then <c>astype('D')</c> parses it, the first malformed string in the sorted array's C order
-        ///     raising.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of NumSharp's next phase).</exception>
+        ///     raising. A <c>StringDType</c> array: a None-like NA in a line of two or more elements (the sort's <c>Cannot
+        ///     compare null that is not a nan-like value</c>), or any NA left for the cast (<c>Arrays with missing data cannot
+        ///     be converted to a non-nullable type</c>).</exception>
         [NDScoped]
         public static NDArray sort_complex(NDArray a)
         {

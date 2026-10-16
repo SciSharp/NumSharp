@@ -634,6 +634,8 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="Retentions">Retention families keyed by op: a counted reference to a caller's memory outlived the
         /// call (not an over-disposal; reported apart); null for a runner that checks none.</param>
         /// <param name="OwnershipCases">Cases (or entries) whose caller arrays were checked.</param>
+        /// <param name="OwnershipRebases">Ownership checks whose dropped references could have been a finalizer's (a
+        /// collection ran since the baseline): the ledger was drained and rebased, and the case's next check judged it.</param>
         internal sealed record SweepResult(
             long OrdinaryMeasured, long MaskedMeasured, long IndexMeasured, long ErrorPathsMeasured,
             long GcInconclusive, long ThrewSkipped, int Files,
@@ -647,7 +649,8 @@ namespace NumSharp.Tests.Fuzz
             long DirectMeasured = 0,
             Dictionary<(string op, OwnershipViolation kind), (long count, string sampleId, string file, string detail)> OverDisposals = null,
             Dictionary<string, (long count, string sampleId, string file, string detail)> Retentions = null,
-            long OwnershipCases = 0)
+            long OwnershipCases = 0,
+            long OwnershipRebases = 0)
         {
             /// <summary>All success-path cases measured, across every family and the direct runners.</summary>
             public long Measured => OrdinaryMeasured + MaskedMeasured + IndexMeasured + DirectMeasured;
@@ -707,6 +710,11 @@ namespace NumSharp.Tests.Fuzz
             /// <summary>Distinct cases whose caller arrays were checked.</summary>
             public long OwnershipCases;
 
+            /// <summary>Checks whose only findings were dropped references while a collection had run since the baseline:
+            ///     the ledger was drained and rebased instead of reporting them (see
+            ///     <see cref="OwnershipLedger.DropMayBeFinalization"/>). Printed with the verdict, never judged.</summary>
+            public long OwnershipRebases;
+
             /// <summary>The case the last ownership check belonged to (one case is checked after several regions).</summary>
             private string _ownershipCase;
 
@@ -745,16 +753,31 @@ namespace NumSharp.Tests.Fuzz
                 // The pool scan walks every bucket, so it runs once per case: on its first check, right after the warm run
                 // (a call that parked a caller's memory in the pool has done so by then).
                 OwnershipFinding overDisposal = null, retained = null;
+                bool onlyDroppedReferences = true;
                 foreach (var f in ledger.Check(scanPool: firstCheckOfCase))
                 {
                     if (f.IsOverDisposal)
                     {
                         overDisposal ??= f;
+                        onlyDroppedReferences &= f.Kind == OwnershipViolation.ReferenceDropped;
                     }
                     else
                     {
                         retained ??= f;
                     }
+                }
+
+                // A dropped reference is the one finding a FINALIZER can fake: an undisposed view an earlier case left of
+                // the same memory (a shared fixture's) abandons its reference when a collection finalizes it, possibly
+                // inside this case's region. When a collection ran since the baseline, drain everything and judge the
+                // case's next check against the drained baseline instead: a real under-count recurs on every execution.
+                // Disposed / released / swapped / pooled memory is never a finalizer's doing, so those stay findings.
+                if (overDisposal is not null && onlyDroppedReferences && ledger.DropMayBeFinalization)
+                {
+                    ledger.DrainAndRebase();
+                    OwnershipRebases++;
+                    overDisposal = null;
+                    retained = null;   // judged against the old baseline; the next check judges retention afresh
                 }
 
                 // The shared arrays: only their over-disposals count (a transient extra reference to one, an op's view of
@@ -818,7 +841,8 @@ namespace NumSharp.Tests.Fuzz
             public SweepResult ToResult(int files)
                 => new(Ordinary, Masked, Index, ErrorPaths, GcInconclusive, ThrewSkipped, files,
                        Groups, Bypasses, MeasuredByOp, ErrorMeasuredByOp, ThrewByOp,
-                       InconclusiveIds, ErrorInconclusiveIds, Direct, OverDisposals, Retentions, OwnershipCases);
+                       InconclusiveIds, ErrorInconclusiveIds, Direct, OverDisposals, Retentions, OwnershipCases,
+                       OwnershipRebases);
 
             /// <summary>
             ///     Records a confirmed measurement and classifies it: a non-zero balance joins an

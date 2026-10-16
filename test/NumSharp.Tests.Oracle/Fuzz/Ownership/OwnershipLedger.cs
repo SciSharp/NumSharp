@@ -95,11 +95,66 @@ namespace NumSharp.Tests.Fuzz.Ownership
         /// <summary>The recorded arrays, in snapshot order.</summary>
         private readonly List<Entry> _entries = new();
 
+        /// <summary>
+        ///     The collector's epoch when the baseline was read: captured when the ledger is constructed (before
+        ///     <see cref="Of"/> reads a single reference count) and again by <see cref="DrainAndRebase"/>. A collection after
+        ///     it may have run finalizers the baseline did not account for (see <see cref="DropMayBeFinalization"/>).
+        /// </summary>
+        private GcQuiescence.Epoch _epoch = GcQuiescence.Epoch.Capture();
+
+        /// <summary>Whether the baseline was read right after a full drain (<see cref="DrainAndRebase"/>): no finalizable
+        ///     object that existed before it is left, so every later drop below it is the caller's code.</summary>
+        private bool _drained;
+
         /// <summary>An empty ledger (a case without caller arrays checks nothing).</summary>
         public static readonly OwnershipLedger Empty = new();
 
         /// <summary>How many distinct arrays the ledger watches.</summary>
         public int Count => _entries.Count;
+
+        /// <summary>
+        ///     Whether a <see cref="OwnershipViolation.ReferenceDropped"/> finding could be another array's finalizer rather
+        ///     than the call: true when the baseline was not read after a full drain and a collection started (or a
+        ///     background one completed) since it was read.
+        /// </summary>
+        /// <remarks>
+        ///     An undisposed view of a caller's memory holds a counted reference until its finalizer ABANDONS it (see
+        ///     <c>UnmanagedMemoryBlock.Disposer.Abandon</c>). Views an EARLIER call left behind (the retention families)
+        ///     are still counted in the baseline, so a collection that finalizes them inside a later call's region lowers
+        ///     the count below that call's snapshot, and the later call reads as an under-count it never made. The leak
+        ///     measurement's own hygiene (<c>ScopeAudit.Quiesce</c>, a young collection) runs inside every measured
+        ///     region's retries, so a shared fixture carrying such views failed the gate on a different entry every run.
+        ///     A finalizer runs only after a collection queues it, so with no collection since the baseline (the epoch
+        ///     unchanged) every drop is the call's own.
+        /// </remarks>
+        public bool DropMayBeFinalization => !_drained && !GcQuiescence.Undisturbed(_epoch);
+
+        /// <summary>
+        ///     Finalizes every finalizable object (two full collections, each followed by a finalizer wait) and re-reads
+        ///     each recorded array's reference counts as the new baseline. After it, a drop below the baseline can only be
+        ///     the caller's code: the views that were waiting for a finalizer are gone, and a view created later adds its
+        ///     reference before its finalizer removes it.
+        /// </summary>
+        /// <remarks>
+        ///     Expensive (a full collection marks the whole live heap; tens of milliseconds in a full test run), so the sweep
+        ///     calls it only when <see cref="DropMayBeFinalization"/> makes a dropped reference ambiguous. A call that really
+        ///     under-counts does so on every execution, so the case's NEXT check, judged against the drained baseline,
+        ///     reports it. Disposed flags are re-read too, so the rebased ledger reports only what changes after it.
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">The ARC probe cannot read a slice (see <see cref="ArcProbe.Read"/>).</exception>
+        public void DrainAndRebase()
+        {
+            GcQuiescence.CollectFull();
+            // The epoch after the drain's own collections; with _drained set it no longer decides anything, but a stale
+            // epoch would misreport the window to a reader of DropMayBeFinalization's inputs.
+            _epoch = GcQuiescence.Epoch.Capture();
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var e = _entries[i];
+                _entries[i] = e with { Before = ArcProbe.Read(e.Slice), DisposedBefore = e.Array.IsDisposed };
+            }
+            _drained = true;
+        }
 
         /// <summary>
         ///     Snapshots the given caller arrays. Null entries and repeats (by reference) are skipped; a disposed array is

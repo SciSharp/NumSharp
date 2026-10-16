@@ -32,8 +32,10 @@ namespace NumSharp
         ///     cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="AxisError">The axis is out of bounds (a 0-d input refuses every axis).</exception>
         /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of NumSharp's next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
+        ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
+        ///     value</c>, raised after the lines before it were sorted).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public static NDArray sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
@@ -56,8 +58,10 @@ namespace NumSharp
         ///     <paramref name="stable"/>, an <paramref name="order"/>, or a read-only array (<c>sort array is read-only</c>).</exception>
         /// <exception cref="AxisError">A string array with an out-of-bounds axis.</exception>
         /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort kind</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose lines hold two or more
-        ///     elements (the <c>StringDType</c> part of NumSharp's next phase).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements that holds an NA of a descriptor
+        ///     whose NA object is neither a string nor NaN-like (NumPy's <c>Cannot compare null that is not a nan-like
+        ///     value</c>, raised after the lines before it were sorted).</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public void sort(int? axis = -1, string kind = null, object order = null, bool? stable = null)
             => AxisSort.SortInPlace(this, axis, SortKindArguments.Resolve(kind, order, stable));
     }

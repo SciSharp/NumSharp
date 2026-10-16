@@ -99,15 +99,18 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">The axis is out of bounds (the rule of <see cref="AxisRuleOf"/>).</exception>
         /// <exception cref="ValueError">An arg-reduction over an empty line (<c>attempt to get argmax of an empty
         ///     sequence</c>), or <c>nonzero</c> of a 0-d array (<see cref="NonZero0dMessage"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text (the next phase).</exception>
+        /// <exception cref="InvalidOperationException">A call whose answer the shape does not decide: it computes on text
+        ///     through its own route (the text sorts, searches and arg-reductions), which must run before this guard — a
+        ///     wiring error inside NumSharp.</exception>
         /// <remarks>Use it where the numeric path that follows handles the shape-decided text itself (a sort whose copy moves
         ///     the strings and whose line kernel returns for a line of one element); otherwise take <see cref="ReduceStandIn(string, NDArray, int?)"/>.</remarks>
         internal static void ThrowIfComputes(string op, NDArray a, int? axis = null)
         {
             if (IsVString(a))
             {
-                // The StringDType form: the same checks, then the shape-decided answer or the phase-2 deferral (the caller's
-                // path handles the shape-decided text itself, as it does for the fixed-width classes).
+                // The StringDType form: the same checks, then the shape-decided answer (the caller's path handles the
+                // shape-decided text itself, as it does for the fixed-width classes); a computing call reaching it is a
+                // wiring error (VStringStandIn).
                 VStringStandIn(op, a, axis).Dispose();
                 return;
             }
@@ -135,8 +138,9 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
         /// <exception cref="ValueError">An arg-reduction over an empty line, or <c>nonzero</c> of a 0-d array.</exception>
         /// <exception cref="SystemError"><c>any</c> / <c>all</c> (the bool cast route) over a <c>U</c> unit above U+10FFFF.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text in a way this phase does
-        ///     not yet (the sorts and arg-reductions).</exception>
+        /// <exception cref="InvalidOperationException">A call that is not a truth test and whose answer the shape does not
+        ///     decide: it computes on text through its own route (the sorts, the arg-reductions), which must run before this
+        ///     guard — a wiring error inside NumSharp.</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int? axis = null)
         {
             // A StringDType operand is tested first (IsString refuses it loudly).
@@ -191,7 +195,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
         /// <exception cref="SystemError">A <c>U</c> unit above U+10FFFF (the bool cast route of <c>any</c> / <c>all</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException"><paramref name="op"/> is not a truth test (no caller passes one).</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="op"/> is not a truth test and the input is not empty (no
+        ///     caller passes one: a wiring error inside NumSharp).</exception>
         internal static NDArray ReduceStandIn(string op, NDArray a, int[] axes)
         {
             // A StringDType operand is tested first (IsString refuses it loudly); its truth test is the same cast route.

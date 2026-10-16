@@ -278,8 +278,8 @@ namespace NumSharp
 
             // Text data, edges or weights only ever reach NumPy's cumulative path (text data never gets equal-width edges,
             // text weights are never "simple"); its answers are decided by sizes and dtypes alone, or need text computation.
-            if (Backends.Strings.NDStringUfuncs.IsString(raveled) || Backends.Strings.NDStringUfuncs.IsString(binEdges)
-                || Backends.Strings.NDStringUfuncs.IsString(w))
+            if (Backends.Strings.NDStringUfuncs.IsText(raveled) || Backends.Strings.NDStringUfuncs.IsText(binEdges)
+                || Backends.Strings.NDStringUfuncs.IsText(w))
                 return HistogramTextAnswer(raveled, w, binEdges, density);
 
             // ntype: int64 counts when unweighted, else the weights' dtype (NumPy: hist.dtype == weights.dtype).
@@ -337,6 +337,15 @@ namespace NumSharp
         /// </remarks>
         private static HistogramResult HistogramTextAnswer(NDArray raveled, NDArray w, NDArray binEdges, bool density)
         {
+            if (w is not null && Backends.Strings.NDStringUfuncs.IsVString(w))
+            {
+                // StringDType weights: cum_n = np.zeros(bin_edges.shape, weights.dtype) holds empty texts, and NumPy's block
+                // loop COMPUTES over them (the weights' cumsum and the in-place add concatenate text), so the counts'
+                // n = np.diff(cum_n) is what refuses — unless a statement before it raises first (a None-like NA in the
+                // data's argsort, the weights' cumsum or the add). Running the statements gives either answer.
+                HistogramCumulativeText(raveled, w, binEdges, w.dtype);
+                throw new InvalidOperationException("np.histogram: StringDType weights reached a subtraction NumPy refuses.");
+            }
             if (w is not null && Backends.Strings.NDStringUfuncs.IsString(w))
             {
                 // cum_n = np.zeros(bin_edges.shape, weights.dtype) holds text. With data, a block's `sw.cumsum()`
@@ -347,12 +356,12 @@ namespace NumSharp
                 throw Backends.Strings.NDStringUfuncs.AddNotCompatible(w.dtype, "accumulate");
             }
 
-            NDArray n = HistogramCumulativeText(raveled, w, binEdges, w is null ? NPTypeCode.Int64 : w.typecode);
+            NDArray n = HistogramCumulativeText(raveled, w, binEdges, w is null ? DType.Int64 : w.dtype);
 
             if (density)
             {
-                // db = np.array(np.diff(bin_edges), float): text edges have no subtract loop.
-                if (Backends.Strings.NDStringUfuncs.IsString(binEdges))
+                // db = np.array(np.diff(bin_edges), float): text edges (StringDType included) have no subtract loop.
+                if (Backends.Strings.NDStringUfuncs.IsText(binEdges))
                     throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", binEdges.dtype, binEdges.dtype);
                 NDArray db = np.diff(binEdges).astype(NPTypeCode.Double);
                 return new HistogramResult(n / db / np.sum(n), binEdges);
@@ -369,7 +378,8 @@ namespace NumSharp
         /// <param name="a">The raveled data (text or numbers).</param>
         /// <param name="w">The raveled numeric weights, or null.</param>
         /// <param name="binEdges">The edges (text or numbers, at least as NumPy's monotonic check left them).</param>
-        /// <param name="ntype">NumPy's <c>ntype</c>: int64 (intp) without weights, the weights' dtype with them.</param>
+        /// <param name="ntype">NumPy's <c>ntype</c>: int64 (intp) without weights, the weights' descriptor with them (a
+        ///     <c>StringDType</c> one included: its running total holds texts, and the final <c>np.diff</c> refuses it).</param>
         /// <returns>The counts (or summed weights), one per bin: <c>np.diff(cum_n)</c>.</returns>
         /// <exception cref="UnicodeDecodeError">A search converts <c>S</c> text holding a byte that is not ASCII to a <c>U</c>
         ///     common descriptor.</exception>
@@ -388,7 +398,7 @@ namespace NumSharp
         ///     survive.</para>
         /// </remarks>
         [NDScoped]
-        private static NDArray HistogramCumulativeText(NDArray a, NDArray w, NDArray binEdges, NPTypeCode ntype)
+        private static NDArray HistogramCumulativeText(NDArray a, NDArray w, NDArray binEdges, DType ntype)
         {
             long len = a.size;
             // cum_n = np.zeros(bin_edges.shape, ntype)
@@ -601,7 +611,7 @@ namespace NumSharp
             int? nEqualBins = null;
             NDArray binEdges = null;
             double first = 0, last = 0;
-            bool textData = Backends.Strings.NDStringUfuncs.IsString(a);
+            bool textData = Backends.Strings.NDStringUfuncs.IsText(a);
 
             if (bins is string binName)
             {
@@ -650,8 +660,9 @@ namespace NumSharp
                     throw new ValueError("`bins` must be 1d, when an array");
                 binEdges = nd;
                 // `np.any(bin_edges[:-1] > bin_edges[1:])`: with fewer than two edges there is nothing to compare, so text
-                // edges pass as they are; two or more text edges are compared by the string greater kernel.
-                if (Backends.Strings.NDStringUfuncs.IsString(binEdges))
+                // edges pass as they are; two or more text edges are compared by the string greater kernel (StringDType's
+                // with its NA rules: a NaN-like NA compares False, a None-like one raises).
+                if (Backends.Strings.NDStringUfuncs.IsText(binEdges))
                 {
                     if (binEdges.size > 1 && TextEdgesDecrease(binEdges))
                         throw new ValueError("`bins` must increase monotonically, when an array");
@@ -723,6 +734,21 @@ namespace NumSharp
             else if (a.size == 0)
             {
                 first = 0; last = 1; // can't infer a range from no data
+            }
+            else if (Backends.Strings.NDStringUfuncs.IsVString(a))
+            {
+                // `first_edge, last_edge = a.min(), a.max()` COMPUTE over StringDType (a None-like NA raises there), then
+                // `np.isfinite(first_edge)`: a str has no isfinite loop; a NaN-like NA (the minimum only when every element
+                // is one) is not finite, and the `and` stops there, reporting both edges.
+                object lo, hi;
+                using (var mn = np.amin(a))
+                    lo = mn.Storage.GetAtIndex(0);
+                using (var mx = np.amax(a))
+                    hi = mx.Storage.GetAtIndex(0);
+                if (lo is string || lo is char)
+                    throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isfinite");
+                throw new ValueError($"autodetected range of [{Backends.Strings.NDPyObject.Str(lo)}, " +
+                                     $"{Backends.Strings.NDPyObject.Str(hi)}] is not finite");
             }
             else if (Backends.Strings.NDStringUfuncs.IsString(a))
             {

@@ -185,6 +185,10 @@ namespace NumSharp.Tests.Fuzz
         private static bool MeasureRead(SurfaceMember member, ReadTarget target, LeakFixture fx, SweepAccumulator acc,
                                         List<string> errors, List<(SurfaceMember, ReadTarget)> backendRetry)
         {
+            // Young garbage first: undisposed views earlier reads left of the shared fixture are finalized before the
+            // baseline, not inside this read's measurement (see MeasureCatalogueEntry and
+            // OwnershipLedger.DropMayBeFinalization).
+            ScopeAudit.Quiesce();
             // The fixture's arrays as they are before THIS read (a getter must never dispose or release one, and a
             // round-trip setter writes values, never a fixture's lifetime).
             var ledger = OwnershipLedger.Of(fx.Owned());

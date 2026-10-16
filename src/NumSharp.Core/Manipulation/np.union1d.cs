@@ -12,9 +12,11 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.union1d.html</remarks>
         /// <exception cref="UnicodeDecodeError">A <c>U</c> union over <c>S</c> text holding a non-ASCII byte (NumPy's
         ///     concatenation decodes it first).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> union of two or more elements (the
-        ///     <c>StringDType</c> part of NumSharp's next phase). Fixed-width text computes: the concatenation formats numbers
-        ///     into text and decodes bytes beside str, then <c>np.unique</c> sorts the text.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no common
+        ///     DType with (a number, bool, <c>S</c> bytes): NumPy's verbatim promotion text.</exception>
+        /// <exception cref="ValueError">A NEP 55 <c>StringDType</c> array whose sort compares a None-like NA (an NA object
+        ///     that is neither a string nor NaN-like) with another entry: NumPy's <c>Cannot compare null that is not a
+        ///     nan-like value</c>.</exception>
         [NDScoped]
         public static NDArray union1d(NDArray ar1, NDArray ar2)
         {

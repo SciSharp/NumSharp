@@ -140,9 +140,12 @@ namespace NumSharp.Tests.Backends.Strings
             ((Action)(() => np.dtypes.StringDType(over))).Should().Throw<ValueError>().WithMessage(Message);
             ((Action)(() => np.dtypes.StringDType(-over))).Should().Throw<ValueError>().WithMessage(Message);
 
-            // A value whose bit length alone proves the excess is refused without formatting a million digits.
+            // A value whose bit length alone proves the excess is refused without formatting a million digits. The value is
+            // built OUTSIDE the timed region, as a shift: BigInteger.Pow(2, 3_000_000) squares repeatedly and took about 2 s on
+            // net8.0's BigInteger by itself, which made this limit time the setup instead of the refusal.
+            var huge = BigInteger.One << 3_000_000;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            ((Action)(() => np.dtypes.StringDType(BigInteger.Pow(2, 3_000_000)))).Should().Throw<ValueError>().WithMessage(Message);
+            ((Action)(() => np.dtypes.StringDType(huge))).Should().Throw<ValueError>().WithMessage(Message);
             sw.ElapsedMilliseconds.Should().BeLessThan(2000, "the early bit-length test refuses before any digit is computed");
         }
 

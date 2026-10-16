@@ -28,8 +28,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="bins"/> is not 1-D (<c>object too deep for desired array</c> /
         ///     <c>object of too small depth for desired array</c>), or, after the cast below, not monotonic (<c>bins must be
         ///     monotonically increasing or decreasing</c>).</exception>
-        /// <exception cref="InvalidCastException"><paramref name="bins"/> does not cast 'safely' to float64 (text or complex;
-        ///     NumPy's TypeError text).</exception>
+        /// <exception cref="InvalidCastException"><paramref name="bins"/> does not cast 'safely' to float64 (text, StringDType
+        ///     included, or complex; NumPy's TypeError text).</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> <paramref name="x"/>: NumPy's searchsorted compares the numeric bins
+        ///     and the text as Python objects and refuses the first mixed pair (<c>'&lt;' not supported between instances of
+        ///     'float' and 'str'</c>), or two keys Python cannot order.</exception>
 
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.digitize.html
@@ -61,6 +64,17 @@ namespace NumSharp
             int mono = BinsMonotonicity(bins);
             if (mono == 0)
                 throw new ValueError("bins must be monotonically increasing or decreasing");
+
+            // A StringDType x (tested first: IsString refuses it): the numeric bins have no common descriptor with it, so
+            // NumPy's searchsorted compares Python objects — a number against a str raises its TypeError, and the keys are
+            // compared with each other even when the bins are empty (searchsorted answers every case, no shortcut here).
+            if (Backends.Strings.NDStringUfuncs.IsVString(x))
+            {
+                string objectSide = right ? "left" : "right";
+                if (mono == -1)
+                    return NDArray.Scalar((long)bins.Shape.dimensions[0]) - np.searchsorted(bins["::-1"], x, objectSide);
+                return np.searchsorted(bins, x, objectSide);
+            }
 
             // A text x is searched as text: searchsorted converts the numeric bins to the common string dtype and runs NumPy's
             // binary search over the text (the bins were checked monotonic as NUMBERS, so their text need not be sorted: the
@@ -123,8 +137,10 @@ namespace NumSharp
                 throw new ValueError("object of too small depth for desired array");
             if (bins.ndim > 1)
                 throw new ValueError("object too deep for desired array");
-            // ...and then casts under 'safe' (no FORCECAST in NPY_ARRAY_CARRAY_RO): text and complex refuse.
-            if (Backends.Strings.NDStringUfuncs.IsString(bins) || bins.typecode == NPTypeCode.Complex)
+            // ...and then casts under 'safe' (no FORCECAST in NPY_ARRAY_CARRAY_RO): text (StringDType included, tested first:
+            // IsString refuses it) and complex refuse.
+            if (Backends.Strings.NDStringUfuncs.IsVString(bins) || Backends.Strings.NDStringUfuncs.IsString(bins)
+                || bins.typecode == NPTypeCode.Complex)
                 throw new InvalidCastException(
                     $"Cannot cast array data from {bins.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
 

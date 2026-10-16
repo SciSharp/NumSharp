@@ -131,7 +131,7 @@ namespace NumSharp.Tests.Fuzz
             var overDisposals = r.OverDisposals ?? new();
             var retentions = r.Retentions ?? new();
             Console.WriteLine($"[{label}] cases checked={r.OwnershipCases} over-disposal families={overDisposals.Count} " +
-                              $"retention families={retentions.Count}");
+                              $"retention families={retentions.Count} drained rebases={r.OwnershipRebases}");
             if (retentions.Count > 0)
                 Console.WriteLine($"[{label}] retentions (a counted reference to a caller's memory outlived the call; not " +
                                   "judged):\n  " + string.Join("\n  ", retentions.OrderByDescending(k => k.Value.count).Take(40)
@@ -204,6 +204,99 @@ namespace NumSharp.Tests.Fuzz
             finally
             {
                 view.Dispose();
+                a.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Creates one view of <paramref name="a"/> and parks it in <paramref name="holder"/>: once the caller clears the
+        ///     slot, the undisposed view is garbage whose counted reference stays until a collection finalizes it (the
+        ///     retention an earlier sweep entry leaves on a shared fixture).
+        /// </summary>
+        /// <param name="a">The array the view aliases.</param>
+        /// <param name="holder">A one-slot array that keeps the view reachable until the caller clears it.</param>
+        /// <remarks>Not inlined, so no local of the caller holds the view: clearing the slot is what makes it garbage,
+        ///     which pins the moment it can first be finalized to AFTER the ledger's baseline counted it.</remarks>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void ParkView(NDArray a, NDArray[] holder) => holder[0] = a["::2"];
+
+        /// <summary>
+        ///     A dropped reference that an EARLIER undisposed view's finalizer caused (a collection ran after the
+        ///     snapshot) is not reported: the sweep drains, rebases and judges the case's next check instead. This is the
+        ///     flake the catalogue gate had: fixture M carried ~100 views earlier entries left, the measurement's own
+        ///     hygiene collection finalized them inside a later entry, and that entry was blamed (a different one per run).
+        /// </summary>
+        /// <exception cref="AssertFailedException">The finalizer's drop was reported, or no rebase happened.</exception>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void Ownership_FinalizedEarlierView_IsRebasedNotReported()
+        {
+            var a = OwnershipOperand();
+            try
+            {
+                var holder = new NDArray[1];
+                ParkView(a, holder);
+                var ledger = OwnershipLedger.OfPositional(new[] { a });
+                holder[0] = null;             // the view becomes garbage only now, after the baseline counted its reference
+                GcQuiescence.CollectFull();   // finalizes the view inside the "region": its reference is abandoned
+                Assert.IsTrue(ledger.Check().Any(x => x.Kind == OwnershipViolation.ReferenceDropped),
+                    "the planted finalizer drop did not lower the count — the test no longer exercises the race");
+                Assert.IsTrue(ledger.DropMayBeFinalization, "a collection ran since the baseline");
+
+                var acc = new SweepAccumulator();
+                Assert.IsFalse(acc.CheckOwnership("teeth", ledger, "teeth/1", "teeth", "warm"),
+                    "a drop a finalizer explains must not be reported");
+                Assert.AreEqual(1L, acc.OwnershipRebases);
+                Assert.IsFalse(acc.OverDisposals.ContainsKey(("teeth", OwnershipViolation.ReferenceDropped)));
+                Assert.IsFalse(ledger.DropMayBeFinalization, "the rebased baseline follows a full drain");
+                Assert.AreEqual(0, ledger.Check().Count(x => x.IsOverDisposal), "the rebased ledger reads clean");
+            }
+            finally
+            {
+                a.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     A REAL under-count that coincides with a collection is still reported: the first check rebases (it cannot
+        ///     tell the call from a finalizer), the call under-counts again on its next execution, and the check against
+        ///     the drained baseline reports it.
+        /// </summary>
+        /// <exception cref="AssertFailedException">The under-count escaped the gate.</exception>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [TestCategory("ScopeAudit")]
+        public void Ownership_RealUnderCount_DuringACollection_IsReportedOnTheNextCheck()
+        {
+            var a = OwnershipOperand();
+            // Two more counted references, so the two planted releases below never take the count to zero (a release
+            // to zero frees the memory, which is the Released finding, not this one).
+            var v1 = a["::2"];
+            var v2 = a["1::2"];
+            try
+            {
+                var ledger = OwnershipLedger.OfPositional(new[] { a });
+                GC.Collect();                          // a collection inside the "warm region"
+                a.Storage.InternalArray.Release();     // the warm execution's planted over-release
+
+                var acc = new SweepAccumulator();
+                Assert.IsFalse(acc.CheckOwnership("teeth", ledger, "teeth/2", "teeth", "warm"),
+                    "the first, ambiguous drop is rebased");
+                Assert.AreEqual(1L, acc.OwnershipRebases);
+
+                a.Storage.InternalArray.Release();     // the measured execution under-counts again
+                Assert.IsTrue(acc.CheckOwnership("teeth", ledger, "teeth/2", "teeth", "measured"),
+                    "the recurring under-count must be reported against the drained baseline");
+                Assert.IsTrue(acc.OverDisposals.ContainsKey(("teeth", OwnershipViolation.ReferenceDropped)));
+
+                a.Storage.InternalArray.TryAddRef();   // restore the two references the plants took
+                a.Storage.InternalArray.TryAddRef();
+            }
+            finally
+            {
+                v2.Dispose();
+                v1.Dispose();
                 a.Dispose();
             }
         }

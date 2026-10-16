@@ -112,9 +112,10 @@ namespace NumSharp
             /// <exception cref="ValueError">The broadcast result is empty ("zero-size array to reduction operation maximum
             ///     which has no identity": NumPy takes the max of the sizes).</exception>
             /// <exception cref="IncorrectShapeException"><paramref name="a"/> and <paramref name="i"/> do not broadcast.</exception>
-            /// <exception cref="StringComputationNotSupportedException">A NEP 55 <c>StringDType</c> <paramref name="a"/> with an
-            ///     integer count: NumPy's <c>a * i</c> branch, which NumSharp's <c>StringDType</c> arithmetic does not compute
-            ///     yet.</exception>
+            /// <remarks>A NEP 55 <c>StringDType</c> <paramref name="a"/> takes NumPy's <c>a * i</c> branch after the count
+            ///     check: <see cref="np.multiply(NDArray, NDArray, NDArray, NDArray, DType)"/>'s <c>StringDType</c> loop, whose
+            ///     result keeps <paramref name="a"/>'s descriptor and whose NA rules and <c>Overflow encountered in string
+            ///     multiply</c> are its own (see that member's exceptions).</remarks>
             public static NDArray multiply(NDArray a, NDArray i)
             {
                 // a numpy.char.chararray operand: np.asanyarray keeps the class, np.empty_like(a, ...) makes the out a
@@ -130,8 +131,8 @@ namespace NumSharp
                     throw new TypeError($"unsupported type {i.dtype} for operand 'i'");
                 // i = np.maximum(i, 0)   (the C# literal is NumPy's weak Python int: i keeps its dtype)
                 using var reps = np.maximum(i, 0);
-                // if a.dtype.char == "T": return a * i   (StringDType's own loop sizes its result; NumSharp's StringDType
-                // arithmetic is a later subphase, so this is the deferral NumPy's order reaches after the count check)
+                // if a.dtype.char == "T": return a * i   (StringDType's own multiply loop sizes each result string: no width
+                // pass, no overflow pre-check here — the loop raises its own)
                 if (NDStringUfuncs.IsVString(a))
                     return np.multiply(a, reps);
                 // a_len = str_len(a)
