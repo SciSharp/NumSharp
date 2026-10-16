@@ -21,8 +21,12 @@ namespace NumSharp.Build.Analyzer
     ///     weaver (or the hand-written scope) reclaims every transient the first two construct, and
     ///     <c>[NDScopedCovered]</c> is the author's assertion that this helper always runs under a
     ///     caller's ambient scope (the per-method analysis has no call-graph to see that on its own).
-    ///     Those are the fixes the message suggests, alongside a <c>using</c> / <c>.Dispose()</c> /
-    ///     <c>scope.Returns(...)</c>.
+    ///     The message is an ordered procedure over those fixes, with the conditions under which each one
+    ///     would dispose a live array or stop reclaiming one: a false positive is suppressed, a helper
+    ///     every call of which already runs under a scope is marked <c>[NDScopedCovered]</c>, an entry
+    ///     point that keeps no array past the call is marked <c>[NDScoped]</c>, and anything else is
+    ///     disposed explicitly. A dropped disposable that stores NDArrays gets its own text, because no
+    ///     scope attribute reclaims it.
     ///     </para>
     ///     <para>
     ///     The analysis is deliberately comprehensive ("all scenarios"): it catches a result dropped on
@@ -39,24 +43,126 @@ namespace NumSharp.Build.Analyzer
         private const string Category = "NumSharp.Build";
         private const string HelpLink = "https://scisharp.github.io/NumSharp/docs/numsharp-build-compiler.html#ndw012";
 
+        /// <summary>
+        ///     NDW012 for a dropped <c>NDArray</c> (or a carrier of one). The message IS the fix procedure: it is
+        ///     read in build logs by people and by coding agents alike, so it names the cases in the order to test
+        ///     them and states the conditions under which <c>[NDScoped]</c> would dispose an array that is still in
+        ///     use, instead of offering the attribute as a reflex. <c>{0}</c> is the attribute that fits the
+        ///     enclosing method (<c>[NDScoped]</c>, or <c>[NDScopedAsync]</c> for an async / Task-shaped method);
+        ///     <c>{1}</c> names the value (<c>NDArray</c>).
+        /// </summary>
+        /// <remarks>
+        ///     <para>The case order follows a 2026-10-16 triage of every NDW012 in NumSharp.Core's build (171
+        ///     sites): 36 were not leaks (a call that returns its own out array, a callee that takes the array
+        ///     over), 133 were already reclaimed by a caller's scope, where <c>[NDScopedCovered]</c> is the fix and
+        ///     a nested <c>[NDScoped]</c> only adds a scope to every call, and 2 were real leaks on unscoped
+        ///     paths.</para>
+        ///     <para>Every condition in the text is a way the attributes would dispose an array the program still
+        ///     uses, or stop reclaiming one, that neither the weaver nor this analyzer reports:
+        ///     an array kept past the call, by the method or by a callee (a static cache included: the caller's
+        ///     scope tracks it); a class, or a struct without <c>INDArrayCarrier</c>, that holds arrays in its own
+        ///     fields and leaves as a tuple component or a bare out parameter (the weaver refuses it only as a
+        ///     direct return, NDW003; proven on woven code 2026-10-16 with <c>np.ma.average</c>'s core and with
+        ///     probes of all three shapes, each handing the caller disposed arrays);
+        ///     a pointer into a temporary (an <c>IntPtr</c> return is weavable);
+        ///     a scope held open across a long loop, which keeps every array of every pass until it closes (an
+        ///     explicit <c>Dispose</c> releases the buffer, but the scope still references the object);
+        ///     an array created in a lambda or task that runs on another thread or after the scope closed, which
+        ///     no scope tracks (<c>NDScope</c> is <c>[ThreadStatic]</c>);
+        ///     an async method marked <c>[NDScopedCovered]</c>, which rides its caller's scope only up to its first
+        ///     <c>await</c>;
+        ///     and a covered helper reached through a delegate, an interface or a base virtual, which a search for
+        ///     direct callers misses.
+        ///     A constructor can take neither attribute (both are Method/Property-only, CS0592).</para>
+        ///     <para>Keep the message a single line: build logs and agents read it line by line, and RS1032 forbids
+        ///     line breaks in a message.</para>
+        /// </remarks>
         internal static readonly DiagnosticDescriptor Nw012 = new DiagnosticDescriptor(
             "NDW012",
-            "NDArray is created but never disposed, returned, or scoped (leaked to the finalizer)",
-            "This {1} is never returned, assigned to an out/ref parameter, stored, disposed, or " +
-            "reclaimed by an NDScope, so its pooled buffer is left to the finalizer instead of being " +
-            "returned promptly. Dispose it (a 'using' declaration or '.Dispose()'), yield it through " +
-            "'scope.Returns(...)', or mark the enclosing method '{0}' so the weaver reclaims it.",
+            "NDArray is created but never disposed, returned, stored, or scoped (left to the finalizer)",
+            "This {1} is never disposed, returned, stored, or reclaimed by an NDScope, so its buffer waits for the " +
+            "finalizer. This check reads one method at a time and cannot see a scope that a caller opened. When a " +
+            "method marked {0} finishes, its scope disposes every array created during the call, by the method or by " +
+            "anything it calls, except those it returns, yields, or assigns to out parameters and those detached with " +
+            "NDScope.Detach. Do not add {0} just to silence this warning; act on the first case that holds. " +
+            "(1) Not a leak: the value is, or contains only, arrays the method already holds (an @out argument that the " +
+            "call returns, or the receiver of inplace: true; a view or copy of one does not count), or the method it is " +
+            "passed to takes it over (disposes it, detaches it, or returns it or an object that owns it). Keep the code " +
+            "and suppress just this line between '#pragma warning disable NDW012' and '#pragma warning restore NDW012', " +
+            "with a comment that gives the reason. " +
+            "Cases 2 and 3 mark the whole method, which silences every NDW012 in it, and a constructor cannot take " +
+            "them. Each leaves the method's arrays to a scope ([NDScopedCovered]: the caller's; {0}: the method's own) " +
+            "that tracks only arrays created on its thread while it is open and frees them only when it closes, so a " +
+            "case does not apply if that scope stays open across a loop, here or in a caller, that creates arrays on " +
+            "every pass and can run many times (over elements, rows, or training steps), or if the array is created " +
+            "in a lambda or task that runs on another thread or after that scope closes. " +
+            "(2) Every call to this method (count calls through a delegate, interface, or base virtual) happens while " +
+            "a scope is open on the calling thread (an [NDScoped], [NDScopedAsync], or [NDScopedCovered] method, or a " +
+            "'using var scope = NDScope.Open()', is up the call stack), the method creates no array after an await, " +
+            "and nothing outside this assembly can call it: mark it [NDScopedCovered], which costs nothing at run " +
+            "time, not {0}, which would add a second scope to every call. " +
+            "(3) No array created during the call is kept past it, by the method or by anything it calls (in a field, " +
+            "property, static cache, collection, or caller's array, or by a lambda or task that runs later), unless " +
+            "it is detached (NDScope.Detach, or an [NDScopedExit] parameter); everything the method returns, yields, " +
+            "or assigns to out parameters is an NDArray, an NDArray[], an INDArrayCarrier struct, a tuple of those, or " +
+            "a value that holds no arrays (so not an NDMaskedArray, a poly1d, or a holder of your own, even inside a " +
+            "tuple); and it hands out no pointer into a temporary: mark it {0}, or mark its unscoped callers " +
+            "[NDScoped] ([NDScopedAsync] for an async one) under these same conditions and apply case 2. " +
+            "(4) Otherwise dispose the array after its last use ('using var t = ...;' or 't.Dispose()'; one created " +
+            "in a loop, before the next pass), but never an array the method returns, stores, or was given, nor a " +
+            "result that may be that same input (np.asarray(x), x.astype(t, copy: false)).",
             Category,
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
-            description: "Every NDArray owns an unmanaged buffer from NumSharp's pool. A transient that " +
-                         "is dropped without being disposed or yielded to a scope is reclaimed only when " +
-                         "its finalizer eventually runs — the exact cost the [NDScoped] weaver removes. " +
-                         "Marking the method [NDScoped]/[NDScopedAsync], or disposing the value, closes the gap.",
+            description: "Every NDArray owns an unmanaged buffer from NumSharp's pool, and one that is dropped " +
+                         "waits for the finalizer. Who reclaims the array decides the fix, and this analysis reads " +
+                         "one method at a time. A call that returns an array the method already holds, or a callee " +
+                         "that takes the array over, is no leak: suppress the line. A method whose every call runs " +
+                         "on the calling thread under a scope opened up the call stack needs only [NDScopedCovered], " +
+                         "which is free at run time. An entry point reached without a scope takes [NDScoped] or " +
+                         "[NDScopedAsync], whose scope disposes every array created during the call except what the " +
+                         "method returns, yields, or assigns to out parameters, so it breaks a method that keeps a " +
+                         "new array past the call or returns an object that holds arrays (also inside a tuple) or a " +
+                         "pointer into a temporary. A scope frees its arrays only when it closes, so neither " +
+                         "attribute fits a scope that stays open across a long loop creating arrays on every pass. " +
+                         "Anything else is disposed explicitly, except an array the method returns, stores, or was " +
+                         "given.",
             helpLinkUri: HelpLink);
 
+        /// <summary>
+        ///     NDW012 for a dropped DISPOSABLE that stores NDArrays: a holder class, NumSharp's <c>np.nditer</c>
+        ///     iterator, an <c>NpzFile</c>, or an array of them. It has a text of its own because the scope
+        ///     attributes cannot fix it: an <c>NDScope</c> reclaims only the NDArrays created during the
+        ///     call and never calls the instance's <c>Dispose</c>, so whatever else the instance owns (native
+        ///     iterator state, an open file) waits for the finalizer. <c>{0}</c> names the value.
+        /// </summary>
+        internal static readonly DiagnosticDescriptor Nw012Holder = new DiagnosticDescriptor(
+            "NDW012",
+            "Disposable that stores NDArrays is created but never disposed, returned, or stored",
+            "This {0} is never disposed, returned, or stored, so it and the arrays it holds wait for the finalizer. " +
+            "An NDScope reclaims only NDArrays and never calls this object's Dispose, so neither [NDScoped] nor " +
+            "[NDScopedCovered] fixes this; act on the first case that holds. (1) Not a leak: the method it is passed " +
+            "to takes it over (disposes it, or returns it or an object that owns it). Keep the code and suppress just " +
+            "this line between '#pragma warning disable NDW012' and '#pragma warning restore NDW012', with a comment " +
+            "that gives the reason. (2) Otherwise dispose it after its last use ('using var x = ...;', '.Dispose()', " +
+            "or '.Close()'; each element of an array of them). A foreach disposes the enumerator it obtains, not the " +
+            "collection it walks, so hold the collection in a 'using' first.",
+            Category,
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "A disposable that stores NDArrays (a holder class of your own, NumSharp's np.nditer " +
+                         "iterator, an NpzFile) owns its arrays and possibly native state or an open file. An NDScope " +
+                         "reclaims only the NDArrays created during the call and never calls Dispose, so the instance " +
+                         "itself must be disposed or closed once it is no longer used.",
+            helpLinkUri: HelpLink);
+
+        /// <summary>
+        ///     The two NDW012 texts: one id and one severity, two messages, because the fix for a dropped NDArray
+        ///     (find who reclaims it, then scope, cover, suppress, or dispose) differs from the fix for a dropped
+        ///     holder (always dispose it).
+        /// </summary>
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-            ImmutableArray.Create(Nw012);
+            ImmutableArray.Create(Nw012, Nw012Holder);
 
         public override void Initialize(AnalysisContext context)
         {
@@ -134,7 +240,7 @@ namespace NumSharp.Build.Analyzer
                     if (_usingLocals.Contains(local))
                         continue;
                     if (DispositionOfLocal(local) == Disposition.Leaks)
-                        Report(local.Locations.Length > 0 ? local.Locations[0] : Location.None, EnclosingSuggestion(method), DescribeOwned(local.Type));
+                        Report(local.Locations.Length > 0 ? local.Locations[0] : Location.None, method, local.Type);
                 }
 
                 // 2) owning expressions whose value is not captured by a local and never escapes.
@@ -150,13 +256,36 @@ namespace NumSharp.Build.Analyzer
                         // sub-expression whose owning ancestor also leaks is subsumed by that ancestor.
                         if (HasLeakingOwnedAncestor(op))
                             continue;
-                        Report(op.Syntax.GetLocation(), EnclosingSuggestion(method), DescribeOwned(op.Type));
+                        Report(op.Syntax.GetLocation(), method, op.Type);
                     }
                 }
             }
 
-            private void Report(Location loc, string suggestion, string kind)
-                => _ctx.ReportDiagnostic(Diagnostic.Create(Nw012, loc, suggestion, kind));
+            /// <summary>
+            ///     Reports one leaked value with the text that fits it: the holder text for a disposable that stores
+            ///     NDArrays (only its own <c>Dispose</c> reclaims it, so no scope attribute is suggested), else the
+            ///     NDArray text, which names the scope attribute that fits the enclosing method.
+            /// </summary>
+            /// <param name="loc">Where the value is created: a local's declarator, or the leaking expression.</param>
+            /// <param name="method">The method whose body drops the value; decides <c>[NDScoped]</c> versus <c>[NDScopedAsync]</c>.</param>
+            /// <param name="type">The value's static type; decides between the two texts and how the value is named.</param>
+            private void Report(Location loc, IMethodSymbol method, ITypeSymbol type)
+            {
+                var diagnostic = IsHolderValue(type)
+                    ? Diagnostic.Create(Nw012Holder, loc, DescribeOwned(type))
+                    : Diagnostic.Create(Nw012, loc, EnclosingSuggestion(method), DescribeOwned(type));
+                _ctx.ReportDiagnostic(diagnostic);
+            }
+
+            /// <summary>
+            ///     True for a value that only its own <c>Dispose</c> reclaims: a disposable that stores NDArrays, or an
+            ///     array of them — the two kinds <see cref="DescribeOwned"/> names as instances. An NDArray, an
+            ///     NDArray carrier, or a tuple of them is not one: a scope reclaims those.
+            /// </summary>
+            /// <param name="t">The leaked value's static type.</param>
+            /// <returns>True when the holder text applies.</returns>
+            private bool IsHolderValue(ITypeSymbol t)
+                => (t is IArrayTypeSymbol arr && _model.IsNDOwningDisposable(arr.ElementType)) || _model.IsNDOwningDisposable(t);
 
             /// <summary>How the message names the leaked value: a plain NDArray (carriers included), or an NDArray-owning disposable instance.</summary>
             private string DescribeOwned(ITypeSymbol t)
