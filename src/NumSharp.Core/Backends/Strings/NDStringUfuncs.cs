@@ -382,7 +382,10 @@ namespace NumSharp.Backends.Strings
                 // dtype=bool fixes the loop at bool, and the string input's cast to it fails (probed: less(u, i, dtype=bool)).
                 if (numeric is not null)
                     return InputCastError(ufunc, 0, d1, NPTypeCode.Boolean) ?? InputCastError(ufunc, 1, d2, NPTypeCode.Boolean);
-                return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({d1.Meta}, {d2.Meta}) -> None");
+                // The dispatcher names the operand CLASSES, and a Python int / float / complex operand (a C# literal) is the
+                // abstract _PyLongDType / _PyFloatDType / _PyComplexDType, not its default descriptor's class (probed:
+                // np.less(np.array(['a']), 0) names _PyLongDType; np.less(u, np.int32(0)) names Int32DType).
+                return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({DispatchClass(x1)}, {DispatchClass(x2)}) -> None");
             }
 
             // NumPy's string add promoter wins over a dtype= request: add(U3, U3, dtype='f8') still concatenates (probed).

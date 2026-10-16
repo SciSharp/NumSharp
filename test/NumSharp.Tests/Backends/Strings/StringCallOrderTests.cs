@@ -401,5 +401,33 @@ namespace NumSharp.Tests.Backends.Strings
             Action t = () => np.nanargmax(NDArray.Scalar("ab"), 1);
             t.Should().Throw<AxisError>().WithMessage("axis 1 is out of bounds for array of dimension 1*");
         }
+
+        /// <summary>
+        ///     An ordering of fixed-width text against a number has no loop, and NumPy's refusal names the operand CLASSES
+        ///     its dispatcher looked up: a C# number literal is NumPy's Python scalar, so its class is the abstract
+        ///     <c>_PyLongDType</c> / <c>_PyFloatDType</c> (probed 2.4.2: <c>np.less(np.array(['a']), 0)</c>), on either side,
+        ///     while an array keeps its dtype's class (<c>np.less(u, np.int32(0))</c> names <c>Int32DType</c>). The weighted
+        ///     quantile family's <c>np.any(weights &lt; 0)</c> over text weights meets this text.
+        /// </summary>
+        [TestMethod]
+        public void Ordering_TextAgainstANumber_NamesThePythonScalarClass()
+        {
+            Action intLiteral = () => np.less(U(), 0);
+            intLiteral.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'less' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, " +
+                "<class 'numpy.dtypes._PyLongDType'>) -> None");
+            Action floatLiteral = () => np.less(U(), 0.5);
+            floatLiteral.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'less' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, " +
+                "<class 'numpy.dtypes._PyFloatDType'>) -> None");
+            Action literalFirst = () => np.greater(0, U());
+            literalFirst.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'greater' did not contain a loop with signature matching types (<class 'numpy.dtypes._PyLongDType'>, " +
+                "<class 'numpy.dtypes.StrDType'>) -> None");
+            Action array = () => np.less(U(), np.array(0));
+            array.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'less' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, " +
+                "<class 'numpy.dtypes.Int32DType'>) -> None");
+        }
     }
 }
