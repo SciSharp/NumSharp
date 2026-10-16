@@ -13,9 +13,15 @@ namespace NumSharp
         /// <returns>Index of the maximum value in the flattened array (NumPy intp = int64).</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
+        ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
+        ///     checks.</exception>
         [NDScoped]
         public static long nanargmax(NDArray a)
         {
+            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.IndexScalar(a, static s => nanargmax(s));
             // Scalar return — scope only: reclaims the NaN mask and the full-size replaced copy
             // (a NaN-free or integer input passes through NanArgReplace untracked and unharmed).
             var prepared = NanArgReplace(a, double.NegativeInfinity, axis: null);
@@ -43,12 +49,19 @@ namespace NumSharp
         ///     is <c>np.argmax</c> / <c>np.argmin</c> of the text and computes (its <c>_replace_nan</c> leaves an array that
         ///     is not inexact alone).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmax.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
+        ///     written.</exception>
         [NDScoped]
         public static NDArray nanargmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmax(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
+            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => nanargmax(s.a, s.axis, s.@out, s.keepdims), @out);
             // Boundary scope: reclaims the NaN mask, the all-NaN-guard reductions and the replaced
             // copy; the result (or the caller's @out — untracked, a Returns no-op) is yielded.
             ValidateNanArgAxis(a, axis);
@@ -74,9 +87,15 @@ namespace NumSharp
         /// <returns>Index of the minimum value in the flattened array (NumPy intp = int64).</returns>
         /// <exception cref="ValueError">All-NaN slice encountered.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
+        ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
+        ///     checks.</exception>
         [NDScoped]
         public static long nanargmin(NDArray a)
         {
+            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.IndexScalar(a, static s => nanargmin(s));
             // Scalar return — scope only (see nanargmax(NDArray)).
             var prepared = NanArgReplace(a, double.PositiveInfinity, axis: null);
             return (long)prepared.TensorEngine.ArgMin(prepared);
@@ -101,12 +120,19 @@ namespace NumSharp
         ///     is <c>np.argmax</c> / <c>np.argmin</c> of the text and computes (its <c>_replace_nan</c> leaves an array that
         ///     is not inexact alone).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanargmin.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
+        ///     written.</exception>
         [NDScoped]
         public static NDArray nanargmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
+            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => nanargmin(s.a, s.axis, s.@out, s.keepdims), @out);
             // Boundary scope (see nanargmax(NDArray, int?, NDArray, bool)).
             ValidateNanArgAxis(a, axis);
             // Text: NumPy's argmin checks the empty length and out= before it compares (see nanargmax); the engine

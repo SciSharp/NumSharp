@@ -13,7 +13,9 @@ namespace NumSharp
         /// <param name="shift">The number of places by which elements are shifted.</param>
         /// <param name="axis">Axis along which elements are shifted. By default, the array
         /// is flattened before shifting, after which the original shape is restored.</param>
-        /// <returns>Output array, with the same shape as <paramref name="a"/>.</returns>
+        /// <returns>Output array, with the same shape as <paramref name="a"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         /// Matches NumPy's algorithm: empty_like + slice-copy pairs.
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
@@ -26,6 +28,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, shift, axis), static s => roll(s.a, s.shift, s.axis));
             if (axis == null)
                 return roll(a.ravel(), shift, 0).reshape(Shape.Adopt(a.Shape.dimensions));
 
@@ -82,6 +87,8 @@ namespace NumSharp
         public static NDArray roll(NDArray a, int shift, int? axis = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, shift, axis), static s => roll(s.a, s.shift, s.axis))
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.Kept((a, shift, axis), static s => roll(s.a, s.shift, s.axis))
             : roll(a, (long)shift, axis);
     }
 }

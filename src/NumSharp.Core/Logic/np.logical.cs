@@ -57,15 +57,26 @@ namespace NumSharp
         /// prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): logical ufuncs have bool-output loops only, so
         /// any non-bool request raises the no-loop TypeError.</param>
-        /// <returns>The element-wise AND of the operands' truth values (bool, or <paramref name="out"/>).</returns>
+        /// <returns>The element-wise AND of the operands' truth values (bool, or <paramref name="out"/>).
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_and.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         [NDScoped]
         public static NDArray logical_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
+            // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(x1, x2, @out))
+                return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
             // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
             // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
             // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
@@ -90,15 +101,26 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are written; masked-off out slots keep
         /// prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): non-bool raises the no-loop TypeError.</param>
-        /// <returns>The element-wise OR of the operands' truth values (bool, or <paramref name="out"/>).</returns>
+        /// <returns>The element-wise OR of the operands' truth values (bool, or <paramref name="out"/>).
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_or.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         [NDScoped]
         public static NDArray logical_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
+            // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(x1, x2, @out))
+                return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
             // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
             // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
             // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
@@ -120,15 +142,26 @@ namespace NumSharp
         /// <param name="where">Boolean mask: only mask-true elements are written; masked-off out slots keep
         /// prior contents.</param>
         /// <param name="dtype">Validate-only (NumPy parity): non-bool raises the no-loop TypeError.</param>
-        /// <returns>The element-wise XOR of the operands' truth values (bool, or <paramref name="out"/>).</returns>
+        /// <returns>The element-wise XOR of the operands' truth values (bool, or <paramref name="out"/>).
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_xor.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         [NDScoped]
         public static NDArray logical_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), @out);
+            // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(x1, x2, @out))
+                return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
             // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
             // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
             // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').

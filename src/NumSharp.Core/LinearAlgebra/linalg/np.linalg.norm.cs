@@ -19,7 +19,9 @@ namespace NumSharp
             /// <param name="axis">The axis to reduce. <c>null</c> flattens.</param>
             /// <param name="keepdims">Leave the reduced axes in the result with length 1.</param>
             /// <returns>The norm: a 0-d array for a whole-array norm, else the reduced array. An EMPTY operand's
-            ///     inf-, 1- and 2-norms are 0.0 (NumPy 2.x reduces those with <c>initial=0</c>).</returns>
+            ///     inf-, 1- and 2-norms are 0.0 (NumPy 2.x reduces those with <c>initial=0</c>).
+            ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+            ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <exception cref="ValueError">An order that is invalid for the number of reduced axes, duplicate axes, more
             ///     than two reduced axes, or a min order (-1, -inf, -2) of an empty operand.</exception>
             /// <exception cref="ValueError">A text element that does not parse as a float (NumPy's <c>x.astype(float)</c>:
@@ -45,6 +47,8 @@ namespace NumSharp
             public static NDArray norm(NDArray x, object ord = null, int? axis = null, bool keepdims = false)
                 => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 ? NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims))
+                : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+                ? NDCharArrayBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims))
                 : norm(x, ord, axis is null ? null : new[] {axis.Value}, keepdims);
 
             /// <summary>
@@ -57,6 +61,9 @@ namespace NumSharp
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
+                // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+                if (NDCharArrayBoundary.Sees(x))
+                    return NDCharArrayBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
                 // NumPy's norm converts a non-inexact input with x.astype(float): a text array is parsed (each element by
                 // float(), the first failing one raising NumPy's text), and the norm runs on the float64 numbers.
                 using var parsed = Backends.Strings.NDStringUfuncs.IsString(x) ? x.astype(np.float64, true, 'K', "unsafe") : null;
@@ -99,7 +106,9 @@ namespace NumSharp
             /// <param name="axis">The reduced axis (negative values count from the end).</param>
             /// <param name="keepdims">Leave the reduced axis in the result with length 1.</param>
             /// <param name="ord">The vector order; <c>null</c> means NumPy's default of 2.</param>
-            /// <returns>The norm along <paramref name="axis"/>.</returns>
+            /// <returns>The norm along <paramref name="axis"/>.
+            ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+            ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d input has no axis).</exception>
             /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
             /// <remarks>
@@ -110,6 +119,8 @@ namespace NumSharp
             public static NDArray vector_norm(NDArray x, int axis, bool keepdims = false, object ord = null)
                 => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
+                : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+                ? NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
                 : norm(x, ord ?? 2, new[] {axis}, keepdims);
 
             /// <summary>
@@ -123,7 +134,9 @@ namespace NumSharp
             /// <param name="axis">The reduced axes, any number of them (negative values count from the end), or null for
             ///     the flattened array. An empty tuple reduces nothing (the elementwise magnitude).</param>
             /// <param name="keepdims">Leave the reduced axes in the result with length 1.</param>
-            /// <returns>The vector norm over the axes.</returns>
+            /// <returns>The vector norm over the axes.
+            ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+            ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <exception cref="AxisError">An axis is out of range.</exception>
             /// <exception cref="ValueError">An axis appears twice ("repeated axis"), a text order, or -inf of an empty
             ///     operand.</exception>
@@ -145,6 +158,9 @@ namespace NumSharp
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x))
                     return NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
+                // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+                if (NDCharArrayBoundary.Sees(x))
+                    return NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
                 object order = ord ?? 2;
                 if (axis is not null)
                 {
@@ -200,9 +216,15 @@ namespace NumSharp
             ///     non-null default for an <c>object</c> parameter, so the sentinel carries it.
             /// </param>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_norm.html</remarks>
+            /// <remarks>
+            ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+            ///     ends with <c>np.concatenate</c>), which drops the class.
+            /// </remarks>
             public static NDArray matrix_norm(NDArray x, bool keepdims = false, object ord = null)
                 => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 ? NDMatrixBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
+                : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+                ? NDCharArrayBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
                 : norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
 
             #region internals

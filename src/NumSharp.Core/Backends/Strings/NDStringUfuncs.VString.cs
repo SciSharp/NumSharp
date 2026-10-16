@@ -374,7 +374,34 @@ namespace NumSharp.Backends.Strings
                             $"Cannot cast ufunc '{ufunc}' output from {produced.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
                 }
             }
+            // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray of the user's
+            // call cast to StringDType (the comparisons, add) or to bool (the logical ufuncs) is refused by the finalize rule
+            // here, between the output cast and the broadcast (NDCharArrayBoundary.TrivialLoopCopyError).
+            var copy = NDCharArrayBoundary.TrivialLoopCopyError(x1, VStringLoopDescr(ufunc, x1), x2,
+                                                                 x2 is null ? null : VStringLoopDescr(ufunc, x2), where);
+            if (copy is not null)
+                return copy;
             return BroadcastError(x1, x2, @out, where);
+        }
+
+        /// <summary>
+        ///     The descriptor a <c>StringDType</c> loop reads an input in, for NumPy's trivial-loop copy: the logical ufuncs'
+        ///     promoter casts every input to bool; the text loops (the comparisons, <c>add</c>, <c>maximum</c>,
+        ///     <c>minimum</c>) read an <c>S</c> / <c>U</c> input through its cast to the default <c>StringDType()</c>; the
+        ///     repetition reads its count as int64; a <c>StringDType</c> input is read as it is.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="x">The input.</param>
+        /// <returns>The loop's descriptor for <paramref name="x"/>.</returns>
+        private static DType VStringLoopDescr(string ufunc, NDArray x)
+        {
+            if (s_logical.Contains(ufunc))
+                return DType.Boolean;
+            if (IsVString(x))
+                return x.dtype;
+            if (IsString(x))
+                return DTypeRegistry.VString.default_descr();
+            return ufunc == "multiply" ? np.int64 : x.dtype;
         }
 
         /// <summary>

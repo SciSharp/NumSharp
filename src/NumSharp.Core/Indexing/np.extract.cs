@@ -22,7 +22,8 @@ namespace NumSharp
         ///     Rank-1 <see cref="NDArray"/> of values from <paramref name="arr"/>
         ///     where the corresponding ravel'd <paramref name="condition"/> entry
         ///     is truthy. Dtype matches <paramref name="arr"/>.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.extract.html
         ///     <para>
@@ -50,6 +51,9 @@ namespace NumSharp
         [NDScoped] // reclaims the ravel view/copy handed to take (and the flatnonzero indices on the throw path)
         public static NDArray extract(NDArray condition, NDArray arr)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Kept((condition, arr), static s => extract(s.condition, s.arr));
             using var plain = NDMatrixBoundary.PlainFor(condition, arr);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (arr is null) throw new ArgumentNullException(nameof(arr));

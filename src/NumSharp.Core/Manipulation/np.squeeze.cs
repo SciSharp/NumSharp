@@ -11,7 +11,9 @@ namespace NumSharp
         ///     Remove single-dimensional entries from the shape of an array.
         /// </summary>
         /// <param name="a">Input data.</param>
-        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
+        /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     A pure VIEW like NumPy's <c>PyArray_Squeeze</c>: the length-one axes are dropped from the
         ///     dims AND strides while offset/buffer stay — never a reshape (which rebuilds C-strides and
@@ -26,6 +28,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped(a, static s => squeeze(s));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept(a, static s => squeeze(s));
             var dims = a.Shape.dimensions;
             int keep = 0;
             for (int i = 0; i < dims.Length; i++)
@@ -42,7 +47,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
-        /// <returns>A view of <paramref name="a"/> without the named axis (a fresh view object, the 0-d case included).</returns>
+        /// <returns>A view of <paramref name="a"/> without the named axis (a fresh view object, the 0-d case included).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     NumPy's <c>PyArray_ConvertMultiAxis</c> (its integer branch) then <c>PyArray_SqueezeSelected</c>: a 0-d input
         ///     lets axis 0 and -1 through (no axis is selected, so nothing is removed), every other axis must be in range
@@ -59,6 +66,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis), static s => squeeze(s.a, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, axis), static s => squeeze(s.a, s.axis));
             // The backward-compatibility special case of PyArray_ConvertMultiAxis: axis 0 / -1 of a 0-d input selects no
             // axis. NumPy then returns the array itself; NumSharp returns a fresh view object (as squeeze(NDArray) does for
             // an array with nothing to remove), so disposing the result never disposes the input.

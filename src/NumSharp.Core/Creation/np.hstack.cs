@@ -11,7 +11,9 @@ namespace NumSharp
         ///     and r/g/b channels(third axis). The functions concatenate, stack and block provide more general stacking and concatenation operations.
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the second axis, except 1-D arrays which can be any length.</param>
-        /// <returns>The array formed by stacking the given arrays.</returns>
+        /// <returns>The array formed by stacking the given arrays.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.hstack.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="ArgumentNullException"><paramref name="tup"/> is null.</exception>
@@ -21,6 +23,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(tup))
                 return NDMatrixBoundary.Wrapped(tup, static s => hstack(s));
+            // a numpy.char.chararray operand: NumPy's hstack ends with np.concatenate, which drops the class; the rule's
+            // region keeps its inner atleast_1d calls plain (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(tup))
+                return NDCharArrayBoundary.Plain(tup, static s => hstack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

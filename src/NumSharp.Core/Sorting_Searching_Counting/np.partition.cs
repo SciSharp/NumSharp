@@ -26,8 +26,14 @@ namespace NumSharp
         ///     np.sort convention — NumPy's copy(order='K') keeps F-order for F-inputs; values identical).
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
+        ///     after the argument checks.</exception>
         public static NDArray partition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
+            ? throw NDCharArrayBoundary.PartitionKeywordError()
+            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
             : AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
 
@@ -45,9 +51,15 @@ namespace NumSharp
         /// <param name="order">Must stay null (no structured dtypes).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
+        ///     after the argument checks.</exception>
         [NDScoped]
         public static NDArray partition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
+            ? throw NDCharArrayBoundary.PartitionKeywordError()
+            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
             : AxisPartition.Partition(a, kth, axis, kind, order);
 
@@ -61,8 +73,14 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.partition.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>),
+        ///     after the argument checks.</exception>
         public static NDArray partition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy's a.partition(kth, axis=...) is chararray.partition(sep), which takes no axis (NDCharArrayBoundary)
+            ? throw NDCharArrayBoundary.PartitionKeywordError()
+            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
             : AxisPartition.Partition(a, kth, axis, kind, order);
     }

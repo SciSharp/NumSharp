@@ -15,7 +15,9 @@ namespace NumSharp
         /// If such a split is not possible, an error is raised.
         /// </param>
         /// <param name="axis">The axis along which to split, default is 0.</param>
-        /// <returns>A list of sub-arrays as views into ary.</returns>
+        /// <returns>A list of sub-arrays as views into ary.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range: NumPy reads <c>ary.shape[axis]</c> first,
         ///     a Python tuple index ("tuple index out of range"), so a 0-d array refuses every axis.</exception>
@@ -30,6 +32,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections, axis), static s => split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // `N = ary.shape[axis]` is NumPy's first statement: the axis is checked before the sections.
@@ -53,18 +58,30 @@ namespace NumSharp
         /// Split an array into multiple sub-arrays as views into ary.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).
+        /// </remarks>
         public static NDArray[] split(NDArray ary, long[] indices, int axis = 0)
             => NDMatrixBoundary.Sees(ary)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
+            : NDCharArrayBoundary.Sees(ary)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
             : array_split(ary, indices, axis);
 
         /// <summary>
         /// Split an array into multiple sub-arrays as views into ary.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).
+        /// </remarks>
         public static NDArray[] split(NDArray ary, int[] indices, int axis = 0)
             => NDMatrixBoundary.Sees(ary)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
+            : NDCharArrayBoundary.Sees(ary)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => split(s.ary, s.indices, s.axis))
             : array_split(ary, indices, axis);
 
         /// <summary>
@@ -79,7 +96,9 @@ namespace NumSharp
         /// <param name="ary">Array to be divided into sub-arrays.</param>
         /// <param name="indices_or_sections">The number of sections (sizes differ by at most one).</param>
         /// <param name="axis">The axis along which to split, default is 0.</param>
-        /// <returns>The sub-arrays, views into <paramref name="ary"/>.</returns>
+        /// <returns>The sub-arrays, views into <paramref name="ary"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
         /// <exception cref="IndexError"><paramref name="axis"/> is out of range ("tuple index out of range": NumPy's
         ///     <c>Ntotal = ary.shape[axis]</c> runs first).</exception>
@@ -90,6 +109,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections, axis), static s => array_split(s.ary, s.indices_or_sections, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
 
             // `Ntotal = ary.shape[axis]` first, then `Nsections = int(…); if Nsections <= 0: raise`.
@@ -103,11 +125,18 @@ namespace NumSharp
         /// Split an array into multiple sub-arrays.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).
+        /// </remarks>
         public static NDArray[] array_split(NDArray ary, long[] indices, int axis = 0)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -119,11 +148,18 @@ namespace NumSharp
         /// Split an array into multiple sub-arrays.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).
+        /// </remarks>
         public static NDArray[] array_split(NDArray ary, int[] indices, int axis = 0)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices, axis), static s => array_split(s.ary, s.indices, s.axis));
             if (ary is null) throw new ArgumentNullException(nameof(ary));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 

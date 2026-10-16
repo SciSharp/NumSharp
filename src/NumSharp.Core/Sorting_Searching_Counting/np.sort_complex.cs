@@ -9,7 +9,9 @@ namespace NumSharp
         ///     to complex. Always returns a fresh complex array; the input is never mutated.
         /// </summary>
         /// <param name="a">Input array.</param>
-        /// <returns>Sorted complex array (sorted along the last axis).</returns>
+        /// <returns>Sorted complex array (sorted along the last axis).
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.sort_complex.html<br></br>
         ///     NumPy widths: int8/uint8/int16/uint16 up-cast to complex64, longdouble to clongdouble,
@@ -34,6 +36,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain(a, static s => sort_complex(s));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Plain(a, static s => sort_complex(s));
             // Text runs NumPy's two statements as they are: b.sort() orders the text along the last axis (a 0-d input
             // refuses the axis), and astype('D') parses each string into a complex number with Python's complex() rules.
             // np.sort == array(a, copy=True) + in-place sort along the default last axis; the sort

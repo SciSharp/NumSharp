@@ -50,9 +50,15 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         /// <exception cref="NotSupportedException">Always, once the subscripts validate.</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public static NDArray einsum(string subscripts, params NDArray[] operands)
             => NDMatrixBoundary.Sees(operands)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((subscripts, operands), static s => einsum(s.subscripts, s.operands))
+            : NDCharArrayBoundary.Sees(operands)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((subscripts, operands), static s => einsum(s.subscripts, s.operands))
             : einsum(subscripts, operands, null);
 
         /// <summary>
@@ -84,6 +90,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(operands))
                 return NDMatrixBoundary.Plain((subscripts, operands, @out, dtype, order, casting, optimize), static s => einsum(s.subscripts, s.operands, s.@out, s.dtype, s.order, s.casting, s.optimize));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(operands))
+                return NDCharArrayBoundary.Plain((subscripts, operands, @out, dtype, order, casting, optimize), static s => einsum(s.subscripts, s.operands, s.@out, s.dtype, s.order, s.casting, s.optimize));
             if (subscripts is null)
                 throw new ArgumentNullException(nameof(subscripts));
 

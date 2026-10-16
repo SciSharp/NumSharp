@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Statistics;
 
 namespace NumSharp
@@ -14,12 +15,21 @@ namespace NumSharp
         ///     for bit-exact parity.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.median.html</remarks>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the axes and keepdims' out are checked. With <c>overwrite_input</c> and no axis
+        ///     NumPy partitions the text itself instead: its broadcast error for an even length other than 2
+        ///     (<see cref="IncorrectShapeException"/>), else the closing mean's refusal of text.</exception>
         public static NDArray median(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, overwrite_input, keepdims), static s => median(s.a, s.axis, s.@out, s.overwrite_input, s.keepdims), axis, keepdims, null);
+            // a numpy.char.chararray operand: _median partitions the chararray, and chararray.partition is the STRING
+            // partition (NDCharArrayBoundary): NumPy's TypeError, or the string partition's own answer (MedianOfChararray)
+            if (NDCharArrayBoundary.Sees(a))
+                throw MedianOfChararray(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, keepdims);
             // Text (input or out=): NumPy's _ureduce normalizes the axis (a 0-d input refuses every axis), then the
             // closing mean(part, out=out) resolves add on (out, part) and refuses with its verbatim text; see
             // NDStringUfuncs.ReduceError / ReduceOutError.
@@ -58,9 +68,19 @@ namespace NumSharp
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (<c>np.median(m, axis=())</c> reduces axis 1).</remarks>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition
+        ///     (<c>chararray.partition() got an unexpected keyword argument 'axis'</c>), after the axes and keepdims' out are
+        ///     checked. With <c>overwrite_input</c> and no axis NumPy partitions the text itself instead: its broadcast error
+        ///     for an even length other than 2 (<see cref="IncorrectShapeException"/>), else the closing mean's refusal of
+        ///     text.</exception>
         public static NDArray median(NDArray a, int[] axis,
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
+            // a numpy.char.chararray operand (decided before the matrix region below, which would hide it): the STRING
+            // partition's answer (MedianOfChararray, NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                throw MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // Text (input or out=): NumPy's _ureduce normalizes the tuple (every axis, then repeats), then the closing
             // mean(part, out=out) refuses on (out, part) with its verbatim text; see NDStringUfuncs.ReduceError /
@@ -69,6 +89,78 @@ namespace NumSharp
             return QuantileEngine.Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
                 QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true,
                 allowBooleanContinuous: true, medianMean: true);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.median</c> of a <c>numpy.char.chararray</c>, statement by statement up to its failure:
+        ///     <c>_ureduce</c> normalizes the axes, indexes <c>out</c> for keepdims and merges several reduced axes; then
+        ///     <c>_median</c> partitions the chararray — and <c>chararray.partition</c> is the STRING partition
+        ///     (<c>partition(sep)</c>). Every form passes <c>axis=</c> to it (<c>np.partition</c>, or <c>a.partition(kth,
+        ///     axis=axis)</c>) and gets the TypeError, except <c>overwrite_input=True</c> without an axis: NumPy's
+        ///     <c>part.partition(kth)</c> then really partitions the strings around the kth list as text, which fails to
+        ///     broadcast for an even length other than 2 and otherwise computes and leaves the data as it was, so the closing
+        ///     <c>mean(part[indexer])</c> refuses the text.
+        /// </summary>
+        /// <param name="a">The chararray.</param>
+        /// <param name="axes">The reduced axes, or null for every axis.</param>
+        /// <param name="out">The <c>out=</c> argument, or null.</param>
+        /// <param name="overwrite_input">NumPy's <c>overwrite_input</c>.</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns>The exception NumPy raises (never null): the caller throws it.</returns>
+        /// <exception cref="AxisError">An axis is out of bounds (thrown here, NumPy's first check).</exception>
+        /// <exception cref="ValueError">An axis repeats (thrown here).</exception>
+        /// <exception cref="IndexError">keepdims with an <paramref name="out"/> NumPy cannot index (thrown here).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0 (the merge
+        ///     reshape, thrown here).</exception>
+        private static Exception MedianOfChararray(NDArray a, int[] axes, NDArray @out, bool overwrite_input, bool keepdims)
+        {
+            // _ureduce: `axis = _nx.normalize_axis_tuple(axis, nd)` — every axis checked, then the repeats.
+            Backends.Strings.NDStringUfuncs.ValidateReduceAxes("median", a.ndim, axes);
+            int nd = a.ndim;
+            int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
+            // The plain view the remaining statements read: no subclass rule may run on them.
+            using var region = NDCharArrayBoundary.Inside();
+            if (keepdims && @out is not null)
+            {
+                // `out[(Ellipsis,) + index_out]`: index 0 on every reduced axis (every axis without one), before the call.
+                var index = new Slice[1 + nd];
+                index[0] = Slice.Ellipsis;
+                for (int d = 0; d < nd; d++)
+                    index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
+                using var target = @out[index];
+            }
+            if (reduced is not null && reduced.Length > 1)
+            {
+                // The merge of several reduced axes: the kept ones moved to the front, then `reshape(kept + (-1,))`, whose -1
+                // NumPy cannot resolve beside a kept axis of length 0.
+                var keep = new System.Collections.Generic.List<int>();
+                for (int d = 0; d < nd; d++)
+                    if (Array.IndexOf(reduced, d) < 0)
+                        keep.Add(d);
+                var destinations = new int[keep.Count];
+                for (int i = 0; i < destinations.Length; i++)
+                    destinations[i] = i;
+                using var moved = np.moveaxis(a, keep.ToArray(), destinations);
+                var merged = new long[keep.Count + 1];
+                for (int d = 0; d < keep.Count; d++)
+                    merged[d] = moved.Shape.dimensions[d];
+                merged[keep.Count] = -1;
+                using var reshaped = moved.reshape(Shape.Adopt(merged));
+            }
+            if (!overwrite_input || reduced is not null)
+                return NDCharArrayBoundary.PartitionKeywordError();
+
+            // `part = a.ravel(); part.partition(kth)`: the string partition of the flattened text around the kth indices
+            // written as text — [n // 2 - 1, n // 2] for an even length, [(n - 1) // 2] for an odd one. np.strings.partition
+            // broadcasts the text against that separator list with its find ufunc's four operands (a, sep, start, end).
+            long n = a.size;
+            long k = n % 2 == 0 ? 2 : 1;
+            if (n != k && n != 1 && k != 1)
+                return new IncorrectShapeException($"operands could not be broadcast together with shapes ({n},) ({k},) () () ");
+            // The string partition computed and left `part` as it was: `mean(part[indexer], axis=0, out=out)` refuses the text
+            // as the median of plain text does.
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("median", a, (int?)null, @out);
+            throw new InvalidOperationException("np.median over text must refuse in the closing mean.");
         }
     }
 }

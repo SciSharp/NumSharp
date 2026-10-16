@@ -45,6 +45,11 @@ using System.Runtime.CompilerServices;
 // NO OWNERSHIP PARITY YET. A result is always a matrix VIEW of the plain result (never an owner). NumPy's
 // results own their data where the function allocated the result as the subclass (np.concatenate, np.dot); the
 // matrix-operand oracle tier compares class, dtype, shape and values, not flags.owndata.
+//
+// ONE DEPTH FOR EVERY ARRAY SUBCLASS. numpy.char.chararray has a boundary of its own (Char/NDCharArrayBoundary.cs, its
+// rules differ: np.ravel keeps a chararray and drops a matrix, np.concatenate the reverse), and it shares this depth:
+// a rule of either class raises it, so a nested public call computes plain for both, and PlainFor opens a region for a
+// chararray receiver as it does for a matrix one (an NDArray member keeps its plain meaning for any subclass object).
 // =============================================================================
 
 namespace NumSharp
@@ -78,6 +83,31 @@ namespace NumSharp
         ///     outermost one and decides the result's class; anything else means plain-array semantics.
         /// </summary>
         [ThreadStatic] private static int t_depth;
+
+        /// <summary>
+        ///     Whether no boundary region of either array subclass is open on this thread, i.e. the next public call is the
+        ///     outermost one. <see cref="NDCharArrayBoundary"/> reads it to decide its own rules; a rule raises the depth with
+        ///     <see cref="Inside"/>.
+        /// </summary>
+        internal static bool AtOutermostCall
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => t_depth == 0;
+        }
+
+        /// <summary>
+        ///     Whether <paramref name="a"/> is an object of one of NumPy's array SUBCLASSES the boundaries know
+        ///     (<see cref="NDMatrix"/>, <see cref="NDCharArray"/>): the receivers and operands for which
+        ///     <see cref="PlainFor(NDArray)"/> opens a region of plain-array semantics.
+        /// </summary>
+        /// <param name="a">The array, or <c>null</c>.</param>
+        /// <returns>True for a matrix or a chararray object (a chararray's scalar stand-in included: opening a region for it
+        ///     is harmless, no rule reads it as a chararray).</returns>
+        /// <remarks>Two exact type tests (method-table compares): neither class has a subclass in the library, and
+        ///     <c>is</c> on a non-sealed class walks the type hierarchy of every plain array that passes through.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsSubclassObject(NDArray a)
+            => a is not null && (a.GetType() == typeof(NDMatrix) || a.GetType() == typeof(NDCharArray));
 
         /// <summary>
         ///     Whether <paramref name="a"/> is a matrix OPERAND: an <see cref="NDMatrix"/> object that is not
@@ -524,18 +554,19 @@ namespace NumSharp
 
         /// <summary>
         ///     Opens a region of plain-array semantics for the calling member when <paramref name="self"/> is a
-        ///     matrix object: the public <c>np.*</c> functions it calls do not apply their matrix rule. Use it in
-        ///     an <see cref="NDArray"/> member that is implemented by an <c>np.*</c> function (so the member
-        ///     keeps the plain meaning through an <see cref="NDArray"/> reference) and in an <see cref="NDMatrix"/>
-        ///     member that builds its own result from a plain computation.
+        ///     matrix or a chararray object: the public <c>np.*</c> functions it calls do not apply the rules of either
+        ///     class (<see cref="NDCharArrayBoundary"/> shares the depth). Use it in an <see cref="NDArray"/> member that
+        ///     is implemented by an <c>np.*</c> function (so the member keeps the plain meaning through an
+        ///     <see cref="NDArray"/> reference) and in an <see cref="NDMatrix"/> member that builds its own result from a
+        ///     plain computation.
         /// </summary>
         /// <param name="self">The receiver.</param>
         /// <returns>A region to dispose at the end of the member (<c>using var plain = ...</c>). For a receiver
-        ///     that is not a matrix it does nothing.</returns>
+        ///     that is neither a matrix nor a chararray it does nothing.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static PlainRegion PlainFor(NDArray self)
         {
-            if (self is null || self.GetType() != typeof(NDMatrix))
+            if (!IsSubclassObject(self))
                 return default;
             t_depth++;
             return new PlainRegion(true);
@@ -545,11 +576,11 @@ namespace NumSharp
         /// <param name="a">The first operand, or <c>null</c>.</param>
         /// <param name="b">The second operand, or <c>null</c>.</param>
         /// <returns>A region to dispose at the end of the function; it does nothing when neither operand is a
-        ///     matrix object.</returns>
+        ///     matrix or a chararray object.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static PlainRegion PlainFor(NDArray a, NDArray b)
         {
-            if ((a is null || a.GetType() != typeof(NDMatrix)) && (b is null || b.GetType() != typeof(NDMatrix)))
+            if (!IsSubclassObject(a) && !IsSubclassObject(b))
                 return default;
             t_depth++;
             return new PlainRegion(true);
@@ -559,13 +590,12 @@ namespace NumSharp
         /// <param name="a">The first operand, or <c>null</c>.</param>
         /// <param name="b">The second operand, or <c>null</c>.</param>
         /// <param name="c">The third operand, or <c>null</c>.</param>
-        /// <returns>A region to dispose at the end of the function; it does nothing when no operand is a matrix
-        ///     object.</returns>
+        /// <returns>A region to dispose at the end of the function; it does nothing when no operand is a matrix or
+        ///     a chararray object.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static PlainRegion PlainFor(NDArray a, NDArray b, NDArray c)
         {
-            if ((a is null || a.GetType() != typeof(NDMatrix)) && (b is null || b.GetType() != typeof(NDMatrix))
-                && (c is null || c.GetType() != typeof(NDMatrix)))
+            if (!IsSubclassObject(a) && !IsSubclassObject(b) && !IsSubclassObject(c))
                 return default;
             t_depth++;
             return new PlainRegion(true);
@@ -573,13 +603,13 @@ namespace NumSharp
 
         /// <summary><see cref="PlainFor(NDArray)"/> for operands passed as one sequence.</summary>
         /// <param name="arrays">The operands, or <c>null</c>.</param>
-        /// <returns>A region to dispose at the end of the function; it does nothing when no operand is a matrix
-        ///     object.</returns>
+        /// <returns>A region to dispose at the end of the function; it does nothing when no operand is a matrix or
+        ///     a chararray object.</returns>
         internal static PlainRegion PlainFor(NDArray[] arrays)
         {
             if (arrays is not null)
                 for (int i = 0; i < arrays.Length; i++)
-                    if (arrays[i] is not null && arrays[i].GetType() == typeof(NDMatrix))
+                    if (IsSubclassObject(arrays[i]))
                     {
                         t_depth++;
                         return new PlainRegion(true);

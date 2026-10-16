@@ -93,6 +93,10 @@ namespace NumSharp.Tests.Creation
             r.Length.Should().Be(3);
             r[0].shape.Should().Equal(0L);
             r[0].typecode.Should().Be(NPTypeCode.Double);
+            // NumPy 2.4.2: np.unstack iterates np.moveaxis(x, axis, 0), so every entry is a VIEW, empty or not
+            // ([a.flags.owndata for a in np.unstack(np.zeros((0, 3)), axis=1)] is [False, False, False]).
+            foreach (var view in r)
+                view.Storage.OwnsData.Should().BeFalse();
         }
 
         [TestMethod]

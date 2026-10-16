@@ -297,6 +297,205 @@ namespace NumSharp.Tests.Fuzz
                 text.Dispose();
                 return bytes;
             });
+
+            // ---- NDCharArray: the phase-3 operators and members (section strcharops replays them outside the sweep) ----
+            // Each comparison entry takes the stripping route, the reflected route of a plain array on the left, a C# string,
+            // Python's fallback for an S / U mix of two chararrays and the C# null literal; the errors are measured too.
+            AddCharArrayComparison(l, "NDCharArray.op_Equality", (a, b) => a == b, (a, b) => a == b, a => a == "ab",
+                                   (a, b) => a == b, a => a == (object)null, ordering: false);
+            AddCharArrayComparison(l, "NDCharArray.op_Inequality", (a, b) => a != b, (a, b) => a != b, a => a != "ab",
+                                   (a, b) => a != b, a => a != (object)null, ordering: false);
+            AddCharArrayComparison(l, "NDCharArray.op_LessThan", (a, b) => a < b, (a, b) => a < b, a => a < "ab",
+                                   (a, b) => a < b, a => a < (object)null, ordering: true);
+            AddCharArrayComparison(l, "NDCharArray.op_LessThanOrEqual", (a, b) => a <= b, (a, b) => a <= b, a => a <= "ab",
+                                   (a, b) => a <= b, a => a <= (object)null, ordering: true);
+            AddCharArrayComparison(l, "NDCharArray.op_GreaterThan", (a, b) => a > b, (a, b) => a > b, a => a > "ab",
+                                   (a, b) => a > b, a => a > (object)null, ordering: true);
+            AddCharArrayComparison(l, "NDCharArray.op_GreaterThanOrEqual", (a, b) => a >= b, (a, b) => a >= b, a => a >= "ab",
+                                   (a, b) => a >= b, a => a >= (object)null, ordering: true);
+            E(l, "NDCharArray.op_Addition", "chararray + str / chararray / plain, str + chararray, the None and number errors", f =>
+            {
+                using var c = np.@char.array(new[] { "ab  ", "b" });
+                using var u = np.array(new[] { "x", "yz" });
+                using var withStr = c + "x";
+                using var reflected = "x" + c;
+                using var both = c + c;
+                using var plain = u + c;
+                try
+                {
+                    _ = c + (object)null;   // a short chararray: the trivial loop's copy into object, the finalize error
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    _ = c + (object)5L;   // no add loop for (<U4, int64): the ufunc's TypeError
+                }
+                catch (TypeError)
+                {
+                }
+                return c + u;
+            });
+            E(l, "NDCharArray.op_Addition", "a StringDType operand: short (the finalize error), 2-d (the refusal)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c" });
+                using var t = np.array(new[] { "q", "r" }, np.dtypes.StringDType());
+                try
+                {
+                    _ = c + t;
+                }
+                catch (ValueError)
+                {
+                }
+                // The 1-d bases are held: each 2-d view counts a reference on its base's buffer.
+                using var flatChars = np.@char.array(new[] { "ab", "c", "d", "e" });
+                using var flatText = np.array(new[] { "q", "r", "s", "t" }, np.dtypes.StringDType());
+                using var c2 = flatChars.reshape(2, 2);
+                using var t2 = flatText.reshape(2, 2);
+                try
+                {
+                    _ = c2 + t2;   // NumPy's plain StringDType result, which the operator's NDCharArray type cannot hold
+                }
+                catch (NotSupportedException)
+                {
+                }
+                return null;
+            });
+            E(l, "NDCharArray.op_Multiply", "an int, an int array, int * chararray, the non-integer and None errors", f =>
+            {
+                using var c = np.@char.array(new[] { "ab ", "c" });
+                using var counts = np.array(new[] { 2L, 0L });
+                using var byArray = c * counts;
+                using var reflected = 3 * c;
+                try
+                {
+                    _ = c * 2.5;
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    _ = c * (object)null;
+                }
+                catch (ValueError)
+                {
+                }
+                return c * 2;
+            });
+            E(l, "NDCharArray.Equals", "against a chararray holding the same text, against another object", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c" });
+                using var same = np.@char.array(new[] { "ab", "c" });
+                bool equal = c.Equals((object)same);
+                return Box(equal && !c.Equals("ab"));
+            });
+            T(l, "NDCharArray.GetHashCode", "raises by design (an array is mutable, so unhashable, as in NumPy)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c" });
+                return Box(c.GetHashCode());
+            });
+            E(l, "NDCharArray.argmax", "the finalize ValueError without out=, the indices into out=", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c", "b" });
+                try
+                {
+                    c.argmax();
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    c.argmax(0, keepdims: true);
+                }
+                catch (ValueError)
+                {
+                }
+                var @out = np.zeros(Shape.Scalar, np.int64);
+                return c.argmax(null, @out);
+            });
+            E(l, "NDCharArray.argmin", "the finalize ValueError without out=, the indices into out=", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c", "b" });
+                try
+                {
+                    c.argmin();
+                }
+                catch (ValueError)
+                {
+                }
+                var @out = np.zeros(Shape.Scalar, np.int64);
+                return c.argmin(null, @out);
+            });
+            T(l, "NDCharArray.argpartition", "raises by design (NumPy creates the int64 index array as the subclass: the finalize ValueError)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c", "b" });
+                return c.argpartition(0);
+            });
+            T(l, "NDCharArray.partition", "raises by design (the sort partition: chararray.partition takes only a separator, NumPy's TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c", "b" });
+                c.partition(0, -1);
+                return null;
+            });
+            T(l, "NDCharArray.partition", "the string partition (np.char.partition): the next phase of np.char", f =>
+            {
+                using var c = np.@char.array(new[] { "a b", "c" });
+                return c.partition(" ");
+            });
+        }
+
+        /// <summary>
+        ///     The entries of one comparison operator: the stripping route (a chararray on each side), the reflected route (a
+        ///     plain array on the left), a C# string, Python's fallback for an S / U mix of two chararrays (a 0-d bool for
+        ///     <c>==</c> / <c>!=</c>, NumPy's TypeError for an ordering), and the C# <c>null</c> literal (a reference test for
+        ///     <c>==</c> / <c>!=</c>, the TypeError of an ordering against None).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The operator's inventory id.</param>
+        /// <param name="chars">The operator over two chararrays.</param>
+        /// <param name="reflected">The operator with a plain array on the left.</param>
+        /// <param name="str">The operator against a C# string.</param>
+        /// <param name="mixed">The operator over a <c>U</c> and an <c>S</c> chararray.</param>
+        /// <param name="none">The operator against the C# null literal.</param>
+        /// <param name="ordering">True for <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c>: the mix and null routes raise.</param>
+        private static void AddCharArrayComparison(List<LeakCase> l, string api, Func<NDCharArray, NDCharArray, NDArray> chars,
+            Func<NDArray, NDCharArray, NDArray> reflected, Func<NDCharArray, NDArray> str,
+            Func<NDCharArray, NDCharArray, NDArray> mixed, Func<NDCharArray, NDArray> none, bool ordering)
+        {
+            E(l, api, "two chararrays, a plain array on the left, a str, an S / U mix, null", f =>
+            {
+                using var c = np.@char.array(new[] { "ab  ", "b" });
+                using var u = np.array(new[] { "ab", "b " });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 98 }, new byte[] { 98 } });
+                using var left = reflected(u, c);
+                using var text = str(c);
+                if (ordering)
+                {
+                    try
+                    {
+                        mixed(c, s);
+                    }
+                    catch (TypeError)
+                    {
+                    }
+                    try
+                    {
+                        none(c);
+                    }
+                    catch (TypeError)
+                    {
+                    }
+                }
+                else
+                {
+                    using var fallback = mixed(c, s);
+                    using var reference = none(c);
+                }
+                return chars(c, c);
+            });
         }
     }
 }

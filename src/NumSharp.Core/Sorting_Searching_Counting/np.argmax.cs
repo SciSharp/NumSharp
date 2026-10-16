@@ -11,9 +11,14 @@
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
         public static NDArray argmax(NDArray a, int axis, bool keepdims = false)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmax(s.a, s.axis, s.keepdims), axis, keepdims, null)
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexResult((a, axis, keepdims), static s => argmax(s.a, s.axis, s.keepdims), null)
             : a.TensorEngine.ArgMax(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
@@ -47,12 +52,19 @@
         ///     out afterwards reports the same error NumPy reports.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
+        ///     written.</exception>
         [NDScoped]
         public static NDArray argmax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => argmax(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
+            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => argmax(s.a, s.axis, s.@out, s.keepdims), @out);
             return NanArgWriteOut(a.TensorEngine.ReduceArgMax(a, axis, keepdims), @out, "argmax");
         }
 
@@ -62,8 +74,13 @@
         /// <param name="a">Input array.</param>
         /// <returns>Index of the maximum value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
+        ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
+        ///     checks.</exception>
         public static long argmax(NDArray a)
-            => (long)a.TensorEngine.ArgMax(a);
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexScalar(a, static s => argmax(s))
+            : (long)a.TensorEngine.ArgMax(a);
 
         /// <summary>
         ///     Returns the indices of the minimum values along an axis.
@@ -74,9 +91,14 @@
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
         public static NDArray argmin(NDArray a, int axis, bool keepdims = false)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), axis, keepdims, null)
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexResult((a, axis, keepdims), static s => argmin(s.a, s.axis, s.keepdims), null)
             : a.TensorEngine.ArgMin(a, axis: axis, keepdims: keepdims);
 
         /// <summary>
@@ -110,12 +132,19 @@
         ///     out afterwards reports the same error NumPy reports.
         ///     </para>
         /// </remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand without <paramref name="out"/>: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks; with <paramref name="out"/> the indices are
+        ///     written.</exception>
         [NDScoped]
         public static NDArray argmin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, keepdims), static s => argmin(s.a, s.axis, s.@out, s.keepdims), axis, keepdims, null);
+            // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.IndexResult((a, axis, @out, keepdims), static s => argmin(s.a, s.axis, s.@out, s.keepdims), @out);
             return NanArgWriteOut(a.TensorEngine.ReduceArgMin(a, axis, keepdims), @out, "argmin");
         }
 
@@ -125,7 +154,12 @@
         /// <param name="a">Input array.</param>
         /// <returns>Index of the minimum value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates the int64 index result as the
+        ///     subclass (<c>Can only create a chararray from string data.</c>), after the argument
+        ///     checks.</exception>
         public static long argmin(NDArray a)
-            => (long)a.TensorEngine.ArgMin(a);
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexScalar(a, static s => argmin(s))
+            : (long)a.TensorEngine.ArgMin(a);
     }
 }

@@ -175,6 +175,13 @@ namespace NumSharp.Tests.Fuzz
         /// <exception cref="InvalidOperationException">The ARC probe cannot read a fixture's slice.</exception>
         private static bool MeasureCatalogueEntry(LeakCase entry, LeakFixture fx, SweepAccumulator acc, List<string> errors)
         {
+            // Earlier entries leave views of the fixture arrays to the finalizer (the retentions the ownership gate prints:
+            // f.V["0:4"] passed inline, a callback's view), each holding a counted reference on a fixture buffer. A
+            // collection inside THIS entry's measurement (MeasureExactTraffic's own hygiene) would finalize them and read
+            // as this entry dropping the references — a false over-disposal (fixture V once fell 11 -> 1 inside a
+            // chararray comparison entry). Finalizing that young garbage before the snapshot charges each entry with its own
+            // changes only (a gen-1 collection: cheap, independent of the heap size).
+            ScopeAudit.Quiesce();
             // The fixture's arrays as they are before THIS entry: an earlier entry may legitimately have materialized a
             // masked fixture's fill, so each entry is judged on its own changes.
             var ledger = OwnershipLedger.Of(fx.Owned());

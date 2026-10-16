@@ -13,12 +13,16 @@ namespace NumSharp
         /// <param name="a">Input array.</param>
         /// <param name="repeats">The number of repetitions for each element.</param>
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input and returns a flat array.</param>
-        /// <returns>Output array which has the same shape as <paramref name="a"/>, except along <paramref name="axis"/>.</returns>
+        /// <returns>Output array which has the same shape as <paramref name="a"/>, except along <paramref name="axis"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray repeat(NDArray a, int repeats, int? axis = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.Kept((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis))
             : repeat(a, (long)repeats, axis);
 
         /// <summary>
@@ -27,7 +31,9 @@ namespace NumSharp
         /// <param name="a">Input array.</param>
         /// <param name="repeats">The number of repetitions for each element.</param>
         /// <param name="axis">Axis along which to repeat values. <c>null</c> (NumPy <c>None</c>) flattens the input.</param>
-        /// <returns>Output array.</returns>
+        /// <returns>Output array.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // calculating overload: reclaims the ravel/ascontiguousarray/reshape temps
@@ -36,6 +42,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats < 0)
@@ -59,7 +68,9 @@ namespace NumSharp
         /// <param name="a">Input array.</param>
         /// <param name="repeats">Repeat counts. Either a 0-d/size-1 array (broadcast) or a 1-D array of length equal to <c>a.size</c> (axis=None) or <c>a.shape[axis]</c>.</param>
         /// <param name="axis">Axis along which to repeat. <c>null</c> flattens the input.</param>
-        /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.</returns>
+        /// <returns>A new array with elements repeated according to <paramref name="repeats"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="repeats"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="repeats"/> has more than one dimension (<c>object too deep for desired
         ///     array</c>, checked first).</exception>
@@ -83,6 +94,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, repeats, axis), static s => repeat(s.a, s.repeats, s.axis));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             if (repeats is null)

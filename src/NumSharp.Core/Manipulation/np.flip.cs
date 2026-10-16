@@ -27,7 +27,8 @@ namespace NumSharp
         /// </param>
         /// <returns>
         ///     A view of <paramref name="m"/> with the entries of axis reversed. Since a view is returned,
-        ///     this operation is done in constant time.
+        ///     this operation is done in constant time. A <c>numpy.char.chararray</c> operand gives a chararray view, and a
+        ///     0-d one its element: the read-only stand-in of NumPy's Python <c>str</c> / <c>bytes</c>, stripped.
         /// </returns>
         /// <exception cref="AxisError">When <paramref name="axis"/> is out of bounds for the array's dimensions.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flip.html</remarks>
@@ -37,6 +38,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(m))
                 return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary): flip ends with
+            // m[indexer], chararray.__getitem__, so a 0-d operand's result is its element, stripped
+            if (NDCharArrayBoundary.Sees(m))
+                return NDCharArrayBoundary.KeptIndexed((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -65,7 +70,8 @@ namespace NumSharp
         /// </param>
         /// <returns>
         ///     A view of <paramref name="m"/> with the entries of the given axes reversed. Since a view is
-        ///     returned, this operation is done in constant time.
+        ///     returned, this operation is done in constant time. A <c>numpy.char.chararray</c> operand gives a chararray
+        ///     view, and a 0-d one its element: the read-only stand-in of NumPy's Python <c>str</c> / <c>bytes</c>, stripped.
         /// </returns>
         /// <exception cref="AxisError">When any axis is out of bounds for the array's dimensions.</exception>
         /// <exception cref="ValueError">When an axis is repeated ("repeated axis").</exception>
@@ -76,6 +82,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(m))
                 return NDMatrixBoundary.Wrapped((m, axis), static s => flip(s.m, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary): flip ends with
+            // m[indexer], chararray.__getitem__, so a 0-d operand's result is its element, stripped
+            if (NDCharArrayBoundary.Sees(m))
+                return NDCharArrayBoundary.KeptIndexed((m, axis), static s => flip(s.m, s.axis));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -113,7 +123,8 @@ namespace NumSharp
         /// <returns>
         ///     A view of <paramref name="m"/> with the columns reversed — equivalent to m[:, ::-1]
         ///     or np.flip(m, axis: 1). Since a view is returned, this operation is done in constant time.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ValueError">When <paramref name="m"/> is less than 2-d ("Input must be &gt;= 2-d.").</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fliplr.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
@@ -122,6 +133,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(m))
                 return NDMatrixBoundary.Wrapped(m, static s => fliplr(s));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(m))
+                return NDCharArrayBoundary.Kept(m, static s => fliplr(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 
@@ -140,7 +154,8 @@ namespace NumSharp
         /// <returns>
         ///     A view of <paramref name="m"/> with the rows reversed — equivalent to m[::-1, ...]
         ///     or np.flip(m, axis: 0). Since a view is returned, this operation is done in constant time.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ValueError">When <paramref name="m"/> is less than 1-d ("Input must be &gt;= 1-d.").</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.flipud.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
@@ -149,6 +164,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(m))
                 return NDMatrixBoundary.Wrapped(m, static s => flipud(s));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(m))
+                return NDCharArrayBoundary.Kept(m, static s => flipud(s));
             if (m is null)
                 throw new ArgumentNullException(nameof(m));
 

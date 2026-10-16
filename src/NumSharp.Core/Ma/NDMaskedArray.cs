@@ -128,8 +128,12 @@ namespace NumSharp
             // A numpy.matrix is stored as a plain view of its buffer. numpy.ma keeps the matrix class
             // (_baseclass, a "masked_matrix" whose reductions stay two-dimensional); that has no model here, and
             // every member computes with np.* calls written for plain arrays, long after this constructor
-            // returned. The view belongs to this masked array, so no scope may dispose it (Own).
-            _data = NDMatrixBoundary.IsMatrix(data) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(data)) : data;
+            // returned. The view belongs to this masked array, so no scope may dispose it (Own). A
+            // numpy.char.chararray is stored the same way: NumPy's masked chararray keeps it as _baseclass (its .data
+            // is a chararray and its comparisons strip), which is not modelled either.
+            _data = NDMatrixBoundary.IsMatrix(data) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(data))
+                : NDCharArrayBoundary.IsCharArray(data) ? MaskedArrayModule.Own(NDCharArrayBoundary.PlainViewOf(data))
+                : data;
             _mask = NDMatrixBoundary.IsMatrix(mask) ? MaskedArrayModule.Own(NDMatrixBoundary.PlainOf(mask)) : mask;
             _fill_value = fill_value;
         }
@@ -3880,8 +3884,9 @@ namespace NumSharp
 
         /// <summary>
         ///     Normalizes any accepted operand to its data <see cref="NDArray"/>: unwraps a
-        ///     <see cref="NDMaskedArray"/>, passes an <see cref="NDArray"/> through, and converts a C# scalar or
-        ///     array-like via <see cref="np.asarray(object,DType,char)"/>.
+        ///     <see cref="NDMaskedArray"/>, passes an <see cref="NDArray"/> through (a <c>numpy.matrix</c> or a
+        ///     <c>numpy.char.chararray</c> as a new plain view: numpy.ma's base class is not modelled), and converts a C#
+        ///     scalar or array-like via <see cref="np.asarray(object,DType,char)"/>.
         /// </summary>
         /// <param name="a">The operand.</param>
         /// <returns>The operand's data as an <see cref="NDArray"/>.</returns>
@@ -3892,9 +3897,10 @@ namespace NumSharp
             {
                 case null: throw new ArgumentNullException(nameof(a));
                 case NDMaskedArray m: return m._data;
-                // A numpy.matrix operand is read as its plain view: numpy.ma's matrix base class is not modelled
-                // (NDMaskedArray's constructor), so the module computes with plain-array semantics throughout.
-                case NDArray nd: return NDMatrixBoundary.PlainOf(nd);
+                // A numpy.matrix or numpy.char.chararray operand is read as its plain view: numpy.ma's base class is
+                // not modelled (NDMaskedArray's constructor), so the module computes with plain-array semantics
+                // throughout. The view is the calling function's temporary (its scope reclaims it).
+                case NDArray nd: return NDCharArrayBoundary.PlainViewOf(NDMatrixBoundary.PlainOf(nd));
                 case Array arr: return np.array(arr); // C# array-like (double[], int[,], …)
                 default: return NDArray.Scalar(a);    // boxed C# scalar (int/double/bool/…)
             }
@@ -6669,7 +6675,9 @@ namespace NumSharp
                 // a BigInteger past the double range raises CPython's OverflowError).
                 operand = Backends.DefaultEngine.PackPythonScalarForFloatLoop(value, x.typecode);
             else
-                operand = value as NDArray ?? (value as NDMaskedArray)?._data ?? AsValueOperand(value);
+                // A numpy.char.chararray value is read as its plain view, as AsData reads one (numpy.ma's base class is not
+                // modelled); the view is the calling function's temporary.
+                operand = NDCharArrayBoundary.PlainViewOf(value as NDArray) ?? (value as NDMaskedArray)?._data ?? AsValueOperand(value);
             return ufunc switch
             {
                 "equal" => np.equal(x, operand),

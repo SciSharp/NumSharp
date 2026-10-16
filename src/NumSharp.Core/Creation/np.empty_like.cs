@@ -30,7 +30,9 @@ namespace NumSharp
         /// <param name="shape">Overrides the shape of the result.</param>
         /// <param name="order">Memory layout: 'C', 'F', 'A' or 'K' (default, preserves prototype layout).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
-        /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.</returns>
+        /// <returns>Array of uninitialized (arbitrary) data with the same shape and type as prototype.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty_like.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray empty_like(NDArray prototype, DType dtype, Shape shape, char order, string device = null)
@@ -38,6 +40,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(prototype))
                 return NDMatrixBoundary.Wrapped((prototype, dtype, shape, order, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.order, s.device));
+            // a numpy.char.chararray operand: PyArray_NewLikeArray allocates the result as the subclass (subok=True), so
+            // its dtype meets __array_finalize__ after the device, order and dimension checks (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(prototype))
+                return NDCharArrayBoundary.Kept((prototype, dtype, shape, order, device), static s => empty_like(s.prototype, s.dtype, s.shape, s.order, s.device));
             ValidateDevice(device);
             var dims = shape.IsEmpty ? (long[])prototype.Shape.dimensions.Clone() : (long[])shape;
             // PyArray_NewLikeArrayWithShape's layout: order='K' keeps the prototype's axis permutation (C when shape=

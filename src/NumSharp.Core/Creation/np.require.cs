@@ -21,7 +21,9 @@ namespace NumSharp
         ///         <item>'ENSUREARRAY' / 'E' — ensure a base array instead of a subclass (no-op in NumSharp: no ndarray subclasses)</item>
         ///     </list>
         /// </param>
-        /// <returns>Array with the specified requirements and dtype if given. A copy is made only when needed.</returns>
+        /// <returns>Array with the specified requirements and dtype if given. A copy is made only when needed.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <param name="like">Reference array for NumPy's array-function dispatch — accepted for signature parity but has no observable effect in NumSharp (no array-subclass dispatch).</param>
         /// <exception cref="ValueError">If both 'C' and 'F' order are requested, or a requirement string is not understood.</exception>
         /// <remarks>
@@ -41,6 +43,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, dtype, requirements, like), static s => require(s.a, s.dtype, s.requirements, s.like));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, dtype, requirements, like), static s => require(s.a, s.dtype, s.requirements, s.like));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
@@ -89,9 +94,15 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.require.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.
+        /// </remarks>
         public static NDArray require(NDArray a, DType dtype, string requirements)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, dtype, requirements), static s => require(s.a, s.dtype, s.requirements))
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.Kept((a, dtype, requirements), static s => require(s.a, s.dtype, s.requirements))
             : require(a, dtype, ToCharTokens(requirements));
 
         /// <summary>Splits a requirements string into one-character tokens (NumPy iterates a string by char).</summary>

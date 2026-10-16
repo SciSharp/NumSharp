@@ -13,7 +13,9 @@ namespace NumSharp
         /// <param name="tup">
         ///     Arrays to stack. All of them must have the same first dimension.
         /// </param>
-        /// <returns>The 2-D array formed by stacking the given arrays.</returns>
+        /// <returns>The 2-D array formed by stacking the given arrays.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.column_stack.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray column_stack(params NDArray[] tup)
@@ -21,6 +23,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(tup))
                 return NDMatrixBoundary.Wrapped(tup, static s => column_stack(s));
+            // a numpy.char.chararray operand: NumPy's column_stack ends with np.concatenate, which drops the class; the rule's
+            // region keeps its inner view and transpose calls plain (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(tup))
+                return NDCharArrayBoundary.Plain(tup, static s => column_stack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

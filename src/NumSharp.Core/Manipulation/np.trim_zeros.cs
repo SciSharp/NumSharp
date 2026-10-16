@@ -13,7 +13,9 @@ namespace NumSharp
         /// <param name="filt">Input array.</param>
         /// <param name="trim">'f' trims from the front, 'b' from the back; "fb" (default) trims both. Case-insensitive.</param>
         /// <param name="axis">The single dimension to trim; <c>null</c> trims the whole-array bounding box.</param>
-        /// <returns>A view of <paramref name="filt"/> (see the <c>int[]</c> overload).</returns>
+        /// <returns>A view of <paramref name="filt"/> (see the <c>int[]</c> overload).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ValueError"><paramref name="trim"/> contains unexpected characters.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="filt"/> ("axis: axis … is
         ///     out of bounds for array of dimension …", NumPy names the argument).</exception>
@@ -23,6 +25,8 @@ namespace NumSharp
         public static NDArray trim_zeros(NDArray filt, string trim = "fb", int? axis = null)
             => NDMatrixBoundary.Sees(filt)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis))
+            : NDCharArrayBoundary.Sees(filt)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.Kept((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis))
             : trim_zeros(filt, trim, axis.HasValue ? new[] {axis.Value} : null);
 
         /// <summary>
@@ -44,7 +48,8 @@ namespace NumSharp
         /// <returns>
         ///     A view of <paramref name="filt"/> with leading/trailing all-zero hyperplanes removed. The number
         ///     of dimensions and the input dtype are preserved.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ValueError">If <paramref name="trim"/> contains unexpected characters, or an axis is repeated
         ///     (NumPy's ValueError texts).</exception>
         /// <exception cref="AxisError">If an axis is out of bounds for <paramref name="filt"/> (checked for every axis before
@@ -59,6 +64,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(filt))
                 return NDMatrixBoundary.Wrapped((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(filt))
+                return NDCharArrayBoundary.Kept((filt, trim, axis), static s => trim_zeros(s.filt, s.trim, s.axis));
             // NumPy lower-cases and validates the trim spec against the four accepted spellings.
             trim = (trim ?? string.Empty).ToLowerInvariant();
             if (trim != "fb" && trim != "bf" && trim != "f" && trim != "b")

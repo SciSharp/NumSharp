@@ -35,6 +35,7 @@ Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_o
 """
 import codecs
 import json
+import operator
 import sys
 import warnings
 from pathlib import Path
@@ -8856,6 +8857,724 @@ def gen_strchararray():
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Sections strcharops / strcharfn: numpy.char.chararray BEHAVIOR (the numpy.char plan's phase 3) — the operators with
+# Python's dispatch, the members that refuse (the finalize error) or partition the strings, and the np.* functions that
+# keep the class, wrap their result, drop the class or refuse a chararray.
+# ----------------------------------------------------------------------------------------------------------------------
+
+CHO = "strcharops"
+CHF = "strcharfn"
+
+# __array_finalize__'s ValueError. NumPy 2.4.2 may corrupt its heap freeing an array whose finalize raised (the
+# strchararray section's note), so a worker process that recorded this error is replaced before the next case.
+FINALIZE_TEXT = "Can only create a chararray from string data."
+
+_CHX_OPS = {"==": operator.eq, "!=": operator.ne, "<": operator.lt, "<=": operator.le, ">": operator.gt,
+            ">=": operator.ge, "+": operator.add, "*": operator.mul}
+
+
+def _chx_dec(v):
+    """The inverse of ``enc``: the Python value a JSON encoding stands for.
+
+    Args:
+        v: an ``enc`` result (text and bytes as hex, None, bool, int, float, lists).
+
+    Returns:
+        The value.
+
+    Raises:
+        TypeError: not an ``enc`` encoding.
+    """
+    if isinstance(v, list):
+        return [_chx_dec(x) for x in v]
+    if isinstance(v, dict):
+        if "u" in v:
+            return bytes.fromhex(v["u"]).decode("utf-32-le", "surrogatepass")
+        if "b" in v:
+            return bytes.fromhex(v["b"])
+        if "none" in v:
+            return None
+        if "bool" in v:
+            return v["bool"]
+        if "int" in v:
+            return v["int"]
+        if "float" in v:
+            f = v["float"]
+            return float(f) if isinstance(f, str) else f
+    raise TypeError(f"not an enc() value: {v!r}")
+
+
+def _chx_pool(spec, layout, seed=1):
+    """The recipe of a chararray-pool operand (``_cha_operand``)."""
+    return {"pool": [spec, layout, seed]}
+
+
+def _chx_vals(values, dtype, out=False):
+    """The recipe of an operand holding ``np.array(values, dtype)`` (its own C-contiguous base); ``out`` for an out=
+    operand, whose OWNDATA the replay must reproduce (``target``)."""
+    d = {"values": enc(values), "dtype": dtype}
+    if out:
+        d["out"] = True
+    return d
+
+
+def _chx_build(recipe):
+    """A (base, view) operand from its recipe — the same in the generator and in a worker process.
+
+    Args:
+        recipe: ``{"pool": [spec, layout, seed]}`` (``_cha_operand``), ``{"values": enc, "dtype": spec}``
+            (``np.array(values, dtype)``) or ``{"T": enc}`` (a StringDType array of the values).
+
+    Returns:
+        The (base, view) pair.
+    """
+    if "pool" in recipe:
+        spec, layout, seed = recipe["pool"]
+        return _cha_operand(spec, layout, seed)
+    if "T" in recipe:
+        return t_plain(np.array(_chx_dec(recipe["T"]), dtype=np.dtypes.StringDType()))
+    arr = np.array(_chx_dec(recipe["values"]), dtype=recipe["dtype"])
+    return target(arr) if recipe.get("out") else plain(arr)
+
+
+def _chx_cha(k=0):
+    """The argument spec of operand ``k`` viewed as a chararray."""
+    return {"op": k, "cha": True}
+
+
+def _chx_arr(k):
+    """The argument spec of operand ``k`` as the plain array it is."""
+    return {"op": k}
+
+
+def _chx_v(value):
+    """The argument spec of a Python value."""
+    return {"v": enc(value)}
+
+
+def _chx_arg(spec, views, chars):
+    """One argument of a call as the Python value NumPy receives.
+
+    Args:
+        spec: ``{"op": k}`` (operand k), ``{"op": k, "cha": true}`` (operand k's chararray view — one object per operand,
+            so a call that names it twice passes the same chararray), ``{"elem": [k, [i, ...]]}`` (an element of operand
+            k's chararray view: the stripped Python str / bytes), ``{"v": enc}`` (a Python value), ``{"dt": spec}`` (a
+            dtype) or ``{"tuple": [spec, ...]}`` (a tuple).
+        views: the operand views.
+        chars: the chararray view of each operand used so far, by index.
+
+    Returns:
+        The value.
+
+    Raises:
+        TypeError: an unknown spec.
+    """
+    if "op" in spec:
+        k = spec["op"]
+        if not spec.get("cha"):
+            return views[k]
+        if k not in chars:
+            chars[k] = views[k].view(np.char.chararray)
+        return chars[k]
+    if "elem" in spec:
+        k, index = spec["elem"]
+        if k not in chars:
+            chars[k] = views[k].view(np.char.chararray)
+        return chars[k][tuple(index)]
+    if "v" in spec:
+        return _chx_dec(spec["v"])
+    if "dt" in spec:
+        return np.dtype(spec["dt"])
+    if "tuple" in spec:
+        return tuple(_chx_arg(x, views, chars) for x in spec["tuple"])
+    raise TypeError(f"unknown argument spec {spec!r}")
+
+
+def _chx_resolve(fn):
+    """A NumPy function by its dotted name under ``np`` (``reshape``, ``strings.add``, ``char.multiply``)."""
+    obj = np
+    for part in fn.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def _chx_call(op, params, views):
+    """Makes one case's call.
+
+    Args:
+        op: ``cha_op`` (an operator: ``params.sym`` over ``params.args``), ``cha_call`` (a member of operand
+            ``params.recv``'s chararray view: ``params.name`` with ``args`` / ``kw``; ``sort`` returns the sorted
+            receiver) or ``cha_fn`` (the NumPy function ``params.fn`` with ``args`` / ``kw``).
+        params: the case parameters.
+        views: the operand views.
+
+    Returns:
+        The result; a ``_WithSelf`` when NumPy's identity with the receiver is recorded (a member, or a function whose
+        first argument is a chararray).
+    """
+    chars = {}
+    if op == "cha_call":
+        k = params["recv"]
+        chars[k] = views[k].view(np.char.chararray)
+    args = [_chx_arg(a, views, chars) for a in params.get("args", [])]
+    kw = {name: _chx_arg(a, views, chars) for name, a in params.get("kw", {}).items()}
+    if op == "cha_op":
+        return _CHX_OPS[params["sym"]](*args)
+    if op == "cha_call":
+        recv = chars[params["recv"]]
+        if params["name"] == "sort":
+            recv.sort(*args, **kw)
+            return _WithSelf(recv, recv)
+        return _WithSelf(getattr(recv, params["name"])(*args, **kw), recv)
+    r = _chx_resolve(params["fn"])(*args, **kw)
+    first = args[0] if args else None
+    return _WithSelf(r, first) if isinstance(first, np.char.chararray) else r
+
+
+def _chx_expect(r, views, receiver=None, uninit=False):
+    """The expectation of a behavior case's result.
+
+    Args:
+        r: NumPy's result.
+        views: the operand views (memory sharing).
+        receiver: the object NumPy's identity is compared with, or None.
+        uninit: the result's text is uninitialized (``np.empty_like``): its buffer is not compared.
+
+    Returns:
+        ``array`` with its CLASS, its OWNDATA read from the result itself and, given a receiver, ``self``; ``items`` for
+        a tuple / list (a namedtuple too); ``element`` for a str / bytes (``__getitem__``'s stripped value) or a
+        np.str_ / np.bytes_ (an unstripped NumPy scalar); ``bool`` for a Python bool (Python's fallback of a comparison
+        nothing answers); a 0-d ``scalar`` array for a numeric NumPy scalar.
+
+    Raises:
+        TypeError: a result kind the sections do not record.
+    """
+    if isinstance(r, np.ndarray):
+        d = array_expect(r, views)
+        d["owndata"] = bool(r.flags.owndata)
+        d["class"] = type(r).__name__
+        if receiver is not None:
+            d["self"] = r is receiver
+        if uninit:
+            d["buffer"] = None
+        return d
+    if isinstance(r, (list, tuple)):
+        return {"kind": "items", "items": [_chx_expect(x, views) for x in r]}
+    if isinstance(r, (str, bytes)):
+        return {"kind": "element", "py": type(r).__name__, "value": enc(r)}
+    if isinstance(r, bool):
+        return {"kind": "bool", "value": r}
+    if isinstance(r, (np.generic, int)):
+        # A numeric NumPy scalar, or a Python int (np.count_nonzero): a 0-d array of its dtype (int64 for a Python int).
+        d = array_expect(np.asarray(r) if isinstance(r, np.generic) else np.asarray(r, dtype=np.int64), None)
+        d.pop("writeable", None)
+        d.pop("owndata", None)
+        d["scalar"] = True
+        return d
+    raise TypeError(f"unexpected behavior result {type(r)}")
+
+
+def _chx_outcome(payload):
+    """Rebuilds a case's operands, makes its call and records the outcome (run by the worker processes).
+
+    Args:
+        payload: ``{"op", "params", "recipes"}``.
+
+    Returns:
+        ``{"expected": ...}`` or ``{"error": ...}``.
+    """
+    views = [_chx_build(r)[1] for r in payload["recipes"]]
+    try:
+        r = _chx_call(payload["op"], payload["params"], views)
+        receiver = None
+        if isinstance(r, _WithSelf):
+            r, receiver = r.result, r.receiver
+        return {"expected": _chx_expect(r, views, receiver, payload["params"].get("uninit", False))}
+    except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
+        return {"error": err_info(e)}
+
+
+# The cases of sections strcharops / strcharfn whose outcome a worker process records (_chx_flush).
+_CHX_PENDING = []
+
+
+def add_chx(section, op, params, recipes, layout="", phase=1):
+    """Records one behavior case; its outcome is computed later by ``_chx_flush``.
+
+    Args:
+        section: ``CHO`` or ``CHF``.
+        op: ``cha_op``, ``cha_call`` or ``cha_fn`` (see ``_chx_call``).
+        params: the case parameters (JSON: argument specs, see ``_chx_arg``).
+        recipes: the operands' recipes (``_chx_build``).
+        layout: the case's layout label.
+        phase: 1, or 2 for a call NumPy answers by computing what NumSharp's string support defers (the string
+            partition of ``chararray.partition``).
+    """
+    pairs = [_chx_build(r) for r in recipes]
+    prefix = f"{section}/{op}/"
+    n = _OP_COUNT.get(prefix, 0) + 1
+    _OP_COUNT[prefix] = n
+    cid = f"{section}/{op}/{n}"
+    assert cid not in _IDS
+    _IDS.add(cid)
+    case = {"id": cid, "op": op, "params": params, "operands": [describe(b, v) for b, v in pairs], "phase": phase,
+            "layout": layout}
+    _CHX_PENDING.append((case, {"op": op, "params": params, "recipes": recipes}))
+    CASES.append(case)
+
+
+# A worker answers cases read from stdin, one JSON line each, until a case raises the finalize error: it leaves then
+# (without the interpreter's teardown), and the driver starts a fresh one for the next case.
+_CHX_WORKER = ("import json, os, sys\n"
+               "sys.path.insert(0, sys.argv[1])\n"
+               "import gen_strings_oracle as g\n"
+               "for line in sys.stdin:\n"
+               "    out = g._chx_outcome(json.loads(line))\n"
+               "    sys.stdout.write(json.dumps(out, allow_nan=False) + '\\n')\n"
+               "    sys.stdout.flush()\n"
+               "    if out.get('error', {}).get('text') == g.FINALIZE_TEXT:\n"
+               "        os._exit(0)\n"
+               "os._exit(0)\n")
+
+
+def _chx_run_chunk(payloads):
+    """The outcomes of a run of cases, in order, from a sequence of worker processes (a fresh one after each finalize
+    error).
+
+    Args:
+        payloads: the cases' payloads.
+
+    Returns:
+        The outcomes.
+
+    Raises:
+        AssertionError: a worker wrote no outcome for a case (it crashed during the call).
+    """
+    import subprocess
+    outcomes = []
+    proc = None
+    for payload in payloads:
+        if proc is None:
+            proc = subprocess.Popen([sys.executable, "-I", "-c", _CHX_WORKER, str(HERE)], stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+        proc.stdin.write(json.dumps(payload) + "\n")
+        proc.stdin.flush()
+        line = proc.stdout.readline()
+        assert line.startswith("{"), f"behavior worker wrote no outcome for {payload}: rc={proc.poll()}"
+        out = json.loads(line)
+        outcomes.append(out)
+        if out.get("error", {}).get("text") == FINALIZE_TEXT:
+            proc.stdin.close()
+            proc.wait()
+            proc = None
+    if proc is not None:
+        proc.stdin.close()
+        proc.wait()
+    return outcomes
+
+
+def _chx_flush():
+    """Records the outcome of every pending behavior case: eight runs of consecutive cases, each through its own worker
+    sequence; the cases keep their place and ids."""
+    from concurrent.futures import ThreadPoolExecutor
+    payloads = [p for _, p in _CHX_PENDING]
+    k = max(1, (len(payloads) + 7) // 8)
+    chunks = [payloads[i:i + k] for i in range(0, len(payloads), k)]
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(_chx_run_chunk, chunks))
+    outcomes = [o for chunk in results for o in chunk]
+    for (case, _), outcome in zip(_CHX_PENDING, outcomes):
+        case.update(outcome)
+    _CHX_PENDING.clear()
+
+
+def _chx_shape(recipe):
+    """The view shape of an operand recipe."""
+    return _chx_build(recipe)[1].shape
+
+
+def gen_strcharops():
+    """Section strcharops: the chararray operators — the six stripping comparisons with Python's binary-operator
+    dispatch (a plain array on either side, NotImplemented for an S / U mix and Python's fallback), + (np.add, a chararray
+    view) and * (np.char.asarray(np.char.multiply(...)), a copy for U) — and the members phase 3 adds: argmax / argmin /
+    argpartition (the finalize error after NumPy's checks; out= computes), partition (the STRING partition; its sort form
+    is NumPy's TypeError), sort (in place), argsort and searchsorted (plain)."""
+    syms = ["==", "!=", "<", "<=", ">", ">="]
+    for spec in ["<U4", "|S4"]:
+        is_u = spec[1] == "U"
+        other = "|S4" if is_u else "<U4"
+        word = (lambda s: s) if is_u else (lambda s: s.encode("latin-1"))
+        alien = (lambda s: s.encode("latin-1")) if is_u else (lambda s: s)
+        for layout in ["c1", "c2", "f2", "s1", "r1", "z0", "e1", "one", "bc", "d5"]:
+            cha = _chx_pool(spec, layout, 1)
+            shape = _chx_shape(cha)
+            label = f"{spec}:{layout}"
+            C = _chx_cha(0)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            # The partners: (recipes after the chararray, argument spec, label, syms to cover).
+            partners = [([], _chx_v(word("ab")), "word", syms), ([], _chx_v(word("ab  ")), "word_ws", syms),
+                        ([], _chx_v(word("")), "empty_word", ["==", "<"]),
+                        ([_chx_pool(spec, layout, 5)], _chx_arr(1), "plain", syms),
+                        ([_chx_pool(spec, layout, 5)], _chx_cha(1), "chararray", syms),
+                        ([], _chx_v(alien("ab")), "alien_word", syms),
+                        ([_chx_pool(other, layout, 5)], _chx_arr(1), "alien_plain", syms),
+                        ([], _chx_v(5), "int", ["==", "<"]), ([], _chx_v(1.5), "float", ["=="]),
+                        ([], _chx_v(True), "bool", ["=="]),
+                        ([{"T": enc(["ab"])}], _chx_arr(1), "stringdtype", ["==", "<"])]
+            if nd >= 1:
+                partners.append(([], _chx_v([word(w) for w in ["ab", "c", " d", ""] * 3][:shape[-1]]), "list", ["==", ">"]))
+            if nd >= 1 and size > 0:
+                partners.append(([_chx_vals([], spec)], _chx_arr(1), "empty_plain", ["=="]))
+                partners.append(([], {"elem": [0, [0] * nd]}, "elem", ["==", "<"]))
+            for extra, partner, plabel, cover in partners:
+                for sym in cover:
+                    for left_first in (True, False):
+                        args = [C, partner] if left_first else [partner, C]
+                        add_chx(CHO, "cha_op", {"sym": sym, "args": args}, [cha] + extra,
+                                layout=f"{label}:{plabel}:{'L' if left_first else 'R'}")
+            # + : np.add in the written order.
+            add_partners = [([], _chx_v(word("x")), "word"), ([_chx_pool(spec, layout, 5)], _chx_arr(1), "plain"),
+                            ([_chx_pool(spec, layout, 5)], _chx_cha(1), "chararray"),
+                            ([], _chx_v(alien("x")), "alien_word"), ([], _chx_v(1), "int"), ([], _chx_v(None), "none"),
+                            ([{"T": enc(["q"])}], _chx_arr(1), "stringdtype")]
+            if nd >= 1:
+                add_partners.append(([], _chx_v([word(w) for w in ["x", "yy", "", "z"] * 3][:shape[-1]]), "list"))
+            if nd >= 1 and size > 0:
+                add_partners.append(([], {"elem": [0, [0] * nd]}, "elem"))
+            for extra, partner, plabel in add_partners:
+                for left_first in (True, False):
+                    args = [C, partner] if left_first else [partner, C]
+                    add_chx(CHO, "cha_op", {"sym": "+", "args": args}, [cha] + extra,
+                            layout=f"{label}:{plabel}:{'L' if left_first else 'R'}")
+            # * : np.char.multiply, then np.char.asarray.
+            mul_partners = [([], _chx_v(2), "two"), ([], _chx_v(0), "zero"), ([], _chx_v(-1), "minus"),
+                            ([], _chx_v(2 ** 62), "huge"), ([], _chx_v(2.5), "float"), ([], _chx_v(word("x")), "word"),
+                            ([_chx_pool(spec, layout, 5)], _chx_arr(1), "plain"), ([], _chx_v(True), "bool"),
+                            ([], _chx_v(None), "none")]
+            if size > 0:
+                counts = (np.arange(size) % 4).reshape(shape).tolist() if nd else 3
+                mul_partners.append(([_chx_vals(counts, "int64")], _chx_arr(1), "counts"))
+            for extra, partner, plabel in mul_partners:
+                for left_first in (True, False):
+                    if not left_first and plabel in ("float", "word", "plain", "bool", "none", "minus", "zero"):
+                        continue
+                    args = [C, partner] if left_first else [partner, C]
+                    add_chx(CHO, "cha_op", {"sym": "*", "args": args}, [cha] + extra,
+                            layout=f"{label}:{plabel}:{'L' if left_first else 'R'}")
+        # A chararray past NumPy's buffer size: the trivial loop no longer copies it, so None meets CPython's own error.
+        big = _chx_vals([word("ab")] * 9000, spec)
+        for args in ([_chx_cha(0), _chx_v(None)], [_chx_v(None), _chx_cha(0)]):
+            add_chx(CHO, "cha_op", {"sym": "+", "args": args}, [big], layout=f"{spec}:big:none")
+
+    # The members.
+    for spec in ["<U4", "|S4"]:
+        word = (lambda s: s) if spec[1] == "U" else (lambda s: s.encode("latin-1"))
+        for layout in ["c1", "c2", "f2", "s1", "r2", "z0", "e1", "e2", "one", "bc", "d5"]:
+            cha = _chx_pool(spec, layout, 2)
+            shape = _chx_shape(cha)
+            nd = len(shape)
+            label = f"{spec}:{layout}"
+
+            def member(name, args=(), kw=None, extra=(), phase=1, sub=""):
+                add_chx(CHO, "cha_call", {"recv": 0, "name": name, "args": list(args), "kw": kw or {}},
+                        [cha] + list(extra), layout=f"{label}{sub}", phase=phase)
+
+            for name in ["argmax", "argmin"]:
+                member(name)
+                member(name, kw={"axis": _chx_v(0)})
+                member(name, kw={"axis": _chx_v(-1)})
+                member(name, kw={"axis": _chx_v(5)})
+                member(name, kw={"keepdims": _chx_v(True)})
+                if nd == 2:
+                    member(name, kw={"axis": _chx_v(1), "out": _chx_arr(1)},
+                           extra=[_chx_vals([0] * shape[0], "int64", out=True)], sub=":out")
+                    member(name, kw={"axis": _chx_v(1), "keepdims": _chx_v(True), "out": _chx_arr(1)},
+                           extra=[_chx_vals([[0]] * shape[0], "int64", out=True)], sub=":out_keepdims")
+            member("argmax", kw={"out": _chx_arr(1)}, extra=[_chx_vals(0, "int64", out=True)], sub=":out")
+            member("argmax", kw={"out": _chx_arr(1)}, extra=[_chx_vals([0, 0], "int64", out=True)], sub=":out_shape")
+            member("argmin", kw={"out": _chx_arr(1)}, extra=[_chx_vals(0.0, "float64", out=True)], sub=":out_float")
+            member("argpartition", [_chx_v(1)])
+            member("argpartition", [_chx_v(9)])
+            member("argpartition", [_chx_v(1)], {"axis": _chx_v(3)})
+            member("argpartition", [_chx_v(1)], {"kind": _chx_v("bad")})
+            member("argpartition", [_chx_v([0, 1])])
+            member("argpartition", [_chx_v(0)], {"axis": _chx_v(None)})
+            member("partition", [_chx_v(1)], {"axis": _chx_v(0)})
+            member("partition", [_chx_v(1)], {"axis": _chx_v(None)})
+            member("partition", [_chx_v([0, 1])], {"axis": _chx_v(-1)})
+            # chararray.partition(sep): the string partition, computed by NumPy, deferred by NumSharp (phase 5).
+            member("partition", [_chx_v(word("a"))], phase=2)
+            member("sort")
+            member("sort", kw={"axis": _chx_v(0)})
+            member("sort", kw={"kind": _chx_v("stable")})
+            member("argsort")
+            member("argsort", kw={"axis": _chx_v(0)})
+            member("argsort", kw={"kind": _chx_v("stable")})
+            if nd == 1:
+                member("searchsorted", [_chx_v(word("b"))])
+                member("searchsorted", [_chx_v([word("a"), word("x")])])
+                member("searchsorted", [_chx_v(word("b"))], {"side": _chx_v("right")})
+                if shape[0]:
+                    member("searchsorted", [_chx_v(word("b"))], {"sorter": _chx_arr(1)},
+                           extra=[_chx_vals(list(range(shape[0]))[::-1], "int64")], sub=":sorter")
+            member("nonzero")
+    _chx_flush()
+
+
+def gen_strcharfn():
+    """Section strcharfn: the np.* functions with chararray operands — the ones that keep the class (Kept: methods and
+    np.asanyarray views; their identities: np.asanyarray(c) is c), wrap a text result (Wrapped: the ufuncs, insert /
+    delete / diagflat / take_along_axis / unique / setdiff1d, OWNDATA False; a chararray out= comes back as a new view),
+    drop it (np.asarray, np.concatenate, np.where, the set operations), create a non-string result as the subclass (the
+    finalize error: the index functions without out=, np.zeros_like with a numeric dtype, the trivial-loop copy of a short
+    input into bool / StringDType) or call the string partition (np.partition, np.median, np.quantile, np.percentile)."""
+    def fn(name, args=(), kw=None, recipes=(), label="", phase=1, uninit=False):
+        params = {"fn": name, "args": list(args), "kw": kw or {}}
+        if uninit:
+            params["uninit"] = True
+        add_chx(CHF, "cha_fn", params, list(recipes), layout=label, phase=phase)
+
+    C = _chx_cha(0)
+    for spec in ["<U4", "|S4"]:
+        is_u = spec[1] == "U"
+        word = (lambda s: s) if is_u else (lambda s: s.encode("latin-1"))
+        layouts = ["c1", "c2", "f2", "t3", "s2", "r2", "o1", "bc", "z0", "e2", "one", "d5"] if is_u else ["c1", "c2", "z0"]
+        for layout in layouts:
+            cha = _chx_pool(spec, layout, 3)
+            shape = _chx_shape(cha)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            L = f"{spec}:{layout}"
+
+            def one(name, args=(), kw=None, extra=(), phase=1, uninit=False, sub=""):
+                fn(name, [C] + list(args), kw, [cha] + list(extra), f"{L}{sub}", phase, uninit)
+
+            # Kept: methods and np.asanyarray views.
+            one("reshape", [_chx_v(-1)])
+            one("reshape", [_chx_v(shape if shape else ())])
+            one("ravel")
+            one("ravel", kw={"order": _chx_v("F")})
+            one("transpose")
+            one("permute_dims")
+            one("squeeze")
+            one("expand_dims", [_chx_v(0)])
+            one("atleast_1d")
+            one("atleast_2d")
+            one("atleast_3d")
+            one("flip")
+            one("roll", [_chx_v(1)])
+            one("tile", [_chx_v(2)])
+            one("tile", [_chx_v(1)])
+            one("repeat", [_chx_v(2)])
+            one("sort", kw={"axis": _chx_v(None)})
+            one("require")
+            one("require", kw={"requirements": _chx_v("F")})
+            one("asanyarray")
+            one("diagflat")
+            one("take", [_chx_v(0)])
+            one("unique")
+            one("unique", kw={"return_counts": _chx_v(True)})
+            one("unique", kw={"return_index": _chx_v(True), "return_inverse": _chx_v(True), "return_counts": _chx_v(True)})
+            one("unique_counts")
+            one("unique_inverse")
+            one("unique_all")
+            one("empty_like", uninit=True)
+            one("zeros_like")
+            one("ones_like")
+            one("full_like", [_chx_v(word("xy"))])
+            one("full_like", [_chx_v(5)])
+            for dt in ["int8", "bool", "float64", "U2", "S2", "int64"]:
+                one("zeros_like", kw={"dtype": {"dt": dt}}, sub=f":{dt}")
+            one("ones_like", kw={"dtype": {"dt": "float64"}}, sub=":float64")
+            one("full_like", [_chx_v(word("x"))], kw={"dtype": {"dt": "float64"}}, sub=":float64")
+            one("full_like", [_chx_v(3)], kw={"dtype": {"dt": "int8"}}, sub=":int8")
+            # Plain: np.asarray and the conversions, the functions that concatenate or broadcast.
+            one("asarray")
+            one("ascontiguousarray")
+            one("asfortranarray")
+            one("copy")
+            one("array")
+            fn("concatenate", [{"tuple": [C, C]}], {"axis": _chx_v(None)}, [cha], f"{L}:pair")
+            fn("stack", [{"tuple": [C, C]}], {}, [cha], L)
+            fn("where", [_chx_v(True), C, C], {}, [cha], L)
+            one("resize", [_chx_v(3)])
+            one("broadcast_to", [_chx_v((2,) + tuple(shape))])
+            one("argsort", kw={"axis": _chx_v(None)})
+            one("count_nonzero")
+            fn("union1d", [C, C], {}, [cha], L)
+            fn("intersect1d", [C, C], {}, [cha], L)
+            fn("setxor1d", [C, C], {}, [cha], L)
+            fn("isin", [C, C], {}, [cha], L)
+            fn("setdiff1d", [C, _chx_arr(1)], {}, [cha, _chx_pool(spec, "c1", 6)], f"{L}:ar1")
+            fn("setdiff1d", [_chx_arr(1), C], {}, [cha, _chx_pool(spec, "c1", 6)], f"{L}:ar2")
+            fn("setdiff1d", [C, _chx_arr(1)], {"assume_unique": _chx_v(True)}, [cha, _chx_pool(spec, "c1", 6)],
+               f"{L}:assume_unique")
+            # More functions whose result is plain (they end in np.concatenate / np.where / an index computation) while
+            # their inner calls meet chararray rules (np.append's ravel, the stack family's atleast_*, np.flatnonzero's
+            # ravel): the class, and — through the boundary audit — that NumSharp keeps those inner calls plain.
+            one("append", [C])
+            if nd:
+                one("append", [C], {"axis": _chx_v(0)})
+            fn("dstack", [{"tuple": [C, C]}], {}, [cha], L)
+            fn("column_stack", [{"tuple": [C, C]}], {}, [cha], L)
+            one("tril")
+            one("triu")
+            one("pad", [_chx_v(1)], {"mode": _chx_v("edge")})
+            fn("broadcast_arrays", [C, C], {}, [cha], L)
+            one("nonzero")
+            one("argwhere")
+            one("flatnonzero")
+            if nd >= 2:
+                one("lexsort")
+            fn("choose", [_chx_arr(1), {"tuple": [C, C]}], {}, [cha, _chx_vals(np.zeros(shape, dtype=np.int64).tolist(), "int64")],
+               L)
+            # np.copy keeps the class only with subok=True.
+            one("copy", kw={"subok": _chx_v(True)}, sub=":subok")
+            # np.meshgrid keeps EACH input's class (np.asanyarray, reshape, broadcast_arrays(subok=True), copy).
+            if nd == 1:
+                fn("meshgrid", [C, C], {}, [cha], L)
+                fn("meshgrid", [C, C], {"sparse": _chx_v(True)}, [cha], f"{L}:sparse")
+                fn("meshgrid", [C, C], {"copy": _chx_v(False)}, [cha], f"{L}:nocopy")
+                fn("meshgrid", [C, _chx_arr(1)], {"indexing": _chx_v("ij")}, [cha, _chx_vals([word("p"), word("q")], spec)],
+                   f"{L}:mixed")
+            # The index functions: the finalize error after their checks; out= computes.
+            for name in ["argmax", "argmin", "nanargmax", "nanargmin"]:
+                one(name)
+                one(name, kw={"axis": _chx_v(0)})
+                one(name, kw={"axis": _chx_v(3)})
+                one(name, kw={"out": _chx_arr(1)}, extra=[_chx_vals(0, "int64", out=True)], sub=":out")
+            if nd:
+                one("argmax", kw={"keepdims": _chx_v(True), "out": _chx_arr(1)},
+                    extra=[_chx_vals(np.zeros([1] * nd, dtype=np.int64).tolist(), "int64", out=True)],
+                    sub=":out_keepdims")
+            one("argpartition", [_chx_v(0)])
+            one("argpartition", [_chx_v(9)])
+            one("argpartition", [_chx_v(0)], {"axis": _chx_v(None)})
+            # The string partition: np.partition's a.partition(kth, axis=...) and the statistics that call it.
+            one("partition", [_chx_v(0)])
+            one("partition", [_chx_v(9)], {"axis": _chx_v(3)})
+            one("median")
+            one("median", kw={"axis": _chx_v(0)})
+            one("median", kw={"axis": _chx_v(3)})
+            one("median", kw={"overwrite_input": _chx_v(True)})
+            one("median", kw={"keepdims": _chx_v(True)})
+            one("quantile", [_chx_v(0.5)])
+            one("quantile", [_chx_v(0.5)], {"method": _chx_v("lower")})
+            one("quantile", [_chx_v(0.5)], {"method": _chx_v("bad")})
+            one("quantile", [_chx_v(2.0)], {"method": _chx_v("lower")})
+            one("quantile", [_chx_v([0.25, 0.75])], {"method": _chx_v("nearest"), "axis": _chx_v(0)})
+            one("percentile", [_chx_v(50)], {"method": _chx_v("higher")})
+            one("percentile", [_chx_v(150)])
+            # The ufuncs: chararray.__array_wrap__'s view of a text result; a plain one for a bool result.
+            one("add", [_chx_v(word("x"))])
+            fn("add", [_chx_v(word("x")), C], {}, [cha], f"{L}:R")
+            fn("add", [C, C], {}, [cha], f"{L}:self")
+            fn("add", [C, _chx_arr(1)], {}, [cha, {"T": enc(["q"])}], f"{L}:stringdtype")
+            fn("add", [_chx_arr(1), C], {}, [cha, {"T": enc(["q"])}], f"{L}:stringdtype:R")
+            if size:
+                mask = (np.arange(size) % 2 == 0).reshape(shape).tolist() if nd else True
+                # A fresh result's masked-off elements are uninitialized in NumPy.
+                fn("add", [C, _chx_v(word("x"))], {"where": _chx_arr(1)}, [cha, _chx_vals(mask, "bool")], f"{L}:where",
+                   uninit=True)
+                # With out= every element is defined: the selected ones computed, the others out='s own.
+                fn("add", [C, _chx_v(word("x"))], {"where": _chx_arr(1), "out": _chx_arr(2)},
+                   [cha, _chx_vals(mask, "bool"), _chx_vals(np.full(shape, word("o"), dtype=spec[1] + "8").tolist(),
+                                                            spec[1] + "8", out=True)], f"{L}:where_out")
+            # where=True (the Python object) is no mask; where=False is a mask that selects nothing.
+            fn("add", [C, _chx_v(word("x"))], {"where": _chx_v(True)}, [cha], f"{L}:where_true")
+            fn("add", [C, C], {"out": _chx_arr(1)}, [cha, _chx_vals(np.zeros(shape, dtype=spec[1] + "8").tolist(),
+                                                                    spec[1] + "8", out=True)], f"{L}:out")
+            fn("add", [C, C], {"out": _chx_cha(1)}, [cha, _chx_vals(np.zeros(shape, dtype=spec[1] + "8").tolist(),
+                                                                    spec[1] + "8", out=True)], f"{L}:out_chararray")
+            fn("multiply", [C, _chx_v(2)], {"out": _chx_arr(1)}, [cha, _chx_vals(np.zeros(shape, dtype=spec[1] + "8").tolist(),
+                                                                                spec[1] + "8", out=True)], f"{L}:out")
+            one("strings.add", [_chx_v(word("x"))])
+            one("strings.multiply", [_chx_v(2)])
+            one("char.add", [_chx_v(word("x"))])
+            one("char.multiply", [_chx_v(2)])
+            one("char.multiply", [_chx_v(2.5)])
+            for name in ["equal", "less"]:
+                fn(name, [C, C], {}, [cha], f"{L}:self")
+                fn(name, [C, _chx_arr(1)], {}, [cha, {"T": enc(["q"])}], f"{L}:stringdtype")
+            for name in ["logical_and", "logical_or", "logical_xor"]:
+                fn(name, [C, C], {}, [cha], f"{L}:self")
+                fn(name, [C, _chx_v(5)], {}, [cha], f"{L}:int")
+                fn(name, [_chx_v(True), C], {}, [cha], f"{L}:bool:R")
+            if size:
+                mask = (np.arange(size) % 2 == 0).reshape(shape).tolist() if nd else True
+                fn("logical_and", [C, C], {"where": _chx_arr(1)}, [cha, _chx_vals(mask, "bool")], f"{L}:where", uninit=True)
+                fn("logical_and", [C, C], {"where": _chx_arr(1), "out": _chx_arr(2)},
+                   [cha, _chx_vals(mask, "bool"), _chx_vals(np.ones(shape, dtype=bool).tolist(), "bool", out=True)],
+                   f"{L}:where_out")
+            # _wheremask_converter: only the object True is no mask (the trivial loop then copies a short chararray into
+            # bool: the finalize error); False is a mask, so the masked loop runs and never copies.
+            fn("logical_and", [C, C], {"where": _chx_v(True)}, [cha], f"{L}:where_true")
+            fn("logical_and", [C, C], {"where": _chx_v(False)}, [cha], f"{L}:where_false", uninit=True)
+            fn("logical_and", [C, C], {"out": _chx_arr(1)}, [cha, _chx_vals(np.zeros(shape, dtype=bool).tolist(), "bool",
+                                                                            out=True)], f"{L}:out")
+            if nd >= 1:
+                # Rank-dependent forms.
+                one("swapaxes", [_chx_v(0), _chx_v(-1)])
+                one("moveaxis", [_chx_v(0), _chx_v(-1)])
+                one("rollaxis", [_chx_v(-1)])
+                one("flipud")
+                one("roll", [_chx_v(1)], {"axis": _chx_v(0)})
+                one("repeat", [_chx_v(2)], {"axis": _chx_v(0)})
+                one("sort")
+                one("sort", kw={"axis": _chx_v(0)})
+                if shape[0]:
+                    one("take", [_chx_v([0, -1])], kw={"axis": _chx_v(0)})
+                one("unstack")
+                one("unstack", kw={"axis": _chx_v(-1)})
+                one("split", [_chx_v(1)])
+                one("array_split", [_chx_v(2)])
+                one("hsplit", [_chx_v(1)])
+                one("insert", [_chx_v(0), _chx_v(word("z"))])
+                if shape[0]:
+                    one("delete", [_chx_v(0)])
+                fn("compress", [_chx_v(([True, False] * 4)[:shape[0]]), C], {"axis": _chx_v(0)}, [cha], f"{L}")
+                fn("compress", [_chx_v([True] * (shape[0] + 1)), C], {"axis": _chx_v(0)}, [cha], f"{L}:long")
+                one("trim_zeros")
+                one("unique", kw={"axis": _chx_v(0)})
+                one("argsort")
+                one("partition", [_chx_v(0)], {"axis": _chx_v(0)})
+                one("median", kw={"axis": _chx_v(-1), "overwrite_input": _chx_v(True)})
+                idx = np.zeros(shape, dtype=np.int64).tolist()
+                one("take_along_axis", [_chx_arr(1)], {"axis": _chx_v(-1)}, extra=[_chx_vals(idx, "int64")])
+                fn("extract", [_chx_arr(1), C], {}, [cha, _chx_vals(np.ones(shape, dtype=bool).tolist(), "bool")],
+                   f"{L}:order")
+                fn("hstack", [{"tuple": [C, C]}], {}, [cha], L)
+                fn("vstack", [{"tuple": [C, C]}], {}, [cha], L)
+                if nd == 1:
+                    fn("searchsorted", [C, _chx_v(word("b"))], {}, [cha], L)
+                    one("diag")
+            if nd >= 2:
+                one("matrix_transpose")
+                one("fliplr")
+                one("rot90")
+                one("diagonal")
+                one("diag")
+                one("vsplit", [_chx_v(1)])
+                one("unique", kw={"axis": _chx_v(1)})
+                one("median", kw={"axis": _chx_v((0, 1))})
+                one("quantile", [_chx_v(0.5)], {"axis": _chx_v((0, 1)), "method": _chx_v("lower")})
+            # The stand-in (NumPy's Python str / bytes) is no chararray operand.
+            if size and nd:
+                fn("atleast_2d", [{"elem": [0, [0] * nd]}], {}, [cha], f"{L}:elem")
+                fn("add", [{"elem": [0, [0] * nd]}, C], {}, [cha], f"{L}:elem")
+                fn("logical_and", [{"elem": [0, [0] * nd]}, {"elem": [0, [-1] * nd]}], {}, [cha], f"{L}:elems")
+        # Past NumPy's buffer size the trivial loop no longer copies a 1-d input, and a 2-d one is never copied.
+        for n in [8192, 8193]:
+            big = _chx_vals([word("ab")] * n, spec)
+            fn("logical_and", [C, C], {}, [big], f"{spec}:n{n}")
+            fn("add", [C, _chx_arr(1)], {}, [big, {"T": enc(["q"])}], f"{spec}:n{n}:stringdtype")
+        fn("logical_and", [_chx_arr(1), C], {}, [_chx_pool(spec, "c1", 3), _chx_pool(spec, "c2", 4)], f"{spec}:2d_first")
+        fn("logical_and", [C, _chx_arr(1)], {}, [_chx_pool(spec, "c1", 3), _chx_pool(spec, "c2", 4)], f"{spec}:1d_first")
+    _chx_flush()
+
+
+# ----------------------------------------------------------------------------------------------------------------------
 # strsets. Set routines and statistics over text: np.unique with every flag and the Array-API unique family, np.isin,
 # intersect1d / union1d / setdiff1d / setxor1d, np.lexsort, np.sort_complex, np.histogram / histogram_bin_edges, and
 # np.quantile / np.percentile with the methods NumPy computes on text (strings phase 2, P2.2 milestone C)
@@ -9917,7 +10636,8 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strsets, gen_tcomp, gen_tarith, gen_treduce]
+              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strsets,
+              gen_tcomp, gen_tarith, gen_treduce]
 
 
 def main():

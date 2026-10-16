@@ -28,7 +28,8 @@ namespace NumSharp
         ///     <paramref name="a"/>. Shape: <c>a.shape</c> with
         ///     <paramref name="axis1"/> and <paramref name="axis2"/> removed
         ///     and the diagonal appended as the last axis.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.diagonal.html
         ///     <para>
@@ -46,6 +47,9 @@ namespace NumSharp
         ///     first).</exception>
         public static NDArray diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, offset, axis1, axis2), static s => diagonal(s.a, s.offset, s.axis1, s.axis2));
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 

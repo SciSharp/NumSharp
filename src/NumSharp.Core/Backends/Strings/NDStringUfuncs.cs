@@ -225,31 +225,44 @@ namespace NumSharp.Backends.Strings
         /// <param name="x2">The second operand.</param>
         /// <param name="out">The <c>out=</c> operand, or null (its cast was checked by the guard).</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <returns>The ufunc's result.</returns>
+        /// <returns>The ufunc's result: <paramref name="out"/>, or a fresh bool array in NumPy's ufunc output layout.</returns>
         /// <exception cref="SystemError">A <c>U</c> operand holds a unit above U+10FFFF.</exception>
         private static NDArray LogicalOverTruth(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where)
         {
-            NDArray t1 = null, t2 = null;
+            NDArray t1 = null, t2 = null, fresh = null;
             try
             {
-                // The truth arrays keep the operands' memory order ('K'), so the bool loop's output layout follows them as
-                // NumPy's follows the cast operands. A StringDType operand is tested first (IsString refuses it): its cast
-                // route reads an NA by the descriptor's rule (NDVStringCells.NaTruth).
+                // A StringDType operand is tested first (IsString refuses it): its cast route reads an NA by the
+                // descriptor's rule (NDVStringCells.NaTruth).
                 t1 = IsVString(x1) || IsString(x1) ? NDStringTruth.Truth(x1, NDStringTruth.Flavor.Cast) : null;
                 t2 = IsVString(x2) || IsString(x2) ? NDStringTruth.Truth(x2, NDStringTruth.Flavor.Cast) : null;
                 NDArray a = t1 ?? x1, b = t2 ?? x2;
-                return ufunc switch
+                // NumPy casts to bool in the iterator's buffers, so the ORIGINAL operands decide the output layout (a
+                // broadcast operand abstains on its stride-0 axis, where its dense truth array would vote for F order): a
+                // fresh result is allocated in that layout and handed to the bool loop as its out=. Masked-off elements of
+                // a fresh result stay uninitialized, as NumPy leaves them.
+                if (@out is null)
                 {
-                    "logical_and" => np.logical_and(a, b, @out, where),
-                    "logical_or" => np.logical_or(a, b, @out, where),
-                    _ => np.logical_xor(a, b, @out, where),
+                    long[] dims = BroadcastDims(x1, x2, null, where);
+                    fresh = new NDArray(DType.Boolean, NDStringComparison.ResultShape(dims, x1, x2, where), false);
+                }
+                NDArray target = @out ?? fresh;
+                NDArray result = ufunc switch
+                {
+                    "logical_and" => np.logical_and(a, b, target, where),
+                    "logical_or" => np.logical_or(a, b, target, where),
+                    _ => np.logical_xor(a, b, target, where),
                 };
+                fresh = null;   // handed out
+                return result;
             }
             finally
             {
-                // The truth arrays are temporaries: the result never aliases them (a fresh array or out=).
+                // The truth arrays are temporaries: the result never aliases them (a fresh array or out=). A fresh result
+                // the bool loop never returned (it threw) is released too.
                 t1?.Dispose();
                 t2?.Dispose();
+                fresh?.Dispose();
             }
         }
 
@@ -961,11 +974,14 @@ namespace NumSharp.Backends.Strings
                 if (other.Meta is VStringDTypeMeta || other.Meta == DTypeRegistry.Str)
                     return null;
             }
-            // The workaround allocates its result through an iterator over both operands, so a broadcast failure is
-            // still reported; the values are a constant that needs no element of either operand. The typed array is
-            // built directly: a typed wrapper made afterwards would alias it, and NumPy's result owns its data.
+            // The workaround allocates its result through an iterator over both operands (NpyIter_MultiNew with
+            // NPY_KEEPORDER), so a broadcast failure is still reported and the result is laid out as a ufunc output over
+            // the two operands: an F-ordered pair gives an F result. The values are a constant that needs no element of
+            // either operand. The typed array is built directly: a typed wrapper made afterwards would alias it, and
+            // NumPy's result owns its data.
             var shape = Shape.ResolveReturnShape(lhs.Shape, rhs.Shape);
-            var result = new NumSharp.Generic.NDArray<bool>(shape.Clean(), fillZeros: !notEqual);
+            var layout = Shape.NpyIterOutputShape((long[])shape.dimensions.Clone(), new[] { lhs.Shape, rhs.Shape });
+            var result = new NumSharp.Generic.NDArray<bool>(layout, fillZeros: !notEqual);
             if (notEqual)
                 result.Storage.InternalArray.Fill(true);
             return result;

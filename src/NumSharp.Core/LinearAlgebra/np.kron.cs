@@ -21,7 +21,8 @@ namespace NumSharp
         ///     A fresh, writeable, C-contiguous array. The result dtype follows NumPy's <c>multiply</c>
         ///     promotion (NEP50). If <paramref name="b"/> is 0-d the result is the element-wise
         ///     <c>a * b</c> (which is itself the degenerate Kronecker product).
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.kron.html
@@ -36,6 +37,11 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
+            // a numpy.char.chararray operand: NumPy keeps it (asanyarray, array(subok=True)) and multiplies with
+            // subok=True, so chararray.__array_wrap__ decides the class of the product — a text result would be a
+            // chararray view (text has no multiply loop: the ufunc's TypeError), an int8 one too (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a, b))
+                return NDCharArrayBoundary.Wrapped((a, b), static s => kron(s.a, s.b));
             int nda = a.ndim, ndb = b.ndim;
 
             // NumPy promotes a to ndmin=b.ndim, so post-promotion nda >= ndb and the scalar shortcut

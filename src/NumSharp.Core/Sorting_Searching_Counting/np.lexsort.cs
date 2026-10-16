@@ -12,7 +12,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="keys">The k sort keys, all the same shape. Keys are only read.</param>
         /// <param name="axis">Axis to sort along (default -1, the last axis).</param>
-        /// <returns>int64 index array of the keys' shape.</returns>
+        /// <returns>int64 index array of the keys' shape.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.lexsort.html<br></br>
         ///     Port of <c>PyArray_LexSort</c> (item_selection.c): each key is run through a STABLE
@@ -38,6 +40,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(keys))
                 return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(keys))
+                return NDCharArrayBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             if (keys is null || keys.Length == 0)
                 throw new TypeError("need sequence of keys with len > 0 in lexsort");
             for (int i = 0; i < keys.Length; i++)
@@ -99,11 +104,18 @@ namespace NumSharp
         /// <exception cref="AxisError">The axis is out of bounds for a key's rank.</exception>
         /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of keys along lines of two or
         ///     more elements (the <c>StringDType</c> part of NumSharp's next phase); fixed-width text keys sort by their text.</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public static NDArray lexsort(NDArray keys, int axis = -1)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(keys))
                 return NDMatrixBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(keys))
+                return NDCharArrayBoundary.Plain((keys, axis), static s => lexsort(s.keys, s.axis));
             // A string array is a sequence of text keys, each sorted by its text (the key list below).
             if (keys is null)
                 throw new ArgumentNullException(nameof(keys));

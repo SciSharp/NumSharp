@@ -407,6 +407,55 @@ c.astype(np.float64);   // ValueError: Can only create a chararray from string d
 
 One difference from NumPy: with `order:` and text data, NumPy's `np.char.array` returns a plain array, because its `np.asarray` call drops the class. NumSharp returns a chararray with the same data and layout.
 
+### Operators and functions with a chararray
+
+The comparison operators of a chararray remove the trailing whitespace before they compare, as `np.@char.equal` does. They do this also when a plain array is on the left, because Python asks the chararray first:
+
+```csharp
+var c = np.@char.array(new[] { "ab  ", "b", "ab", "a " });
+var u = np.array(new[] { "ab", "b", "ab  ", "a" });
+c == "ab";      // [ True False  True False]
+u == c;         // [ True  True  True  True]
+c + "x";        // a chararray view, <U5: 'ab  x', 'bx', 'abx', 'a x'
+c * 2;          // a chararray copy, <U8: 'ab  ab  ', 'bb', 'abab', 'a a '
+c * 2.5;        // ValueError: Can only multiply by integers
+```
+
+An `S` chararray against `U` text is NumPy's `NotImplemented`. Then a plain array on the other side compares without the strip, or Python's fallback answers: `==` is `False`, `!=` is `True`, and `<` raises `TypeError: '<' not supported between instances of 'chararray' and 'bytes'`.
+
+The members:
+
+- `sort()` sorts in place. `argsort()` and `searchsorted()` return plain arrays.
+- `argmax()`, `argmin()` and `argpartition()` raise `ValueError: Can only create a chararray from string data.`, because NumPy creates their index result as a chararray. With `out:` they write the indices into the given array.
+- `partition(sep)` is the string partition of `np.@char.partition` (not computed yet). So `np.partition(c, 1)`, `np.median(c)`, `np.quantile(c, ...)` and `np.percentile(c, ...)` raise NumPy's `TypeError: chararray.partition() got an unexpected keyword argument 'axis'`.
+
+The `np.*` functions treat a chararray the way NumPy does:
+
+- **The result is a chararray** when NumPy calls a method of the array or views it with `np.asanyarray`: `np.reshape`, `np.ravel`, `np.transpose`, `np.squeeze`, `np.sort`, `np.repeat`, `np.tile`, `np.flip`, `np.take`, the split functions, `np.zeros_like` and the other `*_like` functions, `np.copy(c, subok: true)`.
+- **The result is a chararray view** when it is the text result of a ufunc (`np.add`, `np.strings.multiply`) or of `np.insert`, `np.delete`, `np.unique` and the other functions that wrap their result. The view does not own its data.
+- **The result is a plain array** when NumPy converts with `np.asarray`: `np.concatenate`, `np.stack`, `np.where`, `np.append`, `np.asarray` and the set routines.
+- **The call raises the `ValueError`** when NumPy creates a result that is not text as a chararray: `np.argmax`, `np.argmin` and `np.argpartition` without `out:`, `np.zeros_like(c, np.float64)`, and the logical ufuncs over a chararray of at most 8,192 elements (NumPy copies a short input into the loop's bool dtype as a chararray).
+
+```csharp
+np.sort(c);                                    // a chararray
+np.concatenate(new NDArray[] { c, c });        // a plain array
+np.argmax(c);                                  // ValueError: Can only create a chararray from string data.
+np.unique(c, return_counts: true);             // values 'a ', 'ab', 'b' (a chararray), counts [1 2 1]
+np.unique(c);                                  // 'a ', 'ab', 'ab  ', 'b': without a flag, no strip
+```
+
+The C# type of the variable decides which operators and members run, as for `NDMatrix`. A chararray in a variable of type `NDArray` uses the operators and members of `NDArray`: `==` does not strip, `+` returns a plain array, and `argmax()` returns the index. The `np.*` functions still find the chararray: `np.reshape(plainVariable, ...)` returns a chararray.
+
+Other differences from NumPy:
+
+- `c == null` and `c != null` are reference tests that return a 0-d `False` and `True`. NumPy's `c == None` raises `TypeError: comparison of non-string arrays`.
+- `np.squeeze` of a chararray with no axis of length 1 returns a new chararray view. NumPy returns the same object.
+- A view of an element (`np.atleast_2d(c[0])`) is read-only, because the element is a read-only 0-d chararray. NumPy makes a writeable array from the Python `str`.
+- `c + t` with a `StringDType` array `t` of two or more dimensions raises `NotSupportedException`, because NumPy's result is a plain `StringDType` array and the `+` of `NDCharArray` returns a chararray. Call `np.add(c, t)` for NumPy's result.
+- A masked array of a chararray (`np.ma.array(c)`) holds the data as a plain array.
+
+Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): the comparison operators ran 2.8 to 6.1 times as fast, `+` and `*` 2.4 to 14 times, the `np.*` functions 1.3 to 9 times. The slowest cases are `searchsorted` (1.0 to 1.3 times NumPy's speed, the same as for a plain array: both libraries run one binary search per key), `argmax` with `out:` and a 1,000-string `np.concatenate`.
+
 ### What is not computed yet
 
 NumPy answers a call that involves text in one of two ways, and NumSharp follows it.
@@ -752,6 +801,8 @@ This is NumPy's `np.frombuffer` on a bytestring, and the general interop bridge.
 | `np.char.compare_chararrays(a, b, '<', True)` | `np.@char.compare_chararrays(a, b, "<", true)` |
 | `c = np.char.array(["a ", "b"])`; `c[0]` (the stripped `str`) | `var c = np.@char.array(new[] { "a ", "b" })`; `c[0].item()` |
 | `a.view(np.char.chararray)` | `a.view(typeof(NDCharArray))` |
+| `c == "ab"`, `u == c` (a chararray strips on either side) | the same, with `c` of type `NDCharArray` (in an `NDArray` variable, `==` does not strip) |
+| `c.argmax(out=o)` | `c.argmax(null, o)` (without `out`, `ValueError` as in NumPy) |
 | `np.char.upper(arr)` / `np.strings.upper(arr)` | a later stage: `NDArray.AsStringArray(arr).Select(s => s.ToUpper())` |
 | `np.array(["a", "bb"], dtype=StringDType())` | `np.array(new[] { "a", "bb" }, np.dtypes.StringDType())` |
 | `StringDType(na_object=None)` | `np.dtypes.StringDType(na_object: null)` |
@@ -805,7 +856,7 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.sort` / `np.argsort` / `arr.sort()` / `np.partition` / `np.argpartition` | NumPy's results, NumPy's order of equal strings for every `kind`, NumPy's argument errors |
 | `np.@char.equal` … `np.@char.greater_equal`, `np.@char.compare_chararrays` | Comparisons after the trailing NULs and ASCII whitespace are removed; `null` (NumPy's `NotImplemented`) for `S` against `U` |
 | `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
-| `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only |
+| `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only; the comparison operators strip (also with a plain array on the left), `+` and `*` return chararrays, and the `np.*` functions keep, wrap or drop the class as NumPy's do |
 | `np.argmax` / `np.argmin` / `np.searchsorted` / `np.digitize` | NumPy's results: the first extreme element, NumPy's exact search over unsorted haystacks |
 | `np.unique` / `np.unique_values` / `np.unique_counts` / `np.unique_inverse` / `np.unique_all` | NumPy's results for every flag and axis; `unique_values` (and `sorted: false`) sorted where NumPy keeps its hash order |
 | `np.isin` / `np.intersect1d` / `np.union1d` / `np.setdiff1d` / `np.setxor1d` / `np.lexsort` / `np.sort_complex` | NumPy's results: numbers beside text written as text, bytes decoded as ASCII where NumPy joins the operands |

@@ -9,7 +9,9 @@ namespace NumSharp
         ///     This is equivalent to concatenation along the first axis after 1-D arrays of shape(N,) have been reshaped to(1, N). Rebuilds arrays divided by vsplit.
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the first axis. 1-D arrays must have the same length.</param>
-        /// <returns>The array formed by stacking the given arrays, will be at least 2-D.</returns>
+        /// <returns>The array formed by stacking the given arrays, will be at least 2-D.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vstack.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="ArgumentNullException"><paramref name="tup"/> is null.</exception>
@@ -19,6 +21,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(tup))
                 return NDMatrixBoundary.Wrapped(tup, static s => vstack(s));
+            // a numpy.char.chararray operand: NumPy's vstack ends with np.concatenate, which drops the class; the rule's
+            // region keeps its inner atleast_2d calls plain (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(tup))
+                return NDCharArrayBoundary.Plain(tup, static s => vstack(s));
             if (tup == null)
                 throw new ArgumentNullException(nameof(tup));
 

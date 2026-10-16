@@ -33,7 +33,8 @@ namespace NumSharp
         ///     flattens both <paramref name="arr"/> and <paramref name="values"/>
         ///     to 1-D before concatenation.</param>
         /// <returns>A new array with <paramref name="values"/> appended to
-        ///     <paramref name="arr"/> along <paramref name="axis"/>.</returns>
+        ///     <paramref name="arr"/> along <paramref name="axis"/>: a plain array for <c>numpy.char.chararray</c> operands too
+        ///     (NumPy's <c>np.concatenate</c> drops the class).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.append.html
@@ -49,6 +50,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr, values))
                 return NDMatrixBoundary.Wrapped((arr, values, axis), static s => append(s.arr, s.values, s.axis));
+            // a numpy.char.chararray operand: NumPy's append ends with np.concatenate, which drops the class; the rule's
+            // region keeps its inner ravel calls plain (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr, values))
+                return NDCharArrayBoundary.Plain((arr, values, axis), static s => append(s.arr, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 
@@ -76,7 +81,9 @@ namespace NumSharp
         /// <param name="values">Values to append: a scalar, a C# array or collection, or an <see cref="NDArray"/>
         ///     whose static type is <see cref="object"/>. Converted with <see cref="np.asanyarray(in object, DType, string)"/>.</param>
         /// <param name="axis">Axis along which to append; <c>null</c> (default) flattens both operands first.</param>
-        /// <returns>A new array with <paramref name="values"/> appended to <paramref name="arr"/>.</returns>
+        /// <returns>A new array with <paramref name="values"/> appended to <paramref name="arr"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="values"/> is null.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: the conversion of a scalar or collection is released on return. An
@@ -91,6 +98,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, values, axis), static s => append(s.arr, s.values, s.axis));
+            // a numpy.char.chararray operand (either side): a plain result, its conversions computed plain (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr, values as NDArray))
+                return NDCharArrayBoundary.Plain((arr, values, axis), static s => append(s.arr, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (values is null) throw new ArgumentNullException(nameof(values));
 

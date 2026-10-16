@@ -9,13 +9,18 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input.</param>
-        /// <returns>The input a in Fortran, or column-major, order.</returns>
+        /// <returns>The input a in Fortran, or column-major, order.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asfortranarray.html</remarks>
         public static NDArray asfortranarray(NDArray a, DType dtype = null)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain((a, dtype), static s => asfortranarray(s.a, s.dtype));
+            // a numpy.char.chararray operand: NumPy converts with np.asarray here, so the result is a plain array (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Plain((a, dtype), static s => asfortranarray(s.a, s.dtype));
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
             var result = asarray(a, dtype, 'F');

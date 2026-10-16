@@ -99,7 +99,9 @@ namespace NumSharp
             /// </summary>
             /// <param name="a">The strings (<c>S</c> or <c>U</c>).</param>
             /// <param name="i">The repeat counts: an integer array (any width, not bool), broadcast against <paramref name="a"/>.</param>
-            /// <returns>A fresh text array of <paramref name="a"/>'s class (0-d for a 0-d operand pair).</returns>
+            /// <returns>A fresh text array of <paramref name="a"/>'s class (0-d for a 0-d operand pair).
+            ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+            ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
             /// <exception cref="ArgumentNullException">An operand is null.</exception>
             /// <exception cref="TypeError"><paramref name="i"/> is not an integer array ("unsupported type float64 for operand
             ///     'i'", checked first); <paramref name="a"/> is not text (<c>str_len</c>'s no-loop text); or the output width
@@ -115,6 +117,10 @@ namespace NumSharp
             ///     yet.</exception>
             public static NDArray multiply(NDArray a, NDArray i)
             {
+                // a numpy.char.chararray operand: np.asanyarray keeps the class, np.empty_like(a, ...) makes the out a
+                // chararray, and the ufunc returns that out's __array_wrap__ view (NDCharArrayBoundary)
+                if (NDCharArrayBoundary.Sees(a))
+                    return NDCharArrayBoundary.Wrapped((a, i), static s => multiply(s.a, s.i));
                 if (a is null)
                     throw new ArgumentNullException(nameof(a));
                 if (i is null)

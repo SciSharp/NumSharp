@@ -20,9 +20,21 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.equal.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.
+        /// </remarks>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
             : x1.TensorEngine.Compare(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -58,9 +70,21 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.not_equal.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.
+        /// </remarks>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray not_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => not_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => not_equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
             : x1.TensorEngine.NotEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -96,9 +120,21 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.less.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.
+        /// </remarks>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray less(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => less(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => less(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
             : x1.TensorEngine.Less(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -134,9 +170,21 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.greater.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.
+        /// </remarks>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray greater(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => greater(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => greater(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
             : x1.TensorEngine.Greater(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -172,9 +220,21 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.less_equal.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.
+        /// </remarks>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray less_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => less_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => less_equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
             : x1.TensorEngine.LessEqual(x1, x2, dtype, @out, where);
 
         /// <summary>
@@ -210,9 +270,21 @@ namespace NumSharp
         /// <param name="dtype">Validate-only (NumPy parity): comparisons have bool loops only — any non-bool request raises the no-loop TypeError.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.greater_equal.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> input gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>), a plain array of a result of another dtype; a chararray
+        ///     <paramref name="out"/> comes back as a new chararray view of it.
+        /// </remarks>
+        /// <exception cref="ValueError">A short <c>numpy.char.chararray</c> input (0-d, or 1-d with at most
+        ///     <c>np.getbufsize()</c> elements) that NumPy's trivial loop copies into a loop dtype
+        ///     that is not string data — bool for the logical ufuncs, StringDType beside a
+        ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         public static NDArray greater_equal(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
             => NDMatrixBoundary.Sees(x1, x2)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((x1, x2, @out, where, dtype), static s => greater_equal(s.x1, s.x2, s.@out, s.where, s.dtype), @out)
+            : NDCharArrayBoundary.Sees(x1, x2, @out)   // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => greater_equal(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out)
             : x1.TensorEngine.GreaterEqual(x1, x2, dtype, @out, where);
 
         /// <summary>

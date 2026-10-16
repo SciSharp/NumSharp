@@ -17,7 +17,9 @@ namespace NumSharp
         ///     The array is rotated in the plane defined by the axes. Axes must be different.
         ///     Defaults to <c>(0, 1)</c>.
         /// </param>
-        /// <returns>A rotated view of <paramref name="m"/>.</returns>
+        /// <returns>A rotated view of <paramref name="m"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     Port of NumPy's <c>numpy.rot90</c> (<c>numpy/lib/_function_base_impl.py</c>): a pure
         ///     composition of axis flips and a transpose, so the result is always a view that shares
@@ -35,6 +37,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(m))
                 return NDMatrixBoundary.Wrapped((m, k, axes), static s => rot90(s.m, s.k, s.axes));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(m))
+                return NDCharArrayBoundary.Kept((m, k, axes), static s => rot90(s.m, s.k, s.axes));
             axes ??= new[] {0, 1};
 
             if (axes.Length != 2)

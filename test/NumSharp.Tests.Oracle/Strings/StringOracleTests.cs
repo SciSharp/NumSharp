@@ -330,6 +330,138 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void CharArrayAsData() => Run("strchararray");
 
         /// <summary>
+        ///     Section strcharops (the <c>numpy.char</c> plan's phase 3): the chararray OPERATORS with Python's binary-operator
+        ///     dispatch — the six stripping comparisons with the chararray on either side against str / bytes / plain arrays
+        ///     of both classes / chararrays / lists / numbers / StringDType / element stand-ins (NotImplemented for an S / U mix,
+        ///     a plain array's own answer, Python's fallback), <c>+</c> (np.add, a chararray view) and <c>*</c> (np.char.asarray
+        ///     of np.char.multiply) — and the members phase 3 adds: argmax / argmin / argpartition (NumPy's checks, then the
+        ///     finalize error; out= computes), partition (the sort form's TypeError; the STRING partition, which NumSharp
+        ///     defers to phase 5), sort in place, argsort and searchsorted plain. NumPy's outcomes are recorded in worker
+        ///     processes replaced after every finalize error (NumPy may corrupt its heap there).
+        /// </summary>
+        [TestMethod] public void CharArrayOperatorsAndMembers() => RunWithCharArrayBoundaryAudit("strcharops");
+
+        /// <summary>
+        ///     Section strcharfn (the <c>numpy.char</c> plan's phase 3): the <c>np.*</c> functions with chararray operands —
+        ///     the class, values, OWNDATA, identity and errors of the functions that keep the class (methods and
+        ///     <c>np.asanyarray</c> views), wrap a text result (the ufuncs, insert / delete / diagflat / take_along_axis /
+        ///     unique / setdiff1d: views; a chararray out= comes back as a new view), drop it (np.asarray, concatenate, where,
+        ///     the set operations), create a non-string result as the subclass (the index functions, *_like with a numeric
+        ///     dtype, the trivial-loop copy of a short input into bool or StringDType — and its absence for a 2-D or
+        ///     8,193-element input) or meet the string partition (np.partition, median, quantile, percentile).
+        /// </summary>
+        [TestMethod] public void CharArrayFunctions() => RunWithCharArrayBoundaryAudit("strcharfn");
+
+        /// <summary>
+        ///     The chararray boundary's safety contract over the WHOLE string corpus: every case of every section with an
+        ///     <c>S</c> / <c>U</c> operand is replayed with those operands viewed as chararrays while
+        ///     <see cref="NDCharArrayBoundary.AuditInternalCallers"/> is on, and no method of the library itself may reach the
+        ///     chararray rule of a public function at depth zero. This reaches every string function NumSharp has, far more
+        ///     than the two chararray sections, whose NumPy answers are the only ones recorded for chararray operands: the
+        ///     outcomes are not compared here, only the call paths are observed.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A library call path reached a chararray rule (the fix is a region —
+        ///     <c>NDMatrixBoundary.PlainFor</c> in the member or function that passes its operand on — or a rule for the
+        ///     calling function), or fewer cases than the floor were replayed (a corpus that shrank or failed to
+        ///     copy).</exception>
+        /// <remarks>The hook reads the stack on every rule that applies at depth zero, so this replay is slower than the
+        ///     sections' own; it is switched off again however the replay ends.</remarks>
+        [TestMethod]
+        public void CharArrayOperand_LibraryNeverReachesACharArrayRule()
+        {
+            int replayed = 0;
+            NDCharArrayBoundary.InternalCallers.Clear();
+            NDCharArrayBoundary.AuditInternalCallers = true;
+            try
+            {
+                foreach (var c in Cases)
+                {
+                    NDArray[] ops;
+                    try
+                    {
+                        ops = c.Operands.Select(StringOracleCorpus.Reconstruct).ToArray();
+                    }
+                    catch (Exception)
+                    {
+                        continue;   // an operand NumSharp cannot build is the section's own failure, not this audit's
+                    }
+                    bool any = false;
+                    for (int i = 0; i < ops.Length; i++)
+                    {
+                        if (ops[i] is null || ops[i] is NDCharArray || ops[i].dtype.@char is not ('S' or 'U'))
+                            continue;
+                        ops[i] = (NDCharArray)ops[i].view(typeof(NDCharArray));
+                        any = true;
+                    }
+                    if (!any)
+                        continue;
+                    replayed++;
+                    try
+                    {
+                        StringOracleOps.Invoke(c, ops);
+                    }
+                    catch (Exception)
+                    {
+                        // The outcome is not the subject (a chararray operand changes many answers): only the call paths
+                        // the audit records are.
+                    }
+                }
+            }
+            finally
+            {
+                NDCharArrayBoundary.AuditInternalCallers = false;
+            }
+
+            var found = NDCharArrayBoundary.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
+            Console.WriteLine($"[chararray boundary audit] {replayed} string cases replayed with chararray operands, " +
+                              $"{found.Count} library call paths reached a chararray rule");
+            foreach (var kv in found)
+                Console.WriteLine($"  {kv.Value,6} x {kv.Key}");
+            Assert.IsTrue(replayed >= MinCharArrayAuditCases,
+                $"only {replayed} cases replayed (floor {MinCharArrayAuditCases}): the corpus shrank or failed to copy");
+            Assert.AreEqual(0, found.Count,
+                "library methods reached the chararray rule of a public function at depth zero:\n" +
+                string.Join("\n", found.Take(60).Select(kv => $"  {kv.Value,6} x {kv.Key}")));
+        }
+
+        /// <summary>The fewest cases <see cref="CharArrayOperand_LibraryNeverReachesACharArrayRule"/> must replay: a floor
+        ///     under the measured count, so an emptied or uncopied corpus cannot pass vacuously.</summary>
+        private const int MinCharArrayAuditCases = 30000;
+
+        /// <summary>
+        ///     <see cref="Run"/> with <see cref="NDCharArrayBoundary.AuditInternalCallers"/> on, then the boundary's safety
+        ///     contract: no method of the library itself reached the chararray rule of a public function at depth zero. The
+        ///     rules are written for the USER's call (a library method that passes its operand on must compute plain, inside
+        ///     a region), so a recorded caller is a function that would hand a chararray result — or a finalize / partition
+        ///     error — to library code written for the plain answer.
+        /// </summary>
+        /// <param name="section">The chararray section (<c>strcharops</c> or <c>strcharfn</c>).</param>
+        /// <exception cref="AssertFailedException">A case diverged from NumPy, or a library call path reached a chararray rule
+        ///     (the fix is an <c>NDMatrixBoundary.PlainFor</c> / <c>NDCharArrayBoundary.Inside</c> region, or a rule for the
+        ///     calling function).</exception>
+        /// <remarks>The hook reads the stack on every rule that applies, so it is on only for these two sections; it is
+        ///     switched off again however <see cref="Run"/> ends.</remarks>
+        private static void RunWithCharArrayBoundaryAudit(string section)
+        {
+            NDCharArrayBoundary.InternalCallers.Clear();
+            NDCharArrayBoundary.AuditInternalCallers = true;
+            try
+            {
+                Run(section);
+            }
+            finally
+            {
+                NDCharArrayBoundary.AuditInternalCallers = false;
+            }
+
+            var found = NDCharArrayBoundary.InternalCallers.OrderByDescending(kv => kv.Value).ToList();
+            Console.WriteLine($"[chararray boundary audit] {section}: {found.Count} library call paths reached a chararray rule");
+            Assert.AreEqual(0, found.Count,
+                "library methods reached the chararray rule of a public function at depth zero:\n" +
+                string.Join("\n", found.Take(60).Select(kv => $"  {kv.Value,6} x {kv.Key}")));
+        }
+
+        /// <summary>
         ///     Section strsets (strings phase 2, P2.2 milestone C): set routines and statistics over <c>S</c> / <c>U</c>
         ///     text — <c>np.unique</c> with every flag, axis and keyword over categorical, distinct, NUL-holding, long-prefix
         ///     and non-ASCII data (rows compared field by field along an axis), the Array-API unique family,
@@ -432,6 +564,9 @@ namespace NumSharp.Tests.Strings
             // over them: tma 437 → 5, strchar 3 → 0); tma keeps the sorts that StringDType's part of P2.2 answers — np.median
             // (2), np.sort (2) and np.unique (1) of numpy.ma over StringDType.
             ["tma"] = 5,
+            // numpy.char phase 3: chararray.partition(sep) is the STRING partition NumPy computes; NumSharp's lands with the
+            // string methods (phase 5).
+            ["strcharops"] = 22,
         };
 
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
@@ -443,7 +578,8 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strsets", "tcomp", "tarith",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn",
+                "strsets", "tcomp", "tarith",
                 "treduce",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
@@ -488,9 +624,12 @@ namespace NumSharp.Tests.Strings
             int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
             int excusedClass = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedClasses.ContainsKey(c.Id));
             int excusedOrder = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedOrders.ContainsKey(c.Id));
+            int excusedIdentity = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedIdentities.ContainsKey(c.Id));
+            int excusedRefusal = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedRefusals.ContainsKey(c.Id));
             Console.WriteLine($"[strings/{section}] {total} cases, {deferred} deferred to the computational phase, " +
                               $"{excused} with an excused layout, {excusedClass} with an excused class, " +
-                              $"{excusedOrder} with an excused order, {failures.Count} failed");
+                              $"{excusedOrder} with an excused order, {excusedIdentity} with an excused identity, " +
+                              $"{excusedRefusal} excused refusals, {failures.Count} failed");
             var listDeferred = Environment.GetEnvironmentVariable(ListDeferredVariable);
             if (!string.IsNullOrEmpty(listDeferred) && listDeferred != "0")
                 foreach (var d in deferredCases)
@@ -555,6 +694,11 @@ namespace NumSharp.Tests.Strings
                     message = Shorten(e.Message);
                     return Outcome.Deferred;
                 }
+                if (c.Error is null && e is NotSupportedException && RefusalExcuse(c) is { } refusal)
+                {
+                    ExcusedRefusals.TryAdd(c.Id, refusal);
+                    return Outcome.Passed;
+                }
                 if (c.Error is null)
                 {
                     message = $"NumPy returned a result, NumSharp threw {e.GetType().Name}: {Shorten(e.Message)}";
@@ -597,7 +741,10 @@ namespace NumSharp.Tests.Strings
                     ExcusedClasses.TryAdd(c.Id, classExcuse);
                 Compare(c.Expected, result, layoutExcuse is null ? ops : null, diffs, compareLayout: layoutExcuse is null,
                         wantClassOverride: classExcuse is null ? null : "chararray");
-                if (c.Expected.TryGetProperty("self", out var self))
+                var identityExcuse = IdentityExcuse(c);
+                if (identityExcuse != null)
+                    ExcusedIdentities.TryAdd(c.Id, identityExcuse);
+                if (identityExcuse is null && c.Expected.TryGetProperty("self", out var self))
                 {
                     if (!hasReceiver)
                         diffs.Add("NumPy's answer is compared with its receiver, but the replay returned no receiver");
@@ -699,6 +846,12 @@ namespace NumSharp.Tests.Strings
         ///       copy (pinned in <c>OpenBugs.FancyIndex.cs</c>; plan <c>docs/plans/view-shape-open-bugs.md</c>);</description></item>
         ///       <item><description><c>np.ma.compress_nd</c> / <c>compress_rowcols</c> / <c>compress_cols</c>, whose column
         ///       selection is such an index.</description></item>
+        ///       <item><description>section strcharfn: <c>np.array</c> of a permuted or broadcast chararray (the
+        ///       array-object oracle's VF12, C-ordered where NumPy copies in K order), <c>np.tile</c> of a 0-d chararray with
+        ///       unit reps (VF26, an owning copy where NumPy returns a view of its <c>ndmin</c> copy), <c>np.choose</c> with a
+        ///       0-d index (VF01, a writeable 0-d array where NumPy returns a NumPy scalar), <c>np.broadcast_arrays</c> of a
+        ///       read-only broadcast chararray (VF17, a writeable result), and a function of an element stand-in (read-only,
+        ///       where NumPy's <c>str</c> becomes a fresh writeable array).</description></item>
         ///     </list>
         ///     <c>np.argwhere</c> / <c>np.flatnonzero</c> (reached by an empty string array, whose index searches run the
         ///     numeric path on a bool stand-in) and <c>np.unravel_index</c> (section M's bool index array) were excused here
@@ -724,6 +877,29 @@ namespace NumSharp.Tests.Strings
                                                       || e.TryGetProperty("m", out _) || e.TryGetProperty("b", out _))
                 && !IsCContiguous(c.Operands[0]))
                 return "advanced index of a non-C source: NumPy keeps the source's memory order for the other axes (OpenBugs.FancyIndex)";
+            // Section strcharfn, two plain-array gaps of the array-object oracle (view_flags.jsonl), not chararray rules:
+            // np.array(c) of a PERMUTED or BROADCAST chararray is copied in C order where NumPy copies in K order (VF12), and
+            // np.tile(c0, 1) of a 0-d chararray owns its copy where NumPy returns a view of its internal ndmin copy (VF26).
+            if (c.Op == "cha_fn" && c.Params is not null && c.Params.TryGetValue("fn", out var chfn))
+            {
+                if (chfn.GetString() == "array" && (c.Layout.Contains(":t3") || c.Layout.Contains(":bc")))
+                    return "VF12: np.array copies a permuted / broadcast input in C order, NumPy in K order";
+                if (chfn.GetString() == "tile" && c.Layout.Contains(":z0"))
+                    return "VF26: np.tile with unit reps of a 0-d input owns its copy, NumPy's is a view of an ndmin copy";
+                // np.choose of a 0-d index: NumPy's PyArray_Return makes the result a NumPy scalar (np.str_), NumSharp
+                // returns a writeable 0-d array — the class VF01 records for the ufuncs and the reductions.
+                if (chfn.GetString() == "choose" && c.Layout.Contains(":z0"))
+                    return "VF01: np.choose's 0-d result is a writeable 0-d array where NumPy returns a NumPy scalar";
+                // np.broadcast_arrays forces its results writeable, a read-only (broadcast) operand's too (VF17).
+                if (chfn.GetString() == "broadcast_arrays" && c.Layout.Contains(":bc"))
+                    return "VF17: np.broadcast_arrays makes a read-only broadcast operand's result writeable";
+            }
+            // Section strcharfn: a function of an element STAND-IN (NumPy's Python str). NumPy converts the str into a fresh,
+            // writeable array; NumSharp's stand-in is read-only, so a view of it (np.atleast_2d(c[0])) is read-only too.
+            if (c.Op == "cha_fn" && c.Params is not null && c.Params.TryGetValue("args", out var chargs)
+                && chargs.GetArrayLength() > 0 && chargs[0].ValueKind == JsonValueKind.Object && chargs[0].TryGetProperty("elem", out _)
+                && c.Params["fn"].GetString() == "atleast_2d")
+                return "a view of an element stand-in is read-only; NumPy's str becomes a fresh writeable array";
             if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
                 return null;
             bool basicSeen = false;
@@ -779,6 +955,46 @@ namespace NumSharp.Tests.Strings
                 || cls.GetString() != "ndarray")
                 return null;
             return "np.char.array with order= over string data: NumPy's np.asarray drops the chararray class";
+        }
+
+        /// <summary>The cases whose identity with their receiver is a known, documented divergence, keyed by case id with the
+        ///     reason (everything else of the result is compared).</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedIdentities = new();
+
+        /// <summary>
+        ///     The one identity divergence: <c>np.squeeze</c> of an array with no length-1 axis. NumPy's <c>PyArray_Squeeze</c>
+        ///     returns the operand itself; NumSharp returns a fresh view object by design (documented on
+        ///     <see cref="np.squeeze(NDArray)"/>: disposing the result must never dispose the input) — the array-object
+        ///     oracle's same gap for plain arrays.
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when the identity must match NumPy's.</returns>
+        private static string IdentityExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Op == "cha_fn" && c.Params is not null && c.Params.TryGetValue("fn", out var fn) && fn.GetString() == "squeeze")
+                return "np.squeeze returns a fresh view object where NumPy returns an operand with no length-1 axis itself";
+            return null;
+        }
+
+        /// <summary>The cases NumSharp refuses by design where NumPy computes, keyed by case id with the reason.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedRefusals = new();
+
+        /// <summary>
+        ///     The one refusal divergence: <c>chararray + StringDType</c> (or the reverse) where NumPy computes — a 2-D or
+        ///     longer chararray that NumPy's trivial loop does not copy. NumPy's <c>chararray.__add__</c> then returns a PLAIN
+        ///     StringDType array, which the <see cref="NDCharArray"/> result of NumSharp's <c>+</c> operator cannot hold:
+        ///     NumSharp raises <see cref="NotSupportedException"/> naming <c>np.add</c> (documented on the operator).
+        /// </summary>
+        /// <param name="c">The case.</param>
+        /// <returns>The reason, or null when NumSharp must answer.</returns>
+        private static string RefusalExcuse(StringOracleCorpus.Case c)
+        {
+            if (c.Op != "cha_op" || c.Params is null || c.Params["sym"].GetString() != "+")
+                return null;
+            if (c.Expected.ValueKind != JsonValueKind.Object || !c.Expected.TryGetProperty("class", out var cls)
+                || cls.GetString() != "ndarray")
+                return null;
+            return "chararray + StringDType: NumPy's plain StringDType result does not fit the operator's NDCharArray type";
         }
 
         /// <summary>
@@ -870,7 +1086,7 @@ namespace NumSharp.Tests.Strings
                     CompareArray(exp, AsArray(result), ops, diffs, "", compareLayout, wantClassOverride);
                     break;
                 case "element":
-                    CompareElement(exp, result, diffs);
+                    CompareElement(exp, result, diffs, compareLayout);
                     break;
                 case "items":
                 {
@@ -1518,12 +1734,15 @@ namespace NumSharp.Tests.Strings
         /// <param name="exp">The element expectation (<c>py</c>, <c>value</c>).</param>
         /// <param name="result">NumSharp's result.</param>
         /// <param name="diffs">Receives the divergences.</param>
+        /// <param name="compareLayout">False for a <see cref="LayoutExcuse"/>d case: the value is compared, the read-only
+        ///     flag of a 0-d answer is not (a plain function's NumPy scalar that NumSharp returns as a writeable 0-d array,
+        ///     the array-object oracle's VF01).</param>
         /// <remarks>
         ///     A stripped text that ENDS in a NUL (<c>'a\0'</c>, the rstrip of <c>'a\0 '</c>) cannot be held by a fixed-width
         ///     stand-in, whose storage drops trailing NULs as every <c>S</c> / <c>U</c> element does: NumPy's value is compared
         ///     without its trailing NULs (pinned by the unit tests, <c>CharArrayTests</c>).
         /// </remarks>
-        private static void CompareElement(JsonElement exp, object result, List<string> diffs)
+        private static void CompareElement(JsonElement exp, object result, List<string> diffs, bool compareLayout = true)
         {
             string py = exp.GetProperty("py").GetString();
             var want = StringOracleCorpus.Decode(exp.GetProperty("value"));
@@ -1568,7 +1787,7 @@ namespace NumSharp.Tests.Strings
                     break;
                 }
             }
-            if (result is NDArray scalarArray && scalarArray.flags.writeable)
+            if (compareLayout && result is NDArray scalarArray && scalarArray.flags.writeable)
                 diffs.Add("the element's 0-d stand-in is writeable (NumPy's scalar is immutable)");
         }
 

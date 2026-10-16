@@ -16,12 +16,19 @@ namespace NumSharp
         /// <param name="norm">Normalization mode: <c>null</c>/"backward"/"ortho"/"forward".</param>
         /// <param name="out">Accepted for signature parity; NumPy passes <c>out=None</c> into irfft.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.hfft.html</remarks>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         [NDScoped]
         public NDArray hfft(NDArray a, int? n = null, int axis = -1, string norm = null, NDArray @out = null)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Plain((self: this, a, n, axis, norm, @out), static s => s.self.hfft(s.a, s.n, s.axis, s.norm, s.@out));
             int nn = n ?? (ShapeAt(a, axis) - 1) * 2;
             string newNorm = SwapDirection(norm);
             // NumPy calls irfft with out=None here (the hfft `out` argument is not used).

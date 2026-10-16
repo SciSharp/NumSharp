@@ -856,6 +856,19 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-16 — `numpy.char` phase 3: `chararray` behavior** (`docs/plans/np-char.md` → state log). The operators with
+  Python's dispatch (the stripping comparisons also with a plain array on the left, `+` / `*` returning chararrays), the
+  finalize errors of `argmax` / `argmin` / `argpartition`, the string `partition` behind `np.partition` / `np.median` /
+  `np.quantile` / `np.percentile`, and the `np.*` functions that keep, wrap or drop the class (`NDCharArrayBoundary`).
+  No phase-2 kernel was needed: the members and functions run this plan's S / U kernels on the plain data. Its oracle
+  sections (`strcharops`, 3,266 cases; `strcharfn`, 2,633 cases) and a boundary audit over all 74,606 string-oracle cases
+  found five divergences in shared paths, fixed for every dtype: a one-element 1-d operand against a 0-d one keeps its
+  axis (`Shape.ResolveReturnShape`); the logical ufuncs over text lay out a fresh result over the ORIGINAL operands (a
+  broadcast operand abstains on its stride-0 axis); the failed `S == U` comparison is laid out as a ufunc output (an F
+  pair gives an F result); `np.unstack` of an empty array returns views; `np.choose` names the shapes of a broadcast
+  failure in NumPy's order. The cells under 1.5× in its benchmark are this plan's kernels: `searchsorted` of 64 keys over
+  `<U8` text is 1.03–1.27× (a binary search per key at 6–8 ns per step on both sides; interleaving several keys' searches
+  is the lever), and `argmax(out=)` 1.27× at 1K (its fixed cost) and 1.39× at 1M (~75 % of one core's DRAM bandwidth).
 - **2026-10-16 — P2.T: `StringDType` computes** (`450f930b`; the comparisons, the truth readers and `np.isnan`, `add` /
   `multiply` / `maximum` / `minimum`, the reductions and the statistics that refuse after computing, `np.char.add` /
   `np.char.multiply` and numpy.ma over `T`; `Backends/Strings/NDVString{Cells,Comparison,Arithmetic,Reduction,Statistics}.cs`,

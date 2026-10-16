@@ -12,6 +12,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.quantile.html</remarks>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         public static NDArray quantile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -25,8 +28,9 @@ namespace NumSharp
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims);
+            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
+            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+                return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
         }
@@ -37,6 +41,9 @@ namespace NumSharp
         /// </summary>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         public static NDArray quantile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -51,8 +58,9 @@ namespace NumSharp
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axisArr, @out, method, keepdims);
+            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
+            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+                return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
         }
@@ -87,18 +95,22 @@ namespace NumSharp
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (the median / percentile / quantile family's gap class).</remarks>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         public static NDArray quantile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             ValidateQuantile(q);
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axis, @out, method, keepdims);
+            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+                return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: true);
         }
@@ -134,10 +146,14 @@ namespace NumSharp
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (with a list of quantiles NumPy even raises a matrix-product error).</remarks>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         public static NDArray quantile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
@@ -145,8 +161,8 @@ namespace NumSharp
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText).
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axis, @out, method, keepdims);
+            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
+                return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
                 QuantileEngine.ParseMethod(method), keepdims, qIsScalar: false);
         }
@@ -177,6 +193,9 @@ namespace NumSharp
         ///     an empty axes.</c>, or an index out of bounds).</exception>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         public static NDArray quantile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
@@ -194,12 +213,13 @@ namespace NumSharp
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text data: NumPy accepts a q of any rank up to 2 (_quantile_ureduce_func refuses rank 3 and above, after the
             // range and axis checks), so the text route runs before the numeric path's rank check.
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
+            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 double[] qText = QArrayFromNDArray(q);
                 ValidateQuantileArray(q, qText);
                 return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axisArr, @out, method, keepdims);
+                    axisArr, @out, method, keepdims, chararray);
             }
             if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             bool qIsScalar = q.ndim == 0;
@@ -249,10 +269,14 @@ namespace NumSharp
         ///     neighbour lookup).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain, as for every
         ///     tuple-axis overload (see the <see cref="double"/>-q one).</remarks>
+        /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
+        ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
+        ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         public static NDArray quantile(NDArray a, NDArray q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false)
         {
+            bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
@@ -261,12 +285,12 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsString(q))
                 throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("quantile", a, q, method, axis);
             // Text data: q's rank is NumPy's check after the axes (rank 3 and above refused), so it runs in the text route.
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            if (chararray || Backends.Strings.NDStringUfuncs.IsString(a))
             {
                 double[] qText = QArrayFromNDArray(q);
                 ValidateQuantileArray(q, qText);
                 return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axis, @out, method, keepdims);
+                    axis, @out, method, keepdims, chararray);
             }
             if (q.ndim > 1) throw new ArgumentException("q must be a scalar or 1d");
             double[] qArr = QArrayFromNDArray(q);

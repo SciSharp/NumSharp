@@ -94,7 +94,8 @@ namespace NumSharp
         ///     A fresh, writeable, C-contiguous array of the unwrapped signal. The
         ///     shape matches <paramref name="p"/>; the dtype is the float
         ///     <c>result_type(diff(p), period)</c> described above.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="p"/> is 0-D (propagated from <see cref="diff(NDArray,int,int,object,object)"/>).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
@@ -112,6 +113,8 @@ namespace NumSharp
         public static NDArray unwrap(NDArray p, double? discont = null, int axis = -1, double period = 2 * Math.PI)
             => NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
+            : NDCharArrayBoundary.Sees(p)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((p, discont, axis, period), static s => unwrap(s.p, s.discont, s.axis, s.period))
             : UnwrapImpl(p, discont, axis, period, periodIsInteger: false, periodInt: 0);
 
         /// <summary>
@@ -140,7 +143,8 @@ namespace NumSharp
         /// <returns>
         ///     A fresh, writeable, C-contiguous array. Integer/bool inputs keep their
         ///     integer dtype (bool -> int64); float inputs stay float.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="p"/> is 0-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds for <paramref name="p"/>'s rank.</exception>
@@ -157,6 +161,8 @@ namespace NumSharp
         public static NDArray unwrap(NDArray p, long period, double? discont = null, int axis = -1)
             => NDMatrixBoundary.Sees(p)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
+            : NDCharArrayBoundary.Sees(p)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((p, period, discont, axis), static s => unwrap(s.p, s.period, s.discont, s.axis))
             : UnwrapImpl(p, discont, axis, period, periodIsInteger: true, periodInt: period);
 
         /// <summary>

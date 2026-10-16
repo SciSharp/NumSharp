@@ -35,12 +35,16 @@ namespace NumSharp
         /// <param name="axis">Axis along which to delete. <c>null</c> (default)
         ///     flattens <paramref name="arr"/> first and returns a 1-D result.</param>
         /// <returns>A C-contiguous copy of <paramref name="arr"/> with one
-        ///     sub-array removed along <paramref name="axis"/>.</returns>
+        ///     sub-array removed along <paramref name="axis"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.delete.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray delete(NDArray arr, int obj, int? axis = null)
             => NDMatrixBoundary.Sees(arr)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis))
+            : NDCharArrayBoundary.Sees(arr)   // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis))
             : delete(arr, (long)obj, axis);
 
         /// <summary>
@@ -68,6 +72,10 @@ namespace NumSharp
         ///     Long-index overload of <see cref="delete(NDArray, int, int?)"/>.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.
+        /// </remarks>
         // Scope: delete is a composition that owns transients — PrepareAxisContext mints a ravel
         // `work` copy for axis=None on an N-D input, the DeleteXxx helpers build concatenated chunks,
         // and WithSourceOrder mints an asfortranarray copy for an F-contiguous source (orphaning the
@@ -81,6 +89,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
             var ctx = PrepareAxisContext(arr, axis);
@@ -92,12 +103,19 @@ namespace NumSharp
         ///     Python <c>slice.indices(N)</c> against the axis length.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.
+        /// </remarks>
         [NDScoped]
         public static NDArray delete(NDArray arr, Slice obj, int? axis = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -110,12 +128,19 @@ namespace NumSharp
         ///     are silently collapsed (each axis position is removed at most once).
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.
+        /// </remarks>
         [NDScoped]
         public static NDArray delete(NDArray arr, int[] obj, int? axis = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -130,12 +155,19 @@ namespace NumSharp
         ///     Long-array-of-indices overload.
         /// </summary>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.
+        /// </remarks>
         [NDScoped]
         public static NDArray delete(NDArray arr, long[] obj, int? axis = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -151,7 +183,9 @@ namespace NumSharp
         /// <param name="arr">Input array.</param>
         /// <param name="obj">True at each position to remove along <paramref name="axis"/>.</param>
         /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
-        /// <returns>A fresh array without the masked sub-arrays (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <returns>A fresh array without the masked sub-arrays (F-ordered when <paramref name="arr"/> is).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null.</exception>
         /// <exception cref="ArgumentException"><paramref name="obj"/>'s length differs from the axis length.</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the ravel work array, the keep mask and the C-order result that an
@@ -163,6 +197,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
@@ -192,7 +229,9 @@ namespace NumSharp
         /// <param name="arr">Input array.</param>
         /// <param name="obj">A boolean mask (removed where true) or an integer index array.</param>
         /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
-        /// <returns>A fresh array without the selected sub-arrays (F-ordered when <paramref name="arr"/> is).</returns>
+        /// <returns>A fresh array without the selected sub-arrays (F-ordered when <paramref name="arr"/> is).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arr"/> or <paramref name="obj"/> is null.</exception>
         /// <exception cref="ArgumentException">A boolean <paramref name="obj"/> is not 1-D or its length differs
         ///     from the axis length.</exception>
@@ -213,6 +252,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 

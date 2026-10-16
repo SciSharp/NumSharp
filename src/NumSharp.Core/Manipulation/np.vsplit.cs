@@ -12,7 +12,9 @@ namespace NumSharp
         /// If an integer, N, the array will be divided into N equal arrays along axis 0.
         /// If such a split is not possible, an error is raised.
         /// </param>
-        /// <returns>A list of sub-arrays as views into ary.</returns>
+        /// <returns>A list of sub-arrays as views into ary.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>
         /// Equivalent to split with axis=0.
         /// Array must have ndim >= 2.
@@ -24,6 +26,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices_or_sections), static s => vsplit(s.ary, s.indices_or_sections));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections), static s => vsplit(s.ary, s.indices_or_sections));
             if (ary.ndim < 2)
                 throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
 
@@ -38,7 +43,9 @@ namespace NumSharp
         /// A 1-D array of sorted integers indicating where along axis 0 the array is split.
         /// For example, [2, 3] would result in ary[:2], ary[2:3], ary[3:].
         /// </param>
-        /// <returns>A list of sub-arrays as views into ary.</returns>
+        /// <returns>A list of sub-arrays as views into ary.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>
         /// Equivalent to split with axis=0.
         /// Array must have ndim >= 2.
@@ -50,6 +57,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices), static s => vsplit(s.ary, s.indices));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices), static s => vsplit(s.ary, s.indices));
             if (ary.ndim < 2)
                 throw new ArgumentException("vsplit only works on arrays of 2 or more dimensions");
 

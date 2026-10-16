@@ -131,15 +131,15 @@ arrays count) is a READ-ONLY 0-d stand-in of Python's `rstrip()` (29 code points
 `squeeze()`, `astype(copy=False)` and `to_device` return `this`); `repr` is `chararray(...)` with stripped elements;
 `NDArray.view(Type)` / `view(DType, Type)` are `view(type=)`. Divergences (pinned `[Misaligned]`): `np.char.array(...,
 order=)` of string data is a chararray (NumPy: a plain ndarray, its `np.asarray` drops the class — the oracle's one class
-excuse); an `itemsize=0` chararray (S0 / U0) is refused; a stripped value ending in NUL loses the NUL in the stand-in; np.*
-functions do not keep the class yet, and `c.argmax()` / `argmin()` / `argpartition()` return the index where NumPy's
-finalize raises (phase 3). Oracle section `strchararray` (11,505 cases). Its replay found and fixed seven
+excuse); an `itemsize=0` chararray (S0 / U0) is refused; a stripped value ending in NUL loses the NUL in the stand-in
+(the operators, the index members and the np.* functions are phase 3's, below). Oracle section `strchararray` (11,505
+cases). Its replay found and fixed seven
 base ndarray divergences: a scalar `bool` index is a COPY (`a[True]` was a view, `a[False]` the dims-less sentinel; the
 string indexer counted the bool as an axis), an out-of-bounds integer in slice notation on a strided view is NumPy's
 `IndexError` text (`UnmanagedStorage.GetView` checks every integer against its source axis), index 0 of an empty axis raises,
 `getfield` of an empty array is a view, `np.imag` of a real F array is F-ordered (`PyArray_ISFORTRAN`), and
-`np.asanyarray(object[,])` is NumPy's nested list of rows. The other 43 functions, the class's operators and np.* functions
-keeping the class are open (phases 3–4). Performance (55 cells, NPY/NS geomean 3.6×, min 1.63×; was 2.53× with 16 cells
+`np.asanyarray(object[,])` is NumPy's nested list of rows. The other 43 functions are open (phase 4 onward).
+Performance (55 cells, NPY/NS geomean 3.6×, min 1.63×; was 2.53× with 16 cells
 under 1.5×): the element stand-in's text is cut from a per-thread 2 KB arena whose Disposer the pieces share
 (`Char/NDCharArray.StandIn.cs`) and its address comes from the strides; string mask / index-array gathers run directly
 (`DirectILKernelGenerator.MaskGather.cs`; the flat gather kernels bake ANY constant slab width up to 256 bytes —
@@ -149,6 +149,43 @@ under 1.5×): the element stand-in's text is cut from a per-thread 2 KB arena wh
 `np.zeros`' calloc / demand-zero pages, and a VirtualAlloc'd zeroed block reports through the pool's coarse accounting
 (`AccountForeignAllocation`), not `GC.AddMemoryPressure` per block (a gen-2 collection every ~150 short-lived 3.2 MB
 arrays, numeric `np.zeros` included). Gate: `Backends/Strings/CharArrayFastPathTests.cs` (15; 21 planted bugs killed).
+**`chararray` behavior (phase 3, 2026-10-16): the static rule plus the boundary** (owner decision;
+`Char/NDCharArray{.Operators,.Arg}.cs`, `Char/NDCharArrayBoundary.cs`). The OPERATORS bind at compile time (`NDMatrix`'s
+rule): `==` `!=` `<` `<=` `>` `>=` `+` `*` on `NDCharArray`, seven forms each (a chararray against a chararray / `NDArray` /
+`object` / `string`, both orders), replaying Python's dispatch. A chararray on the right runs its REFLECTED method before
+a plain array's, so `u == c` strips. An `S` / `U` mix (`NotImplemented`) falls to the plain array's unstripped comparison,
+else Python's fallback (`==` a 0-d False, `!=` True, an ordering `TypeError: '<' not supported between instances of
+'chararray' and 'bytes'`). `+` is `np.char.add` (a chararray VIEW); `*` is `np.char.asarray(np.char.multiply(...))` (a `U`
+copy); the C# `null` keeps `NDArray`'s reference test for `==` / `!=`. A chararray behind an `NDArray` reference uses
+`NDArray`'s operators and members, plain. `argmax` / `argmin` / `argpartition` raise `ValueError: Can only create a
+chararray from string data.` after NumPy's checks (with `out=` they compute). `partition(sep)` is the STRING partition
+(P2.5); its `axis=` forms are NumPy's `TypeError: chararray.partition() got an unexpected keyword argument 'axis'`, which
+`np.partition` / `np.median` / `np.quantile` / `np.percentile` raise too. The np.* FUNCTIONS find a chararray at run time:
+`NDCharArrayBoundary.Sees(a)` at the outermost call, then a rule by NumPy's mechanism —
+- Kept (a method or an `np.asanyarray` view: `reshape`, `ravel`, `transpose`, `squeeze`, `sort`, `repeat`, `tile`, the
+  split family, the `*_like` family where a numeric dtype is the finalize error, `np.copy(subok=True)`, `np.take` (0-d:
+  the unstripped scalar), `np.flip` (0-d: the stripped element), `np.meshgrid` per input);
+- Wrapped (`__array_wrap__`, a chararray VIEW: text ufunc results, `insert` / `delete` / `diagflat` / `kron` /
+  `take_along_axis` / `setdiff1d`, np.unique's values, which with a return flag merge stripped-equal runs);
+- Plain (`np.asarray` converters: the stack family, `append`, `lexsort`, the linalg / fft / emath functions);
+- IndexResult (the `np.argmax` family: the finalize error);
+- NumPy's trivial-loop copy (`check_for_trivial_loop`): a 0-d or ≤ `np.getbufsize()` 1-d chararray input cast to bool or
+  StringDType is copied AS the subclass, so the logical ufuncs raise the finalize error. Only the C# literal `true` (marked
+  `WasPythonBool`) is NumPy's `where=True`.
+
+TRAPS: the boundary shares `NDMatrixBoundary`'s depth and `PlainFor` opens a region for a chararray receiver too, so a
+function must decide its chararray rule BEFORE any `PlainFor` (np.quantile's tuple-axis overloads missed it). A public
+function that passes a chararray to another must compute plain: the test hook `AuditInternalCallers` (a stack walk at
+every rule) replays all 74,606 string-oracle cases with chararray operands and must find no library caller. A comparison
+operator's typed result must share the driver result's storage (`AsGeneric` inside `using`): an untyped wrapper left to
+the finalizer stranded one buffer per comparison, and `MakeGeneric` reports OWNDATA False. Divergences (`[Misaligned]`,
+`CharArrayBehaviorTests`): the static rule; `c == null`; `np.squeeze`'s identity; a view of a stand-in is read-only;
+`chararray + StringDType` refused by the operator (call `np.add`); numpy.ma holds a chararray's data plain. Library fixes
+on the way: `Shape.ResolveReturnShape((1,), ())` keeps the axis; the text logical ufuncs and the failed `S == U` comparison
+lay out their results as NumPy's iterator does; `np.unstack` of an empty array returns views; `np.choose`'s broadcast
+text. Oracle sections `strcharops` (3,266 cases) and `strcharfn` (2,633 cases, 99 functions). Performance (91 cells,
+NPY/NS geomean 3.5×): the six cells under 1.5× cost the same on the plain path (text `searchsorted` 1.03–1.27×,
+`argmax(out=)` 1.27× / 1.39×, a 1K `np.concatenate` 1.34×).
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes

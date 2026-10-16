@@ -20,7 +20,10 @@ namespace NumSharp
         ///     <paramref name="x"/> (shared memory, matching NumPy), each with
         ///     shape equal to <c>x.shape</c> with the <paramref name="axis"/>
         ///     entry removed.
-        /// </returns>
+        ///     An empty <paramref name="x"/> gives empty views too. A <c>numpy.char.chararray</c> operand of two or
+        ///     more dimensions gives chararray views (NumPy iterates the chararray); a 1-d one gives its elements as
+        ///     NumPy's iteration does, the read-only stand-ins of the Python <c>str</c> / <c>bytes</c> with the trailing
+        ///     whitespace stripped.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="x"/> is 0-d ("Input array must be at least 1-d.").</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range: moveaxis' "source: axis … is out of
@@ -44,6 +47,17 @@ namespace NumSharp
             // three 1 x 2 matrices). Each 1-d slice of the plain result is wrapped into that row.
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.WrappedAll((x, axis), static s => unstack(s.x, s.axis));
+            // A numpy.char.chararray operand: NumPy iterates np.moveaxis's chararray, and iteration calls
+            // chararray.__getitem__ — each row of an N-d chararray is a chararray view, each element of a 1-d one the
+            // Python str / bytes with its trailing whitespace stripped (NDCharArrayBoundary).
+            if (NDCharArrayBoundary.Sees(x))
+            {
+                if (x.ndim != 1)
+                    return NDCharArrayBoundary.KeptAll((x, axis), static s => unstack(s.x, s.axis));
+                // moveaxis' axis check first ("source: axis 1 is out of bounds ..."), then the elements.
+                DefaultEngine.check_and_adjust_axis(1, axis, "source");
+                return NDCharArrayBoundary.StrippedElements((NDCharArray)x);
+            }
             if (x is null)
                 throw new ArgumentNullException(nameof(x));
 
@@ -73,16 +87,9 @@ namespace NumSharp
                 k++;
             }
 
-            if (x.size == 0)
-            {
-                // Some OTHER axis is zero-length (a zero `axis` yields an empty
-                // result array above). There is no data to alias — each entry is
-                // an empty array of the remaining shape.
-                for (int i = 0; i < result.Length; i++)
-                    result[i] = new NDArray(x.dtype, Shape.Adopt(subDims));
-                return result;
-            }
-
+            // An EMPTY x (another axis is zero-length; a zero `axis` returned above) is unstacked into views too: NumPy's
+            // iteration of moveaxis(x, axis, 0) yields views (OWNDATA False) whatever their size. An empty view's offset
+            // need not address an element (it may point past the buffer); nothing reads through it.
             long axisStride = shape.strides[axis];
             long baseOffset = shape.offset;
             var storage = x.Storage;

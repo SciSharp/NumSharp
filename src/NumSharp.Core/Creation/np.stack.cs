@@ -12,7 +12,9 @@ namespace NumSharp
         /// <param name="arrays">Each array must have the same shape.</param>
         /// <param name="axis">The axis in the result array along which the input arrays are stacked.</param>
         /// <returns>The stacked array has one more dimension than the input arrays: stacking <c>n</c> 0-d arrays gives
-        ///     shape <c>(n,)</c>.</returns>
+        ///     shape <c>(n,)</c>.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="arrays"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="arrays"/> is empty (<c>need at least one array to stack</c>), or the
         ///     arrays' shapes differ (<c>all input arrays must have the same shape</c>, checked before the axis).</exception>
@@ -30,6 +32,10 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arrays))
                 return NDMatrixBoundary.Wrapped((arrays, axis), static s => stack(s.arrays, s.axis));
+            // a numpy.char.chararray operand: NumPy's stack ends with np.concatenate, which drops the class; the rule's
+            // region keeps its inner expand_dims calls plain (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arrays))
+                return NDCharArrayBoundary.Plain((arrays, axis), static s => stack(s.arrays, s.axis));
             if (arrays == null)
                 throw new ArgumentNullException(nameof(arrays));
 

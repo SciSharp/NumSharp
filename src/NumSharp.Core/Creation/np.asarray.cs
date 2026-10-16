@@ -71,7 +71,9 @@ namespace NumSharp
         /// <param name="copy">Tri-state: <c>null</c> = copy only if needed (default), <c>true</c> = always copy, <c>false</c> = never copy (raises if a copy would be required).</param>
         /// <param name="like">Reference array for array-function dispatch — accepted for NumPy parity but has no observable effect in NumSharp.</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted.</param>
-        /// <returns>NDArray with the requested dtype and memory layout. Returns <paramref name="a"/> when no copy is needed.</returns>
+        /// <returns>NDArray with the requested dtype and memory layout. Returns <paramref name="a"/> when no copy is needed.
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <exception cref="NotSupportedException"><paramref name="a"/> is null (Python's <c>None</c>) and
         ///     <paramref name="dtype"/> is null: NumPy builds an object array, a dtype NumSharp does not have. With a dtype,
         ///     <c>None</c> is the 0-d array of its setitem value (NaN, <c>nan+nanj</c>, <c>False</c>, <c>'None'</c>, a
@@ -95,6 +97,10 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Plain((a, dtype, order, copy, like, device), static s => asarray(s.a, s.dtype, s.order, s.copy, s.like, s.device));
+
+            // a numpy.char.chararray operand: NumPy converts with np.asarray here, so the result is a plain array (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Plain((a, dtype, order, copy, like, device), static s => asarray(s.a, s.dtype, s.order, s.copy, s.like, s.device));
 
             // Only "cpu" is supported (matches NumPy 2.x). null is treated as "default".
             if (device != null && !string.Equals(device, "cpu", StringComparison.Ordinal))

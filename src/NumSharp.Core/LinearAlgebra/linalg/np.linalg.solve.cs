@@ -67,7 +67,9 @@ namespace NumSharp
             ///     (<c>allaxes.remove(k)</c>), never normalizing them: a negative axis is not found, so only
             ///     <c>0 .. a.ndim - 1</c> are accepted.
             /// </param>
-            /// <returns>The solution, of shape <c>a.shape[b.ndim:]</c> (after the axis move).</returns>
+            /// <returns>The solution, of shape <c>a.shape[b.ndim:]</c> (after the axis move).
+            ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+            ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorsolve.html
             ///     <para>
@@ -87,6 +89,9 @@ namespace NumSharp
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.Wrapped((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
+                // a numpy.char.chararray operand: NumPy's asarray(a) / asarray(b) drop the class (NDCharArrayBoundary)
+                if (NDCharArrayBoundary.Sees(a, b))
+                    return NDCharArrayBoundary.Plain((a, b, axes), static s => tensorsolve(s.a, s.b, s.axes));
                 var work = a;
                 if (axes is not null)
                 {

@@ -73,12 +73,15 @@ namespace NumSharp
         ///     float per <see cref="np.sqrt(NDArray, NDArray, NDArray, DType)"/>). A scalar input yields a
         ///     0-D array. <c>-0.0</c> does NOT trigger the complex promotion (<c>-0.0 &lt; 0</c> is false),
         ///     matching NumPy.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.sqrt.html</remarks>
         [NDScoped]
         public NDArray sqrt(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.sqrt(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.sqrt(s.x))
             : np.sqrt(FixRealLtZero(x));
 
         /// <summary>
@@ -91,12 +94,15 @@ namespace NumSharp
         ///     <c>log(x)</c>. <c>log(0)</c> is <c>-inf</c> and <c>log(inf)</c> is <c>inf</c> (both stay
         ///     real); a negative real element promotes the whole array to complex128
         ///     (<c>log(-e) == 1 + pi·i</c>). A 0-D array for a scalar input.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.log.html</remarks>
         [NDScoped]
         public NDArray log(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log(s.x))
             : np.log(FixRealLtZero(x));
 
         /// <summary>
@@ -107,12 +113,15 @@ namespace NumSharp
         /// <returns>
         ///     <c>log10(x)</c>. <c>log10(0)</c> is <c>-inf</c>; a negative real element promotes the whole
         ///     array to complex128. A 0-D array for a scalar input.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.log10.html</remarks>
         [NDScoped]
         public NDArray log10(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log10(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log10(s.x))
             : np.log10(FixRealLtZero(x));
 
         /// <summary>
@@ -123,12 +132,15 @@ namespace NumSharp
         /// <returns>
         ///     <c>log2(x)</c>. <c>log2(0)</c> is <c>-inf</c>; a negative real element promotes the whole
         ///     array to complex128. A 0-D array for a scalar input.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.log2.html</remarks>
         [NDScoped]
         public NDArray log2(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log2(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log2(s.x))
             : np.log2(FixRealLtZero(x));
 
         /// <summary>
@@ -143,7 +155,8 @@ namespace NumSharp
         ///     complex128 (so the quotient is complex); otherwise the result is real (float64). <paramref name="n"/>
         ///     and <paramref name="x"/> broadcast against each other via the division. Note the argument
         ///     order is <c>(n, x)</c>, matching NumPy.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.logn.html</remarks>
         [NDScoped]
         public NDArray logn(NDArray n, NDArray x)
@@ -151,6 +164,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(n, x))
                 return NDMatrixBoundary.Plain((self: this, n, x), static s => s.self.logn(s.n, s.x));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(n, x))
+                return NDCharArrayBoundary.Plain((self: this, n, x), static s => s.self.logn(s.n, s.x));
             // NumPy fixes BOTH operands independently, then divides. A negative element in n (e.g. logn(-2, 8))
             // makes log(n) complex, so real log(x) / complex log(n) promotes the quotient to complex — exactly
             // NumPy's `nx.log(x) / nx.log(n)`.
@@ -178,7 +194,8 @@ namespace NumSharp
         ///     with a NON-integer exponent takes the complex-<c>power</c> path, which is <c>allclose</c> to
         ///     NumPy but not bit-exact (the documented <c>Complex.Pow</c> vs <c>npy_cpow</c> ULP divergence);
         ///     an integer exponent is bit-exact.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.power.html</remarks>
         [NDScoped]
         public NDArray power(NDArray x, NDArray p)
@@ -186,6 +203,9 @@ namespace NumSharp
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(x, p))
                 return NDMatrixBoundary.Plain((self: this, x, p), static s => s.self.power(s.x, s.p));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(x, p))
+                return NDCharArrayBoundary.Plain((self: this, x, p), static s => s.self.power(s.x, s.p));
             // Base: negative real element -> complex128. Exponent: negative real element -> float (so a
             // negative integer exponent does not hit np.power's integer-domain "negative integer power" error).
             x = FixRealLtZero(x);
@@ -204,12 +224,15 @@ namespace NumSharp
         ///     <c>|x| &gt; 1</c> (or an infinite element, whose <c>|x| &gt; 1</c>) promotes the whole array to
         ///     complex128. A <c>nan</c> element does NOT trigger the promotion (<c>|nan| &gt; 1</c> is false).
         ///     A 0-D array for a scalar input.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.arccos.html</remarks>
         [NDScoped]
         public NDArray arccos(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arccos(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arccos(s.x))
             : np.arccos(FixRealAbsGt1(x));
 
         /// <summary>
@@ -220,12 +243,15 @@ namespace NumSharp
         /// <returns>
         ///     <c>arcsin(x)</c>. For <c>|x| &lt;= 1</c> a real result in <c>[-pi/2, pi/2]</c>; any real element
         ///     with <c>|x| &gt; 1</c> promotes the whole array to complex128. A 0-D array for a scalar input.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.arcsin.html</remarks>
         [NDScoped]
         public NDArray arcsin(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arcsin(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arcsin(s.x))
             : np.arcsin(FixRealAbsGt1(x));
 
         /// <summary>
@@ -239,12 +265,15 @@ namespace NumSharp
         ///     promotes the whole array to complex128. The boundary <c>|x| == 1</c> stays REAL and yields
         ///     <c>±inf</c> (the promotion is strictly <c>|x| &gt; 1</c>, matching NumPy). A 0-D array for a
         ///     scalar input.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.emath.arctanh.html</remarks>
         [NDScoped]
         public NDArray arctanh(NDArray x)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arctanh(s.x))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arctanh(s.x))
             : np.arctanh(FixRealAbsGt1(x));
 
         // ── Domain-fix helpers (ports of numpy/lib/_scimath_impl.py) ──────────────────────────────

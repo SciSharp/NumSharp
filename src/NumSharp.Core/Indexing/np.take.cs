@@ -36,7 +36,9 @@ namespace NumSharp
         ///     </list>
         ///     Dtype matches <paramref name="a"/> (or <paramref name="out"/>'s dtype
         ///     when <paramref name="out"/> is supplied).
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result; a 0-d result without
+        ///     <paramref name="out"/> is the element's UNSTRIPPED NumPy scalar (<c>PyArray_Return</c>), NumSharp's
+        ///     read-only stand-in.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="indices"/> is null.</exception>
         /// <exception cref="ValueError">A bad <paramref name="mode"/> (<see cref="ClipmodeConverter"/>), checked first;
         ///     an <paramref name="out"/> of another shape (<c>output array does not match result of ndarray.take</c>) or a
@@ -60,6 +62,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, indices, axis, @out, mode), static s => take(s.a, s.indices, s.axis, s.@out, s.mode), @out);
+            // a numpy.char.chararray operand comes back as a chararray (a 0-d result: the element's unstripped scalar), as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.KeptTake((a, indices, axis, @out, mode), static s => take(s.a, s.indices, s.axis, s.@out, s.mode), @out);
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
 
@@ -76,7 +81,10 @@ namespace NumSharp
         /// <param name="axis">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
         /// <param name="out">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
         /// <param name="mode">As in <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</param>
-        /// <returns>The taken element(s).</returns>
+        /// <returns>The taken element(s).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result; a 0-d result without
+        ///     <paramref name="out"/> is the element's UNSTRIPPED NumPy scalar (<c>PyArray_Return</c>), NumSharp's
+        ///     read-only stand-in.</returns>
         /// <exception cref="ValueError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
         /// <exception cref="AxisError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
         /// <exception cref="IndexError">See <see cref="take(NDArray, NDArray, int?, NDArray, string)"/>.</exception>
@@ -87,6 +95,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, index, axis, @out, mode), static s => take(s.a, s.index, s.axis, s.@out, s.mode), @out);
+            // a numpy.char.chararray operand comes back as a chararray (a 0-d result: the element's unstripped scalar), as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.KeptTake((a, index, axis, @out, mode), static s => take(s.a, s.index, s.axis, s.@out, s.mode), @out);
             // Wrap the scalar in a 0-d NDArray so the array overload's shape-preserving
             // logic emits a 0-d result (NumPy semantic for scalar input).
             var idxArr = NDArray.Scalar(index);

@@ -54,6 +54,10 @@ namespace NumSharp
         ///     wrong shape (<c>"choose: invalid shape for output array."</c>).
         /// </exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice entry is null.</exception>
+        /// <exception cref="IncorrectShapeException">The choices and <paramref name="a"/> do not broadcast together:
+        ///     NumPy's multi-iterator text (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch
+        ///     is between arg 0 with shape (0, 3) and arg 2 with shape (0,).</c>), the choices numbered first and the
+        ///     index array last.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.choose.html
         ///     <para>Scoped by <c>[NDScoped]</c>: the int64 copy of a non-int64 index array, the 0-d arrays of
@@ -88,6 +92,10 @@ namespace NumSharp
         /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
         /// <returns>A fresh C-contiguous array, or <paramref name="out"/> when given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="choices"/> or a choice is null.</exception>
+        /// <exception cref="IncorrectShapeException">The choices and <paramref name="a"/> do not broadcast together:
+        ///     NumPy's multi-iterator text (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch
+        ///     is between arg 0 with shape (0, 3) and arg 2 with shape (0,).</c>), the choices numbered first and the
+        ///     index array last.</exception>
         /// <exception cref="ValueError"><paramref name="choices"/> is empty, an index is out of range under
         ///     <c>mode="raise"</c>, or <paramref name="mode"/> is not a known clip mode.</exception>
         /// <exception cref="TypeError"><paramref name="a"/> cannot be safe-cast to int64, or <paramref name="out"/>
@@ -119,6 +127,10 @@ namespace NumSharp
         /// <param name="mode"><c>"raise"</c> (default), <c>"wrap"</c> or <c>"clip"</c>.</param>
         /// <returns>A fresh C-contiguous array, or <paramref name="out"/> when given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="choices"/> is null.</exception>
+        /// <exception cref="IncorrectShapeException">The choices and <paramref name="a"/> do not broadcast together:
+        ///     NumPy's multi-iterator text (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch
+        ///     is between arg 0 with shape (0, 3) and arg 2 with shape (0,).</c>), the choices numbered first and the
+        ///     index array last.</exception>
         /// <exception cref="TypeError"><paramref name="choices"/> is 0-d, <paramref name="a"/> cannot be safe-cast
         ///     to int64, or <paramref name="out"/> has the wrong shape.</exception>
         /// <exception cref="ValueError"><paramref name="choices"/> has length 0 along its first axis, an index is out
@@ -155,6 +167,10 @@ namespace NumSharp
         /// <param name="mode">The clip mode string, parsed by NumPy's rules.</param>
         /// <returns>The fresh result, or <paramref name="out"/> after the result is copied into it.</returns>
         /// <exception cref="ArgumentNullException">A choice entry is null.</exception>
+        /// <exception cref="IncorrectShapeException">The choices and <paramref name="a"/> do not broadcast together:
+        ///     NumPy's multi-iterator text (<c>shape mismatch: objects cannot be broadcast to a single shape.  Mismatch
+        ///     is between arg 0 with shape (0, 3) and arg 2 with shape (0,).</c>), the choices numbered first and the
+        ///     index array last.</exception>
         /// <exception cref="ValueError">No choices, an out-of-range index under raise, a bad clip mode, or a
         ///     read-only <paramref name="out"/>.</exception>
         /// <exception cref="TypeError">The index array cannot be safe-cast to int64, or <paramref name="out"/> has
@@ -303,6 +319,10 @@ namespace NumSharp
             var shapes = new Shape[n + 1];
             for (int i = 0; i < n; i++) shapes[i] = castChoices[i].Shape;
             shapes[n] = idx64.Shape;
+            // PyArray_Choose's multi-iterator broadcasts the choices and then the index ("index array at the end"), so a
+            // conflict is NumPy's multi-iterator text naming those positions ("... Mismatch is between arg 0 with shape
+            // (0, 3) and arg 2 with shape (0,)."): np.broadcast_shapes raises exactly that, in the same argument order.
+            broadcast_shapes(shapes);
             Shape common = Shape.Broadcast(shapes)[0];
             long[] resultDims = common.dimensions;
             int ndim = resultDims.Length;

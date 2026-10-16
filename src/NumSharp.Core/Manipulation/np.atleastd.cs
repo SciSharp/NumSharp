@@ -33,7 +33,9 @@ namespace NumSharp
         /// <summary>
         ///     View inputs as arrays with at least three dimensions.
         /// </summary>
-        /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
+        /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped] // reclaims the inner expand_dims alias of the 1-D arm; the ndim>=3 passthrough is an untracked input
@@ -42,6 +44,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped(arr, static s => atleast_3d(s), keepRank: true);
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Kept(arr, static s => atleast_3d(s));
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -103,7 +108,9 @@ namespace NumSharp
         ///     View inputs as arrays with at least three dimensions.
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
-        /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
+        /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
@@ -113,6 +120,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arys))
                 return NDMatrixBoundary.WrappedAll(arys, static s => atleast_3d(s));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arys))
+                return NDCharArrayBoundary.KeptAll(arys, static s => atleast_3d(s));
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
@@ -171,10 +181,15 @@ namespace NumSharp
         ///     View inputs as arrays with at least two dimensions.
         /// </summary>
         /// <param name="arr">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
-        /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
+        /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray atleast_2d(NDArray arr)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Kept(arr, static s => atleast_2d(s));
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -229,11 +244,16 @@ namespace NumSharp
         ///     View inputs as arrays with at least two dimensions.
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
-        /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
+        /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_2d(params NDArray[] arys)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arys))
+                return NDCharArrayBoundary.KeptAll(arys, static s => atleast_2d(s));
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 
@@ -288,10 +308,15 @@ namespace NumSharp
         ///     Convert inputs to arrays with at least one dimension.
         ///     Scalar inputs are converted to 1-dimensional arrays, whilst higher-dimensional inputs are preserved.
         /// </summary>
-        /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
+        /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray atleast_1d(NDArray arr)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Kept(arr, static s => atleast_1d(s));
             if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
@@ -344,11 +369,16 @@ namespace NumSharp
         ///     Scalar inputs are converted to 1-dimensional arrays, whilst higher-dimensional inputs are preserved.
         /// </summary>
         /// <param name="arys">One or more input arrays.</param>
-        /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
+        /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="arys"/> is null.</exception>
         public static NDArray[] atleast_1d(params NDArray[] arys)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arys))
+                return NDCharArrayBoundary.KeptAll(arys, static s => atleast_1d(s));
             if (arys == null)
                 throw new ArgumentNullException(nameof(arys));
 

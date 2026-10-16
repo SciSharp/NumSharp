@@ -28,11 +28,16 @@ namespace NumSharp
         ///     axis order (each axis in increasing index — a negative stride is NOT reversed, a broadcast axis abstains).
         /// </param>
         /// <returns>The 1-D result: a view that shares <paramref name="a"/>'s memory (and its writeability), or a fresh
-        ///     copy.</returns>
+        ///     copy.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ArgumentException">An order code other than C, F, A or K.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
         public static NDArray ravel(NDArray a, char order)
         {
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((a, order), static s => ravel(s.a, s.order));
             var s = a.Shape;
             // PyArray_Ravel's order resolution: 'K' is C / F for a C- / F-contiguous array (0-d and size<=1 included);
             // 'A' is F only for a strictly F-contiguous array.

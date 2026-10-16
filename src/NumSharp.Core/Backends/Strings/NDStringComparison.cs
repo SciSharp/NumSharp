@@ -240,14 +240,16 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     The layout of a fresh result: NumPy's NpyIter output allocation over the two inputs and the mask (each votes
-        ///     with the axes it really strides; C order wins ties), so the result's flags and strides are NumPy's.
+        ///     with the axes it really strides; C order wins ties), so the result's flags and strides are NumPy's. Also the
+        ///     layout of the logical ufuncs over text (<see cref="NDStringUfuncs"/>'s truth route), whose casts to bool happen
+        ///     in NumPy's iterator buffers: the ORIGINAL operands vote, so a broadcast operand abstains on its stride-0 axis.
         /// </summary>
         /// <param name="dims">The broadcast dimensions (adopted by the returned shape — a fresh array).</param>
         /// <param name="x1">The first input.</param>
         /// <param name="x2">The second input.</param>
         /// <param name="where">The mask, or null.</param>
         /// <returns>A dense, offset-0 shape of <paramref name="dims"/>.</returns>
-        private static Shape ResultShape(long[] dims, NDArray x1, NDArray x2, NDArray where)
+        internal static Shape ResultShape(long[] dims, NDArray x1, NDArray x2, NDArray where)
         {
             if (dims.Length == 0)
                 return Shape.NewScalar();

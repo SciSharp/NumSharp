@@ -210,7 +210,9 @@ namespace NumSharp
         ///     The input is flattened. Each NaN is treated as a distinct value.
         /// </summary>
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
-        /// <returns>The unique elements of <paramref name="x"/> (dtype preserved).</returns>
+        /// <returns>The unique elements of <paramref name="x"/> (dtype preserved).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.unique_values.html<br></br>
         ///     NumSharp returns the values SORTED (like <c>np.unique(x, equal_nan=False)</c>). For integer and
@@ -225,6 +227,12 @@ namespace NumSharp
         [NDScoped]
         public static NDArray unique_values(NDArray x)
         {
+            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
+            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
+            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
+            // the matrix region below (NDCharArrayBoundary).
+            if (NDCharArrayBoundary.Sees(x))
+                return NDCharArrayBoundary.Wrapped(x, static s => unique_values(s));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy hashes text (sorts it with an index output); a StringDType array is deferred here unless at most one
             // element is ordered, fixed-width text computes in the instance unique.
@@ -242,7 +250,9 @@ namespace NumSharp
         ///     The input is flattened. Each NaN is treated as a distinct value.
         /// </summary>
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
-        /// <returns>A <see cref="UniqueCountsResult"/>: (values, counts).</returns>
+        /// <returns>A <see cref="UniqueCountsResult"/>: (values, counts).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_counts.html</remarks>
         /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
         ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
@@ -252,6 +262,15 @@ namespace NumSharp
         [NDScoped]
         public static UniqueCountsResult unique_counts(NDArray x)
         {
+            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
+            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
+            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
+            // the matrix region below (NDCharArrayBoundary).
+            if (NDCharArrayBoundary.Sees(x))
+            {
+                var kept = NDCharArrayBoundary.WrappedFirst(x, static s => unique_counts(s).ToArray(), stripRuns: true);
+                return new UniqueCountsResult(kept[0], kept[1]);
+            }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy sorts text: a StringDType array is deferred here unless at most one element is ordered; fixed-width
             // text computes in the instance unique.
@@ -271,7 +290,9 @@ namespace NumSharp
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
         /// <returns>A <see cref="UniqueInverseResult"/>: (values, inverse_indices). <c>inverse_indices</c>
         ///     has the same shape as <paramref name="x"/>, so <c>np.take(values, inverse_indices)</c>
-        ///     reconstructs the input.</returns>
+        ///     reconstructs the input.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_inverse.html</remarks>
         /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
         ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
@@ -283,6 +304,15 @@ namespace NumSharp
         [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
+            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
+            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
+            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
+            // the matrix region below (NDCharArrayBoundary).
+            if (NDCharArrayBoundary.Sees(x))
+            {
+                var kept = NDCharArrayBoundary.WrappedFirst(x, static s => unique_inverse(s).ToArray(), stripRuns: true);
+                return new UniqueInverseResult(kept[0], kept[1]);
+            }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy sorts text: a StringDType array is deferred here unless at most one element is ordered; fixed-width
             // text computes in the instance unique below.
@@ -301,7 +331,9 @@ namespace NumSharp
         ///     a distinct value.
         /// </summary>
         /// <param name="x">Input array. Flattened if it is not already 1-D.</param>
-        /// <returns>A <see cref="UniqueAllResult"/>: (values, indices, inverse_indices, counts).</returns>
+        /// <returns>A <see cref="UniqueAllResult"/>: (values, indices, inverse_indices, counts).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique_all.html</remarks>
         /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array of two or more elements:
         ///     computing on <c>StringDType</c> is phase 2's next stage (an empty or one-element one is answered from its
@@ -311,6 +343,15 @@ namespace NumSharp
         [NDScoped]
         public static UniqueAllResult unique_all(NDArray x)
         {
+            // a numpy.char.chararray operand: NumPy hands the values back through _array_converter.wrap or a boolean
+            // index (a chararray view); the index arrays stay plain. A call with a return flag sorts the chararray and finds
+            // its runs with the chararray's stripping `!=` (stripRuns; unique_values hashes the plain data). Decided before
+            // the matrix region below (NDCharArrayBoundary).
+            if (NDCharArrayBoundary.Sees(x))
+            {
+                var kept = NDCharArrayBoundary.WrappedFirst(x, static s => unique_all(s).ToArray(), stripRuns: true);
+                return new UniqueAllResult(kept[0], kept[1], kept[2], kept[3]);
+            }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy sorts text: a StringDType array is deferred here unless at most one element is ordered; fixed-width
             // text computes in the instance unique below.

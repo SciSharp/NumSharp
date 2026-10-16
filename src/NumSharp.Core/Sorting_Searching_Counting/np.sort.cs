@@ -20,7 +20,9 @@ namespace NumSharp
         ///     refuses it for an array without fields.</param>
         /// <param name="stable">NumPy's keyword-only <c>stable</c>: true asks for the stable kind. It cannot be combined
         ///     with <paramref name="kind"/> (false included).</param>
-        /// <returns>The sorted copy, laid out as <c>a.copy(order='K')</c> (a 1-D C array for <c>axis=null</c>).</returns>
+        /// <returns>The sorted copy, laid out as <c>a.copy(order='K')</c> (a 1-D C array for <c>axis=null</c>).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     NaN floats sort to the end; complex sorts lexicographically (real then imaginary), any-NaN-part last; text
         ///     (<c>S</c> / <c>U</c>) sorts by code points, compared unsigned — matching NumPy 2.4.2.
@@ -35,6 +37,8 @@ namespace NumSharp
         public static NDArray sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.Kept((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
             : AxisSort.Sort(a, axis, SortKindArguments.Resolve(kind, order, stable));
     }
 

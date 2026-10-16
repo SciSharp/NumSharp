@@ -16,11 +16,18 @@ namespace NumSharp
         ///     forms <c>range(-axes, 0)</c>, which is empty for any <c>axes &lt;= 0</c>.
         /// </param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tensordot.html</remarks>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, int axes = 2)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a, b))
+                return NDCharArrayBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes));
             // Text reaches the final dot after NumPy's axis checks (which come first), and dot answers for it.
             var axesA = new List<int>();
             var axesB = new List<int>();
@@ -36,9 +43,15 @@ namespace NumSharp
         ///     Tensor contraction pairing one axis of <paramref name="a"/> with one of
         ///     <paramref name="b"/> — NumPy's <c>axes=(int, int)</c> spelling.
         /// </summary>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public static NDArray tensordot(NDArray a, NDArray b, (int AxisA, int AxisB) axes)
             => NDMatrixBoundary.Sees(a, b)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
+            : NDCharArrayBoundary.Sees(a, b)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((a, b, axes), static s => tensordot(s.a, s.b, s.axes))
             : tensordot(a, b, new[] {axes.AxisA}, new[] {axes.AxisB});
 
         /// <summary>
@@ -57,12 +70,19 @@ namespace NumSharp
         ///     mismatch. A mismatched extent found earlier in the list settles as the shape mismatch
         ///     first, hiding a later out-of-range axis.
         /// </exception>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         [NDScoped]
         public static NDArray tensordot(NDArray a, NDArray b, int[] axesA, int[] axesB)
         {
             // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
+            // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a, b))
+                return NDCharArrayBoundary.Plain((a, b, axesA, axesB), static s => tensordot(s.a, s.b, s.axesA, s.axesB));
             // Port of numpy/_core/numeric.py :: tensordot. Text runs every axis check below, then the final dot
             // (np.dot of the two reshaped matrices) gives NumPy's answer for it.
             var shapeA = a.Shape.dimensions;

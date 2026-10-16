@@ -495,10 +495,34 @@ namespace NumSharp.Backends.Strings
             if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return new ArgumentException(
                     $"Cannot cast ufunc '{ufunc}' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+            // NumPy's trivial loop copies a short input its loop casts, keeping the input's class: a chararray input of the
+            // user's call cast to bool (the logical ufuncs) or a chararray repeat count cast to int64 is refused by the
+            // finalize rule here, between the output cast and the broadcast (NDCharArrayBoundary.TrivialLoopCopyError).
+            var copy = NDCharArrayBoundary.TrivialLoopCopyError(x1, FixedWidthLoopDescr(ufunc, x1), x2,
+                                                                 x2 is null ? null : FixedWidthLoopDescr(ufunc, x2), where);
+            if (copy is not null)
+                return copy;
             var broadcast = BroadcastError(x1, x2, @out, where);
             if (broadcast is not null)
                 return broadcast;
             return NextPhase(ufunc, result.Meta is StringDTypeMeta ? result : (IsString(x1) ? x1 : x2 ?? x1).dtype);
+        }
+
+        /// <summary>
+        ///     The descriptor a fixed-width string loop reads an input in, for NumPy's trivial-loop copy: the logical ufuncs'
+        ///     promoter casts every input to bool, the string repeat loop reads its count as int64, and every other loop
+        ///     (the comparisons, the concatenation, the repeat's text) reads each input in its own descriptor.
+        /// </summary>
+        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="x">The input.</param>
+        /// <returns>The loop's descriptor for <paramref name="x"/>.</returns>
+        private static DType FixedWidthLoopDescr(string ufunc, NDArray x)
+        {
+            if (s_logical.Contains(ufunc))
+                return DType.Boolean;
+            if (ufunc == "multiply" && !IsString(x))
+                return np.int64;
+            return x.dtype;
         }
 
         /// <summary>

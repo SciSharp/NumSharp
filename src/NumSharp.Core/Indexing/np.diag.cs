@@ -17,7 +17,9 @@ namespace NumSharp
         ///     Diagonal in question. Use <c>k &gt; 0</c> for diagonals above the main diagonal,
         ///     and <c>k &lt; 0</c> for diagonals below the main diagonal.
         /// </param>
-        /// <returns>The extracted diagonal or constructed diagonal array.</returns>
+        /// <returns>The extracted diagonal or constructed diagonal array.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ArgumentException">
         ///     <paramref name="v"/> is not 1- or 2-dimensional —
         ///     <c>Input must be 1- or 2-d.</c> (NumPy's <c>ValueError</c>).
@@ -37,6 +39,9 @@ namespace NumSharp
         [NDScoped]
         public static NDArray diag(NDArray v, int k = 0)
         {
+            // a numpy.char.chararray operand: a 2-d one is np.diagonal's chararray view; a 1-d one builds np.zeros (plain)
+            if (v is not null && v.ndim == 2 && NDCharArrayBoundary.Sees(v))
+                return NDCharArrayBoundary.Kept((v, k), static s => diag(s.v, s.k));
             using var plain = NDMatrixBoundary.PlainFor(v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (v is null) throw new ArgumentNullException(nameof(v));
 
@@ -64,7 +69,8 @@ namespace NumSharp
         /// <returns>
         ///     The 2-D output array of shape <c>(n, n)</c> where <c>n = v.size + |k|</c>.
         ///     Always a freshly allocated, C-contiguous, writeable array.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.diagflat.html
         ///     <para>
@@ -82,6 +88,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(v))
                 return NDMatrixBoundary.Wrapped((v, k), static s => diagflat(s.v, s.k));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(v))
+                return NDCharArrayBoundary.Wrapped((v, k), static s => diagflat(s.v, s.k));
             if (v is null) throw new ArgumentNullException(nameof(v));
             return DiagonalEmbed(v.ravel(), k);
         }

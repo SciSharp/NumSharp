@@ -1,0 +1,216 @@
+using NumSharp.Backends.Strings;
+
+// =============================================================================
+// NDCharArray.Arg.cs — the members NumPy refuses on a chararray (argmax / argmin / argpartition) and the STRING
+// partition that hides ndarray.partition
+// =============================================================================
+//
+// argmax / argmin / argpartition create their int64 result as the operand's SUBCLASS (PyArray_ArgMax / PyArray_ArgMin /
+// PyArray_ArgPartition: PyArray_NewFromDescr(Py_TYPE(ap), ...)), so chararray's __array_finalize__ raises
+// "Can only create a chararray from string data." — AFTER NumPy's argument checks (the axis, the empty-sequence error,
+// the kth bounds and the kind), which come first. With out= NumPy writes into the caller's array and nothing is created
+// as the subclass: the call computes. argsort, sort and searchsorted are not refused (argsort works on the plain view,
+// sort is in place, searchsorted allocates a plain array): the inherited NDArray members already answer as NumPy does.
+//
+// chararray.partition(sep) is the string partition (np.char.partition), not ndarray's in-place sort partition:
+// c.partition(1) partitions the strings around the text '1'. NumSharp's string partition is a later stage of the string
+// support (np.strings P2.5), so it raises the deferral; the forms that pass axis= meet NumPy's TypeError.
+//
+// =============================================================================
+
+namespace NumSharp
+{
+    public partial class NDCharArray
+    {
+        #region argmax / argmin
+
+        /// <summary>
+        ///     NumPy's <c>chararray.argmax()</c>: always the finalize error, because NumPy creates the index as a chararray
+        ///     — after its own checks (an empty array raises <c>attempt to get argmax of an empty sequence</c> first).
+        /// </summary>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="ValueError">An empty chararray (<c>attempt to get argmax of an empty sequence</c>); otherwise
+        ///     always <c>Can only create a chararray from string data.</c></exception>
+        /// <remarks>Through an <see cref="NDArray"/> reference the same object computes the plain index (the static rule).</remarks>
+        public new long argmax()
+        {
+            // The plain computation raises NumPy's earlier errors in NumPy's order; its index is never returned.
+            base.argmax(null, null, false).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        /// <summary>
+        ///     NumPy's <c>chararray.argmax(axis, keepdims=...)</c>: the finalize error, after NumPy's axis and empty-sequence
+        ///     checks.
+        /// </summary>
+        /// <param name="axis">The axis (checked as NumPy checks it).</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank (rank 1 for a 0-d chararray).</exception>
+        /// <exception cref="ValueError">The reduced length is 0 (<c>attempt to get argmax of an empty sequence</c>); else
+        ///     <c>Can only create a chararray from string data.</c></exception>
+        public new NDArray argmax(int axis, bool keepdims = false) => argmax((int?)axis, null, keepdims);
+
+        /// <summary>
+        ///     NumPy's <c>chararray.argmax(axis=None, out=None, *, keepdims=False)</c>: with <paramref name="out"/> the
+        ///     indices are written into it and it is returned (nothing is created as the subclass); without it, the
+        ///     finalize error after NumPy's checks.
+        /// </summary>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="out">The output array, or null.</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns><paramref name="out"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
+        /// <exception cref="ValueError">The reduced length is 0, <paramref name="out"/> has another shape (<c>output array
+        ///     does not match result of np.argmax.</c>), or — without <paramref name="out"/> — always <c>Can only create a
+        ///     chararray from string data.</c></exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64.</exception>
+        public new NDArray argmax(int? axis = null, NDArray @out = null, bool keepdims = false)
+        {
+            if (@out is not null)
+                return base.argmax(axis, @out, keepdims);
+            base.argmax(axis, null, keepdims).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        /// <summary>NumPy's <c>chararray.argmin()</c>: always the finalize error, after the empty-sequence check.</summary>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="ValueError">An empty chararray (<c>attempt to get argmin of an empty sequence</c>); otherwise
+        ///     always <c>Can only create a chararray from string data.</c></exception>
+        public new long argmin()
+        {
+            base.argmin(null, null, false).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        /// <summary>NumPy's <c>chararray.argmin(axis, keepdims=...)</c>: the finalize error after NumPy's checks.</summary>
+        /// <param name="axis">The axis.</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
+        /// <exception cref="ValueError">The reduced length is 0; else <c>Can only create a chararray from string data.</c></exception>
+        public new NDArray argmin(int axis, bool keepdims = false) => argmin((int?)axis, null, keepdims);
+
+        /// <summary>
+        ///     NumPy's <c>chararray.argmin(axis=None, out=None, *, keepdims=False)</c>: computes into <paramref name="out"/>;
+        ///     without it, the finalize error after NumPy's checks.
+        /// </summary>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="out">The output array, or null.</param>
+        /// <param name="keepdims">NumPy's <c>keepdims</c>.</param>
+        /// <returns><paramref name="out"/>.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
+        /// <exception cref="ValueError">The reduced length is 0, <paramref name="out"/> has another shape, or — without
+        ///     <paramref name="out"/> — always <c>Can only create a chararray from string data.</c></exception>
+        /// <exception cref="TypeError"><paramref name="out"/>'s dtype does not cast safely to int64.</exception>
+        public new NDArray argmin(int? axis = null, NDArray @out = null, bool keepdims = false)
+        {
+            if (@out is not null)
+                return base.argmin(axis, @out, keepdims);
+            base.argmin(axis, null, keepdims).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        #endregion
+
+        #region argpartition
+
+        /// <summary>
+        ///     NumPy's <c>chararray.argpartition(kth, axis=-1, kind='introselect', order=None)</c>: always the finalize
+        ///     error, after NumPy's checks of the kind, the order, the axis and the kth bounds (skipped for an empty array).
+        /// </summary>
+        /// <param name="kth">The element index to partition by.</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="kind">The selection algorithm (only <c>'introselect'</c>).</param>
+        /// <param name="order">Must be null.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="ValueError">A bad kind or kth (<c>kth(=9) out of bounds (4)</c>); otherwise always
+        ///     <c>Can only create a chararray from string data.</c></exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
+        public new NDArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
+        {
+            base.argpartition(kth, axis, kind, order).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        /// <summary>NumPy's <c>chararray.argpartition</c> with several kth indices: the finalize error after NumPy's checks.</summary>
+        /// <param name="kth">The element indices to partition by.</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="kind">The selection algorithm.</param>
+        /// <param name="order">Must be null.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="ValueError">A bad kind or kth; otherwise always <c>Can only create a chararray from string
+        ///     data.</c></exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
+        public new NDArray argpartition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
+        {
+            base.argpartition(kth, axis, kind, order).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        /// <summary>NumPy's <c>chararray.argpartition</c> with the kth indices as an array: the finalize error after NumPy's
+        ///     checks.</summary>
+        /// <param name="kth">The kth indices (an integer array).</param>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="kind">The selection algorithm.</param>
+        /// <param name="order">Must be null.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="ValueError">A bad kind or kth; otherwise always <c>Can only create a chararray from string
+        ///     data.</c></exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
+        /// <exception cref="TypeError">A non-integer kth array.</exception>
+        public new NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
+        {
+            base.argpartition(kth, axis, kind, order).Dispose();
+            throw NDCharArrayBoundary.FinalizeError();
+        }
+
+        #endregion
+
+        #region partition (the string partition)
+
+        /// <summary>
+        ///     NumPy's <c>chararray.partition(sep)</c>: the STRING partition (<c>np.char.partition</c>: each element split
+        ///     around the first <paramref name="sep"/> into three parts), which hides ndarray's in-place sort partition.
+        ///     NumSharp's string partition is a later stage of its string support (<c>np.strings</c>, P2.5).
+        /// </summary>
+        /// <param name="sep">The separator (NumPy converts it to text).</param>
+        /// <returns>Never returns yet.</returns>
+        /// <exception cref="StringComputationNotSupportedException">Always: NumPy computes the partition; NumSharp's
+        ///     <c>np.strings</c> stage that computes it has not landed.</exception>
+        public NDCharArray partition(object sep) => throw NDStringUfuncs.NextPhase("chararray.partition", this);
+
+        /// <summary>
+        ///     <c>c.partition(kth, axis, ...)</c>, the call <c>np.partition</c> makes: NumPy's TypeError, because
+        ///     <c>chararray.partition</c> takes only the separator.
+        /// </summary>
+        /// <param name="kth">The kth index of a sort partition.</param>
+        /// <param name="axis">The axis (its presence is what NumPy refuses).</param>
+        /// <param name="kind">The selection algorithm.</param>
+        /// <param name="order">Must be null.</param>
+        /// <exception cref="TypeError">Always: <c>chararray.partition() got an unexpected keyword argument 'axis'</c>.</exception>
+        /// <remarks>The axis has no default, so <c>c.partition(1)</c> binds the string partition, as in NumPy.</remarks>
+        public new void partition(int kth, int? axis, string kind = "introselect", string order = null)
+            => throw NDCharArrayBoundary.PartitionKeywordError();
+
+        /// <summary><see cref="partition(int, int?, string, string)"/> with several kth indices: NumPy's TypeError.</summary>
+        /// <param name="kth">The kth indices.</param>
+        /// <param name="axis">The axis.</param>
+        /// <param name="kind">The selection algorithm.</param>
+        /// <param name="order">Must be null.</param>
+        /// <exception cref="TypeError">Always: <c>chararray.partition() got an unexpected keyword argument 'axis'</c>.</exception>
+        public new void partition(int[] kth, int? axis, string kind = "introselect", string order = null)
+            => throw NDCharArrayBoundary.PartitionKeywordError();
+
+        /// <summary><see cref="partition(int, int?, string, string)"/> with the kth indices as an array: NumPy's TypeError.</summary>
+        /// <param name="kth">The kth indices.</param>
+        /// <param name="axis">The axis.</param>
+        /// <param name="kind">The selection algorithm.</param>
+        /// <param name="order">Must be null.</param>
+        /// <exception cref="TypeError">Always: <c>chararray.partition() got an unexpected keyword argument 'axis'</c>.</exception>
+        public new void partition(NDArray kth, int? axis, string kind = "introselect", string order = null)
+            => throw NDCharArrayBoundary.PartitionKeywordError();
+
+        #endregion
+    }
+}

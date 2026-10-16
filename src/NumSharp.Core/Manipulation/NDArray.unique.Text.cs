@@ -80,7 +80,10 @@ namespace NumSharp
             // string), and the inverse and the counts do not depend on how equal strings were ordered.
             NDArray perm = AxisSort.ArgSortText(ar, 0, stable: true);
             NDArray aux = ar[perm];
-            NDArray mask = RunStarts(aux);
+            // A numpy.char.chararray operand of the user's call: NumPy's aux is the chararray's gather, so its
+            // `aux[1:] != aux[:-1]` is the chararray's STRIPPING comparison (compare_chararrays, rstrip=True): neighbours that
+            // differ only in trailing ASCII whitespace / NULs are one run, kept as its first (smallest) string.
+            NDArray mask = RunStarts(aux, NDCharArrayBoundary.StripUniqueRuns && a is NDCharArray);
             return UniqueOutputs(aux[mask], perm, mask, return_index, return_inverse, return_counts);
         }
 
@@ -161,8 +164,10 @@ namespace NumSharp
         ///     straight into the mask's tail.
         /// </summary>
         /// <param name="sorted">The sorted 1-D text array.</param>
+        /// <param name="strip">True to compare neighbours as a chararray does (trailing ASCII whitespace and NULs stripped
+        ///     first: <c>compare_chararrays(..., '!=', rstrip=True)</c>).</param>
         /// <returns>A fresh bool array of <paramref name="sorted"/>'s length.</returns>
-        private static NDArray RunStarts(NDArray sorted)
+        private static NDArray RunStarts(NDArray sorted, bool strip = false)
         {
             long n = sorted.size;
             var mask = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
@@ -174,7 +179,14 @@ namespace NumSharp
                     using var tail = mask["1:"];
                     using var later = sorted["1:"];
                     using var earlier = sorted[":-1"];
-                    np.not_equal(later, earlier, @out: tail);
+                    if (!strip)
+                        np.not_equal(later, earlier, @out: tail);
+                    else
+                    {
+                        // Both neighbours are one class, so the stripping comparison always answers (never NotImplemented).
+                        using var differs = Backends.Strings.NDStringComparison.CompareChararrays("not_equal", later, earlier, rstrip: true);
+                        np.copyto(tail, differs);
+                    }
                 }
             }
             return mask;

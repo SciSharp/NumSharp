@@ -32,9 +32,13 @@ is oracle-verified in the coverage artifact.
 | `chararray` | None. `coverage/object_surfaces.py` lists `char.chararray` with disposition `subsystem` and no target. |
 | Object results | None. NumSharp has no object dtype (`split`, `rsplit`, `splitlines` return object arrays of lists in NumPy). |
 
-**Since 2026-10-15 (phase 1, see the state log at the end of §7):** `np.@char` is the module (C-D1), and C1 (the
-stripping comparisons, `compare_chararrays`), `add` and C4's `multiply` compute; the other functions, `chararray` and
-`np.char.array` / `asarray` are open.
+**Since 2026-10-16 (phases 1–3, see the state log at the end of §7):** `np.@char` is the module (C-D1). C1 (the
+stripping comparisons, `compare_chararrays`), `add` and C4's `multiply` compute. `chararray` is `NDCharArray`: its data
+rules (phase 2: the constructors, `np.char.array` / `asarray`, the finalize rule, stripped element access, views and
+copies that keep the class) and its behavior (phase 3: the operators with Python's dispatch, the sort and search members,
+the finalize errors of the index members, and the `np.*` functions that keep, wrap or drop the class) are done. Open: C3
+(`join`, `split`, `rsplit`, `splitlines`: phase 4, with C-D3's `NDListArray`), C4's `partition` / `rpartition` and the
+string methods of C5 (they wait for the phase-2 kernels, P2.5 / P2.6).
 
 ---
 
@@ -270,6 +274,13 @@ four explicit points:
 4. **Static typing → `new`-hidden members** on `NDCharArray`, so `c.reshape(4)` is typed `NDCharArray`; the hook
    gives the same runtime type through an `NDArray`-typed variable.
 
+**As built (phases 2 and 3, owner decision "static + boundary", 2026-10-16).** Points 1 and 3 were not built: no member
+of `NDArray` became virtual, and `NDArray`'s operators do not test for a chararray. The class follows `NDMatrix`'s rule
+instead. Its members and operators are re-declared on `NDCharArray` and bind at COMPILE time, so a chararray behind an
+`NDArray` reference uses `NDArray`'s plain meaning. The `np.*` functions find a chararray at RUN time through
+`NDCharArrayBoundary` (point 2 and §1.8), which shares `NDMatrixBoundary`'s depth. See the phase-2 and phase-3 entries of
+the state log.
+
 Element access: an index that selects one element returns a 0-d COPY that holds the stripped value (Python's `str`),
 width = the stripped length (minimum 1, as `np.array('')` is `<U1`). A view would make `c[0] + "x"` give `'ab  x'`
 where NumPy gives `'abx'`. Iteration yields the same copies; `item()`, `tolist()` and the flat iterator keep
@@ -420,6 +431,24 @@ C-D1 decision and C3 for C-D3.
 - **`ctypes`, `dump`, `dumps`**: `chararray` inherits `NDArray`'s answer (NumSharp has neither ctypes nor pickle).
 - **Python's `NotImplemented` and `bool` results** from an operator typed `NDArray`: the C-D6 mapping. `[Misaligned]`.
 - **NumPy's crash** on repeated failed `argmax`: not reproduced (§1.6).
+- **Phase 3's divergences** (pinned `[Misaligned]` in `CharArrayBehaviorTests`; the oracle names each excused case):
+  - **The static type decides** (owner decision): a chararray behind an `NDArray` reference binds `NDArray`'s operators
+    and members, which compute plain (`==` does not strip, `+` returns a plain array, `argmax()` returns the index, an
+    element keeps its whitespace). NumPy dispatches on the object. The `np.*` functions find a chararray at run time.
+  - **`c == null`** keeps `NDArray`'s reference test (a 0-d `False`; `!=` a 0-d `True`), as C# code expects of
+    `x == null`. NumPy's `c == None` raises `TypeError: comparison of non-string arrays`.
+  - **`np.squeeze`** of a chararray with no length-1 axis returns a new chararray view; NumPy returns the operand itself.
+  - **A view of an element stand-in is read-only** (`np.atleast_2d(c[0])`); NumPy converts the Python `str` into a fresh
+    writeable array.
+  - **`chararray + StringDType`** where NumPy's trivial loop does not copy the chararray: NumPy returns a PLAIN
+    StringDType array, which the operator's `NDCharArray` type cannot hold, so the operator raises
+    `NotSupportedException` naming `np.add` (which computes NumPy's answer).
+  - **numpy.ma** does not model a chararray `_baseclass`: a masked array over a chararray holds plain data, as it does
+    for a matrix.
+  - **Inherited plain-array gaps** (the array-object oracle's ids): VF12 (`np.array` copies a permuted or broadcast input
+    in C order, NumPy in K order), VF26 (`np.tile` with unit reps of a 0-d input owns its copy), VF01 (`np.choose` of a
+    0-d index returns a writeable 0-d array, NumPy a scalar), VF17 (`np.broadcast_arrays` makes a read-only operand's
+    result writeable).
 
 ---
 
@@ -576,6 +605,128 @@ C-D1 decision and C3 for C-D3.
     Unit tests `Backends/Strings/CharArrayFastPathTests.cs` (15) hold each fast path to the general route it replaces; 21
     planted bugs (arena, lean objects, offsets, the copy widths, the mask kernel's lanes and tail, the parse cache, the
     copy shape, the transpose, the float text, the view trims, the zero fill) are killed by them.
+- **2026-10-16 — phase 3: `chararray` behavior** (C2's behavior half and the finalize and sorting rows of C5; the owner's
+  scope: "Comparison operators that strip trailing whitespace, also when a plain array is on the left. + and * that
+  return a chararray. The sort and search members (sort in place; argsort and searchsorted return plain arrays). NumPy's
+  finalize ValueError for argmax, argmin and argpartition. The np.* functions that keep the class (np.sort, np.reshape,
+  np.unique, np.take, text ufuncs) and those that drop it (np.concatenate, np.stack, np.where). A new oracle section.").
+  Owner decision taken: **the static rule plus the boundary** (`NDMatrix`'s rule; C-D2's "As built" note). No new kernel.
+  - **Operators** (`Char/NDCharArray.Operators.cs`): `==`, `!=`, `<`, `<=`, `>`, `>=`, `+` and `*`, each in seven forms
+    (a chararray against a chararray, an `NDArray`, an `object` or a `string`, in both orders), so an expression with a
+    TYPED chararray on either side binds here and never meets an ambiguity with `NDArray`'s forms. Python's dispatch is
+    replayed. The chararray's method runs first. When a plain array is on the left, the chararray's REFLECTED method runs
+    first, because a subclass's reflected method wins (so `u == c` strips). For an `S` / `U` mix (`NotImplemented`) the
+    other operand answers: a plain array compares unstripped (`c == s` is all False, `c < s` the ufunc's no-loop
+    TypeError); with nothing to answer, `==` is a 0-d False, `!=` a 0-d True, and an ordering raises
+    `TypeError("'<' not supported between instances of 'chararray' and 'bytes'")`. An element stand-in (`c[0]`, NumPy's
+    Python `str`) is not a chararray operand. `+` is `np.char.add` in the written order: a chararray VIEW (OWNDATA False).
+    `*` is `np.char.asarray(np.char.multiply(...))`: a `U` result is a copy, an `S` result a view, and a count that is not
+    an integer is `ValueError("Can only multiply by integers")`. The C# `null` keeps `NDArray`'s reference test for `==` and
+    `!=`. For `+`, `null` is NumPy's `None`: np.add's trivial loop copies a 0-d or short 1-d chararray into object as a
+    chararray (the finalize error), and a longer one reaches CPython's `can only concatenate str (not "NoneType") to str`.
+  - **Members** (`Char/NDCharArray.Arg.cs`): `argmax`, `argmin` and `argpartition` create their int64 result as the
+    subclass in NumPy (`PyArray_NewFromDescr(Py_TYPE(ap), ...)`). They run the plain computation for NumPy's earlier errors
+    (the axis, `attempt to get argmax of an empty sequence`, the kind, the kth bounds) and then raise `ValueError("Can only
+    create a chararray from string data.")`; with `out=` they compute into it. `partition(sep)` is the STRING partition
+    (deferred to P2.5: 22 oracle cases); its sort forms with `axis=` raise NumPy's `TypeError("chararray.partition() got
+    an unexpected keyword argument 'axis'")`. `sort` (in place, unstripped order), `argsort` and `searchsorted` (plain
+    arrays) are the inherited members, already NumPy's answers.
+  - **The boundary** (`Char/NDCharArrayBoundary.cs`): a public function that sees a chararray at the outermost call packs
+    its arguments in a tuple and calls itself again through a rule (a `static` lambda: no allocation). The rule raises the
+    depth it shares with `NDMatrixBoundary`, so nested public calls compute plain for both subclasses, and
+    `NDMatrixBoundary.PlainFor` opens a region for a chararray receiver too. So a function decides its chararray rule
+    BEFORE any `PlainFor` (np.quantile's tuple-axis overloads missed chararrays until the flag moved above it). The rules
+    follow NumPy's mechanism per function:
+    - **Kept** (NumPy calls the method or works on `np.asanyarray(a)`; the plain result becomes a chararray over the same
+      storage, owning exactly where it owns, and the operand itself where NumPy returns it): `np.reshape`, `np.ravel`,
+      `np.transpose`, `np.permute_dims`, `np.matrix_transpose`, `np.swapaxes`, `np.moveaxis`, `np.rollaxis`, `np.squeeze`,
+      `np.expand_dims`, `np.atleast_1d` / `2d` / `3d`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.roll`, `np.tile`,
+      `np.repeat`, `np.sort`, `np.compress`, `np.extract`, `np.diagonal`, `np.diag` of a 2-D chararray, `np.trim_zeros`,
+      `np.require`, `np.asanyarray`, `np.copy(subok=True)` (the new `subok` parameter), `np.empty_like` / `zeros_like` /
+      `ones_like` / `full_like` (a numeric `dtype=` is the finalize error before anything is filled), `np.resize` of an
+      empty source or result (`zeros_like`; any other resize is plain). KeptAll: `np.split`, `np.array_split`,
+      `np.hsplit`, `np.vsplit`, `np.unstack`. KeptTake: `np.take` (a 0-d result is the UNSTRIPPED NumPy scalar).
+      KeptIndexed: `np.flip` (`m[indexer]`: a 0-d result is the element, stripped). KeptPerOperand: `np.meshgrid` (each
+      result keeps ITS input's class).
+    - **Wrapped** (`chararray.__array_wrap__`: a text result becomes a chararray VIEW, OWNDATA False; a chararray `out=`
+      comes back as a new view of it): `np.add`, `np.multiply`, `np.strings.add` / `multiply`, `np.char.add` / `multiply`,
+      `np.insert`, `np.delete`, `np.diagflat`, `np.kron`, `np.take_along_axis`, `np.setdiff1d`, `np.unique_values`, and
+      np.unique's values (WrappedFirst; the index arrays stay plain). With a return flag NumPy's `_unique1d` finds the runs
+      with the chararray's STRIPPING `!=`, so `['b ', 'a', 'b']` gives `['a', 'b']` with counts `[1, 2]`; without a flag
+      it compares the plain data.
+    - **Plain** (NumPy converts with `np.asarray`): `np.asarray`, `np.ascontiguousarray`, `np.asfortranarray`,
+      `np.asarray_chkfinite`, the stack family (`np.stack`, `np.vstack`, `np.hstack`, `np.dstack`, `np.column_stack`),
+      `np.append`, `np.argwhere`, `np.lexsort`, `np.sort_complex`, `np.fft.fftshift` / `ifftshift` / `hfft`,
+      `np.linalg.norm` / `vector_norm` / `matrix_norm` / `cross` / `tensorsolve`, `np.cross`, `np.einsum`,
+      `np.tensordot`, `np.vdot`, the `np.emath` functions, `np.unwrap`, `np.polyval` with a chararray `p`. No rule is needed
+      where the computation already returns a fresh plain array (`np.concatenate`, `np.where`, the set routines but
+      `setdiff1d`, `np.nonzero`, the comparison ufuncs' bool results).
+    - **IndexResult / IndexScalar**: `np.argmax`, `np.argmin`, `np.nanargmax`, `np.nanargmin`, `np.argpartition` — the
+      plain computation's checks, then the finalize error; with `out=` the call computes.
+    - **The string partition**: `np.partition`, `np.median`, `np.quantile`, `np.percentile` raise
+      `chararray.partition() got an unexpected keyword argument 'axis'`, after the checks NumPy makes first (the axes,
+      keepdims' `out`, an unknown method's ValueError). `np.median(overwrite_input=True)` without an axis reproduces NumPy's
+      real string partition around the kth list: its broadcast error for an even length other than 2, else the closing
+      mean's refusal of text.
+    - **NumPy's trivial-loop copy** (`check_for_trivial_loop`, `TrivialLoopCopyError`): without a mask, a ufunc input whose
+      loop dtype differs from its own is COPIED into the loop dtype when it is 0-d or 1-d with at most `np.getbufsize()`
+      elements, and the copy keeps the subclass. So `np.logical_and(c, c)` (a cast to bool) and `np.add(c, t)` with a
+      `StringDType` `t` raise the finalize error for a short chararray and compute plain for a longer one. Only the Python
+      object `True` is no mask (`_wheremask_converter`): the C# literal `true` is marked `WasPythonBool`, and `false` or
+      `np.array(true)` select the masked loop.
+    - **Other NumPy behaviors reproduced**: `np.polyval` with a chararray `x` raises `ValueError("Can only multiply by
+      integers")` (an empty `p`: the chararray zeros); `np.flip` of a 0-d chararray is its stripped element;
+      `np.unstack` of a 1-d chararray iterates it (stripped elements, `StrippedElements`); `np.choose` reports a broadcast
+      failure in NumPy's multi-iterator text (the choices first, the index last).
+  - **Library fixes found** (each NumPy's answer for every array, with unit tests):
+    - `Shape.ResolveReturnShape((1,), ())` returned `()`: a one-element 1-d operand against a 0-d one now keeps its axis.
+    - `np.unstack` of an empty array returns views, as for any other array (it returned owning copies).
+    - `np.choose`'s broadcast error names the shapes in NumPy's order.
+    - The logical ufuncs over text allocate their result in NpyIter's layout over the ORIGINAL operands: a broadcast
+      operand abstains on its stride-0 axis (its dense truth array voted for F order).
+    - The failed `S == U` comparison (an all-False result) is laid out as a ufunc output over the two operands (an F pair
+      gives an F result).
+    - The chararray comparison operators released the driver's untyped result wrapper only in the finalizer (the leak
+      sweep found one stranded buffer per comparison); the typed result now shares the storage (`AsGeneric`), so it owns
+      its data as NumPy's does.
+    - numpy.ma: a masked array over a chararray holds a plain view of its data (`NDCharArrayBoundary.PlainViewOf`), as it
+      does for a matrix; the masked computations no longer meet chararray rules.
+    - Test harness: the ownership gate quiesces collections before each entry's ledger snapshot (a retained view of an
+      earlier entry, finalized during the next one, read as that entry's over-disposal); the native-allocation chokepoint
+      allowlist covers P2.T's static tables and in-place temporaries (`NDVStringArithmetic.cs` 4, `NDVStringCells.cs` 3).
+  - **Divergences** (pinned `[Misaligned]`, `CharArrayBehaviorTests`; §6): the static type decides; `c == null` is a
+    reference test; `np.squeeze` without a length-1 axis returns a new view; a view of an element stand-in is read-only;
+    `chararray + StringDType` (NumPy's plain StringDType result) is refused by the operator; numpy.ma's chararray base
+    class is not modelled.
+  - **Gates.** Oracle section `strcharops` (3,266 cases, 1,392 NumPy errors, 22 deferred: `c.partition(sep)`, 8 excused
+    refusals: `chararray + StringDType`): the comparisons with every partner kind in both orders (words with and without
+    whitespace, plain arrays, chararrays, the other class, numbers, bools, `StringDType`, lists, empties, element
+    stand-ins), `+` and `*` with their errors, a chararray past the buffer size, the members over 11 layouts × both
+    classes. Oracle section `strcharfn` (2,633 cases over 99 functions, 709 NumPy errors): the class, values, OWNDATA,
+    identity and errors of every rule over 12 layouts; 21 cases excused by layout (the plain gaps VF12 `np.array` of a
+    permuted / broadcast input, VF26 `np.tile` of a 0-d input, VF01 `np.choose`'s 0-d result, VF17 `np.broadcast_arrays`
+    of a read-only operand, and a view of an element stand-in) and 15 by identity (`np.squeeze`). The boundary audit
+    (`AuditInternalCallers`: a stack walk at every rule) replays both sections and, in
+    `CharArrayOperand_LibraryNeverReachesACharArrayRule`, all 74,606 string-oracle cases with their text operands made
+    chararrays (floor 30,000): no library method reaches a chararray rule. Unit tests `Backends/Strings/
+    CharArrayBehaviorTests.cs` (16, five `[Misaligned]`). Leak catalogue entries for the 14 new members (the comparison
+    operators through every route, `+`, `*`, the index members, `partition`).
+  - **Performance** (NPY/NS, `start /affinity 14`, two runs of each side, the better of each; 91 cells at 1K / 100K / 1M):
+    geomean 3.54×, min 1.03×. Comparison operators 2.8–6.1× (geomean 4.4×), `+` and `*` 2.4–14× (5.3×), members 1.0–4.3×
+    (2.0×), `np.*` that keep or wrap the class 1.5–9.0× (3.3×), `np.*` that drop it 1.3–4.8× (3.0×). The cells under 1.5×
+    cost the same on the plain path, so the chararray layer adds nothing measurable there:
+    - `c.searchsorted(keys)` 1.27× / 1.03× / 1.12× (64 keys): the plain `np.searchsorted` of P2.2 milestone B is
+      1.07–1.17×. Both libraries run a binary search per key at 6–8 ns per step, a dependent chain of loads and compares.
+      The lever is the search kernel's: interleave several keys' searches to overlap their memory latencies.
+    - `c.argmax(out=o)` 1.27× at 1K and 1.39× at 1M (1.62× at 100K): the plain argmax kernel. At 1K its fixed cost is
+      ~0.5 µs of 1.45 µs (NumPy's method skips `_wrapfunc`, 1.9 µs where `np.argmax` costs 3.0 µs); at 1M the 32 MB scan
+      runs at ~75 % of one core's DRAM bandwidth.
+    - `np.concatenate((c, c))` 1.34× at 1K: the plain concatenate of 2 × 32 KB (allocation and copy fixed cost).
+    Two Kept-rule costs were measured: a rule adds ~255 ns (one storage alias and one `NDCharArray`), and the plain
+    `reshape(-1, 8)` spends ~210 ns more than an explicit shape (`_inferMissingDimension` builds an intermediate `Shape`);
+    `np.reshape(c, (-1, 8))` is 2.4–3.1×.
+  - **Open:** `c.partition(sep)` (P2.5), C3 (phase 4, C-D3's `NDListArray`), the string methods of C5 (P2.5 / P2.6), the
+    coverage mapping `char.chararray` → `NumSharp.NDCharArray` (C6).
 
 ---
 
@@ -603,8 +754,8 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 |
 | String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 |
 | Views and copies (the finalize hook) | `T`, `mT`, `transpose`, `swapaxes`, `reshape`, `ravel`, `flatten`, `squeeze`, `copy`, `take`, `repeat`, `compress`, `diagonal`, `real`, `imag`, `view`, `astype`, `byteswap`, `flat` | chararray (`diagonal`, `imag` read-only); `astype` / `view` to a numeric dtype per §1.6 | C2 |
-| Finalize errors | `argmax`, `argmin`, `argpartition` | `ValueError("Can only create a chararray from string data.")`; with `out=`, the index | phase 3 (with the operators) |
-| Sorting | `argsort` (plain view), `sort` (in place), `searchsorted` | ndarray's answer | P2.2 |
+| Finalize errors | `argmax`, `argmin`, `argpartition` | `ValueError("Can only create a chararray from string data.")`; with `out=`, the index | phase 3 (done) |
+| Sorting | `argsort` (plain view), `sort` (in place), `searchsorted` | ndarray's answer | phase 3 (done; the kernels are P2.2's) |
 | Truth | `all`, `any`, `nonzero` | ndarray's answer | P2.1 (done) |
 | Numeric refusals | `max`, `min`, `sum`, `mean`, `prod`, `std`, `var`, `cumsum`, `cumprod`, `trace`, `clip`, `round`, `conj`, `conjugate`, `dot`, `choose` | ndarray's errors | phase 1 (done) |
 | Mutation and fields | `fill`, `put`, `resize`, `setfield`, `getfield`, `setflags` | ndarray's answer (in place for the mutators) | C2 (number stores: P2.4) |

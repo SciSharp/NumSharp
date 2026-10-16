@@ -71,11 +71,17 @@ namespace NumSharp.Statistics
         ///     'safe'</c>; <c>Cannot cast scalar from ...</c> for a 0-d out); or keepdims without <paramref name="out"/> over
         ///     a 0-d result (<c>string indices must be integers, not 'tuple'</c> for <c>U</c>, <c>byte indices must be
         ///     integers or slices, not tuple</c> for <c>S</c>: NumPy indexes its scalar).</exception>
+        /// <param name="partitionRaises">True for a <c>numpy.char.chararray</c> operand of the user's call: NumPy's
+        ///     <c>arr.partition(..., axis=0)</c> is then <c>chararray.partition(sep)</c>, which raises once the method is
+        ///     resolved (see the exceptions).</param>
+        /// <exception cref="TypeError">With <paramref name="partitionRaises"/>, for every known method:
+        ///     <c>chararray.partition() got an unexpected keyword argument 'axis'</c> — after the checks above it, before the
+        ///     interpolating methods' refusal and the take.</exception>
         /// <remarks>Scoped: the flattened or merged data, the sorted lines and the indexes are reclaimed; the result (or
         ///     the caller's <paramref name="out"/>) survives.</remarks>
         [NDScoped]
         internal static NDArray Compute(string op, NDArray a, double[] q, long[] qShape, bool qIsInteger, int[] axes,
-            NDArray @out, string method, bool keepdims)
+            NDArray @out, string method, bool keepdims, bool partitionRaises = false)
         {
             int nd = a.ndim;
             int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
@@ -129,6 +135,14 @@ namespace NumSharp.Statistics
             // _quantile_ureduce_func: `if q.ndim > 2: raise ValueError("q must be a scalar or 1d")`.
             if (qShape.Length > 2)
                 throw new ValueError("q must be a scalar or 1d");
+
+            // A numpy.char.chararray operand: _quantile resolves the method (an unknown one is its ValueError), then both its
+            // routes call arr.partition(..., axis=0) on the chararray copy — chararray.partition(sep) takes no axis.
+            if (partitionRaises)
+            {
+                QuantileEngine.ParseMethod(method);
+                throw NDCharArrayBoundary.PartitionKeywordError();
+            }
 
             // _quantile: the method (unknown names refused), then the interpolating methods' refusal (an empty reduced axis
             // first: their arr[previous_indexes] indexes it). A selection method — or 'linear' with an integer q — goes on.

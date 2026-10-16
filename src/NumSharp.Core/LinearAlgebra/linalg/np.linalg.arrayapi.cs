@@ -107,7 +107,9 @@ namespace NumSharp
             /// </remarks>
             /// <param name="x1">The first operand.</param>
             /// <param name="x2">The second operand.</param>
-            /// <returns>The cross product, the component axis at <paramref name="axis"/> of the broadcast result.</returns>
+            /// <returns>The cross product, the component axis at <paramref name="axis"/> of the broadcast result.
+            ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+            ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <exception cref="IndexError"><paramref name="axis"/> is out of range for either operand ("tuple index out of
             ///     range": NumPy indexes <c>x1.shape[axis]</c> before anything else).</exception>
             /// <exception cref="ValueError">The component axis of either operand does not have length 3.</exception>
@@ -117,6 +119,9 @@ namespace NumSharp
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
                 if (NDMatrixBoundary.Sees(x1, x2))
                     return NDMatrixBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
+                // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
+                if (NDCharArrayBoundary.Sees(x1, x2))
+                    return NDCharArrayBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
                 // `if x1.shape[axis] != 3 or x2.shape[axis] != 3` is NumPy's first statement: Python tuple indexing, so an
                 // axis out of range for either operand is an IndexError (x1's first), not an AxisError.
                 int a1 = ShapeIndex(axis, x1.ndim);

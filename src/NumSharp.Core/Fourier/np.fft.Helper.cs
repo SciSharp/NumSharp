@@ -14,10 +14,16 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="axes">Axes over which to shift; <c>null</c> shifts all axes.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html</remarks>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         [NDScoped]
         public NDArray fftshift(NDArray x, int[] axes = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
             : Shift(x, axes, negate: false);
 
         /// <summary>
@@ -26,9 +32,15 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="axes">Axis over which to shift (NumPy's <c>axes</c> also accepts a single int).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.fftshift.html</remarks>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public NDArray fftshift(NDArray x, int axes)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.fftshift(s.x, s.axes))
             : Shift(x, new[] { axes }, negate: false);
 
         /// <summary>
@@ -39,10 +51,16 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="axes">Axes over which to shift; <c>null</c> shifts all axes.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftshift.html</remarks>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         [NDScoped]
         public NDArray ifftshift(NDArray x, int[] axes = null)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
             : Shift(x, axes, negate: true);
 
         /// <summary>
@@ -51,9 +69,15 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="axes">Axis over which to shift (NumPy's <c>axes</c> also accepts a single int).</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fft.ifftshift.html</remarks>
+        /// <remarks>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.
+        /// </remarks>
         public NDArray ifftshift(NDArray x, int axes)
             => NDMatrixBoundary.Sees(x)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
+            : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain((self: this, x, axes), static s => s.self.ifftshift(s.x, s.axes))
             : Shift(x, new[] { axes }, negate: true);
 
         /// <summary>

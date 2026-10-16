@@ -24,8 +24,13 @@ namespace NumSharp
         ///     order, the same policy as argsort's NaN tail).
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
         public static NDArray argpartition(NDArray a, int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
+            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
             : AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
 
@@ -35,9 +40,14 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
         [NDScoped]
         public static NDArray argpartition(NDArray a, int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
+            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
             : AxisPartition.ArgPartition(a, kth, axis, kind, order);
 
@@ -49,8 +59,13 @@ namespace NumSharp
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argpartition.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand: NumPy creates
+        ///     the int64 index result as the subclass (<c>Can only create a chararray from string
+        ///     data.</c>), after the argument checks.</exception>
         public static NDArray argpartition(NDArray a, NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
+            => NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand: NumPy creates the index as the subclass, so the finalize ValueError follows the plain checks (NDCharArrayBoundary)
+            ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
+            : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
             : AxisPartition.ArgPartition(a, kth, axis, kind, order);
     }

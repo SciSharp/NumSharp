@@ -183,7 +183,9 @@ namespace NumSharp
         ///   (NumPy's <c>sorted=False</c> hash-iteration order for integer/complex values is
         ///   platform-specific and not reproducible in C# — spec-compliant, the Array API leaves it
         ///   unspecified). See <see cref="unique_values"/>.</param>
-        /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.</returns>
+        /// <returns>A <see cref="UniqueResult"/> carrying <c>values</c> and the requested outputs.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of the unique values (NumPy's
+        ///     <c>_array_converter.wrap</c>); the index arrays stay plain.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="StringComputationNotSupportedException">A <c>StringDType</c> array whose answer depends on its
         ///     text (computing on <c>StringDType</c> is phase 2's next stage); at most one element to order is answered from the
@@ -197,6 +199,16 @@ namespace NumSharp
             bool equal_nan = true,
             bool sorted = true)
         {
+            // a numpy.char.chararray operand: _unique1d (no axis, or a 1-d operand) hands the values back through
+            // _array_converter.wrap or a boolean index — a chararray view; the index arrays stay plain, and the axis path of
+            // an N-d operand converts with np.ascontiguousarray (plain). With a return flag _unique1d sorts the CHARARRAY and
+            // finds its runs with the chararray's stripping `!=` (stripRuns); without one it hashes the plain data. Decided
+            // before the matrix region below.
+            if ((axis is null || ar.ndim == 1) && NDCharArrayBoundary.Sees(ar))
+                return new UniqueResult(NDCharArrayBoundary.WrappedFirst((ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted),
+                        static s => unique(s.ar, s.return_index, s.return_inverse, s.return_counts, s.axis, s.equal_nan, s.sorted).ToArray(),
+                        stripRuns: return_index || return_inverse || return_counts),
+                    return_index, return_inverse, return_counts);
             using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's one check before it reads text, the axis range, then StringDType's deferral (a StringDType array
             // whose answer depends on its text; one that orders nothing continues). Fixed-width text computes in the

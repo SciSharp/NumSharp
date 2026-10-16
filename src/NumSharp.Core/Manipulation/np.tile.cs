@@ -14,7 +14,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="A">The input array.</param>
         /// <param name="reps">The number of repetitions of A along each axis. Each rep must be non-negative.</param>
-        /// <returns>The tiled output array. Expanded outputs are C-contiguous; all-one reps produce a keep-order copy. Dtype matches <paramref name="A"/>.</returns>
+        /// <returns>The tiled output array. Expanded outputs are C-contiguous; all-one reps produce a keep-order copy. Dtype matches <paramref name="A"/>.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tile.html</remarks>
         /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
         /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
@@ -24,6 +26,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(A))
                 return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(A))
+                return NDCharArrayBoundary.Kept((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 
@@ -36,7 +41,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="A">The input array.</param>
         /// <param name="reps">The number of repetitions of A along each axis. Each rep must be non-negative.</param>
-        /// <returns>The tiled output array (see <see cref="tile(NDArray, int[])"/>).</returns>
+        /// <returns>The tiled output array (see <see cref="tile(NDArray, int[])"/>).
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ArgumentNullException">If <paramref name="A"/> or <paramref name="reps"/> is null.</exception>
         /// <exception cref="ArgumentException">If any element of <paramref name="reps"/> is negative.</exception>
         /// <remarks>
@@ -53,6 +60,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(A))
                 return NDMatrixBoundary.Wrapped((A, reps), static s => tile(s.A, s.reps));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(A))
+                return NDCharArrayBoundary.Kept((A, reps), static s => tile(s.A, s.reps));
             if (A is null) throw new ArgumentNullException(nameof(A));
             if (reps is null) throw new ArgumentNullException(nameof(reps));
 

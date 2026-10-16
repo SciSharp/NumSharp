@@ -24,8 +24,13 @@ namespace NumSharp
             if (leftShape == rightShape)
                 return leftShape;
 
-            if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape[0] == 1)
+            // A 0-d left shape takes the right one; so does a one-element 1-d left shape, but only against a right shape
+            // of at least one axis: (1,) broadcast with () is (1,) — the RANK is the larger one's, so returning the 0-d
+            // right shape there dropped the axis (np.add(x1, x2, out=o, where=False) of one-element arrays refused its out).
+            if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape[0] == 1 && rightShape.NDim >= 1)
                 return rightShape;
+
+            // Reached only with a left shape of at least one axis, so a 0-d or one-element 1-d right shape leaves it as is.
 
             if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape[0] == 1)
                 return leftShape;

@@ -30,7 +30,8 @@ namespace NumSharp
         ///     A fresh C-contiguous array of shape <c>(Ni..., J, Nk...)</c> (the broadcast of the
         ///     non-axis dimensions, with <c>J = indices.shape[axis]</c>) and dtype of
         ///     <paramref name="arr"/>.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray VIEW of a text result (NumPy's
+        ///     <c>__array_wrap__</c>: OWNDATA False); a result of another dtype stays plain.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.take_along_axis.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         [NDScoped]
@@ -42,6 +43,9 @@ namespace NumSharp
                 return axis is null
                     ? NDMatrixBoundary.Plain((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis))
                     : NDMatrixBoundary.Wrapped((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis));
+            // a numpy.char.chararray operand comes back as chararray.__array_wrap__'s view of the result, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(arr))
+                return NDCharArrayBoundary.Wrapped((arr, indices, axis), static s => take_along_axis(s.arr, s.indices, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (indices is null) throw new ArgumentNullException(nameof(indices));
             // A StringDType source: the same gather runs on its cell view (NumPy's checks, this array's shapes) and the cells

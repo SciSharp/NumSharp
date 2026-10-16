@@ -12,7 +12,9 @@ namespace NumSharp
         /// If an integer, N, the array will be divided into N equal arrays along the axis.
         /// If such a split is not possible, an error is raised.
         /// </param>
-        /// <returns>A list of sub-arrays as views into ary.</returns>
+        /// <returns>A list of sub-arrays as views into ary.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>
         /// For 1-D arrays, splits along axis 0.
         /// For 2-D+ arrays, splits along axis 1 (columns).
@@ -24,6 +26,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices_or_sections), static s => hsplit(s.ary, s.indices_or_sections));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices_or_sections), static s => hsplit(s.ary, s.indices_or_sections));
             if (ary.ndim == 0)
                 throw new ArgumentException("hsplit only works on arrays of 1 or more dimensions");
 
@@ -39,7 +44,9 @@ namespace NumSharp
         /// A 1-D array of sorted integers indicating where along the axis the array is split.
         /// For example, [2, 3] would result in ary[:2], ary[2:3], ary[3:].
         /// </param>
-        /// <returns>A list of sub-arrays as views into ary.</returns>
+        /// <returns>A list of sub-arrays as views into ary.
+        ///     A <c>numpy.char.chararray</c> operand gives chararrays over the results (NumPy creates them as the
+        ///     subclass).</returns>
         /// <remarks>
         /// For 1-D arrays, splits along axis 0.
         /// For 2-D+ arrays, splits along axis 1 (columns).
@@ -51,6 +58,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(ary))
                 return NDMatrixBoundary.WrappedAll((ary, indices), static s => hsplit(s.ary, s.indices));
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(ary))
+                return NDCharArrayBoundary.KeptAll((ary, indices), static s => hsplit(s.ary, s.indices));
             if (ary.ndim == 0)
                 throw new ArgumentException("hsplit only works on arrays of 1 or more dimensions");
 

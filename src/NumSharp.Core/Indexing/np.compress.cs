@@ -37,7 +37,8 @@ namespace NumSharp
         ///     <paramref name="axis"/> for which <paramref name="condition"/> is
         ///     false. Dtype matches <paramref name="a"/> (or
         ///     <paramref name="out"/>'s dtype when supplied).
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="condition"/> or <paramref name="a"/> is null.</exception>
         /// <exception cref="ValueError"><paramref name="condition"/> is not 1-D.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>'s rank (rank 1 for a
@@ -73,6 +74,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((condition, a, axis, @out), static s => compress(s.condition, s.a, s.axis, s.@out), @out);
+            // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
+            if (NDCharArrayBoundary.Sees(a))
+                return NDCharArrayBoundary.Kept((condition, a, axis, @out), static s => compress(s.condition, s.a, s.axis, s.@out), @out);
             if (condition is null) throw new ArgumentNullException(nameof(condition));
             if (a is null) throw new ArgumentNullException(nameof(a));
 

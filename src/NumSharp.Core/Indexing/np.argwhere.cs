@@ -15,7 +15,8 @@ namespace NumSharp
         ///     Result dtype is <c>int64</c>. For 0-d input, returns shape <c>(1, 0)</c> when
         ///     the value is truthy and <c>(0, 0)</c> otherwise. For empty input of shape
         ///     <c>(0, d1, ..., dn)</c>, returns shape <c>(0, ndim)</c>.
-        /// </returns>
+        ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
+        ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.argwhere.html
         ///     Equivalent to <c>np.transpose(np.nonzero(a))</c> with a special case for 0-d input.
@@ -25,6 +26,8 @@ namespace NumSharp
         public static NDArray argwhere(NDArray a)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
             ? NDMatrixBoundary.Plain(a, static s => argwhere(s))
+            : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand too: asarray drops either class
+            ? NDCharArrayBoundary.Plain(a, static s => argwhere(s))
             : a.TensorEngine.Argwhere(a);
     }
 }

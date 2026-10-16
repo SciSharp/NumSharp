@@ -28,7 +28,9 @@ namespace NumSharp
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <param name="order">'C', 'F', 'A' or 'K' (default — resolved against a).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
-        /// <returns>Array interpretation of a in the requested layout.</returns>
+        /// <returns>Array interpretation of a in the requested layout.
+        ///     A <c>numpy.char.chararray</c> operand gives a chararray over the result (NumPy creates it as the
+        ///     subclass), owning its data exactly when the plain result would.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html
         ///     <para>A null <paramref name="a"/> is Python's <c>None</c>: with a dtype it is the 0-d array NumPy's
@@ -55,6 +57,9 @@ namespace NumSharp
                     // a numpy.matrix passes through as a matrix (np.asarray, which this calls, strips the class)
                     if (NDMatrixBoundary.Sees(nd))
                         return NDMatrixBoundary.Wrapped((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
+                    // a numpy.char.chararray passes through as a chararray (np.asarray, which this calls, strips the class)
+                    if (NDCharArrayBoundary.Sees(nd))
+                        return NDCharArrayBoundary.Kept((nd, dtype, order), static s => asarray(s.nd, s.dtype, s.order));
                     return asarray(nd, dtype, order);
                 case Array textArr when Backends.Strings.NDStringArrays.IsTextInput(textArr, dtype):
                     // Text (string[], an object[] holding str/bytes, or any array under a string dtype): NumPy's
