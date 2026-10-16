@@ -856,7 +856,7 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
-- **2026-10-16 — `numpy.char` phase 3: `chararray` behavior** (`docs/plans/np-char.md` → state log). The operators with
+- **2026-10-16 — `numpy.char` phase 3: `chararray` behavior** (`d343a5bc`; `docs/plans/np-char.md` → state log). The operators with
   Python's dispatch (the stripping comparisons also with a plain array on the left, `+` / `*` returning chararrays), the
   finalize errors of `argmax` / `argmin` / `argpartition`, the string `partition` behind `np.partition` / `np.median` /
   `np.quantile` / `np.percentile`, and the `np.*` functions that keep, wrap or drop the class (`NDCharArrayBoundary`).

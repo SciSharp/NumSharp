@@ -605,7 +605,7 @@ C-D1 decision and C3 for C-D3.
     Unit tests `Backends/Strings/CharArrayFastPathTests.cs` (15) hold each fast path to the general route it replaces; 21
     planted bugs (arena, lean objects, offsets, the copy widths, the mask kernel's lanes and tail, the parse cache, the
     copy shape, the transpose, the float text, the view trims, the zero fill) are killed by them.
-- **2026-10-16 — phase 3: `chararray` behavior** (C2's behavior half and the finalize and sorting rows of C5; the owner's
+- **2026-10-16 — phase 3: `chararray` behavior** (`d343a5bc`; C2's behavior half and the finalize and sorting rows of C5; the owner's
   scope: "Comparison operators that strip trailing whitespace, also when a plain array is on the left. + and * that
   return a chararray. The sort and search members (sort in place; argsort and searchsorted return plain arrays). NumPy's
   finalize ValueError for argmax, argmin and argpartition. The np.* functions that keep the class (np.sort, np.reshape,
