@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Unmanaged.Pooling;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Sorting
@@ -423,12 +424,15 @@ namespace NumSharp.Backends.Sorting
 
             // per-call scratch, reused across every line (the AxisSort buffer policy): the value
             // gather buffer always, the NaN stash only for the float dtypes that compact. UNMANAGED
-            // so a line may exceed int.MaxValue (a managed byte[] element count caps at ~2^31).
+            // so a line may exceed int.MaxValue (a managed byte[] element count caps at ~2^31), and
+            // POOLED: a fresh C-allocator buffer is first-touch page faults on every call (see
+            // AxisSort.ArgSortInto). Every Return passes the size its Take got.
+            long lineBytes = N * elsize;
             void* ps = null, pn = null;
             try
             {
-                ps = NativeMemory.Alloc((nuint)N, (nuint)elsize);
-                if (NeedsNanTail(tc)) pn = NativeMemory.Alloc((nuint)N, (nuint)elsize);
+                ps = (void*)SizeBucketedBufferPool.Take(lineBytes);
+                if (NeedsNanTail(tc)) pn = (void*)SizeBucketedBufferPool.Take(lineBytes);
                 fixed (long* pk = ks)
                 {
                     ctx.scratch = (byte*)ps;
@@ -440,8 +444,8 @@ namespace NumSharp.Backends.Sorting
             }
             finally
             {
-                if (ps != null) NativeMemory.Free(ps);
-                if (pn != null) NativeMemory.Free(pn);
+                if (ps != null) SizeBucketedBufferPool.Return((IntPtr)ps, lineBytes);
+                if (pn != null) SizeBucketedBufferPool.Return((IntPtr)pn, lineBytes);
             }
         }
 
@@ -464,12 +468,13 @@ namespace NumSharp.Backends.Sorting
 
             // argpartition always gathers (the source is read-only); idx is the answer column. Both
             // are UNMANAGED so a line may exceed int.MaxValue (the int64 idx column would otherwise
-            // cap at ~2^31 elements).
+            // cap at ~2^31 elements), and POOLED (see PartitionInPlaceCore).
+            long lineBytes = N * elsize, idxBytes = N * sizeof(long);
             void* ps = null; long* pi = null;
             try
             {
-                ps = NativeMemory.Alloc((nuint)N, (nuint)elsize);
-                pi = (long*)NativeMemory.Alloc((nuint)N, sizeof(long));
+                ps = (void*)SizeBucketedBufferPool.Take(lineBytes);
+                pi = (long*)SizeBucketedBufferPool.Take(idxBytes);
                 fixed (long* pk = ks)
                 {
                     ctx.scratch = (byte*)ps;
@@ -482,8 +487,8 @@ namespace NumSharp.Backends.Sorting
             }
             finally
             {
-                if (ps != null) NativeMemory.Free(ps);
-                if (pi != null) NativeMemory.Free(pi);
+                if (ps != null) SizeBucketedBufferPool.Return((IntPtr)ps, lineBytes);
+                if (pi != null) SizeBucketedBufferPool.Return((IntPtr)pi, idxBytes);
             }
         }
 

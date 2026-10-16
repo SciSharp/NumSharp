@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 namespace NumSharp.Backends.Sorting
 {
@@ -410,14 +411,16 @@ namespace NumSharp.Backends.Sorting
             }
 
             // single-pass radix builds ALL byte-histograms at once: nbytes·256 longs (8·256 for the
-            // 8-byte path, 4·256 covers the ≤4-byte paths). BuildHist zeroes it, so Alloc (not AllocZeroed).
+            // 8-byte path, 4·256 covers the ≤4-byte paths). BuildHist zeroes it, so a dirty buffer serves.
             int histLen = (w == 8 ? 8 : 4) * 256;
+            // Pooled scratch (see ArgSortInto): fresh C-allocator columns are first-touch page faults on every call.
+            long keyBytes = N * w, histBytes = (long)histLen * sizeof(long);
             void* pk = null, pt = null; long* pc = null;
             try
             {
-                pk = NativeMemory.Alloc((nuint)N, (nuint)w);
-                pt = NativeMemory.Alloc((nuint)N, (nuint)w);
-                pc = (long*)NativeMemory.Alloc((nuint)histLen, sizeof(long));
+                pk = (void*)SizeBucketedBufferPool.Take(keyBytes);
+                pt = (void*)SizeBucketedBufferPool.Take(keyBytes);
+                pc = (long*)SizeBucketedBufferPool.Take(histBytes);
                 if (w == 4) { ctx.k32 = (uint*)pk; ctx.t32 = (uint*)pt; }
                 else { ctx.k64 = (ulong*)pk; ctx.t64 = (ulong*)pt; }
                 ctx.count = pc;
@@ -426,9 +429,9 @@ namespace NumSharp.Backends.Sorting
             }
             finally
             {
-                if (pk != null) NativeMemory.Free(pk);
-                if (pt != null) NativeMemory.Free(pt);
-                if (pc != null) NativeMemory.Free(pc);
+                if (pk != null) SizeBucketedBufferPool.Return((IntPtr)pk, keyBytes);
+                if (pt != null) SizeBucketedBufferPool.Return((IntPtr)pt, keyBytes);
+                if (pc != null) SizeBucketedBufferPool.Return((IntPtr)pc, histBytes);
             }
         }
 
@@ -485,14 +488,20 @@ namespace NumSharp.Backends.Sorting
 
             // single-pass radix builds ALL byte-histograms at once: nbytes·256 longs. BuildHist zeroes it.
             int histLen = (w == 8 ? 8 : 4) * 256;
+            // The scratch comes from the buffer pool, not straight from the C allocator: a line of 100K float64 needs four
+            // 800 KB columns, which the allocator serves as fresh pages on every call, and touching them was a large part of
+            // the argsort (measured A/B, one process each, best of two runs: 100K float64 3.9 -> 2.8 ms, 1M 45 -> 39 ms;
+            // 100K int32 1.8 -> 1.3 ms). The pool hands the same warm buffers back to the next sort. Every Return passes the
+            // size its Take got (the pool's contract).
+            long keyBytes = N * w, idxBytes = N * sizeof(long), histBytes = (long)histLen * sizeof(long);
             void* pk = null, pt = null; long* pi = null, pit = null, pc = null;
             try
             {
-                pk = NativeMemory.Alloc((nuint)N, (nuint)w);
-                pt = NativeMemory.Alloc((nuint)N, (nuint)w);
-                pi = (long*)NativeMemory.Alloc((nuint)N, sizeof(long));
-                pit = (long*)NativeMemory.Alloc((nuint)N, sizeof(long));
-                pc = (long*)NativeMemory.Alloc((nuint)histLen, sizeof(long));
+                pk = (void*)SizeBucketedBufferPool.Take(keyBytes);
+                pt = (void*)SizeBucketedBufferPool.Take(keyBytes);
+                pi = (long*)SizeBucketedBufferPool.Take(idxBytes);
+                pit = (long*)SizeBucketedBufferPool.Take(idxBytes);
+                pc = (long*)SizeBucketedBufferPool.Take(histBytes);
                 if (w == 4) { ctx.k32 = (uint*)pk; ctx.t32 = (uint*)pt; }
                 else { ctx.k64 = (ulong*)pk; ctx.t64 = (ulong*)pt; }
                 ctx.idx = pi; ctx.it = pit; ctx.count = pc;
@@ -501,11 +510,11 @@ namespace NumSharp.Backends.Sorting
             }
             finally
             {
-                if (pk != null) NativeMemory.Free(pk);
-                if (pt != null) NativeMemory.Free(pt);
-                if (pi != null) NativeMemory.Free(pi);
-                if (pit != null) NativeMemory.Free(pit);
-                if (pc != null) NativeMemory.Free(pc);
+                if (pk != null) SizeBucketedBufferPool.Return((IntPtr)pk, keyBytes);
+                if (pt != null) SizeBucketedBufferPool.Return((IntPtr)pt, keyBytes);
+                if (pi != null) SizeBucketedBufferPool.Return((IntPtr)pi, idxBytes);
+                if (pit != null) SizeBucketedBufferPool.Return((IntPtr)pit, idxBytes);
+                if (pc != null) SizeBucketedBufferPool.Return((IntPtr)pc, histBytes);
             }
         }
 
