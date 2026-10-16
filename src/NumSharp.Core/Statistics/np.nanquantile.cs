@@ -18,6 +18,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The NaN-ignoring quantile; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
@@ -41,17 +45,35 @@ namespace NumSharp
         ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
         ///     dtype.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanquantile.html</remarks>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             ValidateQuantile(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
+            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
+            // values (QuantileWeighted).
+            if (weights is not null)
+            {
+                using var qArray = NDArray.Scalar(q);
+                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights,
+                    (a, q, axis, @out, overwrite_input, method, keepdims),
+                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
+            }
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
@@ -77,6 +99,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The NaN-ignoring quantiles, q's axis first; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
@@ -99,18 +125,36 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A NEP 55 <c>StringDType</c> reduction along an axis whose row result NumPy
         ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
         ///     dtype.</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
+            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
+            // values (QuantileWeighted).
+            if (weights is not null)
+            {
+                using var qArray = np.array(q);
+                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights,
+                    (a, q, axis, @out, overwrite_input, method, keepdims),
+                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
+            }
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
@@ -138,6 +182,10 @@ namespace NumSharp
         ///     anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The NaN-ignoring quantile over the reduced axes; <paramref name="out"/> itself when one is
         ///     given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
@@ -167,14 +215,32 @@ namespace NumSharp
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (<c>np.nanquantile(m, 0.5, axis=(0, 1))</c> returns the input's values).</remarks>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             ValidateQuantile(q);
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
+            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
+            // values (QuantileWeighted).
+            if (weights is not null)
+            {
+                using var qArray = NDArray.Scalar(q);
+                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights,
+                    (a, q, axis, @out, overwrite_input, method, keepdims),
+                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
+            }
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
@@ -202,6 +268,10 @@ namespace NumSharp
         ///     anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>One NaN-ignoring quantile per element of <paramref name="q"/> along the first axis, over the reduced
         ///     axes; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
@@ -232,15 +302,33 @@ namespace NumSharp
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code.</remarks>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
             for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
+            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
+            // values (QuantileWeighted).
+            if (weights is not null)
+            {
+                using var qArray = np.array(q);
+                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights,
+                    (a, q, axis, @out, overwrite_input, method, keepdims),
+                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
+            }
             // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
             // text itself (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
@@ -267,6 +355,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The quantiles of the non-NaN values: one per element of q (a scalar result for a 0-d q), with the axis reduced; for empty numeric data and an empty text q, NumPy's <c>np.nanmean(a, axis)</c>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="q"/> is null.</exception>
         /// <exception cref="TypeError">A text <paramref name="q"/> (NumPy's [0, 1] check: Python's <c>'&lt;=' not supported
@@ -291,15 +383,23 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A NEP 55 <c>StringDType</c> reduction along an axis whose row result NumPy
         ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
         ///     dtype.</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             return NanQuantileOfArrayQ(a, q, axis.HasValue ? new[] { axis.Value } : null, axis, @out, overwrite_input,
-                method, keepdims);
+                method, keepdims, weights);
         }
 
         /// <summary>
@@ -315,6 +415,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The quantiles of the non-NaN values over the reduced axes; <paramref name="out"/> itself when one is
         ///     given; for empty numeric data, NumPy's <c>np.nanmean(a, axis)</c>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="q"/> is null.</exception>
@@ -339,12 +443,20 @@ namespace NumSharp
         ///     dtype.</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain, as for every
         ///     tuple-axis overload.</remarks>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, NDArray q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NanQuantileOfArrayQ(a, q, axis, null, @out, overwrite_input, method, keepdims);
+            return NanQuantileOfArrayQ(a, q, axis, null, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -360,6 +472,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The quantile of the non-NaN values with the axis reduced (a scalar result over every axis).</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex, or text data (NumPy's NaN test).</exception>
         /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1] (<c>Quantiles must be in the range [0,
@@ -383,14 +499,22 @@ namespace NumSharp
         ///     Python int is WEAK for the result dtype (NumPy's <c>weak_q</c>): an interpolating method keeps float16 /
         ///     float32 data's dtype.
         /// </remarks>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, long q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // `q = np.asanyarray(q)` of a Python int: a 0-d int64 array, weak for the result dtype (weak_q). It is read
             // into the quantile list and never returned, so it is released here.
             using NDArray qArray = NDArray.PythonLiteral(q);
-            return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims);
+            return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -404,6 +528,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
         /// <param name="method">The estimation method.</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The quantile of the non-NaN values over the reduced axes.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex, or text data (NumPy's NaN test).</exception>
         /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1], an unknown method, or an axis
@@ -421,14 +549,22 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A NEP 55 <c>StringDType</c> reduction along an axis whose row result NumPy
         ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
         ///     dtype.</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
+        /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
+        ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
+        ///     reproduced.</exception>
         public static NDArray nanquantile(NDArray a, long q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // `q = np.asanyarray(q)` of a Python int: a 0-d int64 array, weak for the result dtype (weak_q). It is read
             // into the quantile list and never returned, so it is released here.
             using NDArray qArray = NDArray.PythonLiteral(q);
-            return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims);
+            return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -446,10 +582,12 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
         /// <param name="method">The estimation method's name.</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c>, or null: checked after q, then NumPy's weighted branch over each
+        ///     line's non-NaN values.</param>
         /// <returns>The quantiles of the non-NaN values.</returns>
         /// <exception cref="Exception">The public overloads' errors.</exception>
         private static NDArray NanQuantileOfArrayQ(NDArray a, NDArray q, int[] axisArr, int? axis, NDArray @out,
-            bool overwrite_input, string method, bool keepdims)
+            bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
@@ -470,6 +608,14 @@ namespace NumSharp
             double[] qArr = QArrayFromNDArray(q);
             // `_quantile_is_valid(q)` at any rank (an empty q of rank other than 1 fails its q.min()).
             ValidateQuantileArray(q, qArr);
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
+            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
+            // values (QuantileWeighted).
+            if (weights is not null)
+                return QuantileWeighted.Compute(a, q, axisArr, @out, keepdims, method, weights,
+                    (a, q, axisArr, axis, @out, overwrite_input, method, keepdims),
+                    static s => NanQuantileOfArrayQ(s.a, s.q, s.axisArr, s.axis, s.@out, s.overwrite_input, s.method,
+                        s.keepdims, null));
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
                 // StringDType data: NumPy validates q (above), then reads the data; q's rank is checked per line, by the
                 // quantile of what is left after the NaN-like NAs are removed.

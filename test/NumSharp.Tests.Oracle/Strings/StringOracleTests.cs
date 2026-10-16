@@ -532,6 +532,62 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeSortingAndStatistics() => Run("tsort");
 
         /// <summary>
+        ///     Section qfamily (the validation of strings phase 2): the quantile family's keywords over every dtype, numbers
+        ///     and text alike — NumPy's <c>weights=</c> (method <c>inverted_cdf</c>) through <c>np.quantile</c> /
+        ///     <c>np.percentile</c> / <c>np.nanquantile</c> / <c>np.nanpercentile</c> over 9 numeric dtypes, <c>U</c>,
+        ///     <c>S</c> and <c>StringDType</c> (three NA kinds), every layout, axis form, q form, weight dtype and value,
+        ///     out= and keepdims form, NumPy's order of checks and its own <c>np.nanquantile</c> IndexError; text with many
+        ///     ties under fractional weights (NumPy's introsort order of equal strings decides the sums' rounding). Strict.
+        /// </summary>
+        [TestMethod] public void QuantileFamilyKeywords() => Run("qfamily");
+
+        /// <summary>
+        ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
+        ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
+        ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
+        ///     NumPy's, and the counter proves the route ran.
+        /// </summary>
+        [TestMethod]
+        public void QuantileFamilyKeywords_RowByRow()
+        {
+            int before = NumSharp.Statistics.QuantileWeighted.RowByRowRuns;
+            NumSharp.Statistics.QuantileWeighted.ForceRowByRowTestHook = true;
+            try
+            {
+                Run("qfamily");
+            }
+            finally
+            {
+                NumSharp.Statistics.QuantileWeighted.ForceRowByRowTestHook = false;
+            }
+            int ran = NumSharp.Statistics.QuantileWeighted.RowByRowRuns - before;
+            Assert.IsTrue(ran > 1000, $"the forced row-by-row route ran only {ran} times");
+        }
+
+        /// <summary>
+        ///     Section qfamily with every one-line search FORCED onto NumPy's statements
+        ///     (<c>QuantileWeighted.ForceEagerSearchTestHook</c>: the cdf divided, cast and fixed up, then searched) where a
+        ///     float64 search otherwise divides only the entries it probes. The answers must still be NumPy's, and the counter
+        ///     proves the route ran.
+        /// </summary>
+        [TestMethod]
+        public void QuantileFamilyKeywords_EagerSearch()
+        {
+            int before = NumSharp.Statistics.QuantileWeighted.EagerSearchRuns;
+            NumSharp.Statistics.QuantileWeighted.ForceEagerSearchTestHook = true;
+            try
+            {
+                Run("qfamily");
+            }
+            finally
+            {
+                NumSharp.Statistics.QuantileWeighted.ForceEagerSearchTestHook = false;
+            }
+            int ran = NumSharp.Statistics.QuantileWeighted.EagerSearchRuns - before;
+            Assert.IsTrue(ran > 1000, $"the forced eager search ran only {ran} times");
+        }
+
+        /// <summary>
         ///     Lifetime gate of the <c>StringDType</c> sections (strings phase 1, P1.9): once every case of tstore / tcreate /
         ///     tmove / tcast has been replayed and its arrays are garbage, no string allocator is left alive — every buffer the
         ///     replay made (operands, results, temporaries of the gathers, scatters and casts, failed operations) ran its clear
@@ -604,7 +660,7 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strsets", "tcomp", "tarith",
-                "treduce", "tsort",
+                "treduce", "tsort", "qfamily",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

@@ -9622,21 +9622,24 @@ def _set_operand(rng, n, flavor, spec):
     return own(np.array(vals, dtype=spec))
 
 
-def _quant_call(name, a, q, axis, method, keepdims, out):
-    """``np.quantile`` / ``np.percentile`` with the given keywords (``out`` omitted when None)."""
+def _quant_call(name, a, q, axis, method, keepdims, out, weights=None):
+    """``np.quantile`` / ``np.percentile`` (or a nan form) with the given keywords (``out`` and ``weights`` omitted when
+    None, as a NumPy caller leaves them out)."""
     kw = {"axis": axis, "method": method, "keepdims": keepdims}
     if out is not None:
         kw["out"] = out
+    if weights is not None:
+        kw["weights"] = weights
     return getattr(np, name)(a, q, **kw)
 
 
 def _quant(layout, op, *, name="quantile", q=0.5, qkind="f", axis=None, method="lower", keepdims=False, out=None,
-           extra=()):
+           extra=(), weights=None, section=None):
     """Records one quantile-family call (op ``quant_kw``).
 
     :param layout: the layout label.
-    :param op: the (base, view) text operand.
-    :param name: ``quantile`` or ``percentile``.
+    :param op: the (base, view) data operand.
+    :param name: ``quantile``, ``percentile``, ``nanquantile`` or ``nanpercentile``.
     :param q: the q value: a float, a list of floats, a Python int, or a (base, view) operand for ``qkind='arr'``.
     :param qkind: ``f`` (a Python float), ``fl`` (a list of floats), ``i`` (a Python int), ``arr`` (an ndarray q).
     :param axis: None, an int or a tuple of ints.
@@ -9644,6 +9647,8 @@ def _quant(layout, op, *, name="quantile", q=0.5, qkind="f", axis=None, method="
     :param keepdims: keepdims.
     :param out: an out (base, view) operand, or None.
     :param extra: nothing (reserved).
+    :param weights: a weights (base, view) operand (NumPy's ``weights=`` keyword), or None to leave it out.
+    :param section: the section (``SETS`` by default).
     """
     ops = [op]
     params = {"name": name, "qkind": qkind, "method": method, "keepdims": keepdims,
@@ -9656,15 +9661,19 @@ def _quant(layout, op, *, name="quantile", q=0.5, qkind="f", axis=None, method="
     if out is not None:
         params["out_op"] = len(ops)
         ops.append(out)
+    if weights is not None:
+        params["w_op"] = len(ops)
+        ops.append(weights)
 
     def call(*views, p=params):
         a = views[0]
         qq = views[p["q_op"]] if p["qkind"] == "arr" else p["q"]
         o = views[p["out_op"]] if "out_op" in p else None
+        w = views[p["w_op"]] if "w_op" in p else None
         ax = tuple(p["axis"]) if isinstance(p["axis"], list) else p["axis"]
-        return _quant_call(p["name"], a, qq, ax, p["method"], p["keepdims"], o)
+        return _quant_call(p["name"], a, qq, ax, p["method"], p["keepdims"], o, w)
 
-    add(SETS, "quant_kw", params=params, operands=ops, layout=layout,
+    add(section or SETS, "quant_kw", params=params, operands=ops, layout=layout,
         mutate=params.get("out_op"), call=call)
 
 
@@ -11558,12 +11567,402 @@ def gen_strcharobj():
         add_cobj("cobj_fn", {"fn": "join", "args": sep_args}, ops, layout="join:lists")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section qfamily: the quantile family's keywords over every dtype (the validation of strings phase 2, 2026-10-16)
+# ----------------------------------------------------------------------------------------------------------------------
+
+QFAM = "qfamily"
+# The numeric dtypes the weighted branch is gated on, then the text kinds (fixed-width and StringDType with each NA kind
+# the branch treats differently: none, NaN-like, a string).
+QF_NUM = ["float64", "float32", "float16", "int8", "uint8", "int32", "int64", "uint64", "bool"]
+QF_TEXT = ["<U3", "|S3", "T", "Tnan", "Tstr"]
+QF_KINDS = QF_NUM + QF_TEXT
+QF_FUNCS = ("quantile", "percentile", "nanquantile", "nanpercentile")
+QF_TSPEC = {"T": TD, "Tnan": TDNAN, "Tstr": TDS}
+
+
+def _qf_num(dtype, layout, seed):
+    """A numeric data operand of ``LAYOUTS[layout]``: DISTINCT values (bool aside), with no zero of either sign.
+
+    NumPy's default argsort leaves tied values in an order its dispatched sort decides (introsort for 8- and 16-bit types,
+    x86-simd-sort on AVX2 / AVX-512 hosts for 32- and 64-bit ones), NumSharp's stable one in input order; the weighted
+    branch adds the weights of a tied run in that order, so a run of ties with fractional weights could round differently.
+    Distinct values have one sorted order, and their weights may be any floats.
+
+    :param dtype: the numeric dtype name.
+    :param layout: a ``LAYOUTS`` name.
+    :param seed: the permutation's seed.
+    :returns: the (base, view) pair.
+    """
+    n, build = LAYOUTS[layout]
+    rng = np.random.default_rng(seed)
+    dt = np.dtype(dtype)
+    if dt.kind == "b":
+        base = rng.integers(0, 2, n).astype(bool)
+    else:
+        perm = rng.permutation(n)
+        if dt.kind == "f":
+            vals = perm * 1.25 - n * 0.5 + 0.375          # multiples of 1/8: exact in float16, never 0
+        elif dt.kind == "u":
+            vals = perm * 3 + 1
+        else:
+            vals = perm * 3 - n
+        base = np.asarray(vals).astype(dt)
+    return base, build(base)
+
+
+def _qf_data(kind, layout, seed):
+    """A data operand of ``kind`` (``QF_KINDS``) and ``layout``.
+
+    :param kind: a numeric dtype name, ``<U3`` / ``|S3``, or ``T`` / ``Tnan`` / ``Tstr``.
+    :param layout: a ``LAYOUTS`` name.
+    :param seed: the values' seed.
+    :returns: the (base, view) pair.
+    """
+    if kind in QF_NUM:
+        return _qf_num(kind, layout, seed)
+    if kind in QF_TSPEC:
+        return t_operand(QF_TSPEC[kind], layout, seed)
+    return operand(kind, layout, seed)
+
+
+def _qf_weights(kind, shape, seed, integral=None):
+    """A weights operand of ``shape``: fractional positive floats (their sums round), or small positive integers for bool
+    data (its two values tie in every run).
+
+    :param kind: the data kind.
+    :param shape: the weights' shape.
+    :param seed: the values' seed.
+    :param integral: force (True) or refuse (False) integer weights; None decides by the data kind.
+    :returns: the (base, view) pair.
+    """
+    rng = np.random.default_rng(seed + 7919)
+    if integral is None:
+        integral = kind == "bool"
+    if integral:
+        w = rng.integers(1, 5, shape).astype(np.float64)
+    else:
+        w = np.round(rng.uniform(0.05, 3.0, shape), 3)
+    return plain(w)
+
+
+def _qf_q(fn, values):
+    """q values scaled for ``fn`` (a percentile multiplies them by 100).
+
+    :param fn: the function name.
+    :param values: the quantiles in [0, 1].
+    :returns: the scaled list.
+    """
+    return [v * 100 for v in values] if fn.endswith("percentile") else list(values)
+
+
+def gen_qfamily():
+    """Section qfamily: the quantile family's ``weights=`` keyword (NumPy 2.4.2, method ``inverted_cdf`` only) over every
+    dtype — numbers and text — through ``np.quantile`` / ``np.percentile`` / ``np.nanquantile`` / ``np.nanpercentile``
+    (op ``quant_kw`` with a ``w_op`` operand). Every case is phase 1: NumSharp computes them.
+
+    * the core matrix: 14 data kinds (9 numeric dtypes; ``U``, ``S``; StringDType without an NA, with a NaN-like NA,
+      with a string NA) x 7 layouts x the 4 functions x every axis form (None, each axis, -1, every axis in order and
+      reversed) x weights of the data's shape and of the reduced axes' shape (the nan forms' NumPy 2.4.2 IndexError for
+      the latter over a kept axis longer than 1 included);
+    * q forms: a Python float, a list, a Python int, float64 / float32 / float16 / int / bool / 0-d / 2-d / 3-d arrays;
+    * weight dtypes (int, uint8, bool, float16, float32, complex, text) and values (negative, NaN, inf, all zero,
+      leading zeros, a zero on the picked element, an overflowing sum);
+    * NumPy's error order (q, method, axis, the weights' shape, their sign, q's rank), out= (shape, keepdims, another
+      dtype, text parsed into numbers, the nan forms' unchecked per-position store), empty data, 0-d data, ``axis=()``,
+      NaN data and all-NaN lines in both families, and text with many ties under fractional weights (NumPy's introsort
+      order of equal strings decides the cumulative sum's rounding).
+    """
+    # --- The core matrix.
+    for ki, kind in enumerate(QF_KINDS):
+        for li, layout in enumerate(["c1", "c2", "f2", "t3", "r2", "col", "s2"]):
+            seed = 101 * ki + 13 * li
+            data = _qf_data(kind, layout, seed)
+            v = data[1]
+            nd = v.ndim
+            axes = [None] + list(range(nd))
+            if nd > 1:
+                axes += [-1, tuple(range(nd)), tuple(reversed(range(nd)))]
+            for fn in QF_FUNCS:
+                q = _qf_q(fn, [0.0, 0.3, 0.5, 0.71, 1.0])
+                for ax in axes:
+                    forms = ["full"] if ax is None else ["full", "reduced"]
+                    for form in forms:
+                        if form == "full":
+                            wshape = v.shape
+                        else:
+                            axt = ax if isinstance(ax, tuple) else (ax,)
+                            wshape = tuple(v.shape[a] for a in axt)
+                        w = _qf_weights(kind, wshape, seed + len(wshape))
+                        _quant(f"{kind}-{layout}-{form}", data, name=fn, q=q, qkind="fl", axis=ax,
+                               method="inverted_cdf", weights=w, section=QFAM)
+
+    # --- q forms, keepdims.
+    for ki, kind in enumerate(QF_KINDS):
+        data = _qf_data(kind, "c2", 7 + ki)
+        v = data[1]
+        w = _qf_weights(kind, v.shape, 7 + ki)
+        for fn in QF_FUNCS:
+            pct = fn.endswith("percentile")
+            s = 100 if pct else 1
+            forms = [("f", 0.5 * s), ("f", 0.0), ("f", 1.0 * s), ("fl", [0.1 * s, 0.9 * s]), ("i", 1 * s), ("i", 0),
+                     ("arr", plain(np.array([0.1, 0.4, 0.9]) * s)),
+                     ("arr", plain((np.array([0.1, 0.4, 0.9]) * s).astype(np.float32))),
+                     ("arr", plain((np.array([0.1, 0.4, 0.9]) * s).astype(np.float16))),
+                     ("arr", plain(np.array([0, 1]) * s)),
+                     ("arr", plain(np.array(0.3 * s))),
+                     ("arr", plain(np.array([[0.2, 0.4], [0.6, 0.8]]) * s)),
+                     ("arr", plain(np.zeros((1, 1, 1))))]
+            if not pct:
+                forms.append(("arr", plain(np.array([True, False]))))
+            for qi, (qk, qv) in enumerate(forms):
+                for ax in (None, 0, 1):
+                    wq = w if ax is None else _qf_weights(kind, (v.shape[ax],), 3 + qi)
+                    _quant(f"{kind}-q{qi}", data, name=fn, q=qv, qkind=qk, axis=ax, method="inverted_cdf", weights=wq,
+                           section=QFAM)
+                _quant(f"{kind}-q{qi}-kd", data, name=fn, q=qv, qkind=qk, axis=1, method="inverted_cdf",
+                       weights=_qf_weights(kind, (v.shape[1],), 5 + qi), keepdims=True, section=QFAM)
+                _quant(f"{kind}-q{qi}-kdN", data, name=fn, q=qv, qkind=qk, axis=None, method="inverted_cdf",
+                       weights=w, keepdims=True, section=QFAM)
+
+    # --- Weight dtypes and values (float64 data, every function).
+    data = _qf_data("float64", "c2", 3)
+    v = data[1]
+    rng = np.random.default_rng(5)
+    wdts = {
+        "i8": plain(rng.integers(1, 9, v.shape).astype(np.int64)),
+        "i1": plain(rng.integers(1, 9, v.shape).astype(np.int8)),
+        "u1": plain(rng.integers(1, 9, v.shape).astype(np.uint8)),
+        "b": plain(np.array([[True, False, True, True], [True, True, False, True], [False, True, True, True]])),
+        "f2": plain(np.round(rng.uniform(0.1, 3, v.shape), 2).astype(np.float16)),
+        "f4": plain(np.round(rng.uniform(0.1, 3, v.shape), 2).astype(np.float32)),
+        "c16": plain((rng.integers(1, 9, v.shape) + 1j * rng.integers(-3, 3, v.shape)).astype(np.complex128)),
+        "U": plain(np.array([["a", "b", "c", "d"]] * 3)),
+        "T": t_plain(np.array([["a", "b", "c", "d"]] * 3, dtype=TD.build())),
+    }
+    for fn in QF_FUNCS:
+        q = _qf_q(fn, [0.0, 0.25, 0.5, 1.0])
+        for key, w in wdts.items():
+            _quant(f"w{key}", data, name=fn, q=q, qkind="fl", axis=None, method="inverted_cdf", weights=w, section=QFAM)
+            _quant(f"w{key}-ax1", data, name=fn, q=q, qkind="fl", axis=1, method="inverted_cdf", weights=w,
+                   section=QFAM)
+        base_w = np.round(rng.uniform(0.5, 2.0, v.shape), 2)
+        values = {
+            "neg": lambda b: b.__setitem__((1, 2), -0.5),
+            "negzero": lambda b: b.__setitem__((1, 2), -0.0),
+            "nan": lambda b: b.__setitem__((2, 1), np.nan),
+            "inf": lambda b: b.__setitem__((0, 0), np.inf),
+            "zerorow": lambda b: b.__setitem__((1,), 0.0),
+            "allzero": lambda b: b.__setitem__((slice(None),), 0.0),
+            "lead0": lambda b: b.__setitem__((slice(None), 0), 0.0),
+            "huge": lambda b: b.__setitem__((slice(None),), 1e308),
+        }
+        for key, mutate in values.items():
+            wv = base_w.copy()
+            mutate(wv)
+            for ax in (None, 1):
+                _quant(f"v{key}", data, name=fn, q=q, qkind="fl", axis=ax, method="inverted_cdf", weights=plain(wv),
+                       section=QFAM)
+        # A zero weight on the element q = 0 would pick, and a q that lands exactly on a cdf step.
+        _quant("step", plain(np.array([1.0, 2.0, 3.0, 4.0])), name=fn, q=_qf_q(fn, [0.0, 0.25, 0.5, 0.75, 1.0]),
+               qkind="fl", method="inverted_cdf", weights=plain(np.array([0.0, 1.0, 1.0, 2.0])), section=QFAM)
+        _quant("step-f4", plain(np.array([1.0, 2.0, 3.0, 4.0])),
+               name=fn, q=plain((np.array([0.0, 0.25, 0.5, 0.75, 1.0]) * (100 if fn.endswith("percentile") else 1))
+                                .astype(np.float32)),
+               qkind="arr", method="inverted_cdf", weights=plain(np.array([0.1, 0.2, 0.3, 0.4])), section=QFAM)
+        # A float q searches the cdf cast to ITS dtype: equal weights put cdf steps at k/10, which float32 / float16 round
+        # onto (or past) the q values themselves (probed: np.quantile(arange(10.), np.float32([0.3]), weights=ones) is 2.0,
+        # 3.0 with a float64 q of the same value); a percentile's q is divided by 100 in its dtype first.
+        for qdt in (np.float64, np.float32, np.float16):
+            qv = np.arange(1, 10) / 10 * (100 if fn.endswith("percentile") else 1)
+            _quant(f"step-tenths-{np.dtype(qdt).name}", plain(np.arange(10.0)), name=fn,
+                   q=plain(qv.astype(qdt)), qkind="arr", method="inverted_cdf", weights=plain(np.ones(10)),
+                   section=QFAM)
+            _quant(f"step-thirds-{np.dtype(qdt).name}", plain(np.arange(9.0)), name=fn,
+                   q=plain((np.arange(0, 10) / 9 * (100 if fn.endswith("percentile") else 1)).astype(qdt)),
+                   qkind="arr", method="inverted_cdf", weights=plain(np.full(9, 1.0 / 3)), section=QFAM)
+        # One line's search at its boundaries, for every q dtype: leading zero weights put the sorted cdf at
+        # [0, 0, .25, .5, 1] (NumPy's -1 rule takes the zeros, so q = 0 skips them; .25 and .5 are hit exactly), and a
+        # first weight that divides to 0.0 beside huge ones (5e-324 / 1e300) falls under the -1 rule too although it is not
+        # zero. NumSharp divides only the entries its search probes when the search compares in float64 (float64, integer
+        # and bool q) and runs NumPy's statements otherwise (float16 / float32 q), so every q dtype is here.
+        pc = 100 if fn.endswith("percentile") else 1
+        lead = plain(np.array([30.0, 10.0, 50.0, 20.0, 40.0]))
+        lead_w = plain(np.array([1.0, 0.0, 2.0, 0.0, 1.0]))
+        for qdt in (np.float64, np.float32, np.float16):
+            _quant(f"lead0-{np.dtype(qdt).name}", lead, name=fn,
+                   q=plain((np.array([0.0, 0.25, 0.5, 0.75, 1.0]) * pc).astype(qdt)), qkind="arr",
+                   method="inverted_cdf", weights=lead_w, section=QFAM)
+        lead_q = {"i8": np.array([0, 1]) * pc, "u8": (np.array([0, 1]) * pc).astype(np.uint64), "0d": np.array(0)}
+        if pc == 1:
+            # A bool q of a percentile is divided by 100 first (a float q); the quantile searches it as bool.
+            lead_q["b"] = np.array([False, True])
+        for key, qv in lead_q.items():
+            _quant(f"lead0-q{key}", lead, name=fn, q=plain(qv), qkind="arr", method="inverted_cdf", weights=lead_w,
+                   section=QFAM)
+        _quant("underflow", plain(np.array([1.0, 2.0, 3.0])), name=fn, q=_qf_q(fn, [0.0, 1e-310, 0.5, 1.0]),
+               qkind="fl", method="inverted_cdf", weights=plain(np.array([5e-324, 1e300, 1e300])), section=QFAM)
+
+    # --- NumPy's order of checks.
+    a1 = plain(np.array([3.0, 1.0, 2.0, 5.0, 4.0]))
+    w1 = plain(np.array([1.0, 2.0, 1.0, 1.0, 1.0]))
+    m = plain(np.arange(6.0).reshape(2, 3))
+    for fn in QF_FUNCS:
+        s = 100 if fn.endswith("percentile") else 1
+        _quant("chk-linear", a1, name=fn, q=0.5 * s, method="linear", weights=w1, section=QFAM)
+        _quant("chk-unknown", a1, name=fn, q=0.5 * s, method="nope", weights=w1, section=QFAM)
+        _quant("chk-q-range", a1, name=fn, q=1.5 * s, method="nope", weights=plain(-np.array([1.0] * 5)), section=QFAM)
+        _quant("chk-axis", a1, name=fn, q=0.5 * s, axis=3, method="inverted_cdf", weights=w1, section=QFAM)
+        _quant("chk-axis-linear", a1, name=fn, q=0.5 * s, axis=3, method="linear", weights=w1, section=QFAM)
+        _quant("chk-axis-shape", a1, name=fn, q=0.5 * s, axis=4, method="inverted_cdf",
+               weights=plain(np.array([1.0, 2.0])), section=QFAM)
+        _quant("chk-shape-none", a1, name=fn, q=0.5 * s, method="inverted_cdf", weights=plain(np.array([1.0, 2.0])),
+               section=QFAM)
+        _quant("chk-shape-axis", a1, name=fn, q=0.5 * s, axis=0, method="inverted_cdf",
+               weights=plain(-np.array([1.0, 2.0])), section=QFAM)
+        _quant("chk-shape-2d", a1, name=fn, q=0.5 * s, axis=0, method="inverted_cdf",
+               weights=plain(np.ones((1, 5))), section=QFAM)
+        _quant("chk-0d-w", a1, name=fn, q=0.5 * s, method="inverted_cdf", weights=plain(np.array(1.0)), section=QFAM)
+        _quant("chk-q3d-neg", a1, name=fn, q=plain(np.zeros((1, 1, 1))), qkind="arr", method="inverted_cdf",
+               weights=plain(-np.ones(5)), section=QFAM)
+        _quant("chk-q3d-axis", a1, name=fn, q=plain(np.zeros((1, 1, 1))), qkind="arr", axis=3, method="inverted_cdf",
+               weights=w1, section=QFAM)
+        _quant("chk-axes-oob", m, name=fn, q=0.5 * s, axis=(0, 5), method="inverted_cdf", weights=plain(np.ones((2, 3))),
+               section=QFAM)
+        _quant("chk-axes-rep", m, name=fn, q=0.5 * s, axis=(1, -1), method="inverted_cdf",
+               weights=plain(np.ones((2, 3))), section=QFAM)
+        _quant("chk-axes-rep-plain", m, name=fn, q=0.5 * s, axis=(0, 0), method="inverted_cdf", section=QFAM)
+        _quant("chk-complex", plain(np.array([1 + 1j, 2 + 0j])), name=fn, q=0.5 * s, method="linear",
+               weights=plain(np.ones(2)), section=QFAM)
+        _quant("chk-wtext-shape", a1, name=fn, q=0.5 * s, method="inverted_cdf",
+               weights=plain(np.array(["a", "b", "c"])), section=QFAM)
+
+    # --- out=.
+    m23 = plain(np.array([[3.0, 1.0, 2.0], [6.0, 5.0, 4.0]]))
+    w3 = plain(np.array([1.0, 2.0, 3.0]))
+    wf = plain(np.array([[1.0, 2.0, 3.0], [3.0, 2.0, 1.0]]))
+    for fn in QF_FUNCS:
+        s = 100 if fn.endswith("percentile") else 1
+        outs = {
+            "ok": (target(np.zeros(2)), 1, False, w3),
+            "okf": (target(np.zeros(2)), 1, False, wf),
+            "wrong": (target(np.zeros(3)), 1, False, wf),
+            "small": (target(np.zeros(1)), 1, False, wf),
+            "wide": (target(np.zeros((3, 2))), 1, False, wf),
+            "int": (target(np.zeros(2, np.int64)), 1, False, wf),
+            "f4": (target(np.zeros(2, np.float32)), 1, False, wf),
+            "u5": (target(np.zeros(2, "<U5")), 1, False, wf),
+            "kd": (target(np.zeros((2, 1))), 1, True, wf),
+            "kdbad": (target(np.zeros(2)), 1, True, wf),
+            "kdN": (target(np.zeros((1, 1))), None, True, wf),
+            "none0d": (target(np.zeros(())), None, False, wf),
+            "strided": (plain(np.zeros((1, 4)))[0], 1, False, wf),
+        }
+        for key, (o, ax, kd, w) in outs.items():
+            if key == "strided":
+                base = np.zeros(4)
+                o = (base, base[::2])
+            _quant(f"out-{key}", m23, name=fn, q=0.5 * s, axis=ax, method="inverted_cdf", keepdims=kd, out=o,
+                   weights=w, section=QFAM)
+        # A list q into a wrong-length out: the flat nan path stores by broadcast.
+        _quant("out-flat-wrong", a1, name=fn, q=[0.5 * s], qkind="fl", method="inverted_cdf",
+               out=target(np.zeros(3)), weights=w1, section=QFAM)
+        _quant("out-flat-bad", a1, name=fn, q=[0.5 * s, 0.6 * s], qkind="fl", method="inverted_cdf",
+               out=target(np.zeros(3)), weights=w1, section=QFAM)
+        # Text data into a numeric out: parsed (NumPy's setitem), or refused with the parse's text.
+        _quant("out-text-num", plain(np.array(["10", "2", "33"])), name=fn, q=[0.5 * s], qkind="fl",
+               method="inverted_cdf", out=target(np.zeros(1)), weights=plain(np.ones(3)), section=QFAM)
+        _quant("out-text-bad", plain(np.array(["b", "a", "c"])), name=fn, q=[0.5 * s, 1.0 * s], qkind="fl",
+               method="inverted_cdf", out=target(np.zeros(2)), weights=plain(np.ones(3)), section=QFAM)
+        _quant("out-text-bad0d", plain(np.array(["b", "a", "c"])), name=fn, q=0.5 * s,
+               method="inverted_cdf", out=target(np.zeros(())), weights=plain(np.ones(3)), section=QFAM)
+        _quant("out-nan-int", plain(np.array([[1.0, np.nan], [2.0, 3.0]])), name=fn, q=0.5 * s, axis=1,
+               method="inverted_cdf", out=target(np.zeros(2, np.int64)), weights=plain(np.ones((2, 2))), section=QFAM)
+
+    # --- Empty, 0-d and axis=().
+    for fn in QF_FUNCS:
+        s = 100 if fn.endswith("percentile") else 1
+        for key, (arr, ax, wshape) in {
+            "e1": (np.zeros(0), None, (0,)),
+            "e2-ax1": (np.zeros((2, 0)), 1, (2, 0)),
+            "e2-ax0": (np.zeros((2, 0)), 0, (2, 0)),
+            "e2-ax1r": (np.zeros((2, 0)), 1, (0,)),
+            "e3-axes": (np.zeros((0, 2, 3)), (1, 2), (0, 2, 3)),
+            "z0": (np.array(3.0), None, ()),
+            "z0-ax0": (np.array(3.0), 0, ()),
+            "noaxes-0d": (np.arange(6.0).reshape(2, 3), (), ()),
+            "noaxes-full": (np.arange(6.0).reshape(2, 3), (), (2, 3)),
+            "noaxes-1d": (np.arange(6.0).reshape(2, 3), (), (3,)),
+        }.items():
+            w = plain(np.ones(wshape)) if wshape else plain(np.array(2.0))
+            _quant(f"empty-{key}", plain(arr), name=fn, q=0.5 * s, axis=ax, method="inverted_cdf", weights=w,
+                   section=QFAM)
+            _quant(f"empty-{key}-kd", plain(arr), name=fn, q=[0.5 * s], qkind="fl", axis=ax, method="inverted_cdf",
+                   keepdims=True, weights=w, section=QFAM)
+
+    # --- NaN data in both families, all-NaN lines, NaN-like StringDType NAs, None-like NAs.
+    nan_data = {
+        "f8": np.array([[3.0, np.nan, 2.0, 5.0], [np.nan, np.nan, np.nan, np.nan], [1.0, 4.0, np.nan, 0.5]]),
+        "f4": np.array([[3.0, np.nan, 2.0, 5.0], [7.0, 1.0, 6.0, 2.5], [1.0, 4.0, np.nan, 0.5]], np.float32),
+        "f2": np.array([[np.nan, np.nan], [2.0, 1.0]], np.float16),
+        "allnan": np.full((2, 3), np.nan),
+        "T": np.array([["b", np.nan, "a", "zz"], [np.nan, np.nan, np.nan, np.nan], ["c", "d" * 20, np.nan, ""]],
+                      dtype=TDNAN.build()),
+        "Tall": np.array([np.nan, np.nan], dtype=TDNAN.build()),
+    }
+    for fn in QF_FUNCS:
+        s = 100 if fn.endswith("percentile") else 1
+        for key, arr in nan_data.items():
+            op = t_plain(arr) if arr.dtype.kind == "T" else plain(arr)
+            for ax in (None, 0, -1) if arr.ndim > 1 else (None, 0):
+                wshape = arr.shape
+                rng = np.random.default_rng(len(key) * 31 + (0 if ax is None else ax + 5))
+                w = plain(np.round(rng.uniform(0.2, 2.0, wshape), 2))
+                _quant(f"nan-{key}", op, name=fn, q=0.5 * s, axis=ax, method="inverted_cdf", weights=w, section=QFAM)
+                _quant(f"nan-{key}-q", op, name=fn, q=[0.0, 0.4 * s, 1.0 * s], qkind="fl", axis=ax,
+                       method="inverted_cdf", weights=w, section=QFAM)
+                _quant(f"nan-{key}-kd", op, name=fn, q=0.5 * s, axis=ax, method="inverted_cdf", keepdims=True,
+                       weights=w, section=QFAM)
+        tnone = t_plain(np.array(["b", None, "c", "a"], dtype=TDN.build()))
+        _quant("none-na", tnone, name=fn, q=0.5 * s, method="inverted_cdf", weights=plain(np.ones(4)), section=QFAM)
+        _quant("none-na-1", t_plain(np.array([None], dtype=TDN.build())), name=fn, q=0.5 * s, method="inverted_cdf",
+               weights=plain(np.ones(1)), section=QFAM)
+
+    # --- Text with many ties under fractional weights: NumPy's introsort order of equal strings (lines longer than 16)
+    # decides the order the cumulative sum adds their weights in.
+    rng = np.random.default_rng(77)
+    for ti, (kind, n) in enumerate([("<U3", 24), ("|S3", 40), ("T", 33), ("Tnan", 50), ("<U3", 200)]):
+        pool = ["a", "b", "a\x00", "c", "bb", "a\x00b"]
+        if kind in QF_TSPEC:
+            # StringDType compares with NpyString_cmp (strncmp: a NUL both texts share ends the comparison), so texts of
+            # one size that differ only past a shared NUL are EQUAL and the sort's order of them decides which bytes the
+            # answer holds (the NaN removal's order of the nan forms too).
+            pool = ["a", "b", "a\x00b", "a\x00c", "a\x00d", "bb", "c"]
+        vals = [pool[i] for i in rng.integers(0, len(pool), n)]
+        if kind == "Tnan":
+            # NaN-like NAs among the ties: the nan forms remove them in _remove_nan_1d's order, which reorders the texts
+            # (and their weights) the sort then meets.
+            for i in rng.integers(0, n, n // 5):
+                vals[i] = np.nan
+        if kind == "|S3":
+            arr = np.array([x.encode() for x in vals], dtype="|S3")
+        elif kind in QF_TSPEC:
+            arr = np.array(vals, dtype=QF_TSPEC[kind].build())
+        else:
+            arr = np.array(vals, dtype=kind)
+        op = t_plain(arr) if arr.dtype.kind == "T" else plain(arr)
+        w = plain(np.round(rng.uniform(0.01, 1.0, n), 3))
+        qs = np.round(rng.uniform(0, 1, 9), 4).tolist() + [0.0, 1.0]
+        for fn in ("quantile", "nanquantile"):
+            _quant(f"ties{ti}", op, name=fn, q=qs, qkind="fl", method="inverted_cdf", weights=w, section=QFAM)
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
-              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort]
+              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily]
 
 
 def main():

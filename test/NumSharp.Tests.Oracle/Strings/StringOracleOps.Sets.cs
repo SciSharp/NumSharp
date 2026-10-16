@@ -21,7 +21,8 @@ namespace NumSharp.Tests.Strings
         /// <param name="p">The case parameters: for <c>quant_kw</c> the function <c>name</c> (<c>quantile</c> /
         ///     <c>percentile</c>), <c>qkind</c> (<c>f</c> a Python float, <c>fl</c> a list of floats, <c>i</c> a Python int,
         ///     <c>arr</c> an ndarray operand named by <c>q_op</c>), <c>q</c>, <c>axis</c> (null, an int or a list of ints),
-        ///     <c>method</c>, <c>keepdims</c> and <c>out_op</c> (the out operand, when present).</param>
+        ///     <c>method</c>, <c>keepdims</c>, <c>out_op</c> (the out operand, when present) and <c>w_op</c> (the
+        ///     <c>weights=</c> operand, when present: section qfamily).</param>
         /// <param name="ops">The reconstructed operands.</param>
         /// <param name="result">The call's result (the out array itself for an <c>out=</c> call, whose view and base the
         ///     replay compares).</param>
@@ -55,6 +56,8 @@ namespace NumSharp.Tests.Strings
             string method = Str(p, "method");
             bool keepdims = p["keepdims"].GetBoolean();
             NDArray @out = NullableInt(p, "out_op") is int oi ? ops[oi] : null;
+            // NumPy's weights= keyword (section qfamily), absent from the call when the case has none.
+            NDArray weights = NullableInt(p, "w_op") is int wi ? ops[wi] : null;
             JsonElement axisElement = p["axis"];
             int[] axes = axisElement.ValueKind == JsonValueKind.Array ? axisElement.EnumerateArray().Select(e => e.GetInt32()).ToArray() : null;
             int? axis = axisElement.ValueKind == JsonValueKind.Number ? axisElement.GetInt32() : null;
@@ -66,26 +69,26 @@ namespace NumSharp.Tests.Strings
             };
             // Section tsort's nan forms (np.nanquantile / np.nanpercentile over StringDType): the same q and axis forms.
             if (name is "nanquantile" or "nanpercentile")
-                return NanQuantileKeywords(p, ops, a, percentile, method, keepdims, @out, axes, axis);
+                return NanQuantileKeywords(p, ops, a, percentile, method, keepdims, @out, axes, axis, weights);
             switch (Str(p, "qkind"))
             {
                 case "f":
                 {
                     double q = p["q"].GetDouble();
                     if (axes is not null)
-                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims);
-                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims)
-                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
                 case "fl":
                 {
                     double[] q = p["q"].EnumerateArray().Select(e => e.GetDouble()).ToArray();
                     if (axes is not null)
-                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims);
-                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims)
-                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
                 case "i":
                 {
@@ -93,19 +96,19 @@ namespace NumSharp.Tests.Strings
                     // percentile has no integer overload: C# binds a Python int to its double one, the value NumPy's
                     // true_divide(q, 100) reads.
                     if (percentile)
-                        return axes is not null ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                                : np.percentile(a, q, axis, @out, method: method, keepdims: keepdims);
-                    return axes is not null ? np.quantile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                            : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return axes is not null ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                                : np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                    return axes is not null ? np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                            : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
                 case "arr":
                 {
                     NDArray q = ops[Int(p, "q_op")];
                     if (axes is not null)
-                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims);
-                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims)
-                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return percentile ? np.percentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.quantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.percentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.quantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
             }
             throw new InvalidOperationException($"the string oracle has no q kind '{Str(p, "qkind")}'");
@@ -126,10 +129,11 @@ namespace NumSharp.Tests.Strings
         /// <param name="out">The out array, or null.</param>
         /// <param name="axes">A tuple axis, or null.</param>
         /// <param name="axis">One axis, or null.</param>
+        /// <param name="weights">NumPy's weights= keyword, or null when the case has none.</param>
         /// <returns>The call's result.</returns>
         /// <exception cref="InvalidOperationException">A q kind the oracle does not know.</exception>
         private static object NanQuantileKeywords(Dictionary<string, JsonElement> p, NDArray[] ops, NDArray a, bool percentile,
-            string method, bool keepdims, NDArray @out, int[] axes, int? axis)
+            string method, bool keepdims, NDArray @out, int[] axes, int? axis, NDArray weights)
         {
             switch (Str(p, "qkind"))
             {
@@ -137,37 +141,37 @@ namespace NumSharp.Tests.Strings
                 {
                     double q = p["q"].GetDouble();
                     if (axes is not null)
-                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims);
-                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
-                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
                 case "fl":
                 {
                     double[] q = p["q"].EnumerateArray().Select(e => e.GetDouble()).ToArray();
                     if (axes is not null)
-                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims);
-                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
-                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
                 case "i":
                 {
                     long q = p["q"].GetInt64();
                     if (percentile)
-                        return axes is not null ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                                : np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims);
-                    return axes is not null ? np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                            : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return axes is not null ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                                : np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
+                    return axes is not null ? np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                            : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
                 case "arr":
                 {
                     NDArray q = ops[Int(p, "q_op")];
                     if (axes is not null)
-                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims)
-                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims);
-                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims)
-                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims);
+                        return percentile ? np.nanpercentile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights)
+                                          : np.nanquantile(a, q, axes, @out, method: method, keepdims: keepdims, weights: weights);
+                    return percentile ? np.nanpercentile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights)
+                                      : np.nanquantile(a, q, axis, @out, method: method, keepdims: keepdims, weights: weights);
                 }
             }
             throw new InvalidOperationException($"the string oracle has no nan-quantile q kind '{Str(p, "qkind")}'");

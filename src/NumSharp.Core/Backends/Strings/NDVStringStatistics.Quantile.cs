@@ -973,7 +973,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="target">The destination.</param>
         /// <param name="value">The value.</param>
         /// <exception cref="Exception">The store's errors (NumPy's setitem texts, or the cast's for an array).</exception>
-        private static void PyAssign(NDArray target, NDArray value)
+        internal static void PyAssign(NDArray target, NDArray value)
         {
             if (value.ndim != 0 || value.typecode != NPTypeCode.String)
             {

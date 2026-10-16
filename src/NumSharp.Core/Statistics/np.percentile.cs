@@ -17,6 +17,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The percentile; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
@@ -42,13 +46,18 @@ namespace NumSharp
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.percentile.html</remarks>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
         public static NDArray percentile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             ValidatePercentile(q);
@@ -57,6 +66,17 @@ namespace NumSharp
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
             // a StringDType array reads the two neighbours before _lerp refuses them).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
+            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
+            // empty_like of the chararray).
+            if (weights is not null)
+            {
+                if (chararray)
+                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+                using var qArray = NDArray.Scalar(q / 100.0);
+                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
+            }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axisArr, @out, overwrite_input,
@@ -75,6 +95,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The percentiles, q's axis first; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read).</exception>
@@ -99,13 +123,18 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
         public static NDArray percentile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -120,6 +149,17 @@ namespace NumSharp
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
             // a StringDType array reads the two neighbours before _lerp refuses them).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
+            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
+            // empty_like of the chararray).
+            if (weights is not null)
+            {
+                if (chararray)
+                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+                using var qArray = np.array(qFracs);
+                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
+            }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, qFracs, new long[] { qFracs.Length }, false, axisArr, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, qFracs, axisArr, @out, overwrite_input,
@@ -141,6 +181,10 @@ namespace NumSharp
         ///     anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The percentile over the reduced axes; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
         ///     first statement (before q is read); or bool data with an interpolating method (NumPy's boolean-subtract
@@ -169,9 +213,14 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
         public static NDArray percentile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -181,6 +230,17 @@ namespace NumSharp
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
             // a StringDType array reads the two neighbours before _lerp refuses them).
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
+            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
+            // empty_like of the chararray).
+            if (weights is not null)
+            {
+                if (chararray)
+                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+                using var qArray = NDArray.Scalar(q / 100.0);
+                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
+            }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, new[] { q / 100.0 }, axis, @out, overwrite_input,
@@ -201,6 +261,10 @@ namespace NumSharp
         ///     anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's thirteen names).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>One percentile per element of <paramref name="q"/> along the first axis, over the reduced axes;
         ///     <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="TypeError"><paramref name="a"/> is complex: "a must be an array of real numbers", NumPy's
@@ -231,9 +295,14 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
         public static NDArray percentile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -249,6 +318,17 @@ namespace NumSharp
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
             // a StringDType array reads the two neighbours before _lerp refuses them).
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
+            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
+            // empty_like of the chararray).
+            if (weights is not null)
+            {
+                if (chararray)
+                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+                using var qArray = np.array(qFracs);
+                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
+            }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, qFracs, new long[] { qFracs.Length }, false, axis, @out, method, keepdims, chararray);
             return QuantileEngine.Compute(a, qFracs, axis, @out, overwrite_input,
@@ -266,6 +346,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
         /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The percentiles: one per element of q (a scalar result for a 0-d q), with the axis reduced.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="q"/> is null.</exception>
         /// <exception cref="TypeError">A text <paramref name="q"/>: NumPy divides it by 100 first, and <c>divide</c> has no
@@ -290,13 +374,18 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
         public static NDArray percentile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
-                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims), axis, keepdims, null);
+                return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -309,6 +398,20 @@ namespace NumSharp
             // Text data: NumPy accepts a q of any rank up to 2 (_quantile_ureduce_func refuses rank 3 and above, after the
             // range and axis checks), so the text route runs before the numeric path's rank check.
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
+            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
+            // empty_like of the chararray).
+            if (weights is not null)
+            {
+                if (chararray)
+                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+                // `q = np.true_divide(q, 100)` in q's own dtype (a float32 q stays float32), after the range check.
+                PercentileFractions(q);
+                using var hundred = NDArray.PythonLiteral(100L);
+                using var qArray = np.true_divide(q, hundred);
+                return QuantileWeighted.Compute(a, qArray, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims, method, weights);
+            }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 // np.true_divide(q, 100) is float64 whatever q held: percentile never takes the integer index.
                 return QuantileOfText("percentile", a, PercentileFractions(q), (long[])q.Shape.dimensions.Clone(), false,
@@ -338,6 +441,10 @@ namespace NumSharp
         /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
         /// <param name="method">The estimation method (<c>linear</c> by default; NumPy's names).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (keyword-only there), only with method <c>inverted_cdf</c>: one
+        ///     weight per element of <paramref name="a"/> (its shape, or the reduced axes' shape); null (the default)
+        ///     weighs every element equally. A weighted call takes NumPy's weighted branch: the data sorted, the weights'
+        ///     cumulative sum normalized, and each q searched in it; the result has the data's dtype.</param>
         /// <returns>The percentiles over the reduced axes; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="q"/> is null.</exception>
         /// <exception cref="TypeError"><paramref name="a"/> is complex ("a must be an array of real numbers", NumPy's first
@@ -365,9 +472,14 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>numpy.char.chararray</c> operand: NumPy's
         ///     <c>a.partition(kth, axis=...)</c> is the STRING partition (<c>chararray.partition() got an unexpected keyword
         ///     argument 'axis'</c>), after the checks that come first (q, the axes, the method, keepdims' out).</exception>
+        /// <exception cref="ValueError">With <paramref name="weights"/>: another method (<c>Only method 'inverted_cdf'
+        ///     supports weights. Got: linear.</c>), weights of a wrong shape, a negative weight, weights that sum to NaN,
+        ///     inf or zero, or a repeated axis (<c>repeated axis in `axis` argument</c>).</exception>
+        /// <exception cref="TypeError">With <paramref name="weights"/>: weights of another shape without an axis, or
+        ///     text weights (the comparison's refusal).</exception>
         public static NDArray percentile(NDArray a, NDArray q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
-            string method = "linear", bool keepdims = false)
+            string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
@@ -382,6 +494,20 @@ namespace NumSharp
             double[] fractions = PercentileFractions(q);
             // Text data: q's rank is NumPy's check after the axes (rank 3 and above refused), so it runs in the text route;
             // np.true_divide(q, 100) is float64 whatever q held, so percentile never takes the integer index.
+            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
+            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
+            // empty_like of the chararray).
+            if (weights is not null)
+            {
+                if (chararray)
+                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+                // `q = np.true_divide(q, 100)` in q's own dtype (a float32 q stays float32), after the range check.
+                PercentileFractions(q);
+                using var hundred = NDArray.PythonLiteral(100L);
+                using var qArray = np.true_divide(q, hundred);
+                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
+            }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, fractions, (long[])q.Shape.dimensions.Clone(), false, axis, @out,
                     method, keepdims, chararray);

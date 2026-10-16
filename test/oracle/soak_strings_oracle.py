@@ -712,11 +712,30 @@ def fam_quant(rng, sec, count):
         else:
             params["q"] = float(np.round(rng.random(), 2) * scale)
 
+        # NumPy's weights= (method inverted_cdf; another method is its ValueError): fractional weights of the data's shape
+        # or of the reduced axes' shape, sometimes with zeros (a leading zero weight never answers q = 0).
+        if rng.random() < 0.35:
+            if rng.random() < 0.85:
+                params["method"] = "inverted_cdf"
+            if axis is None or rng.random() < 0.5:
+                wshape = view.shape
+            else:
+                axt = axis if isinstance(axis, tuple) else (axis,)
+                wshape = tuple(view.shape[a] for a in axt)
+            w = np.round(rng.uniform(0.0, 2.0, wshape), 3)
+            if w.size and rng.random() < 0.2:
+                w.reshape(-1)[int(rng.integers(0, w.size))] = 0.0
+            params["w_op"] = len(ops)
+            ops.append(g.plain(w))
+
         def call(*views, p=params):
             a = views[0]
             qq = views[p["q_op"]] if p["qkind"] == "arr" else p["q"]
             ax = tuple(p["axis"]) if isinstance(p["axis"], list) else p["axis"]
-            return getattr(np, p["name"])(a, qq, axis=ax, method=p["method"], keepdims=p["keepdims"])
+            kw = {"axis": ax, "method": p["method"], "keepdims": p["keepdims"]}
+            if "w_op" in p:
+                kw["weights"] = views[p["w_op"]]
+            return getattr(np, p["name"])(a, qq, **kw)
 
         g.add(sec, "quant_kw", params=params, operands=ops, layout=label(kind, spec, lname), call=call)
         # np.median / np.nanmedian through the statistics op.
