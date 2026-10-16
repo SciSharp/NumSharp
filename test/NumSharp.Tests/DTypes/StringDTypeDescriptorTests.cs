@@ -397,7 +397,8 @@ namespace NumSharp.Tests.DTypes
 
         /// <summary>
         ///     <c>np.issubdtype</c>: <c>StringDType</c>'s scalar type is Python's <c>str</c>, the base class of
-        ///     <c>np.str_</c> — so <c>U</c> is a subtype of <c>T</c> but not the reverse; <c>T</c> is under no category.
+        ///     <c>np.str_</c> — so <c>U</c> is a subtype of <c>T</c> but not the reverse; <c>T</c> is under no NumPy scalar
+        ///     class, and a family name spelled as a string is a dtype string NumPy refuses.
         /// </summary>
         [TestMethod]
         public void IsSubDtype_FollowsPythonsStrHierarchy()
@@ -416,8 +417,13 @@ namespace NumSharp.Tests.DTypes
             np.issubdtype(t, np.str_).Should().BeFalse();
             np.issubdtype(np.dtype("i8"), t).Should().BeFalse();
             np.issubdtype(t, np.dtype("i8")).Should().BeFalse();
-            foreach (var category in new[] { "character", "generic", "flexible", "number", "integer", "inexact", "bool" })
-                np.issubdtype(t, category).Should().BeFalse(category);
+            // A StringDType descriptor's class is Python's own str, outside NumPy's scalar hierarchy: under no NumPy class.
+            foreach (var category in new[] { np.character, np.generic, np.flexible, np.number, np.integer, np.inexact })
+                np.issubdtype(t, category).Should().BeFalse(category.ToString());
+            np.issubdtype(t, np.bool_).Should().BeFalse();
+            // The family is the CLASS: a string is a dtype string, and "character" is none (NumPy's TypeError).
+            new Action(() => np.issubdtype(t, "character")).Should().Throw<NotSupportedException>()
+                .WithMessage("*data type 'character' not understood*");
         }
 
         // ------------------------------------------------------------------------------------------------------------

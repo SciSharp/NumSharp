@@ -147,6 +147,29 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Machine limits of an integer scalar CLASS — NumPy's <c>np.iinfo(cls)</c>: a concrete class gives its dtype's
+        ///     limits (<c>np.iinfo((NDScalarType)np.int16)</c> is <c>np.iinfo(np.int16)</c>); an abstract class
+        ///     (<see cref="integer"/>, <see cref="signedinteger"/>, ...) has no dtype and is refused with NumPy's text.
+        /// </summary>
+        /// <param name="dtype">The scalar class.</param>
+        /// <returns>The limits of the class's dtype.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">
+        ///     <paramref name="dtype"/> is abstract: <c>Invalid integer data type 'O'.</c>, NumPy's text. NumPy's
+        ///     <c>iinfo</c> retries a value that converts to no dtype with the dtype of its TYPE, and the type of a class is
+        ///     Python's <c>type</c>, an object dtype (kind <c>'O'</c>).
+        /// </exception>
+        /// <exception cref="ArgumentException">A concrete class that is not an integer one (the error <see cref="iinfo(DType)"/> raises).</exception>
+        public static iinfo iinfo(NDScalarType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            if (dtype.IsAbstract)
+                throw new ValueError("Invalid integer data type 'O'.");
+            return new iinfo(dtype.ToDescriptor());
+        }
+
+        /// <summary>
         /// Machine limits for integer types.
         /// </summary>
         /// <typeparam name="T">An integer type (bool, byte, short, ushort, int, uint, long, ulong, char).</typeparam>

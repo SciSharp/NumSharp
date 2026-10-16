@@ -153,9 +153,15 @@ namespace NumSharp.Tests.Fuzz
                                                       FuzzCorpus.DtypeToTC(p["to"].GetString()),
                                                       p["casting"].GetString()));
                 case "isdtype":
+                    // The surface tier's scalar-class cases (arg / kinds dicts) take the scalar-type adapter.
+                    if (p.ContainsKey("kinds"))
+                        return ScalarTypeIsDtype(p);
                     return NDArray.Scalar(np.isdtype(FuzzCorpus.DtypeToTC(p["dtype"].GetString()),
                                                       p["kind_name"].GetString()));
                 case "issubdtype":
+                    // The surface tier's scalar-class cases (arg1 / arg2 dicts) take the scalar-type adapter.
+                    if (p.ContainsKey("arg1"))
+                        return ScalarTypeIsSubdtype(p);
                     return NDArray.Scalar(np.issubdtype(FuzzCorpus.DtypeToTC(p["a"].GetString()),
                                                         FuzzCorpus.DtypeToTC(p["b"].GetString())));
                 case "isfortran":
@@ -566,6 +572,9 @@ namespace NumSharp.Tests.Fuzz
                 case "min_scalar_type":
                     return np.min_scalar_type(ParseScalar(p["value"]));
                 case "dtype":
+                    // np.dtype of a scalar CLASS (the surface tier's scalar-type section) rather than of a string.
+                    if (IsScalarTypeDtypeCase(p))
+                        return ScalarTypeDtype("dtype", p);
                     return np.dtype(p["dtype"].GetString()).typecode;
                 case "common_type":
                     return np.common_type_code(ops);

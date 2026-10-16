@@ -230,6 +230,29 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Machine limits of a floating-point scalar CLASS — NumPy's <c>np.finfo(cls)</c>: a concrete class gives its
+        ///     dtype's limits (<c>np.finfo((NDScalarType)np.float32)</c> is <c>np.finfo(np.float32)</c>); an abstract class
+        ///     (<see cref="floating"/>, <see cref="inexact"/>, ...) has no dtype and is refused with NumPy's text.
+        /// </summary>
+        /// <param name="dtype">The scalar class.</param>
+        /// <returns>The limits of the class's dtype.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
+        /// <exception cref="ValueError">
+        ///     <paramref name="dtype"/> is abstract: <c>data type &lt;class 'numpy.object_'&gt; not inexact</c>, NumPy's text.
+        ///     NumPy's <c>finfo</c> retries a value that converts to no dtype with the dtype of its TYPE, and the type of a
+        ///     class is Python's <c>type</c>, an object dtype — so even <c>np.finfo(np.floating)</c> names <c>object_</c>.
+        /// </exception>
+        /// <exception cref="ArgumentException">A concrete class that is not a floating-point one (the error <see cref="finfo(DType)"/> raises).</exception>
+        public static finfo finfo(NDScalarType dtype)
+        {
+            if (dtype is null)
+                throw new ArgumentNullException(nameof(dtype));
+            if (dtype.IsAbstract)
+                throw new ValueError("data type <class 'numpy.object_'> not inexact");
+            return new finfo(dtype.ToDescriptor());
+        }
+
+        /// <summary>
         /// Machine limits for floating point types.
         /// </summary>
         /// <typeparam name="T">A floating point type (float, double, decimal).</typeparam>

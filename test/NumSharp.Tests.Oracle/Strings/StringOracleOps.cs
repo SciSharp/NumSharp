@@ -34,7 +34,7 @@ namespace NumSharp.Tests.Strings
                 case "promote_types": return np.promote_types(np.dtype(Str(p, "a")), np.dtype(Str(p, "b")));
                 case "result_type": return np.result_type(p["specs"].EnumerateArray().Select(e => e.GetString()).ToArray());
                 case "can_cast": return np.can_cast(np.dtype(Str(p, "from")), np.dtype(Str(p, "to")), Str(p, "casting"));
-                case "issubdtype": return np.issubdtype(Str(p, "a"), Str(p, "b"));
+                case "issubdtype": return IsSubdtypeOfTarget(np.dtype(Str(p, "a")), Str(p, "b"));
 
                 // ---- creation ----
                 case "array":
@@ -514,6 +514,30 @@ namespace NumSharp.Tests.Strings
         }
 
         // ---- argument helpers ----
+
+        /// <summary>
+        ///     <c>np.issubdtype(arg1, target)</c> where the generator's target is one of NumPy's scalar CLASSES spelled by its
+        ///     name (<c>np.character</c>, <c>np.flexible</c>, <c>np.generic</c>, <c>np.number</c>, <c>np.integer</c>,
+        ///     <c>np.inexact</c>, <c>np.str_</c>, <c>np.bytes_</c>) or a dtype string. A class name binds the class (NumSharp's
+        ///     <see cref="NDScalarType"/>, or the <see cref="DType"/> NumSharp spells a concrete class by): a string handed to
+        ///     <c>np.issubdtype</c> is a dtype string, so <c>"character"</c> would be NumPy's own refusal.
+        /// </summary>
+        /// <param name="arg1">The descriptor tested.</param>
+        /// <param name="target">The class name or the dtype string.</param>
+        /// <returns>NumSharp's answer.</returns>
+        /// <exception cref="NotSupportedException">A target that is neither a class name nor a dtype NumSharp parses.</exception>
+        internal static bool IsSubdtypeOfTarget(DType arg1, string target) => target switch
+        {
+            "generic" => np.issubdtype(arg1, np.generic),
+            "number" => np.issubdtype(arg1, np.number),
+            "integer" => np.issubdtype(arg1, np.integer),
+            "inexact" => np.issubdtype(arg1, np.inexact),
+            "flexible" => np.issubdtype(arg1, np.flexible),
+            "character" => np.issubdtype(arg1, np.character),
+            "str_" => np.issubdtype(arg1, np.str_),
+            "bytes_" => np.issubdtype(arg1, np.bytes_),
+            _ => np.issubdtype(arg1, target),
+        };
 
         /// <summary>A string parameter.</summary>
         private static string Str(Dictionary<string, JsonElement> p, string key) => p[key].GetString();

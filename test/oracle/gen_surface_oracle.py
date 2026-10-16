@@ -1675,7 +1675,11 @@ def _gap_of(case):
         matrix), so a fix shows up as a gap whose carved cases all match NumPy.
     """
     op, p, err = case["op"], case["params"], case.get("error")
-    # finfo / iinfo take dtype SPELLINGS ('half', 'f4', 'intp', ...): the rules key on the dtype they name.
+    # finfo / iinfo take dtype SPELLINGS ('half', 'f4', 'intp', ...): the rules key on the dtype they name. The
+    # scalar-type section's finfo / iinfo cases name a scalar CLASS instead (params sctype / sctype_of) and no rule
+    # carves them.
+    if op.startswith(("finfo.", "iinfo.")) and "dtype" not in p:
+        return None
     dt = np.dtype(p["dtype"]).name if op.startswith(("finfo.", "iinfo.")) else p.get("dtype")
     if op == "linalg.cross" and err and err["text"].startswith("shape mismatch"):
         return "SU2"
@@ -1732,11 +1736,255 @@ def _gap_of(case):
 
 
 # =============================================================================================================
+# S41-S48: the scalar-type hierarchy (np.generic, np.integer, np.floating, ...) and its relatives
+# =============================================================================================================
+#
+# NumPy's abstract scalar classes are the most used NumPy names NumSharp lacked (np.integer alone is in ~200K public
+# Python files on GitHub, docs/plans/numpy-missing-api-usage.md). NumSharp models each class as an NDScalarType object;
+# a concrete class is spelled by its descriptor (np.float64 is a DType) and reached as a class by the implicit
+# DType -> NDScalarType conversion (NumPy's dtype.type). An argument of these cases names a class or a dtype as a small
+# dict both sides decode the same way:
+#
+#     {"class": "integer"}   the abstract class np.integer          C#: np.integer
+#     {"dtype": "i4"}        the dtype string (NumPy: the string)    C#: the string (bound as a DType / string overload)
+#     None                   Python's None                           C#: a null DType
+#
+# Projections, each the documented modelling limit of NDScalarType (not a repair of an answer): __mro__ / __bases__ /
+# __base__ list numpy.generic classes only (Python's built-in object / float / complex bases are not NumSharp objects,
+# so __base__ of generic reads None); __subclasses__ is emitted only for the classes whose NumPy list NumSharp can hold
+# (NumPy's other lists name classes NumSharp lacks — object_, void, bytes_, complex64 — or keeps apart where NumSharp
+# collapses them — intc, longdouble, clongdouble; the unit tests pin NumSharp's lists). Dtype strings whose class NumPy
+# keeps apart from the one NumSharp collapses it onto (intc, longdouble, clongdouble, g, G) and the platform C long
+# ('long', 'ulong', 'l', 'L') are left out, as is isinstance over a Python built-in (NumPy's 1.0 is a float, not a
+# numpy.floating; NumSharp's double IS numpy.float64 — the documented divergence of NDScalarType.__instancecheck__).
+
+SCT_ABSTRACT = ["generic", "number", "integer", "signedinteger", "unsignedinteger", "inexact", "floating",
+                "complexfloating", "flexible", "character"]
+# The concrete classes NumSharp has, by the name of their (canonical) dtype; each class's name is the dtype's name.
+SCT_CONCRETE = ALL13
+# Dtype strings an issubdtype argument may be: the canonical names, codes, NumPy's Python-type names and the datetimes.
+SCT_DTYPE_SPECS = ALL13 + ["M8[s]", "m8[s]", "f8", "i4", "u2", "float", "complex", "int", "bool_", "intp", "uint",
+                           "longlong", "half", "double", "single", "byte", "ubyte"]
+# Strings NumPy refuses as a dtype: the family names NumSharp once read as categories, and junk.
+SCT_BAD_SPECS = ["integer", "floating", "signed", "number", "generic", "invalid_category"]
+SCT_ATTRS = ["__name__", "__qualname__", "__module__", "repr", "__mro__", "__bases__", "__base__", "mro"]
+# The classes whose __subclasses__() list NumSharp holds whole (every entry a class NumSharp has, in NumPy's order).
+SCT_SUBCLASSES_EXACT = ["number", "integer", "inexact"]
+ISDTYPE_KIND_NAMES = ["bool", "signed integer", "unsigned integer", "integral", "real floating", "complex floating",
+                      "numeric"]
+# np.sctypeDict keys whose value NumSharp holds as the same dtype NumPy's class converts to (on any 64-bit host):
+# NumPy's keys minus the classes NumSharp lacks (complex64, csingle, bytes_, str_, void, object_, object, bytes, a,
+# str, unicode), minus the platform C long (long, ulong) and the datetimes (a datetime dtype has no NumSharp storage
+# code to compare by name; the unit tests pin them).
+SCTYPEDICT_KEYS = ["bool", "float16", "float32", "float64", "longdouble", "complex128", "clongdouble", "int8", "byte",
+                   "uint8", "ubyte", "int16", "short", "uint16", "ushort", "intc", "uintc", "int32", "uint32", "int64",
+                   "longlong", "uint64", "ulonglong", "intp", "uintp", "double", "cdouble", "single", "half", "bool_",
+                   "int_", "uint", "float", "complex", "int"]
+
+
+def _sct_arg(spec):
+    """The NumPy object an argument dict names (see the section comment).
+
+    Parameters:
+        spec: {"class": name}, {"dtype": string} or None.
+
+    Returns:
+        The abstract class (np.integer), the dtype string itself (NumPy converts it inside the call), or None.
+    """
+    if spec is None:
+        return None
+    if "class" in spec:
+        return getattr(np, spec["class"])
+    return spec["dtype"]
+
+
+def _sct_label(spec):
+    """A short id fragment for an argument dict.
+
+    Parameters:
+        spec: {"class": name}, {"dtype": string} or None.
+
+    Returns:
+        "c:<name>", "d:<string>" or "None".
+    """
+    if spec is None:
+        return "None"
+    return ("c:" + spec["class"]) if "class" in spec else ("d:" + spec["dtype"])
+
+
+def _np_class_names(classes):
+    """The Python repr of a list of class names, numpy.generic classes only (the documented projection).
+
+    Parameters:
+        classes: an iterable of classes (a __mro__, __bases__, mro() or __subclasses__() result).
+
+    Returns:
+        The repr of the names list, e.g. "['integer', 'number', 'generic']".
+    """
+    return repr([c.__name__ for c in classes if isinstance(c, type) and issubclass(c, np.generic)])
+
+
+def _sct_attr(cls, attr):
+    """One attribute of a scalar class as the C# side renders it: a str raw, a class list as the repr of its names.
+
+    Parameters:
+        cls: the NumPy scalar class.
+        attr: "__name__", "__qualname__", "__module__", "repr", "__mro__", "__bases__", "__base__", "mro" or
+            "__subclasses__".
+
+    Returns:
+        The attribute as text (the class repr, a names-list repr, a base name or "None", or the string itself).
+    """
+    if attr == "repr":
+        return repr(cls)
+    if attr in ("__mro__", "__bases__"):
+        return _np_class_names(getattr(cls, attr))
+    if attr == "mro":
+        return _np_class_names(cls.mro())
+    if attr == "__subclasses__":
+        return _np_class_names(cls.__subclasses__())
+    if attr == "__base__":
+        b = cls.__base__
+        return b.__name__ if isinstance(b, type) and issubclass(b, np.generic) else "None"
+    return getattr(cls, attr)
+
+
+def gen_scalar_types():
+    """np.issubdtype / np.isdtype / np.dtype / np.finfo / np.iinfo over the scalar classes, the classes' own attributes
+    and isinstance / issubclass checks, and the relatives np.typecodes, np.sctypeDict, np.True_ / np.False_ and
+    np.longdouble."""
+    classes = [{"class": n} for n in SCT_ABSTRACT]
+    dtypes = [{"dtype": s} for s in SCT_DTYPE_SPECS]
+
+    # ---- S41 np.issubdtype over every pair of class / dtype / None, and the refused strings -------------------------
+    args = classes + dtypes + [None]
+    for a in args:
+        for b in args:
+            p = {"arg1": a, "arg2": b}
+            emit("sctype", "issubdtype", f"{_sct_label(a)},{_sct_label(b)}", [], p, "scalar",
+                 lambda o, a=a, b=b: np.bool_(np.issubdtype(_sct_arg(a), _sct_arg(b))))
+    for bad in SCT_BAD_SPECS:
+        for other in [{"dtype": "f8"}, {"class": "integer"}]:
+            for p in ({"arg1": other, "arg2": {"dtype": bad}}, {"arg1": {"dtype": bad}, "arg2": other}):
+                emit("sctype", "issubdtype", f"bad:{_sct_label(p['arg1'])},{_sct_label(p['arg2'])}", [], p, "scalar",
+                     lambda o, p=p: np.bool_(np.issubdtype(_sct_arg(p["arg1"]), _sct_arg(p["arg2"]))))
+
+    # ---- S42 np.isdtype with classes: identity, named kinds, mixed tuples, refusals ---------------------------------
+    isdtype_args = classes + [{"dtype": s} for s in SCT_CONCRETE + ["M8[s]", "m8[s]"]]
+    kinds = classes + [{"dtype": s} for s in ["int64", "float32", "bool", "complex128"]] + \
+        [{"name": k} for k in ISDTYPE_KIND_NAMES]
+
+    def _kind_obj(k):
+        """The NumPy object an isdtype kind dict names.
+
+        Parameters:
+            k: {"name": kind name}, {"int": a Python int (an invalid kind)}, {"class": name} or {"dtype": string}.
+
+        Returns:
+            The kind name, the int, the abstract class, or the descriptor np.dtype(string).
+        """
+        if "name" in k:
+            return k["name"]
+        if "int" in k:
+            return k["int"]
+        if "class" in k:
+            return getattr(np, k["class"])
+        return np.dtype(k["dtype"])
+
+    def _isdtype_arg(a):
+        """The NumPy object an isdtype dtype dict names.
+
+        Parameters:
+            a: {"class": name} or {"dtype": string}.
+
+        Returns:
+            The abstract class, or the descriptor np.dtype(string) (isdtype refuses a plain string).
+        """
+        return getattr(np, a["class"]) if "class" in a else np.dtype(a["dtype"])
+
+    for a in isdtype_args:
+        for k in kinds:
+            p = {"arg": a, "kinds": [k]}
+            emit("sctype", "isdtype", f"{_sct_label(a)},{list(k.values())[0]}", [], p, "scalar",
+                 lambda o, a=a, k=k: np.bool_(np.isdtype(_isdtype_arg(a), _kind_obj(k))))
+        for tup in ([{"class": "integer"}, {"name": "integral"}], [{"dtype": "int64"}, {"name": "real floating"}],
+                    [{"class": "floating"}, {"dtype": "float32"}], [{"class": "number"}, {"class": "generic"}],
+                    [{"class": "integer"}, {"int": 3}], [{"name": "integral"}, {"name": "bad"}]):
+            p = {"arg": a, "kinds": tup}
+            emit("sctype", "isdtype", f"{_sct_label(a)},tuple:{'|'.join(str(list(k.values())[0]) for k in tup)}", [], p,
+                 "scalar", lambda o, a=a, tup=tup: np.bool_(np.isdtype(_isdtype_arg(a), tuple(_kind_obj(k) for k in tup))))
+        emit("sctype", "isdtype", f"{_sct_label(a)},bad_name", [], {"arg": a, "kinds": [{"name": "bad"}]}, "scalar",
+             lambda o, a=a: np.bool_(np.isdtype(_isdtype_arg(a), "bad")))
+
+    # ---- S43 np.dtype / np.finfo / np.iinfo of a class: the descriptor, or NumPy's refusal ---------------------------
+    for n in SCT_ABSTRACT:
+        emit("sctype", "dtype", f"c:{n}", [], {"sctype": n}, "dtype", lambda o, n=n: np.dtype(getattr(np, n)))
+        emit("sctype", "finfo.dtype", f"c:{n}", [], {"sctype": n}, "dtype", lambda o, n=n: np.finfo(getattr(np, n)).dtype)
+        emit("sctype", "iinfo.dtype", f"c:{n}", [], {"sctype": n}, "dtype", lambda o, n=n: np.iinfo(getattr(np, n)).dtype)
+    for s in SCT_CONCRETE:
+        emit("sctype", "dtype", f"d:{s}", [], {"sctype_of": s}, "dtype", lambda o, s=s: np.dtype(np.dtype(s).type))
+    for s in FLOATS + ["complex128"]:
+        emit("sctype", "finfo.dtype", f"d:{s}", [], {"sctype_of": s}, "dtype", lambda o, s=s: np.finfo(np.dtype(s).type).dtype)
+    for s in INTS:
+        emit("sctype", "iinfo.dtype", f"d:{s}", [], {"sctype_of": s}, "dtype", lambda o, s=s: np.iinfo(np.dtype(s).type).dtype)
+
+    # ---- S44 the classes' own attributes ------------------------------------------------------------------------------
+    for n in SCT_ABSTRACT:
+        for attr in SCT_ATTRS + (["__subclasses__"] if n in SCT_SUBCLASSES_EXACT else []):
+            emit("sctype", "sctype", f"{n}:{attr}", [], {"cls": n, "attr": attr}, "text",
+                 lambda o, n=n, attr=attr: _sct_attr(getattr(np, n), attr))
+    for s in SCT_CONCRETE + ["M8[ms]", "m8[5s]"]:
+        name = np.dtype(s).type.__name__
+        for attr in SCT_ATTRS + ["__subclasses__"]:
+            emit("sctype", "sctype", f"{s}:{attr}", [], {"cls": name, "of": s, "attr": attr}, "text",
+                 lambda o, s=s, attr=attr: _sct_attr(np.dtype(s).type, attr))
+
+    # ---- S45 isinstance / issubclass ----------------------------------------------------------------------------------
+    # A NumPy scalar of each dtype (NumSharp's 0-d array that stands for one, rebuilt from the descriptor), a 1-D array
+    # (never a scalar) and, for issubclass, each dtype's class.
+    for dt in ALL13:
+        x = values((3,), dt, 2)
+        scalar = operand(np.asarray(x[1]), "c")[1]
+        vector = operand(x, "c")[1]
+        for n in SCT_ABSTRACT:
+            emit("sctype", "sctype", f"{dt}:scalar:isinstance:{n}", [scalar], {"cls": n, "check": "instance"},
+                 "scalar", lambda o, n=n: np.bool_(isinstance(o[0][()], getattr(np, n))))
+            emit("sctype", "sctype", f"{dt}:array:isinstance:{n}", [vector], {"cls": n, "check": "instance"},
+                 "scalar", lambda o, n=n: np.bool_(isinstance(o[0], getattr(np, n))))
+    for n in SCT_ABSTRACT:
+        for sub in classes + [{"dtype": s} for s in SCT_CONCRETE + ["M8[s]", "m8[s]"]]:
+            p = {"cls": n, "check": "subclass", "sub": sub}
+            emit("sctype", "sctype", f"{n}:issubclass:{_sct_label(sub)}", [], p, "scalar",
+                 lambda o, n=n, sub=sub: np.bool_(issubclass(getattr(np, sub["class"]) if "class" in sub
+                                                             else np.dtype(sub["dtype"]).type, getattr(np, n))))
+
+    # ---- S46-S48 np.typecodes, np.sctypeDict, np.True_ / np.False_, np.longdouble -------------------------------------
+    for key in np.typecodes:
+        emit("sctype", "typecodes", key, [], {"key": key}, "text", lambda o, key=key: np.typecodes[key])
+    emit("sctype", "typecodes", "keys", [], {"key": None}, "text", lambda o: repr(list(np.typecodes)))
+    for key in SCTYPEDICT_KEYS:
+        emit("sctype", "sctypeDict", key, [], {"key": key}, "dtype", lambda o, key=key: np.dtype(np.sctypeDict[key]))
+    # The bool scalars and np.longdouble are single NumPy objects: their cases vary the FACET observed (the param
+    # "facet"), each a property a ported program relies on.
+    for op, val in (("True_", np.True_), ("False_", np.False_)):
+        emit("sctype", op, "value", [], {"facet": "value"}, "scalar", lambda o, val=val: val)
+        emit("sctype", op, "invert", [], {"facet": "invert"}, "scalar", lambda o, val=val: ~val)
+        emit("sctype", op, "int", [], {"facet": "int"}, "scalar", lambda o, val=val: np.int64(int(val)))
+        emit("sctype", op, "asarray", [], {"facet": "asarray"}, "array", lambda o, val=val: np.asarray(val))
+    emit("sctype", "longdouble", "dtype", [], {"facet": "dtype"}, "dtype", lambda o: np.dtype(np.longdouble))
+    emit("sctype", "longdouble", "itemsize", [], {"facet": "itemsize"}, "scalar",
+         lambda o: np.int64(np.dtype(np.longdouble).itemsize))
+    emit("sctype", "longdouble", "is_floating", [], {"facet": "is_floating"}, "scalar",
+         lambda o: np.bool_(np.issubdtype(np.longdouble, np.floating)))
+    emit("sctype", "longdouble", "zeros", [], {"facet": "zeros"}, "array", lambda o: np.zeros(3, np.longdouble))
+
+
+# =============================================================================================================
 # Main
 # =============================================================================================================
 
 SECTIONS = [gen_linalg, gen_histogram, gen_equiv_memory_shapes, gen_apply_bmat, gen_text, gen_ndarray,
-            gen_attributes, gen_objects, gen_aliases]
+            gen_attributes, gen_objects, gen_aliases, gen_scalar_types]
 
 
 def write_jsonl(path, cases):

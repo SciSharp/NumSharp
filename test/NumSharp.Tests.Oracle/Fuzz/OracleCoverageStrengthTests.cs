@@ -183,6 +183,14 @@ namespace NumSharp.Tests.Fuzz
             ["finfo.resolution"] = "finfo of an inexact dtype: float16 / float32 carved as SU13 (not rounded to the dtype)",
             ["finfo.smallest_normal"] = "finfo of an inexact dtype: float32 carved as SU14 (not exactly 2**-126)",
             ["finfo.tiny"] = "finfo of an inexact dtype: float32 carved as SU14 (not exactly 2**-126)",
+
+            // The scalar-type section's relatives (gen_scalar_types): single NumPy objects and name tables, whose case
+            // axis is the facet or the key, not an operand dtype.
+            ["True_"] = "NumPy's bool scalar constant: bool by definition; the cases vary the facet (value, ~, int(), asarray)",
+            ["False_"] = "NumPy's bool scalar constant: bool by definition; the cases vary the facet (value, ~, int(), asarray)",
+            ["longdouble"] = "one NumPy class (float64 on win-amd64): the cases vary the facet (dtype, itemsize, family, zeros)",
+            ["sctypeDict"] = "name -> scalar-class table: the axis is the KEY param sweep (each key's dtype is the result)",
+            ["typecodes"] = "type-code string table: the axis is the KEY param sweep, text results",
         };
 
         /// <summary>

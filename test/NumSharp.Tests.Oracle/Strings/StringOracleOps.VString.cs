@@ -69,7 +69,7 @@ namespace NumSharp.Tests.Strings
                     return true;
                 case "t_issubdtype":
                     result = p.ContainsKey("category")
-                        ? np.issubdtype(Spec(p["a"]), Str(p, "category"))
+                        ? IsSubdtypeOfTarget(Spec(p["a"]), Str(p, "category"))
                         : np.issubdtype(Spec(p["a"]), Spec(p["b"]));
                     return true;
                 case "t_isdtype":

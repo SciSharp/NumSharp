@@ -325,56 +325,56 @@ public class NpTypingTests
     [TestMethod]
     public void IsSubdtype_Int32Integer()
     {
-        np.issubdtype(NPTypeCode.Int32, "integer").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int32, np.integer).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsSubdtype_Int32SignedInteger()
     {
-        np.issubdtype(NPTypeCode.Int32, "signedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int32, np.signedinteger).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsSubdtype_UInt32UnsignedInteger()
     {
-        np.issubdtype(NPTypeCode.UInt32, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.UInt32, np.unsignedinteger).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsSubdtype_Int32Floating()
     {
-        np.issubdtype(NPTypeCode.Int32, "floating").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Int32, np.floating).Should().BeFalse();
     }
 
     [TestMethod]
     public void IsSubdtype_Float64Number()
     {
-        np.issubdtype(NPTypeCode.Double, "number").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Double, np.number).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsSubdtype_Float64Floating()
     {
-        np.issubdtype(NPTypeCode.Double, "floating").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Double, np.floating).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsSubdtype_Float64Inexact()
     {
-        np.issubdtype(NPTypeCode.Double, "inexact").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Double, np.inexact).Should().BeTrue();
     }
 
     [TestMethod]
     public void IsSubdtype_BoolInteger_NumPy2x()
     {
         // In NumPy 2.x, bool is NOT a subtype of integer
-        np.issubdtype(NPTypeCode.Boolean, "integer").Should().BeFalse();
+        np.issubdtype(NPTypeCode.Boolean, np.integer).Should().BeFalse();
     }
 
     [TestMethod]
     public void IsSubdtype_BoolGeneric()
     {
-        np.issubdtype(NPTypeCode.Boolean, "generic").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Boolean, np.generic).Should().BeTrue();
     }
 
 #endregion

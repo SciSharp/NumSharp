@@ -463,6 +463,14 @@ namespace NumSharp
         public static IReadOnlyList<DTypeMeta> All => (DTypeMeta[])Volatile.Read(ref _all).Clone();
 
         /// <summary>
+        ///     The published registration array itself, without <see cref="All"/>'s copy — for internal readers that cache
+        ///     something derived from the registry and must notice a registration: every registration publishes a NEW
+        ///     array, so a reference compare with the array a cache was built from tells whether it is still current.
+        /// </summary>
+        /// <value>The live array. Callers must never write into it: it is shared with every other reader.</value>
+        internal static DTypeMeta[] AllSnapshot => Volatile.Read(ref _all);
+
+        /// <summary>
         ///     Registers a new DType class (a user dtype). Its type number, name and aliases must be unused; a class with
         ///     storage must carry an unused <see cref="NPTypeCode"/>. Casting implementations are added separately with
         ///     <see cref="AddCastingImpl"/>.
