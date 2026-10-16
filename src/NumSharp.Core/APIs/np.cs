@@ -60,9 +60,16 @@ namespace NumSharp
         public static readonly DType @ushort = typeof(ushort);
         public static readonly DType uint16 = typeof(ushort);
 
-        // 'intc' / 'uintc' are NumPy's aliases for C 'int' / 'unsigned int' (always 32-bit in practice).
-        public static readonly DType intc = typeof(int);
-        public static readonly DType uintc = typeof(uint);
+        /// <summary>
+        ///     <c>numpy.intc</c> (C <c>int</c>, char <c>'i'</c>, type number 5): on Windows its own class beside
+        ///     <see cref="int32"/> (which is the C <c>long</c> there) — equal to it (<c>np.dtype(np.intc) ==
+        ///     np.dtype(np.int32)</c>, the same 32-bit lane) but not the same class (<c>np.issubdtype(np.int32,
+        ///     np.intc)</c> is False); on Linux and macOS the <see cref="int32"/> descriptor itself.
+        /// </summary>
+        public static readonly DType intc = DTypeRegistry.CInt.singleton;
+
+        /// <summary><c>numpy.uintc</c> (C <c>unsigned int</c>, char <c>'I'</c>): its own class on Windows, <see cref="uint32"/> elsewhere (see <see cref="intc"/>).</summary>
+        public static readonly DType uintc = DTypeRegistry.CUInt.singleton;
         public static readonly DType int32 = typeof(int);
         public static readonly DType uint32 = typeof(uint);
 
@@ -71,9 +78,15 @@ namespace NumSharp
         public static readonly DType @long = _np_cLong;
         public static readonly DType @ulong = _np_cULong;
 
-        // 'longlong' / 'ulonglong' are C 'long long' / 'unsigned long long' — always 64-bit.
-        public static readonly DType longlong = typeof(long);
-        public static readonly DType ulonglong = typeof(ulong);
+        /// <summary>
+        ///     <c>numpy.longlong</c> (C <c>long long</c>, char <c>'q'</c>, type number 9): on Linux and macOS its own class
+        ///     beside <see cref="int64"/> (which is the C <c>long</c> there) — equal to it, the same 64-bit lane, but not the
+        ///     same class; on Windows the <see cref="int64"/> descriptor itself.
+        /// </summary>
+        public static readonly DType longlong = DTypeRegistry.CLongLong.singleton;
+
+        /// <summary><c>numpy.ulonglong</c> (C <c>unsigned long long</c>, char <c>'Q'</c>): its own class on Linux and macOS, <see cref="uint64"/> on Windows (see <see cref="longlong"/>).</summary>
+        public static readonly DType ulonglong = DTypeRegistry.CULongLong.singleton;
 
         // NumPy 2.x: int_ and intp are pointer-sized (int64 on 64-bit platforms).
         // On 64-bit OS typeof(long) is the correct choice — NOT typeof(nint), which is
@@ -99,13 +112,19 @@ namespace NumSharp
         public static readonly DType @double = float_;
 
         /// <summary>
-        ///     <c>numpy.longdouble</c> (C <c>long double</c>) — the <see cref="float64"/> descriptor itself, as
-        ///     <see cref="clongdouble"/> is <see cref="complex128"/>: NumSharp has no extended precision, and on NumPy's
-        ///     win-amd64 build a <c>long double</c> IS a 64-bit double (<c>np.dtype(np.longdouble) == np.dtype('d')</c>
-        ///     there). NumPy still keeps a distinct class with type code <c>'g'</c> and type number 13, so
-        ///     <c>np.issubdtype(np.float64, np.longdouble)</c> is False in NumPy and True here.
+        ///     <c>numpy.longdouble</c> (C <c>long double</c>, char <c>'g'</c>, type number 13) — its own class
+        ///     (<c>np.dtypes.LongDoubleDType</c>, scalar class <c>numpy.longdouble</c>) over the float64 storage lane. NumSharp
+        ///     has no extended precision, so it is the 8-byte double of NumPy's win-amd64 build on every platform:
+        ///     <c>np.dtype(np.longdouble) == np.dtype('d')</c> and a cast between them is a no-op, while
+        ///     <c>np.issubdtype(np.float64, np.longdouble)</c> is False, as in NumPy.
         /// </summary>
-        public static readonly DType longdouble = float_;
+        /// <remarks>
+        ///     An array created with this dtype keeps it (<c>np.zeros(3, np.longdouble).dtype.@char</c> is <c>'g'</c>), and
+        ///     so do its views, copies and casts to it; an operation computes in the float64 lane and returns float64 where
+        ///     NumPy keeps <c>longdouble</c> (equal descriptors, so <c>result.dtype == np.longdouble</c> still holds). Linux
+        ///     NumPy's <c>longdouble</c> is an 80-bit type in 16 bytes (<c>float128</c>); NumSharp's is not.
+        /// </remarks>
+        public static readonly DType longdouble = DTypeRegistry.LongDouble.singleton;
 
         // ---- Complex ----
         // NumSharp's Complex = System.Numerics.Complex = two 64-bit floats (complex128). NumPy's complex64 is a scalar CLASS
@@ -113,7 +132,12 @@ namespace NumSharp
         public static readonly DType complex_ = typeof(Complex);
         public static readonly DType complex128 = complex_;
         public static readonly DType cdouble = complex_;      // NumPy alias for complex128
-        public static readonly DType clongdouble = complex_;  // NumPy: long-double complex collapses to complex128
+        /// <summary>
+        ///     <c>numpy.clongdouble</c> (complex <c>long double</c>, char <c>'G'</c>, type number 16) — its own class over the
+        ///     complex128 lane, two 8-byte parts (see <see cref="longdouble"/>): equal to <see cref="complex128"/>, not the
+        ///     same class.
+        /// </summary>
+        public static readonly DType clongdouble = DTypeRegistry.CLongDouble.singleton;
 
         /// <summary>NumSharp-only: the <see cref="System.Decimal"/> descriptor (no NumPy counterpart).</summary>
         public static readonly DType @decimal = typeof(decimal);

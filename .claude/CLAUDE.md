@@ -2992,7 +2992,7 @@ The six comparisons and `isnan`/`isfinite`/`isinf` expose **ONE NumPy-shaped ove
   array, `RaisesOverflow` for a bool array against a Python int at or past 2^63).
 
 ### Type Promotion & Dtype
-`can_cast`, `character`, `common_type`, `complexfloating`, `datetime_data`, `dtype`, `dtypes` (the `np.dtypes` class module), `False_`, `find_common_type`, `finfo`, `flexible`, `floating`, `generic`, `iinfo`, `inexact`, `integer`, `isdtype`, `issubdtype`, `longdouble`, `min_scalar_type`, `mintypecode`, `number`, `promote_types`, `result_type`, `sctypeDict`, `signedinteger`, `True_`, `typecodes`, `typing` (the `np.typing` module), `unsignedinteger`
+`can_cast`, `character`, `clongdouble`, `common_type`, `complex64` / `csingle` (classes without a dtype), `complexfloating`, `datetime_data`, `dtype`, `dtypes` (the `np.dtypes` class module), `False_`, `find_common_type`, `finfo`, `flexible`, `floating`, `generic`, `iinfo`, `inexact`, `intc` / `uintc`, `integer`, `isdtype`, `issubdtype`, `longdouble`, `longlong` / `ulonglong`, `min_scalar_type`, `mintypecode`, `number`, `object_` / `void` (classes without a dtype), `promote_types`, `result_type`, `ScalarType`, `sctypeDict`, `signedinteger`, `True_`, `typecodes`, `typing` (the `np.typing` module), `unsignedinteger`
 
 **The dtype system is NumPy 2.x's two-level model (NEP 40/41/42/43/50/56), Stage A of `docs/plans/dtype-system.md`**
 (`src/NumSharp.Core/DTypes/`, gates `test/NumSharp.Tests/DTypes/*` + the `dtype_text` fuzz tier; every rule probed
@@ -3113,17 +3113,22 @@ Python's `str(KeyError)`), `metadata` + `np.dtype(dtype, align, copy, metadata)`
 `dtype('<i4')`, former surface gap SU17; errors quote the whole string, `None` is TypeError), `isnative` is `PyArray_ISNBO`,
 `repr` takes the short form whenever the stored byte order is explicit, `ensure_canonical` returns a FRESH native copy
 (never the singleton: `np.result_type(np.dtype('>f8')).isbuiltin` is 0), `promote_types`' fast path is pointer identity.
-**Gate:** `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (4,683
-records each: NumPy's member names incl. the C slots parsed from the headers and the fields of the structs `ArrayMethod`,
-`ArrayMethodContext` and `DatetimeMetaData` port (`StructPorts`, each unported field listed with its reason), 1,014 descriptors × every attribute + str /
-repr / len / `d[0]`, 98 errors, 784 comparison pairs, 812 promotions, 33 classes, 1,941 casting resolutions), one file per
-C `long` model (Windows NumPy / Linux NumPy under WSL — regenerate both), replayed by `DTypes/DTypeOracleTests.cs`, which
-picks the host's model; 8/8 planted bugs killed. Exemptions are listed with reasons and self-retire (each must stay
-absent / divergent): the dunders C# has no use for (`__bool__`, pickle, typing, `__mul__`/`__rmul__` sub-arrays), the
-unported slots (`setitem`, `getitem`, `finalize_descr`, `get_constant`, ArrFuncs, `sort_meth`/`argsort_meth`), the absent
-classes (`Complex64DType`, `StrDType`, `BytesDType`, `StringDType`, `ObjectDType`, `VoidDType`), the C-integer /
-long-double classes NumPy keeps apart and NumSharp collapses, the datetime `type` (Stage C), and the asymmetric
-`M8[1000ms] == M8[s]` (trap 4).
+**Gate:** `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (7,554
+/ 6,514 records: NumPy's member names incl. the C slots parsed from the headers and the fields of the structs `ArrayMethod`,
+`ArrayMethodContext` and `DatetimeMetaData` port (`StructPorts`, each unported field listed with its reason), 1,483 / 1,351
+descriptors × every attribute + str / repr / len / `d[0]`, 134 / 122 errors, 1,225 / 1,089 comparison pairs, 1,685 / 1,479
+promotions (each result's CLASS too: char and type number, since the repr cannot tell Windows' C int `'i'` from int32's
+`'l'`), 33 classes, 2,993 / 2,439 casting resolutions), one file per C `long` model (Windows NumPy / Linux NumPy under
+WSL — regenerate both; the generator reads NumPy's headers from `refs/numpy`, or `NUMPY_SRC` in a worktree without
+one), replayed by `DTypes/DTypeOracleTests.cs`, which picks the host's model; 8/8 planted bugs killed. The C-type classes
+of each model are compared like every other class (Windows' `IntDType` / `UIntDType` / `LongDoubleDType` /
+`CLongDoubleDType`, Linux's `LongLongDType` / `ULongLongDType`). Exemptions are listed with reasons and self-retire (each
+must stay absent / divergent): the dunders C# has no use for (`__bool__`, pickle, typing, `__mul__`/`__rmul__`
+sub-arrays), the unported slots (`setitem`, `getitem`, `finalize_descr`, `get_constant`, ArrFuncs,
+`sort_meth`/`argsort_meth`), the absent classes (`Complex64DType`, `StrDType`, `BytesDType`, `StringDType`,
+`ObjectDType`, `VoidDType`), Linux's long double pair (`DivergentClasses`: NumPy's is the 16-byte x87 type, so its
+descriptors are left out of the lp64 file and only the class call's instance is exempt), the datetime `type`
+(Stage C), and the asymmetric `M8[1000ms] == M8[s]` (trap 4).
 
 **Stage B landed (2026-09-09): `DType` is the ONE dtype spelling, end to end.** **`NDArray.dtype` returns `DType`**
 (`Storage.Descr` — NumPy's `PyArrayObject.descr`: the class singleton for a builtin lane, so `a.dtype == b.dtype` /
@@ -3172,8 +3177,9 @@ and `Type t = np.float64` need a cast; `a.dtype.Name` → `a.dtype.name` (NumPy)
 30/30 + Oracle 176/176 (dtype_text tier unchanged), Interop 638/638.
 
 **NumPy's scalar-type hierarchy is `NDScalarType` (2026-10-16; `DTypes/NDScalarType.cs`, `DTypes/np.scalar_types.cs`,
-`APIs/np.typing.cs`; gates `DTypes/NDScalarTypeTests.cs` (36) + the surface tier's scalar-type section, 5,631 cases, zero
-excuses).** The abstract scalar CLASSES were the most used NumPy names NumSharp lacked (`np.integer` ~203K GitHub files,
+`APIs/np.typing.cs`; gates `DTypes/NDScalarTypeTests.cs` (36) + `DTypes/CTypeClassesTests.cs` (13) + the surface tier's
+scalar-type section, 6,123 cases, zero excuses + the DType oracle's C-type classes).** The abstract scalar CLASSES were
+the most used NumPy names NumSharp lacked (`np.integer` ~203K GitHub files,
 `np.floating` 161K, `np.number` 128K; `docs/plans/numpy-missing-api-usage.md`).
 - **Model.** `np.generic`, `np.number`, `np.integer`, `np.signedinteger`, `np.unsignedinteger`, `np.inexact`,
   `np.floating`, `np.complexfloating`, `np.flexible`, `np.character` are the ten abstract `NDScalarType` singletons
@@ -3233,11 +3239,49 @@ excuses).** The abstract scalar CLASSES were the most used NumPy names NumSharp 
   dtype-less or built-in class they read NumPy's class (`finfo(np.complex64)` is float32's, `finfo(float)` float64's,
   `iinfo(int)` int64's) and refuse with its name or kind (`Invalid integer data type 'c'.`).
 - **Relatives.** `np.typecodes` (NumPy's strings in NumPy's order, read-only); `np.sctypeDict` (NumPy's names →
-  NumSharp's DESCRIPTORS, `np.sctypeDict["float64"]` IS `np.float64`; the string names `bytes_`/`bytes`/`a` and
-  `str_`/`str`/`unicode` map to the unsized `dtype('S')` / `dtype('<U')`; the dtype-less classes' names (`complex64`,
-  `csingle`, `void`, `object_`, `object`) have no key, collapsed names map onto the class they collapse onto,
-  `long`/`ulong` follow the host's C long); `np.True_` / `np.False_` (C# bools); `np.longdouble` (the float64 descriptor,
-  as `np.clongdouble` is complex128).
+  NumSharp's DESCRIPTORS, `np.sctypeDict["float64"]` IS `np.float64`, in NumPy's key order for the host's C long model;
+  the string names `bytes_`/`bytes`/`a` and `str_`/`str`/`unicode` map to the unsized `dtype('S')` / `dtype('<U')`; the
+  dtype-less classes' names (`complex64`, `csingle`, `void`, `object_`, `object`) have no key, the C-type names map to
+  their own classes, `long`/`ulong` follow the host's C long); `np.True_` / `np.False_` (C# bools); `np.ScalarType`
+  (NumPy's construction: Python's seven classes, then `sorted(dict.fromkeys(sctypeDict.values()), key=(kind.lower(),
+  itemsize))` STABLY, the dtype-less classes included — 31 classes on both models, `intc` before `int32` on Windows,
+  `longlong` after `int64` on Linux).
+- **The C-type classes NumPy keeps beside the canonical class of a width are classes of their own (E2,
+  2026-10-16): `np.longdouble` / `np.clongdouble` everywhere, Windows' `np.intc` / `np.uintc` (int32 is the C long
+  there), Linux's `np.longlong` / `np.ulonglong` (int64 is the C long there).** Each is a LANE-SHARING
+  `LegacyBuiltinDTypeMeta` (`DTypeRegistry.LongDouble` / `CLongDouble` / `CInt` / `CUInt` / `CLongLong` / `CULongLong`;
+  `ownsLane: false`, so `OwnsTypeCode` / `OwnsScalarType` are false): it stores in the canonical class's lane and reports
+  its own type number, character, scalar type and class (`np.dtype('g')` is `num 13, char 'g', name 'float64',
+  type longdouble, LongDoubleDType`). NumPy's semantics, all probed on Windows and Linux NumPy 2.4.2:
+  - `np.issubdtype(np.float64, np.longdouble)` is False (the user-reported gap), the MROs and `__subclasses__()` lists
+    are NumPy's per model (`floating` lists `longdouble`, `complexfloating` `clongdouble`, Windows' `signedinteger`
+    `intc` before `int32`);
+  - equality is `PyArray_EquivTypes`: same-kind same-size NumPy numerics are EQUAL and hash equally
+    (`LegacyBuiltinDTypeMeta.IsEquivalentNumeric`, the hash `(kind, itemsize, byte order)`), never the same object;
+  - their casts are NumPy's `numeric_copy_or_byteswap` at `NPY_EQUIV_CASTING`, resolved as a no-cast for natives
+    (`can_cast(np.longdouble, np.float64, 'no')` is True);
+  - promotion of two NumPy numeric classes reads NumPy's own table of TYPE NUMBERS (`DTypes/NumPyPromotionTable.cs`, a
+    port of `_npy_can_cast_safely_table` + the table loop of `initialize_casting_tables`, sizes by model), so the answer
+    is a CLASS: `promote(float64, longdouble)` is `longdouble`, and Windows' `promote(int16, uint16)` is the C int `'i'`
+    (equal to int32). Its LANE always equals the frozen storage table's (`CTypeClassesTests` checks every owner pair),
+    which every kernel still promotes by; a weak complex lifts `longdouble` to `clongdouble`;
+  - `np.result_type` over ARRAYS is now descriptor-level (`np.result_type(x_g, x_g)` is `'g'`; it round-tripped through
+    the type code before);
+  - arrays KEEP the class through creation (`zeros`/`ones`/`empty`/`full`/`arange`/`*_like`), views (every
+    `UnmanagedStorage` sub-view carries it: `AdoptLaneSharingDescr`), copies (`copy`, `flatten` in C / F / K,
+    `ascontiguousarray`), `astype`, `view(dtype)` (`SetLaneDescr`: `x.view(np.float64)` of a `'g'` array is float64),
+    joins (`concatenate`/`stack`/`hstack`: the result class of `np.result_type`), fancy and boolean gathers
+    (`NDArray.KeepLaneSharingClass`) and the routines built on those (`tile`, `repeat`, `flip`, `sort`, `roll`, ...);
+  - `memoryview.format` is the descriptor's character (`'g'`, `"Zg"`, Windows' intc `'i'`); FIXED with it: int64 on
+    LP64 is NumPy's `'l'`, not `'q'`.
+  - Printing names the dtype for a non-default class (`array([0., 0., 0.], dtype=float64)` for longdouble,
+    `ArrayFormatter.DtypeIsImplied` reads the class); `np.finfo(np.longdouble).dtype` is `'g'`, `np.iinfo(np.intc).dtype`
+    `'i'`.
+  **Divergences (`[Misaligned]`):** COMPUTING routines (ufuncs, reductions, `clip`, ...) return their storage lane's
+  class — NumPy registers loops per class, so its `x + x` of a longdouble array is longdouble, NumSharp's float64 (the
+  values are equal and `(x + x).dtype == np.longdouble` holds); NumSharp's long double is the 8-byte double on every host
+  (Windows NumPy's; Linux NumPy's is the 16-byte x87 type, so `np.dtype('float128')` / `'f16'` raise here, as on Windows,
+  and Linux's `promote(longdouble, complex128)` is `clongdouble` there, `complex128` here).
 - **`np.typing`** (`[ModuleName("np.typing")]`): C# has no exported type aliases, so each member names the C# type that
   plays the alias's role in NumSharp's signatures — `NDArray` → `typeof(NDArray<>)` (`NumSharp.Generic`;
   `npt.NDArray[np.float64]` is `NDArray<double>`), `ArrayLike` → `typeof(NDArray)` (every array_like parameter),
@@ -3247,8 +3291,6 @@ excuses).** The abstract scalar CLASSES were the most used NumPy names NumSharp 
   descriptor's class is Python's own `str` (`<class 'str'>`, module `builtins`, OUTSIDE `np.generic`), which `np.str_`
   derives from, so `issubdtype('U5', StringDType())` is True and `issubdtype(StringDType(), np.character)` False;
   `np.isdtype` refuses a `StringDType` descriptor and Python's `str` with NumPy's `_preprocess_dtype` texts.
-- **Not done:** `np.ScalarType`; the classes NumPy keeps apart where NumSharp collapses them (`intc`/`uintc` on Windows,
-  `longdouble`/`clongdouble`: `np.issubdtype(np.float64, np.longdouble)` is True here, False in NumPy).
 - **Perf (NPY/NS, two pinned P-cores, a loaded host):** issubdtype 38–140×, isdtype 69–658×, isinstance 5.2–8.8×,
   issubclass 11×, `np.dtype(cls)` 52×, `__subclasses__()` 10× (was 1.3× before its cache), typecodes / sctypeDict lookups
   ~8×.

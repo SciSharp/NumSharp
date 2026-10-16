@@ -89,14 +89,14 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"b"` | `SByte` | NumPy: int8 (signed, C `char` convention) |
 | `"B"` | `Byte` | NumPy: uint8 |
 | `"h"` / `"H"` | `Int16` / `UInt16` | |
-| `"i"` / `"I"` | `Int32` / `UInt32` | always 32-bit per NumPy spec |
+| `"i"` / `"I"` | `Int32` / `UInt32` | C `int`, always 32-bit; on Windows its own class `np.intc` / `np.uintc` (see [C-type classes](#c-type-classes)) |
 | `"l"` / `"L"` | **platform-dependent** | C `long` - see [Platform-Dependent Types](#platform-dependent-types) |
-| `"q"` / `"Q"` | `Int64` / `UInt64` | C `long long`-always 64-bit |
-| `"p"` / `"P"` | pointer-sized | see [Platform-Dependent Types](#platform-dependent-types) |
+| `"q"` / `"Q"` | `Int64` / `UInt64` | C `long long`, always 64-bit; on Linux/macOS its own class `np.longlong` / `np.ulonglong` |
+| `"n"` / `"N"`, `"p"` / `"P"` | pointer-sized | see [Platform-Dependent Types](#platform-dependent-types) |
 | `"e"` | `Half` | NumPy: float16 |
 | `"f"` | `Single` | NumPy: float32 |
-| `"d"` / `"g"` | `Double` | `g` (long double) collapses to float64 |
-| `"D"` / `"G"` | `Complex` | `G` (long-double complex) collapses to complex128 |
+| `"d"` / `"g"` | `Double` | `g` is the long double: its own class `np.longdouble`, stored as float64 (8 bytes, as on NumPy's Windows build) |
+| `"D"` / `"G"` | `Complex` | `G` is the long-double complex: its own class `np.clongdouble`, stored as complex128 |
 | `"F"` | **throws** | complex64 - NumSharp only has complex128 |
 | `"c"` | `S1` | a 1-byte bytestring (NumPy's `'c'`) |
 | `"S"` / `"a"` / `"U"` | `S` / `S` / `<U` | unsized string descriptors (`itemsize` 0): a creation or a cast sizes them from the data |
@@ -126,10 +126,11 @@ NumSharp's `np.dtype(string)` mirrors NumPy 2.x exactly for every form NumSharp 
 | `"byte"` | **`SByte`** (NumPy convention: `byte` = int8, signed) |
 | `"int16"` / `"short"` | `Int16` |
 | `"uint16"` / `"ushort"` | `UInt16` |
-| `"int32"` / `"intc"` | `Int32` |
-| `"uint32"` / `"uintc"` | `UInt32` |
-| `"int64"` / `"longlong"` | `Int64` |
-| `"uint64"` / `"ulonglong"` | `UInt64` |
+| `"int32"` / `"intc"` | `Int32` (`"intc"` is its own class on Windows) |
+| `"uint32"` / `"uintc"` | `UInt32` (`"uintc"` is its own class on Windows) |
+| `"int64"` / `"longlong"` | `Int64` (`"longlong"` is its own class on Linux/macOS) |
+| `"uint64"` / `"ulonglong"` | `UInt64` (`"ulonglong"` is its own class on Linux/macOS) |
+| `"longdouble"` / `"clongdouble"` | `Double` / `Complex`, each its own class |
 | `"int"` / `"int_"` / `"intp"` | **pointer-sized**-int64 on 64-bit |
 | `"uint"` / `"uintp"` | **pointer-sized**-uint64 on 64-bit |
 | `"long"` / `"ulong"` | **platform-dependent** C long/ulong |
@@ -181,7 +182,7 @@ NumSharp uses `System.Numerics.Complex`, which is two 64-bit floats-equivalent t
 np.complex128;
 np.complex_;
 np.cdouble;           // NumPy alias for complex128
-np.clongdouble;       // NumPy: long-double complex, collapses to complex128
+np.clongdouble;       // NumPy's long-double complex: its own class, stored as complex128 (equal to it)
 np.dtype("complex");  // NumPy 2.x default complex is complex128
 np.dtype("D");
 np.dtype("c16");
@@ -316,8 +317,8 @@ Everything else is fixed across platforms:
 | Spelling | Always |
 |----------|--------|
 | `np.int_`, `np.intp`, `"int"`, `"int_"`, `"intp"`, `"p"` | pointer-sized (int64 on 64-bit platforms) |
-| `np.longlong`, `"longlong"`, `"q"`, `"i8"` | `Int64` |
-| `np.int32`, `"int32"`, `"i"`, `"i4"` | `Int32` |
+| `np.longlong`, `"longlong"`, `"q"`, `"i8"` | `Int64` storage (the class of `np.longlong` is int64's on Windows, its own on Linux/macOS) |
+| `np.int32`, `"int32"`, `"i"`, `"i4"` | `Int32` storage (the class of `"i"` / `np.intc` is int32's on Linux/macOS, its own on Windows) |
 | `np.int16`, `"int16"`, `"h"`, `"i2"` | `Int16` |
 
 ### Recommendation
@@ -449,11 +450,11 @@ object (Python's)
       +-> bool
       +-> number
       |    +-> integer
-      |    |    +-> signedinteger     int8 int16 int32 int64 timedelta64
-      |    |    \-> unsignedinteger   uint8 uint16 uint32 uint64 (char)
+      |    |    +-> signedinteger     int8 int16 intc° int32 int64 longlong° timedelta64
+      |    |    \-> unsignedinteger   uint8 uint16 uintc° uint32 uint64 ulonglong° (char)
       |    \-> inexact
-      |         +-> floating          float16 float32 float64 (+ float) (decimal)
-      |         \-> complexfloating   complex64* complex128 (+ complex)
+      |         +-> floating          float16 float32 float64 (+ float) longdouble (decimal)
+      |         \-> complexfloating   complex64* complex128 (+ complex) clongdouble
       +-> flexible
       |    +-> character            bytes_ (+ bytes) str_ (+ str)
       |    \-> void*
@@ -461,6 +462,7 @@ object (Python's)
       \-> object_*
 
 * a NumPy class NumSharp has no dtype for     (+ x) a second base: Python's class x
+° a class of its own on one platform only: intc / uintc on Windows, longlong / ulonglong on Linux and macOS
 ```
 
 `np.generic`, `np.number`, `np.integer`, `np.signedinteger`, `np.unsignedinteger`, `np.inexact`, `np.floating`,
@@ -486,7 +488,7 @@ np.integer.__subclasscheck__(a.dtype.type);  // issubclass(a.dtype.type, np.inte
 
 NDScalarType t = a.dtype;                    // a.dtype.type: <class 'numpy.float64'>
 t.__mro__;                                   // [float64, floating, inexact, number, generic, float, object]
-np.floating.__subclasses__();                // [float16, float32, float64, decimal]
+np.floating.__subclasses__();                // [float16, float32, float64, longdouble, decimal]
 DType d = (DType)t;                          // np.dtype(t): back to the descriptor
 
 NDScalarType.PyFloat.__subclasscheck__(np.float64);   // issubclass(np.float64, float): True
@@ -518,7 +520,31 @@ Rules worth knowing:
 
 The type tables are there too: `np.typecodes` (NumPy's type-code strings), `np.sctypeDict` (NumPy's type names, each
 mapped to the NumSharp dtype; the names of `complex64`, `object_` and `void`, which have no dtype, are absent),
-`np.True_` / `np.False_` (C# `bool`s) and `np.longdouble` (float64, as on NumPy's Windows build).
+`np.ScalarType` (every scalar class, Python's seven first, in NumPy's order: 31 classes), and `np.True_` / `np.False_`
+(C# `bool`s).
+
+### C-type classes
+
+NumPy keeps a class for each C type, and where two C types have the same size and kind, two classes share one
+storage format: the long double (`np.longdouble`, `'g'`) beside float64 and its complex twin (`np.clongdouble`, `'G'`)
+beside complex128 everywhere; the C `int` (`np.intc`, `'i'`) beside int32 on Windows, where int32 is the C `long`; the
+C `long long` (`np.longlong`, `'q'`) beside int64 on Linux and macOS, where int64 is the C `long`. NumSharp has the same
+classes, each stored like its twin:
+
+```csharp
+np.dtype("g");                                // dtype('float64'), char 'g', type longdouble
+np.longdouble == np.float64;                  // True: equal descriptors (and equal hashes)
+np.issubdtype(np.float64, np.longdouble);     // False: different classes, as in NumPy
+np.can_cast(np.longdouble, np.float64, "no"); // True: the same bytes
+np.promote_types(np.float64, np.longdouble);  // longdouble
+np.zeros(3, np.longdouble).dtype.@char;       // 'g': creation, views, copies, joins and gathers keep the class
+```
+
+Two differences from NumPy remain. Computing routines (`x + x`, `np.sum`, `np.clip`, ...) return the class of the
+storage format, float64 for a long double array, where NumPy keeps the long double; the values are the same, and the
+result's dtype still compares equal to `np.longdouble`. And NumSharp's long double is 8 bytes on every platform, as on
+NumPy's Windows build: on Linux, NumPy's long double is the 16-byte extended type (`float128`), which NumSharp does not
+have.
 
 ### `np.typing`
 

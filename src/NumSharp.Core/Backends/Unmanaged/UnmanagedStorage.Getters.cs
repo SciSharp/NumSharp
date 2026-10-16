@@ -224,6 +224,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -245,6 +247,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -294,6 +298,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -315,6 +321,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -389,6 +397,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -414,6 +424,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -460,6 +472,8 @@ namespace NumSharp.Backends
                     adjustedShape = adjustedShape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
                 var view = UnmanagedStorage.CreateBroadcastedUnsafe(SliceForSubview(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }
@@ -485,6 +499,8 @@ namespace NumSharp.Backends
                     shape = shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 var view = new UnmanagedStorage(SliceForSubview(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
+                // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the new view carries it.
+                view.AdoptLaneSharingDescr(_descr);
                 view.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
                 return view;
             }

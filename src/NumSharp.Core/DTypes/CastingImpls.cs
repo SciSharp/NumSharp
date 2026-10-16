@@ -5,24 +5,34 @@ namespace NumSharp
 {
     /// <summary>
     ///     The cast between two storage-backed builtin classes (NumPy's <c>add_numeric_cast</c>, <c>convert_datatype.c</c>).
-    ///     Its <see cref="ArrayMethod.casting"/> is computed the way NumPy computes <c>spec.casting</c>: the same class →
-    ///     <c>equiv</c> (a copy or byte swap); <c>safe</c> when the frozen promotion table says
-    ///     <c>promote(from, to) == to</c> (NumPy's <c>_npy_can_cast_safely_table</c>); otherwise <c>same_kind</c> when the
-    ///     source kind orders at or below the destination kind (<c>b &lt; u &lt; i &lt; f &lt; c</c>), else <c>unsafe</c>.
-    ///     These are exactly the rules <c>np.can_cast(NPTypeCode, NPTypeCode)</c> always applied, so the builtin answers
-    ///     are unchanged; the class pair now owns them.
+    ///     Its <see cref="ArrayMethod.casting"/> is computed the way NumPy computes <c>spec.casting</c>: the same class, or
+    ///     two NumPy classes of one kind and one size (<c>intc</c> ↔ <c>int32</c> on Windows, <c>longdouble</c> ↔
+    ///     <c>float64</c>) → <c>equiv</c> (NumPy's <c>numeric_copy_or_byteswap</c>, resolved to no cast at all when both byte
+    ///     orders are native); <c>safe</c> when the frozen promotion table says <c>promote(from, to) == to</c> (NumPy's
+    ///     <c>_npy_can_cast_safely_table</c>); otherwise <c>same_kind</c> when the source kind orders at or below the
+    ///     destination kind (<c>b &lt; u &lt; i &lt; f &lt; c</c>), else <c>unsafe</c>. These are exactly the rules
+    ///     <c>np.can_cast(NPTypeCode, NPTypeCode)</c> always applied, so the builtin answers are unchanged; the class pair
+    ///     now owns them.
     /// </summary>
     /// <remarks>
-    ///     One deliberate departure: NumPy also calls two DIFFERENT classes with the same kind and size equivalent
-    ///     (<c>intc</c> vs <c>long</c> on Windows), which would make NumSharp's <c>Char</c> and <c>UInt16</c> an
-    ///     <c>equiv</c> pair. They are distinct storage types with distinct kernels, so only the identical class is
-    ///     <c>equiv</c> here; <c>Char ↔ UInt16</c> is <c>safe</c> one way and <c>same_kind</c> the other, as before.
-    ///     The loop is not provided by this object — the engine drives its IL cast kernels directly (Stage A).
+    ///     <para>
+    ///     The equivalence holds between NumPy's own classes only (<see cref="LegacyBuiltinDTypeMeta.IsEquivalentNumeric"/>):
+    ///     NumSharp's <c>Char</c> and <c>UInt16</c> have one kind and one size too, but they are distinct storage types with
+    ///     distinct kernels, so <c>Char ↔ UInt16</c> stays <c>safe</c> one way and <c>same_kind</c> the other, as before.
+    ///     </para>
+    ///     <para>
+    ///     A lane-sharing class casts through its lane's tables: its storage code is the lane's, so the promotion-table
+    ///     test reads the lane pair (<c>longdouble → float32</c> is float64's <c>same_kind</c>). The loop is not provided by
+    ///     this object — the engine drives its IL cast kernels directly (Stage A).
+    ///     </para>
     /// </remarks>
     public sealed class BuiltinCastingImpl : CastingImpl
     {
+        /// <summary>Builds the cast between two builtin classes (only <see cref="DTypeRegistry"/> calls this, once per ordered pair).</summary>
+        /// <param name="from">The source class.</param>
+        /// <param name="to">The destination class.</param>
         internal BuiltinCastingImpl(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
-            : base(ReferenceEquals(from, to) ? "numeric_copy_or_byteswap" : "numeric_cast", NPY_CASTING.NPY_UNSAFE_CASTING /* see Casting */,
+            : base(from.IsEquivalentNumeric(to) ? "numeric_copy_or_byteswap" : "numeric_cast", NPY_CASTING.NPY_UNSAFE_CASTING /* see Casting */,
                 NDArrayMethodFlags.SUPPORTS_UNALIGNED | NDArrayMethodFlags.NO_FLOATINGPOINT_ERRORS, from, to)
         {
             _from = from;
@@ -45,9 +55,14 @@ namespace NumSharp
         /// </summary>
         public override NPY_CASTING casting => _casting ??= ComputeCasting(_from, _to);
 
+        /// <summary>NumPy's <c>add_numeric_cast</c> safety level for one class pair (see <see cref="casting"/>).</summary>
+        /// <param name="from">The source class.</param>
+        /// <param name="to">The destination class.</param>
+        /// <returns>The cast's minimal safety.</returns>
         private static NPY_CASTING ComputeCasting(LegacyBuiltinDTypeMeta from, LegacyBuiltinDTypeMeta to)
         {
-            if (ReferenceEquals(from, to))
+            // "Find the correct casting level, and special case no-cast": one kind and one size is a copy or byte swap.
+            if (from.IsEquivalentNumeric(to))
                 return NPY_CASTING.NPY_EQUIV_CASTING;
             if (np._nptypemap_arr_arr.TryGetValue((from.TypeCode, to.TypeCode), out var promoted) && promoted == to.TypeCode)
                 return NPY_CASTING.NPY_SAFE_CASTING;
@@ -57,9 +72,14 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
+        /// <remarks>
+        ///     An equivalent pair resolves as NumPy's <c>legacy_same_dtype_resolve_descriptors</c> does, which NumPy installs
+        ///     for every <c>numeric_copy_or_byteswap</c> cast: no cast (a view) when both byte orders are native, an
+        ///     <c>equiv</c> byte swap otherwise — so <c>np.can_cast('g', 'd', 'no')</c> is True.
+        /// </remarks>
         public override NPY_CASTING resolve_descriptors(DType[] givenDescrs, DType[] loopDescrs, out long viewOffset)
         {
-            if (IsWithinDType)
+            if (IsWithinDType || _from.IsEquivalentNumeric(_to))
                 return LegacySameDTypeResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
             return SimpleCastResolveDescriptors(this, givenDescrs, loopDescrs, out viewOffset);
         }

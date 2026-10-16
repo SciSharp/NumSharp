@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace NumSharp
 {
@@ -132,9 +133,9 @@ namespace NumSharp
         ///     in that order. Use it the way NumPy code does: <c>np.typecodes["AllFloat"].Contains(a.dtype.@char)</c>.
         /// </summary>
         /// <remarks>
-        ///     The strings are NumPy's and describe NumPy's codes, including the ones NumSharp has no dtype for (<c>g</c>,
-        ///     <c>F</c>, <c>G</c>, <c>S</c>, <c>U</c>, <c>V</c>, <c>O</c>). Read-only, where NumPy's is a plain dict: the
-        ///     table is shared process-wide, and a write would change every reader's answer.
+        ///     The strings are NumPy's and describe NumPy's codes, including the ones NumSharp has no dtype for (<c>F</c>,
+        ///     <c>V</c>, <c>O</c>). Read-only, where NumPy's is a plain dict: the table is shared process-wide, and a write
+        ///     would change every reader's answer.
         /// </remarks>
         public static IReadOnlyDictionary<string, string> typecodes => ScalarTypeTables.TypeCodes;
 
@@ -146,9 +147,12 @@ namespace NumSharp
         /// </summary>
         /// <remarks>
         ///     <para>
-        ///     Keys in NumPy 2.4.2's order (win-amd64), values resolved on this platform: <c>"long"</c> / <c>"ulong"</c>
-        ///     follow the C <c>long</c> (32-bit on Windows, 64-bit on LP64 Linux and macOS), <c>"intp"</c>, <c>"int_"</c>,
-        ///     <c>"int"</c>, <c>"uintp"</c> and <c>"uint"</c> the pointer size.
+        ///     Keys in NumPy 2.4.2's order for the host's C <c>long</c> model (the C integer names: Windows lists
+        ///     <c>intc, uintc, int32, long, …</c>, Linux <c>int32, intc, uint32, uintc, …</c>), values resolved on this
+        ///     platform: <c>"long"</c> / <c>"ulong"</c> follow the C <c>long</c> (32-bit on Windows, 64-bit on LP64 Linux and
+        ///     macOS), <c>"intp"</c>, <c>"int_"</c>, <c>"int"</c>, <c>"uintp"</c> and <c>"uint"</c> the pointer size. Linux
+        ///     NumPy's <c>"float128"</c> / <c>"complex256"</c> (its 16-byte long double) are absent: NumSharp's long double
+        ///     is 8 bytes, as on Windows.
         ///     </para>
         ///     <para>
         ///     The string names map to the UNSIZED string descriptors, the objects <see cref="bytes_"/> and
@@ -158,15 +162,39 @@ namespace NumSharp
         ///     <para>
         ///     Differences from NumPy, all from NumSharp's dtype set: the names of the classes NumSharp has no dtype for are
         ///     absent (<c>complex64</c>, <c>csingle</c>, <c>void</c>, <c>object_</c>, <c>object</c>) — the values here are
-        ///     descriptors, and those classes (<see cref="complex64"/>, <see cref="object_"/>, <see cref="@void"/>) have none;
-        ///     the names of classes NumSharp collapses map to the class they collapse onto (<c>"intc"</c> is
-        ///     <see cref="int32"/>, <c>"longdouble"</c> is <see cref="float64"/>, <c>"clongdouble"</c> is
-        ///     <see cref="complex128"/>, where Windows NumPy keeps distinct classes). <c>"datetime64"</c> /
-        ///     <c>"timedelta64"</c> map to the generic-unit descriptors (<c>dtype('&lt;M8')</c>, the object
-        ///     <c>np.dtype("M")</c> returns). Read-only, for the reason <see cref="typecodes"/> is.
+        ///     descriptors, and those classes (<see cref="complex64"/>, <see cref="object_"/>, <see cref="@void"/>) have none.
+        ///     The C-type names map to their own classes, as in NumPy (<c>"longdouble"</c> is <see cref="longdouble"/>,
+        ///     equal to but not the class of <see cref="float64"/>; <c>"intc"</c> is <see cref="intc"/>, its own class on
+        ///     Windows). <c>"datetime64"</c> / <c>"timedelta64"</c> map to the generic-unit descriptors
+        ///     (<c>dtype('&lt;M8')</c>, the object <c>np.dtype("M")</c> returns). Read-only, for the reason
+        ///     <see cref="typecodes"/> is.
         ///     </para>
         /// </remarks>
         public static IReadOnlyDictionary<string, DType> sctypeDict => ScalarTypeTables.SctypeDict;
+
+        /// <summary>
+        ///     <c>numpy.ScalarType</c>: every scalar class NumPy knows, as one read-only list — Python's <c>int</c>,
+        ///     <c>float</c>, <c>complex</c>, <c>bool</c>, <c>bytes</c>, <c>str</c> and <c>memoryview</c> first, then each class
+        ///     of NumPy's <c>sctypeDict</c> once, sorted by kind and item size the way NumPy sorts them (31 classes on Windows:
+        ///     <c>[int, float, complex, bool, bytes, str, memoryview, numpy.bool, numpy.complex64, numpy.complex128,
+        ///     numpy.clongdouble, numpy.float16, …, numpy.uint64, numpy.void]</c>).
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's construction, reproduced: <c>ScalarType = [int, float, complex, bool, bytes, str, memoryview] +
+        ///     sorted(dict.fromkeys(sctypeDict.values()), key=lambda t: (dtype(t).kind.lower(), dtype(t).itemsize))</c> — a
+        ///     STABLE sort, so classes of one kind and size keep their <c>sctypeDict</c> order (<c>intc</c> before
+        ///     <c>int32</c> on Windows). The classes NumSharp has no dtype for (<see cref="complex64"/>, <see cref="object_"/>,
+        ///     <see cref="@void"/>) are in it, as in NumPy; NumSharp's own decimal and char classes are not (they are no NumPy
+        ///     name). The C-integer classes follow the host's C <c>long</c>: Windows lists <c>intc</c> and <c>int32</c>,
+        ///     Linux <c>int64</c> and <c>longlong</c>.
+        ///     </para>
+        ///     <para>
+        ///     A port of <c>isinstance(x, np.ScalarType)</c> is <c>np.ScalarType.Any(t =&gt; t.__instancecheck__(x))</c>, and of
+        ///     <c>type(x) in np.ScalarType</c> a membership test of the class (<see cref="NDScalarType"/>s compare by identity).
+        ///     </para>
+        /// </remarks>
+        public static IReadOnlyList<NDScalarType> ScalarType => ScalarTypeTables.ScalarTypes;
 
         /// <summary>
         ///     The tables behind <see cref="typecodes"/> and <see cref="sctypeDict"/>, built when one of them is first read.
@@ -190,17 +218,123 @@ namespace NumSharp
                     ["All"] = "?bhilqnpBHILQNPefdgFDGSUVOMm",
                 });
 
+            /// <summary>
+            ///     NumPy 2.4.2's <c>sctypeDict</c> keys in NumPy's order on this host's C <c>long</c> model, the dtype-less
+            ///     classes' names included — the order <see cref="SctypeDict"/> enumerates in and the order
+            ///     <c>dict.fromkeys(sctypeDict.values())</c> visits the classes in, which decides <c>ScalarType</c>'s order
+            ///     among classes of one kind and size. Declared before both tables, which read it: static fields initialise
+            ///     in declaration order.
+            /// </summary>
+            private static readonly string[] NumPySctypeDictKeys = BuildNumPySctypeDictKeys();
+
             /// <summary>NumPy's <c>sctypeDict</c> over NumSharp's descriptors (see <see cref="sctypeDict"/> for the differences).</summary>
             internal static readonly IReadOnlyDictionary<string, DType> SctypeDict = BuildSctypeDict();
 
             /// <summary>
-            ///     Builds <see cref="SctypeDict"/> in NumPy's key order (<c>_type_aliases.py</c>: the <c>typeinfo</c> names,
-            ///     then the <c>_aliases</c>, then the <c>_extra_aliases</c>), skipping the names of classes NumSharp lacks.
-            ///     A <see cref="Dictionary{TKey,TValue}"/> filled without removals enumerates in insertion order, which is
-            ///     what keeps NumPy's order.
+            ///     Builds <see cref="NumPySctypeDictKeys"/>. NumPy lists the names of its classes in type-number order, each
+            ///     class's sized name first when it is the canonical class of its width, so the ten C integer names come in
+            ///     the host model's order (probed on Windows and Linux NumPy 2.4.2): Windows' C int class is only
+            ///     <c>intc</c> (int32 is the C long, <c>int32</c> then <c>long</c>) and its C long long class is int64
+            ///     (<c>int64</c> then <c>longlong</c>); Linux's C int class IS int32 (<c>int32</c> then <c>intc</c>), its C long
+            ///     class int64 (<c>int64</c> then <c>long</c>), and its C long long class only <c>longlong</c>.
+            /// </summary>
+            /// <returns>The keys, in order.</returns>
+            /// <remarks>
+            ///     Linux NumPy also ends with <c>float128</c> and <c>complex256</c>, the sized names of its 16- and 32-byte
+            ///     long double pair. NumPy adds them only when <c>float{bits}</c> of the long double is a new name; NumSharp's
+            ///     long double is 8 bytes on every host (<c>float64</c>, as on Windows), so the rule adds nothing here.
+            /// </remarks>
+            private static string[] BuildNumPySctypeDictKeys()
+            {
+                string[] cIntegers = DTypeRegistry.CLongIs32Bit
+                    ? new[] { "intc", "uintc", "int32", "long", "uint32", "ulong", "int64", "longlong", "uint64", "ulonglong" }
+                    : new[] { "int32", "intc", "uint32", "uintc", "int64", "long", "uint64", "ulong", "longlong", "ulonglong" };
+                var keys = new List<string>
+                {
+                    "bool", "float16", "float32", "float64", "longdouble", "complex64", "complex128", "clongdouble", "bytes_",
+                    "str_", "void", "object_", "datetime64", "timedelta64", "int8", "byte", "uint8", "ubyte", "int16", "short",
+                    "uint16", "ushort",
+                };
+                keys.AddRange(cIntegers);
+                keys.AddRange(new[]
+                {
+                    "intp", "uintp", "double", "cdouble", "single", "csingle", "half", "bool_", "int_", "uint", "float",
+                    "complex", "object", "bytes", "a", "int", "str", "unicode",
+                });
+                return keys.ToArray();
+            }
+
+            /// <summary>
+            ///     NumPy's <c>ScalarType</c> (see <see cref="ScalarType"/>). Declared after <see cref="SctypeDict"/> and
+            ///     <see cref="NumPySctypeDictKeys"/>, which it reads: static fields initialise in declaration order.
+            /// </summary>
+            internal static readonly IReadOnlyList<NDScalarType> ScalarTypes = BuildScalarType();
+
+            /// <summary>
+            ///     Builds <see cref="ScalarTypes"/>: Python's seven classes, then the classes of
+            ///     <see cref="NumPySctypeDictKeys"/> once each (first occurrence), stably sorted by (lower-cased kind, item
+            ///     size) — NumPy's <c>_scalar_type_key</c>.
+            /// </summary>
+            /// <returns>The read-only list.</returns>
+            private static IReadOnlyList<NDScalarType> BuildScalarType()
+            {
+                var seen = new HashSet<NDScalarType>(ReferenceEqualityComparer.Instance);
+                var classes = new List<NDScalarType>();
+                foreach (var key in NumPySctypeDictKeys)
+                {
+                    // The dtype-less classes have no sctypeDict entry in NumSharp (its values are descriptors); every other
+                    // name's class is the class of its descriptor.
+                    NDScalarType cls = key switch
+                    {
+                        "complex64" or "csingle" => NDScalarType.Complex64,
+                        "void" => NDScalarType.Void,
+                        "object_" or "object" => NDScalarType.Object_,
+                        _ => SctypeDict[key],
+                    };
+                    if (seen.Add(cls))
+                        classes.Add(cls);
+                }
+
+                // LINQ's OrderBy is a stable sort, as Python's sorted() is.
+                var sorted = classes.OrderBy(c => char.ToLowerInvariant(c.NumPyKind)).ThenBy(c => c.NumPyItemSize);
+                var result = new List<NDScalarType>
+                {
+                    NDScalarType.PyInt, NDScalarType.PyFloat, NDScalarType.PyComplex, NDScalarType.PyBool,
+                    NDScalarType.PyBytes, NDScalarType.PyStr, NDScalarType.PyMemoryView,
+                };
+                result.AddRange(sorted);
+                return result.AsReadOnly();
+            }
+
+            /// <summary>
+            ///     Builds <see cref="SctypeDict"/> in NumPy's key order for this host's model (<see cref="NumPySctypeDictKeys"/>,
+            ///     after <c>_type_aliases.py</c>: the <c>typeinfo</c> names, then the <c>_aliases</c>, then the
+            ///     <c>_extra_aliases</c>), skipping the names of classes NumSharp lacks. A
+            ///     <see cref="Dictionary{TKey,TValue}"/> filled without removals enumerates in insertion order, which is what
+            ///     keeps NumPy's order.
             /// </summary>
             /// <returns>The read-only table.</returns>
             private static IReadOnlyDictionary<string, DType> BuildSctypeDict()
+            {
+                var byName = SctypeDictEntries();
+                var ordered = new Dictionary<string, DType>(byName.Count);
+                foreach (var key in NumPySctypeDictKeys)
+                {
+                    // The dtype-less classes' names (complex64, csingle, void, object_, object) have no entry.
+                    if (byName.TryGetValue(key, out var descr))
+                        ordered.Add(key, descr);
+                }
+                // A name with an entry but missing from the key list would vanish silently: the two lists must agree.
+                System.Diagnostics.Debug.Assert(ordered.Count == byName.Count, "every sctypeDict entry must be in NumPySctypeDictKeys");
+                return new ReadOnlyDictionary<string, DType>(ordered);
+            }
+
+            /// <summary>
+            ///     Every <c>sctypeDict</c> name NumSharp has a descriptor for, with that descriptor (in no particular order:
+            ///     <see cref="BuildSctypeDict"/> orders them).
+            /// </summary>
+            /// <returns>The name → descriptor map.</returns>
+            private static Dictionary<string, DType> SctypeDictEntries()
             {
                 DType cLong = DTypeRegistry.CLongIs32Bit ? DType.Int32 : DType.Int64;
                 DType cULong = DTypeRegistry.CLongIs32Bit ? DType.UInt32 : DType.UInt64;
@@ -212,15 +346,15 @@ namespace NumSharp
                 // singletons, the same objects np.bytes_ / np.str_ are.
                 DType bytes = DTypeRegistry.Bytes.singleton;
                 DType str = DTypeRegistry.Str.singleton;
-                return new ReadOnlyDictionary<string, DType>(new Dictionary<string, DType>
+                return new Dictionary<string, DType>
                 {
                     ["bool"] = DType.Boolean,
                     ["float16"] = DType.Half,
                     ["float32"] = DType.Single,
                     ["float64"] = DType.Double,
-                    ["longdouble"] = DType.Double,
+                    ["longdouble"] = DTypeRegistry.LongDouble.singleton,
                     ["complex128"] = DType.Complex,
-                    ["clongdouble"] = DType.Complex,
+                    ["clongdouble"] = DTypeRegistry.CLongDouble.singleton,
                     ["bytes_"] = bytes,
                     ["str_"] = str,
                     ["datetime64"] = DTypeRegistry.DateTime64.singleton,
@@ -233,16 +367,16 @@ namespace NumSharp
                     ["short"] = DType.Int16,
                     ["uint16"] = DType.UInt16,
                     ["ushort"] = DType.UInt16,
-                    ["intc"] = DType.Int32,
-                    ["uintc"] = DType.UInt32,
+                    ["intc"] = DTypeRegistry.CInt.singleton,
+                    ["uintc"] = DTypeRegistry.CUInt.singleton,
                     ["int32"] = DType.Int32,
                     ["long"] = cLong,
                     ["uint32"] = DType.UInt32,
                     ["ulong"] = cULong,
                     ["int64"] = DType.Int64,
-                    ["longlong"] = DType.Int64,
+                    ["longlong"] = DTypeRegistry.CLongLong.singleton,
                     ["uint64"] = DType.UInt64,
-                    ["ulonglong"] = DType.UInt64,
+                    ["ulonglong"] = DTypeRegistry.CULongLong.singleton,
                     ["intp"] = intp,
                     ["uintp"] = uintp,
                     ["double"] = DType.Double,
@@ -259,7 +393,7 @@ namespace NumSharp
                     ["int"] = intp,
                     ["str"] = str,
                     ["unicode"] = str,
-                });
+                };
             }
         }
     }

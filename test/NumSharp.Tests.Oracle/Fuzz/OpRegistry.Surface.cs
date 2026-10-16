@@ -59,6 +59,7 @@ namespace NumSharp.Tests.Fuzz
                 case "True_": return BoolScalarFacet(np.True_, p);
                 case "False_": return BoolScalarFacet(np.False_, p);
                 case "longdouble": return LongDoubleFacet(p);
+                case "ScalarType": return ScalarTypeListFacet(p);
                 case "shares_memory":
                 case "may_share_memory":
                     return MemoryPredicate(op, p, ops);

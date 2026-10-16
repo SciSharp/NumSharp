@@ -60,12 +60,29 @@ namespace NumSharp.Tests.DTypes
             np.dtypes.UByteDType.Should().BeSameAs(np.dtypes.UInt8DType);
             np.dtypes.ShortDType.Should().BeSameAs(np.dtypes.Int16DType);
             np.dtypes.UShortDType.Should().BeSameAs(np.dtypes.UInt16DType);
-            np.dtypes.IntDType.Should().BeSameAs(np.dtypes.Int32DType);
-            np.dtypes.UIntDType.Should().BeSameAs(np.dtypes.UInt32DType);
-            np.dtypes.LongLongDType.Should().BeSameAs(np.dtypes.Int64DType);
-            np.dtypes.ULongLongDType.Should().BeSameAs(np.dtypes.UInt64DType);
-            np.dtypes.LongDoubleDType.Should().BeSameAs(np.dtypes.Float64DType, "no extended precision, as on NumPy's win-amd64 build");
-            np.dtypes.CLongDoubleDType.Should().BeSameAs(np.dtypes.Complex128DType);
+            // The C type of each width that is NOT the canonical class's is a class of its own, as in NumPy: on LLP64 the C
+            // int (int32 is the C long there), on LP64 the C long long (int64 is the C long there).
+            if (DTypeRegistry.CLongIs32Bit)
+            {
+                np.dtypes.IntDType.Should().NotBeSameAs(np.dtypes.Int32DType);
+                np.dtypes.UIntDType.Should().NotBeSameAs(np.dtypes.UInt32DType);
+                np.dtypes.LongLongDType.Should().BeSameAs(np.dtypes.Int64DType);
+                np.dtypes.ULongLongDType.Should().BeSameAs(np.dtypes.UInt64DType);
+                np.dtypes.Int64DType.Aliases.Should().Contain("LongLongDType");
+            }
+            else
+            {
+                np.dtypes.IntDType.Should().BeSameAs(np.dtypes.Int32DType);
+                np.dtypes.UIntDType.Should().BeSameAs(np.dtypes.UInt32DType);
+                np.dtypes.LongLongDType.Should().NotBeSameAs(np.dtypes.Int64DType);
+                np.dtypes.ULongLongDType.Should().NotBeSameAs(np.dtypes.UInt64DType);
+                np.dtypes.Int32DType.Aliases.Should().Contain("IntDType");
+            }
+            // long double is its own class on every platform (8 bytes in NumSharp, as on NumPy's win-amd64 build).
+            np.dtypes.LongDoubleDType.Should().NotBeSameAs(np.dtypes.Float64DType);
+            np.dtypes.CLongDoubleDType.Should().NotBeSameAs(np.dtypes.Complex128DType);
+            np.dtypes.LongDoubleDType.type_num.Should().Be(13);
+            np.dtypes.CLongDoubleDType.type_num.Should().Be(16);
 
             // C long: 32-bit on Windows and 32-bit hosts, 64-bit on LP64 Unix — the same rule np.dtype('l') follows.
             np.dtypes.LongDType.Should().BeSameAs(np.dtype("l").Meta);
@@ -73,7 +90,7 @@ namespace NumSharp.Tests.DTypes
             DTypeRegistry.FromName("LongDType").Should().BeSameAs(np.dtypes.LongDType);
             DTypeRegistry.FromName("ByteDType").Should().BeSameAs(np.dtypes.Int8DType);
             np.dtypes.Int8DType.Aliases.Should().Equal("ByteDType");
-            np.dtypes.Int32DType.Aliases.Should().Contain("IntDType");
+            np.dtypes.Float64DType.Aliases.Should().BeEmpty();
         }
 
         [TestMethod]

@@ -97,21 +97,30 @@ namespace NumSharp
         /// to the arguments. Every array — 0-d included — is a full (strong) participant, as in NumPy 2.x.
         /// </summary>
         /// <param name="arrays">One or more NDArray objects.</param>
-        /// <returns>The result type from combining the array dtypes.</returns>
+        /// <returns>
+        /// The result descriptor — its CLASS included: an array of a C-type class contributes that class
+        /// (<c>np.result_type(np.zeros(3, np.longdouble))</c> is <c>longdouble</c>), and NumPy's promotion can name one
+        /// for two canonical classes (Windows' <c>np.result_type(int16_array, uint16_array)</c> is the C int class
+        /// <c>'i'</c>, equal to int32).
+        /// </returns>
+        /// <exception cref="ArgumentException">No array.</exception>
+        /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
         public static DType result_type(params NDArray[] arrays)
         {
             if (arrays == null || arrays.Length == 0)
                 throw new ArgumentException("At least one array must be provided", nameof(arrays));
 
-            // A fixed-width string array promotes by DESCRIPTOR (np.result_type(U3, S5) is <U5): its width is not in
-            // the lane, so the type-code round trip below would lose it.
-            if (arrays.Any(a => a?.typecode == NPTypeCode.String))
-                return arrays.Length == 1 ? arrays[0].dtype : DTypePromotion.ResultType(arrays.Cast<object>().ToArray());
-
+            // One array: NumPy returns its descriptor made canonical (a native one is itself) — the class is kept, a
+            // fixed-width string keeps its width.
             if (arrays.Length == 1)
-                return arrays[0].GetTypeCode;
+            {
+                var only = arrays[0].dtype;
+                return only.Meta.ensure_canonical(only);
+            }
 
-            return DTypePromotion.ResultType(arrays.Cast<object>().ToArray()).GetTypeCode();
+            // Promote by DESCRIPTOR: a string's width (np.result_type(U3, S5) is <U5) and a lane-sharing C-type class
+            // (np.longdouble) are not in the storage lane, so a type-code round trip would lose them.
+            return DTypePromotion.ResultType(arrays.Cast<object>().ToArray());
         }
 
         /// <summary>
@@ -146,17 +155,28 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr1">First array.</param>
         /// <param name="arr2">Second array.</param>
-        /// <returns>The result type from combining the array dtypes.</returns>
+        /// <returns>The result descriptor, its class included (see <see cref="result_type(NDArray[])"/>).</returns>
+        /// <exception cref="ArgumentNullException">An array is null.</exception>
+        /// <exception cref="DTypePromotionError">No common dtype exists.</exception>
         public static DType result_type(NDArray arr1, NDArray arr2)
         {
             if (arr1 is null)
                 throw new ArgumentNullException(nameof(arr1));
             if (arr2 is null)
                 throw new ArgumentNullException(nameof(arr2));
-            // Strings promote by descriptor (the width); see result_type(params NDArray[]).
-            if (arr1.typecode == NPTypeCode.String || arr2.typecode == NPTypeCode.String)
-                return DTypePromotion.ResultType(arr1, arr2);
-            return result_type(arr1.GetTypeCode, arr2.GetTypeCode);
+            var m1 = arr1.dtype.Meta;
+            var m2 = arr2.dtype.Meta;
+            // Two arrays of non-parametric classes: NumPy's result is the common class's default descriptor (its
+            // singleton), which is what the sequence promotion below computes for two operands — without its
+            // allocations, for every numeric pair. (Two arrays of NumSharp classes always have a common class.)
+            if (!m1._parametric && !m2._parametric)
+            {
+                var common = ReferenceEquals(m1, m2) ? m1 : DTypePromotion.CommonDType(m1, m2);
+                if (!common._parametric)
+                    return common.default_descr();
+            }
+            // Promote by descriptor: a string's width and a lane-sharing C-type class are not in the storage lane.
+            return DTypePromotion.ResultType(arr1, arr2);
         }
     }
 }

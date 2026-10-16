@@ -69,7 +69,9 @@ namespace NumSharp
             if (!IsIntegerType(typeCode))
                 throw new ArgumentException($"Invalid integer data type '{typeCode.AsNumpyDtypeName()}'", nameof(dtype));
 
-            this.dtype = typeCode;
+            // The class, not the lane: np.iinfo(np.intc).dtype is the intc descriptor ('i') on Windows, although its limits
+            // are int32's lane's (a lane-sharing class has no storage code of its own to rebuild it from).
+            this.dtype = dtype.Meta is LegacyBuiltinDTypeMeta builtin ? builtin.singleton : typeCode;
             (bits, min, max, maxUnsigned, kind) = GetTypeInfo(typeCode);
         }
 

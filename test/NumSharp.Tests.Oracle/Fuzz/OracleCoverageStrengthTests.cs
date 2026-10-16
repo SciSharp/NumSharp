@@ -188,7 +188,8 @@ namespace NumSharp.Tests.Fuzz
             // axis is the facet or the key, not an operand dtype.
             ["True_"] = "NumPy's bool scalar constant: bool by definition; the cases vary the facet (value, ~, int(), asarray)",
             ["False_"] = "NumPy's bool scalar constant: bool by definition; the cases vary the facet (value, ~, int(), asarray)",
-            ["longdouble"] = "one NumPy class (float64 on win-amd64): the cases vary the facet (dtype, itemsize, family, zeros)",
+            ["longdouble"] = "one NumPy class (float64 on win-amd64): the cases vary the facet (dtype, itemsize, family, zeros, issubdtype(float64, longdouble))",
+            ["ScalarType"] = "one NumPy list of scalar classes: the cases vary the facet (its length, which classes it holds), no operand dtype exists",
             ["sctypeDict"] = "name -> scalar-class table: the axis is the KEY param sweep (each key's dtype is the result)",
             ["typecodes"] = "type-code string table: the axis is the KEY param sweep, text results",
         };

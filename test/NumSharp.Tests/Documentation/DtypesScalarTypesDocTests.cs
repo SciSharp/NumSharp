@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Documentation
             NDScalarType t = a.dtype;
             t.ToString().Should().Be("<class 'numpy.float64'>");
             t.__mro__.Select(c => c.__name__).Should().Equal("float64", "floating", "inexact", "number", "generic", "float", "object");
-            np.floating.__subclasses__().Select(c => c.__name__).Should().Equal("float16", "float32", "float64", "decimal");
+            np.floating.__subclasses__().Select(c => c.__name__).Should().Equal("float16", "float32", "float64", "longdouble", "decimal");
             ReferenceEquals((DType)t, np.float64).Should().BeTrue();
         }
 
@@ -71,7 +71,9 @@ namespace NumSharp.Tests.Documentation
             ReferenceEquals(np.sctypeDict["float64"], np.float64).Should().BeTrue();
             np.True_.Should().BeTrue();
             np.False_.Should().BeFalse();
-            ReferenceEquals(np.longdouble, np.float64).Should().BeTrue();
+            (np.longdouble == np.float64).Should().BeTrue();
+            np.issubdtype(np.float64, np.longdouble).Should().BeFalse();
+            np.ScalarType.Count.Should().Be(31);
 
             np.typing.NDArray.MakeGenericType(typeof(double)).Should().Be(typeof(NumSharp.Generic.NDArray<double>));
             np.typing.ArrayLike.Should().Be(typeof(NDArray));
@@ -83,6 +85,32 @@ namespace NumSharp.Tests.Documentation
             using var scaled = scale(ints, np.float64);
             scaled.dtype.Should().Be(np.float64);
             scaled.ToArray<double>().Should().Equal(2.0, 4.0, 6.0);
+        }
+
+        /// <summary>
+        ///     The page's "C-type classes" snippet: the long double is a class of its own that equals float64, casts to it as
+        ///     a no-op, wins its promotion, and stays on an array created with it; a computing routine returns float64.
+        /// </summary>
+        [TestMethod]
+        public void CTypeClasses_AsDocumented()
+        {
+            var g = np.dtype("g");
+            g.ToString(true).Should().Be("dtype('float64')");
+            g.@char.Should().Be('g');
+            ((NDScalarType)g).__name__.Should().Be("longdouble");
+            (np.longdouble == np.float64).Should().BeTrue();
+            np.longdouble.GetHashCode().Should().Be(np.float64.GetHashCode());
+            np.issubdtype(np.float64, np.longdouble).Should().BeFalse();
+            np.can_cast(np.longdouble, np.float64, "no").Should().BeTrue();
+            np.promote_types(np.float64, np.longdouble).Should().BeSameAs(np.longdouble);
+            using var x = np.zeros(3, np.longdouble);
+            x.dtype.@char.Should().Be('g');
+
+            // The two documented differences: computing routines return the storage format's class.
+            using var sum = x + x;
+            sum.dtype.@char.Should().Be('d');
+            (sum.dtype == np.longdouble).Should().BeTrue();
+            np.longdouble.itemsize.Should().Be(8);
         }
     }
 }

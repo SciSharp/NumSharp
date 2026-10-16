@@ -102,8 +102,13 @@ namespace NumSharp
             // NumPy parity: np.finfo(np.complex128).dtype == np.float64.
             // The finfo represents the precision of the underlying real component, so
             // we report float64's machine limits with dtype set to the real type.
-            // System.Numerics.Complex is 2 × float64 → underlying dtype is Double.
-            this.dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
+            // System.Numerics.Complex is 2 × float64 → underlying dtype is Double. NumPy's _convert_to_float maps each
+            // complex CLASS to its real class, and a real class to itself, so the long-double classes stay long double:
+            // np.finfo(np.longdouble).dtype and np.finfo(np.clongdouble).dtype are both 'g' (the float64 lane).
+            if (ReferenceEquals(dtype.Meta, DTypeRegistry.LongDouble) || ReferenceEquals(dtype.Meta, DTypeRegistry.CLongDouble))
+                this.dtype = DTypeRegistry.LongDouble.singleton;
+            else
+                this.dtype = typeCode == NPTypeCode.Complex ? NPTypeCode.Double : typeCode;
 
             switch (typeCode)
             {

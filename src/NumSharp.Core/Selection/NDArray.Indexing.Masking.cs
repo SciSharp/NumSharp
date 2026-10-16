@@ -45,7 +45,7 @@ namespace NumSharp
                         return TryStringMaskGather(mask, out var masked)
                             ? masked
                             : StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
-                    return this.TensorEngine.BooleanMask(this, mask);
+                    return KeepLaneSharingClass(this.TensorEngine.BooleanMask(this, mask));
                 }
 
                 // The mask does not match a leading prefix of the array shape: NumPy's prepare_index error.

@@ -163,16 +163,25 @@ namespace NumSharp
                 return ConcatenateStrings(workArrays, effectiveAxis, ndim, firstShape, @out, dtype, casting);
             }
 
-            // Resolve result dtype: dtype= wins, then out=, then NEP50 promotion.
+            // Resolve result dtype: dtype= wins, then out=, then NEP50 promotion. The descriptor is kept beside the lane: a
+            // lane-sharing C-type class (np.longdouble, Windows' np.intc) is not a storage code, and NumPy's
+            // PyArray_ResultType names it for a fresh output (concatenate of longdouble arrays is longdouble).
             NPTypeCode resultType;
+            DType resultDescr = null;
             if (dtype is not null)
+            {
                 resultType = dtype.GetTypeCode();
+                resultDescr = dtype;
+            }
             else if (@out is not null)
+            {
                 resultType = @out.GetTypeCode;
-            else if (workArrays.Length == 1)
-                resultType = workArrays[0].GetTypeCode;
+            }
             else
-                resultType = np.result_type(workArrays);
+            {
+                resultDescr = np.result_type(workArrays);
+                resultType = resultDescr.GetTypeCode();
+            }
 
             // Casting rule check: each input must cast to resultType under
             // the requested casting mode. NumPy raises TypeError; we raise
@@ -222,6 +231,8 @@ namespace NumSharp
                 var retShape = Shape.ConcatOutputShape(firstShape, inputShapes);
                 // fillZeros: false — every byte is overwritten below.
                 dst = new NDArray(resultType, retShape, fillZeros: false);
+                // The fresh output takes the result's lane-sharing C-type class, if it is one (a no-op otherwise).
+                dst.Storage.AdoptLaneSharingDescr(resultDescr);
             }
 
             // Layered fast paths:

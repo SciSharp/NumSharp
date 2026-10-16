@@ -686,10 +686,13 @@ namespace NumSharp.Backends
             if (InternalArray == null)
                 return new UnmanagedStorage(_typecode) { Engine = Engine };
 
-            if (CanCloneRawLayout())
-                return new UnmanagedStorage(InternalArray.Clone(), new Shape(_shape)) { Engine = Engine };
-
-            return new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true)) { Engine = Engine };
+            // The clone is a new storage built from the data's lane, so it would report the lane's own class: a
+            // lane-sharing descriptor (longdouble, Windows' intc) is carried over explicitly, as NumPy's copy keeps the dtype.
+            var clone = CanCloneRawLayout()
+                ? new UnmanagedStorage(InternalArray.Clone(), new Shape(_shape)) { Engine = Engine }
+                : new UnmanagedStorage(CloneData(), _shape.Clone(true, true, true)) { Engine = Engine };
+            clone.AdoptLaneSharingDescr(_descr);
+            return clone;
         }
 
         private bool CanCloneRawLayout()

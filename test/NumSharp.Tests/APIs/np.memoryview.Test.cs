@@ -21,6 +21,16 @@ namespace NumSharp.Tests.APIs
         private static string I32 => OperatingSystem.IsWindows() ? "l" : "i";
         private static string U32 => OperatingSystem.IsWindows() ? "L" : "I";
 
+        /// <summary>
+        ///     NumPy's int64 struct code on this host: NPY_LONGLONG's <c>'q'</c> on Windows, NPY_LONG's <c>'l'</c> on LP64
+        ///     (probed on Linux NumPy 2.4.2: <c>memoryview(np.zeros(3, np.int64)).format</c> is <c>'l'</c>; the
+        ///     standard-size <c>'q'</c> is only for a swapped or unaligned array, which NumSharp never has).
+        /// </summary>
+        private static string I64 => OperatingSystem.IsWindows() ? "q" : "l";
+
+        /// <summary>NumPy's uint64 struct code on this host: <c>'Q'</c> on Windows, <c>'L'</c> on LP64 (see <see cref="I64"/>).</summary>
+        private static string U64 => OperatingSystem.IsWindows() ? "Q" : "L";
+
         [TestMethod]
         public void Metadata_1D_Int32()
         {
@@ -168,7 +178,7 @@ namespace NumSharp.Tests.APIs
                 (NPTypeCode.Boolean, "?"), (NPTypeCode.SByte, "b"), (NPTypeCode.Byte, "B"),
                 (NPTypeCode.Int16, "h"), (NPTypeCode.UInt16, "H"),
                 (NPTypeCode.Int32, I32), (NPTypeCode.UInt32, U32),
-                (NPTypeCode.Int64, "q"), (NPTypeCode.UInt64, "Q"),
+                (NPTypeCode.Int64, I64), (NPTypeCode.UInt64, U64),
                 (NPTypeCode.Half, "e"), (NPTypeCode.Single, "f"), (NPTypeCode.Double, "d"),
                 (NPTypeCode.Complex, "Zd"),
                 (NPTypeCode.Char, "u"),      // NumSharp-only (no NumPy dtype)
@@ -176,6 +186,28 @@ namespace NumSharp.Tests.APIs
             };
             foreach (var (t, f) in cases)
                 Assert.AreEqual(f, np.zeros(new Shape(2), t).data.format, $"format for {t}");
+        }
+
+        /// <summary>
+        ///     NumPy's C-type classes keep their own buffer codes (probed on Windows and Linux NumPy 2.4.2): np.intc
+        ///     <c>'i'</c>, np.uintc <c>'I'</c>, np.longlong <c>'q'</c>, np.ulonglong <c>'Q'</c>, np.longdouble <c>'g'</c>,
+        ///     np.clongdouble <c>'Zg'</c> — whichever of them is a class of its own on the host or the canonical class.
+        /// </summary>
+        [TestMethod]
+        public void Format_Codes_CTypeClasses()
+        {
+            (DType t, string f)[] cases =
+            {
+                (np.intc, "i"), (np.uintc, "I"), (np.longlong, "q"), (np.ulonglong, "Q"),
+                (np.longdouble, "g"), (np.clongdouble, "Zg"),
+            };
+            foreach (var (t, f) in cases)
+            {
+                using var a = np.zeros(new Shape(2), t);
+                Assert.AreEqual(f, a.data.format, $"format for {t.ToString(true)} ('{t.@char}')");
+                using var view = a["1:"];
+                Assert.AreEqual(f, view.data.format, $"a view of {t.ToString(true)} ('{t.@char}') keeps the class");
+            }
         }
 
         [TestMethod]

@@ -904,6 +904,11 @@ namespace NumSharp
             var typeCode = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
             ValidateAstypeCasting(typeCode, casting);
             var casted = TensorEngine.Cast(this, dtype.type, copy);
+            // The cast works by storage lane, so a NEW result reports the lane's own class: a lane-sharing target
+            // (astype(np.longdouble), Windows' astype(np.intc)) labels it with the requested class, as NumPy's does. When
+            // copy=False hands back this very array (NumPy: the dtypes are equivalent, no copy), it keeps its own class.
+            if (!ReferenceEquals(casted, this))
+                casted.Storage.AdoptLaneSharingDescr(dtype);
             // 'K' (astype's default) is fully handled by Cast's KEEPORDER allocation — including
             // the neither-contiguous sorted-stride-perm layouts (3-D transpose, broadcast) that a
             // binary C/F resolve cannot express; re-imposing the collapsed order here would both
@@ -1110,10 +1115,18 @@ namespace NumSharp
                 return new NDArray(Storage.AliasAsDescr(dtype)) { TensorEngine = TensorEngine };
             if (dtype.GetTypeCode() == Storage.TypeCode)
             {
-                return new NDArray(Storage.Alias()) { TensorEngine = TensorEngine };
+                // The same lane: the view is an alias, and it takes the requested class when that is a lane-sharing one
+                // (a.view(np.longdouble) of a float64 array is 'g', and the 'g' array's view(np.float64) is float64). The
+                // alias is a new storage object, so labelling it leaves this array's dtype alone.
+                var alias = Storage.Alias();
+                if (dtype.Meta is LegacyBuiltinDTypeMeta builtin && !ReferenceEquals(builtin, Storage.Descr?.Meta))
+                    alias.SetLaneDescr(builtin.singleton);
+                return new NDArray(alias) { TensorEngine = TensorEngine };
             }
             // AliasAs reinterprets bytes without conversion (like NumPy's view)
-            return new NDArray(Storage.AliasAs(dtype.GetTypeCode())) { TensorEngine = TensorEngine };
+            var reinterpreted = Storage.AliasAs(dtype.GetTypeCode());
+            reinterpreted.AdoptLaneSharingDescr(dtype);
+            return new NDArray(reinterpreted) { TensorEngine = TensorEngine };
         }
 
         /// <summary>

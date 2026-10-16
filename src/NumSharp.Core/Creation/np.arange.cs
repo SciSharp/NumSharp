@@ -27,7 +27,7 @@ namespace NumSharp
         public static NDArray arange(double start, double stop, double step, DType dtype, string device = null)
         {
             ValidateDevice(device);
-            return ArangeCore(start, stop, step, dtype?.GetTypeCode() ?? NPTypeCode.Empty);
+            return WithLaneSharingDescr(ArangeCore(start, stop, step, dtype?.GetTypeCode() ?? NPTypeCode.Empty), dtype);
         }
 
         /// <summary>

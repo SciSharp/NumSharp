@@ -14,9 +14,12 @@ namespace NumSharp
     ///     NEP 50 entry point where C# literals are weak and arrays — 0-d included — are strong).
     /// </summary>
     /// <remarks>
-    ///     For the storage-backed builtins the answers ARE NumSharp's frozen promotion table
-    ///     (<see cref="np._nptypemap_arr_arr"/>, consulted by <see cref="DefaultBuiltinCommonDType"/>), so every
-    ///     two-operand <c>promote_types</c> / <c>result_type</c> answer the <c>dtype_text</c> fuzz tier gates is unchanged.
+    ///     Two NumPy numeric classes promote by NumPy's own table of type numbers (<see cref="NumPyPromotionTable"/>,
+    ///     consulted by <see cref="DefaultBuiltinCommonDType"/>): its answer is a CLASS, and can be a lane-sharing C-type
+    ///     class even for two canonical classes (Windows' <c>promote(int16, uint16)</c> is the C int class <c>'i'</c>).
+    ///     Its storage lane is always the one NumSharp's frozen table (<see cref="np._nptypemap_arr_arr"/>) names — the
+    ///     table every kernel and NumSharp's own Decimal and Char still promote by — so every two-operand
+    ///     <c>promote_types</c> / <c>result_type</c> answer the <c>dtype_text</c> fuzz tier gates is unchanged.
     ///     Three things the old engine could not do come with the port: order-independent reduction of THREE OR MORE
     ///     operands (the old fold dropped every other pair, so <c>result_type(i1, i1, f8, i1)</c> was <c>int8</c>),
     ///     weak C# literals (<c>result_type(int8_array, 300)</c> is <c>int8</c>, <c>result_type(int8_array, 1.5)</c> is
@@ -50,10 +53,21 @@ namespace NumSharp
         ///       to complex; a weak float adopts a float or complex class; a weak int adopts any numeric class (and
         ///       <c>timedelta64</c>); anything else defers (null);</description></item>
         ///       <item><description>an operand with a LARGER type number is "more generic" and must answer instead (null);</description></item>
-        ///       <item><description>otherwise the frozen promotion table decides — for the datetime classes NumPy's table row
-        ///       says <c>timedelta64</c> absorbs bool and the integers narrower than uint64, and nothing else promotes.</description></item>
+        ///       <item><description>two NumPy numeric classes take NumPy's own table by type number
+        ///       (<see cref="NumPyPromotionTable"/>): its answer is a class, and can be a lane-sharing C-type class
+        ///       (<c>longdouble</c>, <c>intc</c> on Windows, <c>longlong</c> on Linux) even for two canonical classes —
+        ///       Windows' <c>promote(int16, uint16)</c> is the C int class <c>'i'</c> — which a storage code cannot
+        ///       tell from its lane's owner;</description></item>
+        ///       <item><description>a lane-sharing class beside NumSharp's own Decimal or Char takes the storage-lane table,
+        ///       its result kept in the lane-sharing class (<see cref="LaneSharingCommonDType"/>);</description></item>
+        ///       <item><description>otherwise the frozen promotion table decides (NumSharp's Decimal and Char, which NumPy has
+        ///       no row for) — and for the datetime classes NumPy's table row says <c>timedelta64</c> absorbs bool and the
+        ///       integers narrower than uint64, and nothing else promotes.</description></item>
         ///     </list>
         /// </summary>
+        /// <param name="cls">The class whose <c>common_dtype</c> slot is called.</param>
+        /// <param name="other">The other operand's class.</param>
+        /// <returns>The common class, or null (NotImplemented) when <paramref name="other"/> must answer or no common class exists.</returns>
         internal static DTypeMeta DefaultBuiltinCommonDType(DTypeMeta cls, DTypeMeta other)
         {
             if (other is PyScalarDTypeMeta py)
@@ -70,6 +84,11 @@ namespace NumSharp
                     case PyScalarKind.Complex:
                         if (cls.Kind == 'c')
                             return cls;
+                        // NumPy lifts a real float class to the complex class of its precision: long double to
+                        // clongdouble, float64 to complex128, and float16 / float32 to complex64, which NumSharp's single
+                        // complex width carries as complex128.
+                        if (ReferenceEquals(cls, DTypeRegistry.LongDouble))
+                            return DTypeRegistry.CLongDouble;
                         if (cls.Kind == 'f')
                             return DTypeRegistry.Complex128; // NumSharp's single complex width
                         break;
@@ -95,6 +114,23 @@ namespace NumSharp
                 return null;
             }
 
+            // Two NumPy numeric classes promote by NumPy's own table of type numbers, whose answer can be a C-type class
+            // even for two canonical classes (Windows' promote(int16, uint16) is the C int class 'i', int32's lane but not
+            // its 'l' class) — a storage code cannot tell those apart. A lane-sharing class beside NumSharp's own Decimal
+            // or Char has no NumPy row and takes the storage-lane table, kept in its own class.
+            if (cls is LegacyBuiltinDTypeMeta a && other is LegacyBuiltinDTypeMeta b)
+            {
+                if (a.IsNumPyNumeric && b.IsNumPyNumeric)
+                {
+                    int byTypeNumber = NumPyPromotionTable.Promote(a.type_num, b.type_num);
+                    // complex64 (14) has no NumSharp class: NumPy's table names it only beside float16 / float32 with a
+                    // complex64 operand, which NumSharp never has, so a -1 or an unregistered number is NotImplemented.
+                    return byTypeNumber < 0 ? null : LegacyClasses.ByTypeNum[byTypeNumber];
+                }
+                if (!a.OwnsTypeCode || !b.OwnsTypeCode)
+                    return LaneSharingCommonDType(a, b);
+            }
+
             if (cls.HasStorage && other.HasStorage
                 && np._nptypemap_arr_arr.TryGetValue((cls.TypeCode, other.TypeCode), out var promoted))
             {
@@ -114,6 +150,48 @@ namespace NumSharp
             }
 
             return null;
+        }
+
+        /// <summary>
+        ///     The builtin classes by NumPy type number (0 … 23), read by the promotion of two NumPy numeric classes. A
+        ///     nested class so the array is built on the first promotion — after <see cref="DTypeRegistry"/> registered
+        ///     every builtin, which it does once and for good (a user class takes a number of the user range) — and never
+        ///     during the registry's own initialisation.
+        /// </summary>
+        private static class LegacyClasses
+        {
+            /// <summary><c>ByTypeNum[n]</c> is <see cref="DTypeRegistry.FromTypeNum"/>(<c>n</c>), or null for a number without a NumSharp class (complex64, object, void).</summary>
+            internal static readonly DTypeMeta[] ByTypeNum = Build();
+
+            /// <summary>Builds <see cref="ByTypeNum"/> from the registry.</summary>
+            /// <returns>The array, one entry per legacy type number.</returns>
+            private static DTypeMeta[] Build()
+            {
+                var classes = new DTypeMeta[NumPyPromotionTable.NTypesLegacy];
+                for (int typeNum = 0; typeNum < classes.Length; typeNum++)
+                    classes[typeNum] = DTypeRegistry.FromTypeNum(typeNum);
+                return classes;
+            }
+        }
+
+        /// <summary>
+        ///     The common class of a lane-sharing C-type class and one of NumSharp's own classes NumPy has no row for
+        ///     (Decimal, Char): the storage-lane table, with a result in the lane-sharing class's lane kept as that class
+        ///     (<c>promote(char, intc)</c> is <c>intc</c>, as <c>promote(uint16, intc)</c> is in NumPy). Two NumPy numeric
+        ///     classes never come here: NumPy's own table by type number answers them first.
+        /// </summary>
+        /// <param name="cls">The class whose <c>common_dtype</c> is asked (its type number is not smaller than <paramref name="other"/>'s).</param>
+        /// <param name="other">The other class.</param>
+        /// <returns>The common class, or null (NotImplemented) when the lane table has none.</returns>
+        private static DTypeMeta LaneSharingCommonDType(LegacyBuiltinDTypeMeta cls, LegacyBuiltinDTypeMeta other)
+        {
+            if (!np._nptypemap_arr_arr.TryGetValue((cls.TypeCode, other.TypeCode), out var lane))
+                return null;
+            if (!cls.OwnsTypeCode && cls.TypeCode == lane)
+                return cls;
+            if (!other.OwnsTypeCode && other.TypeCode == lane)
+                return other;
+            return DTypeRegistry.FromTypeCode(lane);
         }
 
         /// <summary>

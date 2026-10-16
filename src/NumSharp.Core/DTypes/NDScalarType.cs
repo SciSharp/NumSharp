@@ -747,6 +747,28 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     The item size of the descriptor <c>np.dtype(cls)</c> — the second key of <c>np.ScalarType</c>'s sort: the
+        ///     class singleton's (0 for the unsized string classes, 8 for <c>datetime64</c>), the size recorded for a
+        ///     dtype-less class (<c>complex64</c> 8, <c>object_</c> 8, <c>void</c> 0), or the NumPy class's for a built-in
+        ///     class.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">An abstract class, which has no descriptor and so no size.</exception>
+        internal int NumPyItemSize
+        {
+            get
+            {
+                if (_kind == ClassKind.Abstract)
+                    throw new InvalidOperationException($"{this} is abstract: it has no descriptor and no item size.");
+                if (_kind == ClassKind.Builtin)
+                    return NumPyClass.NumPyItemSize;
+                var meta = Volatile.Read(ref _meta);
+                if (meta is null)
+                    return _numpyItemSize;
+                return meta.singleton?.itemsize ?? meta.ItemSize;
+            }
+        }
+
         /// <summary>True for a NumPy class NumSharp has no dtype for yet (<c>complex64</c>, <c>object_</c>, <c>void</c>).</summary>
         internal bool IsDtypeless => _dtypelessTypeNum >= 0 && Volatile.Read(ref _meta) is null;
 

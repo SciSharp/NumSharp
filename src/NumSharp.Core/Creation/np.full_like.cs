@@ -72,8 +72,12 @@ namespace NumSharp
 
             // NumPy's `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: a Python int is range-checked in
             // the result's dtype (np.full_like(int8_array, 1000) raises), a Python float / complex cast unsafely, and None
-            // (a null) is NaN / nan+nanj / False, or int(None)'s TypeError when there is an element to write.
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, FullFillElement(fill_value, typeCode, shape.size)), shape));
+            // (a null) is NaN / nan+nanj / False, or int(None)'s TypeError when there is an element to write. The result is
+            // labelled with a lane-sharing C-type class when that is the dtype (a's np.longdouble, or a requested np.intc),
+            // as NumPy's empty_like keeps the descriptor.
+            return WithLaneSharingDescr(
+                new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, FullFillElement(fill_value, typeCode, shape.size)), shape)),
+                resultDescr);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -95,6 +96,49 @@ namespace NumSharp
         public static LegacyBuiltinDTypeMeta Single { get; }
         public static LegacyBuiltinDTypeMeta Double { get; }
         public static LegacyBuiltinDTypeMeta Complex128 { get; }
+        /// <summary>
+        ///     <c>np.dtypes.LongDoubleDType</c> — NumPy's C <c>long double</c> class (type number 13, char <c>'g'</c>,
+        ///     scalar class <c>numpy.longdouble</c>), a lane-sharing class over the <see cref="NPTypeCode.Double"/> lane: 8
+        ///     bytes on every platform, as on NumPy's win-amd64 build (NumSharp has no extended precision; Linux NumPy's is an
+        ///     80-bit type in 16 bytes). Equivalent to <see cref="Double"/> (<c>np.dtype('g') == np.dtype('d')</c>), but its
+        ///     own class: <c>np.issubdtype(np.float64, np.longdouble)</c> is False.
+        /// </summary>
+        public static LegacyBuiltinDTypeMeta LongDouble { get; }
+
+        /// <summary>
+        ///     <c>np.dtypes.CLongDoubleDType</c> — NumPy's complex <c>long double</c> class (type number 16, char <c>'G'</c>,
+        ///     scalar class <c>numpy.clongdouble</c>), sharing the <see cref="NPTypeCode.Complex"/> lane (two 8-byte parts);
+        ///     equivalent to <see cref="Complex128"/>.
+        /// </summary>
+        public static LegacyBuiltinDTypeMeta CLongDouble { get; }
+
+        /// <summary>
+        ///     The class of NumPy's C <c>int</c> (<c>np.intc</c>, char <c>'i'</c>, type number 5): on LLP64 (Windows) its own
+        ///     lane-sharing class <c>IntDType</c> (scalar class <c>numpy.intc</c>) beside <see cref="Int32"/>, which is the C
+        ///     <c>long</c> there; on LP64 the <see cref="Int32"/> class itself (int32 IS the C <c>int</c>).
+        /// </summary>
+        public static LegacyBuiltinDTypeMeta CInt { get; }
+
+        /// <summary>The class of NumPy's C <c>unsigned int</c> (<c>np.uintc</c>, char <c>'I'</c>, type number 6): <c>UIntDType</c> on LLP64, <see cref="UInt32"/> on LP64 (see <see cref="CInt"/>).</summary>
+        public static LegacyBuiltinDTypeMeta CUInt { get; }
+
+        /// <summary>
+        ///     The class of NumPy's C <c>long long</c> (<c>np.longlong</c>, char <c>'q'</c>, type number 9): on LP64 (Linux,
+        ///     macOS) its own lane-sharing class <c>LongLongDType</c> (scalar class <c>numpy.longlong</c>) beside
+        ///     <see cref="Int64"/>, which is the C <c>long</c> there; on LLP64 the <see cref="Int64"/> class itself.
+        /// </summary>
+        public static LegacyBuiltinDTypeMeta CLongLong { get; }
+
+        /// <summary>The class of NumPy's C <c>unsigned long long</c> (<c>np.ulonglong</c>, char <c>'Q'</c>, type number 10): <c>ULongLongDType</c> on LP64, <see cref="UInt64"/> on LLP64 (see <see cref="CLongLong"/>).</summary>
+        public static LegacyBuiltinDTypeMeta CULongLong { get; }
+
+        /// <summary>
+        ///     Every numeric storage class in registration order — the lane owners, the lane-sharing C-type classes, and
+        ///     NumSharp's Decimal and Char: the classes every numeric cast table (numeric ↔ numeric, ↔ datetime, ↔ strings,
+        ///     ↔ StringDType) is registered over.
+        /// </summary>
+        internal static IReadOnlyList<LegacyBuiltinDTypeMeta> NumericStorage { get; }
+
         /// <summary>NumSharp-only: <see cref="System.Decimal"/> (type number 256, the user-defined range).</summary>
         public static LegacyBuiltinDTypeMeta Decimal { get; }
         /// <summary>NumSharp-only: <see cref="System.Char"/> (type number 257, the user-defined range; promotes as uint16).</summary>
@@ -134,10 +178,14 @@ namespace NumSharp
             const string numsharp = "numsharp.dtypes";
             const DTypeFlags builtin = DTypeFlags.NPY_DT_LEGACY | DTypeFlags.NPY_DT_NUMERIC;
 
-            string[] longAliases32 = CLongIs32Bit ? new[] { "IntDType", "LongDType" } : new[] { "IntDType" };
-            string[] ulongAliases32 = CLongIs32Bit ? new[] { "UIntDType", "ULongDType" } : new[] { "UIntDType" };
-            string[] longAliases64 = CLongIs32Bit ? new[] { "LongLongDType" } : new[] { "LongLongDType", "LongDType" };
-            string[] ulongAliases64 = CLongIs32Bit ? new[] { "ULongLongDType" } : new[] { "ULongLongDType", "ULongDType" };
+            // The C-name aliases of the canonical 32/64-bit classes: LongDType names whichever is the C `long`, and the C
+            // type of the other width that has NO class of its own on this platform is an alias too — IntDType on LP64
+            // (int32 IS the C int), LongLongDType on LLP64 (int64 IS the C long long). The remaining C type of each width
+            // is a lane-sharing class of its own below (IntDType on LLP64, LongLongDType on LP64), as in NumPy.
+            string[] longAliases32 = CLongIs32Bit ? new[] { "LongDType" } : new[] { "IntDType" };
+            string[] ulongAliases32 = CLongIs32Bit ? new[] { "ULongDType" } : new[] { "UIntDType" };
+            string[] longAliases64 = CLongIs32Bit ? new[] { "LongLongDType" } : new[] { "LongDType" };
+            string[] ulongAliases64 = CLongIs32Bit ? new[] { "ULongLongDType" } : new[] { "ULongDType" };
 
             // NumPy's type_num AND type char for the fixed-width 32/64-bit integers are PLATFORM-DEPENDENT, because
             // `np.dtype('int32')`/`np.dtype('int64')` resolve to whichever C integer is that width (verified against
@@ -159,16 +207,59 @@ namespace NumSharp
             UInt8 = Legacy("UInt8DType", numpy, 2, NPTypeCode.Byte, typeof(byte), "uint8", 'u', 'B', 1, 1, builtin, new[] { "UByteDType" });
             Int16 = Legacy("Int16DType", numpy, 3, NPTypeCode.Int16, typeof(short), "int16", 'i', 'h', 2, 2, builtin, new[] { "ShortDType" });
             UInt16 = Legacy("UInt16DType", numpy, 4, NPTypeCode.UInt16, typeof(ushort), "uint16", 'u', 'H', 2, 2, builtin, new[] { "UShortDType" });
+            // NumPy's C-type classes that share a storage lane with the canonical class of their width
+            // (LegacyBuiltinDTypeMeta's remarks), registered in type-number order beside the owners. Each is only reached
+            // by name ("intc", "longdouble"), type character ('i', 'g') and type number: the owner keeps the NPTypeCode
+            // and the C# element type.
+            if (CLongIs32Bit)
+            {
+                // LLP64: int and long are both 32-bit, and int32 is the C long; the C int keeps its own class.
+                CInt = Legacy("IntDType", numpy, 5, NPTypeCode.Int32, typeof(int), "intc", 'i', 'i', 4, 4, builtin, null, ownsLane: false);
+                CUInt = Legacy("UIntDType", numpy, 6, NPTypeCode.UInt32, typeof(uint), "uintc", 'u', 'I', 4, 4, builtin, null, ownsLane: false);
+            }
             Int32 = Legacy("Int32DType", numpy, int32Num, NPTypeCode.Int32, typeof(int), "int32", 'i', int32Char, 4, 4, builtin, longAliases32);
             UInt32 = Legacy("UInt32DType", numpy, uint32Num, NPTypeCode.UInt32, typeof(uint), "uint32", 'u', uint32Char, 4, 4, builtin, ulongAliases32);
             Int64 = Legacy("Int64DType", numpy, int64Num, NPTypeCode.Int64, typeof(long), "int64", 'i', int64Char, 8, 8, builtin, longAliases64);
             UInt64 = Legacy("UInt64DType", numpy, uint64Num, NPTypeCode.UInt64, typeof(ulong), "uint64", 'u', uint64Char, 8, 8, builtin, ulongAliases64);
+            if (CLongIs32Bit)
+            {
+                CLongLong = Int64;
+                CULongLong = UInt64;
+            }
+            else
+            {
+                // LP64: long and long long are both 64-bit, and int64 is the C long; the C long long keeps its own class.
+                CInt = Int32;
+                CUInt = UInt32;
+                CLongLong = Legacy("LongLongDType", numpy, 9, NPTypeCode.Int64, typeof(long), "longlong", 'i', 'q', 8, 8, builtin, null, ownsLane: false);
+                CULongLong = Legacy("ULongLongDType", numpy, 10, NPTypeCode.UInt64, typeof(ulong), "ulonglong", 'u', 'Q', 8, 8, builtin, null, ownsLane: false);
+            }
             Single = Legacy("Float32DType", numpy, 11, NPTypeCode.Single, typeof(float), "float32", 'f', 'f', 4, 4, builtin, null);
-            Double = Legacy("Float64DType", numpy, 12, NPTypeCode.Double, typeof(double), "float64", 'f', 'd', 8, 8, builtin, new[] { "LongDoubleDType" });
-            Complex128 = Legacy("Complex128DType", numpy, 15, NPTypeCode.Complex, typeof(Complex), "complex128", 'c', 'D', 16, 8, builtin, new[] { "CLongDoubleDType" });
+            Double = Legacy("Float64DType", numpy, 12, NPTypeCode.Double, typeof(double), "float64", 'f', 'd', 8, 8, builtin, null);
+            // NumSharp has no extended precision: long double is the 8-byte double of NumPy's win-amd64 build everywhere.
+            LongDouble = Legacy("LongDoubleDType", numpy, 13, NPTypeCode.Double, typeof(double), "longdouble", 'f', 'g', 8, 8, builtin, null, ownsLane: false);
+            Complex128 = Legacy("Complex128DType", numpy, 15, NPTypeCode.Complex, typeof(Complex), "complex128", 'c', 'D', 16, 8, builtin, null);
+            CLongDouble = Legacy("CLongDoubleDType", numpy, 16, NPTypeCode.Complex, typeof(Complex), "clongdouble", 'c', 'G', 16, 8, builtin, null, ownsLane: false);
             Half = Legacy("Float16DType", numpy, 23, NPTypeCode.Half, typeof(System.Half), "float16", 'f', 'e', 2, 2, builtin, null);
             Decimal = Legacy("DecimalDType", numsharp, 256, NPTypeCode.Decimal, typeof(decimal), "decimal", 'f', (char)NPY_TYPECHAR.NPY_LONGLONGLTR, 16, 8, builtin, null);
             Char = Legacy("CharDType", numsharp, 257, NPTypeCode.Char, typeof(char), "char", 'u', (char)NPY_TYPECHAR.NPY_CHARLTR, 2, 2, builtin, null);
+
+            // Every numeric storage class, the lane-sharing C-type classes included (in type-number order beside the
+            // owners): each numeric cast table below spans them all, as NumPy's loops over its legacy type numbers do.
+            var numericStorage = new List<LegacyBuiltinDTypeMeta> { Bool, Int8, UInt8, Int16, UInt16 };
+            if (CLongIs32Bit)
+            {
+                numericStorage.Add(CInt);
+                numericStorage.Add(CUInt);
+            }
+            numericStorage.AddRange(new[] { Int32, UInt32, Int64, UInt64 });
+            if (!CLongIs32Bit)
+            {
+                numericStorage.Add(CLongLong);
+                numericStorage.Add(CULongLong);
+            }
+            numericStorage.AddRange(new[] { Half, Single, Double, LongDouble, Complex128, CLongDouble, Decimal, Char });
+            NumericStorage = numericStorage.AsReadOnly();
 
             // The two fixed-width string classes. Their singletons are NumPy's UNSIZED builtins `S0` (byte order '|') and
             // `U0` (native order): what np.dtype('S') / np.dtype('U') / np.dtype(str) return, isbuiltin == 1. An allocation
@@ -210,10 +301,26 @@ namespace NumSharp
             InitializeVStringCasts();
         }
 
+        /// <summary>Builds, installs the singleton of, and registers one builtin class (see <see cref="LegacyBuiltinDTypeMeta"/>'s constructor for the parameters).</summary>
+        /// <param name="name">NumPy's class name.</param>
+        /// <param name="module">The class's module.</param>
+        /// <param name="typeNum">NumPy's type number.</param>
+        /// <param name="code">The storage lane.</param>
+        /// <param name="scalar">The C# element type.</param>
+        /// <param name="scalarName">The scalar class's name.</param>
+        /// <param name="kind">NumPy's kind character.</param>
+        /// <param name="typeChar">NumPy's type character.</param>
+        /// <param name="itemSize">Element size in bytes.</param>
+        /// <param name="alignment">Alignment in bytes.</param>
+        /// <param name="flags">The <c>NPY_DT_*</c> flags.</param>
+        /// <param name="aliases">The alias class names, or null.</param>
+        /// <param name="ownsLane">False for a lane-sharing C-type class.</param>
+        /// <returns>The registered class.</returns>
+        /// <exception cref="InvalidOperationException">The type number, name, an alias or (for a lane owner) the storage code is already registered.</exception>
         private static LegacyBuiltinDTypeMeta Legacy(string name, string module, int typeNum, NPTypeCode code, Type scalar, string scalarName,
-            char kind, char typeChar, int itemSize, int alignment, DTypeFlags flags, string[] aliases)
+            char kind, char typeChar, int itemSize, int alignment, DTypeFlags flags, string[] aliases, bool ownsLane = true)
         {
-            var meta = new LegacyBuiltinDTypeMeta(name, module, typeNum, code, scalar, scalarName, kind, typeChar, itemSize, alignment, flags, aliases);
+            var meta = new LegacyBuiltinDTypeMeta(name, module, typeNum, code, scalar, scalarName, kind, typeChar, itemSize, alignment, flags, aliases, ownsLane);
             meta.singleton = new DType(meta, DType.NPY_NATIVE, null);
             Add(meta);
             return meta;
@@ -289,7 +396,7 @@ namespace NumSharp
         /// <summary>NumPy's <c>PyArray_InitializeNumericCasts</c>: one <see cref="BuiltinCastingImpl"/> per ordered pair of storage classes.</summary>
         private static void InitializeNumericCasts()
         {
-            var storage = new[] { Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Half, Single, Double, Complex128, Decimal, Char };
+            var storage = NumericStorage;
             foreach (var from in storage)
                 foreach (var to in storage)
                     from.AddCastingImpl(new BuiltinCastingImpl(from, to));
@@ -319,7 +426,7 @@ namespace NumSharp
              * Some of these casts can fail (casting to unitless datetime), but these
              * are rather special.
              */
-            var storage = new[] { Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Half, Single, Double, Complex128, Decimal, Char };
+            var storage = NumericStorage;
             foreach (var num in storage)
             {
                 num.AddCastingImpl(new LegacyWrappingCastingImpl(num, DateTime64, NPY_CASTING.NPY_UNSAFE_CASTING));
@@ -356,7 +463,7 @@ namespace NumSharp
         /// </summary>
         private static void InitializeStringCasts()
         {
-            var numeric = new[] { Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Half, Single, Double, Complex128, Decimal, Char };
+            var numeric = NumericStorage;
             foreach (var str in new[] { Bytes, Str })
             {
                 foreach (var num in numeric)
@@ -404,7 +511,8 @@ namespace NumSharp
             Bool.AddCastingImpl(new AnyToVStringCastingImpl(Bool, VString, NPY_CASTING.NPY_SAME_KIND_CASTING, NPY_CASTING.NPY_SAFE_CASTING));
             VString.AddCastingImpl(new VStringToNumberCastingImpl(VString, Bool, NPY_CASTING.NPY_SAME_KIND_CASTING));
 
-            var numbers = new[] { Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Half, Single, Double, Complex128, Decimal, Char };
+            // Every numeric class but bool, which has its own pair of casts above.
+            var numbers = NumericStorage.Where(m => !ReferenceEquals(m, Bool));
             foreach (var num in numbers)
             {
                 num.AddCastingImpl(new AnyToVStringCastingImpl(num, VString, NPY_CASTING.NPY_SAFE_CASTING, NPY_CASTING.NPY_SAFE_CASTING));

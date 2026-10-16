@@ -312,6 +312,43 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     Labels this storage's elements with a lane-sharing C-type class (<c>longdouble</c>, <c>clongdouble</c>, Windows'
+        ///     <c>intc</c> / <c>uintc</c>, Linux's <c>longlong</c> / <c>ulonglong</c>) when <paramref name="requested"/> is one
+        ///     and its lane is this storage's: the bytes are the same, only <see cref="Descr"/> changes. For any other
+        ///     descriptor this does nothing (the lane's own class is already what <see cref="Descr"/> reports).
+        /// </summary>
+        /// <param name="requested">The descriptor a creation or cast asked for; null does nothing.</param>
+        /// <remarks>
+        ///     <para>
+        ///     The allocation paths that take a descriptor install it themselves (<see cref="Allocate(Shape, DType, bool)"/>);
+        ///     the ones that allocate by storage code (<c>np.ones</c>, <c>np.full</c>, <c>astype</c>'s cast, a dtype view)
+        ///     call this afterwards, so a created <c>np.ones(3, np.longdouble)</c> reports <c>'g'</c>, as NumPy's does.
+        ///     </para>
+        ///     <para>
+        ///     Footgun: only a storage the caller just created may be relabelled. A storage shared with other arrays (a base
+        ///     whose views read <see cref="Descr"/>) would change their dtype too.
+        ///     </para>
+        /// </remarks>
+        internal void AdoptLaneSharingDescr(DType requested)
+        {
+            if (requested?.Meta is LegacyBuiltinDTypeMeta { OwnsTypeCode: false } && requested.typecode == _typecode)
+                _descr = requested.isnative ? requested : requested.Meta.ensure_canonical(requested);
+        }
+
+        /// <summary>
+        ///     Labels this storage with ANY builtin class of its own storage lane — the lane's owner or a lane-sharing C-type
+        ///     class — for a dtype VIEW: <c>a.view(np.longdouble)</c> of a float64 array is <c>'g'</c>, and the <c>'g'</c>
+        ///     array's <c>view(np.float64)</c> is float64 again (the same bytes either way).
+        /// </summary>
+        /// <param name="descr">A builtin descriptor; a descriptor of another lane, or of a non-builtin class, does nothing.</param>
+        /// <remarks>Footgun: as for <see cref="AdoptLaneSharingDescr"/>, only an alias the caller just made may be relabelled.</remarks>
+        internal void SetLaneDescr(DType descr)
+        {
+            if (descr?.Meta is LegacyBuiltinDTypeMeta && descr.typecode == _typecode)
+                _descr = descr.isnative ? descr : descr.Meta.ensure_canonical(descr);
+        }
+
+        /// <summary>
         ///     The size in bytes of a single value of <see cref="DType"/>
         ///     as stored in the unmanaged buffer.
         /// </summary>
@@ -479,6 +516,8 @@ namespace NumSharp.Backends
             ret._baseStorage = storage._baseStorage ?? storage;
             ret.OnReshaped(); // a view never owns its buffer (NumPy: base != NULL ⟹ !OWNDATA)
             ret.Engine = storage.Engine;
+            // A lane-sharing descriptor (longdouble, Windows' intc) is not on the buffer: the broadcast view carries it.
+            ret.AdoptLaneSharingDescr(storage._descr);
             return ret;
         }
 

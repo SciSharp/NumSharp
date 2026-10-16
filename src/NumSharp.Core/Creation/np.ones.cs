@@ -81,7 +81,7 @@ namespace NumSharp
             ValidateDevice(device);
             if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
                 return OnesOfText(shape, dtype);
-            return OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+            return WithLaneSharingDescr(OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double), dtype);
         }
 
         /// <summary>
@@ -175,7 +175,22 @@ namespace NumSharp
             var orderedShape = Shape.Adopt(shape.dimensions, physical);
             if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
                 return OnesOfText(orderedShape, dtype);
-            return OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double);
+            return WithLaneSharingDescr(OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double), dtype);
+        }
+
+        /// <summary>
+        ///     Labels a FRESH array that a creation routine allocated by storage lane with the lane-sharing C-type class the
+        ///     caller asked for (<c>np.ones(3, np.longdouble)</c> reports <c>'g'</c>, Windows' <c>np.full(2, 7, np.intc)</c>
+        ///     <c>'i'</c>, as NumPy's do); any other dtype leaves the array as allocated.
+        /// </summary>
+        /// <param name="fresh">The array just created, which nothing else references yet.</param>
+        /// <param name="dtype">The requested dtype, or null.</param>
+        /// <returns><paramref name="fresh"/> itself.</returns>
+        /// <remarks>Footgun: never pass an array other code holds a view of — relabelling its storage changes their dtype too.</remarks>
+        internal static NDArray WithLaneSharingDescr(NDArray fresh, DType dtype)
+        {
+            fresh.Storage.AdoptLaneSharingDescr(dtype);
+            return fresh;
         }
     }
 }

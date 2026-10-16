@@ -113,6 +113,7 @@ namespace NumSharp
             Add("l",  _cLongType);       // C long: 32-bit on Windows (MSVC), 64-bit on *nix (gcc LP64)
             Add("q",  typeof(long));
             Add("p",  _intpType);        // intptr
+            Add("n",  _intpType);        // NumPy 2.x: 'n' is intp too (np.dtype('n') is int64 on a 64-bit host)
             // unsigned int
             Add("B",  typeof(byte));
             Add("H",  typeof(ushort));
@@ -120,16 +121,17 @@ namespace NumSharp
             Add("L",  _cULongType);      // C unsigned long: same platform rule as 'l'
             Add("Q",  typeof(ulong));
             Add("P",  _uintpType);       // uintptr
+            Add("N",  _uintpType);       // NumPy 2.x: 'N' is uintp
             // float
             Add("e",  typeof(Half));
             Add("f",  typeof(float));
             Add("d",  typeof(double));
-            Add("g",  typeof(double));   // long double collapses to double
+            Add("g",  typeof(double));   // long double: the float64 lane; CTypeClassOf gives its own class
             // complex — NumSharp only has complex128 (System.Numerics.Complex = 2 × float64).
             // complex64 ('F', 'c8', 'complex64') is NOT supported and throws NotSupportedException
             // via _unsupported_numpy_codes below — users must explicitly opt into complex128.
             Add("D",  typeof(Complex));
-            Add("G",  typeof(Complex));  // long-double complex collapses to complex128
+            Add("G",  typeof(Complex));  // long-double complex: the complex128 lane; CTypeClassOf gives its own class
 
             // ---- NumPy lowercase names ----
             Add("bool",       typeof(bool));
@@ -172,8 +174,8 @@ namespace NumSharp
             // long long is always 64-bit.
             Add("longlong",   typeof(long));
             Add("ulonglong",  typeof(ulong));
-            Add("longdouble",  typeof(double));  // collapses to float64
-            Add("clongdouble", typeof(Complex)); // collapses to complex128
+            Add("longdouble",  typeof(double));  // the float64 lane; CTypeClassOf gives the LongDoubleDType class
+            Add("clongdouble", typeof(Complex)); // the complex128 lane; CTypeClassOf gives the CLongDoubleDType class
 
             // ---- NumSharp-only friendly aliases (unique to .NET) ----
             Add("sbyte",   typeof(sbyte));
@@ -209,6 +211,45 @@ namespace NumSharp
             Add("String",  typeof(string));
 
             return map.ToFrozenDictionary();
+        }
+
+        /// <summary>
+        ///     The class a NumPy C-type spelling names when it is not the class the name table's C# <see cref="Type"/>
+        ///     resolves to: <c>'g'</c> / <c>"longdouble"</c> and <c>'G'</c> / <c>"clongdouble"</c> (always their own class,
+        ///     sharing the float64 / complex128 lane), <c>'i'</c> / <c>"intc"</c> and <c>'I'</c> / <c>"uintc"</c> (their own
+        ///     class on Windows, int32 / uint32 elsewhere), <c>'q'</c> / <c>"longlong"</c> and <c>'Q'</c> / <c>"ulonglong"</c>
+        ///     (their own class on Linux and macOS, int64 / uint64 on Windows).
+        /// </summary>
+        /// <param name="name">The dtype string without its byte-order character.</param>
+        /// <returns>The class, or null for every other spelling (the name table decides).</returns>
+        /// <remarks>
+        ///     Every <c>np.dtype(string)</c> asks this, so it dispatches on the length first: each C-type spelling has a
+        ///     length of its own (1, 4, 5, 8, 9, 10, 11), and the common strings (<c>"f8"</c>, <c>"float64"</c>) fail
+        ///     without a string comparison.
+        /// </remarks>
+        private static DTypeMeta CTypeClassOf(string name)
+        {
+            switch (name.Length)
+            {
+                case 1:
+                    return name[0] switch
+                    {
+                        'g' => DTypeRegistry.LongDouble,
+                        'G' => DTypeRegistry.CLongDouble,
+                        'i' => DTypeRegistry.CInt,
+                        'I' => DTypeRegistry.CUInt,
+                        'q' => DTypeRegistry.CLongLong,
+                        'Q' => DTypeRegistry.CULongLong,
+                        _ => null,
+                    };
+                case 4: return name == "intc" ? DTypeRegistry.CInt : null;
+                case 5: return name == "uintc" ? DTypeRegistry.CUInt : null;
+                case 8: return name == "longlong" ? DTypeRegistry.CLongLong : null;
+                case 9: return name == "ulonglong" ? DTypeRegistry.CULongLong : null;
+                case 10: return name == "longdouble" ? DTypeRegistry.LongDouble : null;
+                case 11: return name == "clongdouble" ? DTypeRegistry.CLongDouble : null;
+                default: return null;
+            }
         }
 
         // NumPy dtype codes that are valid in NumPy but NumSharp does not implement.
@@ -445,7 +486,11 @@ namespace NumSharp
                 }
             }
 
-            var descr = flexible ?? DType.From(resolved);
+            // NumPy's C-type spellings whose class is not the canonical class of its width on this host ('g' / 'longdouble'
+            // and 'G' / 'clongdouble' everywhere, 'i' / 'intc' on Windows, 'q' / 'longlong' on Linux) name their own
+            // lane-sharing class, which the C# Type of the name table (the lane's element type) cannot carry.
+            var cType = flexible == null ? CTypeClassOf(type) : null;
+            var descr = flexible ?? cType?.singleton ?? DType.From(resolved);
             // NumPy only replaces the byte order when it is explicit, not the host's own, and applicable at all: an 'S'
             // descriptor (byte order '|') ignores '<'/'>' ('>S5' is dtype('S5')), a 'U' descriptor keeps '>' ('>U5').
             if (endian != DType.NPY_NATIVE && endian != DType.NPY_NATBYTE && descr.byteorder != DType.NPY_IGNORE)
@@ -755,12 +800,21 @@ namespace NumSharp
     ///     member — the same <c>CLongIs32Bit</c> switch the <c>LongDType</c>/<c>LongLongDType</c> aliases already use.
     /// </para>
     /// <para>
-    ///     <b>Members NumSharp has no storage for are still present</b> (for byte-identity and for
-    ///     <see cref="DType.From(NPY_TYPES)"/> to reject them precisely): <see cref="NPY_LONGLONG"/>/<see cref="NPY_ULONGLONG"/>
-    ///     on LP64, <see cref="NPY_LONGDOUBLE"/>/<see cref="NPY_CLONGDOUBLE"/> (NumSharp collapses to float64/complex128),
-    ///     <see cref="NPY_CFLOAT"/> (complex64 — unsupported), <see cref="NPY_OBJECT"/>, <see cref="NPY_STRING"/> (bytes),
-    ///     <see cref="NPY_VOID"/>. <see cref="NPY_CHAR"/> (24) is NumPy's <i>deprecated</i> byte-char and is NOT NumSharp's
-    ///     <c>char</c> dtype (which is a NumSharp extension at <see cref="NUMSHARP_CHAR"/> in the user range).
+    ///     <b>The C type of a width that does not own its storage lane is a class of its own</b>, as in NumPy: on LLP64
+    ///     <see cref="NPY_INT"/> / <see cref="NPY_UINT"/> (<c>np.intc</c> / <c>np.uintc</c>; int32 is the C long there),
+    ///     on LP64 <see cref="NPY_LONGLONG"/> / <see cref="NPY_ULONGLONG"/> (<c>np.longlong</c> / <c>np.ulonglong</c>;
+    ///     int64 is the C long there), and <see cref="NPY_LONGDOUBLE"/> / <see cref="NPY_CLONGDOUBLE"/> everywhere
+    ///     (<c>np.longdouble</c> / <c>np.clongdouble</c>, 8 and 16 bytes as on NumPy's win-amd64 build — Linux NumPy's
+    ///     long double is the 16-byte x87 extended type). Each is a lane-sharing class (<see cref="DTypeRegistry.CInt"/>
+    ///     and its siblings): it stores in the canonical class's lane and reports its own type number, character and
+    ///     scalar type.
+    /// </para>
+    /// <para>
+    ///     <b>Members NumSharp has no dtype for are still present</b> (for byte-identity and for
+    ///     <see cref="DType.From(NPY_TYPES)"/> to reject them precisely): <see cref="NPY_CFLOAT"/> (complex64 —
+    ///     unsupported), <see cref="NPY_OBJECT"/>, <see cref="NPY_VOID"/>. <see cref="NPY_CHAR"/> (24) is NumPy's
+    ///     <i>deprecated</i> byte-char and is NOT NumSharp's <c>char</c> dtype (which is a NumSharp extension at
+    ///     <see cref="NUMSHARP_CHAR"/> in the user range).
     /// </para>
     /// </remarks>
     /// <remarks>https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types</remarks>
@@ -776,29 +830,29 @@ namespace NumSharp
         NPY_SHORT = 3,
         /// <summary>Unsigned 16-bit (C <c>unsigned short</c>; NumSharp <see cref="NPTypeCode.UInt16"/>).</summary>
         NPY_USHORT = 4,
-        /// <summary>C <c>int</c> — always 32-bit; NumPy's <c>intc</c>. NumSharp's Int32 maps here ONLY on LP64 (on LLP64 it is <see cref="NPY_LONG"/>).</summary>
+        /// <summary>C <c>int</c> — always 32-bit; NumPy's <c>intc</c>. NumSharp's Int32 lane owner on LP64; on LLP64 (where int32 is <see cref="NPY_LONG"/>) the lane-sharing <c>IntDType</c> class of <c>np.intc</c>.</summary>
         NPY_INT = 5,
-        /// <summary>C <c>unsigned int</c> — NumPy's <c>uintc</c>. NumSharp's UInt32 maps here only on LP64.</summary>
+        /// <summary>C <c>unsigned int</c> — NumPy's <c>uintc</c>. NumSharp's UInt32 lane owner on LP64; on LLP64 the lane-sharing <c>UIntDType</c> class of <c>np.uintc</c>.</summary>
         NPY_UINT = 6,
         /// <summary>C <c>long</c> — 64-bit on LP64, 32-bit on LLP64. NumSharp's Int64 maps here on LP64; its Int32 maps here on LLP64.</summary>
         NPY_LONG = 7,
         /// <summary>C <c>unsigned long</c>. NumSharp's UInt64 maps here on LP64; its UInt32 on LLP64.</summary>
         NPY_ULONG = 8,
-        /// <summary>C <c>long long</c> — always 64-bit. NumSharp's Int64 maps here on LLP64 (unused on LP64, where Int64 is <see cref="NPY_LONG"/>).</summary>
+        /// <summary>C <c>long long</c> — always 64-bit. NumSharp's Int64 lane owner on LLP64; on LP64 (where int64 is <see cref="NPY_LONG"/>) the lane-sharing <c>LongLongDType</c> class of <c>np.longlong</c>.</summary>
         NPY_LONGLONG = 9,
-        /// <summary>C <c>unsigned long long</c>. NumSharp's UInt64 maps here on LLP64 (unused on LP64).</summary>
+        /// <summary>C <c>unsigned long long</c>. NumSharp's UInt64 lane owner on LLP64; on LP64 the lane-sharing <c>ULongLongDType</c> class of <c>np.ulonglong</c>.</summary>
         NPY_ULONGLONG = 10,
         /// <summary>float32 (NumSharp <see cref="NPTypeCode.Single"/>) — platform-independent.</summary>
         NPY_FLOAT = 11,
         /// <summary>float64 (NumSharp <see cref="NPTypeCode.Double"/>) — platform-independent.</summary>
         NPY_DOUBLE = 12,
-        /// <summary>C <c>long double</c> (extended precision). NumSharp has none — its <c>LongDoubleDType</c> collapses onto float64, so no descriptor reports this num.</summary>
+        /// <summary>C <c>long double</c>: the lane-sharing <c>LongDoubleDType</c> class of <c>np.longdouble</c>, stored in the float64 lane — 8 bytes on every host, as on NumPy's win-amd64 build (Linux NumPy's is the 16-byte x87 extended type).</summary>
         NPY_LONGDOUBLE = 13,
         /// <summary>complex64 — <b>unsupported in NumSharp</b> (single complex width is complex128); no descriptor reports this num.</summary>
         NPY_CFLOAT = 14,
         /// <summary>complex128 (NumSharp <see cref="NPTypeCode.Complex"/>) — platform-independent.</summary>
         NPY_CDOUBLE = 15,
-        /// <summary>C <c>long double</c> complex — collapses onto complex128 in NumSharp; no descriptor reports this num.</summary>
+        /// <summary>C <c>long double</c> complex: the lane-sharing <c>CLongDoubleDType</c> class of <c>np.clongdouble</c>, stored in the complex128 lane (16 bytes, as on NumPy's win-amd64 build).</summary>
         NPY_CLONGDOUBLE = 16,
         /// <summary>Python object array — <b>unsupported in NumSharp</b>.</summary>
         NPY_OBJECT = 17,

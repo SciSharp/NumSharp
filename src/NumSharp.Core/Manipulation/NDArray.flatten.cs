@@ -40,10 +40,12 @@ namespace NumSharp
                 // exit just drops fcopy's wrapper ref — storage stays alive through
                 // the returned NDArray.
                 using var fcopy = this.copy('F');
-                return new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size))) { TensorEngine = TensorEngine };
+                // A lane-sharing C-type class (np.longdouble, Windows' np.intc) is not on the buffer: the copy keeps it, as
+                // NumPy's flatten keeps the descriptor.
+                return np.WithLaneSharingDescr(new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
             }
 
-            return new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine };
+            return np.WithLaneSharingDescr(new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
         }
 
         /// <summary>
@@ -65,7 +67,8 @@ namespace NumSharp
             var layout = Shape.NpyIterOutputShape((long[])s.dimensions.Clone(), new ReadOnlySpan<Shape>(in s));
             using var ordered = new NDArray(dtype, layout, false);
             NumSharp.Backends.Iteration.NDIter.Copy(ordered.Storage, Storage);
-            return new NDArray(new UnmanagedStorage(ordered.Array, Shape.Vector(size))) { TensorEngine = TensorEngine };
+            // The result over the buffer keeps a lane-sharing C-type class, as the 'C' / 'F' paths do.
+            return np.WithLaneSharingDescr(new NDArray(new UnmanagedStorage(ordered.Array, Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
         }
     }
 }

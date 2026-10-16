@@ -286,8 +286,36 @@ namespace NumSharp.Tests.Fuzz
             "itemsize" => NDArray.Scalar((long)np.longdouble.itemsize),
             "is_floating" => NDArray.Scalar(np.issubdtype(np.longdouble, np.floating)),
             "zeros" => np.zeros(3, np.longdouble),
+            // np.issubdtype(np.float64, np.longdouble): False — long double is a class of its own, equal to float64.
+            "not_float64" => NDArray.Scalar(np.issubdtype(np.float64, np.longdouble)),
             var f => throw new NotSupportedException($"np.longdouble facet '{f}'"),
         };
+
+        /// <summary>
+        ///     A facet of <c>np.ScalarType</c> that is the same on every C long model: its length, or whether a class is in
+        ///     it (<c>cls in np.ScalarType</c>, a membership test of the class object). The member is an argument dict
+        ///     (<c>{"class": ...}</c>, <c>{"builtin": ...}</c>) or <c>{"dtype": spec}</c> for the class
+        ///     <c>np.dtype(spec).type</c>.
+        /// </summary>
+        /// <param name="p">The case params: <c>facet</c> (<c>len</c> or <c>contains</c>) and, for <c>contains</c>, <c>member</c>.</param>
+        /// <returns>The facet as a 0-d array.</returns>
+        /// <exception cref="NotSupportedException">A facet the generator does not emit.</exception>
+        internal static NDArray ScalarTypeListFacet(IReadOnlyDictionary<string, JsonElement> p)
+        {
+            switch (p["facet"].GetString())
+            {
+                case "len":
+                    return NDArray.Scalar((long)np.ScalarType.Count);
+                case "contains":
+                {
+                    var m = p["member"];
+                    NDScalarType cls = m.TryGetProperty("dtype", out var spec) ? np.dtype(spec.GetString()) : ScalarClassArg(m);
+                    return NDArray.Scalar(np.ScalarType.Contains(cls));
+                }
+                default:
+                    throw new NotSupportedException($"np.ScalarType facet '{p["facet"].GetString()}'");
+            }
+        }
 
         /// <summary>True when a case names its dtype through a scalar class (the <c>sctype</c> / <c>sctype_builtin</c> / <c>sctype_of</c> params).</summary>
         /// <param name="p">The case params.</param>

@@ -604,6 +604,9 @@ namespace NumSharp.Tests.DTypes
                 Check(problems, id, "byteorder", r.byteorder.ToString(), expected.GetProperty("byteorder").GetString());
                 var meta = expected.GetProperty("metadata");
                 Check(problems, id, "metadata", AttrText(r, "metadata"), meta.ValueKind == JsonValueKind.Null ? null : meta.GetString());
+                // The class: the repr cannot tell Windows' C int class ('i') from int32's ('l').
+                Check(problems, id, "char", r.@char.ToString(), expected.GetProperty("char").GetString());
+                Check(problems, id, "num", r.num.ToString(CultureInfo.InvariantCulture), expected.GetProperty("num").GetInt32().ToString(CultureInfo.InvariantCulture));
             }
             AssertNoProblems(problems);
         }
@@ -613,28 +616,22 @@ namespace NumSharp.Tests.DTypes
         // ---------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     The numpy.dtypes names NumPy keeps as classes of their own while NumSharp has one class per width and kind:
-        ///     each must be NumSharp's class named on the right. Every other name is compared attribute by attribute.
+        ///     The numpy.dtypes classes whose INSTANCES differ from NumPy's on this host's model by design, with the reason:
+        ///     NumSharp's long double is the 8-byte double on every host, while Linux NumPy's is the 16-byte x87 extended
+        ///     type (<c>float128</c> / <c>complex256</c>). The class itself is NumSharp's lane-sharing class and is compared
+        ///     attribute by attribute; only the class call (the instance) is exempt, and it must still differ — the entry
+        ///     retires itself if NumSharp ever gains an extended-precision lane. Empty on Windows, whose long double is the
+        ///     double, as NumSharp's.
         /// </summary>
-        private static Dictionary<string, string> CollapsedClasses()
+        /// <returns>The class names and reasons for this host's model.</returns>
+        private static Dictionary<string, string> DivergentClasses()
         {
-            var map = new Dictionary<string, string>(StringComparer.Ordinal)
+            var map = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (!DTypeRegistry.CLongIs32Bit)
             {
-                // No extended precision: long double is float64, as on NumPy's win-amd64 build.
-                ["LongDoubleDType"] = "Float64DType",
-                ["CLongDoubleDType"] = "Complex128DType",
-            };
-            if (DTypeRegistry.CLongIs32Bit)
-            {
-                // LLP64: C int and C long are both 32-bit; int32 is the C long class, C int its own class in NumPy.
-                map["IntDType"] = "Int32DType";
-                map["UIntDType"] = "UInt32DType";
-            }
-            else
-            {
-                // LP64: C long and C long long are both 64-bit; int64 is the C long class, long long its own in NumPy.
-                map["LongLongDType"] = "Int64DType";
-                map["ULongLongDType"] = "UInt64DType";
+                const string reason = "Linux NumPy's long double is the 16-byte x87 extended type, NumSharp's the 8-byte double";
+                map["LongDoubleDType"] = reason;
+                map["CLongDoubleDType"] = reason;
             }
             return map;
         }
@@ -648,19 +645,13 @@ namespace NumSharp.Tests.DTypes
         public void Classes_MatchNumPy()
         {
             var problems = new List<string>();
-            var collapsed = CollapsedClasses();
+            var divergent = DivergentClasses();
             foreach (var rec in Of("class"))
             {
                 string name = rec.GetProperty("name").GetString();
                 if (AbsentClasses.ContainsKey(name))
                     continue; // Asserted absent by Members_ExistUnderNumPysNames.
                 var cls = DtypesClass(name);
-                if (collapsed.TryGetValue(name, out var canonical))
-                {
-                    if (!ReferenceEquals(cls, DtypesClass(canonical)))
-                        problems.Add($"np.dtypes.{name}: not {canonical} (NumSharp's one class of that width and kind)");
-                    continue;
-                }
                 string id = "class/" + name;
                 Check(problems, id, "__name__", cls.Name, rec.GetProperty("__name__").GetString());
                 Check(problems, id, "__module__", cls.ModulePath, rec.GetProperty("__module__").GetString());
@@ -674,6 +665,13 @@ namespace NumSharp.Tests.DTypes
                 CheckBool(problems, id, "_is_numeric", cls._is_numeric, rec.GetProperty("_is_numeric").GetBoolean());
 
                 var call = rec.GetProperty("call");
+                if (divergent.ContainsKey(name))
+                {
+                    // Self-retiring: the instance must still differ from NumPy's (an 8-byte double against float128).
+                    if (!call.TryGetProperty("error", out _) && cls.Instantiate().ToString(true) == call.GetProperty("repr").GetString())
+                        problems.Add($"{id}: the class call now matches NumPy; remove it from DivergentClasses");
+                    continue;
+                }
                 if (call.TryGetProperty("error", out var callErr))
                 {
                     Check(problems, id, "call", Raised(() => cls.Instantiate()), ErrorText(callErr));
@@ -897,12 +895,17 @@ namespace NumSharp.Tests.DTypes
         /// <param name="t">The C# element type, or null.</param>
         /// <param name="cls">
         ///     The class the type belongs to. It decides the one C# type two NumPy types share: a C# <see cref="string"/> is
-        ///     NumPy's <c>np.str_</c> for <c>StrDType</c> and Python's <c>str</c> for <c>StringDType</c>.
+        ///     NumPy's <c>np.str_</c> for <c>StrDType</c> and Python's <c>str</c> for <c>StringDType</c>, and a lane-sharing
+        ///     C-type class names its own scalar type (<c>LongDoubleDType</c>'s <see cref="double"/> is <c>longdouble</c>,
+        ///     Windows' <c>IntDType</c>'s <see cref="int"/> is <c>intc</c>).
         /// </param>
         /// <returns>The NumPy scalar type name, the C# name for a NumSharp-only type, or null.</returns>
         private static string ScalarTypeName(Type t, DTypeMeta cls)
         {
             if (t == null) return null;
+            // A C-type class shares its storage lane's C# type with the canonical class; its scalar class carries the name.
+            if (cls is LegacyBuiltinDTypeMeta { OwnsScalarType: false } ctype && ctype.singleton != null)
+                return ((NDScalarType)ctype.singleton).__name__;
             if (t == typeof(string)) return cls is VStringDTypeMeta ? "str" : "str_";
             if (t == typeof(byte[])) return "bytes_";
             if (t == typeof(bool)) return "bool";

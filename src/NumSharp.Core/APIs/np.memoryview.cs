@@ -131,17 +131,18 @@ namespace NumSharp
 
             /// <summary>
             ///     The struct-module type code describing one element (NumPy's <c>memoryview.format</c>),
-            ///     e.g. <c>"d"</c> for float64, <c>"?"</c> for bool, <c>"Zd"</c> for complex128. The 32-bit
-            ///     integer codes are platform-dependent exactly as NumPy's are (its C <c>long</c> maps to
-            ///     <c>'l'</c>/<c>'L'</c> on Windows LLP64 but <c>'i'</c>/<c>'I'</c> on LP64), because
-            ///     NumPy's int32 dtype is <c>NPY_LONG</c> on Windows and <c>NPY_INT</c> elsewhere. The two
-            ///     NumSharp-only dtypes that have NO NumPy analog carry a documented NumSharp-specific
-            ///     code: <see cref="NPTypeCode.Char"/> (2-byte UTF-16) → <c>"u"</c>,
+            ///     e.g. <c>"d"</c> for float64, <c>"?"</c> for bool, <c>"Zd"</c> for complex128. The integer codes are
+            ///     platform-dependent exactly as NumPy's are, because they are the C type each dtype is on the host:
+            ///     int32 is <c>'l'</c> (the C <c>long</c>) on Windows and <c>'i'</c> on LP64, int64 is <c>'q'</c> on
+            ///     Windows and <c>'l'</c> on LP64; NumPy's C-type classes keep their own codes (<c>np.intc</c>
+            ///     <c>'i'</c>, <c>np.longlong</c> <c>'q'</c>, <c>np.longdouble</c> <c>'g'</c>, <c>np.clongdouble</c>
+            ///     <c>"Zg"</c>). The two NumSharp-only dtypes that have NO NumPy analog carry a documented
+            ///     NumSharp-specific code: <see cref="NPTypeCode.Char"/> (2-byte UTF-16) → <c>"u"</c>,
             ///     <see cref="NPTypeCode.Decimal"/> (opaque 16-byte item) → <c>"16s"</c>. A fixed-width string array
             ///     reports NumPy's character-count codes: <c>"3w"</c> for <c>&lt;U3</c> (three UCS-4 code points) and
             ///     <c>"2s"</c> for <c>|S2</c> (two bytes) — the struct codes NumPy's <c>buffer.c</c> emits.
             /// </summary>
-            public string format => _arr.typecode == NPTypeCode.String ? StringFormatCode(_arr.dtype) : FormatCode(_arr.typecode);
+            public string format => _arr.typecode == NPTypeCode.String ? StringFormatCode(_arr.dtype) : FormatCode(_arr.dtype);
 
             /// <summary><c>true</c> if the array is C-contiguous (NumPy's <c>memoryview.c_contiguous</c>).</summary>
             public bool c_contiguous => _arr.Shape.IsContiguous;
@@ -307,32 +308,38 @@ namespace NumSharp
                 return order[0];
             }
 
-            // NumPy's dtype -> struct format code (numpy/_core/src/multiarray/buffer.c). NPY_LONG emits
-            // 'q' on LP64 (sizeof(long)==sizeof(longlong)) but 'l' on Windows LLP64 — and NumPy's int32
-            // dtype is NPY_LONG on Windows / NPY_INT elsewhere — so int32/uint32 are the only
-            // platform-dependent codes. Char and Decimal have no NumPy dtype (documented house codes).
-            private static bool CLongIs32Bit => OperatingSystem.IsWindows();
-
-            private static string FormatCode(NPTypeCode tc)
+            /// <summary>
+            ///     NumPy's dtype -> struct format code (<c>_buffer_format_string</c>, numpy/_core/src/multiarray/buffer.c)
+            ///     for a native, aligned array — the only kind NumSharp has, so NumPy's "prefer native types" branch always
+            ///     applies: each integer is the C type its descriptor is on this host (NPY_LONG emits <c>'l'</c>, the
+            ///     standard-size <c>'q'</c> only for a swapped or unaligned array), which is exactly the descriptor's type
+            ///     character.
+            /// </summary>
+            /// <param name="descr">The array's (native) numeric descriptor.</param>
+            /// <returns>The format code.</returns>
+            /// <exception cref="NotSupportedException">A descriptor with no buffer code (the datetime classes before Stage C).</exception>
+            private static string FormatCode(DType descr)
             {
-                switch (tc)
+                switch (descr.typecode)
                 {
                     case NPTypeCode.Boolean: return "?";
                     case NPTypeCode.SByte: return "b";
                     case NPTypeCode.Byte: return "B";
                     case NPTypeCode.Int16: return "h";
                     case NPTypeCode.UInt16: return "H";
-                    case NPTypeCode.Int32: return CLongIs32Bit ? "l" : "i";
-                    case NPTypeCode.UInt32: return CLongIs32Bit ? "L" : "I";
-                    case NPTypeCode.Int64: return "q";
-                    case NPTypeCode.UInt64: return "Q";
+                    // The 4- and 8-byte integers: int32 is 'l' on Windows and 'i' on LP64, int64 'q' on Windows and 'l' on
+                    // LP64, and the C-type classes keep theirs (np.intc 'i', np.longlong 'q') — the type character each time.
+                    case NPTypeCode.Int32:
+                    case NPTypeCode.UInt32:
+                    case NPTypeCode.Int64:
+                    case NPTypeCode.UInt64: return descr.@char.ToString();
                     case NPTypeCode.Half: return "e";
                     case NPTypeCode.Single: return "f";
-                    case NPTypeCode.Double: return "d";
-                    case NPTypeCode.Complex: return "Zd";
+                    case NPTypeCode.Double: return descr.@char == 'g' ? "g" : "d";     // np.longdouble is NPY_LONGDOUBLE's 'g'
+                    case NPTypeCode.Complex: return descr.@char == 'G' ? "Zg" : "Zd"; // np.clongdouble is NPY_CLONGDOUBLE's 'Zg'
                     case NPTypeCode.Char: return "u";    // NumSharp-only: 2-byte UTF-16 code unit (no NumPy dtype)
                     case NPTypeCode.Decimal: return "16s"; // NumSharp-only: opaque 16-byte item (no NumPy dtype)
-                    default: throw new NotSupportedException($"No memoryview format code for {tc}.");
+                    default: throw new NotSupportedException($"No memoryview format code for {descr.typecode}.");
                 }
             }
 

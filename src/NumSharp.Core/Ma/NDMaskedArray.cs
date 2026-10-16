@@ -456,7 +456,7 @@ namespace NumSharp
             const string prefix = "masked_array(";
             // dtype is shown when it is not implied by the repr, OR the whole array is masked, OR it is empty —
             // NumPy's exact condition (an all-masked array shows dtype because its data values never appear).
-            bool dtypeNeeded = !DtypeIsImplied(_data.typecode)
+            bool dtypeNeeded = !DtypeIsImplied(_data.dtype)
                                || (_mask is not null && np.all(_mask))
                                || _data.size == 0;
 
@@ -505,13 +505,12 @@ namespace NumSharp
         }
 
         /// <summary>NumPy's <c>_typelessdata</c> membership: dtypes whose repr does not need an explicit
-        /// <c>dtype=</c> suffix (the four defaults int64/float64/complex128/bool). Mirrors
-        /// <c>ArrayFormatter</c>'s private check so the masked repr agrees with the plain-array repr.</summary>
-        /// <param name="tc">The data typecode.</param>
+        /// <c>dtype=</c> suffix (the four default CLASSES int_/float64/complex128/bool — a longdouble array, float64
+        /// storage of another class, shows its dtype). Delegates to <c>ArrayFormatter</c>'s check so the masked repr
+        /// agrees with the plain-array repr.</summary>
+        /// <param name="dtype">The data's descriptor.</param>
         /// <returns>True when the dtype is implied (no <c>dtype=</c> line needed on that ground alone).</returns>
-        private static bool DtypeIsImplied(NPTypeCode tc) =>
-            tc == NPTypeCode.Int64 || tc == NPTypeCode.Double ||
-            tc == NPTypeCode.Complex || tc == NPTypeCode.Boolean;
+        private static bool DtypeIsImplied(DType dtype) => ArrayFormatter.DtypeIsImplied(dtype);
 
         /// <summary>
         ///     Renders the <c>fill_value=</c> value exactly as NumPy 2.4.2's repr, from the STORED fill array's dtype: a text

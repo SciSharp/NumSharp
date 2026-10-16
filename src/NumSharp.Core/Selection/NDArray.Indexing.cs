@@ -50,7 +50,7 @@ namespace NumSharp
             get => typecode == NPTypeCode.String
                 // A string element has no element kernel: the gather runs on the unit view (NDArray.Indexing.Strings.cs).
                 ? StringFetchIndices(selection.Select(array => (NDArray)array).ToArray())
-                : FetchIndices(this, selection.Select(array => (NDArray)array).ToArray(), null, true);
+                : KeepLaneSharingClass(FetchIndices(this, selection.Select(array => (NDArray)array).ToArray(), null, true));
             set
             {
                 ThrowIfNotWriteable();
@@ -185,7 +185,7 @@ namespace NumSharp
                     ThrowIfTooManyIndices(normalized);
                     return StringFetchIndices(normalized);
                 }
-                return this.FetchIndices(indicesObjects);
+                return KeepLaneSharingClass(this.FetchIndices(indicesObjects));
             }
             set
             {

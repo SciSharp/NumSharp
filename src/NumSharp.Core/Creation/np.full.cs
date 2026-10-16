@@ -90,7 +90,7 @@ namespace NumSharp
                 throw NDArray.NoneWithoutDtype("np.full");
             // When dtype is explicitly provided, use it; when null, infer from fill_value.
             var typeCode = dtype != null ? dtype.GetTypeCode() : fill_value.GetType().GetTypeCode();
-            return FullCore(shape, fill_value, typeCode);
+            return WithLaneSharingDescr(FullCore(shape, fill_value, typeCode), dtype);
         }
 
         /// <summary>

@@ -16,10 +16,23 @@ namespace NumSharp.Backends.Printing
     {
         private static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
-        // NumPy's _typelessdata: dtypes whose repr does not need an explicit "dtype=" suffix.
-        private static bool DtypeIsImplied(NPTypeCode tc) =>
-            tc == NPTypeCode.Int64 || tc == NPTypeCode.Double ||
-            tc == NPTypeCode.Complex || tc == NPTypeCode.Boolean;
+        /// <summary>
+        ///     NumPy's <c>dtype_is_implied</c>: whether an array's repr can leave out <c>dtype=</c> — true when the dtype's
+        ///     CLASS is in NumPy's <c>_typelessdata</c> (<c>int_</c>, the pointer-sized integer, <c>float64</c>,
+        ///     <c>complex128</c> and <c>bool</c>; NumPy tests <c>dtype.type in _typelessdata</c>). It is the class, not the
+        ///     storage lane, that decides: a <c>longdouble</c> array is float64 storage and prints <c>dtype=float64</c>, as in
+        ///     NumPy (<c>array([0., 1.], dtype=float64)</c>), and so does a Linux <c>longlong</c> array (<c>dtype=int64</c>).
+        /// </summary>
+        /// <param name="dtype">The array's descriptor (NumSharp's arrays are always native-order, which NumPy also requires).</param>
+        /// <returns>True when the repr shows no <c>dtype=</c>.</returns>
+        internal static bool DtypeIsImplied(DType dtype)
+        {
+            var meta = dtype?.Meta;
+            return meta != null
+                   && (ReferenceEquals(meta, DTypeRegistry.Bool) || ReferenceEquals(meta, DTypeRegistry.Double)
+                       || ReferenceEquals(meta, DTypeRegistry.Complex128)
+                       || ReferenceEquals(meta, DTypeRegistry.FromTypeCode(IntPtr.Size == 8 ? NPTypeCode.Int64 : NPTypeCode.Int32)));
+        }
 
         #region public entry points
 
@@ -51,7 +64,7 @@ namespace NumSharp.Backends.Printing
                               || (opts.legacy > 210 && a.size > opts.threshold);
             if (shapeShown)
                 extras.Add("shape=" + ShapeTuple(a.Shape.dimensions));
-            if (!DtypeIsImplied(a.typecode) || a.size == 0)
+            if (!DtypeIsImplied(a.dtype) || a.size == 0)
                 extras.Add("dtype=" + DtypeShortRepr(a));
 
             if (extras.Count == 0)

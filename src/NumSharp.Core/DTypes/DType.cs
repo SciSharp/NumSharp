@@ -707,44 +707,26 @@ namespace NumSharp
         public static DType From(string dtype) => np.dtype(dtype);
 
         /// <summary>
-        ///     NumPy's <c>PyArray_DescrFromType</c>: the descriptor for a NumPy type number. The rough reverse of
-        ///     <see cref="type_num"/>, but deliberately <b>many-to-one on the C integers</b>: NumPy keeps DISTINCT
-        ///     descriptors for <c>intc</c>/<c>long</c>/<c>longlong</c> even when several share a width and accepts every
-        ///     one of their numbers on every platform (<c>np.dtype(NPY_INT)</c> and <c>np.dtype(NPY_LONGLONG)</c> both
-        ///     succeed), whereas NumSharp collapses each width to ONE type. So every C-integer number is mapped to the
-        ///     NumSharp type of that WIDTH+signedness — <see cref="NPY_TYPES.NPY_INT"/> and <see cref="NPY_TYPES.NPY_LONGLONG"/>
-        ///     resolve on ALL platforms (to int32 / int64), and <see cref="NPY_TYPES.NPY_LONG"/> follows C <c>long</c>
-        ///     (int32 on LLP64/Windows, int64 on LP64). The returned descriptor's own <see cref="num"/> is therefore
-        ///     NumSharp's platform-canonical value, which is a genuine round-trip only for that canonical spelling — the
-        ///     same folding NumSharp applies to intc/int32. Numbers with NO NumSharp type at all
+        ///     NumPy's <c>PyArray_DescrFromType</c>: the builtin descriptor for a NumPy type number — the reverse of
+        ///     <see cref="type_num"/>. Every C-integer number has a class of its own, as in NumPy: on Windows
+        ///     <see cref="NPY_TYPES.NPY_INT"/> is <c>intc</c> (char <c>'i'</c>) beside <see cref="NPY_TYPES.NPY_LONG"/>'s
+        ///     <c>int32</c>, on Linux <see cref="NPY_TYPES.NPY_LONGLONG"/> is <c>longlong</c> (char <c>'q'</c>) beside
+        ///     <see cref="NPY_TYPES.NPY_LONG"/>'s <c>int64</c>, so the returned descriptor's <see cref="num"/> is always the
+        ///     number asked for. <see cref="NPY_TYPES.NPY_LONGDOUBLE"/> / <see cref="NPY_TYPES.NPY_CLONGDOUBLE"/> are NumSharp's
+        ///     8 / 16-byte <c>longdouble</c> / <c>clongdouble</c>. Numbers with NO NumSharp class
         ///     (<see cref="NPY_TYPES.NPY_CFLOAT"/> complex64, <see cref="NPY_TYPES.NPY_OBJECT"/>, <see cref="NPY_TYPES.NPY_VOID"/>,
-        ///     extended precision, the sentinels) are rejected, matching how the parser refuses a dtype NumSharp cannot
-        ///     represent.
+        ///     the sentinels) are rejected, matching how the parser refuses a dtype NumSharp cannot represent.
         /// </summary>
         /// <param name="type_num">A NumPy type number.</param>
         /// <returns>The class's canonical instance (for the datetime pair, the generic-unit descriptor).</returns>
-        /// <exception cref="NotSupportedException">NumSharp has no type of this number's width/kind (complex64, object, void, extended precision, or a sentinel).</exception>
+        /// <exception cref="NotSupportedException">NumSharp has no class of this number (complex64, object, void, or a sentinel).</exception>
         public static DType From(NPY_TYPES type_num)
         {
-            // Map EVERY C-integer number to the NumSharp type of that width+signedness (NumSharp has one type per
-            // width; NumPy has intc/long/longlong). This makes np.dtype(NPY_INT) / np.dtype(NPY_LONGLONG) resolve on
-            // every platform instead of throwing where that spelling is not the platform-canonical one (e.g. NPY_INT=5
-            // is unregistered on Windows, where NumSharp's Int32 is NPY_LONG=7). NPY_LONG/NPY_ULONG follow C `long`.
-            switch (type_num)
-            {
-                case NPY_TYPES.NPY_INT: return DTypeRegistry.Int32.singleton;
-                case NPY_TYPES.NPY_UINT: return DTypeRegistry.UInt32.singleton;
-                case NPY_TYPES.NPY_LONGLONG: return DTypeRegistry.Int64.singleton;
-                case NPY_TYPES.NPY_ULONGLONG: return DTypeRegistry.UInt64.singleton;
-                case NPY_TYPES.NPY_LONG: return (DTypeRegistry.CLongIs32Bit ? DTypeRegistry.Int32 : DTypeRegistry.Int64).singleton;
-                case NPY_TYPES.NPY_ULONG: return (DTypeRegistry.CLongIs32Bit ? DTypeRegistry.UInt32 : DTypeRegistry.UInt64).singleton;
-            }
-
             var meta = DTypeRegistry.FromTypeNum((int)type_num);
             if (meta == null)
                 throw new NotSupportedException(
                     $"NumPy type number {(int)type_num} (NPY_TYPES.{type_num}) has no NumSharp dtype class: " +
-                    "NumSharp has no complex64/object/void/extended-precision types, a single complex width, and no void storage.");
+                    "NumSharp has no complex64/object/void types, a single complex width, and no void storage.");
             return meta.singleton;
         }
 
@@ -878,14 +860,44 @@ namespace NumSharp
         /// <param name="other">The descriptor to compare with; null is unequal.</param>
         /// <returns>True when both describe the same element layout and parameters.</returns>
         /// <remarks>
+        ///     <para>
+        ///     Two DIFFERENT NumPy numeric classes of one kind and one size are equal too, as in NumPy, whose cast between
+        ///     them is no cast at all: <c>np.dtype('g') == np.dtype('d')</c> (long double is a 64-bit double in NumSharp),
+        ///     and on Windows <c>np.dtype(np.intc) == np.dtype(np.int32)</c>. NumSharp's own char and uint16 are not
+        ///     (<see cref="LegacyBuiltinDTypeMeta.IsEquivalentNumeric"/>).
+        ///     </para>
+        ///     <para>
         ///     One known difference: NumPy's relation folds exact metric-prefix units one way only (<c>M8[1000ms] == M8[s]</c>
         ///     but not the reverse); this equality is symmetric and keeps them apart. <see cref="DTypeCasting.EquivTypes"/> is
         ///     NumPy's relation.
+        ///     </para>
         /// </remarks>
         public bool Equals(DType other)
-            => other is not null && (ReferenceEquals(this, other)
-               || (ReferenceEquals(Meta, other.Meta) && CanonicalByteOrder == other.CanonicalByteOrder && itemsize == other.itemsize
-                   && Nullable.Equals(_datetime, other._datetime) && VStringParameters.AreEqual(_vstring, other._vstring)));
+            // The identity test first and alone, so the common case (a singleton against itself) stays small enough to
+            // inline into ==; the structural comparison is a call.
+            => ReferenceEquals(this, other) || (other is not null && StructurallyEqual(other));
+
+        /// <summary>
+        ///     The structural half of <see cref="Equals(DType)"/>: the same class with the same canonical byte order, size
+        ///     and parameters, or two equivalent NumPy numeric classes (<see cref="LegacyBuiltinDTypeMeta.IsEquivalentNumeric"/>:
+        ///     one kind and one size, as <c>PyArray_EquivTypes</c> reads them) with the same canonical byte order.
+        /// </summary>
+        /// <param name="other">A descriptor that is not this one (and not null).</param>
+        /// <returns>True when the two describe the same data.</returns>
+        private bool StructurallyEqual(DType other)
+        {
+            // Every equal pair has one item size, so this rejects most unequal pairs (float64 against float32) before
+            // any class test.
+            if (itemsize != other.itemsize)
+                return false;
+            var mine = Meta;
+            var theirs = other.Meta;
+            if (ReferenceEquals(mine, theirs))
+                return CanonicalByteOrder == other.CanonicalByteOrder && Nullable.Equals(_datetime, other._datetime)
+                       && VStringParameters.AreEqual(_vstring, other._vstring);
+            return mine is LegacyBuiltinDTypeMeta a && theirs is LegacyBuiltinDTypeMeta b && a.IsEquivalentNumeric(b)
+                   && CanonicalByteOrder == other.CanonicalByteOrder;
+        }
 
         /// <summary>
         ///     NumPy's coercing <c>dtype.__eq__</c>: the operand is converted to a descriptor first, so a
@@ -958,10 +970,16 @@ namespace NumSharp
         ///     <c>hash(U5) != hash(U10)</c>). Fixed-size classes keep the two-field hash.
         /// </summary>
         /// <returns>The hash code.</returns>
-        /// <remarks>A <c>StringDType</c> descriptor hashes its parameters (NumPy hashes the tuple <c>(coerce, na_object)</c>).</remarks>
+        /// <remarks>
+        ///     A <c>StringDType</c> descriptor hashes its parameters (NumPy hashes the tuple <c>(coerce, na_object)</c>). A
+        ///     NumPy numeric class hashes its kind and size instead of its type number, as NumPy's <c>_array_descr_builtin</c>
+        ///     does (<c>(kind, byteorder, flags, elsize, alignment)</c>), so the equal descriptors of two equivalent classes
+        ///     (<c>hash(np.dtype('g')) == hash(np.dtype('d'))</c>) hash alike.
+        /// </remarks>
         public override int GetHashCode()
             => _vstring != null ? HashCode.Combine(Meta.type_num, _vstring.Hash())
                 : Meta is StringDTypeMeta ? HashCode.Combine(Meta.type_num, CanonicalByteOrder, itemsize)
+                : Meta is LegacyBuiltinDTypeMeta { IsNumPyNumeric: true } ? HashCode.Combine(kind, itemsize, CanonicalByteOrder)
                 : HashCode.Combine(Meta.type_num, CanonicalByteOrder);
 
         // NOTE: there are deliberately NO `==(DType, string)` operators. A `null` literal would bind them (`descr == null`

@@ -79,22 +79,34 @@ namespace NumSharp
             public static LegacyBuiltinDTypeMeta ShortDType => DTypeRegistry.Int16;
             /// <summary><c>numpy.dtypes.UShortDType</c> — alias of <see cref="UInt16DType"/>.</summary>
             public static LegacyBuiltinDTypeMeta UShortDType => DTypeRegistry.UInt16;
-            /// <summary><c>numpy.dtypes.IntDType</c> (C <c>int</c>) — alias of <see cref="Int32DType"/>.</summary>
-            public static LegacyBuiltinDTypeMeta IntDType => DTypeRegistry.Int32;
-            /// <summary><c>numpy.dtypes.UIntDType</c> (C <c>unsigned int</c>) — alias of <see cref="UInt32DType"/>.</summary>
-            public static LegacyBuiltinDTypeMeta UIntDType => DTypeRegistry.UInt32;
+            /// <summary>
+            ///     <c>numpy.dtypes.IntDType</c> (C <c>int</c>): on Windows a class of its own beside <see cref="Int32DType"/>
+            ///     (which is the C <c>long</c> there), sharing int32's storage lane; on Linux and macOS an alias of
+            ///     <see cref="Int32DType"/>.
+            /// </summary>
+            public static LegacyBuiltinDTypeMeta IntDType => DTypeRegistry.CInt;
+            /// <summary><c>numpy.dtypes.UIntDType</c> (C <c>unsigned int</c>): its own class on Windows, an alias of <see cref="UInt32DType"/> elsewhere (see <see cref="IntDType"/>).</summary>
+            public static LegacyBuiltinDTypeMeta UIntDType => DTypeRegistry.CUInt;
             /// <summary><c>numpy.dtypes.LongDType</c> (C <c>long</c>): <see cref="Int32DType"/> on Windows / 32-bit hosts, <see cref="Int64DType"/> on LP64 Unix.</summary>
             public static LegacyBuiltinDTypeMeta LongDType => DTypeRegistry.CLongIs32Bit ? DTypeRegistry.Int32 : DTypeRegistry.Int64;
             /// <summary><c>numpy.dtypes.ULongDType</c> (C <c>unsigned long</c>): <see cref="UInt32DType"/> on Windows / 32-bit hosts, <see cref="UInt64DType"/> on LP64 Unix.</summary>
             public static LegacyBuiltinDTypeMeta ULongDType => DTypeRegistry.CLongIs32Bit ? DTypeRegistry.UInt32 : DTypeRegistry.UInt64;
-            /// <summary><c>numpy.dtypes.LongLongDType</c> — alias of <see cref="Int64DType"/>.</summary>
-            public static LegacyBuiltinDTypeMeta LongLongDType => DTypeRegistry.Int64;
-            /// <summary><c>numpy.dtypes.ULongLongDType</c> — alias of <see cref="UInt64DType"/>.</summary>
-            public static LegacyBuiltinDTypeMeta ULongLongDType => DTypeRegistry.UInt64;
-            /// <summary><c>numpy.dtypes.LongDoubleDType</c> — collapses onto <see cref="Float64DType"/> (no extended precision, as on NumPy's win-amd64 build).</summary>
-            public static LegacyBuiltinDTypeMeta LongDoubleDType => DTypeRegistry.Double;
-            /// <summary><c>numpy.dtypes.CLongDoubleDType</c> — collapses onto <see cref="Complex128DType"/>.</summary>
-            public static LegacyBuiltinDTypeMeta CLongDoubleDType => DTypeRegistry.Complex128;
+            /// <summary>
+            ///     <c>numpy.dtypes.LongLongDType</c> (C <c>long long</c>): on Linux and macOS a class of its own beside
+            ///     <see cref="Int64DType"/> (which is the C <c>long</c> there), sharing int64's storage lane; on Windows an
+            ///     alias of <see cref="Int64DType"/>.
+            /// </summary>
+            public static LegacyBuiltinDTypeMeta LongLongDType => DTypeRegistry.CLongLong;
+            /// <summary><c>numpy.dtypes.ULongLongDType</c> (C <c>unsigned long long</c>): its own class on Linux and macOS, an alias of <see cref="UInt64DType"/> on Windows (see <see cref="LongLongDType"/>).</summary>
+            public static LegacyBuiltinDTypeMeta ULongLongDType => DTypeRegistry.CULongLong;
+            /// <summary>
+            ///     <c>numpy.dtypes.LongDoubleDType</c> — NumPy's C <c>long double</c> class, a class of its own sharing
+            ///     <see cref="Float64DType"/>'s storage lane: 8 bytes on every platform (NumSharp has no extended precision,
+            ///     as on NumPy's win-amd64 build), its descriptors equal to float64's.
+            /// </summary>
+            public static LegacyBuiltinDTypeMeta LongDoubleDType => DTypeRegistry.LongDouble;
+            /// <summary><c>numpy.dtypes.CLongDoubleDType</c> — the complex <c>long double</c> class, sharing <see cref="Complex128DType"/>'s storage lane (two 8-byte parts).</summary>
+            public static LegacyBuiltinDTypeMeta CLongDoubleDType => DTypeRegistry.CLongDouble;
 
             // ---- NumSharp-only classes ----
 

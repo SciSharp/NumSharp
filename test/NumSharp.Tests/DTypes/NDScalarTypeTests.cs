@@ -102,8 +102,10 @@ namespace NumSharp.Tests.DTypes
         /// <summary>
         ///     <c>__subclasses__()</c> lists the direct subclasses in NumPy's registration order — abstract first, then
         ///     concrete, the dtype-less classes in their NumPy places (<c>object_</c> last under generic, <c>void</c> after
-        ///     <c>character</c>, <c>complex64</c> before <c>complex128</c>). NumSharp's lists differ from NumPy's only by the
-        ///     classes it collapses (intc, longdouble, clongdouble) or adds (decimal, char).
+        ///     <c>character</c>, <c>complex64</c> before <c>complex128</c>), the C-type classes in theirs (<c>intc</c> before
+        ///     <c>int32</c> on Windows, <c>longlong</c> after <c>int64</c> on Linux, <c>longdouble</c> after <c>float64</c>).
+        ///     NumSharp's lists differ from NumPy's only by the classes it adds (decimal, char) and the one it does not model
+        ///     (void's numpy.record).
         /// </summary>
         [TestMethod]
         public void Subclasses_FollowNumPysRegistrationOrder()
@@ -111,11 +113,21 @@ namespace NumSharp.Tests.DTypes
             Names(np.generic.__subclasses__()).Should().Equal("numpy.number", "numpy.flexible", "numpy.bool", "numpy.datetime64", "numpy.object_");
             Names(np.number.__subclasses__()).Should().Equal("numpy.integer", "numpy.inexact");
             Names(np.integer.__subclasses__()).Should().Equal("numpy.signedinteger", "numpy.unsignedinteger");
-            Names(np.signedinteger.__subclasses__()).Should().Equal("numpy.int8", "numpy.int16", "numpy.int32", "numpy.int64", "numpy.timedelta64");
-            Names(np.unsignedinteger.__subclasses__()).Should().Equal("numpy.uint8", "numpy.uint16", "numpy.uint32", "numpy.uint64", "numsharp.char");
+            if (DTypeRegistry.CLongIs32Bit)
+            {
+                // Windows NumPy (probed): [int8, int16, intc, int32, int64, timedelta64] and [uint8, uint16, uintc, uint32, uint64].
+                Names(np.signedinteger.__subclasses__()).Should().Equal("numpy.int8", "numpy.int16", "numpy.intc", "numpy.int32", "numpy.int64", "numpy.timedelta64");
+                Names(np.unsignedinteger.__subclasses__()).Should().Equal("numpy.uint8", "numpy.uint16", "numpy.uintc", "numpy.uint32", "numpy.uint64", "numsharp.char");
+            }
+            else
+            {
+                // Linux NumPy (probed through WSL): [int8, int16, int32, int64, longlong, timedelta64] and [..., ulonglong].
+                Names(np.signedinteger.__subclasses__()).Should().Equal("numpy.int8", "numpy.int16", "numpy.int32", "numpy.int64", "numpy.longlong", "numpy.timedelta64");
+                Names(np.unsignedinteger.__subclasses__()).Should().Equal("numpy.uint8", "numpy.uint16", "numpy.uint32", "numpy.uint64", "numpy.ulonglong", "numsharp.char");
+            }
             Names(np.inexact.__subclasses__()).Should().Equal("numpy.floating", "numpy.complexfloating");
-            Names(np.floating.__subclasses__()).Should().Equal("numpy.float16", "numpy.float32", "numpy.float64", "numsharp.decimal");
-            Names(np.complexfloating.__subclasses__()).Should().Equal("numpy.complex64", "numpy.complex128");
+            Names(np.floating.__subclasses__()).Should().Equal("numpy.float16", "numpy.float32", "numpy.float64", "numpy.longdouble", "numsharp.decimal");
+            Names(np.complexfloating.__subclasses__()).Should().Equal("numpy.complex64", "numpy.complex128", "numpy.clongdouble");
             Names(np.flexible.__subclasses__()).Should().Equal("numpy.character", "numpy.void");
             Names(np.character.__subclasses__()).Should().Equal("numpy.bytes_", "numpy.str_");
             ((NDScalarType)np.float64).__subclasses__().Should().BeEmpty();
@@ -758,15 +770,18 @@ namespace NumSharp.Tests.DTypes
 
         /// <summary>
         ///     np.sctypeDict maps NumPy's names to NumSharp's spelling of the class (the descriptor itself), in NumPy's key
-        ///     order; collapsed classes map to the class they collapse onto; absent classes have no key.
+        ///     order; the C-type names map to their own classes; the dtype-less classes have no key.
         /// </summary>
         [TestMethod]
         public void SctypeDict_MapsNamesToTheDescriptors()
         {
             ReferenceEquals(np.sctypeDict["float64"], np.float64).Should().BeTrue();
             ReferenceEquals(np.sctypeDict["float"], np.float64).Should().BeTrue();
-            ReferenceEquals(np.sctypeDict["longdouble"], np.float64).Should().BeTrue();
-            ReferenceEquals(np.sctypeDict["intc"], np.int32).Should().BeTrue();
+            ReferenceEquals(np.sctypeDict["longdouble"], np.longdouble).Should().BeTrue();
+            ReferenceEquals(np.sctypeDict["clongdouble"], np.clongdouble).Should().BeTrue();
+            ReferenceEquals(np.sctypeDict["intc"], np.intc).Should().BeTrue();
+            ReferenceEquals(np.sctypeDict["longlong"], np.longlong).Should().BeTrue();
+            (np.sctypeDict["longdouble"] == np.float64).Should().BeTrue("equal descriptors, different classes");
             ReferenceEquals(np.sctypeDict["datetime64"], np.dtype("M")).Should().BeTrue();
             ReferenceEquals(np.sctypeDict["long"], np.@long).Should().BeTrue();
             np.sctypeDict["int"].Should().Be(np.intp);
@@ -783,14 +798,21 @@ namespace NumSharp.Tests.DTypes
                 np.issubdtype(value, np.generic).Should().BeTrue();
         }
 
-        /// <summary>np.True_ / np.False_ are NumSharp's bool scalars (C# bools); np.longdouble is the float64 descriptor.</summary>
+        /// <summary>
+        ///     np.True_ / np.False_ are NumSharp's bool scalars (C# bools); np.longdouble is its own class, EQUAL to float64 (an
+        ///     8-byte double, as on NumPy's win-amd64 build) but neither's subclass (NumPy 2.4.2's answers).
+        /// </summary>
         [TestMethod]
         public void BoolScalars_AndLongDouble()
         {
             np.True_.Should().BeTrue();
             np.False_.Should().BeFalse();
-            ReferenceEquals(np.longdouble, np.float64).Should().BeTrue();
+            ReferenceEquals(np.longdouble, np.float64).Should().BeFalse();
+            (np.longdouble == np.float64).Should().BeTrue();
             np.issubdtype(np.longdouble, np.floating).Should().BeTrue();
+            np.issubdtype(np.float64, np.longdouble).Should().BeFalse();
+            np.issubdtype(np.longdouble, np.float64).Should().BeFalse();
+            np.issubdtype(np.complex128, np.clongdouble).Should().BeFalse();
         }
 
         /// <summary>

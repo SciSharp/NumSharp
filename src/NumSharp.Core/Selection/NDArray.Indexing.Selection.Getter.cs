@@ -43,7 +43,30 @@ namespace NumSharp
                     np.copyto(@out, picked);
                 return @out;
             }
-            return FetchIndices(this, indices, @out, true);
+            // A caller's out keeps its own class; a fresh gather takes this array's lane-sharing C-type class.
+            var gathered = FetchIndices(this, indices, @out, true);
+            return ReferenceEquals(gathered, @out) ? gathered : KeepLaneSharingClass(gathered);
+        }
+
+        /// <summary>
+        ///     Labels the result of an element-moving routine over this array (a fancy or boolean gather) with this array's
+        ///     lane-sharing C-type class (<c>np.longdouble</c>, Windows' <c>np.intc</c>, Linux's <c>np.longlong</c>), as
+        ///     NumPy's result keeps the source's descriptor; for any other class this does nothing, since the lane already
+        ///     reports it.
+        /// </summary>
+        /// <param name="result">The routine's result: a fresh array, or a view of this array (already labelled).</param>
+        /// <returns><paramref name="result"/> itself.</returns>
+        /// <remarks>
+        ///     Only a result built from this array's elements may be passed: its storage is fresh or a view of this one, so
+        ///     relabelling it changes no unrelated array. The storage lane must be this array's (the relabel is a no-op
+        ///     otherwise).
+        /// </remarks>
+        internal NDArray KeepLaneSharingClass(NDArray result)
+        {
+            // The common case — a lane owner's class — costs one cached-descriptor read and a type test.
+            if (result is not null && Storage.Descr?.Meta is LegacyBuiltinDTypeMeta { OwnsTypeCode: false } && !ReferenceEquals(result.Storage, Storage))
+                result.Storage.AdoptLaneSharingDescr(Storage.Descr);
+            return result;
         }
 
         /// <summary>

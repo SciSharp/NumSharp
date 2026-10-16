@@ -1756,14 +1756,17 @@ def _gap_of(case):
 # A class list (__mro__, __bases__, mro(), __subclasses__()) is the repr of its qualified names: 'numpy.float64' for a
 # NumPy class, the bare name for a Python built-in ('float', 'object'), so Python's bool and numpy.bool stay apart.
 # Left out, each a documented limit the unit tests pin: __subclasses__ of a class whose NumPy list names a class
-# NumSharp collapses or lists per platform (signedinteger, unsignedinteger, floating, complexfloating: intc, longdouble,
-# clongdouble), a class NumSharp does not model (void: numpy.record) or a Python class outside NumPy (int:
-# enum.IntEnum, str: enum.StrEnum, object: ~360 classes); np.dtype of
-# a dtype-less class and of the built-ins whose NumPy dtype is one (object, memoryview), or a string dtype (str, bytes:
-# the dtype result is compared by storage code); dtype strings whose class NumPy keeps apart from the one NumSharp
-# collapses it onto (intc, longdouble, clongdouble, g, G) and the platform C long ('long', 'ulong', 'l', 'L'); and
-# isinstance over a C# value (NumSharp's double is both a numpy.float64 and a Python float,
-# NDScalarType.__instancecheck__'s documented rule): the isinstance cases test NumPy scalars (0-d arrays) and arrays.
+# that is a class of its own on one C long model only (signedinteger, unsignedinteger: Windows' intc, Linux's
+# longlong), a NumSharp-only class (floating: numsharp.decimal, unsignedinteger: numsharp.char), a class NumSharp does
+# not model (void: numpy.record) or a Python class outside NumPy (int: enum.IntEnum, str: enum.StrEnum, object: ~360
+# classes); np.dtype of a dtype-less class and of the built-ins whose NumPy dtype is one (object, memoryview), or a
+# string dtype (str, bytes: the dtype result is compared by storage code); dtype strings whose class depends on the C
+# long model (intc, longlong and the platform C long 'long', 'ulong', 'l', 'L' — the corpus is generated on Windows
+# and replayed on Linux too), np.finfo of long double (Linux NumPy's is the 16-byte type) and np.ScalarType's order
+# (it lists intc or longlong by model: membership and length are compared instead); and isinstance over a C# value
+# (NumSharp's double is both a numpy.float64 and a Python float, NDScalarType.__instancecheck__'s documented rule): the
+# isinstance cases test NumPy scalars (0-d arrays) and arrays. The long double pair ('g', 'G', longdouble,
+# clongdouble) IS compared: its class relations are the same on every model.
 
 SCT_ABSTRACT = ["generic", "number", "integer", "signedinteger", "unsignedinteger", "inexact", "floating",
                 "complexfloating", "flexible", "character"]
@@ -1773,15 +1776,19 @@ SCT_DTYPELESS = ["complex64", "object_", "void"]
 SCT_BUILTINS = ["object", "int", "bool", "float", "complex", "str", "bytes", "memoryview"]
 # The concrete classes NumSharp has, by the name of their (canonical) dtype; each class's name is the dtype's name.
 SCT_CONCRETE = ALL13
-# Dtype strings an issubdtype argument may be: the canonical names, codes, NumPy's Python-type names and the datetimes.
+# The C-type classes whose class relations are the same on every C long model: the long double pair (NumSharp's
+# lane-sharing classes of the float64 / complex128 lanes). Compared beside the concrete classes.
+SCT_LONG_DOUBLE = ["longdouble", "clongdouble"]
+# Dtype strings an issubdtype argument may be: the canonical names, codes, NumPy's Python-type names, the datetimes and
+# the long double spellings ('longlong' is left out: its class is int64's on Windows and its own on Linux).
 SCT_DTYPE_SPECS = ALL13 + ["M8[s]", "m8[s]", "f8", "i4", "u2", "float", "complex", "int", "bool_", "intp", "uint",
-                           "longlong", "half", "double", "single", "byte", "ubyte"]
+                           "half", "double", "single", "byte", "ubyte"] + SCT_LONG_DOUBLE + ["g", "G"]
 # Strings NumPy refuses as a dtype: the family names NumSharp once read as categories, and junk.
 SCT_BAD_SPECS = ["integer", "floating", "signed", "number", "generic", "invalid_category"]
 SCT_ATTRS = ["__name__", "__qualname__", "__module__", "repr", "__mro__", "__bases__", "__base__", "mro"]
 # The abstract classes whose __subclasses__() list NumSharp holds whole (every entry a class NumSharp has, in NumPy's
-# order, on every platform).
-SCT_SUBCLASSES_EXACT = ["generic", "number", "integer", "inexact", "flexible", "character"]
+# order, on every platform; complexfloating's is [complex64, complex128, clongdouble]).
+SCT_SUBCLASSES_EXACT = ["generic", "number", "integer", "inexact", "complexfloating", "flexible", "character"]
 # The dtype-less classes whose __subclasses__() list NumSharp holds (both empty); void lists numpy.record, the class
 # of a structured record, which NumSharp does not model.
 SCT_DTYPELESS_SUBCLASSES_EXACT = ["complex64", "object_"]
@@ -1905,8 +1912,8 @@ def _sct_attr(cls, attr):
 
 def gen_scalar_types():
     """np.issubdtype / np.isdtype / np.dtype / np.finfo / np.iinfo over the scalar classes, the classes' own attributes
-    and isinstance / issubclass checks, and the relatives np.typecodes, np.sctypeDict, np.True_ / np.False_ and
-    np.longdouble."""
+    and isinstance / issubclass checks, and the relatives np.typecodes, np.sctypeDict, np.True_ / np.False_,
+    np.longdouble and np.ScalarType."""
     abstract = [{"class": n} for n in SCT_ABSTRACT]
     dtypeless = [{"class": n} for n in SCT_DTYPELESS]
     pyclasses = [{"builtin": n} for n in SCT_BUILTINS]
@@ -1926,7 +1933,7 @@ def gen_scalar_types():
                      lambda o, p=p: np.bool_(np.issubdtype(_sct_arg(p["arg1"]), _sct_arg(p["arg2"]))))
 
     # ---- S42 np.isdtype with classes: identity, named kinds, mixed tuples, refusals ---------------------------------
-    isdtype_args = abstract + dtypeless + [{"dtype": s} for s in SCT_CONCRETE + ["M8[s]", "m8[s]"]]
+    isdtype_args = abstract + dtypeless + [{"dtype": s} for s in SCT_CONCRETE + SCT_LONG_DOUBLE + ["M8[s]", "m8[s]"]]
     kinds = abstract + dtypeless + [{"dtype": s} for s in ["int64", "float32", "bool", "complex128"]] + \
         [{"name": k} for k in ISDTYPE_KIND_NAMES]
 
@@ -2039,7 +2046,7 @@ def gen_scalar_types():
         for attr in SCT_ATTRS + (["__subclasses__"] if n in SCT_BUILTIN_SUBCLASSES_EXACT else []):
             emit("sctype", "sctype", f"b:{n}:{attr}", [], {"builtin": n, "cls": "py:" + n, "attr": attr}, "text",
                  lambda o, n=n, attr=attr: _sct_attr(getattr(builtins, n), attr))
-    for s in SCT_CONCRETE + ["M8[ms]", "m8[5s]"] + SCT_STRING_SPECS:
+    for s in SCT_CONCRETE + SCT_LONG_DOUBLE + ["M8[ms]", "m8[5s]"] + SCT_STRING_SPECS:
         cls = np.dtype(s).type
         # A StringDType's class is Python's str, whose NumPy-external subclasses (enum.StrEnum) are left out.
         extra = [] if cls.__module__ == "builtins" else ["__subclasses__"]
@@ -2088,7 +2095,8 @@ def gen_scalar_types():
             emit("sctype", "sctype", f"{dt}:array:isinstance:{label}", [vector],
                  {**_checked_params(key, n), "check": "instance"},
                  "scalar", lambda o, key=key, n=n: np.bool_(isinstance(o[0], _checked_class(key, n))))
-    subs = abstract + dtypeless + pyclasses + [{"dtype": s} for s in SCT_CONCRETE + ["M8[s]", "m8[s]"] + SCT_STRING_SPECS]
+    subs = abstract + dtypeless + pyclasses + [{"dtype": s} for s in SCT_CONCRETE + SCT_LONG_DOUBLE + ["M8[s]", "m8[s]"]
+                                               + SCT_STRING_SPECS]
     for key, n in checked:
         label = n if key == "cls" else "b:" + n
         for sub in subs:
@@ -2119,6 +2127,17 @@ def gen_scalar_types():
     emit("sctype", "longdouble", "is_floating", [], {"facet": "is_floating"}, "scalar",
          lambda o: np.bool_(np.issubdtype(np.longdouble, np.floating)))
     emit("sctype", "longdouble", "zeros", [], {"facet": "zeros"}, "array", lambda o: np.zeros(3, np.longdouble))
+    emit("sctype", "longdouble", "not_float64", [], {"facet": "not_float64"}, "scalar",
+         lambda o: np.bool_(np.issubdtype(np.float64, np.longdouble)))
+
+    # ---- S49 np.ScalarType: its length and which classes it holds ------------------------------------------------------
+    # The order lists intc (Windows) or longlong (Linux) by the C long model, so the portable facts are the length and the
+    # membership of every class this section names (the abstract classes are not in it, object is not, the rest are).
+    emit("sctype", "ScalarType", "len", [], {"facet": "len"}, "scalar", lambda o: np.int64(len(np.ScalarType)))
+    members = abstract + dtypeless + pyclasses + [{"dtype": s} for s in SCT_CONCRETE + SCT_LONG_DOUBLE]
+    for m in members:
+        emit("sctype", "ScalarType", f"contains:{_sct_label(m)}", [], {"facet": "contains", "member": m}, "scalar",
+             lambda o, m=m: np.bool_((np.dtype(m["dtype"]).type if "dtype" in m else _sct_arg(m)) in np.ScalarType))
 
 
 # =============================================================================================================

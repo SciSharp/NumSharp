@@ -29,8 +29,9 @@ namespace NumSharp.Tests.DTypes
         [DataRow("f", 11, 'f', 'f', '=', 4, 4, "float32", "<f4", "dtype('float32')", "float32", "Float32DType")]
         [DataRow("d", 12, 'f', 'd', '=', 8, 8, "float64", "<f8", "dtype('float64')", "float64", "Float64DType")]
         [DataRow("D", 15, 'c', 'D', '=', 16, 8, "complex128", "<c16", "dtype('complex128')", "complex128", "Complex128DType")]
-        [DataRow("g", 12, 'f', 'd', '=', 8, 8, "float64", "<f8", "dtype('float64')", "float64", "Float64DType")]
-        [DataRow("G", 15, 'c', 'D', '=', 16, 8, "complex128", "<c16", "dtype('complex128')", "complex128", "Complex128DType")]
+        // long double: its own class (type number 13 / 16, char 'g' / 'G'), 8 / 16 bytes as on NumPy's win-amd64 build.
+        [DataRow("g", 13, 'f', 'g', '=', 8, 8, "float64", "<f8", "dtype('float64')", "float64", "LongDoubleDType")]
+        [DataRow("G", 16, 'c', 'G', '=', 16, 8, "complex128", "<c16", "dtype('complex128')", "complex128", "CLongDoubleDType")]
         public void Builtin_Surface(string spelling, int num, char kind, char ch, char byteorder, int itemsize, int alignment,
             string name, string str, string repr, string tostr, string cls)
         {
@@ -210,7 +211,9 @@ namespace NumSharp.Tests.DTypes
         {
             np.dtype("i8").Should().BeSameAs(np.dtype("i8"));
             np.dtype("i8").Should().BeSameAs(DType.Int64);
-            np.dtype("int64").Should().BeSameAs(np.dtype("q"));
+            // int64's singleton is the C long long class on Windows ('q') and the C long class on LP64 ('l'); there the
+            // other 8-byte character is NumPy's C-type class of its own (LongLongDType), equal but not the same object.
+            np.dtype("int64").Should().BeSameAs(np.dtype(DTypeRegistry.CLongIs32Bit ? "q" : "l"));
             ((DType)typeof(int)).Should().BeSameAs(np.dtype("int32"));
             ((DType)NPTypeCode.Double).Should().BeSameAs(DType.Double);
             DType.From(typeof(int[])).Should().BeSameAs(DType.Int32, "array types map to their element class");

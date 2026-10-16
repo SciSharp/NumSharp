@@ -39,10 +39,14 @@ Recipes (field "recipe") build a descriptor step by step, and the C# replay has 
   ["newbyteorder", code]   d.newbyteorder(code)      (code None means the default 'S')
   ["instantiate", name]    getattr(np.dtypes, name)()
 
-What is left out on purpose: specs whose NumPy class is not the canonical class of its width (NumPy's IntDType on
-Windows, LongLongDType on Linux, LongDoubleDType everywhere — NumSharp has one class per width and kind, so those
-spellings resolve to the canonical class there by design); every dtype NumSharp has no storage for (complex64,
-strings, bytes, void, object); and the metadata=None TypeError (C#'s null means "not given").
+The C-type classes NumPy keeps beside the canonical class of the same width and kind are compared like every other
+class: NumSharp models them as lane-sharing classes (Windows' IntDType / UIntDType / LongDoubleDType /
+CLongDoubleDType, Linux's LongLongDType / ULongLongDType; DTypeRegistry.CInt and its siblings), which take the
+canonical class's storage lane but keep their own type number, character and scalar type.
+
+What is left out on purpose: Linux's long double pair (NumPy's is the 16-byte x87 extended type, NumSharp's the 8-byte
+double — its descriptors differ by design, see UNMODELLED_CLASSES); every dtype NumSharp has no storage for
+(complex64, strings, bytes, void, object); and the metadata=None TypeError (C#'s null means "not given").
 
 Regenerate:  python test/oracle/gen_dtype_oracle.py   (requires numpy==2.4.2)
 """
@@ -64,14 +68,31 @@ MODEL = "llp64" if CLONG_BITS == 32 else "lp64"
 OUT = os.path.join(REPO, "test", "NumSharp.Tests", "DTypes", "corpus", f"dtype_oracle.{MODEL}.jsonl")
 NUMPY_SRC = os.environ.get("NUMPY_SRC") or os.path.join(REPO, "refs", "numpy")
 
-# The DType classes NumSharp has storage or descriptors for, canonical NumPy class first.
+# The C-type classes NumPy keeps beside the canonical class of the same width and kind on this host's model, which
+# NumSharp models as lane-sharing classes (DTypeRegistry.CInt / CUInt / CLongLong / CULongLong / LongDouble /
+# CLongDouble): Windows' C int pair and long double pair, Linux's long long pair.
+CTYPE_CLASSES = {"llp64": ["IntDType", "UIntDType", "LongDoubleDType", "CLongDoubleDType"],
+                 "lp64": ["LongLongDType", "ULongLongDType"]}[MODEL]
+# The classes whose NumPy descriptors NumSharp does not reproduce on this model: Linux's long double is the 16-byte
+# x87 extended type (float128 / complex256), NumSharp's the 8-byte double on every host. Their descriptors are left out
+# and DTypeOracleTests.DivergentClasses names them, so the class records still show what NumPy has there.
+UNMODELLED_CLASSES = {"llp64": [], "lp64": ["LongDoubleDType", "CLongDoubleDType"]}[MODEL]
+# The specs that build this model's C-type descriptors, native and swapped: the keyword, newbyteorder, comparison and
+# promotion sections run over them besides their canonical twins.
+CTYPE_SPECS = {"llp64": ["i", "I", "g", "G", ">i", ">g"], "lp64": ["q", "Q", ">q", ">Q"]}[MODEL]
+
+# The DType classes NumSharp has storage or descriptors for, canonical NumPy class first, then this model's C-type classes.
 CLASSES = ["BoolDType", "Int8DType", "UInt8DType", "Int16DType", "UInt16DType", "Int32DType", "UInt32DType",
            "Int64DType", "UInt64DType", "Float16DType", "Float32DType", "Float64DType", "Complex128DType",
-           "DateTime64DType", "TimeDelta64DType"]
+           "DateTime64DType", "TimeDelta64DType"] + CTYPE_CLASSES
+# The sized names, then the C names (each resolves to a canonical class or a C-type class, by model).
 NAMES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32",
-         "float64", "complex128"]
+         "float64", "complex128",
+         "byte", "ubyte", "short", "ushort", "intc", "uintc", "long", "ulong", "longlong", "ulonglong", "intp",
+         "uintp", "int_", "uint", "half", "single", "double", "longdouble", "clongdouble"]
 SIZED = ["b1", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "c16"]
-CHARS = ["?", "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "e", "f", "d", "D"]
+# Every numeric character code: 'n' / 'N' / 'p' / 'P' are intp / uintp, 'g' / 'G' the long double pair.
+CHARS = ["?", "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "n", "N", "p", "P", "e", "f", "d", "g", "D", "G"]
 UNITS = ["Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns", "ps", "fs", "as"]
 ATTRS = ["alignment", "base", "byteorder", "char", "descr", "fields", "flags", "hasobject", "isalignedstruct",
          "isbuiltin", "isnative", "itemsize", "kind", "metadata", "name", "names", "ndim", "num", "shape", "str",
@@ -133,11 +154,25 @@ def attr_text(d, a):
     return repr(v)
 
 
-def canonical_class(d):
-    """True when d's class is the class NumPy itself uses for d's name — the only kind NumSharp models (one class
-    per width and kind). False for the C-name classes that exist beside it (IntDType on Windows, LongLongDType on
-    Linux, LongDoubleDType)."""
-    return type(d) is type(np.dtype(d.name))
+def modelled_class(d):
+    """True when NumSharp models d's class on this host's model: the class NumPy itself uses for d's name, or one of
+    the C-type classes NumPy keeps beside it (CTYPE_CLASSES). False for the classes whose descriptors NumSharp does not
+    reproduce here (UNMODELLED_CLASSES: Linux's 16-byte long double pair).
+
+    Parameters
+    ----------
+    d : numpy.dtype
+        The descriptor a recipe built.
+
+    Returns
+    -------
+    bool
+        Whether a descriptor record of d is replayable.
+    """
+    name = type(d).__name__
+    if name in UNMODELLED_CLASSES:
+        return False
+    return name in CTYPE_CLASSES or type(d) is type(np.dtype(d.name))
 
 
 def descr_record(cid, recipe):
@@ -147,7 +182,7 @@ def descr_record(cid, recipe):
     except Exception as e:  # noqa: BLE001
         emit("error", cid, recipe=recipe, error={"type": type(e).__name__, "text": str(e)})
         return None
-    if not canonical_class(d):
+    if not modelled_class(d):
         return None
     emit("descr", cid, recipe=recipe,
          attrs={a: attr_text(d, a) for a in ATTRS},
@@ -293,9 +328,16 @@ def descriptors():
     for spec in ["datetime64", "datetime64[ns]", "timedelta64", "timedelta64[25us]"]:
         descr_record(f"spec:{spec}", [["dtype", spec]])
 
-    # newbyteorder: every code over native / explicit / non-native / single-byte / datetime descriptors, and chains.
+    # Every character code with an explicit byte order: a C-type class keeps its class through the prefix. (A name
+    # takes no prefix: NumPy looks the whole string up in its type dictionary, so '<intc' is not understood.)
+    for spec in CHARS:
+        for bo in "<>=|":
+            descr_record(f"spec:{bo}{spec}", [["dtype", bo + spec]])
+
+    # newbyteorder: every code over native / explicit / non-native / single-byte / datetime descriptors, and chains,
+    # and over this model's C-type classes (a swapped copy keeps the class, as a copy of the singleton must).
     bases = ["f8", ">f8", "<f8", "i4", ">i4", "c16", ">c16", "f2", "u2", "b1", "u1", "i1", "M8[ns]", ">M8[ns]",
-             "m8[s]", ">m8"]
+             "m8[s]", ">m8"] + CTYPE_SPECS
     for base in bases:
         for code in BYTEORDER_CODES:
             descr_record(f"nbo:{base}:{code}", [["dtype", base], ["newbyteorder", code]])
@@ -306,7 +348,7 @@ def descriptors():
 
     # The np.dtype keywords: copy copies only a singleton, align is a no-op for these dtypes, metadata always copies and
     # merges into the descriptor's own metadata without overriding existing keys.
-    for spec in ["f8", ">f8", "b1", "i8", "c16", "M8[ns]", "m8", "f2"]:
+    for spec in ["f8", ">f8", "b1", "i8", "c16", "M8[ns]", "m8", "f2"] + CTYPE_SPECS:
         descr_record(f"kw:{spec}:copy", [["dtype", spec, {"copy": True}]])
         descr_record(f"kw:{spec}:align", [["dtype", spec, {"align": True}]])
         descr_record(f"kw:{spec}:align_copy", [["dtype", spec, {"align": True, "copy": True}]])
@@ -336,7 +378,7 @@ COMPARE = [
     [["dtype", "u8"]], [["dtype", "b1"]], [["dtype", "M8"]], [["dtype", "M8[ns]"]], [["dtype", "M8[s]"]],
     [["dtype", ">M8[ns]"]], [["dtype", "M8[1000ms]"]], [["dtype", "m8"]], [["dtype", "m8[ns]"]], [["dtype", "m8[Y]"]],
     [["dtype", "f8", {"metadata": {"a": 1}}]], [["dtype", "f8", {"copy": True}]],
-]
+] + [[["dtype", spec]] for spec in CTYPE_SPECS] + [[["dtype", CTYPE_SPECS[0]], ["newbyteorder", "<"]]]
 
 
 def label(recipe):
@@ -363,17 +405,32 @@ def comparisons():
 
 
 def promote_result(fn):
-    """The facts of a promotion result (or the error)."""
+    """The facts of a promotion result (or the error): its repr, whether it is the singleton, its stored byte order and
+    metadata, and its class's character and type number — the repr alone cannot tell a C-type class from the canonical
+    class of its width (Windows' promote_types(int16, uint16) is the C int class 'i', whose repr is dtype('int32')).
+
+    Parameters
+    ----------
+    fn : callable
+        The promotion to run.
+
+    Returns
+    -------
+    dict
+        The result facts, or {"error": {"type", "text"}}.
+    """
     try:
         r = fn()
     except Exception as e:  # noqa: BLE001
         return {"error": {"type": type(e).__name__, "text": str(e)}}
     return {"repr": repr(r), "isbuiltin": r.isbuiltin, "byteorder": r.byteorder,
-            "metadata": None if r.metadata is None else repr(dict(r.metadata))}
+            "metadata": None if r.metadata is None else repr(dict(r.metadata)), "char": r.char, "num": r.num}
 
 
 def promotions():
-    """np.promote_types over every pair of COMPARE, and np.result_type of each one alone."""
+    """np.promote_types over every pair of COMPARE, np.result_type of each one alone, and np.promote_types over every
+    pair of numeric character codes (the class NumPy's type-number table names: a C-type class can come out of two
+    canonical classes)."""
     for ra, rb in itertools.product(COMPARE, repeat=2):
         a, b = run(ra), run(rb)
         emit("promote", f"promote_types:{label(ra)}|{label(rb)}", op="promote_types", a=ra, b=rb,
@@ -382,6 +439,11 @@ def promotions():
         a = run(ra)
         emit("promote", f"result_type:{label(ra)}", op="result_type", a=ra, b=None,
              result=promote_result(lambda: np.result_type(a)))
+    numeric = [c for c in CHARS if modelled_class(np.dtype(c))]
+    for ca, cb in itertools.product(numeric, repeat=2):
+        ra, rb = [["dtype", ca]], [["dtype", cb]]
+        emit("promote", f"promote_types:{ca}|{cb}", op="promote_types", a=ra, b=rb,
+             result=promote_result(lambda: np.promote_types(np.dtype(ca), np.dtype(cb))))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -417,6 +479,9 @@ NUMERIC_INSTANCES = {
     "UInt16DType": ["u2", ">u2"], "Int32DType": ["i4", ">i4"], "UInt32DType": ["u4", ">u4"],
     "Int64DType": ["i8", ">i8"], "UInt64DType": ["u8", ">u8"], "Float16DType": ["f2", ">f2"],
     "Float32DType": ["f4", ">f4"], "Float64DType": ["f8", ">f8"], "Complex128DType": ["c16", ">c16"],
+    # The C-type classes (each model replays its own: CTYPE_CLASSES).
+    "IntDType": ["i", ">i"], "UIntDType": ["I", ">I"], "LongDoubleDType": ["g", ">g"], "CLongDoubleDType": ["G", ">G"],
+    "LongLongDType": ["q", ">q"], "ULongLongDType": ["Q", ">Q"],
 }
 TIME_INSTANCES = {
     "DateTime64DType": ["M8", "M8[ns]", ">M8[ns]", "M8[s]", "M8[Y]", "M8[10ms]", "M8[1000ms]", "M8[D]"],
