@@ -445,6 +445,107 @@ namespace NumSharp.Tests.Fuzz
                 using var c = np.@char.array(new[] { "a b", "c" });
                 return c.partition(" ");
             });
+            // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
+            // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
+            // Python scalar, an object list holding None), the element errors (whose piece store and readers must be
+            // released), and the results' own arrays (an NDListArray owns four or five, the harness disposes it).
+            E(l, "np.char.split", "S / U / StringDType, whitespace and a separator, an object-list separator, an error", f =>
+            {
+                using var u = np.array(new[] { "a b  c", " d " });
+                using var s = np.array(new object[] { new byte[] { 97, 32, 98 }, new byte[] { 99 } });
+                using var t = np.array(new[] { "a b", "c,d" }, np.dtypes.StringDType());
+                using var byWords = np.@char.split(u);
+                using var bytes = np.@char.split(s, new byte[] { 32 });
+                using var vstring = np.@char.split(t, ",", 1);
+                using var objects = np.@char.split(u, new object[] { " ", null });
+                try
+                {
+                    np.@char.split(u, " ", 1.5);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.split(u, "  ");
+            });
+            E(l, "np.char.rsplit", "U with a limit, StringDType, the empty-separator error", f =>
+            {
+                using var u = np.array(new[] { "a,b,,c", "d" });
+                using var t = np.array(new[] { "a b c" }, np.dtypes.StringDType());
+                using var vstring = np.@char.rsplit(t, null, 1);
+                try
+                {
+                    np.@char.rsplit(u, "");
+                }
+                catch (ValueError)
+                {
+                }
+                return np.@char.rsplit(u, ",", 2);
+            });
+            E(l, "np.char.splitlines", "S / U / StringDType, keepends as a value and an array", f =>
+            {
+                using var u = np.array(new[] { "a\nb\r\nc", "d" });
+                using var s = np.array(new object[] { new byte[] { 97, 10, 98 } });
+                using var t = np.array(new[] { "x\ny" }, np.dtypes.StringDType());
+                using var keep = np.array(new[] { true, false });
+                using var bytes = np.@char.splitlines(s);
+                using var vstring = np.@char.splitlines(t, true);
+                using var kept = np.@char.splitlines(u, keep);
+                return np.@char.splitlines(u);
+            });
+            E(l, "np.char.join", "U / S / StringDType results, a separator array, the iterable error, over a list array", f =>
+            {
+                using var u = np.array(new[] { "ab", "cde" });
+                using var seps = np.array(new[] { "-", "" });
+                using var t = np.array(new[] { "ab" }, np.dtypes.StringDType());
+                using var empty = np.array(new object[] { new byte[0] });
+                using var text = np.@char.join(seps, u);
+                using var vstring = np.@char.join("-", t);
+                using var bytes = np.@char.join(new byte[] { 45 }, empty);
+                try
+                {
+                    np.@char.join("-", 5);
+                }
+                catch (TypeError)
+                {
+                }
+                using var words = np.@char.split(u);
+                try
+                {
+                    np.@char.join(" ", words);   // NumPy 2.4.2's ObjectDType(n) TypeError, after every list joined
+                }
+                catch (TypeError)
+                {
+                }
+                using var nothing = np.zeros(new Shape(0), np.dtype("U2"));
+                using var none = np.@char.split(nothing);
+                using var emptyLists = np.@char.join("-", none);
+                return np.@char.join("-", u);
+            });
+            E(l, "NDCharArray.split", "unstripped elements, a separator and a limit", f =>
+            {
+                using var c = np.@char.array(new[] { "a b ", "c  d" });
+                using var words = c.split();
+                return c.split(" ", 1);
+            });
+            E(l, "NDCharArray.rsplit", "a limit from the right", f =>
+            {
+                using var c = np.@char.array(new[] { "a b c" });
+                return c.rsplit(null, 1);
+            });
+            E(l, "NDCharArray.splitlines", "keepends", f =>
+            {
+                using var c = np.@char.array(new[] { "a\nb", "c" });
+                using var lines = c.splitlines();
+                return c.splitlines(true);
+            });
+            E(l, "NDCharArray.join", "the chararray as the separators, a plain result; over a list array", f =>
+            {
+                using var c = np.@char.array(new[] { "-", "+" });
+                using var nothing = np.zeros(new Shape(0, 2), np.dtype("U2"));
+                using var none = np.@char.split(nothing);
+                using var emptyLists = c.join(none);
+                return c.join(new[] { "xy", "z" });
+            });
         }
 
         /// <summary>

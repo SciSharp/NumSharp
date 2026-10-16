@@ -142,6 +142,71 @@ namespace NumSharp.Backends.Printing
                 opts.edgeitems, summaryInsert, opts.legacy, mask, display);
         }
 
+        /// <summary>
+        ///     <c>array_str</c> of an OBJECT array whose elements NumSharp keeps outside an <see cref="NDArray"/> (the lists of
+        ///     <see cref="NDListArray"/>): NumPy's <c>_formatArray</c> layout over <paramref name="positions"/> — an int64 array of
+        ///     the object array's shape holding each element's C-order position — with every element printed by
+        ///     <paramref name="formatter"/> (NumPy's <c>_object_format</c>: no shared width, no alignment).
+        /// </summary>
+        /// <param name="positions">The positions (any shape of at least one axis; a 0-d object array prints its object's str()
+        ///     itself, which the caller produces).</param>
+        /// <param name="formatter">Prints the element at a position (the boxed int64 the layout engine reads).</param>
+        /// <param name="opts">Print options (threshold / edgeitems summarize, linewidth wraps).</param>
+        /// <returns>The bracketed text, <c>[]</c> for an empty array.</returns>
+        internal static string ObjectArrayStr(NDArray positions, IElementFormatter formatter, PrintOptions opts)
+            => ObjectArray2String(positions, formatter, opts, " ", "", "");
+
+        /// <summary>
+        ///     <c>array_repr</c> of such an object array: <c>array([...], dtype=object)</c> — the dtype is never implied, a
+        ///     <c>shape=</c> extra appears for an empty array of another shape than <c>(0,)</c> and for a summarized one, and
+        ///     the extras move to their own line when the last line would pass the line width (NumPy's spacer rule).
+        /// </summary>
+        /// <param name="positions">The positions (see <see cref="ObjectArrayStr"/>; a 0-d array is formatted too).</param>
+        /// <param name="formatter">Prints the element at a position.</param>
+        /// <param name="opts">Print options.</param>
+        /// <returns>The repr.</returns>
+        internal static string ObjectArrayRepr(NDArray positions, IElementFormatter formatter, PrintOptions opts)
+        {
+            const string prefix = "array(";
+            string lst = ObjectArray2String(positions, formatter, opts, ", ", prefix, ")");
+            var extras = new List<string>();
+            bool shapeShown = (positions.size == 0 && !(positions.ndim == 1 && positions.Shape.dimensions[0] == 0))
+                              || (opts.legacy > 210 && positions.size > opts.threshold);
+            if (shapeShown)
+                extras.Add("shape=" + ShapeTuple(positions.Shape.dimensions));
+            // An object dtype is never one of NumPy's _typelessdata.
+            extras.Add("dtype=object");
+
+            string arrStr = prefix + lst + ",";
+            string extraStr = string.Join(", ", extras) + ")";
+            int lastNewline = arrStr.LastIndexOf('\n');
+            int lastLineLen = PyRepr.CodePointLength(arrStr.Substring(lastNewline + 1));
+            string spacer = lastLineLen + extraStr.Length + 1 > opts.linewidth ? "\n" + new string(' ', prefix.Length) : " ";
+            return arrStr + spacer + extraStr;
+        }
+
+        /// <summary><c>array2string</c> of an object array kept outside an <see cref="NDArray"/> (see <see cref="ObjectArrayStr"/>).</summary>
+        /// <param name="positions">The positions.</param>
+        /// <param name="formatter">Prints the element at a position.</param>
+        /// <param name="opts">Print options.</param>
+        /// <param name="separator"><c>" "</c> for str, <c>", "</c> for repr.</param>
+        /// <param name="prefix">The repr prefix (its length indents continuation lines).</param>
+        /// <param name="suffix">The repr suffix (its length is reserved on the last line).</param>
+        /// <returns>The bracketed text.</returns>
+        private static string ObjectArray2String(NDArray positions, IElementFormatter formatter, PrintOptions opts,
+                                                 string separator, string prefix, string suffix)
+        {
+            int linewidth = opts.linewidth;
+            if (opts.legacy > 113)
+                linewidth -= suffix.Length;
+            if (positions.size == 0)
+                return "[]";
+            bool summarize = positions.size > opts.threshold;
+            string nextLinePrefix = " " + new string(' ', prefix.Length);
+            string summaryInsert = summarize ? "..." : "";
+            return FormatArray(positions, formatter, linewidth, nextLinePrefix, separator, opts.edgeitems, summaryInsert, opts.legacy);
+        }
+
         #endregion
 
         #region recursive layout engine (_formatArray)

@@ -52,7 +52,10 @@ namespace NumSharp
     ///     <para>
     ///     <b>Python's <c>None</c> has no array form.</b> NumPy reads <c>None</c> as an object array; NumSharp has no object
     ///     dtype, so a <c>null</c> array argument is an <see cref="ArgumentNullException"/> where NumPy raises its
-    ///     no-string / no-loop error.
+    ///     no-string / no-loop error. The object path (<see cref="split"/>, <see cref="rsplit"/>, <see cref="splitlines"/>,
+    ///     <see cref="join(object, object)"/>) is the exception: it models NumPy's object arrays, so there a <c>null</c>
+    ///     argument IS Python's <c>None</c> — NumPy's <c>string operation on non-string array</c> as the text argument,
+    ///     <c>can only join an iterable</c> as <c>join</c>'s sequence, whitespace as <c>split</c>'s separator.
     ///     </para>
     ///     <para>
     ///     <b>The <c>Char</c> dtype.</b> The module converts implicitly to the <c>Char</c> dtype descriptor

@@ -265,6 +265,10 @@ namespace NumSharp.Tests.Strings
             // functions with chararray operands) live in their own partial.
             if (TryInvokeCharBehavior(c.Op, p, ops, out var behavior))
                 return behavior;
+            // Section strcharobj (numpy.char's object path, phase 4): split / rsplit / splitlines / join and the chararray
+            // members over them, with NDListArray results.
+            if (TryInvokeCharObject(c.Op, p, ops, out var objectPath))
+                return objectPath;
             // Section strsets (np.quantile / np.percentile with every q / axis / out form, P2.2 milestone C) lives in its own
             // partial; its unique, isin, set-routine, lexsort, sort_complex and histogram cases replay through the ops of
             // sections strshape and strsurface.

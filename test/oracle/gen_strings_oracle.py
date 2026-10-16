@@ -11165,12 +11165,405 @@ def gen_tsort():
                    section="tsort", phase=1)
 
 
+# Section strcharobj: numpy.char's OBJECT path (the numpy.char plan's phase 4) — np.char.split / rsplit / splitlines /
+# join and the chararray members over them. _vec_string per element: the operands' NumPy scalars, CPython's str / bytes
+# methods in CPython's order (the descriptor check, maxsplit's __index__, keepends' truth, the separator's type, the empty
+# separator, the pieces), the first failing element (C order) ending the call; the object results recorded piece by
+# piece with every np.str_ piece (unicodeobject.c's [self] shortcut) marked; join's _to_bytes_or_str_array results and
+# NumPy 2.4.2's ObjectDType(n) failure over an object seq.
+# ----------------------------------------------------------------------------------------------------------------------
+
+COBJ = "strcharobj"
+
+# Texts for the split family: whitespace runs at either end, every class of whitespace (Python's 29 code points for str,
+# the 6 ASCII bytes for bytes: \x1c-\x1f, \x85 and \xa0 are whitespace to str only), embedded and trailing NULs (a U
+# element's trailing NULs are padding, a StringDType element keeps them), separators that repeat and overlap, the
+# [self] shapes (a separator longer than the text or of a wider kind), and supplementary-plane text.
+COBJ_SPLIT_U = ["a b  c", "  lead trail  ", "", "x\ty\nz", "one", "w\x00 x\x00", "a\x1cb\x85c\xa0d", "\xe9 \xfc\u3000\xe7",
+                "\U0001F600 a\U0001F600b", "\t\n\x0b\x0c\r ", "a,b,,c,", "aaa", "ab", "abc", "  ", "x"]
+COBJ_SPLIT_S = [b"a b  c", b"  lead trail  ", b"", b"x\ty\nz", b"one", b"w\x00 x\x00", b"a\x1cb\x85c\xa0d", b"\xe9 \xfc",
+                b"a,b,,c,", b"aaa", b"ab", b"abc", b"  ", b"x", b"\t\n\x0b\x0c\r ", b"\xff\x80 \x7f"]
+COBJ_LINES_U = ["a\nb\r\nc\rd", "x\n", "", "\n", "a\x0bb\x0cc\x1cd\x1de\x1ef\x85g\u2028h\u2029i", "no newline",
+                "\r\n\r\n", "\r", "a\r\n", "\n\n", "x", "\r\r\n\n"]
+COBJ_LINES_S = [b"a\nb\r\nc\rd", b"x\n", b"", b"\n", b"a\x0bb\x0cc\x1cd\x85e", b"no newline", b"\r\n\r\n", b"\r", b"a\r\n",
+                b"\n\n", b"x", b"\r\r\n\n"]
+COBJ_JOIN_U = ["osd", "ab", "", "c", "x y", "\xe9\U0001F600", "a\x00b", "z"]
+# bytes.join iterates a bytes object as ints, so only empty S sequences join; the second pool raises at its first
+# non-empty element.
+COBJ_JOIN_S = [b"", b"", b""]
+COBJ_JOIN_S2 = [b"", b"ab", b""]
+
+
+def _cobj_u(s):
+    """A str (or np.str_) as JSON code points (UTF-32LE hex). A NumPy str may hold a code point above U+10FFFF: the codec
+    copies it, while iterating the str would create it as a one-character str, which CPython refuses (SystemError)."""
+    return {"u": s.encode("utf-32-le", "surrogatepass").hex()}
+
+
+def _cobj_piece(p):
+    """One piece of a list: text as code points, bytes as hex."""
+    if isinstance(p, (bytes, np.bytes_)):
+        return {"b": bytes(p).hex()}
+    return _cobj_u(p)
+
+
+def _cobj_expect(r, views):
+    """The expectation of an object-path result: an object array of lists as ``lists`` (its shape, every element's pieces in
+    C order, and the C-order positions whose list holds an np.str_ piece — CPython's [self], which NumPy prints as
+    ``np.str_('...')``), any other result as ``expect_of`` records it.
+
+    Args:
+        r: NumPy's result.
+        views: the operand views.
+
+    Returns:
+        The expectation.
+
+    Raises:
+        AssertionError: an object array whose element is not a list (the object path makes lists only).
+    """
+    if isinstance(r, np.ndarray) and r.dtype == object:
+        lists, selfs = [], []
+        for pos, el in enumerate(r.flat):
+            assert isinstance(el, list), f"an object-path element that is not a list: {el!r}"
+            lists.append([_cobj_piece(p) for p in el])
+            if any(type(p) is np.str_ for p in el):
+                selfs.append(pos)
+        return {"kind": "lists", "shape": [int(x) for x in r.shape], "lists": lists, "strself": selfs}
+    return expect_of(r, views)
+
+
+def _cobj_value(spec, views):
+    """One argument of a case as the Python value NumPy receives.
+
+    Args:
+        spec: ``{"op": k}`` (operand k), ``{"cha": k}`` (operand k's chararray view), ``{"v": enc}`` (a Python value),
+            ``{"split": [spec, ...]}`` (``np.char.split`` of those arguments: an object array of lists), ``{"view":
+            [spec, index]}`` (a basic index of an argument's object array, the index in NumSharp's slice notation).
+        views: the operand views.
+
+    Returns:
+        The value.
+
+    Raises:
+        TypeError: an unknown spec.
+    """
+    if "op" in spec:
+        return views[spec["op"]]
+    if "cha" in spec:
+        return views[spec["cha"]].view(np.char.chararray)
+    if "v" in spec:
+        return _cobj_dec(spec["v"])
+    if "split" in spec:
+        return np.char.split(*[_cobj_value(s, views) for s in spec["split"]])
+    if "view" in spec:
+        target, index = spec["view"]
+        return _cobj_value(target, views)[_cobj_index(index)]
+    raise TypeError(f"unknown argument spec {spec!r}")
+
+
+def _cobj_dec(v):
+    """``_chx_dec`` with complex numbers (``{"complex": [re, im]}``) and Python ints past int64."""
+    if isinstance(v, dict) and "complex" in v:
+        re, im = v["complex"]
+        return complex(float(re) if isinstance(re, str) else re, float(im) if isinstance(im, str) else im)
+    if isinstance(v, list):
+        return [_cobj_dec(x) for x in v]
+    return _chx_dec(v)
+
+
+def _cobj_enc(v):
+    """``enc`` with complex numbers (the generator's own extension; NumSharp's replay decodes them)."""
+    if isinstance(v, (complex, np.complexfloating)):
+        return {"complex": [_jf(v.real), _jf(v.imag)]}
+    if isinstance(v, (list, tuple)):
+        return [_cobj_enc(x) for x in v]
+    return enc(v)
+
+
+def _cobj_index(text):
+    """A basic index in NumSharp's slice notation (``"1:, ::-1"``, ``"0"``) as the Python index."""
+    parts = []
+    for part in text.split(","):
+        part = part.strip()
+        if ":" in part:
+            parts.append(slice(*[int(x) if x.strip() else None for x in part.split(":")]))
+        else:
+            parts.append(int(part))
+    return tuple(parts)
+
+
+def _cobj_call(params, views):
+    """Makes one case's call: ``np.char.<fn>`` (``params.fn``) or a chararray member (``params.member`` of operand
+    ``params.recv``'s chararray view), with ``args`` / ``kw``; ``print`` adds repr (true) or str (false) of the result;
+    ``index`` a basic index of the result."""
+    args = [_cobj_value(a, views) for a in params.get("args", [])]
+    kw = {name: _cobj_value(a, views) for name, a in params.get("kw", {}).items()}
+    if "member" in params:
+        r = getattr(views[params["recv"]].view(np.char.chararray), params["member"])(*args, **kw)
+    else:
+        r = getattr(np.char, params["fn"])(*args, **kw)
+    if "index" in params:
+        r = r[_cobj_index(params["index"])]
+    if "print" in params:
+        return repr(r) if params["print"] else str(r)
+    return r
+
+
+def add_cobj(op, params, operands=(), layout=""):
+    """Records one object-path case (``_cobj_call``), its object results as ``lists``.
+
+    Args:
+        op: ``cobj_fn`` (a module function), ``cobj_member`` (a chararray member) or ``cobj_print`` (repr / str of a
+            result).
+        params: the case parameters (argument specs: ``_cobj_value``).
+        operands: (base, view) pairs.
+        layout: the case's layout label.
+    """
+    views = [v for _, v in operands]
+    prefix = f"{COBJ}/{op}/"
+    n = _OP_COUNT.get(prefix, 0) + 1
+    _OP_COUNT[prefix] = n
+    cid = f"{COBJ}/{op}/{n}"
+    assert cid not in _IDS
+    _IDS.add(cid)
+    case = {"id": cid, "op": op, "params": params, "operands": [describe(b, v) for b, v in operands], "phase": 1,
+            "layout": layout}
+    try:
+        case["expected"] = _cobj_expect(_cobj_call(params, views), views)
+    except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
+        case["error"] = err_info(e)
+    CASES.append(case)
+
+
+def _cobj_operand(kind, pool, layout, seed=0, na=_ABSENT, na_every=0):
+    """A text operand of class ``kind`` (``U`` / ``S`` / ``T``) whose base cycles through ``pool`` from ``seed``, viewed
+    through ``LAYOUTS[layout]``; a StringDType operand with an NA object holds it every ``na_every``-th element."""
+    n, build = LAYOUTS[layout]
+    vals = [pool[(seed + i) % len(pool)] for i in range(n)]
+    if kind == "T":
+        dt = np.dtypes.StringDType() if na is _ABSENT else np.dtypes.StringDType(na_object=na)
+        if na is not _ABSENT and na_every:
+            vals = [na if (seed + i) % na_every == na_every - 1 else v for i, v in enumerate(vals)]
+        base = np.array(vals, dtype=dt)
+    elif kind == "U":
+        base = np.array(vals, dtype=f"<U{max(1, max((len(v) for v in vals), default=1))}")
+    else:
+        base = np.array(vals, dtype=f"|S{max(1, max((len(v) for v in vals), default=1))}")
+    return base, build(base)
+
+
+def _cobj_like(kind, value):
+    """A str value as the text of class ``kind``: bytes (Latin-1) for ``S``, the str itself otherwise."""
+    return value.encode("latin-1") if kind == "S" and isinstance(value, str) else value
+
+
+def _cobj_v(value):
+    """The argument spec of a Python value."""
+    return {"v": _cobj_enc(value)}
+
+
+def gen_strcharobj():
+    """Section strcharobj: np.char.split / rsplit / splitlines / join and the chararray members — every text class
+    (S / U / StringDType, also with NA objects) over the core layouts with every separator and limit form, the argument
+    kinds of every dtype (numbers, NumPy scalars, text of the other class, None, lists holding None, ints past int64), the
+    errors in NumPy's order (the non-string first argument, the descriptor check, __index__, the separator's type, the
+    empty separator, broadcasting, ragged lists, the one-unit str above U+10FFFF), the whitespace and line-boundary sets
+    exhaustively, the result's views and printing, and join over the object result."""
+    pools = {"U": COBJ_SPLIT_U, "S": COBJ_SPLIT_S, "T": COBJ_SPLIT_U}
+    lines = {"U": COBJ_LINES_U, "S": COBJ_LINES_S, "T": COBJ_LINES_U}
+    seps = [None, " ", ",", "aa", "  ", "x", "\U0001F600", "Ā"]
+    limits = [_ABSENT, 0, 1, 2, -1]
+    # 1. split / rsplit: class x layout x separator x maxsplit.
+    for fn in ("split", "rsplit"):
+        for kind in ("U", "S", "T"):
+            for li, layout in enumerate(CORE_LAYOUTS):
+                ops = [_cobj_operand(kind, pools[kind], layout, seed=li)]
+                for sep in seps:
+                    if kind == "S" and sep is not None and not sep.isascii():
+                        continue
+                    for lim in limits:
+                        args = [{"op": 0}]
+                        kw = {}
+                        if sep is not None:
+                            kw["sep"] = _cobj_v(_cobj_like(kind, sep))
+                        if lim is not _ABSENT:
+                            kw["maxsplit"] = _cobj_v(lim)
+                        add_cobj("cobj_fn", {"fn": fn, "args": args, "kw": kw}, ops, layout=f"{kind}:{layout}")
+    # 2. splitlines: class x layout x keepends (Python's truth rule).
+    keeps = [_ABSENT, True, False, 0, 1, 2, 0.5, "", "x", None, float("nan")]
+    for kind in ("U", "S", "T"):
+        for li, layout in enumerate(CORE_LAYOUTS):
+            ops = [_cobj_operand(kind, lines[kind], layout, seed=li)]
+            for keep in keeps:
+                kw = {} if keep is _ABSENT else {"keepends": _cobj_v(keep)}
+                add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}], "kw": kw}, ops, layout=f"{kind}:{layout}")
+    # 3. join: separators x sequences of every class and layout.
+    join_seps = {"U": ["-", "", "--", "\U0001F600", " "], "S": [b"-", b""], "T": ["-", "", "~~"]}
+    for skind in ("U", "S", "T"):
+        for qkind in ("U", "S", "T"):
+            for li, layout in enumerate(CORE_LAYOUTS):
+                pool = (COBJ_JOIN_S if li % 2 == 0 else COBJ_JOIN_S2) if qkind == "S" else COBJ_JOIN_U
+                ops = [_cobj_operand(qkind, pool, layout, seed=li)]
+                for sep in join_seps[skind]:
+                    sep_arg = _cobj_v(sep) if skind != "T" else None
+                    if skind == "T":
+                        sb, sv = plain(np.array([sep], dtype=np.dtypes.StringDType()))
+                        ops2 = ops + [(sb, sv)]
+                        add_cobj("cobj_fn", {"fn": "join", "args": [{"op": 1}, {"op": 0}]}, ops2,
+                                 layout=f"{skind}{qkind}:{layout}")
+                    else:
+                        add_cobj("cobj_fn", {"fn": "join", "args": [sep_arg, {"op": 0}]}, ops,
+                                 layout=f"{skind}{qkind}:{layout}")
+    # A separator array of every layout against a sequence array (broadcast both ways).
+    for li, layout in enumerate(CORE_LAYOUTS):
+        sb = _cobj_operand("U", ["-", "", "+", "~~", "\xe9"], layout, seed=li)
+        qb = _cobj_operand("U", COBJ_JOIN_U, "c1", seed=li)
+        add_cobj("cobj_fn", {"fn": "join", "args": [{"op": 0}, {"op": 0}]}, [sb], layout=f"UU:{layout}:self")
+        add_cobj("cobj_fn", {"fn": "join", "args": [{"op": 0}, _cobj_v("abc")]}, [sb], layout=f"UU:{layout}:str")
+    # 4. Argument kinds: maxsplit / keepends / separators of every dtype, NumPy scalars, text of the other class, None,
+    # object lists, ints past int64, and the separator / maxsplit as broadcast arrays.
+    u2 = plain(np.array(["a b c d", "e f g"]))
+    s2 = plain(np.array([b"a b c d", b"e\x05f g"]))
+    for dt in ("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "float16", "float32", "float64",
+               "complex128", "bool"):
+        num = plain(np.array([1, 0], dtype=dt))
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(" "), {"op": 1}]}, [u2, num], layout=f"max:{dt}")
+        add_cobj("cobj_fn", {"fn": "rsplit", "args": [{"op": 0}, _cobj_v(None), {"op": 1}]}, [u2, num], layout=f"max:{dt}")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, {"op": 1}]}, [u2, num], layout=f"sep:{dt}")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, {"op": 1}]}, [s2, num], layout=f"bsep:{dt}")
+        lines2 = plain(np.array(["a\nb", "c\r\nd"]))
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}, {"op": 1}]}, [lines2, num], layout=f"keep:{dt}")
+    for value in [1.5, True, False, 5, -3, 2 ** 62, 2 ** 63, 2 ** 64, -(2 ** 63), -(2 ** 63) - 1, 1 + 0j, "1", b"1",
+                  None, [1, None], [None, None], [" ", None], [None]]:
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(" "), _cobj_v(value)]}, [u2], layout="max:py")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(value)]}, [u2], layout="sep:py")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(value)]}, [s2], layout="bsep:py")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}, _cobj_v(value)]}, [u2], layout="keep:py")
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v("-"), _cobj_v(value)]}, [], layout="seq:py")
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v(value), _cobj_v("ab")]}, [], layout="jsep:py")
+    for tspec in (_ABSENT, None, float("nan"), "NA", ""):
+        tb = _cobj_operand("T", ["a b", "c,d", "", "x\ny", "\xe9 \xfc"], "c1", na=tspec, na_every=3)
+        lab = "T" if tspec is _ABSENT else f"T(na={tspec!r})"
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}]}, [tb], layout=lab)
+        add_cobj("cobj_fn", {"fn": "rsplit", "args": [{"op": 0}, _cobj_v(","), _cobj_v(1)]}, [tb], layout=lab)
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}, _cobj_v(True)]}, [tb], layout=lab)
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v("-"), {"op": 0}]}, [tb], layout=lab)
+        add_cobj("cobj_fn", {"fn": "join", "args": [{"op": 0}, _cobj_v("xy")]}, [tb], layout=lab)
+        # The StringDType array as the separator / maxsplit / keepends of a U text (its NA elements: None is
+        # whitespace, other NA objects their own type's errors).
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 1}, {"op": 0}]},
+                 [tb, plain(np.array(["a b", "c,d", "e f", "g h", "i j", "k l"]))], layout=lab + ":sep")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 1}, _cobj_v(" "), {"op": 0}]},
+                 [tb, plain(np.array(["a b c"] * 6))], layout=lab + ":max")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 1}, {"op": 0}]},
+                 [tb, plain(np.array(["a\nb"] * 6))], layout=lab + ":keep")
+    # Broadcasting of the arguments, and its error (NumPy's multi-iterator text).
+    m = plain(np.array([["a b", "c,d", "e f g"], ["h", "i j", ",k"]]))
+    for spec in ([" ", ","], [[" "], [","]], [" ", ",", "x"], [[" ", ","]], [" "]):
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(spec)]}, [m], layout="bcast:sep")
+    for spec in ([0, 1, -1], [[0], [1]], [0, 1], [[1, 0, 2]]):
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(None), _cobj_v(spec)]}, [m], layout="bcast:max")
+        add_cobj("cobj_fn", {"fn": "rsplit", "args": [{"op": 0}, _cobj_v(" "), _cobj_v(spec)]}, [m], layout="bcast:max")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}, _cobj_v(spec)]}, [m], layout="bcast:keep")
+    for sspec in (["-", "+"], [["-"], ["+"]], ["-", "+", "*"]):
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v(sspec), {"op": 0}]}, [m], layout="bcast:join")
+    # 5. Errors in NumPy's order.
+    for a in (1.5, 5, True, None, [1, 2], [None, "a"], [["a"], ["b", "c"]], ["a b", None]):
+        add_cobj("cobj_fn", {"fn": "split", "args": [_cobj_v(a)]}, [], layout="a:py")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [_cobj_v(a)]}, [], layout="a:py")
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v(a), _cobj_v("ab")]}, [], layout="a:py")
+    for args in ([["a", "b"], "", [0, 1, 2]], [["a", "b"], ["", "x"]], [["a", "b"], ["x", ""]], [["a", "b"], " ", [1.5, 1]],
+                 [["a", "b"], ["", "x"], [1.5, 1]], [["a", "b"], [b"x", b""], 1], [["a", "b"], 5], [[b"a b"], 5],
+                 [[b"a b"], 1.5], [[b"a b"], ""], [[b"a b"], b""], [[b"a b"], None, 1.5], [["a"], True], [[b"a\x01b"], True],
+                 [[b"ab"], 2 ** 63], [[b"ab"], 2 ** 64], [["ab"], 2 ** 64]):
+        add_cobj("cobj_fn", {"fn": "split", "args": [_cobj_v(x) for x in args]}, [], layout="order")
+        add_cobj("cobj_fn", {"fn": "rsplit", "args": [_cobj_v(x) for x in args]}, [], layout="order")
+    for args in ([["-", "+"], [1, 2]], [b"-", [b"ab"]], [b"-", [b""]], ["-", [b"ab"]], [b"-", ["ab"]], [b"-", [b"", b"x"]],
+                 [5, "ab"], ["-", 5], ["-", [1, 2]], ["-", [True]], ["-", [1.5]], [["-", "+", "*"], ["ab", "cd"]],
+                 ["-", [["a"], ["b", "c"]]], [["-", None], "ab"], ["-", ["ab", None]], [b"-", [""]], ["-", [b""]]):
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v(x) for x in args]}, [], layout="order")
+    # A one-unit str above U+10FFFF (CPython's PyUnicode_New refusal) as the text, a separator, a piece, a line, a join
+    # sequence (iterated character by character) or a separator (only a ONE-unit text is refused).
+    def bad(units):
+        return plain(np.array(units, dtype=np.uint32).view(f"U{len(units)}"))
+    for units in ([0x61, 0x20, 0x110000, 0x62], [0x110000, 0, 0, 0], [0x61, 0x20, 0x110000, 0], [0x110000, 0x20, 0x110000, 0x62],
+                  [0x61, 0x0A, 0x110000, 0], [0x78, 0x110000]):
+        b = bad(units)
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}]}, [b], layout="u110000")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}, _cobj_v(" ")]}, [b], layout="u110000")
+        add_cobj("cobj_fn", {"fn": "rsplit", "args": [{"op": 0}]}, [b], layout="u110000")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}]}, [b], layout="u110000")
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v("-"), {"op": 0}]}, [b], layout="u110000")
+        add_cobj("cobj_fn", {"fn": "join", "args": [{"op": 0}, _cobj_v("ab")]}, [b], layout="u110000")
+        add_cobj("cobj_fn", {"fn": "split", "args": [_cobj_v(["ab"]), {"op": 0}]}, [b], layout="u110000:sep")
+    # 6. The whitespace and line-boundary sets, exhaustively: every code point below U+3010 (str) / byte (bytes) between
+    # two letters, split and split into lines.
+    every_u = "".join("a" + chr(c) for c in range(1, 0x3010)) + "a"
+    every_s = b"".join(b"a" + bytes([c]) for c in range(1, 256)) + b"a"
+    for text in (every_u, every_s):
+        add_cobj("cobj_fn", {"fn": "split", "args": [_cobj_v([text])]}, [], layout="every")
+        add_cobj("cobj_fn", {"fn": "rsplit", "args": [_cobj_v([text]), _cobj_v(None), _cobj_v(7)]}, [], layout="every")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [_cobj_v([text])]}, [], layout="every")
+        add_cobj("cobj_fn", {"fn": "splitlines", "args": [_cobj_v([text]), _cobj_v(True)]}, [], layout="every")
+    tb = plain(np.array([every_u], dtype=np.dtypes.StringDType()))
+    add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}]}, [tb], layout="every:T")
+    add_cobj("cobj_fn", {"fn": "splitlines", "args": [{"op": 0}, _cobj_v(True)]}, [tb], layout="every:T")
+    # 7. Long texts: many pieces, long separators and limits from either end (the searches' vector paths).
+    big = " ".join(f"w{i}" for i in range(400))
+    for kind in ("U", "S", "T"):
+        bb = _cobj_operand(kind, [_cobj_like(kind, big), _cobj_like(kind, big.replace(" ", ",, ")), _cobj_like(kind, "x" * 300)],
+                           "c1")
+        for sep, lim in ((None, _ABSENT), (" ", _ABSENT), (",,", _ABSENT), ("w29", _ABSENT), (" ", 5), (None, 5),
+                         ("x", 3), ("xx", _ABSENT), ("w1 w2", _ABSENT)):
+            for fn in ("split", "rsplit"):
+                kw = {} if sep is None else {"sep": _cobj_v(_cobj_like(kind, sep))}
+                if lim is not _ABSENT:
+                    kw["maxsplit"] = _cobj_v(lim)
+                add_cobj("cobj_fn", {"fn": fn, "args": [{"op": 0}], "kw": kw}, [bb], layout=f"long:{kind}")
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v(_cobj_like(kind, "--") if kind != "S" else "--"), {"op": 0}]},
+                 [bb], layout=f"long:{kind}")
+    # 8. The chararray members (the elements unstripped: _vec_string reads the NumPy scalars).
+    for kind in ("U", "S"):
+        cb = _cobj_operand(kind, [_cobj_like(kind, v) for v in ["a b ", "c  d", " e\n", "f\r\n", ""]], "c1")
+        for member, args in (("split", []), ("split", [_cobj_v(_cobj_like(kind, " "))]), ("rsplit", [_cobj_v(None), _cobj_v(1)]),
+                             ("splitlines", []), ("splitlines", [_cobj_v(True)]), ("join", [_cobj_v(["xy", "z", "", "ab", "c"])]),
+                             ("join", [_cobj_v("xy")]), ("join", [_cobj_v(_cobj_like(kind, "xy"))])):
+            add_cobj("cobj_member", {"member": member, "recv": 0, "args": args}, [cb], layout=f"cha:{kind}")
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"cha": 0}]}, [cb], layout=f"cha:{kind}")
+        add_cobj("cobj_fn", {"fn": "join", "args": [_cobj_v("-"), {"cha": 0}]}, [cb], layout=f"cha:{kind}")
+        add_cobj("cobj_fn", {"fn": "join", "args": [{"cha": 0}, _cobj_v("ab")]}, [cb], layout=f"cha:{kind}")
+    # 9. The object result: its views, printing, and join over it (NumPy 2.4.2's ObjectDType(n) failure; an empty
+    # broadcast is an empty object array).
+    mb = plain(np.array([["a b", "c"], ["d e f", ""], ["g", "h i"]]))
+    for index in ("1:", "::-1", "1, ::-1", "::2, 1", "0", "-1, -1", "1:1", "2:, 1:"):
+        add_cobj("cobj_fn", {"fn": "split", "args": [{"op": 0}], "index": index}, [mb], layout="view")
+    sb = plain(np.array([b"a b", b"", b"c\x00 d"]))
+    for target, ops in (([{"op": 0}], [mb]), ([{"op": 0}], [sb]), ([_cobj_v("a b")], []), ([_cobj_v([])], []),
+                        ([{"op": 0}, _cobj_v(",")], [mb]), ([_cobj_v(["ab"]), _cobj_v("abc")], []),
+                        ([_cobj_v(["ab", "abc"]), _cobj_v("Ā")], []),
+                        ([_cobj_v(["a b c d e f g h i j k l m n o p q r s t u v w x y z"] * 3)], []),
+                        ([_cobj_v(["x"] * 1001)], []), ([_cobj_v([["a", ""], ["", "b"]])], []),
+                        ([_cobj_v(["it's", 'q"z', "\\", "\t\x00"])], [])):
+        for repr_ in (True, False):
+            add_cobj("cobj_print", {"fn": "split", "args": target, "print": repr_}, ops, layout="print")
+        add_cobj("cobj_print", {"fn": "splitlines", "args": target[:1], "print": True}, ops, layout="print")
+    for sep_args, ops in (([_cobj_v(" "), {"split": [{"op": 0}]}], [mb]), ([_cobj_v(["-", "+", "*"]), {"split": [{"op": 0}]}], [mb]),
+                          ([_cobj_v(b" "), {"split": [{"op": 0}]}], [sb]), ([_cobj_v(" "), {"split": [{"op": 0}]}], [sb]),
+                          ([_cobj_v(b"-"), {"split": [{"op": 0}]}], [mb]), ([_cobj_v(5), {"split": [{"op": 0}]}], [mb]),
+                          ([_cobj_v("-"), {"split": [_cobj_v([])]}], []),
+                          ([_cobj_v(["-", "+"]), {"split": [{"op": 0}]}], [plain(np.zeros((0, 2), dtype="U2"))]),
+                          ([_cobj_v(["-", "+", "*"]), {"split": [_cobj_v(["a b", ""])]}], []),
+                          ([_cobj_v("-"), {"view": [{"split": [{"op": 0}]}, "1:1"]}], [mb])):
+        add_cobj("cobj_fn", {"fn": "join", "args": sep_args}, ops, layout="join:lists")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
-              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strsets,
-              gen_tcomp, gen_tarith, gen_treduce, gen_tsort]
+              gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
+              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort]
 
 
 def main():

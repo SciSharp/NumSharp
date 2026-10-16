@@ -456,6 +456,58 @@ Other differences from NumPy:
 
 Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): the comparison operators ran 2.8 to 6.1 times as fast, `+` and `*` 2.4 to 14 times, the `np.*` functions 1.3 to 9 times. The slowest cases are `searchsorted` (1.0 to 1.3 times NumPy's speed, the same as for a plain array: both libraries run one binary search per key), `argmax` with `out:` and a 1,000-string `np.concatenate`.
 
+### Splitting and joining: `split`, `rsplit`, `splitlines` and `join`
+
+`np.@char.split`, `rsplit` and `splitlines` call Python's `str` or `bytes` method on every element, as NumPy does. The result is NumPy's object array of lists. NumSharp has no object dtype, so the result is an `NDListArray`: it has the shape of the input, and each element is the list of pieces of one string.
+
+```csharp
+var words = np.array(new[] { "a b  c", "  lead trail  ", "" });
+NDListArray w = np.@char.split(words);          // [list(['a', 'b', 'c']) list(['lead', 'trail']) list([])]
+np.@char.split(words, " ");                     // empty pieces where two separators touch
+np.@char.rsplit(words, maxsplit: 1);            // ['a b', 'c'], ['  lead', 'trail'], []
+np.@char.splitlines(np.array(new[] { "a\nb\r\nc" }), true);   // [list(['a\n', 'b\r\n', 'c'])]
+w.item(0);                                      // a List<object>: "a", "b", "c"
+w.tolist();                                     // the nested lists, every piece exact
+w[0];                                           // a new 1-D U array of the pieces of element 0
+w["1:"];                                        // an NDListArray view of the last two elements
+w.ToString(true);                               // array([list(['a', 'b', 'c']), ...], dtype=object)
+```
+
+The rules are Python's:
+
+- Without a separator, the pieces are the runs of characters that are not whitespace: 29 whitespace characters for `U` and `StringDType` text, the 6 ASCII whitespace bytes for `S` text. With a separator, every occurrence splits, so empty pieces can occur. `maxsplit` limits the number of splits, from the end for `rsplit`.
+- `splitlines` breaks `U` text at `\n`, `\r`, `\r\n`, `\v`, `\f`, `\x1c` to `\x1e`, `\x85`, U+2028 and U+2029, and `S` text at `\n`, `\r` and `\r\n` only. `keepends` follows Python's truth rule: `0.5` and `"x"` are true, `0` and `""` are false.
+- The separator, `maxsplit` and `keepends` can be arrays that broadcast against the text, one value per element.
+- `bytes.split` reads its separator as raw bytes, so a number works as a separator of `S` text: `np.@char.split(s, 5)` splits on the 8 bytes of the `int64` value 5. A separator of `U` text must be a `str` or `None`.
+- When the separator is longer than a `U` string, the list holds the element itself, which NumPy prints as `np.str_('...')`.
+
+`np.@char.join(sep, seq)` joins the CHARACTERS of each string of `seq` with its separator, as Python's `sep.join(seq)` does for a string:
+
+```csharp
+np.@char.join("-", "osd");                                    // 'o-s-d'
+np.@char.join(new[] { "-", "." }, new[] { "ghc", "osd" });    // ['g-h-c', 'o.s.d'], <U5
+np.@char.join("-", np.@char.split(words));                    // TypeError, as in NumPy 2.4.2 (see below)
+```
+
+The result has the class of `seq`: `U` or `S` as wide as the longest result, or `StringDType()`. An `S` sequence joins only when its strings are empty, because Python iterates `bytes` as numbers.
+
+NumPy 2.4.2 cannot join the lists that `split` returns: it joins every list and then raises `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` NumSharp raises the same error.
+
+The errors are NumPy's, in NumPy's order. The first element that fails stops the call:
+
+```csharp
+np.@char.split(words, "");            // ValueError: empty separator
+np.@char.split(words, " ", 1.5);      // TypeError: 'numpy.float64' object cannot be interpreted as an integer
+np.@char.split(words, new byte[] { 32 });   // TypeError: must be str or None, not numpy.bytes_
+np.@char.split(np.array(new long[] { 1 }));  // TypeError: string operation on non-string array
+```
+
+In these four functions a C# `null` is Python's `None`: `np.@char.split(null)` raises NumPy's `TypeError`, and `new object[] { " ", null }` as a separator splits the second element at whitespace. The chararray members `c.split()`, `c.rsplit()`, `c.splitlines()` and `c.join(seq)` call the same functions on the chararray's elements with their trailing whitespace.
+
+Differences from NumPy: `w[i, j]` returns a new array of the pieces, where NumPy returns the Python list (`w.item(i, j)` returns the list), and an `NDListArray` has only the members listed above.
+
+Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): 4.6 to 48 times as fast, 12.6 times on average.
+
 ### What is not computed yet
 
 NumPy answers a call that involves text in one of two ways, and NumSharp follows it.
@@ -902,6 +954,8 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.@char.equal` … `np.@char.greater_equal`, `np.@char.compare_chararrays` | Comparisons after the trailing NULs and ASCII whitespace are removed; `null` (NumPy's `NotImplemented`) for `S` against `U` |
 | `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
 | `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only; the comparison operators strip (also with a plain array on the left), `+` and `*` return chararrays, and the `np.*` functions keep, wrap or drop the class as NumPy's do |
+| `np.@char.split` / `rsplit` / `splitlines` | Python's `str` / `bytes` methods per element; the result is an `NDListArray`, NumPy's object array of lists |
+| `np.@char.join` | The characters of each string joined by its separator; the result has the class of `seq`; over an `NDListArray`, NumPy 2.4.2's `TypeError` |
 | `np.argmax` / `np.argmin` / `np.searchsorted` / `np.digitize` | NumPy's results: the first extreme element, NumPy's exact search over unsorted haystacks |
 | `np.unique` / `np.unique_values` / `np.unique_counts` / `np.unique_inverse` / `np.unique_all` | NumPy's results for every flag and axis; `unique_values` (and `sorted: false`) sorted where NumPy keeps its hash order |
 | `np.isin` / `np.intersect1d` / `np.union1d` / `np.setdiff1d` / `np.setxor1d` / `np.lexsort` / `np.sort_complex` | NumPy's results: numbers beside text written as text, bytes decoded as ASCII where NumPy joins the operands |

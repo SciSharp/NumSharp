@@ -979,7 +979,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dims">Receives the dimensions.</param>
         /// <param name="values">Receives the elements in C order.</param>
         /// <exception cref="ValueError">A ragged jagged level (NumPy's inhomogeneous-shape text).</exception>
-        private static void Collect(Array array, List<long> dims, List<object> values)
+        internal static void Collect(Array array, List<long> dims, List<object> values)
         {
             int leafDepth = -1;
             Visit(array, 0, dims, values, ref leafDepth);

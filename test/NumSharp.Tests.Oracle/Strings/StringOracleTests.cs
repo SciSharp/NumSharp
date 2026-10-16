@@ -353,6 +353,17 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void CharArrayFunctions() => RunWithCharArrayBoundaryAudit("strcharfn");
 
         /// <summary>
+        ///     Section strcharobj (the <c>numpy.char</c> plan's phase 4): the object path — <c>np.@char.split</c> /
+        ///     <c>rsplit</c> / <c>splitlines</c> / <c>join</c> over <c>S</c> / <c>U</c> / <c>StringDType</c> text (NA objects
+        ///     included) of every core layout, every separator / limit / keepends form and argument kind, NumPy's errors in
+        ///     NumPy's order (the first failing element ending the call), the whitespace and line-boundary sets
+        ///     exhaustively, long texts, the chararray members, the object result's views and printing, and join over it
+        ///     (NumPy 2.4.2's ObjectDType failure). An object result is compared piece by piece, with CPython's [self]
+        ///     pieces (<c>np.str_</c>) marked. Strict.
+        /// </summary>
+        [TestMethod] public void CharObjectPath() => Run("strcharobj");
+
+        /// <summary>
         ///     The chararray boundary's safety contract over the WHOLE string corpus: every case of every section with an
         ///     <c>S</c> / <c>U</c> operand is replayed with those operands viewed as chararrays while
         ///     <see cref="NDCharArrayBoundary.AuditInternalCallers"/> is on, and no method of the library itself may reach the
@@ -591,7 +602,7 @@ namespace NumSharp.Tests.Strings
                 "dtype", "creation", "astype", "views", "movement", "mutation", "access", "printing", "ufuncs", "reductions",
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
-                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn",
+                "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strsets", "tcomp", "tarith",
                 "treduce", "tsort",
             };
@@ -1310,6 +1321,9 @@ namespace NumSharp.Tests.Strings
                 case "masked":
                     CompareMasked(exp, result, diffs);
                     break;
+                case "lists":
+                    CompareLists(exp, result, diffs);
+                    break;
                 case "masked_constant":
                     if (!ReferenceEquals(result, np.ma.masked))
                         diffs.Add($"expected numpy.ma's masked constant, got {Describe(result)}");
@@ -1344,6 +1358,65 @@ namespace NumSharp.Tests.Strings
                 default:
                     diffs.Add($"unknown expectation kind '{kind}'");
                     break;
+            }
+        }
+
+        /// <summary>
+        ///     Compares an object-path result (NumPy's object array of lists) with NumPy's: the shape, then every element's
+        ///     pieces in C order — bytes pieces by their bytes, str pieces by their code points (a NumPy str may hold one above
+        ///     U+10FFFF) — and the positions whose single piece is the element's own <c>np.str_</c> (CPython's [self]).
+        /// </summary>
+        /// <param name="exp">The <c>lists</c> expectation.</param>
+        /// <param name="result">NumSharp's result.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static unsafe void CompareLists(JsonElement exp, object result, List<string> diffs)
+        {
+            if (result is not NDListArray l)
+            {
+                diffs.Add($"expected an object array of lists (NDListArray), got {Describe(result)}");
+                return;
+            }
+            var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
+            if (!wantShape.SequenceEqual(l.shape))
+            {
+                diffs.Add($"shape ({string.Join(",", l.shape)}) != NumPy ({string.Join(",", wantShape)})");
+                return;
+            }
+            var want = exp.GetProperty("lists").EnumerateArray().ToArray();
+            var wantSelf = new HashSet<long>(exp.GetProperty("strself").EnumerateArray().Select(e => e.GetInt64()));
+            // The element ranges in C order (a view's Starts / Ends are strided), read through flat copies.
+            using var starts = l.Starts.flatten();
+            using var ends = l.Ends.flatten();
+            using var self = l.SelfPiece?.flatten();
+            long* offsets = (long*)l.Offsets.Address;
+            for (long pos = 0; pos < want.Length && diffs.Count < 20; pos++)
+            {
+                long first = starts.GetInt64(pos), end = ends.GetInt64(pos);
+                var pieces = want[pos].EnumerateArray().ToArray();
+                if (end - first != pieces.Length)
+                {
+                    diffs.Add($"[{pos}] {end - first} pieces, NumPy {pieces.Length}");
+                    continue;
+                }
+                for (int k = 0; k < pieces.Length; k++)
+                {
+                    long from = offsets[first + k], to = offsets[first + k + 1];
+                    bool bytesPiece = pieces[k].TryGetProperty("b", out var bhex);
+                    if (bytesPiece != (l.Kind == 'S'))
+                    {
+                        diffs.Add($"[{pos}][{k}] a {(l.Kind == 'S' ? "bytes" : "str")} piece, NumPy's is {(bytesPiece ? "bytes" : "str")}");
+                        continue;
+                    }
+                    string gotHex = bytesPiece
+                        ? Convert.ToHexString(new ReadOnlySpan<byte>((byte*)l.Units.Address + from, checked((int)(to - from)))).ToLowerInvariant()
+                        : Convert.ToHexString(new ReadOnlySpan<byte>((byte*)((uint*)l.Units.Address + from), checked((int)(to - from) * 4))).ToLowerInvariant();
+                    string wantHex = bytesPiece ? bhex.GetString() : pieces[k].GetProperty("u").GetString();
+                    if (gotHex != wantHex)
+                        diffs.Add($"[{pos}][{k}] piece {Shorten(gotHex)} != NumPy {Shorten(wantHex)}");
+                }
+                bool gotSelf = self is not null && self.GetBoolean(pos);
+                if (gotSelf != wantSelf.Contains(pos))
+                    diffs.Add($"[{pos}] np.str_ piece {gotSelf} != NumPy {wantSelf.Contains(pos)}");
             }
         }
 

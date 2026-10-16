@@ -211,6 +211,34 @@ lay out their results as NumPy's iterator does; `np.unstack` of an empty array r
 text. Oracle sections `strcharops` (3,266 cases) and `strcharfn` (2,633 cases, 99 functions). Performance (91 cells,
 NPY/NS geomean 3.5×): the six cells under 1.5× cost the same on the plain path (text `searchsorted` 1.03–1.27×,
 `argmax(out=)` 1.27× / 1.39×, a 1K `np.concatenate` 1.34×).
+
+**`numpy.char`'s object path (phase 4, 2026-10-16): `split` / `rsplit` / `splitlines` / `join` and `NDListArray`**
+(owner decision C-D3; `APIs/np.char.split.cs`, `Char/NDCharArray.Split.cs`, `Char/NDListArray.cs`, engine
+`Backends/Strings/NDCharObjectPath.cs`). NumPy's `_vec_string` is one NDIter walk in C order over the broadcast operands
+(no casting, no buffer); per element, CPython 3.12's `str` / `bytes` method statement for statement over 1-byte or 4-byte
+units, in CPython's order: the NumPy scalars (a ONE-unit `U` text above U+10FFFF is `SystemError: invalid maximum
+character passed to PyUnicode_New`), the descriptor check (a StringDType NA), `maxsplit`'s `__index__` / `keepends`'
+truth, the separator's type (bytes.split takes any buffer: `np.int64(5)` splits on its 8 bytes), `empty separator`, the
+pieces; the first failing element ends the call. `split` returns an `NDListArray` (NumPy's object array of lists): exact
+pieces (`Units` + `Offsets`), the element ranges (`Starts` / `Ends`) and the `[self]` flags (unicodeobject.c returns the
+element's own `np.str_` when the separator is longer or of a wider kind; the repr prints `np.str_('ab')`). Basic indexing
+gives a view, a full integer index a NEW 1-D piece array (NumPy: the list itself, which `item()` gives —
+`[Misaligned]`). `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's
+own `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` (`ObjectDType(n)`:
+NumPy cannot finish `np.char.join(' ', np.char.split(a))`). In the object path a C# `null` IS Python's None (an object
+array), where the rest of the module raises `ArgumentNullException`. Oracle section `strcharobj` (3,625 cases, strict,
+expectation kind `lists`), unit tests `CharObjectPathTests` (16). Performance (99 cells, default tiered runtime): NPY/NS
+geomean 12.6×, min 4.6×.
+
+TRAPS: (1) under `DOTNET_TieredCompilation=0` CoreLib's ReadyToRun bodies are never re-optimized, and its `memmove` and
+span searches ran 3–4× slower inside a per-element loop than with `DOTNET_ReadyToRun=0` (U `split(' ')` 324 vs 61 µs per
+1K) — the engine copies pieces inline and searches with its own vectors (`FindUnit` / `FindNeedle`); benchmark text code
+under the default runtime, and check TC=0 too. (2) A raw U+2028 / U+2029 / U+0085 in a C# string literal or comment is a
+C# LINE TERMINATOR (CS1010 / CS1056 far from the cause); write them as `\u2028` escapes. (3) Iterating a Python str that
+holds U+110000 creates it as a one-character str (CPython's SystemError): encode such text with
+`s.encode('utf-32-le', 'surrogatepass')`, never `for c in s`. (4) `cond ? long : BigInteger` types BOTH arms BigInteger
+(the oracle decoded every int as BigInteger once; 15 string sections failed). (5) The oracle harness reads an
+expectation's `self` key as receiver identity: never name another field `self`.
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes

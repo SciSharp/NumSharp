@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -250,19 +251,35 @@ namespace NumSharp.Tests.Strings
             if (e.TryGetProperty("bool", out var bo))
                 return bo.GetBoolean();
             if (e.TryGetProperty("int", out var i))
-                return i.GetInt64();
+            {
+                // A Python int past int64 (section strcharobj's limits) is a BigInteger, NumSharp's Python int of any size.
+                // Two returns, not a conditional: a conditional would type BOTH arms BigInteger (long converts to it).
+                if (i.TryGetInt64(out long l))
+                    return l;
+                return System.Numerics.BigInteger.Parse(i.GetRawText(), CultureInfo.InvariantCulture);
+            }
+            if (e.TryGetProperty("complex", out var cx))
+                return new System.Numerics.Complex(DecodeFloat(cx[0]), DecodeFloat(cx[1]));
             if (e.TryGetProperty("float", out var f))
-                return f.ValueKind == JsonValueKind.Number
-                    ? f.GetDouble()
-                    : f.GetString() switch
-                    {
-                        "nan" => double.NaN,
-                        "inf" => double.PositiveInfinity,
-                        "-inf" => double.NegativeInfinity,
-                        var s => throw new FormatException($"unknown float spelling '{s}'"),
-                    };
+                return DecodeFloat(f);
             throw new FormatException($"unknown value encoding {e}");
         }
+
+        /// <summary>A float as the generator writes it: a JSON number, or <c>"nan"</c> / <c>"inf"</c> / <c>"-inf"</c>
+        ///     (the corpus is written without JSON's non-standard literals).</summary>
+        /// <param name="f">The encoded float.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="FormatException">An unknown spelling.</exception>
+        private static double DecodeFloat(JsonElement f)
+            => f.ValueKind == JsonValueKind.Number
+                ? f.GetDouble()
+                : f.GetString() switch
+                {
+                    "nan" => double.NaN,
+                    "inf" => double.PositiveInfinity,
+                    "-inf" => double.NegativeInfinity,
+                    var s => throw new FormatException($"unknown float spelling '{s}'"),
+                };
 
         /// <summary>
         ///     A Python <c>str</c> from its UTF-32LE bytes, mapped to .NET the way NumSharp's <c>U</c> decoding maps it: a

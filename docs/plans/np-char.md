@@ -32,13 +32,14 @@ is oracle-verified in the coverage artifact.
 | `chararray` | None. `coverage/object_surfaces.py` lists `char.chararray` with disposition `subsystem` and no target. |
 | Object results | None. NumSharp has no object dtype (`split`, `rsplit`, `splitlines` return object arrays of lists in NumPy). |
 
-**Since 2026-10-16 (phases 1–3, see the state log at the end of §7):** `np.@char` is the module (C-D1). C1 (the
+**Since 2026-10-16 (phases 1–4, see the state log at the end of §7):** `np.@char` is the module (C-D1). C1 (the
 stripping comparisons, `compare_chararrays`), `add` and C4's `multiply` compute. `chararray` is `NDCharArray`: its data
 rules (phase 2: the constructors, `np.char.array` / `asarray`, the finalize rule, stripped element access, views and
 copies that keep the class) and its behavior (phase 3: the operators with Python's dispatch, the sort and search members,
-the finalize errors of the index members, and the `np.*` functions that keep, wrap or drop the class) are done. Open: C3
-(`join`, `split`, `rsplit`, `splitlines`: phase 4, with C-D3's `NDListArray`), C4's `partition` / `rpartition` and the
-string methods of C5 (they wait for the phase-2 kernels, P2.5 / P2.6).
+the finalize errors of the index members, and the `np.*` functions that keep, wrap or drop the class) are done. C3, the
+object path (`join`, `split`, `rsplit`, `splitlines` and their chararray members, with C-D3's `NDListArray`), is done
+(phase 4). Open: C4's `partition` / `rpartition` and the string methods of C5 (they wait for the phase-2 kernels, P2.5 /
+P2.6).
 
 ---
 
@@ -110,6 +111,34 @@ dropped its trailing NULs.
   `split([b'a b'], ' ')` is `[[b'a b']]`.
 - `splitlines(a, keepends=None)`: `U` line boundaries are `\n`, `\r`, `\r\n`, `\v`, `\f`, `\x1c`, `\x1d`, `\x1e`,
   `\x85`, `\u2028`, `\u2029`; `S` boundaries are `\n`, `\r`, `\r\n`. `keepends` broadcasts per element.
+
+Probed in phase 4 (each pinned by the oracle section `strcharobj` and `CharObjectPathTests`):
+- **The method is picked by the first argument's dtype** (`bytes.*` for `S`, `str.*` for `U` and StringDType); anything
+  else, a 0-d object array from `None` included, is `TypeError("string operation on non-string array")`. The other
+  arguments are `np.asarray`'d and broadcast by the multi-iterator, whose error is `ValueError("shape mismatch: objects
+  cannot be broadcast to a single shape.  Mismatch is between arg 0 with shape (2,) and arg 1 with shape (3,).")`.
+- **CPython's order per element:** the NumPy scalars of the operands (a ONE-unit `U` text above U+10FFFF is CPython's
+  `SystemError("invalid maximum character passed to PyUnicode_New")`: `_PyUnicode_FromUCS4`'s one-character path checks
+  the code point, a longer text's maximum is capped at U+10FFFF), the descriptor check (`descriptor 'split' for 'str'
+  objects doesn't apply to a 'NoneType' object` for a StringDType NA), `maxsplit`'s `__index__` (`np.bool` has none,
+  `np.uint64(2**63)` is `OverflowError("Python int too large to convert to C ssize_t")`), `keepends`' `PyObject_IsTrue`
+  (`0.5`, `'x'` and NaN are true), the separator's type, `"empty separator"`, then the pieces (a one-unit piece above
+  U+10FFFF is the SystemError again). The first failing element in C order ends the call; an empty array raises none.
+- **bytes.split takes any buffer:** a NumPy number's raw bytes are a separator (`np.char.split(s, 5)` splits on the 8
+  bytes of `np.int64(5)`, `True` on `\x01`, a `str` on its UCS-4 bytes, a Python int past uint64 is `a bytes-like object
+  is required, not 'int'`).
+- **`[self]`:** `unicodeobject.c`'s split returns `[self]` when the separator is longer than the string or of a wider
+  kind (`PyUnicode_KIND`), so a `U` element's list holds its own `np.str_` (printed `np.str_('ab')`); a StringDType
+  element is an exact `str`, and bytes split has no such shortcut.
+- **join's result is `_to_bytes_or_str_array(result, seq)`:** the class of `seq` (a StringDType `seq` gives the default
+  `StringDType()`, its NA object dropped), as wide as the longest result (at least 1); an empty broadcast is
+  `result.astype(seq.dtype)` for any dtype, an empty OBJECT array for an object `seq`. **NumPy 2.4.2 bug:** for a
+  non-empty object `seq` (a split result: the idiom `np.char.join(' ', np.char.split(a))`) the cast calls
+  `ObjectDType(n)`, which raises ``TypeError("currently only the no-argument instantiation is supported; use `np.dtype`
+  instead.")`` after every element joined — the idiom does not work in NumPy 2.4.2.
+- **Python's `None`:** `np.asarray(None)` is a 0-d object array, so `split(None)` is the class error, `join('-', None)` is
+  `"can only join an iterable"`, and a list holding `None` (`[' ', None]`) is an object array whose `None` elements are
+  Python's `None` (whitespace as a separator, `'NoneType' object cannot be interpreted as an integer` as a limit).
 
 ### 1.5 The re-exports on the same object path (`mod`, `encode`, `decode`, `translate`)
 
@@ -297,6 +326,17 @@ where NumPy gives `'abx'`. Iteration yields the same copies; `item()`, `tolist()
   (estimated 4–6× NumPy), no shape object; (c) refuse with `NotSupportedException` (the current answer for object
   dtype): 3 functions and 3 members stay unimplemented.
 
+**As built (phase 4, owner decision "NDListArray", 2026-10-16).** Three points differ from the recommendation:
+1. **The pieces are stored exact, not at one width.** `NDListArray` keeps every piece's code units back to back
+   (`Units`: uint8 for bytes pieces, uint32 for str pieces) with an int64 `Offsets` array, plus the element ranges
+   (`Starts` / `Ends`, the outer shape) and the `[self]` flags. A one-width pieces array would cost pieces × longest
+   piece (one long piece among a million short ones makes it gigabytes) and would drop a piece's trailing NUL.
+2. **`this[i, j]` is a COPY**, a new 1-D array of the element's pieces (`S` / `U` as wide as the longest piece, or
+   StringDType), not a view: exact pieces have no common width to view. `item(...)` and `tolist()` return the exact
+   pieces (NumPy's Python list); slice notation gives an `NDListArray` view (only the ranges are sliced).
+3. **`np.@char.join(sep, NDListArray)` raises NumPy 2.4.2's TypeError** (§1.4): NumPy itself cannot finish the idiom,
+   so NumSharp reproduces the failure after every element joined; an empty broadcast returns an empty `NDListArray`.
+
 **C-D4. The stripping comparisons are a flavor of P2.1's comparison kernels.** Per element: the stripped length (a
 vector compare against NUL and the ASCII whitespace classes, then a leading-zero count), then the first differing unit
 within the shorter stripped length, else the lengths. The driver is P2.1's (`NDStringComparison`: NumPy's output
@@ -449,6 +489,14 @@ C-D1 decision and C3 for C-D3.
     in C order, NumPy in K order), VF26 (`np.tile` with unit reps of a 0-d input owns its copy), VF01 (`np.choose` of a
     0-d index returns a writeable 0-d array, NumPy a scalar), VF17 (`np.broadcast_arrays` makes a read-only operand's
     result writeable).
+- **Phase 4's divergences** (pinned in `CharObjectPathTests`):
+  - **The object result is an `NDListArray`**, not an ndarray: it has the array attributes, basic indexing, `item`,
+    `tolist`, iteration and NumPy's repr / str, but none of the other ndarray members (`reshape`, `T`, `flatten`, ...).
+  - **Element access is a 1-D piece array** (C-D3 "As built", point 2; `[Misaligned]`): NumPy returns the Python list,
+    which `item()` gives.
+  - **Python's `None` is `null` here** (the object path models NumPy's object arrays), where the rest of the module
+    raises `ArgumentNullException` for a null array argument (C-D6).
+  - **The broadcast error** is `IncorrectShapeException` (the house convention for shape errors) with NumPy's text.
 
 ---
 
@@ -727,6 +775,39 @@ C-D1 decision and C3 for C-D3.
     `np.reshape(c, (-1, 8))` is 2.4–3.1×.
   - **Open:** `c.partition(sep)` (P2.5), C3 (phase 4, C-D3's `NDListArray`), the string methods of C5 (P2.5 / P2.6), the
     coverage mapping `char.chararray` → `NumSharp.NDCharArray` (C6).
+- **2026-10-16 — phase 4: the object path** (the owner's scope: "join, split, rsplit and splitlines, with NumPy's errors in
+  NumPy's order"; owner decision C-D3: `NDListArray`).
+  - **Built.** `np.@char.split` / `rsplit` / `splitlines` / `join` (`APIs/np.char.split.cs`), the chararray members
+    `split` / `rsplit` / `splitlines` / `join` (`Char/NDCharArray.Split.cs`), the result type `NDListArray`
+    (`Char/NDListArray.cs`) and the engine `NDCharObjectPath` (`Backends/Strings/NDCharObjectPath.cs`): NumPy's
+    `_vec_string` as one NDIter walk in C order over the broadcast operands (each with its own dtype, no casting, no
+    buffer), CPython 3.12's `split_whitespace` / `split_char` / `split` / their `rsplit` twins / `splitlines` / `join`
+    statement for statement over 1-byte or 4-byte units, every argument read as the Python object NumPy's
+    `PyArray_ToScalar` makes (text, NumPy numbers with their buffer bytes, StringDType NA objects, object lists holding
+    `None`, Python ints past uint64). `ArrayFormatter.ObjectArrayStr` / `ObjectArrayRepr` print object arrays through the
+    existing layout engine.
+  - **A .NET runtime trap found on the way:** under `DOTNET_TieredCompilation=0` the ReadyToRun bodies of CoreLib are
+    never re-optimized, and inside the split loop its `memmove` and span searches ran 3–4× slower than the same loop with
+    `DOTNET_ReadyToRun=0` (U `split(' ')` 324 against 61 µs per 1,000 elements; `str.split(None)` 198 against 52 µs). The
+    pieces are now copied inline (two overlapping moves up to 32 bytes, 16-byte blocks up to 512) and the separators found
+    by the engine's own vector searches (`FindUnit` / `FindUnitLast`, and a candidate scan for short texts in
+    `FindNeedle` / `FindNeedleLast`); both modes are fast now.
+  - **Gates.** Oracle section `strcharobj` (3,625 cases, 305 NumPy errors, zero excuses): S / U / StringDType over the 11
+    core layouts × 8 separators × 5 limits for split / rsplit, 11 keepends forms, join over every class pair and layout,
+    the argument kinds of 13 dtypes and of Python values (big ints, complex, `None`, object lists), StringDType NA
+    objects, broadcasting and its error, NumPy's error order, the one-unit U+10FFFF rule, the whitespace and
+    line-boundary sets exhaustively (every code point below U+3010 and every byte), long texts, the chararray members,
+    the result's views and printing, join over the object result. An object result is compared piece by piece with its
+    `[self]` pieces (a new expectation kind `lists`). 8 planted bugs (rsplit order, `[self]`, a vector search, the
+    `\x85` whitespace, CRLF, maxsplit 0, the lone-unit check, the piece copy) each turned 2–1,707 cases red. Unit tests
+    `Backends/Strings/CharObjectPathTests.cs` (16, one `[Misaligned]`). Leak catalogue entries for the 8 new members.
+  - **Performance** (NPY/NS, `start /affinity 14`, the default tiered runtime; 99 cells: split / rsplit / splitlines /
+    join × S / U / StringDType × 1K / 100K / 1M, plus strided, a separator array and a two-unit separator): geomean
+    12.6×, min 4.6× (`rsplit(None, 1)` of StringDType at 1K). split / rsplit: U 10–25×, StringDType 4.6–48×, S 5.5–11×
+    (NumPy's bytes methods cost half its str methods); splitlines 6.7–36×; join 10–18×. Under `TieredCompilation=0`:
+    geomean 11.1×, min 5.5×.
+  - **Open:** the coverage mapping `char.chararray` → `NumSharp.NDCharArray` (C6); `NDListArray`'s other ndarray
+    members, if wanted.
 
 ---
 
@@ -736,7 +817,7 @@ C-D1 decision and C3 for C-D3.
 |---|---|
 | C1 | `compare_chararrays`, `equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal` |
 | C2 | `array`, `asarray`, `chararray` |
-| C3 | `join`, `split`, `rsplit`, `splitlines` |
+| C3 | `join`, `split`, `rsplit`, `splitlines` (phase 4, done) |
 | C4 | `multiply` (after P2.3), `partition`, `rpartition` (after P2.5) |
 | P2.3 | `add` |
 | P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith`, `lstrip`, `rstrip`, `strip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill` |
@@ -750,9 +831,9 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 |---|---|---|---|
 | String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 |
 | String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 |
-| String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 |
+| String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done) |
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 |
-| String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 |
+| String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 (phase 4, done) |
 | Views and copies (the finalize hook) | `T`, `mT`, `transpose`, `swapaxes`, `reshape`, `ravel`, `flatten`, `squeeze`, `copy`, `take`, `repeat`, `compress`, `diagonal`, `real`, `imag`, `view`, `astype`, `byteswap`, `flat` | chararray (`diagonal`, `imag` read-only); `astype` / `view` to a numeric dtype per §1.6 | C2 |
 | Finalize errors | `argmax`, `argmin`, `argpartition` | `ValueError("Can only create a chararray from string data.")`; with `out=`, the index | phase 3 (done) |
 | Sorting | `argsort` (plain view), `sort` (in place), `searchsorted` | ndarray's answer | phase 3 (done; the kernels are P2.2's) |
