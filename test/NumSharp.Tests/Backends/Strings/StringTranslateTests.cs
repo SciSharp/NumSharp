@@ -499,8 +499,9 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     <c>U</c> with dict tables (probed: NumPy 2.4.2): maketrans maps, deletions, replacements cut at the width, keys
-        ///     that equal a code point (97.0, True) or never do ('a'), a bool value (code point 1), the largest code point,
-        ///     a NUL mapped inside a text but not at its end.
+        ///     that equal a code point (97.0, True) or never do ('a', the non-integral 97.5), a bool value (code point 1), the
+        ///     largest code point, a NUL mapped inside a text but not at its end, and a key at the dense table's end read
+        ///     through the gather (U+0100 when the call compiles 256 dense entries).
         /// </summary>
         [TestMethod]
         public void U_DictTables_MatchNumPy()
@@ -511,6 +512,16 @@ namespace NumSharp.Tests.Backends.Strings
             r1.dtype.Should().Be(np.dtype("U3"));
             Strings(r1).Should().Equal("XYZ", "cXY");
             Strings(np.strings.translate(np.array(new[] { "abc" }), Dict(97.0, "z"))).Should().Equal("zbc");
+            // A float key equals a code point only when it is integral: 97.5 matches nothing, 98.0 matches 'b'.
+            Strings(np.strings.translate(np.array(new[] { "abc" }), Dict(97.5, "z", 98.0, "y"))).Should().Equal("ayc");
+            // A key exactly at the dense table's end (U+0100: a call this small compiles 256 dense entries): the lane must take
+            // the key route, never read one entry past the table.
+            Strings(np.strings.translate(np.array(new[] { new string('Ā', 8), "ĀÿĀÿĀÿĀÿ" }),
+                Dict(256, "X", 255, "Y"))).Should().Equal("XXXXXXXX", "XYXYXYXY");
+            // The same code point under a table whose keys all sit in the dense range (the eight-unit gather route): U+0100 is
+            // the first unit past the table, which keeps it, and the gather must not read the entry one past the table's end.
+            Strings(np.strings.translate(np.array(new[] { new string('Ā', 8), "aĀbĀcĀdĀ" }),
+                Dict(97, "b"))).Should().Equal(new string('Ā', 8), "bĀbĀcĀdĀ");
             Strings(np.strings.translate(np.array(new[] { "abc" }), Dict(true, "z", 97, "q"))).Should().Equal("qbc");
             Strings(np.strings.translate(np.array(new[] { "\u0001bc" }), Dict(true, "z"))).Should().Equal("zbc");
             Strings(np.strings.translate(np.array(new[] { "abc" }), Dict("a", "z"))).Should().Equal("abc");
@@ -574,7 +585,8 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     <c>U</c> units past U+10FFFF (probed: NumPy 2.4.2): a one-unit text raises at its scalar, a kept unit raises
-        ///     when written, a mapped or deleted one does not; a lone surrogate is a character like any other.
+        ///     when written, a mapped or deleted one does not; a lone surrogate is a character like any other; a str TABLE
+        ///     holding such a unit raises when a character indexes it there, not otherwise.
         /// </summary>
         [TestMethod]
         public void U_UnitsPastU10FFFF_MatchNumPy()
@@ -595,6 +607,12 @@ namespace NumSharp.Tests.Backends.Strings
             Strings(np.strings.translate(U(0x110000, 0x61), Dict(0x110000, null))).Should().Equal("a");
             Strings(np.strings.translate(U(0xD800, 0x61), Dict(97, "z", 0xD800, "q"))).Should().Equal("qz");
             Strings(np.strings.translate(U(0x61, 0x62), Dict(97, 0xDC00))).Should().Equal("\uDC00b");
+            // A str TABLE (an np.str_ element) holding a unit past U+10FFFF: indexing it there makes a one-character str of
+            // that unit — CPython's SystemError — while a text that indexes past the table's end keeps its characters.
+            using var table = U(0x61, 0x110000);
+            Action indexed = () => np.strings.translate(np.array(new[] { "\u0001\0a" }), table);
+            indexed.Should().Throw<SystemError>().WithMessage("invalid maximum character passed to PyUnicode_New");
+            Strings(np.strings.translate(np.array(new[] { "ab" }), table)).Should().Equal("ab");
         }
 
         /// <summary>

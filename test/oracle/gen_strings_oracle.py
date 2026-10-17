@@ -13836,6 +13836,16 @@ def gen_strtrans():
             fn_case(S, "translate", [raw], [_Op(0), TR_U_TABLES[tname]], f"U:{label}:{tname}")
         fn_case(S, "translate", [raw], [_Op(0), {0x110000: "x"}], f"U:{label}:mapped")
         fn_case(S, "translate", [raw], [_Op(0), {0x110000: None, 0x7FFFFFF0: "y"}], f"U:{label}:deleted")
+    # The translate mutation pass's pins: a non-integral float key (it equals no code point), a str TABLE holding a unit
+    # past U+10FFFF (CPython's SystemError when a character indexes it there, nothing otherwise), and a key exactly at the
+    # dense table's end read through the eight-unit gather (U+0100 when the call compiles 256 dense entries).
+    fn_case(S, "translate", [plain(np.array(["abc", "xbz"]))], [_Op(0), {97.5: "z", 98.0: "y"}], "U:floatkeys")
+    fn_case(S, "translate", [plain(np.array(["\x01\x00a"])), _u_units([0x61, 0x110000], 2)], [_Op(0), _Op(1)],
+            "U:strtable-past:indexed")
+    fn_case(S, "translate", [plain(np.array(["ab"])), _u_units([0x61, 0x110000], 2)], [_Op(0), _Op(1)],
+            "U:strtable-past:kept")
+    fn_case(S, "translate", [plain(np.array(["Ā" * 8, "Āÿ" * 4]))], [_Op(0), {256: "X", 255: "Y"}], "U:dense-end")
+    fn_case(S, "translate", [plain(np.array(["Ā" * 8, "aĀbĀcĀdĀ"]))], [_Op(0), {97: "b"}], "U:dense-end:gather")
     # F. bytes.translate: tables, wrong lengths, np.str_ / number / dict tables, delete sets of every kind.
     sop = plain(np.array(TR_S_POOL, dtype="|S6"))
     for label, table in [("mk", mk), ("rev", rev), ("rev255", rev[:-1] + b"\x01"), ("x255", b"x" * 255),
@@ -14034,6 +14044,17 @@ def gen_ttrans():
         pool = [_tr_random_text(rng, w, True) for _ in range(8)]
         op = t_operand(spec, layout, seed=0, pool=pool, na_every=rng.choice([0, 0, 4]))
         fn_case(S, "translate", [op], [_Op(0), _tr_random_table(rng)], f"rand{i}:{_t_label(spec)}:{layout}")
+
+
+def _u_units(units, width):
+    """A U array holding raw UCS-4 units (rows of ``width`` units), as an operand: units past U+10FFFF and lone surrogates
+    included, which no Python str literal builds.
+
+    :param units: the units, row after row.
+    :param width: the element width in units.
+    :returns: the (base, view) pair.
+    """
+    return plain(np.frombuffer(np.array(units, dtype="<u4").tobytes(), dtype=f"<U{width}").copy())
 
 
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
