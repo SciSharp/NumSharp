@@ -319,6 +319,10 @@ NDIter.
 Every unit ships **for all six bases at once**: one shared driver plus six step tables. Names are
 machine-partitioned; the counts sum to 193 with no overlap (Appendix A).
 
+The compute route of each of the 28 names still open (U3's `polyvalfromroots`, U6, U8, U9, U10, U11) was measured and
+decided on 2026-10-17: [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md). Where it refines
+a unit below, that document wins.
+
 ### U1 — Substrate, facades and the additive family (54 names) — DELIVERED 2026-09-27
 
 **As built** (the planned items below are kept for the record; where the build diverged, this block wins):
