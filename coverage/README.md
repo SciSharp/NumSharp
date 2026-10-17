@@ -25,7 +25,7 @@ The final `dashboard_rows` projection in `generate_coverage.py` applies the dash
 
 `object_surfaces.py` discovers methods, properties, Python protocols, and instance-only attributes from actual pinned NumPy classes/objects. It includes ufuncs, modern and legacy RNGs, seed sequences and bit generators, polynomial classes, masked/record/string/matrix arrays, iterators, dtype/limits/flags, archives, memory maps, and other public object contracts. Every public method of NumPy's ufunc type is also catalogued per ufunc export. The list is read from `numpy.ufunc` at the pin (`reduce`, `accumulate`, `reduceat`, `outer`, `at`, `resolve_dtypes`), never written by hand. The scan covers numpy itself and every namespace the generator compares (`UFUNC_PROTOCOL_NAMESPACES`), so ufuncs exported by `numpy.strings` and `numpy.char` get rows too. numpy.ma's masked ufunc wrappers get a row for each of those methods they implement: `ma.add` has `reduce`/`accumulate`/`outer`, the comparisons only `accumulate`/`outer` (NumPy sets their `reduce` to None), `ma.maximum`/`ma.minimum` only `reduce`/`outer`. These rows describe exposed protocols: unary reductions and most generalized-ufunc methods reject every call in NumPy (`applicability: not_applicable`, explained in the notes), while `resolve_dtypes` resolves for every ufunc shape. Aliases are separate exported names, and inherited members are separate contracts on each owner type.
 
-The reflection inventory's schema v6 `objectTypes` map contains public members **including inherited members**, with declaring-type evidence, and each type's C# operators and conversions (`operators`: every overload with its operand types, result type and declaring type), which credit Python's operator protocols. Object members match only their explicitly mapped CLR owner, using exact spelling or a reviewed adapter in `object_surfaces.py`. A top-level `np.sqrt`, `np.sum`, or an ordinary NDArray member cannot confer support on `emath.sqrt`, `add.reduce`, or `MaskedArray.sum`. A class being available does not mark its methods available. Missing methods, signatures, source links, and reviewed spelling differences are visible individually.
+The reflection inventory's schema v7 `objectTypes` map contains public members **including inherited members**, with declaring-type evidence, and each type's C# operators and conversions (`operators`: every overload with its operand types, result type and declaring type, since v6), which credit Python's operator protocols. Since v7 every method member, of a module facade or an object type, also carries `overloads`: each overload's parameters as data (name, type, default value and its kind, `params`, by-ref), its generic parameters, `[OverloadResolutionPriority]`, obsolete / hidden flags and declaring type, which signature parity compares (see "Signature parity"). Object members match only their explicitly mapped CLR owner, using exact spelling or a reviewed adapter in `object_surfaces.py`. A top-level `np.sqrt`, `np.sum`, or an ordinary NDArray member cannot confer support on `emath.sqrt`, `add.reduce`, or `MaskedArray.sum`. A class being available does not mark its methods available. Missing methods, signatures, source links, and reviewed spelling differences are visible individually.
 
 ## Catalog completeness
 
@@ -111,6 +111,38 @@ Availability says NumSharp *exposes* an API; the committed NumPy oracles say it 
 
 Host-pinned contracts (the `RunHostLibmCorpus` tiers, discovered from the replay source; the OpenBLAS and Windows-libm tiers declared under `host_pins`) are hard-gated only on the pinned host. A row whose contracts are *all* pinned is marked `pinned`.
 
+## Signature parity
+
+Availability is a NAME claim. `direct_target` credits a NumPy API when the annotated NumSharp module has a member of that name, and a reviewed alias in `overrides.json` credits it through another name. Until generator 1.15.0 nothing after that looked at a parameter: the inventory tool carried each overload only as display text (`numsharp_signatures`), which the artifact printed beside NumPy's signature without comparing the two. So a row read "available / exact" while the NumPy call, ported word for word, did not compile or bound another argument:
+
+- `np.sum` had seven overloads and none takes `out=`, `initial=` or `where=`;
+- `np.transpose` names its parameter `premute`, so `np.transpose(x, axes: p)` does not compile;
+- `np.can_cast` takes `NPTypeCode` / `Type` in 15 of its 20 overloads and names NumPy's `from_` `from`;
+- `numpy.acos` is credited to `np.arccos`, and `np.acos(x)` does not compile (14 headline names are credited that way).
+
+A standalone comparison found them on 2026-10-17 (`tools/api-parameter-parity/`, `docs/plans/numpy-signature-diff.md` and `numpy-signature-marks.md`); this section is that comparison inside the artifact.
+
+`signature_parity.py` compares each credited call's NumPy signature with every C# overload of the credited member and attaches a `signature` record to the row:
+
+- **NumPy's side.** `inspect.signature`, except the documented first docstring line of an ndarray method (inspect folds its keywords into `**kwargs`: `(self, /, axis=None, dtype=None, out=None, **kwargs)` for `ndarray.sum`), the callable a numpy.ma ufunc wrapper forwards to (`ma.add` takes `np.add`'s keywords), and ndarray's documented method for the numpy.ma functions and MaskedArray methods that forward `(*args, **params)` to it (`ma.copy`, `ma.swapaxes`).
+- **Matching** (docs/plans/api-parameter-parity.md section 1). A positional-only NumPy parameter is matched by slot, whatever the C# name; a positional-or-keyword one by name, at NumPy's slot; a keyword-only one by name. `*args` needs a `params` array (other C# parameters at its slot are reported as `varargs`); keywords NumPy takes through `**kwargs` are not foreign, and a C# parameter named like NumPy's `**kwds` spells it.
+- **Marks**, over ALL overloads. **M**: a NumPy parameter no overload offers; a rename counts, reported as `axes (C#: premute)`, because NumPy's keyword does not compile. **X**: a C# parameter NumPy does not have. **O**: more than one overload (the owner's rule of 2026-10-17: one NumPy-shaped signature per function). **T**: a dtype taken as `NPTypeCode` / `Type` instead of `DType`. **N**: credited through another name.
+- **Closest overload**: the overload the fewest weighted edits from NumPy's, i.e. what the one surviving overload must become. It adds a positional parameter at another slot (`order`), a parameter C# requires where NumPy has a default (`required`), another default value (`default`), `*args` without a `params` array (`varargs`), and, informational only, a null default where NumPy has a value (`null_default`).
+- **Exclusions** (section 3 of the plan): `like`, `subok`, a ufunc's `casting` / `order` / `signature`, the field `order` of the sort family and `einsum_path`'s `einsum_call` are listed under `excluded` and not counted.
+- **Status**: `identical` (one overload with exactly NumPy's parameters under NumPy's name), `differs` (any mark or a hard closest-overload difference), or `not-compared` with a `reason` (a module function credited to an NDArray instance method or the other way round, whose receiver is an argument on the other side; a credit to a property; NumPy stating no signature). Python protocols take no part (C# spells them as operators, indexers and casts), nor do uncredited rows, constants, modules and classes credited to a C# type; a class credited to a factory method is compared.
+- **Strictness.** A credited call whose target `member_index` cannot resolve, or whose member carries no overload data, is a join failure, not a verdict: the generator refuses to write the artifact ("Signature-parity join failed").
+
+**Outputs.**
+- Each credited call carries a `signature` record: `status`, `spelling`, `overloads`, `missing`, `excluded`, `foreign`, `typecode`, `order`, `required`, `default`, `varargs`, `null_default`, `closest` (the compared overload) and `numpy` (the compared NumPy signature), or `reason`.
+- Every summary scope adds `signature_identical` / `signature_differs` / `signature_not_compared`, the per-mark row counts (`signature_missing`, `signature_foreign`, `signature_overloaded`, `signature_typecode`, `signature_other_name`), the closest-overload counts and `signature_percent`, which shares `coverage_percent`'s denominator.
+- `coverage.csv` appends `signature_*` columns after the oracle ones.
+- `summary.md` gains a "Signature parity" section: the marks per scope and per surface, every headline API whose signature differs with what differs, and the credited headline calls not compared.
+- The dashboard shows a "NumPy-identical signatures" card (it filters the explorer to the differing calls), an explorer filter by class and by mark, a mark badge on each differing result and the record in the detail pane; like the oracle counts, the page recounts the headline and refuses a mismatched artifact, and an artifact from before generator 1.15.0 hides every signature element.
+
+At generator 1.15.0: headline **259 / 560** APIs have NumPy's exact signature (46.2%); 260 credited calls differ (54 M, 50 X, 220 O, 6 T, 14 N) and 2 are not compared. Expanded scope: 590 / 4,844 (12.2%), 585 differ.
+
+Gates: `test_signature_parity.py` (21 rules against NumPy 2.4.2's real signatures; 20 of 20 planted bugs fail it), `test_object_surfaces.py` (schema 7 lists every overload of every method, with its parameters) and the signature cases of `test_dashboard.cjs`.
+
 ## Generate or verify
 
 ```bash
@@ -126,7 +158,7 @@ Generated, reviewable outputs live in gitignored `coverage/generated/`:
 
 - `coverage.json` — complete machine-readable inventory used by the documentation dashboard.
 - `coverage.csv` — flat data for spreadsheets and downstream tooling.
-- `summary.md` — human-readable totals, the NumPy-oracle parity evidence, and the highest-priority gaps.
+- `summary.md` — human-readable totals, the NumPy-oracle parity evidence, signature parity, and the highest-priority gaps.
 - `manifest.json` — schema, tool versions, scope, and counting rules.
 
 CI generates a fresh copy under `artifacts/numpy-numsharp-coverage/`, validates documentation links across **all catalog scopes**, and uploads it as `numpy-numsharp-api-coverage`. Master builds publish snapshots to the repository's `data` branch. Generated data is not committed on master.
@@ -157,4 +189,4 @@ Platform-conditional extended-precision aliases (`float96`, `float128`, `complex
 - **Missing** — no NumSharp public API mapping was found.
 - **NumSharp-only** — an unmatched public member declared by `np`, `NDArray`, or `NumPyRandom`; these rows link directly to their declaration on GitHub.
 
-API availability is not a blanket behavioral-parity claim. Exact edge-case, dtype, layout, and signature parity requires differential tests, and the **oracle-verified** counts report which APIs those tests actually cover (see "NumPy-oracle parity evidence" above). Record reviewed exceptions and cross-surface aliases in `coverage/overrides.json`; the generator validates every referenced NumSharp target. Record corpus-key mappings and oracle aliases in `coverage/oracle_map.json`; the generator validates those too.
+API availability is not a blanket behavioral-parity claim. Exact edge-case, dtype and layout parity requires differential tests, and the **oracle-verified** counts report which APIs those tests actually cover (see "NumPy-oracle parity evidence" above); whether the call itself is NumPy's is reported apart, as **signature parity** (see "Signature parity" above). Record reviewed exceptions and cross-surface aliases in `coverage/overrides.json`; the generator validates every referenced NumSharp target. Record corpus-key mappings and oracle aliases in `coverage/oracle_map.json`; the generator validates those too.

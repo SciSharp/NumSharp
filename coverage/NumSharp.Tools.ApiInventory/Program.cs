@@ -46,7 +46,12 @@ var inventory = new ApiInventory(
     // Schema 6 adds TypeInventory.Operators: the C# operator and conversion methods, which the generator
     // needs to credit NumPy's Python operator protocols (ndarray.__add__ is spelled `a + b` in both
     // languages). Earlier schemas dropped every special-name method, so an operator was invisible.
-    SchemaVersion: 6,
+    // Schema 7 adds ApiMember.Overloads: every method overload with its parameters as DATA (name, type,
+    // default, params, by-ref) and the attributes that decide how C# binds it. Before it the inventory
+    // carried each overload only as display text, so the generator could credit a NumPy function by NAME
+    // and nothing else: np.sum read "available" with out=/initial=/where= missing, seven overloads and an
+    // NPTypeCode parameter, because no step ever looked at a parameter.
+    SchemaVersion: 7,
     AssemblyVersion: assembly.GetName().Version?.ToString() ?? "unknown",
     Modules: modules,
     // The full public surface OUTSIDE the annotated modules (type -> member names). The generator
@@ -81,8 +86,9 @@ Console.WriteLine(JsonSerializer.Serialize(inventory, new JsonSerializerOptions
 
 /// <summary>
 ///     Reflects one type's public surface: methods, properties, fields and (schema 6) C# operators and conversions,
-///     each grouped by name with every overload's signature. Members declared outside NumSharp (System.Object's
-///     ToString/GetHashCode when not overridden) are left out, so a protocol is never credited to .NET's defaults.
+///     each grouped by name with every overload's signature, and (schema 7) every method overload's parameters as
+///     data. Members declared outside NumSharp (System.Object's ToString/GetHashCode when not overridden) are left
+///     out, so a protocol is never credited to .NET's defaults.
 /// </summary>
 /// <param name="type">The type to reflect.</param>
 /// <param name="flags">
@@ -101,7 +107,12 @@ static TypeInventory InspectType(Type type, BindingFlags flags)
             group.Select(FormatMethod).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
             group.All(IsObsolete),
             group.All(method => method.IsStatic),
-            DeclaringTypes(group)))
+            DeclaringTypes(group))
+        {
+            // Schema 7: the overloads as data, in the same order as Signatures, for the generator's
+            // signature-parity pass (coverage/signature_parity.py).
+            Overloads = group.Select(DescribeOverload).OrderBy(overload => overload.Signature, StringComparer.Ordinal).ToArray(),
+        })
         .OrderBy(member => member.Name, StringComparer.Ordinal)
         .ToArray();
 
@@ -167,6 +178,85 @@ static OperatorOverload FormatOperatorOverload(MethodInfo method) => new(
     FriendlyType(method.ReturnType),
     method.GetParameters().Select(parameter => FriendlyType(parameter.ParameterType)).ToArray(),
     method.DeclaringType!.FullName ?? method.DeclaringType.Name);
+
+/// <summary>
+///     Describes one method overload with what decides how a ported NumPy call binds to it: its parameters in
+///     declaration order (with defaults, <c>params</c> and by-ref modifiers), its generic parameters and the
+///     attributes that change overload resolution or visibility.
+/// </summary>
+/// <param name="method">A public, non-special-name method.</param>
+/// <returns>
+///     The overload. <see cref="MethodOverload.Signature" /> is the same text as the member's
+///     <see cref="ApiMember.Signatures" /> entry, so the two lists can be read side by side.
+/// </returns>
+/// <remarks>
+///     <c>[OverloadResolutionPriority]</c> is matched by attribute NAME: NumSharp.Core polyfills it for net8.0, so its
+///     CLR type is not the BCL's on every target. The priority matters to the generator because C# 12 (the default
+///     language version of a net8.0 project) ignores it, so an overload set that resolves only through it is
+///     ambiguous for those callers.
+/// </remarks>
+static MethodOverload DescribeOverload(MethodInfo method)
+{
+    int? priority = method.GetCustomAttributesData()
+        .Where(attribute => attribute.AttributeType.Name == "OverloadResolutionPriorityAttribute"
+                            && attribute.ConstructorArguments.Count == 1)
+        .Select(attribute => (int?)Convert.ToInt32(attribute.ConstructorArguments[0].Value, CultureInfo.InvariantCulture))
+        .FirstOrDefault();
+    var browsable = method.GetCustomAttribute<System.ComponentModel.EditorBrowsableAttribute>();
+    return new MethodOverload(
+        FormatMethod(method),
+        FriendlyType(method.ReturnType),
+        method.GetParameters().Select(DescribeParameter).ToArray(),
+        method.IsGenericMethodDefinition ? method.GetGenericArguments().Select(argument => argument.Name).ToArray() : [],
+        priority,
+        IsObsolete(method),
+        browsable?.State == System.ComponentModel.EditorBrowsableState.Never,
+        method.IsStatic,
+        method.DeclaringType!.FullName ?? method.DeclaringType.Name);
+}
+
+/// <summary>
+///     Describes one parameter for the generator's comparison with NumPy's signature: name, type, whether a ported
+///     call may omit it, its default as C# text and as a kind, and its <c>params</c> / by-ref modifiers.
+/// </summary>
+/// <param name="parameter">A method parameter.</param>
+/// <returns>
+///     The parameter. <see cref="ApiParameter.DefaultKind" /> is <c>null</c>, <c>"null"</c> (a null default, or a
+///     struct's <c>default</c>, which reflection also reports as null), <c>"bool"</c>, <c>"number"</c>,
+///     <c>"string"</c>, <c>"char"</c>, <c>"enum"</c> or <c>"other"</c>; <see cref="ApiParameter.Default" /> is the
+///     literal (<c>"default"</c> for a struct's default, so it is not read as a null reference).
+/// </returns>
+static ApiParameter DescribeParameter(ParameterInfo parameter)
+{
+    var parameterType = parameter.ParameterType.IsByRef ? parameter.ParameterType.GetElementType()! : parameter.ParameterType;
+    string? kind = null;
+    string? text = null;
+    if (parameter.HasDefaultValue)
+    {
+        var value = parameter.DefaultValue;
+        kind = value is null || value == DBNull.Value || value == Missing.Value ? "null"
+            : value is bool ? "bool"
+            : value is string ? "string"
+            : value is char ? "char"
+            : value.GetType().IsEnum ? "enum"
+            : value.GetType().IsPrimitive || value is decimal ? "number"
+            : "other";
+        // A non-nullable struct parameter declared `= default` has no constant: reflection reports null. Its C#
+        // spelling is `default`, and it means "not given" exactly like a null reference default.
+        text = kind == "null" && parameterType.IsValueType && Nullable.GetUnderlyingType(parameterType) is null
+            ? "default"
+            : FormatDefault(value);
+    }
+
+    return new ApiParameter(
+        parameter.Name ?? string.Empty,
+        FriendlyType(parameterType),
+        parameter.HasDefaultValue || parameter.IsOptional,
+        text,
+        kind,
+        parameter.GetCustomAttribute<ParamArrayAttribute>() is not null,
+        parameter.IsOut ? "out" : parameter.ParameterType.IsByRef ? (parameter.IsIn ? "in" : "ref") : null);
+}
 
 static string[] DeclaringTypes(IEnumerable<MemberInfo> members) => members
     .Select(member => member.DeclaringType!.FullName ?? member.DeclaringType.Name)
@@ -368,6 +458,17 @@ static string FriendlyType(Type type)
     return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(FriendlyType))}>";
 }
 
+/// <summary>
+///     The tool's whole output: NumSharp.Core's public surface as the coverage generator reads it. The generator
+///     refuses any other <see cref="SchemaVersion" />, because an older schema silently lacks data it relies on
+///     (schema 6 the operators that credit Python protocols, schema 7 the overloads behind signature parity).
+/// </summary>
+/// <param name="SchemaVersion">The output format's version (7 since the overloads became data).</param>
+/// <param name="AssemblyVersion">NumSharp.Core's assembly version, printed in the artifact.</param>
+/// <param name="Modules">The <c>[ModuleName]</c>-annotated module facades, keyed by module name.</param>
+/// <param name="UnannotatedSurface">Every other exported type's public member names (the stray-host index).</param>
+/// <param name="ExportedTypes">Every exported public type's full name (the type-match index).</param>
+/// <param name="ObjectTypes">Every exported type's members, inherited ones included (the object-API index).</param>
 internal sealed record ApiInventory(
     int SchemaVersion,
     string AssemblyVersion,
@@ -425,6 +526,16 @@ internal sealed record OperatorOverload(
     string[] ParameterTypes,
     string DeclaringType);
 
+/// <summary>
+///     One public member NAME of a type with every declaration behind it: what the generator credits a NumPy API to.
+///     Crediting is by name; whether the member's parameters are NumPy's is read from <see cref="Overloads" />.
+/// </summary>
+/// <param name="Name">The member name, case-sensitive like NumPy's.</param>
+/// <param name="Kind"><c>method</c>, <c>property</c> or <c>field</c>.</param>
+/// <param name="Signatures">Every declaration as display text, ordered by text.</param>
+/// <param name="Obsolete">Whether EVERY declaration is <c>[Obsolete]</c>.</param>
+/// <param name="Static">Whether EVERY declaration is static.</param>
+/// <param name="DeclaringTypes">The full names of the types that declare the member (several for inherited members).</param>
 internal sealed record ApiMember(
     string Name,
     string Kind,
@@ -433,4 +544,50 @@ internal sealed record ApiMember(
     // True when EVERY declaration behind this name is static — meaningful on instance facades, where
     // a static helper would otherwise be indistinguishable from the module's functions.
     bool Static,
-    string[] DeclaringTypes);
+    string[] DeclaringTypes)
+{
+    /// <summary>
+    ///     Schema 7: every overload of a METHOD as data, ordered like <see cref="Signatures" />; null (and so
+    ///     omitted from the JSON) for properties and fields. The generator compares these parameters with NumPy's
+    ///     signature, which display text cannot support.
+    /// </summary>
+    public MethodOverload[]? Overloads { get; init; }
+}
+
+/// <summary>One method overload, structured for the generator's signature-parity comparison.</summary>
+/// <param name="Signature">The overload as text, identical to its <see cref="ApiMember.Signatures" /> entry.</param>
+/// <param name="ReturnType">The result type in <c>FriendlyType</c> spelling.</param>
+/// <param name="Parameters">The parameters in declaration order.</param>
+/// <param name="GenericParameters">The method's own generic parameter names (<c>T</c> of <c>array&lt;T&gt;</c>); empty when none.</param>
+/// <param name="OverloadResolutionPriority">The <c>[OverloadResolutionPriority]</c> value, or null without the attribute.</param>
+/// <param name="Obsolete">Whether the overload is <c>[Obsolete]</c>.</param>
+/// <param name="Hidden">Whether the overload is <c>[EditorBrowsable(Never)]</c>.</param>
+/// <param name="Static">Whether the overload is static (an instance method of an object API binds as <c>a.name(...)</c>).</param>
+/// <param name="DeclaringType">The full name of the declaring type (a base type for an inherited member).</param>
+internal sealed record MethodOverload(
+    string Signature,
+    string ReturnType,
+    ApiParameter[] Parameters,
+    string[] GenericParameters,
+    int? OverloadResolutionPriority,
+    bool Obsolete,
+    bool Hidden,
+    bool Static,
+    string DeclaringType);
+
+/// <summary>One parameter of a method overload.</summary>
+/// <param name="Name">The parameter name (what a C# named argument, NumPy's keyword, must spell).</param>
+/// <param name="Type">The parameter type in <c>FriendlyType</c> spelling, by-ref element type for <c>out</c>/<c>ref</c>/<c>in</c>.</param>
+/// <param name="Optional">Whether a call may omit it (it has a default).</param>
+/// <param name="Default">The default as C# text (<c>null</c>, <c>default</c>, <c>"\n"</c>, <c>'C'</c>, <c>1E-08</c>, ...); null without a default.</param>
+/// <param name="DefaultKind">The default's kind (see <c>DescribeParameter</c>); null without a default.</param>
+/// <param name="IsParams">Whether it is a <c>params</c> array (NumPy's <c>*args</c> counterpart).</param>
+/// <param name="ByRef"><c>"out"</c>, <c>"ref"</c> or <c>"in"</c> for a by-reference parameter; null otherwise.</param>
+internal sealed record ApiParameter(
+    string Name,
+    string Type,
+    bool Optional,
+    string? Default,
+    string? DefaultKind,
+    bool IsParams,
+    string? ByRef);

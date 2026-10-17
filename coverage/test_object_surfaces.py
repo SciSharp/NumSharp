@@ -263,8 +263,45 @@ class ObjectSurfaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             np.divmod.reduce([1, 2])
 
+    def test_every_method_carries_its_overloads_as_data(self):
+        """Schema 7: each method lists every overload with its parameters, the input signature parity compares.
+
+        Before schema 7 an overload existed only as display text, so nothing could tell ``np.transpose(a, premute)``
+        from NumPy's ``transpose(a, axes=None)``; a mismatch here would make signature_parity compare a member
+        against overloads it does not have.
+        """
+        default_kinds = set()
+        for collection in ("modules", "objectTypes"):
+            for type_name, entry in self.inventory[collection].items():
+                for member in entry.get("methods") or []:
+                    overloads = member.get("overloads")
+                    self.assertIsInstance(overloads, list, f"{type_name}.{member['name']}")
+                    # One entry per overload, the same overloads the display text lists.
+                    self.assertEqual(sorted(member["signatures"]), sorted(o["signature"] for o in overloads),
+                                     f"{type_name}.{member['name']}")
+                    for overload in overloads:
+                        for parameter in overload["parameters"]:
+                            self.assertTrue({"name", "type", "optional", "isParams"} <= parameter.keys())
+                            # An optional parameter states its default and how to read it; a required one neither.
+                            self.assertEqual(parameter["optional"], "defaultKind" in parameter,
+                                             f"{type_name}.{member['name']}: {parameter}")
+                            default_kinds.add(parameter.get("defaultKind"))
+        self.assertTrue({"null", "bool", "number", "string", "char", "enum"} <= default_kinds)
+        methods = {m["name"]: m for m in self.inventory["modules"]["np"]["methods"]}
+        # A C# params array is NumPy's *args: signature_parity matches it by the flag, not the name.
+        self.assertTrue(any(o["parameters"] and o["parameters"][-1]["isParams"]
+                            for o in methods["broadcast_arrays"]["overloads"]))
+        # np.clip's where= defaults to null, NumSharp's spelling of NumPy's where=True.
+        where = next(p for o in methods["clip"]["overloads"] for p in o["parameters"] if p["name"] == "where")
+        self.assertEqual(("null", "null"), (where["default"], where["defaultKind"]))
+        # [OverloadResolutionPriority] is read by name (net8.0 compiles NumSharp's polyfill of the attribute):
+        # np.random's bare-null-seed overloads carry 1.
+        rng = next(m for m in self.inventory["modules"]["np.random"]["methods"] if m["name"] == "default_rng")
+        self.assertIn(1, [o.get("overloadResolutionPriority") for o in rng["overloads"]])
+
     def test_object_inventory_includes_inherited_declaration_ownership(self):
-        self.assertEqual(6, self.inventory["schemaVersion"])
+        """Object types list inherited members with their declaring types, and their operators (schema 6+)."""
+        self.assertEqual(7, self.inventory["schemaVersion"])
         # Schema 6: every type carries its operators, each overload with its operand types and declaring type.
         self.assertTrue(all(isinstance(entry.get("operators"), list) for entry in self.inventory["objectTypes"].values()))
         ndarray_add = next(op for op in self.inventory["objectTypes"]["NumSharp.NDArray"]["operators"]

@@ -33,6 +33,9 @@ const fixture = [
   row('NumSharp.NDArray.ToArray', 'Conversion extensions', { origin: 'numsharp', surface: 'ndarray', kind: 'method', extended: false, status: 'extension', availability: 'extension' }),
 ];
 
+// Run the page's inline script against a stub DOM (one recording element per id in the page) and
+// return its exposed functions with the fixture loaded; every function a test calls must be listed
+// in the `globalThis.dashboard` replacement below.
 function dashboard() {
   const elements = new Map();
   const ids = [...markdown.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
@@ -55,7 +58,7 @@ function dashboard() {
     addEventListener() {},
   };
   const context = vm.createContext({ document, window: {}, console });
-  const exposed = inline.replace(/\n  initialize\(\);\s*\n\}\)\(\);\s*$/, '\n  globalThis.dashboard = { state, rowInScope, summarize, surfaceLabel, apiLabel, scopedRows, initializeMetadata, initializeFilters, renderSummary, filterRows, changeScope, resetFilters, applyPreset, tooltipContent, parityClass };\n})();');
+  const exposed = inline.replace(/\n  initialize\(\);\s*\n\}\)\(\);\s*$/, '\n  globalThis.dashboard = { state, rowInScope, summarize, surfaceLabel, apiLabel, scopedRows, initializeMetadata, initializeFilters, renderSummary, filterRows, changeScope, resetFilters, applyPreset, tooltipContent, parityClass, signatureClass, signatureMarks };\n})();');
   assert.notEqual(exposed, inline, 'test harness must replace only the initialization call');
   new vm.Script(exposed).runInContext(context);
   const api = context.dashboard;
@@ -443,4 +446,171 @@ test('an artifact with oracle evidence keeps the oracle elements after metadata'
   assert.match(element('cov-metrics').innerHTML, /Oracle-verified parity/);
   assert.match(element('cov-surface-grid').innerHTML, /3 oracle-verified/);
   assert.match(api.tooltipContent({ dataset: { tooltipGroup: 'surface:np' } }), /3 oracle-verified/);
+});
+
+// ---- Signature parity (generator 1.15+: credited calls carry a `signature` record) ----
+
+// A credited headline row with the given signature record (coverage/signature_parity.py's shape).
+function signed(id, signature, overrides = {}) {
+  return row(id, 'Math', { status: 'available', availability: 'exact', in_default_scope: true, extended: false, signature, ...overrides });
+}
+
+// One row per record shape the generator emits: identical (with and without informational notes),
+// each mark (M X O T N), a closest-overload-only difference, not compared, and an uncredited API.
+const signatureRows = () => [
+  signed('numpy.sum', { status: 'differs', spelling: 'exact', overloads: 7, missing: ['out', 'initial', 'where'],
+    order: ['keepdims: NumPy #4, C# #3'], closest: 'NDArray sum(NDArray a, int? axis = null)', numpy: 'sum(a, axis=None, ...)' }),
+  signed('numpy.transpose', { status: 'differs', spelling: 'exact', overloads: 1, missing: ['axes (C#: premute)'],
+    foreign: ['premute'], closest: 'NDArray transpose(NDArray a, int[] premute = null)', numpy: 'transpose(a, axes=None)' }),
+  signed('numpy.inner', { status: 'identical', spelling: 'exact', overloads: 1, closest: 'NDArray inner(NDArray a, NDArray b)', numpy: 'inner(a, b, /)' }),
+  signed('numpy.acos', { status: 'differs', spelling: 'alias', overloads: 1, excluded: ['casting', 'order'],
+    closest: 'NDArray arccos(NDArray x)', numpy: 'acos(x, /, out=None, ...)' }, { availability: 'alias' }),
+  signed('numpy.zeros', { status: 'differs', spelling: 'exact', overloads: 1, typecode: ['System.Type dtype'],
+    excluded: ['like'], closest: 'NDArray zeros(Shape shape, System.Type dtype = null)', numpy: 'zeros(shape, dtype=None, ...)' }),
+  signed('numpy.full', { status: 'identical', spelling: 'exact', overloads: 1, null_default: ["order: 'C' vs null"],
+    excluded: ['like'], closest: 'NDArray full(Shape shape, object fill_value)', numpy: 'full(shape, fill_value, ...)' }),
+  signed('numpy.std', { status: 'differs', spelling: 'exact', overloads: 1, order: ['ddof: NumPy #4, C# #3'],
+    required: ['ddof'], closest: 'NDArray std(NDArray a, int ddof)', numpy: 'std(a, axis=None, ...)' }),
+  signed('numpy.astype', { status: 'not-compared', spelling: 'exact', reason: 'credited through NumSharp.NDArray.astype, whose receiver is an argument of the NumPy call or the other way round' }),
+  row('numpy.nextafter', 'Math', { status: 'missing', availability: 'missing', in_default_scope: true, extended: false }),
+];
+
+test('signature classes, marks and counts mirror the generator for every record shape', () => {
+  const { api } = dashboard();
+  const rows = signatureRows();
+  const shown = Object.fromEntries(rows.map((item) => [item.id, `${api.signatureClass(item)}:${api.signatureMarks(item)}`]));
+  assert.deepEqual(shown, {
+    'numpy.sum': 'differs:MO', 'numpy.transpose': 'differs:MX', 'numpy.inner': 'identical:',
+    'numpy.acos': 'differs:N', 'numpy.zeros': 'differs:T', 'numpy.full': 'identical:',
+    'numpy.std': 'differs:', 'numpy.astype': 'not-compared:', 'numpy.nextafter': 'none:',
+  });
+  // An alias that could not be compared still shows N: its spelling is another name either way.
+  assert.equal(api.signatureMarks(signed('numpy.shape', { status: 'not-compared', spelling: 'alias', reason: 'credited to a property' })), 'N');
+  const counts = api.summarize(rows);
+  assert.equal(counts.signature, 2);
+  assert.equal(counts.signatureApis, 2);
+  assert.equal(counts.signatureDiffers, 5);
+  assert.equal(counts.signatureNotCompared, 1);
+  assert.deepEqual([counts.signatureMissing, counts.signatureForeign, counts.signatureOverloaded, counts.signatureTypecode, counts.signatureOtherName], [2, 1, 1, 1, 1]);
+  assert.equal(counts.signatureCoverage, 100 * 2 / 9, 'identical over every comparable API of the scope, as the generator divides');
+});
+
+test('signature metric, filter, badges and search follow the selected scope', () => {
+  const { api, element } = dashboard();
+  api.state.rows = signatureRows();
+  api.changeScope();
+  assert.match(element('cov-metrics').innerHTML, /NumPy-identical signatures/);
+  assert.match(element('cov-metrics').innerHTML, /22\.2%/);
+  assert.match(element('cov-metrics').innerHTML, /2 of 9 take NumPy&#039;s exact parameters · 5 differ/);
+  assert.match(element('cov-metrics').innerHTML, /data-metric-action="signature"/);
+  assert.deepEqual(Array.from(element('cov-signature').options, (item) => item.value),
+    ['all', 'identical', 'differs', 'mark:M', 'mark:X', 'mark:O', 'mark:T', 'mark:N', 'not-compared', 'none']);
+  assert.match(element('cov-surface-grid').innerHTML, /2 identical signatures/);
+  assert.match(api.tooltipContent({ dataset: { tooltipGroup: 'surface:np' } }), /2 identical signatures/);
+  api.applyPreset('signature');
+  assert.equal(element('cov-signature').value, 'differs');
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.acos', 'numpy.std', 'numpy.sum', 'numpy.transpose', 'numpy.zeros']);
+  // One badge per differing row, its letters the marks (a closest-overload-only difference reads "sig").
+  const badges = [...element('cov-results').innerHTML.matchAll(/class="cov-result-signature"[^>]*>([^<]*)</g)].map((match) => match[1]).sort();
+  assert.deepEqual(badges, ['MO', 'MX', 'N', 'T', 'sig']);
+  element('cov-signature').value = 'mark:M';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.sum', 'numpy.transpose']);
+  element('cov-signature').value = 'identical';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.full', 'numpy.inner']);
+  assert.doesNotMatch(element('cov-results').innerHTML, /cov-result-signature/, 'an identical row carries no badge');
+  api.resetFilters();
+  assert.equal(element('cov-signature').value, 'all');
+  element('cov-search').value = 'premute';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id), ['numpy.transpose']);
+  // A foreign name that appears nowhere else in the row: only the `foreign` list can match it.
+  api.state.rows.push(signed('numpy.flip', { status: 'differs', spelling: 'exact', overloads: 1, foreign: ['axis_list'] }));
+  element('cov-search').value = 'axis_list';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id), ['numpy.flip'], 'foreign parameter names are searchable');
+  element('cov-search').value = 'initial';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id), ['numpy.sum'], 'missing parameter names are searchable');
+});
+
+test('detail pane renders marks, closest-overload differences and the not-compared reason', () => {
+  const { api, element } = dashboard();
+  api.state.rows = signatureRows();
+  api.changeScope();
+  // Select one API by searching for it and return the detail pane it renders.
+  // id: the row id to search for (the first result becomes the selected row).
+  const show = (id) => { element('cov-search').value = id; api.filterRows(); return element('cov-detail').innerHTML; };
+  const transpose = show('numpy.transpose');
+  assert.match(transpose, /Differs · M X/);
+  assert.match(transpose, /<strong>M<\/strong> · no overload offers <code>axes \(C#: premute\)<\/code>/);
+  assert.match(transpose, /<strong>X<\/strong> · NumPy has no <code>premute<\/code>/);
+  assert.match(transpose, /Compared overload: <code>NDArray transpose\(NDArray a, int\[\] premute = null\)<\/code>/);
+  const sum = show('numpy.sum');
+  assert.match(sum, /<strong>O<\/strong> · 7 C# overloads; NumPy has one signature/);
+  assert.match(sum, /Closest overload: <code>at another position: keepdims: NumPy #4, C# #3<\/code>/);
+  const inner = show('numpy.inner');
+  assert.match(inner, /Identical to NumPy/);
+  assert.match(inner, /One C# overload has exactly NumPy's parameters under NumPy's name/);
+  assert.match(inner, /cov-signature-block is-match/);
+  const acos = show('numpy.acos');
+  assert.match(acos, /<strong>N<\/strong> · credited through another name/);
+  assert.match(acos, /not counted: <code>casting<\/code> <code>order<\/code>/);
+  const zeros = show('numpy.zeros');
+  assert.match(zeros, /<strong>T<\/strong> · dtype taken as <code>System\.Type dtype<\/code> instead of <code>DType<\/code>/);
+  const full = show('numpy.full');
+  assert.match(full, /Informational, a null default where NumPy has a value: <code>order: &#039;C&#039; vs null<\/code>/);
+  const std = show('numpy.std');
+  assert.match(std, /Differs \(closest overload\)/);
+  assert.match(std, /<code>C# requires ddof<\/code>/);
+  const astype = show('numpy.astype');
+  assert.match(astype, /Not compared: credited through NumSharp\.NDArray\.astype/);
+  const nextafter = show('numpy.nextafter');
+  assert.doesNotMatch(nextafter, /NumPy signature parity/, 'an uncredited API gets no signature block');
+  assert.match(nextafter, /No signature record/);
+});
+
+test('metadata recounts the signature headline and rejects a drift', () => {
+  const { api, element } = dashboard();
+  api.state.rows = signatureRows();
+  const data = {
+    numpy_version: '2.4.2', numsharp_assembly_version: 'test', schema_version: 1,
+    summary: { default_scope: { total: 9, available: 8, signature_identical: 2, signature_differs: 5 }, catalog_rows: 9 },
+  };
+  api.initializeMetadata(data);
+  assert.equal(api.state.hasSignature, true);
+  assert.equal(element('cov-signature-reference').textContent,
+    'Headline NumPy-identical signatures: 22.2% (2/9 APIs; 5 differ: 2 M, 1 X, 1 O, 1 T, 1 N).');
+  assert.equal(element('cov-lede-signature').hidden, false);
+  assert.equal(element('cov-signature-explainer').hidden, false);
+  data.summary.default_scope.signature_identical = 3;
+  assert.throws(() => api.initializeMetadata(data), /signature summary does not match/);
+  data.summary.default_scope.signature_identical = 2;
+  data.summary.default_scope.signature_differs = 4;
+  assert.throws(() => api.initializeMetadata(data), /signature summary does not match/);
+});
+
+// An artifact published before generator 1.15 has no `signature` record on any row; reading that as
+// "no record" for every API would claim 0.0% identical signatures.
+test('an artifact without signature records (generator < 1.15) hides every signature element', () => {
+  const { api, element } = dashboard();
+  api.state.rows = signatureRows().map(({ signature, ...rest }) => rest);
+  api.initializeMetadata({
+    numpy_version: '2.4.2', numsharp_assembly_version: 'test', schema_version: 1,
+    summary: { default_scope: { total: 9, available: 8 }, catalog_rows: 9 },
+  });
+  assert.equal(api.state.hasSignature, false);
+  assert.equal(element('cov-signature-reference').textContent, '');
+  assert.equal(element('cov-lede-signature').hidden, true);
+  assert.equal(element('cov-signature-explainer').hidden, true);
+  api.changeScope();
+  assert.doesNotMatch(element('cov-metrics').innerHTML, /NumPy-identical signatures/);
+  assert.doesNotMatch(element('cov-surface-grid').innerHTML, /identical signatures/);
+  assert.doesNotMatch(api.tooltipContent({ dataset: { tooltipGroup: 'surface:np' } }), /identical signatures/);
+  assert.deepEqual(Array.from(element('cov-signature').options, (item) => item.value), ['all', 'none']);
+  element('cov-search').value = 'numpy.transpose';
+  api.filterRows();
+  assert.doesNotMatch(element('cov-detail').innerHTML, /NumPy signature<\/div>|NumPy signature parity/);
+  assert.doesNotMatch(element('cov-results').innerHTML, /cov-result-signature/);
 });

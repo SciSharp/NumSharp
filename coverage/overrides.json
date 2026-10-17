@@ -47,7 +47,7 @@
     },
     "numpy.round": {
       "target": "NumSharp.np.round_",
-      "notes": "C# uses round_ to avoid a naming collision while preserving NumPy round semantics."
+      "notes": "NumSharp names it round_, NumPy 1.x's spelling (NumPy 2.0 removed np.round_); nothing named round exists on np to collide with, so np.round(x) simply does not compile yet (signature mark N)."
     },
     "numpy.row_stack": {
       "target": "NumSharp.np.vstack",

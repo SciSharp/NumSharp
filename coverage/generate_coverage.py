@@ -21,6 +21,7 @@ from typing import Any
 from urllib.parse import quote
 
 import oracle_evidence
+import signature_parity
 from numpy_documentation import documentation_index, documentation_url
 from object_surfaces import (OBJECT_SURFACE_PATHS, SIGNATURE_UNAVAILABLE, class_member_rows, enrich_object_classes,
                              object_surface_rows, scalar_type_rows)
@@ -28,7 +29,7 @@ from object_surfaces import (OBJECT_SURFACE_PATHS, SIGNATURE_UNAVAILABLE, class_
 
 ROOT = Path(__file__).resolve().parents[1]
 PINNED_NUMPY_VERSION = "2.4.2"
-GENERATOR_VERSION = "1.14.0"
+GENERATOR_VERSION = "1.15.0"
 OUTPUT_FILES = ("coverage.json", "coverage.csv", "summary.md", "manifest.json")
 NUMSHARP_SOURCE_BASE_URL = "https://github.com/SciSharp/NumSharp/blob/master/"
 
@@ -381,10 +382,12 @@ def load_numpy() -> Any:
 def load_numsharp_inventory() -> dict[str, Any]:
     """Build and run NumSharp.Tools.ApiInventory, returning the reflected NumSharp public surface.
 
-    :returns: the inventory JSON (schema 6): ``modules`` by [ModuleName], ``unannotatedSurface``,
-        ``exportedTypes`` and ``objectTypes`` (each type's members and, since schema 6, its operators).
+    :returns: the inventory JSON (schema 7): ``modules`` by [ModuleName], ``unannotatedSurface``,
+        ``exportedTypes`` and ``objectTypes`` (each type's members and, since schema 6, its operators; since
+        schema 7 every method member carries ``overloads``, its overloads' parameters as data).
     :raises SystemExit: when the tool does not build or run, emits invalid JSON, or emits another schema
-        (an inventory without operators would report every operator protocol missing).
+        (an inventory without operators would report every operator protocol missing, one without overload
+        data would leave every row's signature parity "not compared").
     """
     project = ROOT / "coverage" / "NumSharp.Tools.ApiInventory" / "NumSharp.Tools.ApiInventory.csproj"
     build_command = [
@@ -412,18 +415,27 @@ def load_numsharp_inventory() -> dict[str, Any]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise SystemExit(f"NumSharp inventory emitted invalid JSON: {error}") from error
-    if data.get("schemaVersion") != 6 or not isinstance(data.get("modules"), dict) or not data["modules"]:
-        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 6 with a non-empty 'modules' map.")
+    if data.get("schemaVersion") != 7 or not isinstance(data.get("modules"), dict) or not data["modules"]:
+        raise SystemExit("NumSharp inventory schema mismatch: expected schemaVersion 7 with a non-empty 'modules' map.")
     if not isinstance(data.get("unannotatedSurface"), dict):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 must carry the 'unannotatedSurface' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 7 must carry the 'unannotatedSurface' index.")
     if not isinstance(data.get("exportedTypes"), list):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 must carry the 'exportedTypes' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 7 must carry the 'exportedTypes' index.")
     if not isinstance(data.get("objectTypes"), dict):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 must carry the 'objectTypes' index.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 7 must carry the 'objectTypes' index.")
     # Schema 6's addition: every type carries its C# operators and conversions, which credit NumPy's
     # Python operator protocols. An inventory without them would silently report every operator missing.
     if any(not isinstance(type_data.get("operators"), list) for type_data in data["objectTypes"].values()):
-        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 6 types must carry 'operators'.")
+        raise SystemExit("NumSharp inventory schema mismatch: schemaVersion 7 types must carry 'operators'.")
+    # Schema 7's addition: every METHOD carries its overloads' parameters as data. Without them every credited
+    # row's signature parity would read "not compared", which is exactly the silence this schema ended.
+    for collection in ("modules", "objectTypes"):
+        for type_data in data[collection].values():
+            for member in type_data["methods"]:
+                if not isinstance(member.get("overloads"), list) or len(member["overloads"]) != len(member["signatures"]):
+                    raise SystemExit(
+                        "NumSharp inventory schema mismatch: schemaVersion 7 methods must carry one 'overloads' entry "
+                        f"per signature ({type_data['type']}.{member['name']}).")
     return data
 
 
@@ -986,15 +998,16 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
     In order: the headline exports (with aliases, support overrides and the stray-host gate), NumSharp-only
     members of the annotated modules, the extended submodule families, the object surfaces (members and
     Python protocols, then per-ufunc methods), NumPy's scalar types, and the members of every other public
-    NumPy class; then rows a credit consumed are dropped from the NumSharp-only set and the NumPy-oracle
-    evidence is joined.
+    NumPy class; then rows a credit consumed are dropped from the NumSharp-only set, the NumPy-oracle
+    evidence is joined, and every credited call gets its signature-parity record (signature_parity.attach).
 
     :param np: the imported, version-pinned numpy module.
     :param inventory: the reflected NumSharp inventory (load_numsharp_inventory).
     :param overrides: the reviewed overrides (overrides.json: aliases, support, stray allowlist).
     :returns: the rows, sorted (NumPy rows first, by surface and name), and the NumSharp targets credited.
     :raises SystemExit: on a duplicate id, an unbacked surface, a stale override, a stray-host miss, a
-        NumSharp-only row without a source link, or an oracle join problem.
+        NumSharp-only row without a source link, an oracle join problem, or a credited call the signature join
+        cannot resolve to a reflected method with overload data.
     :raises ValueError: from object_surfaces when a credited member has no source evidence or a reviewed
         protocol adapter is stale.
     """
@@ -1231,6 +1244,20 @@ def resolve_rows(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) 
         )
     oracle_evidence.attach(rows, oracle)
 
+    # Signature parity: availability above is a NAME claim (the member exists, or a reviewed alias names another
+    # one). This compares each credited row's NumPy signature with every C# overload of its member (inventory
+    # schema 7) and records the missing / foreign parameters, the overload count, NPTypeCode / Type dtype
+    # parameters and the closest overload's differences (row["signature"]). A credit the inventory index cannot
+    # resolve is a join failure, not a verdict: publishing it would quietly drop rows out of the comparison.
+    signature_problems = signature_parity.attach(rows, inventory, np)
+    if signature_problems:
+        raise SystemExit(
+            "Signature-parity join failed:\n"
+            + "".join(f"  - {problem}\n" for problem in signature_problems)
+            + "Fix signature_parity.member_index (or the inventory tool's overload data) so every credited call "
+            "resolves to a reflected method with its overloads."
+        )
+
     rows.sort(key=lambda row: (row["origin"] != "numpy", row["surface"], row["name"].lower(), row["id"]))
     missing_extension_sources = [
         row["id"] for row in rows
@@ -1251,8 +1278,12 @@ def status_counts(rows: list[dict[str, Any]]) -> dict[str, int | float]:
     them (a finding, never counted as verified). ``oracle_percent`` shares ``coverage_percent``'s
     denominator (every row in scope), so the two read as "exposed" vs "exposed AND proven".
 
+    The signature counts (signature_parity.counts) read the rows' ``signature`` records: how many credited calls
+    have NumPy's exact signature, how many differ, and per mark how many miss a NumPy parameter, take one NumPy
+    lacks, have several overloads, take a dtype as NPTypeCode / Type, or are credited through another name.
+
     :param rows: the rows of one scope (headline, expanded, a surface, a category, ...).
-    :returns: availability counts/percentages plus the oracle counts/percentage.
+    :returns: availability counts/percentages plus the oracle counts/percentage and the signature counts/percentage.
     """
     statuses = Counter(row["status"] for row in rows)
     availability = Counter(row["availability"] for row in rows)
@@ -1277,6 +1308,7 @@ def status_counts(rows: list[dict[str, Any]]) -> dict[str, int | float]:
         "oracle_unverified": parity["unverified"],
         "oracle_uncredited": parity["uncredited"],
         "oracle_percent": round(verified * 100 / total, 1) if total else 0.0,
+        **signature_parity.counts(rows),
     }
 
 
@@ -1354,6 +1386,12 @@ def json_text(value: Any) -> str:
 
 
 def csv_text(rows: list[dict[str, Any]]) -> str:
+    """Render coverage.csv: one line per row, the historical columns first, then the oracle and signature ones.
+
+    :param rows: the emitted rows.
+    :returns: the CSV text (LF line ends); list-valued fields are joined with `` | ``, and the signature columns
+        are empty for a row without a signature record (not credited, not a call, or a Python protocol).
+    """
     # The oracle columns are appended AFTER the historical ones so a consumer indexing by position
     # keeps working; "oracle_parity" is the classify() label (it also covers rows without a record).
     columns = [
@@ -1364,6 +1402,10 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
         "oracle_parity", "oracle_contracts", "oracle_error_contracts", "oracle_sources", "oracle_keys",
         "oracle_files", "oracle_dtypes", "oracle_layouts", "oracle_pinned_contracts", "oracle_via",
         "oracle_via_rule",
+        # Signature parity (generator 1.15.0), appended last for the same reason as the oracle columns.
+        "signature_parity", "signature_marks", "signature_overloads", "signature_missing", "signature_excluded",
+        "signature_foreign", "signature_typecode", "signature_order", "signature_required", "signature_default",
+        "signature_varargs", "signature_closest", "signature_numpy", "signature_reason",
     ]
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
@@ -1389,6 +1431,18 @@ def csv_text(rows: list[dict[str, Any]]) -> str:
                 "oracle_pinned_contracts": record["pinned_contracts"],
                 "oracle_via": via.get("id", ""),
                 "oracle_via_rule": via.get("rule", ""),
+            })
+        flat["signature_parity"] = signature_parity.classify(row)
+        signature = row.get("signature")
+        if signature:
+            flat.update({
+                "signature_marks": signature_parity.marks(signature),
+                "signature_overloads": signature.get("overloads", ""),
+                **{f"signature_{key}": " | ".join(signature.get(key, [])) for key in (
+                    "missing", "excluded", "foreign", "typecode", "order", "required", "default", "varargs")},
+                "signature_closest": signature.get("closest", ""),
+                "signature_numpy": signature.get("numpy", ""),
+                "signature_reason": signature.get("reason", ""),
             })
         writer.writerow(flat)
     return stream.getvalue()
@@ -1497,6 +1551,145 @@ def oracle_markdown(summary: dict[str, Any], rows: list[dict[str, Any]], oracle:
     return lines
 
 
+def signature_markdown(summary: dict[str, Any], rows: list[dict[str, Any]]) -> list[str]:
+    """Render summary.md's signature-parity section.
+
+    It answers what availability cannot: whether a credited API's C# signature is NumPy's. The counts come from the
+    same records the rows carry (signature_parity.counts through status_counts); the lists name every headline API
+    whose signature differs, with what differs, and every credited headline call that could not be compared.
+
+    :param summary: the artifact summary (``default_scope``/``api_scope`` carry the signature counts).
+    :param rows: the emitted rows.
+    :returns: markdown lines, starting with a blank separator line.
+    """
+    headline = summary["default_scope"]
+    expanded = summary["api_scope"]
+    labels = {"np": "np.*", "ndarray": "ndarray.*", "random": "np.random.*", "linalg": "np.linalg.*",
+              "fft": "np.fft.*", "ma": "np.ma.*", "polynomial": "np.polynomial.*"}
+
+    def scope_line(name: str, counts: dict[str, Any]) -> str:
+        """One scope's sentence.
+
+        :param name: the scope's display name.
+        :param counts: the scope's status_counts.
+        :returns: the sentence.
+        """
+        compared = counts["signature_identical"] + counts["signature_differs"]
+        return (f"{name}: **{counts['signature_identical']}** of {counts['total']} APIs have NumPy's exact signature "
+                f"(**{counts['signature_percent']:.1f}%**); of the {compared} credited calls compared, "
+                f"**{counts['signature_differs']}** differ; {counts['signature_not_compared']} credited calls were not "
+                "compared.")
+
+    lines = [
+        "",
+        "## Signature parity",
+        "",
+        "Availability credits a NumPy API by NAME. Here each credited call's NumPy signature is compared with every C# "
+        "overload of the credited member (the inventory tool's schema 7 carries their parameters as data), under the "
+        "rules of docs/plans/api-parameter-parity.md: a positional-only NumPy parameter is matched by slot, a "
+        "positional-or-keyword one by name and slot, a keyword-only one by name; `*args` needs a `params` array, and "
+        "keywords NumPy takes through `**kwargs` are not differences. A call is **identical** when one overload has "
+        "exactly NumPy's parameters under NumPy's name. Marks: **M** a NumPy parameter no overload offers (a rename "
+        "counts: NumPy's keyword does not compile), **X** a parameter NumPy does not have, **O** more than one "
+        "overload (NumPy has one signature), **T** a dtype taken as `NPTypeCode` / `Type` instead of `DType`, **N** "
+        "credited through another name (NumPy's spelling does not compile). The closest overload (the one the fewest "
+        "edits from NumPy's) adds positional-order, required-parameter, default-value and `*args` differences. "
+        "Parameters the plan excludes (`like`, `subok`, a ufunc's `casting` / `order` / `signature`) are listed but "
+        "not counted against a row.",
+        "",
+        scope_line("Headline scope", headline),
+        "",
+        scope_line("Expanded scope", expanded),
+        "",
+        "| Mark | Meaning | Headline rows | Expanded rows |",
+        "|---|---|---:|---:|",
+    ]
+    for key, mark, meaning in (
+        ("signature_missing", "M", "a NumPy parameter no overload offers"),
+        ("signature_foreign", "X", "a parameter NumPy does not have"),
+        ("signature_overloaded", "O", "more than one overload"),
+        ("signature_typecode", "T", "a dtype taken as NPTypeCode / Type"),
+        ("signature_other_name", "N", "credited through another name"),
+        ("signature_order", "order", "a positional parameter at another slot (closest overload)"),
+        ("signature_required", "required", "C# requires what NumPy defaults (closest overload)"),
+        ("signature_default", "default", "another default value (closest overload)"),
+        ("signature_varargs", "varargs", "`*args` without a `params` array (closest overload)"),
+        ("signature_excluded_only", "excluded only", "only plan-excluded parameters missing (not a difference)"),
+    ):
+        lines.append(f"| {mark} | {meaning} | {headline[key]} | {expanded[key]} |")
+    lines.extend([
+        "",
+        "Per surface (expanded scope; surfaces without a credited call are omitted):",
+        "",
+        "| Surface | APIs | Identical | Differs | Not compared | M | X | O | T | N | Identical % |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ])
+    for surface, counts in expanded["by_surface"].items():
+        if not (counts["signature_identical"] or counts["signature_differs"] or counts["signature_not_compared"]):
+            continue
+        lines.append(
+            f"| {labels.get(surface, surface)} | {counts['total']} | {counts['signature_identical']} | "
+            f"{counts['signature_differs']} | {counts['signature_not_compared']} | {counts['signature_missing']} | "
+            f"{counts['signature_foreign']} | {counts['signature_overloaded']} | {counts['signature_typecode']} | "
+            f"{counts['signature_other_name']} | {counts['signature_percent']:.1f}% |"
+        )
+
+    def api_name(row: dict[str, Any]) -> str:
+        """The row's short API name for a table cell.
+
+        :param row: a catalog row.
+        :returns: ``np.sum``-style text.
+        """
+        return row["id"].replace("numpy.", "np.", 1).replace("np.ndarray.", "ndarray.", 1)
+
+    def cell(values: list[str]) -> str:
+        """Render a list for a Markdown table cell.
+
+        :param values: the entries.
+        :returns: the entries in backticks with ``|`` escaped, separated by commas (empty for none).
+        """
+        return ", ".join("`" + value.replace("|", "\\|") + "`" for value in values)
+
+    headline_rows = [row for row in rows if row["origin"] == "numpy" and row["in_default_scope"]]
+    differing = sorted((row for row in headline_rows if signature_parity.classify(row) == "differs"),
+                       key=lambda row: (row["surface"], row["name"].lower()))
+    lines.extend([
+        "",
+        f"### Headline APIs whose signature differs ({len(differing)})",
+        "",
+    ])
+    if differing:
+        lines.extend([
+            "| API | Marks | Missing | NumSharp-only parameters | Overloads | NPTypeCode / Type | Closest overload |",
+            "|---|---|---|---|---:|---|---|",
+        ])
+        for row in differing:
+            record = row["signature"]
+            closest = (record.get("order", []) + [f"C# requires {name}" for name in record.get("required", [])]
+                       + record.get("default", []) + record.get("varargs", []))
+            lines.append(
+                f"| [`{api_name(row)}`]({row['documentation_url']}) | {signature_parity.marks(record)} | "
+                f"{cell(record.get('missing', []))} | {cell(record.get('foreign', []))} | {record.get('overloads', '')} | "
+                f"{cell(record.get('typecode', []))} | {cell(closest)} |"
+            )
+    else:
+        lines.append("_None: every compared headline API has NumPy's signature._")
+    skipped = sorted((row for row in headline_rows if signature_parity.classify(row) == "not-compared"),
+                     key=lambda row: (row["surface"], row["name"].lower()))
+    lines.extend([
+        "",
+        f"### Credited headline calls not compared ({len(skipped)})",
+        "",
+    ])
+    if skipped:
+        lines.extend(["| API | Credited to | Reason |", "|---|---|---|"])
+        for row in skipped:
+            lines.append(f"| `{api_name(row)}` | `{row['numsharp_target']}` | {row['signature']['reason']} |")
+    else:
+        lines.append("_None._")
+    return lines
+
+
 def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_version: str, assembly_version: str,
                   oracle: dict[str, Any] | None = None) -> str:
     """Render summary.md: the headline and expanded figures, gaps, near-misses, families and counting rules.
@@ -1549,12 +1742,16 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
         )
     lines.extend([
         "",
-        "> Availability is based on the compiled public API. It is not a blanket behavioral-parity claim; dtype, layout, signature, and edge-case parity require differential tests.",
+        "> Availability is based on the compiled public API: a NumPy API is available when NumSharp has a member of "
+        "its name, or a reviewed alias names another member. It is not a blanket behavioral-parity claim; dtype, "
+        "layout and edge-case parity require differential tests (the oracle section), and signature parity is "
+        "measured separately (the signature section).",
     ])
     # The oracle section sits right under the disclaimer it answers: which APIs those differential
     # tests actually cover. Absent only for callers that render without the oracle block.
     if oracle is not None:
         lines.extend(oracle_markdown(summary, rows, oracle))
+    lines.extend(signature_markdown(summary, rows))
     lines.extend([
         "",
         "## Highest-priority gaps",
@@ -1649,6 +1846,16 @@ def markdown_text(summary: dict[str, Any], rows: list[dict[str, Any]], numpy_ver
 
 
 def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]) -> dict[str, str]:
+    """Build every artifact file from one catalog resolution.
+
+    :param np: the imported, version-pinned numpy module.
+    :param inventory: the reflected NumSharp inventory (schema 7).
+    :param overrides: the reviewed overrides (overrides.json).
+    :returns: file name -> content for coverage.json, coverage.csv, summary.md and manifest.json; every count
+        (availability, oracle, signature) is read from the same projected rows.
+    :raises SystemExit: from resolve_rows (a gate failed: a duplicate id, an unbacked surface, a stale override, a
+        stray-host miss, an oracle or signature join problem).
+    """
     rows, _ = resolve_rows(np, inventory, overrides)
     rows = dashboard_rows(rows)
     summary = build_summary(rows)
@@ -1669,6 +1876,7 @@ def render_outputs(np: Any, inventory: dict[str, Any], overrides: dict[str, Any]
             "availability_note": "Compiled API availability is distinct from fully verified behavioral parity.",
             "case_sensitivity": "NumPy API names are matched case-sensitively for parity. Case-insensitive near-misses are detected and reported (row field 'case_insensitive_matches'; the 'Case-insensitive near-misses' section of summary.md) but never counted as available.",
             "oracle": "Behavioral parity evidence: committed NumPy 2.4.2 oracle contracts (the differential-fuzz corpus plus the .npy, flags and layout oracles), each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence. Contracts resolve to rows through coverage/oracle_map.json; a row is oracle-verified when it is credited and has direct contracts, an identity alias (same NumPy object, same NumSharp member) or a reviewed pure-delegation alias. Host-pinned contracts are hard-gated only on the pinned host.",
+            "signature": "Signature parity (row field 'signature', coverage/signature_parity.py): each credited call's NumPy signature compared with every C# overload of the credited member (inventory schema 7). Identical = one overload with exactly NumPy's parameters under NumPy's name. Marks: M a NumPy parameter no overload offers (a rename counts), X a parameter NumPy does not have, O more than one overload, T a dtype taken as NPTypeCode / Type instead of DType, N credited through another name; the closest overload adds positional-order, required-parameter, default-value and *args differences. Parameters excluded by docs/plans/api-parameter-parity.md section 3 (like, subok, a ufunc's casting / order / signature) are listed but not counted. Python protocols, properties and classes credited to a type are not compared.",
         },
         "oracle": oracle,
         "summary": summary,
@@ -1720,6 +1928,13 @@ def write_outputs(output: Path, rendered: dict[str, str]) -> None:
 
 
 def main() -> None:
+    """Generate (or ``--check``) the coverage artifact and print its headline numbers.
+
+    The console lines are what CI logs show: availability, the oracle evidence, and signature parity, each for the
+    headline and the expanded scope.
+
+    :raises SystemExit: from the inventory build, a resolve_rows gate, or ``--check`` finding stale outputs.
+    """
     args = parse_args()
     np = load_numpy()
     inventory = load_numsharp_inventory()
@@ -1751,6 +1966,14 @@ def main() -> None:
             f"headline {headline['oracle_verified']}/{headline['total']} ({headline['oracle_percent']:.1f}%), "
             f"expanded {expanded['oracle_verified']}/{expanded['total']} ({expanded['oracle_percent']:.1f}%); "
             f"{headline['oracle_unverified']} available headline APIs lack contracts."
+        )
+        print(
+            f"Signature parity: NumPy-identical headline {headline['signature_identical']}/{headline['total']} "
+            f"({headline['signature_percent']:.1f}%), expanded {expanded['signature_identical']}/{expanded['total']} "
+            f"({expanded['signature_percent']:.1f}%); {headline['signature_differs']} headline calls differ "
+            f"(M {headline['signature_missing']}, X {headline['signature_foreign']}, "
+            f"O {headline['signature_overloaded']}, T {headline['signature_typecode']}, "
+            f"N {headline['signature_other_name']})."
         )
 
 
