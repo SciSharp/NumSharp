@@ -130,7 +130,7 @@ undisposed views earlier entries left of the shared fixture, and the measurement
 mid-entry — `ScopeAudit.Quiesce()` before the snapshot, plus `OwnershipLedger.DropMayBeFinalization` / `DrainAndRebase`
 for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 NumPy errors, zero excuses; the 5 deferred
 `tma` cases strict), `StringDTypeOrderTests` (24). Benchmark: 168 cells 1.8–32× NumPy, geomean 7.8×. Left: the
-`np.strings` functions of P2.6 after its predicates and case maps (`translate`, `mod`, `encode`, `decode`) and 7
+`np.strings` functions of P2.6 after its predicates, case maps and `translate` (`mod`, `encode`, `decode`) and 7
 `NextPhase` sites, all of P2.7; no oracle case is deferred any more (P2.5 made `chararray.partition(sep)`'s 22 strict).
 **`np.strings` searches, strips, pads, replaces, partitions and slices since P2.5 (2026-10-17, `5dc14393` +
 `5127e47c`; plan state log).** `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`,
@@ -205,6 +205,32 @@ paid first-touch page faults (`SizeBucketedBufferPool.TakeZeroed` is always call
 `VStringArraySlice.Allocate` now takes a recycled pooled buffer and clears it up to `np.PrefersWriteOnce`'s 64 MiB
 (~1 ns), which every function that returns `T` gains. Gates: oracle `strcase` (2,100 cases) / `tcase` (955; 210 NumPy
 errors in all), zero excuses; `StringCaseMapTests` (12). Benchmark: 55 cells 4.5–237× NumPy, geomean 37.6×.
+**`np.strings.translate` since P2.6 milestone 3 (2026-10-17, `5bbd65c2`, pins `2ada5757`; plan state log).** NumPy's
+`_vec_string(a, a.dtype, 'translate', args)`: `(table,)` for `U` (`deletechars` IGNORED), `[table] + _clean_args(deletechars)`
+for `S` / `T`; a fresh C-ordered result of the operand's dtype over the broadcast of a and the arguments, the first
+element (C order) that raises ending the call. `str.translate` (`U` / `T`): `table[ord(c)]` — a LookupError keeps the
+character, None deletes it, an int is a code point (`ValueError: character mapping must be in range(0x110000)`), a str
+replaces it, anything else `TypeError: character mapping must return integer, None or str`; dict keys match by Python
+equality (97.0 / True yes, 'a' / 97.5 no); a str / bytes table is indexed by code point, a NumPy number keeps
+everything, None raises `'NoneType' object is not subscriptable` at the first lookup. `bytes.translate` (`S`): a 256-byte
+table or None (`translation table must be 256 characters long`, raised by every call: an empty element's too, not an
+empty array's; an `np.bytes_` table drops trailing NULs, so one ending in NUL is 255 long) and a buffer delete set.
+`T`: a non-str NA is `descriptor 'translate' for 'str' objects doesn't apply to a 'NoneType' object`, `deletechars`
+`str.translate() takes exactly one argument (2 given)`, a surrogate result `result array type does not match underlying
+function`, a result equal to a string NA is the NA. A C# `IDictionary` argument is the 0-d object array holding the dict
+(`VecArg.Convert`). Code: `APIs/np.strings.Translate.cs`, the compiled tables `Backends/Strings/NDTranslate.cs` (a dense
+code-point table sized by the call's work, 256–65,536 entries, plus the dict keys past it; route flags), the kernels
+`NDTextElements.Translate.cs` (`S` map + compaction, `U` one `vpgatherdd` per eight units, the exact path for the rest)
+and `NDVStringMethods.Translate.cs` (`T` ASCII cells by byte maps, other text by `TranslateUtf8`: ASCII on a predicted
+branch, the rest decoded four bytes at a time branch-free), the walk for arrays of tables `NDCharObjectPath.Translate.cs`.
+TRAPS: a branch-free UTF-8 decode serializes on every lead byte's load (ASCII-heavy `T32` 95 → 204 ns): keep ASCII on a
+branch; CPython looks a `U` unit up as `PyLong_FromLong((long)c)`, a 32-bit long on Windows (a unit ≥ 2^31 is a negative
+key there; NumSharp models LP64, the oracle keeps keyed units below 2^31); a mutation-test pin with a key at the dense
+table's end keeps the table off the gather route — the gather boundary needs a table whose keys all sit in the dense
+range. Gates: oracle `strtrans` (927 cases) / `ttrans` (1,258; 396 NumPy errors in all), zero excuses;
+`StringTranslateTests` (12); a mutation pass of 37 defects (36 killed, 1 equivalent). Benchmark: 84 cells 10.8–540×
+NumPy, geomean 52.8× (the cells under 20×: `S32` with a delete set, `T8` non-ASCII mappings bounded by the serial decode
+at ~9 ns per character).
 **Phase 2 validated against a randomized NumPy soak (2026-10-16, `b57c3e8b`; plan state log).** `test/oracle/soak_strings_oracle.py`
 draws fresh random cases for every family phase 2 computes (the sorts and partitions, `np.lexsort`, the searches,
 `np.unique` and its Array-API forms, `np.isin` and the set routines, `np.sort_complex`, the histograms, the quantile
@@ -619,10 +645,10 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
     (`InitializeArc` ignores `TryAddRef`'s failure).
   Gates: string-oracle section `tma` (4,167 cases; its 437 deferred cases became strict with P2.T and P2.2 over `T`) +
   `Ma/np.ma.StringDType.Test.cs`.
-- Still refused loudly (phase 2): the `np.strings` functions of P2.6 after its predicates and case maps (`translate`,
-  `mod`, `encode`, `decode`). Text I/O for `T` landed with P1.7c, comparisons and reductions with P2.T, sorting with
-  P2.2 over `T`, the search / strip / pad / replace / partition / slice functions with P2.5, the predicates and the
-  case maps with P2.6.
+- Still refused loudly (phase 2): the `np.strings` functions of P2.6 after its predicates, case maps and `translate`
+  (`mod`, `encode`, `decode`). Text I/O for `T` landed with P1.7c, comparisons and reductions with P2.T, sorting with
+  P2.2 over `T`, the search / strip / pad / replace / partition / slice functions with P2.5, the predicates, the case
+  maps and `translate` with P2.6.
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
