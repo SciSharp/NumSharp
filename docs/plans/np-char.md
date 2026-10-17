@@ -38,8 +38,12 @@ rules (phase 2: the constructors, `np.char.array` / `asarray`, the finalize rule
 copies that keep the class) and its behavior (phase 3: the operators with Python's dispatch, the sort and search members,
 the finalize errors of the index members, and the `np.*` functions that keep, wrap or drop the class) are done. C3, the
 object path (`join`, `split`, `rsplit`, `splitlines` and their chararray members, with C-D3's `NDListArray`), is done
-(phase 4). Open: C4's `partition` / `rpartition` and the string methods of C5 (they wait for the phase-2 kernels, P2.5 /
-P2.6).
+(phase 4). C4 is done (`partition` / `rpartition`, 2026-10-17, `ffa74606`), and C5's string methods land in batches, one
+family each, as their phase-2 functions compute: batch 1 (`rpartition`, `center`, `ljust`, `rjust`, `zfill`,
+`expandtabs`, with the module's re-exports of the last five) is done. Open: the other string methods of C5 — `count`,
+`find`, `rfind`, `index`, `rindex`, `startswith`, `endswith`, `lstrip`, `rstrip`, `strip`, `replace`, the nine predicates
+and the five case maps compute in phase 2 already (P2.5, P2.6 milestones 1 and 2); `translate`, `encode`, `decode` and
+`%` wait for the rest of P2.6.
 
 ---
 
@@ -416,12 +420,16 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
 - `multiply` (the `ValueError` mapping) and `partition` / `rpartition` (the stacked result). Compose `np.stack` as
   NumPy does (layout for free); fuse into one stacked-layout kernel only if the stack pass keeps a cell under 1.5×.
 - Depends on: P2.3 (`multiply`), P2.5 (`partition`). Size: small.
+- Done (2026-10-17, `ffa74606`): `partition` / `rpartition` compose `np.stack` as NumPy does. No cell is under 1.5× (1.89–4.14×
+  NumPy), so there is no fused stacked-layout kernel.
 
 ### C5 The `chararray` members
 
 - The 39 string methods with NumPy's five return rules (§1.6) and the 69 inherited members (Appendix B); `argsort` on
   the plain view.
 - Each member lands with its function (C1–C4, or the phase-2 subphase). Size: medium (many small members).
+- In batches of one family each, with the module's re-exports of the same names: batch 1 (`rpartition`, `center`,
+  `ljust`, `rjust`, `zfill`, `expandtabs`) is done (2026-10-17, `ffa74606`).
 
 ### C6 Completion
 
@@ -808,6 +816,39 @@ C-D1 decision and C3 for C-D3.
     geomean 11.1×, min 5.5×.
   - **Open:** the coverage mapping `char.chararray` → `NumSharp.NDCharArray` (C6); `NDListArray`'s other ndarray
     members, if wanted.
+- **2026-10-17 — C4 and C5's first batch: `partition` / `rpartition` and the padding functions** (`ffa74606`; the owner's scope:
+  "C4, the wrappers … partition and rpartition … And do around 6 methods at a time, preferably similar/family/near/group
+  of methods … C5, the members").
+  - **Built.** `np.@char.partition` / `rpartition` (`APIs/np.char.transform.cs`): NumPy's `np.stack(np.strings.partition(a,
+    sep), axis=-1)`, one PLAIN array with a last axis of 3 (np.stack keeps no subclass; an F-ordered input gives NumPy's
+    stack strides, (24, 48, 8) for `<U2`), the separator cast to the text's dtype first (`c.partition(1)` splits on `'1'`,
+    `np.char.partition(5, ' ')` is NumPy's `invalid literal for int() with base 10: np.str_(' ')`), a `StringDType` text
+    needing a `StringDType` separator. The re-exports `center` / `ljust` / `rjust` / `zfill` / `expandtabs` ARE
+    `np.strings`' functions: each converts its array_likes with `TextOperand` (a `byte[]` is Python bytes) and a null
+    optional argument is NumPy's default (`OptionalOperand`). The chararray members `rpartition` / `center` / `ljust` /
+    `rjust` / `zfill` / `expandtabs` (`Char/NDCharArray.Transform.cs`, `NDCharArray.Arg.cs`) are NumPy's
+    `asarray(f(self, …))`: they read the STORED text (`np.char.array(['ab  ']).center(6, '*')` is `'*ab  *'`), and
+    `AsArrayOfFresh` gives the computed array NumPy's final form directly — a `U` result is taken over instead of copied
+    (the computed array is private to the call, so its owning chararray is the same object to every observer), an `S`
+    result is viewed. `chararray.partition` takes the same route (it copied a `U` result through `np.char.asarray`).
+  - **Size pass.** `np.strings`' padding (`NDStringMethods.PadDescriptor`, `S` / `U` only) skips its length scan when the
+    widest width reaches the element width: no string is longer than its element, so the width is the maximum.
+  - **Gates.** Oracle section `strcharmeth` (2,811 cases, 938 NumPy errors, zero excuses, with the boundary audit): the
+    members over both classes × 14 layouts, every separator / width / fill / tab-size form, zfill's signs and
+    expandtabs' columns, the module functions over plain and chararray operands of every layout, a chararray in a
+    non-text position, `StringDType`, Python values and broadcasting; each case records the result's class, OWNDATA and
+    strides. zfill receivers hold no empty element (NumPy 2.4.2's zfill of an empty element reads uninitialized memory for
+    its sign; the `{"nonempty": …}` recipe). Unit tests `Backends/Strings/CharStringMethodsTests.cs` (12). 6 planted bugs
+    (a `U` result viewed, axis 0 stacking, rpartition running partition, the size-pass skip one unit early, the boundary
+    region removed, expandtabs' default 4) each turned the section red (7–621 cases, or the audit).
+  - **Performance** (NPY/NS, two pinned P-cores, the default tiered runtime; 117 cells: the 7 functions over `U` / `S` /
+    `StringDType` and the 7 members over `U` / `S` at 1K / 100K / 1M, plus reversed and F-ordered views): geomean 3.70×,
+    1.75× minimum in the full run; members 2.53–12.2× (a `U` member result taken over: 1M `U` `center` 91.9 → 39.8 ms),
+    `partition` / `rpartition` 1.89–4.14×. The lowest cell is `expandtabs` over `U` at 1M: NumPy sizes a `U` result in
+    bytes (`<U80` for 20-character texts, 320 MB), and the page faults of that fresh result cost both libraries the same
+    46 ms; measured alone it is 1.30× (NumPy 139 ms, NumSharp 105 ms). The lever is a vector path for `U` elements wider
+    than 64 bytes in P2.5's kernel.
+  - **Open:** the other C5 string members, in batches (§0).
 
 ---
 
@@ -818,9 +859,9 @@ C-D1 decision and C3 for C-D3.
 | C1 | `compare_chararrays`, `equal`, `not_equal`, `less`, `less_equal`, `greater`, `greater_equal` |
 | C2 | `array`, `asarray`, `chararray` |
 | C3 | `join`, `split`, `rsplit`, `splitlines` (phase 4, done) |
-| C4 | `multiply` (after P2.3), `partition`, `rpartition` (after P2.5) |
+| C4 | `multiply` (phase 1, done), `partition`, `rpartition` (done, `ffa74606`) |
 | P2.3 | `add` |
-| P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith`, `lstrip`, `rstrip`, `strip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill` |
+| P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith`, `lstrip`, `rstrip`, `strip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
 | P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal`, `mod`, `encode`, `decode`, `translate` |
 
 The facade (C0) declares all 53; a row is complete when its computation lands.
@@ -829,7 +870,7 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 
 | Group | Members | NumPy's result | Lands with |
 |---|---|---|---|
-| String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 |
+| String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 (`center`, `expandtabs`, `ljust`, `partition`, `rjust`, `rpartition`, `zfill`: done, `ffa74606`) |
 | String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 |
 | String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done) |
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 |

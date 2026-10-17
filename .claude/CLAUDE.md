@@ -411,6 +411,24 @@ holds U+110000 creates it as a one-character str (CPython's SystemError): encode
 `s.encode('utf-32-le', 'surrogatepass')`, never `for c in s`. (4) `cond ? long : BigInteger` types BOTH arms BigInteger
 (the oracle decoded every int as BigInteger once; 15 string sections failed). (5) The oracle harness reads an
 expectation's `self` key as receiver identity: never name another field `self`.
+**`numpy.char`'s wrappers and string members (C4 / C5, 2026-10-17, in batches of one family; `docs/plans/np-char.md`
+state log).** `np.@char.partition` / `rpartition` are NumPy's `np.stack(np.strings.partition(a, sep), axis=-1)`: ONE
+plain array, last axis 3, NumPy's stack layout; the separator is cast to the text's dtype first (`c.partition(1)` splits
+on `'1'`), a `StringDType` text needs a `StringDType` separator. The re-exports (`np.@char.center` / `ljust` / `rjust` /
+`zfill` / `expandtabs`, `APIs/np.char.transform.cs`) ARE `np.strings`' functions: array_likes through
+`CharModule.TextOperand` (a `byte[]` is Python bytes), a null OPTIONAL argument is NumPy's default (`OptionalOperand`), a
+null required one `ArgumentNullException`; the class of the result, its layout and every error are `np.strings`'. The
+chararray members follow NumPy's return rules — rule 1 `asarray(f(self, …))`: `NDCharArray.AsArrayOfFresh` TAKES OVER a
+fresh `U` result (owning, no copy: 1M `U` `center` 91.9 → 39.8 ms) and VIEWS an `S` one; rule 2 (strip / replace) a
+chararray view; rule 4 a plain int64 / bool array — and read the STORED text (`np.char.array(['ab  ']).center(6, '*')`
+is `'*ab  *'`). Done: `rpartition`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs` (`ffa74606`). Gates: oracle section
+`strcharmeth` (strict, with the boundary audit), `CharStringMethodsTests`. TRAPS: (1) a function that forwards a
+chararray to a DIFFERENTLY named public function (partition → `np.stack`) computes inside
+`NDCharArrayBoundary.Inside()`: the audit skips only frames named like the function, and the forward would apply
+`np.stack`'s chararray rule. (2) NumPy 2.4.2's zfill of an EMPTY element reads uninitialized memory for its sign: oracle
+receivers of zfill hold no empty element (recipe `{"nonempty": …}`). (3) `cond ? np.array(...) : cond2 ? new byte[] {
+32 } : " "` is typed `NDArray`, so the `byte[]` becomes a uint8 array (a benchmark partitioned around the text "32");
+cast every arm to `object`.
 **Text ↔ number conversion is phase 1 (P1.1, 2026-10-12, `docs/plans/strings-phase1-completion.md`)** — NumPy's legacy
 casts, byte for byte: a number becomes its scalar's `str()` (`Backends/Strings/NDTextFormat.cs`: the float positional /
 scientific windows per type, float16 / float32 shortest digits, complex forms; an unsized `'U'` / `'S'` takes

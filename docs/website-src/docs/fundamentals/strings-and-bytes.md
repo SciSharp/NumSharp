@@ -510,7 +510,7 @@ The array arguments are NumPy's array_likes: an `NDArray`, a C# `string` (NumPy'
 
 `np.@char` also converts to the `Char` dtype, its meaning before the module existed, so `astype(np.@char)` and `a.dtype == np.@char` still work. Read a descriptor member through a cast: `((DType)np.@char).itemsize`.
 
-Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): the comparisons ran 2.6 to 10 times as fast, `np.@char.add` 4.9 to 6.9 times, `np.@char.multiply` 1.5 to 5 times. The slowest multiply case is a fresh 96 MB result, where both libraries pay the same page faults.
+Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): the comparisons ran 2.6 to 10 times as fast, `np.@char.add` 4.9 to 6.9 times, `np.@char.multiply` 1.5 to 5 times, `np.@char.partition` and `rpartition` 1.9 to 4.1 times. The slowest multiply case is a fresh 96 MB result, where both libraries pay the same page faults.
 
 ### The `chararray` class
 
