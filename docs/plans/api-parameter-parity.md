@@ -61,6 +61,40 @@ of `DType` (7, and 6 NumSharp-only names: `np.can_cast`, `np.dtype`, `np.frombuf
 `np.common_type_code`, `np.issubsctype`, `np.maximum_sctype`, `np.sctype2char`, `ndarray.ReplaceData`). 437 names
 carry no mark.
 
+**Second pass** (2026-10-17, the owner's request "a second pass, using various techniques to discover more missed").
+The same three outputs, regenerated with the techniques below; the script's docstring and `binding_probe.py`'s have
+the rules.
+- **NumPy's other classes, constructors, extension methods** (`dump_modules.cs`' second output, `--types`): every
+  exported type, compared through `OBJECT_GROUPS` (`np.matrix` -> `NDMatrix`, `np.char.chararray` -> `NDCharArray`,
+  `np.ma.MaskedArray` -> `NDMaskedArray`, `np.dtype` -> `DType`, `np.nditer`, `np.broadcast`, `np.flatiter`,
+  `np.ndindex`, `np.ndenumerate`, `np.poly1d`, `np.vectorize`, `np.finfo`, `np.iinfo`, `NpzFile`, `SeedSequence`,
+  `BitGenerator`, the five engines) plus `NDArray<T>`; a constructor is the row `(constructor)` (NumPy's class call),
+  an extension method joins the type it extends. 243 more C# names, 190 with a NumPy counterpart.
+- **NumPy's `.pyi` stubs and numpydoc `Parameters` sections** fill in what a runtime `(*args, **kwargs)` hides
+  (`np.printoptions`' twelve keywords, `np.frompyfunc`'s `identity`, `ndarray.std`'s `mean` / `correction`), following
+  the stubs' base classes (`ndarray.sum` is declared on the stub-only `_ArrayOrScalarCommon`) and aliases (`nansum =
+  sum`).
+- **Generic dtype selectors** (mark **T ◇**): an overload whose type argument picks the dtype (`np.zeros<T>`,
+  `np.iinfo<T>`, `np.can_cast<TFrom, TTo>`, `ndarray.item<T>`): 17 names with a NumPy counterpart.
+- **A compile probe** (`binding_probe.py`, `--probe`): 7,059 NumPy-style C# calls compiled at C# 12 (a net8.0
+  consumer's default, which ignores `[OverloadResolutionPriority]`) and at C# 14. **B** (32 names): a call does not
+  bind: `np.linspace(start, stop)` (C# requires `num`), `device` only with `dtype` (`np.empty` / `ones` / `zeros`),
+  `order` only with `dtype` (the `*_like` creators) and only with `copy` (`astype`), `dtype` only with `axis`
+  (`np.mean`, `a.mean`, `a.sum`), NumPy's positional order (`np.std(a, 1, np.float64)`, `np.empty(shape, dtype,
+  'C')`), `new NDArray(shape)`, `np.ma.masked_array()`, a dtype string for `new DType(...)`. **L**: `null` refused where
+  NumPy's default is None, 31 names at both versions (`axis` of `np.sum` / `mean` / `std` / `var` / `count_nonzero`,
+  `order` of `np.asarray`, `density` of the histograms; `int?` against `int[]` ambiguous in the percentiles and
+  medians), 19 only at C# 12 (the random seeds and sizes), and 73 samplers whose `Shape size` takes `default` instead
+  (◦). **Q** (77 names): only a scalar where NumPy's stubs take an integer sequence (the reductions' `axis` tuple,
+  `np.roll`'s `shift`).
+- **NumPy's public modules without a facade**: 15, with 140 names (`np.testing`, `np.lib.recfunctions`,
+  `np.lib.format`, `np.rec`, `np.exceptions`, `np.ctypeslib`, `np.ma.mrecords`, ...).
+
+Totals: 1,341 C# names, 1,173 with a NumPy counterpart: M 234 (+132 only §3), X 90, O 360, T ● 10 (+17 ◇), B 32,
+L 31 (+19 at C# 12 only, +73 `default`), Q 77; 525 carry none of the four reflection marks and 498 carry no mark at
+all. 168 names are NumSharp-only (63 with several overloads, 26 with a T mark); 210 NumPy names have no member in
+their group.
+
 "Working" cannot come from signatures. Its sources: the `[OpenBugs]` pins that test parameters (phase A), the probe
 done for each item, and the audit of existing parameters (phase X).
 
@@ -1895,6 +1929,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-17**: second pass of the signature inventory on `strings` (§2 "Second pass"): NumPy's other classes,
+  constructors, extension methods and `NDArray<T>` compared too (1,173 names with a NumPy counterpart, was 983), the
+  `.pyi` stubs and numpydoc sections read for hidden parameters, generic dtype selectors marked (T ◇), and a compile
+  probe of 7,059 NumPy-style calls at C# 12 and 14 adding the marks B (32 names), L (31, +19 at C# 12 only, +73
+  `default`) and Q (77). Findings are not items yet. The coverage pipeline's own signature marks (`f949fa17`) use N
+  for a name credited through another one, hence L for the `null` mark here.
 
 - **2026-10-17**: second inventory on `strings`, every `[ModuleName]` module and `np.random.Generator` diffed against
   NumPy 2.4.2's signatures (§2): 983 names with a NumPy counterpart, 397 identical, 310 with more than one overload,
