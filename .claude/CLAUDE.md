@@ -461,7 +461,11 @@ first larger one stopping later copies) into StringDType AS A CHARARRAY, the fin
 a PLAIN result, which a rule-2 member refuses (`NotSupportedException`) and a pad member converts with
 `np.char.asarray` (an `S` chararray). The marks are `NDCharArrayBoundary.WrappedUfunc` / `PlainUfunc` / `InsideUfunc`,
 the check `TrivialLoopCopyError` at NumPy's point (after the input casts, before the broadcast). `replace` casts a
-dtype-less `old` / `new` (a string, a `byte[]`, a number, a chararray element stand-in) to the text's dtype.
+dtype-less `old` / `new` (a string, a `byte[]`, a number, a chararray element stand-in) to the text's dtype. The nine
+predicates (`b1328a4f`, `APIs/np.char.predicates.cs`, `Char/NDCharArray.Predicates.cs`) ARE `np.strings`' ufuncs, with
+`out=` / `where=` / `dtype=`; the members are rule 4 over the STORED text (`np.char.array(['ab  ']).isalpha()` is False,
+`.islower()` True), a 0-d array for a 0-d chararray, and `isdecimal` / `isnumeric` refuse an `S` chararray (no bytes
+loop).
 TRAPS: (1) a function that forwards a chararray to a DIFFERENTLY named public function (partition → `np.stack`)
 computes inside `NDCharArrayBoundary.Inside()`: the audit skips only frames named like the function, and the forward would apply
 `np.stack`'s chararray rule. (2) NumPy 2.4.2's zfill of an EMPTY element reads uninitialized memory for its sign: oracle
