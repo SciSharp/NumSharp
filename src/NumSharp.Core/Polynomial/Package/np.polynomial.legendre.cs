@@ -625,5 +625,29 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legroots.html</remarks>
         [NDScoped]
         public NDArray legroots(object c) => NDPolyAlgebra.Roots(PolyBasis.Legendre, c);
+
+        /// <summary>
+        ///     The Legendre weight function, the constant 1, computed as NumPy 2.4.2 writes it: <c>x*0.0 + 1.0</c>. So the
+        ///     result has x's shape and NumPy's dtype, and it is NOT 1 everywhere: an infinite or NaN x gives NaN
+        ///     (<c>inf*0.0</c> is NaN). An ndarray is computed in one fused pass.
+        /// </summary>
+        /// <param name="x">
+        ///     The points: an <see cref="NDArray"/> of any layout and dtype, or a typed C# array (an ndarray); a Python
+        ///     scalar — a C# <c>bool</c>, integer, <see cref="System.Numerics.BigInteger"/>, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/>, computed with CPython's arithmetic (NumPy returns a Python float or
+        ///     complex there); or a NumPy scalar (<see cref="System.Half"/>, <c>char</c>, <c>decimal</c>). x is not
+        ///     converted first, so a Python list or tuple is refused by Python's <c>*</c>.
+        /// </param>
+        /// <returns>The weights: an array of x's shape for an ndarray x (float64 for an integer or bool x, x's own dtype
+        ///     for a float or complex x), a 0-d array for a scalar x.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is a Python list or tuple (an <c>object[]</c>, a C# list, a
+        ///     <c>ValueTuple</c>) or a string: Python's <c>can't multiply sequence by non-int of type 'float'</c>; null:
+        ///     <c>unsupported operand type(s) for *: 'NoneType' and 'float'</c>. Or a string array: <c>np.multiply</c>'s
+        ///     no-loop error.</exception>
+        /// <exception cref="System.OverflowException">A Python int too large for a float: CPython's <c>int too large to
+        ///     convert to float</c> from <c>x*0.0</c>.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legweight.html</remarks>
+        [NDScoped]
+        public NDArray legweight(object x) => NDPolyWeight.Weight(PolyBasis.Legendre, x);
     }
 }

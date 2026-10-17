@@ -5872,6 +5872,53 @@ Traps:
   implicit Array→NDArray conversion. The runner crashed on the list cells until both arms were cast to `object`.
 - **cmd's `%1` splits on commas.** `bench.cmd C/poly/,T/poly/` passes only `C/poly/`.
 
+### Polynomial package — weight functions (U8, first half)
+`chebweight`, `legweight`, `lagweight`, `hermweight`, `hermeweight` (5 names)
+
+Plans `docs/plans/numpy-polynomial.md` (U8) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.2 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2**: oracle tiers `polyweight.jsonl` (1,860 portable cases) and
+`polyweight_host.jsonl` (1,235 cases, `RunHostLibmCorpus`), 0 excused. Unit tests `Polynomial/PolynomialWeightTests.cs`
+(15; 13 of 14 planted bugs caught, the survivor an equivalent special case that was then removed). **Perf (NPY/NS,
+`benchmark/polynomial/polyweight_*`, 189 cells, every one SHA-256-checked): geomean 1.78×** — chebweight arrays
+1.34–17.4×, legweight 1.39–12.8×, the exp-based weights 0.76–23×.
+
+- **Engine** (`Polynomial/Package/NDPolyWeight.cs`): NumPy's one statement per weight, run on whatever x is —
+  `1.0/(np.sqrt(1.0 + x)*np.sqrt(1.0 - x))`, `x*0.0 + 1.0`, `np.exp(-x)`, `np.exp(-x**2)`, `np.exp(-.5*x**2)`.
+  - A Python scalar is CPython arithmetic until the first ufunc (`legweight(0.5)` is a Python float, `chebweight(2)`
+    NaN, `hermweight(2**70)` NumPy's object-loop TypeError). The statements are replayed over `PolyNumber`.
+  - A Python list / tuple / None / str meets Python's own operator, which raises before NumPy sees it.
+  - **`x**2` of an ndarray is `np.square`, not `np.power`** (`fast_scalar_power`): a bool array squares to int8.
+- **Routes for an ndarray x**, each byte-identical to the others and to NumPy:
+  - one fused `np.evaluate` tree, node for node (`Square` for `x**2`; the literals stay weak);
+  - float16, decimal and the string dtypes: the statements on the house ufuncs (NDExpr's float16 path is 2–5× slower;
+    decimal has no NumPy dtype, so the house routines define it; a string array gets NumPy's no-loop text);
+  - a broadcast x: computed once on its un-broadcast core, copied into NumPy's layout;
+  - an integer or bool x: its integer part (`-x`, `x**2`, which wrap) in x's dtype, then ONE cast into the float loop —
+    NumPy's buffered input cast — so the float part runs on one dtype (a fused pass over a mixed-dtype tree runs
+    scalar: lagweight int16 427 → 128 µs, NumPy 154);
+  - an N-D x that is not C-contiguous: computed over its C-ordered permutation, the C result relabelled with NumPy's
+    layout (`NDArray.AdoptLayout`, mapdomain's route).
+- **Scalar-sized ufunc calls run the house kernel on one stack element** (`PolyNumber.FloatUfunc`, the loop dtype from
+  `PolyNumber.FloatLoop` — a unit test holds it equal to `ResolveUnaryFloatReturnType`): no 0-d arrays but the result.
+- **`x**2` on a scalar is the C runtime's `pow`** (`PyScalar.PowTwo`, `PolyNumber.PowTwo`): CPython's `float_pow` and
+  NumPy's scalarmath call `pow` / `powf`, and ucrtbase's `pow` is not the correctly rounded square (5,182 of 20M
+  random doubles differ from `x*x`; `powf` flushes subnormal squares, `np.float32(2.9465066e-23)**2` is 0). A complex
+  Python value is `c_powu`'s two naive products; an infinite square raises CPython's OverflowError texts.
+- **The floors under 1.5×**: float64 `exp` is the C runtime's on both sides (about 1.0× up to 100K points, 1.8–2.0× at
+  1M); float32 `exp` is the same AVX2 algorithm on both sides (1.1–1.35×); float16 `exp` is the house kernel, itself
+  0.77× NumPy's HALF loop (lever: a 65,536-entry table, plan §5 item 9); a scalar call's 0-d result alone costs 0.34 µs
+  (NumPy's `legweight(0.5)` is 0.11 µs).
+- **Not bit-exact, not in the byte tiers:** complex `chebweight` inherits `np.sqrt`'s complex envelope (one value of the
+  probe 3 ULP from NumPy's; unit-tested within 4 ULP). A `numpy.matrix` x is computed as its plain array, elementwise
+  (`[Misaligned]`: NumPy's operators would make `x**2` a matrix power).
+
+Traps:
+- **The K: drive filled up during the oracle copy** (0 bytes free; the corpora are copied into each framework's output,
+  about 1.1 GB per framework). Build the test projects into C: with `-o` and run `dotnet test <dll>` there; two random
+  surface tests then fail only because they look for `test/oracle/gen_oracle.py` above the output folder.
+- **A route probe and the benchmark disagree under load**: the same call read 212 µs in one run and 140 µs, then
+  122 µs, in later ones. Compare routes interleaved in one process before acting on a benchmark cell.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 

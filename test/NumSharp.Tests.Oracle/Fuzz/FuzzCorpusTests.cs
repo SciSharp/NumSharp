@@ -847,6 +847,24 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void Polyroots() => RunCorpus("polyroots.jsonl");
 
+        // numpy.polynomial weight functions (plan docs/plans/numpy-polynomial-remaining-compute.md §3.2, unit U8):
+        // chebweight / legweight / lagweight / hermweight / hermeweight — NumPy's one statement each over every dtype x
+        // length, full-mantissa / special / extreme values, every memory layout of x (values and the result's C / F /
+        // OWNDATA flags), Python-typed x (CPython's float_pow and c_powu with their OverflowErrors, the int64 / uint64 /
+        // object boundaries of np.exp's conversion, CPython's int-to-float OverflowError), np.float16 / np.uint16 scalars,
+        // the Python objects NumPy never converts (a list / tuple / None / str: Python's operator TypeErrors) and Char.
+        // PORTABLE: chebweight / legweight (IEEE arithmetic and sqrt) and the exp-based weights whose np.exp loop is
+        // float32 (NumPy's own SIMD kernel, ported bit-exactly); the C-runtime exp loops are the PolyweightHost tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyweight() => RunCorpus("polyweight.jsonl");
+
+        // The exp-based weights whose np.exp loop calls the C runtime on both sides — float64 exp, float16's expf and
+        // complex128's — so the bytes are win-amd64's ucrtbase: HOST-PINNED (RunHostLibmCorpus), like the Unary tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PolyweightHost() => RunHostLibmCorpus("polyweight_host.jsonl");
+
         // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
         // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
         // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
@@ -1156,6 +1174,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyalgebra.jsonl"] = 28100,   // numpy.polynomial series algebra (U2): mulx/mul/div/pow/fromroots x 6 bases + X2poly/poly2X x 5, sections A-L of gen_polyalgebra — 26,163 at delivery, 28,144 with the wholeness section (M: pow / maxpower argument kinds, the deferred object refusal, non-finite complex products — 43 of which moved here from the host tier)
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
             ["polyroots.jsonl"] = 8150,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-L of gen_polyroots — 6,681 at delivery, 8,195 with the wholeness sections (K: two-term OBJECT series NumPy still computes, 0-d-zero trims, edge numeric series; L: object series of three or more terms — the companion arithmetic's OverflowErrors and eigvals' isfinite TypeError)
+            ["polyweight.jsonl"] = 1800,   // numpy.polynomial weight functions (U8): {p}weight x 5 bases, sections A-H of gen_polyweight — 1,860 at delivery
+            ["polyweight_host.jsonl"] = 1200,   // the exp-based weights' C-runtime loops (float64 / float16 / complex128), host-pinned — 1,235 at delivery
             ["polyroots_parity.jsonl"] = 1350,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery, 1,354 with section K's edge series
             ["place.jsonl"] = 12,
             ["products.jsonl"] = 326,

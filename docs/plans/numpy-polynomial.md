@@ -1049,6 +1049,11 @@ a unit below, that document wins.
 
 ### U8 — Gauss quadrature and weights (10 names)
 
+> **Weights DELIVERED (2026-10-18)** — the five `{p}weight` names: `Polynomial/Package/NDPolyWeight.cs`, oracle tiers
+> `polyweight.jsonl` / `polyweight_host.jsonl` (3,095 cases, 0 excused), benchmark geomean 1.78× (189 cells, all
+> bit-exact). Routes, findings and floors: [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md)
+> §3.2. The five `{p}gauss` names are still open.
+
 - **Scope:** `{p}gauss` and `{p}weight` for the five non-power bases.
 - **Shared backend:**
   - the gauss driver: companion (U7) → **`np.linalg.eigvalsh`** → one Newton step → `max|·|` scaling →

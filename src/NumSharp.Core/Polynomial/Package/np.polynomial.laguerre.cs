@@ -628,5 +628,32 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.lagroots.html</remarks>
         [NDScoped]
         public NDArray lagroots(object c) => NDPolyAlgebra.Roots(PolyBasis.Laguerre, c);
+
+        /// <summary>
+        ///     The Laguerre weight function <c>exp(-x)</c>, computed as NumPy 2.4.2 writes it, <c>np.exp(-x)</c>. The
+        ///     negation runs in x's dtype first, so an unsigned or signed integer x wraps before the exponential
+        ///     (<c>-np.uint8(1)</c> is 255) and a bool x is refused. An ndarray is computed in one fused pass.
+        /// </summary>
+        /// <param name="x">
+        ///     The points: an <see cref="NDArray"/> of any layout and dtype, or a typed C# array (an ndarray); a Python
+        ///     scalar — a C# <c>bool</c>, integer, <see cref="System.Numerics.BigInteger"/>, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/>, negated with CPython's arithmetic (exact for an int) before
+        ///     <c>np.exp</c> converts it; or a NumPy scalar (<see cref="System.Half"/>, <c>char</c>, <c>decimal</c>). x is
+        ///     not converted first, so a Python list or tuple is refused by Python's unary <c>-</c>.
+        /// </param>
+        /// <returns>The weights: an array of x's shape for an ndarray x, in <c>np.exp</c>'s dtype for x's dtype (float16
+        ///     for int8 / uint8, float32 for int16 / uint16, float64 for wider integers, x's own for a float or complex x),
+        ///     a 0-d array for a scalar x.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is a Python list or tuple (an <c>object[]</c>, a C# list, a
+        ///     <c>ValueTuple</c>), null or a string: Python's <c>bad operand type for unary -: 'list'</c> (<c>'tuple'</c>,
+        ///     <c>'NoneType'</c>, <c>'str'</c>). A bool array: NumPy's <c>The numpy boolean negative, the `-` operator, is not
+        ///     supported, …</c>. A Python int whose negation fits neither int64 nor uint64: NumPy's object loop, <c>loop of
+        ///     ufunc does not support argument 0 of type int which has no callable exp method</c>. A string array:
+        ///     <c>np.negative</c>'s no-loop error.</exception>
+        /// <exception cref="System.OverflowException">A decimal x whose exponential is past decimal's range (decimal has
+        ///     no NumPy dtype and no infinity; the house decimal <c>exp</c> raises).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.lagweight.html</remarks>
+        [NDScoped]
+        public NDArray lagweight(object x) => NDPolyWeight.Weight(PolyBasis.Laguerre, x);
     }
 }

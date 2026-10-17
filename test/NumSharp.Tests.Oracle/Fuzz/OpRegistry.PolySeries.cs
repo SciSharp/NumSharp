@@ -146,11 +146,19 @@ namespace NumSharp.Tests.Fuzz
                     case "none":
                         return null;   // Python's None: C# null (the house map)
                     case "npscalar":
-                        // A NumPy scalar with a C# spelling of its own: np.float16 is Half (the house map); the other
-                        // NumPy scalar kinds have none (a C# float / double / long IS the Python float / int).
-                        if (e.GetProperty("dtype").GetString() != "float16")
-                            throw new NotSupportedException($"NumPy scalar of dtype {e.GetProperty("dtype").GetString()} has no C# spelling");
-                        return BitConverter.UInt16BitsToHalf(Convert.ToUInt16(e.GetProperty("bits").GetString().Substring(2), 16));
+                    {
+                        // A NumPy scalar with a C# spelling of its own: np.float16 is Half, np.uint16 is char (the house
+                        // map: NumSharp's char dtype is NumPy's uint16); the other NumPy scalar kinds have none (a C# float /
+                        // double / long IS the Python float / int).
+                        string dt = e.GetProperty("dtype").GetString();
+                        ushort bits = Convert.ToUInt16(e.GetProperty("bits").GetString().Substring(2), 16);
+                        return dt switch
+                        {
+                            "float16" => BitConverter.UInt16BitsToHalf(bits),
+                            "uint16" => (char)bits,
+                            _ => throw new NotSupportedException($"NumPy scalar of dtype {dt} has no C# spelling"),
+                        };
+                    }
                     default:
                         return PythonScalar(e);
                 }
@@ -351,8 +359,8 @@ namespace NumSharp.Tests.Fuzz
         }
 
         /// <summary>
-        ///     Dispatches an additive-family / polyutils key (U1), a calculus key (U4), a Vandermonde key (U5) or a
-        ///     companion / roots key (U7) to the facade member NumPy's name refers to (the SAME member: the module part
+        ///     Dispatches an additive-family / polyutils key (U1), a calculus key (U4), a Vandermonde key (U5), a
+        ///     companion / roots key (U7) or a weight key (U8, <c>{p}weight</c>) to the facade member NumPy's name refers to (the SAME member: the module part
         ///     picks the submodule, so <c>laguerre.lagline</c> is exercised on <c>np.polynomial.laguerre</c>). The series
         ///     algebra (U2) is tried first (<see cref="TryApplyPolyAlgebra"/>).
         /// </summary>
@@ -462,6 +470,7 @@ namespace NumSharp.Tests.Fuzz
                         "vander3d" => a.CalcFacet(m.chebvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.chebcompanion(a.Get("c"))),
                         "roots" => a.CalcFacet(m.chebroots(a.Get("c"))),
+                        "weight" => a.CalcFacet(m.chebweight(a.Get("x"))),
                         _ => throw new NotSupportedException($"chebyshev op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -485,6 +494,7 @@ namespace NumSharp.Tests.Fuzz
                         "vander3d" => a.CalcFacet(m.legvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.legcompanion(a.Get("c"))),
                         "roots" => a.CalcFacet(m.legroots(a.Get("c"))),
+                        "weight" => a.CalcFacet(m.legweight(a.Get("x"))),
                         _ => throw new NotSupportedException($"legendre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -508,6 +518,7 @@ namespace NumSharp.Tests.Fuzz
                         "vander3d" => a.CalcFacet(m.lagvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.lagcompanion(a.Get("c"))),
                         "roots" => a.CalcFacet(m.lagroots(a.Get("c"))),
+                        "weight" => a.CalcFacet(m.lagweight(a.Get("x"))),
                         _ => throw new NotSupportedException($"laguerre op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -531,6 +542,7 @@ namespace NumSharp.Tests.Fuzz
                         "vander3d" => a.CalcFacet(m.hermvander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.hermcompanion(a.Get("c"))),
                         "roots" => a.CalcFacet(m.hermroots(a.Get("c"))),
+                        "weight" => a.CalcFacet(m.hermweight(a.Get("x"))),
                         _ => throw new NotSupportedException($"hermite op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -554,6 +566,7 @@ namespace NumSharp.Tests.Fuzz
                         "vander3d" => a.CalcFacet(m.hermevander3d(a.Get("x"), a.Get("y"), a.Get("z"), a.Get("deg"))),
                         "companion" => a.CalcFacet(m.hermecompanion(a.Get("c"))),
                         "roots" => a.CalcFacet(m.hermeroots(a.Get("c"))),
+                        "weight" => a.CalcFacet(m.hermeweight(a.Get("x"))),
                         _ => throw new NotSupportedException($"hermite_e op '{fn}' is not registered in OpRegistry"),
                     };
                 }

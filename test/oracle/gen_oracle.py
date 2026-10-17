@@ -17552,9 +17552,12 @@ def _ps_enc(v, operands):
     if v is None:
         return {"kind": "none"}
     if isinstance(v, np.float16):
-        # np.float16 is the one NumPy scalar with a C# spelling of its own (Half); every other NumPy scalar kind is
-        # spelled as the Python value a C# primitive stands for.
+        # np.float16 and np.uint16 are the NumPy scalars with a C# spelling of their own (Half, and char — NumSharp's
+        # char dtype is NumPy's uint16); every other NumPy scalar kind is spelled as the Python value a C# primitive
+        # stands for.
         return {"kind": "npscalar", "dtype": "float16", "bits": "0x%04x" % int(np.array(v).view(np.uint16))}
+    if isinstance(v, np.uint16):
+        return {"kind": "npscalar", "dtype": "uint16", "bits": "0x%04x" % int(v)}
     return _weak_spec(v)
 
 
@@ -20591,6 +20594,213 @@ def gen_polyroots():
 
 
 # ---------------------------------------------------------------------------
+# numpy.polynomial weight functions (plan docs/plans/numpy-polynomial-remaining-compute.md §3.2; unit U8 of
+# docs/plans/numpy-polynomial.md): chebweight / legweight / lagweight / hermweight / hermeweight — NumPy's one statement
+# each, run on whatever x is (`1.0/(np.sqrt(1.0 + x)*np.sqrt(1.0 - x))`, `x*0.0 + 1.0`, `np.exp(-x)`, `np.exp(-x**2)`,
+# `np.exp(-.5*x**2)`; `x**2` of an ndarray is np.square, number.c's fast_scalar_power):
+#   (A) every dtype x length around the vector widths, moderate values;
+#   (B) full-mantissa random values (the fused kernel's vector body and its tail), inside (-1, 1) too;
+#   (C) special values as bit patterns (quiet / signalling / negative-payload NaNs, +-inf, +-0, subnormals, the largest
+#       finite value) and integer extremes (iinfo min / max: the wrapped np.square and negation);
+#   (D) memory layouts of x — 1-D strided / reversed / offset, N-D C / F / transposed / strided / reversed / row
+#       broadcast, stride-0 broadcast, 0-d of every dtype — values and the result's C / F / OWNDATA flags (NumPy's ufunc
+#       output layout);
+#   (E) Python-typed x: floats (CPython's float_pow special cases and its OverflowError, NaN payloads), ints (np.exp's
+#       int64 / uint64 / object conversion boundaries, CPython's int-to-float OverflowError), bools, complexes (c_powu's
+#       OverflowError), np.float16 and np.uint16 (NumSharp's char) scalars as bit patterns;
+#   (F) errors: a Python list / tuple (empty, nested, holding an array) / None / str — Python's own operator TypeErrors,
+#       raised before NumPy sees x — and a bool array for lagweight (NumPy's boolean-negative TypeError);
+#   (G) inputs longer than one SIMD block, and float16 around its 256-element widen / compute / narrow blocks;
+#   (H) Char (the uint16 proxy, relabelled).
+# HOST SPLIT. chebweight and legweight are IEEE + - * / and sqrt: portable. lagweight / hermweight / hermeweight end in
+# np.exp, whose float32 loop is NumPy's own SIMD kernel (ported bit-exactly by NumSharp: portable) while its float64,
+# float16 (expf) and complex128 loops call the C runtime on both sides: those values go to polyweight_host.jsonl,
+# replayed on win-amd64 only (ucrtbase). Errors and layout flags are portable.
+# Not recorded: complex chebweight (np.sqrt's complex128 result is within a few ULP of MSVC's csqrt, not bit-exact —
+# unit-tested allclose), string arrays (the numeric corpus has no string operands; NumPy's no-loop texts are
+# unit-tested), decimal (no NumPy dtype — unit-tested).
+
+POLY_WEIGHT_MODULES = [("chebyshev", "cheb"), ("legendre", "leg"), ("laguerre", "lag"), ("hermite", "herm"),
+                       ("hermite_e", "herme")]
+
+
+def _pw_bits_f64(bits):
+    """A Python float from its IEEE bit pattern (a NaN keeps its payload and its signalling bit)."""
+    import struct
+    return struct.unpack("<d", struct.pack("<Q", bits))[0]
+
+
+def _pw_f16(bits):
+    """An np.float16 scalar from its bit pattern."""
+    return np.array([bits], dtype=np.uint16).view(np.float16)[0]
+
+
+_PW_INF = float("inf")
+_PW_PY_FLOATS = [("0.5", 0.5), ("-0.5", -0.5), ("2.0", 2.0), ("1.0", 1.0), ("-1.0", -1.0), ("0.0", 0.0), ("-0.0", -0.0),
+                 ("inf", _PW_INF), ("-inf", -_PW_INF), ("nan", float("nan")), ("nanpayload", _pw_bits_f64(0x7ff8000000000123)),
+                 ("negnan", _pw_bits_f64(0xfff8000000000000)), ("snan", _pw_bits_f64(0x7ff4000000000001)),
+                 ("1e200", 1e200), ("-1e200", -1e200), ("1e-200", 1e-200), ("1e-160", 1e-160), ("1.4e154", 1.4e154),
+                 ("1.3e154", 1.3e154), ("1e-320", 1e-320), ("0.9999", 0.9999), ("26.6", 26.6), ("-745.2", -745.2),
+                 ("709.8", 709.8), ("27.3", 27.3)]
+_PW_PY_INTS = [("0", 0), ("1", 1), ("2", 2), ("-3", -3), ("100", 100), ("2p31", 2 ** 31), ("3037000499", 3037000499),
+               ("3037000500", 3037000500), ("2p32m1", 2 ** 32 - 1), ("2p63m1", 2 ** 63 - 1), ("2p63", 2 ** 63),
+               ("2p64m1", 2 ** 64 - 1), ("2p64", 2 ** 64), ("m2p63", -(2 ** 63)), ("m2p63m1", -(2 ** 63) - 1),
+               ("2p70", 2 ** 70), ("2p600", 2 ** 600), ("2p1024", 2 ** 1024), ("2p2000", 2 ** 2000)]
+_PW_PY_COMPLEX = [("0.5j", 0.5j), ("1+1j", 1 + 1j), ("inf+0j", complex(_PW_INF, 0)), ("nan+0j", complex(float("nan"), 0)),
+                  ("1e200+1e200j", 1e200 + 1e200j), ("1.4e154+0j", complex(1.4e154, 0)), ("0+1.4e154j", complex(0, 1.4e154)),
+                  ("1e154+1e154j", complex(1e154, 1e154)), ("-0-0j", complex(-0.0, -0.0)), ("0+1e200j", complex(0, 1e200)),
+                  ("-2+0.25j", -2 + 0.25j), ("0-infj", complex(0, -_PW_INF))]
+_PW_F16 = [("0.5", 0x3800), ("m0", 0x8000), ("inf", 0x7c00), ("minf", 0xfc00), ("nan", 0x7e00), ("snan", 0x7d01),
+           ("300", 0x5cb0), ("m2", 0xc000), ("max", 0x7bff), ("sub", 0x0001), ("1", 0x3c00), ("256", 0x5c00)]
+
+
+def _pw_host(op, a):
+    """Whether a weight result needs win-amd64's C runtime: np.exp's float64 / float16 (expf) / complex128 loops."""
+    exp_based = not (op.endswith("chebweight") or op.endswith("legweight"))
+    return exp_based and np.asarray(a).dtype.name in ("float64", "float16", "complex128")
+
+
+def _pw_nd_views(base):
+    """(name, base, view) layouts of an N-D array's values. describe() serializes the BASE in C order, so every base is
+    C-contiguous and the layout lives in the view: F order is the transpose of a C buffer holding base.T, a row
+    broadcast reads one row with a stride-0 first axis."""
+    shape = base.shape
+    out = [("c", base, base)]
+    fb = np.ascontiguousarray(base.T)
+    out.append(("f", fb, fb.T))
+    if len(shape) >= 3:
+        perm = (1, 0) + tuple(range(2, len(shape)))
+        tb = np.ascontiguousarray(base.transpose(perm))
+        out.append(("t", tb, tb.transpose(perm)))
+    if len(shape) >= 2:
+        wide = np.zeros(shape[:-1] + (2 * shape[-1],), base.dtype)
+        wide[..., ::2] = base
+        out.append(("strided", wide, wide[..., ::2]))
+        rb = np.ascontiguousarray(base[::-1])
+        out.append(("reversed", rb, rb[::-1]))
+        row = np.ascontiguousarray(base[0])
+        out.append(("bcast", row, np.broadcast_to(row, shape)))
+    return out
+
+
+def gen_polyweight():
+    cases = []
+    host = []
+    counter = [0]
+    skipped = [0]
+    A = _PSArr
+
+    def flags(a):
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(op, xv, layout, cid, facet=None):
+        module, name = op.split(".")
+        fn = getattr(_poly_module(module), name)
+        operands = []
+        params = {"x": _ps_enc(xv, operands)}
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = fn(_ps_py(xv))
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands, "expected": {},
+                          "expects_throw": True, "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
+            return
+        a = np.asarray(r)
+        if a.dtype.kind == "c" and name == "chebweight":
+            skipped[0] += 1                      # np.sqrt's complex envelope (see the header)
+            return
+        dest = cases if facet == "flags" or not _pw_host(op, a) else host
+        if facet == "flags":
+            a = flags(a)
+        dest.append(_case(op, params, operands, _arr_expected(a), layout, "polyweight", cid=f"{cid}/{n}"))
+
+    for modname, p in POLY_WEIGHT_MODULES:
+        op = f"{modname}.{p}weight"
+
+        # (A) every dtype x length (the fused kernel's vector body and tail; the empty array)
+        for dt in ALL_DTYPES:
+            for n in (0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 33, 65):
+                x = _poly_fill(n, dt, seed=n % 5) if n else np.zeros(0, dt)
+                emit(op, A(x), "c_contiguous_1d", f"{op}/dt/{dt}/{n}")
+
+        # (B) full-mantissa values around the lane widths (2 complex128, 4 float64, 8 float32 / float16 per 256 bits);
+        # the second draw lies inside (-1, 1), chebweight's finite range
+        for dt in ("float64", "float32", "float16", "complex128"):
+            for n in (1, 3, 8, 9, 17, 33, 100):
+                for draw in range(2):
+                    x = _pc_random((n,), dt, 7000 + 31 * draw + n)
+                    if draw:
+                        with np.errstate(all="ignore"):
+                            x = (x / 3.5).astype(dt)
+                    emit(op, A(x), "cfull_1d", f"{op}/rand/{dt}/{n}/{draw}")
+
+        # (C) special values (bit patterns) and integer extremes
+        for dt in ("float64", "float32", "float16", "complex128"):
+            emit(op, A(_pv_special(dt)), "special_1d", f"{op}/spec/{dt}")
+        for dt in ALL_DTYPES:
+            if np.dtype(dt).kind in "iub":
+                emit(op, A(_ps_series(8, dt, "special")), "special_1d", f"{op}/ext/{dt}")
+
+        # (D) memory layouts: 1-D views, stride-0 broadcast, 0-d of every dtype, N-D views (values and flags)
+        for dt in ("float64", "float32", "float16", "int8", "uint16", "int64", "complex128", "bool"):
+            base = _poly_fill(7, dt, seed=4)
+            for lname, ax in _ps_layouts(base):
+                emit(op, ax, lname, f"{op}/lay1/{dt}/{lname}")
+            src = base[:1].copy()
+            emit(op, A(src, np.broadcast_to(src, (6,))), "broadcast_1d", f"{op}/lay1/{dt}/broadcast")
+        for dt in ALL_DTYPES:
+            base = _poly_fill(3, dt, seed=6)
+            emit(op, A(np.array(base[1])), "scalar_0d", f"{op}/zerod/{dt}")
+        for shape in ((2, 3), (3, 1, 2), (4, 1), (2, 3, 4)):
+            for dt in ("float64", "float32", "float16", "int16", "complex128", "bool"):
+                base = _poly_coef(shape, dt, seed=5)
+                for vname, vb, vv in _pw_nd_views(base):
+                    emit(op, A(vb, vv), f"nd_{vname}", f"{op}/nd/{shape}/{dt}/{vname}")
+                    if dt in ("float64", "float16", "int16"):
+                        emit(op, A(vb, vv), f"nd_{vname}", f"{op}/ndflags/{shape}/{dt}/{vname}", facet="flags")
+
+        # (E) Python-typed x and NumPy scalars
+        for lab, v in _PW_PY_FLOATS:
+            emit(op, v, "python_float", f"{op}/pyfloat/{lab}")
+        for lab, v in _PW_PY_INTS:
+            emit(op, v, "python_int", f"{op}/pyint/{lab}")
+        for v in (True, False):
+            emit(op, v, "python_bool", f"{op}/pybool/{v}")
+        for lab, v in _PW_PY_COMPLEX:
+            emit(op, v, "python_complex", f"{op}/pycomplex/{lab}")
+        for lab, bits in _PW_F16:
+            emit(op, _pw_f16(bits), "numpy_scalar", f"{op}/npf16/{lab}")
+        for v in (0, 1, 2, 255, 256, 300, 65535):
+            emit(op, np.uint16(v), "numpy_scalar", f"{op}/npu16/{v}")
+
+        # (F) Python objects NumPy never converts: Python's own operator TypeErrors
+        for lab, v in (("list", [0.5]), ("list_empty", []), ("list_nested", [[0.5, 1.0]]), ("tuple", (0.5,)),
+                       ("tuple_empty", ()), ("tuple_array", (A(np.array([0.5])),)), ("none", None), ("str", "ab"),
+                       ("str_empty", "")):
+            emit(op, v, "python_object", f"{op}/err/{lab}")
+
+        # (G) longer inputs: several SIMD blocks, float16 across its 256-element blocks
+        for dt in ("float64", "float32", "float16"):
+            for n in (1030, 2053):
+                emit(op, A(_pc_random((n,), dt, 9100 + n)), "long_1d", f"{op}/long/{dt}/{n}")
+        for n in (255, 256, 257, 513):
+            emit(op, A(_pc_random((n,), "float16", 9300 + n)), "long_1d", f"{op}/long/float16/{n}")
+
+    # (H) Char: NumSharp's uint16-like dtype computes exactly as uint16 does (the house weave).
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                            "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "") and not c.get("expects_throw")],
+                           "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}  (skipped: {skipped[0]} complex chebweight results)")
+    return cases, host
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -22015,8 +22225,13 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyroots.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyroots_parity.host.jsonl"), [blas_identity()])
+    elif mode == "polyweight":
+        # numpy.polynomial weight functions (U8): portable + host-pinned (np.exp's C-runtime loops, win-amd64).
+        cases, host = gen_polyweight()
+        write_jsonl(os.path.join(corpus_dir, "polyweight.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polyweight_host.jsonl"), host)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

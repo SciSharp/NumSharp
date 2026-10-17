@@ -4,7 +4,7 @@
 
 ### 🧭 Overview
 - NumPy 2.x API coverage **87.1% -> 95.2%** (488 -> 533 of the 560 headline APIs, 4 more partial), and **537 of the 560 are oracle-verified** against committed NumPy 2.4.2 contracts - every figure from the [Supported Features Dashboard](https://scisharp.github.io/NumSharp/docs/coverage-support-dashboard.html).
-  - `np.polynomial.*` - the `numpy.polynomial` package, **172 of its 193 functions** for all six bases, bit-exact.
+  - `np.polynomial.*` - the `numpy.polynomial` package, **177 of its 193 functions** for all six bases, bit-exact.
   - `np.*` - **+48 functions**.
   - `np.random.*` - every NumPy bit generator, the whole `Generator` distribution surface, and a legacy `RandomState` that is NumPy's own sampler code line for line, all byte-identical streams.
   - `np.ma.*` - the masked-array module; `np.emath.*` - the automatic-domain math module.
@@ -43,15 +43,16 @@ One optional companion package ships for the first time, co-versioned with **Num
   - [Advanced usage](https://scisharp.github.io/NumSharp/docs/advanced/index.html) - extending NumSharp, native code & backends, under the hood.
 
 ### ✨ New APIs & Modules
-- `np.polynomial` - the `numpy.polynomial` package for all six bases (`polynomial`, `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus `polyutils`: 172 of its 193 functions, bit-exact with NumPy 2.4.2 against generated oracles (139,882 cases, 0 excused); `{p}` below is `poly` / `cheb` / `leg` / `lag` / `herm` / `herme` - `57545200`, `38ed8da7`, `ac8608d9`, `38526155`, `e2ff9477`, `0c02740c` (+ `0896cbf8`, `d494e83d`).
+- `np.polynomial` - the `numpy.polynomial` package for all six bases (`polynomial`, `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus `polyutils`: 177 of its 193 functions, bit-exact with NumPy 2.4.2 against generated oracles (142,977 cases, 0 excused); `{p}` below is `poly` / `cheb` / `leg` / `lag` / `herm` / `herme` - `57545200`, `38ed8da7`, `ac8608d9`, `38526155`, `e2ff9477`, `0c02740c` (+ `0896cbf8`, `d494e83d`).
   - `{p}val`, `{p}val2d`, `{p}val3d`, `{p}grid2d`, `{p}grid3d`, `{p}valnd` - evaluation.
   - `{p}add`, `{p}sub`, `{p}mulx`, `{p}mul`, `{p}div`, `{p}pow`, `{p}fromroots` - series arithmetic.
   - `{p}der`, `{p}int` - calculus, with every `m` / `k` / `lbnd` / `scl` / `axis` form.
   - `{p}vander`, `{p}vander2d`, `{p}vander3d` - Vandermonde matrices.
   - `{p}companion`, `{p}roots` - companion matrices and roots (the roots compute through the OpenBLAS backend's `eigvals`).
+  - `chebweight`, `legweight`, `lagweight`, `hermweight`, `hermeweight` - the weight functions, with NumPy's Python-scalar arithmetic and `x**2` as `np.square`.
   - `{p}trim`, `{p}line`, `{p}domain`, `{p}zero`, `{p}one`, `{p}x`, the five `X2poly` / `poly2X` pairs - helpers, module constants and basis conversions.
   - `as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapparms`, `mapdomain` - `polyutils`.
-  - Speed - x4.65-x37.8 NumPy's speed by benchmark geomean per family (evaluation x7.5, additive x8.5, calculus x7.6, series algebra x37.8, Vandermonde x10.2, roots x4.65).
+  - Speed - x1.78-x37.8 NumPy's speed by benchmark geomean per family (evaluation x7.5, additive x8.5, calculus x7.6, series algebra x37.8, Vandermonde x10.2, roots x4.65, weights x1.78: their `exp` is the C runtime's on both sides).
   - Still to come: fitting, Gauss quadrature, `chebpts` / `chebinterpolate`, `polyvalfromroots`, `format_float` and the six series classes.
 - `np.matrix` - NumPy's `numpy.matrix` as the type `NDMatrix` (80 of its 83 members), held to NumPy 2.4.2's values, class and shape by two generated oracles (26,761 and 4,645 cases) - `201e9c7b`, `51bd91f8` (+ `daa58824`).
   - `np.matrix`, `np.asmatrix`, `np.bmat` - construction from arrays, sequences and `"1 2; 3 4"` literals.

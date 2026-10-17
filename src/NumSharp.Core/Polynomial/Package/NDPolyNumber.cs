@@ -193,6 +193,13 @@ namespace NumSharp
         public bool IsZeroDimArray => Kind == PolyNumberKind.Array && Array.ndim == 0;
 
         /// <summary>
+        ///     Whether this is an ndarray of a string dtype (U, S or StringDType; any rank). Its arithmetic is not a numeric
+        ///     loop: the house ufunc must see the operands as they are, to run NumPy's string loop or raise NumPy's no-loop
+        ///     TypeError for the pair.
+        /// </summary>
+        public bool IsStringArray => Kind == PolyNumberKind.Array && Array.typecode == NPTypeCode.String;
+
+        /// <summary>
         ///     Classifies a C# value by the house NEP 50 mapping: bool / integer primitives / BigInteger / float /
         ///     double / Complex are Python scalars; Half / char / decimal are NumPy scalars of their dtype; an
         ///     NDArray is an ndarray; a typed C# array (or <see cref="Memory{T}"/>) of a dtype is converted with
@@ -634,13 +641,15 @@ namespace NumSharp
         ///     scalar-sized and at least one is a NumPy scalar, a ufunc when an ndarray is involved — a 0-d
         ///     ndarray included, whose ufunc result is a NumPy scalar again. A scalar-sized operation in NumPy's
         ///     complex64 loop (<see cref="IsComplex64Loop"/>) runs in float32 and yields a complex64 scalar; one
-        ///     with an ndarray of rank ≥ 1 runs in complex128 (NumSharp has no complex64 arrays, #569).
+        ///     with an ndarray of rank ≥ 1 runs in complex128 (NumSharp has no complex64 arrays, #569). A string array
+        ///     operand (any rank) goes to the house ufunc unconverted: NumPy's string loop, or its no-loop TypeError.
         /// </summary>
         /// <param name="op">Add, Subtract, Multiply or Divide (true division).</param>
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The result, of NumPy's kind and dtype.</returns>
-        /// <exception cref="TypeError">A bool subtraction (NumPy refuses it).</exception>
+        /// <exception cref="TypeError">A bool subtraction (NumPy refuses it), or a string array operand the house
+        ///     ufunc has no loop for (NumPy's <c>ufunc 'add' did not contain a loop with signature matching types …</c>).</exception>
         /// <exception cref="DivideByZeroException">Python division by zero (never raised for NumPy values).</exception>
         /// <exception cref="OverflowException">A Python int that does not fit the loop dtype, or CPython's int/float
         ///     overflow.</exception>
@@ -661,6 +670,14 @@ namespace NumSharp
                 PolyRaw16 raw = b._raw;
                 return FromPython(PyScalar.Apply(op, a.Py, PyScalar.Float(*(double*)&raw)));
             }
+
+            // A string array: no numeric loop dtype exists to convert into. The house ufunc gets the operands as they
+            // are — a Python value as the 0-d array its C# literal converts to, carrying NumPy's Python-literal mark, so
+            // the message names it as NumPy does (dtype('float64') beside U / S, _PyFloatDType beside StringDType) — and
+            // runs NumPy's string loop or raises NumPy's `ufunc 'add' did not contain a loop with signature matching
+            // types (dtype('float64'), dtype('<U2')) -> None`.
+            if (a.IsStringArray || b.IsStringArray)
+                return FromArray(HouseUfunc(op, a.AsUfuncOperand(), b.AsUfuncOperand()));
 
             NPTypeCode t = LoopDtype(op, a, b);
             if (t == NPTypeCode.Boolean && op == BinaryOp.Subtract)
@@ -714,16 +731,42 @@ namespace NumSharp
                 r.SetAtIndex(p, 0);
                 return FromArray(r);
             }
-            NDArray result = op switch
-            {
-                BinaryOp.Add => np.add(x, y),
-                BinaryOp.Subtract => np.subtract(x, y),
-                BinaryOp.Multiply => np.multiply(x, y),
-                BinaryOp.Divide => np.true_divide(x, y),
-                _ => throw new NotSupportedException(op.ToString()),
-            };
-            return FromArray(result);
+            return FromArray(HouseUfunc(op, x, y));
         }
+
+        /// <summary>
+        ///     This value as a house ufunc receives it from Python with no conversion of its own: a Python value as the 0-d
+        ///     array its C# literal converts to, marked as a Python literal (<see cref="NDArray.FromPythonOperand"/> — NumPy's
+        ///     <c>NPY_ARRAY_WAS_PYTHON_LITERAL</c>), a NumPy scalar as a 0-d array of its dtype, an ndarray as itself.
+        /// </summary>
+        /// <returns>The operand.</returns>
+        /// <exception cref="NotSupportedException">A Python int beyond uint64 (NumPy's object array).</exception>
+        private NDArray AsUfuncOperand()
+        {
+            if (IsPython)
+            {
+                if (!TryDiscoveredDtype(out _))
+                    throw ObjectArrayRefusal();
+                return NDArray.FromPythonOperand(ToObject());
+            }
+            return ToNDArray();
+        }
+
+        /// <summary>The house ufunc of a binary operator: <c>np.add</c>, <c>np.subtract</c>, <c>np.multiply</c> or
+        ///     <c>np.true_divide</c> (Python's <c>/</c>).</summary>
+        /// <param name="op">Add, Subtract, Multiply or Divide.</param>
+        /// <param name="x">Left operand.</param>
+        /// <param name="y">Right operand.</param>
+        /// <returns>The ufunc's result.</returns>
+        /// <exception cref="NotSupportedException">Another operator.</exception>
+        private static NDArray HouseUfunc(BinaryOp op, NDArray x, NDArray y) => op switch
+        {
+            BinaryOp.Add => np.add(x, y),
+            BinaryOp.Subtract => np.subtract(x, y),
+            BinaryOp.Multiply => np.multiply(x, y),
+            BinaryOp.Divide => np.true_divide(x, y),
+            _ => throw new NotSupportedException(op.ToString()),
+        };
 
         /// <summary>
         ///     <c>-a</c>: CPython negation for a Python value (an int/bool gives an int), NumPy's
@@ -736,6 +779,8 @@ namespace NumSharp
         {
             if (a.IsPython)
                 return FromPython(PyScalar.Negate(a.Py));
+            if (a.IsStringArray)
+                return FromArray(np.negative(a.Array));   // NumPy's no-loop TypeError for the string dtype, any rank
             if (a.Dtype == NPTypeCode.Boolean)
                 throw new TypeError("The numpy boolean negative, the `-` operator, is not supported, use the `~` operator " +
                                     "or the logical_not function instead.");
@@ -747,6 +792,160 @@ namespace NumSharp
             // A sign flip is exact in any precision: a complex64 scalar negates to a complex64 scalar.
             return a.IsComplex64 ? FromComplex64(&rr) : FromScalar(a.Dtype, &rr);
         }
+
+        /// <summary>
+        ///     <c>a ** 2</c> as Python evaluates it — the power with an exact Python int 2, which the weight functions
+        ///     write as <c>x**2</c>. A Python value squares with CPython's arithmetic (<see cref="PyScalar.PowTwo"/>). An
+        ///     ndarray, 0-d included, takes <c>ndarray.__pow__</c>'s <c>fast_scalar_power</c> (<c>number.c</c>): an exact
+        ///     int 2 calls <c>np.square</c> for EVERY dtype, so a bool array squares to int8 and an integer array wraps
+        ///     (<c>np.power(bool_array, 2)</c> would be int64), and a 0-d operand's result is a NumPy scalar. A NumPy
+        ///     scalar runs scalarmath's power in the NEP 50 dtype of the scalar and the weak int 2.
+        /// </summary>
+        /// <param name="a">The base.</param>
+        /// <returns><c>a ** 2</c>: a Python value for a Python base, an ndarray for an ndarray of rank ≥ 1, a NumPy
+        ///     scalar otherwise.</returns>
+        /// <exception cref="OverflowException">CPython's float or complex overflow (<see cref="PyScalar.PowTwo"/>).</exception>
+        /// <exception cref="NotSupportedException">A complex64 NumPy scalar (its power runs NumPy's complex64 loop,
+        ///     which no caller reaches: only an ufunc result can be one, and every weight squares its argument first).</exception>
+        /// <remarks>
+        ///     <para>The NumPy-scalar branch is scalarmath's <c>@name@_power</c> (<c>scalarmath.c.src</c>) with the exponent
+        ///     2 converted into the NEP 50 dtype t:</para>
+        ///     <list type="bullet">
+        ///         <item><description>float64: <c>npy_pow(x, 2.0)</c>, the C runtime's <c>pow</c> (<see cref="Math.Pow"/>) — NOT
+        ///         the product: ucrtbase's <c>pow</c> is not the correctly rounded square (measured: 5,182 of 20M random
+        ///         doubles differ from <c>x*x</c>; NumPy's <c>np.float64(2.3315311434106746e+132)**2</c> is <c>pow</c>'s);</description></item>
+        ///         <item><description>float32 and float16: <c>npy_powf</c> of the (widened) value (<see cref="MathF.Pow"/>),
+        ///         rounded once into t — float16 is <c>half_ctype_power</c>. <c>powf</c> flushes a square below float32's normal
+        ///         range to zero where the product rounds to a subnormal (<c>np.float32(2.9465066e-23)**2</c> is 0, its
+        ///         <c>np.square</c> 1e-45: 33,574 of 20M random floats differ); for float16 the two agree on every bit
+        ///         pattern;</description></item>
+        ///         <item><description>complex128: <c>npy_cpow</c>, which returns <c>(+0, +0)</c> for a zero base (either sign of
+        ///         either part) and unrolls the exponent 2 into the naive <c>cmul(a, a)</c> — scalarmath's product;</description></item>
+        ///         <item><description>the integers (char too) and decimal: <c>@name@_ctype_power</c> squares by repeated
+        ///         multiplication in the dtype — the wrapped product. A bool scalar has no scalarmath power: NumPy's generic
+        ///         path runs the int64 loop, which the NEP 50 dtype (int64 for a bool and a weak int) gives.</description></item>
+        ///     </list>
+        /// </remarks>
+        public static PolyNumber PowTwo(in PolyNumber a)
+        {
+            if (a.IsPython)
+                return FromPython(PyScalar.PowTwo(a.Py));
+            if (a.Kind == PolyNumberKind.Array)
+            {
+                // fast_scalar_power: the exponent 2 maps to np.square for every array dtype (gh-29388).
+                NDArray squared = np.square(a.Array);
+                return a.IsNdArray ? FromArray(squared) : ScalarOf(squared);
+            }
+            if (a.IsComplex64)
+                throw new NotSupportedException("a complex64 scalar's power runs NumPy's complex64 loop, which NumSharp does not have (#569)");
+
+            var two = FromPython(PyScalar.Int(2));
+            NPTypeCode t = LoopDtype(BinaryOp.Multiply, a, two);
+            PolyRaw16 raw, rr;
+            a.WriteAs(t, &raw);
+            switch (t)
+            {
+                case NPTypeCode.Double:
+                {
+                    // npy_pow: the C runtime's pow, not the product (remarks).
+                    double r = Math.Pow(*(double*)&raw, 2.0);
+                    return FromScalar(NPTypeCode.Double, &r);
+                }
+                case NPTypeCode.Single:
+                case NPTypeCode.Half:
+                {
+                    // npy_powf of the widened value, rounded once into t by the house cast (npy_float_to_half for float16).
+                    float f;
+                    PolyConstPool.ConvertBuffer(&raw, t, &f, NPTypeCode.Single, 1);
+                    float r = MathF.Pow(f, 2f);
+                    PolyConstPool.ConvertBuffer(&r, NPTypeCode.Single, &rr, t, 1);
+                    return FromScalar(t, &rr);
+                }
+                case NPTypeCode.Complex:
+                {
+                    // npy_cpow: a zero base with a positive real exponent is (+0, +0); otherwise cmul(a, a).
+                    Complex z = *(Complex*)&raw;
+                    if (z.Real == 0.0 && z.Imaginary == 0.0)
+                    {
+                        Complex zero = default;
+                        return FromScalar(NPTypeCode.Complex, &zero);
+                    }
+                    break;
+                }
+            }
+            var converted = FromScalar(t, &raw);
+            return Binary(BinaryOp.Multiply, converted, converted);
+        }
+
+        /// <summary>
+        ///     A one-input FLOAT-producing ufunc (<c>np.sqrt</c>, <c>np.exp</c>) applied to this value as NumPy applies it to
+        ///     whatever Python passes. An ndarray of rank ≥ 1 goes to the house ufunc and gives an ndarray. Anything
+        ///     scalar-sized — a Python value (converted by its discovered dtype: a bool to bool, an int to int64 or uint64, a
+        ///     float to float64, a complex to complex128), a NumPy scalar or a 0-d array — runs the loop on one element and
+        ///     gives a NumPy SCALAR, because NumPy unwraps a 0-d ufunc result.
+        /// </summary>
+        /// <param name="op">The ufunc's house operation (<see cref="UnaryOp.Sqrt"/>, <see cref="UnaryOp.Exp"/>, …).</param>
+        /// <param name="name">The ufunc's NumPy name, which the object-loop TypeError quotes.</param>
+        /// <param name="arrayUfunc">The house ufunc over an NDArray, for an ndarray operand (a static lambda: no closure).</param>
+        /// <param name="a">The operand.</param>
+        /// <returns>An ndarray for an ndarray operand of rank ≥ 1, a NumPy scalar otherwise.</returns>
+        /// <exception cref="TypeError">A Python int beyond int64 and uint64. NumPy converts it to an OBJECT array, whose
+        ///     loop calls the element's method of the ufunc's name: <c>loop of ufunc does not support argument 0 of type
+        ///     int which has no callable exp method</c>. Or a string operand (the house ufunc's no-loop error).</exception>
+        /// <exception cref="NotSupportedException">A complex64 NumPy scalar (NumPy's complex64 loop; see
+        ///     <see cref="PowTwo"/>).</exception>
+        /// <remarks>
+        ///     A scalar-sized operand runs the house's contiguous whole-array kernel of <paramref name="op"/> over ONE element
+        ///     held on the stack: the kernel <c>np.sqrt</c> / <c>np.exp</c> run, in the loop dtype NumPy picks
+        ///     (<see cref="FloatLoop"/>), without the two 0-d arrays a ufunc call on a scalar costs — the operand and the
+        ///     result, ~0.3 µs each, which made a scalar weight several times slower than NumPy's Python arithmetic. With
+        ///     IL generation disabled (NativeAOT) the operand goes through the NDArray ufunc instead, the same bits slower.
+        /// </remarks>
+        public static PolyNumber FloatUfunc(UnaryOp op, string name, Func<NDArray, NDArray> arrayUfunc, in PolyNumber a)
+        {
+            if (a.IsNdArray || a.IsStringArray)
+                return a.IsNdArray ? FromArray(arrayUfunc(a.Array)) : ScalarOf(arrayUfunc(a.Array));
+            NPTypeCode tin;
+            if (a.IsPython)
+            {
+                if (!a.TryDiscoveredDtype(out tin))
+                    throw new TypeError($"loop of ufunc does not support argument 0 of type {a.Py.TypeName} which has no callable {name} method");
+            }
+            else
+            {
+                if (a.IsComplex64)
+                    throw new NotSupportedException($"a complex64 scalar's {name} runs NumPy's complex64 loop, which NumSharp does not have (#569)");
+                tin = a.Dtype;   // a NumPy scalar or a 0-d array
+            }
+
+            if (!DirectILKernelGenerator.Enabled)
+                return ScalarOf(arrayUfunc(a.ToNDArray()));
+            NPTypeCode tout = FloatLoop(tin);
+            var kernel = DirectILKernelGenerator.GetUnaryKernel(new UnaryKernelKey(tin, tout, op, IsContiguous: true));
+            PolyRaw16 src, dst;
+            a.WriteAs(tin, &src);   // the value in its own dtype (a Python value: its discovered dtype, exactly)
+            long one = 1;
+            kernel(&src, &dst, &one, &one, 1, 1);
+            return FromScalar(tout, &dst);
+        }
+
+        /// <summary>
+        ///     The loop dtype NumPy picks for a float-producing unary ufunc (<c>sqrt</c>, <c>exp</c>, the trigonometric and
+        ///     logarithmic families) with no <c>dtype=</c>: the narrowest float holding the input's integers — bool, int8 and
+        ///     uint8 run float16; int16, uint16 (and NumSharp's char, a uint16) float32; the 32- and 64-bit integers float64 —
+        ///     and every float, complex and decimal dtype its own. The house engine's rule
+        ///     (<c>DefaultEngine.ResolveUnaryFloatReturnType</c>), restated over a dtype code for operands that are not arrays;
+        ///     a unit test holds the two equal for every dtype.
+        /// </summary>
+        /// <param name="t">The input dtype.</param>
+        /// <returns>The loop (and result) dtype.</returns>
+        public static NPTypeCode FloatLoop(NPTypeCode t) => t switch
+        {
+            NPTypeCode.Boolean or NPTypeCode.Byte or NPTypeCode.SByte => NPTypeCode.Half,
+            NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Char => NPTypeCode.Single,
+            NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64 => NPTypeCode.Double,
+            _ => t,
+        };
 
         /// <summary>
         ///     Python's <c>bool(a != 0)</c> — the test <c>{p}line</c> branches on. An ndarray answers through its

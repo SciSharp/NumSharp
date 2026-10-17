@@ -627,5 +627,34 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermroots.html</remarks>
         [NDScoped]
         public NDArray hermroots(object c) => NDPolyAlgebra.Roots(PolyBasis.Hermite, c);
+
+        /// <summary>
+        ///     The physicists' Hermite weight function <c>exp(-x**2)</c>, computed as NumPy 2.4.2 writes it,
+        ///     <c>np.exp(-x**2)</c>. For an ndarray, NumPy's <c>x**2</c> is <c>np.square</c> in x's OWN dtype (not
+        ///     <c>np.power</c>): a bool x squares to int8 (the result is float16), and an integer x wraps before the
+        ///     negation (<c>hermweight(np.uint8 200)</c> is inf). An ndarray is computed in one fused pass.
+        /// </summary>
+        /// <param name="x">
+        ///     The points: an <see cref="NDArray"/> of any layout and dtype, or a typed C# array (an ndarray); a Python
+        ///     scalar — a C# <c>bool</c>, integer, <see cref="System.Numerics.BigInteger"/>, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/>, squared and negated with CPython's arithmetic (exact for an int) before
+        ///     <c>np.exp</c> converts it; or a NumPy scalar (<see cref="System.Half"/>, <c>char</c>, <c>decimal</c>). x is
+        ///     not converted first, so a Python list or tuple is refused by Python's <c>**</c>.
+        /// </param>
+        /// <returns>The weights: an array of x's shape for an ndarray x, in <c>np.exp</c>'s dtype for the squared dtype
+        ///     (float16 for bool / int8 / uint8, float32 for int16 / uint16, float64 for wider integers, x's own for a float
+        ///     or complex x), a 0-d array for a scalar x.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is a Python list or tuple (an <c>object[]</c>, a C# list, a
+        ///     <c>ValueTuple</c>), null or a string: Python's <c>unsupported operand type(s) for ** or pow(): 'list' and
+        ///     'int'</c> (<c>'tuple'</c>, <c>'NoneType'</c>, <c>'str'</c>). A Python int whose negated square is below int64's
+        ///     range (|x| ≥ 3037000500, where the square passes 2**63): NumPy's object loop, <c>loop of ufunc does not support argument 0
+        ///     of type int which has no callable exp method</c>. A string array: <c>np.square</c>'s no-loop
+        ///     error.</exception>
+        /// <exception cref="System.OverflowException">A Python float or complex whose square is past the float range:
+        ///     CPython's <c>(34, 'Result too large')</c> or <c>complex exponentiation</c>. Or a decimal x whose square is past
+        ///     decimal's range (decimal has no NumPy dtype and no infinity).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.hermweight.html</remarks>
+        [NDScoped]
+        public NDArray hermweight(object x) => NDPolyWeight.Weight(PolyBasis.Hermite, x);
     }
 }

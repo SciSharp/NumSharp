@@ -626,5 +626,33 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermeroots.html</remarks>
         [NDScoped]
         public NDArray hermeroots(object c) => NDPolyAlgebra.Roots(PolyBasis.HermiteE, c);
+
+        /// <summary>
+        ///     The probabilists' Hermite weight function <c>exp(-x**2/2)</c>, computed as NumPy 2.4.2 writes it,
+        ///     <c>np.exp(-.5*x**2)</c>. For an ndarray, NumPy's <c>x**2</c> is <c>np.square</c> in x's OWN dtype, so an
+        ///     integer x wraps before the Python float -0.5 promotes the product to float64. An ndarray is computed in one
+        ///     fused pass.
+        /// </summary>
+        /// <param name="x">
+        ///     The points: an <see cref="NDArray"/> of any layout and dtype, or a typed C# array (an ndarray); a Python
+        ///     scalar — a C# <c>bool</c>, integer, <see cref="System.Numerics.BigInteger"/>, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/>, computed with CPython's arithmetic before <c>np.exp</c>
+        ///     (<c>hermeweight(2**70)</c> is 0.0: the square is an exact int, and <c>-.5*</c> it a float); or a NumPy scalar
+        ///     (<see cref="System.Half"/>, <c>char</c>, <c>decimal</c>). x is not converted first, so a Python list or
+        ///     tuple is refused by Python's <c>**</c>.
+        /// </param>
+        /// <returns>The weights: an array of x's shape for an ndarray x (float64 for an integer or bool x, x's own dtype
+        ///     for a float or complex x), a 0-d array for a scalar x.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is a Python list or tuple (an <c>object[]</c>, a C# list, a
+        ///     <c>ValueTuple</c>), null or a string: Python's <c>unsupported operand type(s) for ** or pow(): 'list' and
+        ///     'int'</c> (<c>'tuple'</c>, <c>'NoneType'</c>, <c>'str'</c>). A string array: <c>np.square</c>'s no-loop
+        ///     error.</exception>
+        /// <exception cref="System.OverflowException">A Python float or complex whose square is past the float range
+        ///     (CPython's <c>(34, 'Result too large')</c> or <c>complex exponentiation</c>), or a Python int whose square
+        ///     is too large for a float (<c>int too large to convert to float</c> from <c>-.5*x**2</c>). Or a decimal x whose
+        ///     square is past decimal's range (decimal has no NumPy dtype and no infinity).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermeweight.html</remarks>
+        [NDScoped]
+        public NDArray hermeweight(object x) => NDPolyWeight.Weight(PolyBasis.HermiteE, x);
     }
 }

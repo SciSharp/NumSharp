@@ -626,5 +626,35 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebroots.html</remarks>
         [NDScoped]
         public NDArray chebroots(object c) => NDPolyAlgebra.Roots(PolyBasis.Chebyshev, c);
+
+        /// <summary>
+        ///     The Chebyshev weight function <c>1/sqrt(1 - x**2)</c>, computed as NumPy 2.4.2 writes it,
+        ///     <c>1.0/(np.sqrt(1.0 + x)*np.sqrt(1.0 - x))</c> — two square roots and a product, not the textbook formula,
+        ///     so the bits are NumPy's. It is nan outside [-1, 1] and inf at ±1. An ndarray is computed in one fused pass
+        ///     (no intermediate arrays).
+        /// </summary>
+        /// <param name="x">
+        ///     The points: an <see cref="NDArray"/> of any layout and dtype, or a typed C# array (an ndarray); a Python
+        ///     scalar — a C# <c>bool</c>, integer, <see cref="System.Numerics.BigInteger"/>, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/>, computed with CPython's arithmetic up to the first NumPy call, as NumPy
+        ///     does (<c>chebweight(2)</c> is nan); or a NumPy scalar (<see cref="System.Half"/>, <c>char</c>,
+        ///     <c>decimal</c>). x is not converted first, so a Python list or tuple is refused by Python's <c>+</c>.
+        /// </param>
+        /// <returns>The weights: an array of x's shape for an ndarray x (float64 for an integer or bool x, x's own dtype
+        ///     for a float or complex x), a 0-d array for a scalar x.</returns>
+        /// <exception cref="TypeError"><paramref name="x"/> is a Python list or tuple (an <c>object[]</c>, a C# list, a
+        ///     <c>ValueTuple</c>), null or a string: Python's <c>unsupported operand type(s) for +: 'float' and 'list'</c>
+        ///     (<c>'tuple'</c>, <c>'NoneType'</c>, <c>'str'</c>). Or a string array: <c>np.add</c>'s no-loop error.</exception>
+        /// <exception cref="System.OverflowException">A Python int too large for a float: CPython's <c>int too large to
+        ///     convert to float</c> from <c>1.0 + x</c>. Or a decimal x outside [-1, 1]: decimal (no NumPy dtype) has no NaN,
+        ///     so the house decimal square root of a negative number raises.</exception>
+        /// <exception cref="System.DivideByZeroException">A decimal x of ±1 (<c>1.0/0</c>: decimal has no infinity).</exception>
+        /// <remarks>
+        ///     <para>A complex x inherits <c>np.sqrt</c>'s complex accuracy (a few ULP from NumPy's C runtime
+        ///     <c>csqrt</c>); every real dtype is bit-identical to NumPy.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebweight.html</para>
+        /// </remarks>
+        [NDScoped]
+        public NDArray chebweight(object x) => NDPolyWeight.Weight(PolyBasis.Chebyshev, x);
     }
 }

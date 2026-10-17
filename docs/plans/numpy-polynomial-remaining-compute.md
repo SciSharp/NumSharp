@@ -139,6 +139,29 @@ matched NumPy's complex array case.
 
 ### 3.2 The five weight functions — U8
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyWeight.cs` + the five facade members; oracle
+> tiers `polyweight.jsonl` (1,860 portable cases) and `polyweight_host.jsonl` (1,235 cases, `RunHostLibmCorpus`), zero
+> excuses; unit tests `test/NumSharp.Tests/Polynomial/PolynomialWeightTests.cs` (15, 13 of 14 planted bugs caught — the
+> survivor was an equivalent special case, removed); benchmark `benchmark/polynomial/polyweight_results.md` (189 cells,
+> all bit-exact, geomean 1.78×). What the delivery changed against the recommendation below:
+> - **Three routes beyond the fused tree, all exact.** A broadcast x is computed once on its un-broadcast core and copied
+>   into NumPy's layout (layouts section 1.38 → 2.46×). An integer or bool x is cast once into the first float loop,
+>   NumPy's own buffered cast, then runs on one dtype (the fused kernel over a mixed-dtype tree runs scalar: chebweight
+>   int16 531 → 322 µs against NumPy's 509, lagweight int16 427 → 128 µs against 154, hermweight bool 4,439 → 1,328 µs
+>   against 1,481). An N-D x that is not C-contiguous runs over its C-ordered permutation and the C result is relabelled
+>   with NumPy's layout (mapdomain's route), which the oracle's flags facet caught for a 3-D permutation.
+> - **The scalar path runs the house kernel on one stack element** (`PolyNumber.FloatUfunc`): a ufunc on a scalar had
+>   cost two 0-d arrays (~0.3 µs each). A Python-float call now runs 0.14–0.65× NumPy (0.13–0.24× before), a 0-d array 0.94–2.33×, three points 1.43–4.57×; the floor is the result array itself
+>   (`NDArray.Scalar` alone is 0.34 µs, NumPy's whole `legweight(0.5)` 0.11 µs, a Python float).
+> - **A string array** (U, S, StringDType) reaches the first statement's house ufunc unconverted and raises NumPy's
+>   no-loop text, the Python float named as NumPy names it (`PolyNumber.Binary` passes a Python value with the house's
+>   Python-literal mark).
+> - **Finding F6** (below): NumPy's scalar `x**2` is `pow` / `powf`, not the product, for float64 / float32 NumPy scalars
+>   and Python floats.
+> - **The cells under 1.5×** are floors: float64 `exp` (the C runtime on both sides, about 1.0× up to 100K points, above
+>   1.5× at 1M), float32 `exp` (the same AVX2 algorithm on both sides, 1.1–1.35×), float16 `exp` (the house `np.exp`
+>   kernel, itself 0.77× NumPy's HALF loop: lever 9 in §5), and the scalar result array.
+
 **NumPy 2.4.2:**
 
 | Name | Statement |
@@ -417,11 +440,11 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | # | NumPy name | Module(s) | Recommended compute route | Rejected | Parity tier | Measured / expected NPY/NS |
 |---|---|---|---|---|---|---|
 | 1 | `polyvalfromroots` | polynomial | **U3 step-table IL kernel, new "root product" skeleton, NDIter-driven**; NumPy's prologue; complex form by reduction mode | composition (temp, 3–33× slower, complex inexact); `np.evaluate` Prod; NDIter REDUCE; standalone Direct IL | portable (complex via `PolyComplexProduct`) | 4.2–35.6× (proxy) |
-| 2 | `chebweight` | chebyshev | **fused `np.evaluate`**; f16 eager | Direct IL | portable (sqrt exact) | 2.1–9.7× |
-| 3 | `legweight` | legendre | **fused `np.evaluate`**; f16 eager | — | portable | 8.9× (f64 1M) |
-| 4 | `lagweight` | laguerre | **fused `np.evaluate`**; f16 eager | — | host-libm (exp) | 1.75× f64 1M (CRT exp floor) |
-| 5 | `hermweight` | hermite | **fused `np.evaluate` with `Square`** (NumPy's `x**2`); f16 eager | `Power(x, 2)` (pow: slower, not NumPy's op) | host-libm | 1.20× / 1.95× f64 1K / 1M (exp floor), 4.1× f32 |
-| 6 | `hermeweight` | hermite_e | **fused `np.evaluate` with `Square`**; f16 eager | `Power(x, 2)` | host-libm | as `hermweight` |
+| 2 | `chebweight` | chebyshev | **DELIVERED** — fused `np.evaluate`; f16 / decimal eager; broadcast core; int cast-first | Direct IL | portable (sqrt exact; complex not pinned) | arrays 1.34–17.4× (geomean 2.91), Python float 0.65× |
+| 3 | `legweight` | legendre | **DELIVERED** — as chebweight | — | portable | arrays 1.39–12.8× (geomean 3.18), Python float 0.14× (result-array floor) |
+| 4 | `lagweight` | laguerre | **DELIVERED** — fused; int16/uint8 cast-first; f16 eager | — | portable f32, host-libm f64/f16/complex | f64 1.04× / 1.84× at 100K / 1M (CRT exp floor), f16 0.76× (house f16 exp); arrays geomean 1.45 |
+| 5 | `hermweight` | hermite | **DELIVERED** — fused with `Square` (NumPy's `x**2`); int / bool cast-first; f16 eager | `Power(x, 2)` (pow: slower, not NumPy's op) | as lagweight | f64 0.98× / 1.98× at 100K / 1M, f16 0.76×; arrays geomean 1.51 |
+| 6 | `hermeweight` | hermite_e | **DELIVERED** — as hermweight | `Power(x, 2)` | as lagweight | f64 0.92× / 1.87× at 100K / 1M; arrays geomean 1.54 |
 | 7 | `chebgauss` | chebyshev | **`np.arange` + fused `Cos`; `np.full` for w** | eager (2× the fixed cost) | host-libm (cos) | 2.1–3.0× |
 | 8 | `leggauss` | legendre | **composition** (U7 companion → `eigvalsh` → U3/U4 → house ufuncs/reductions) | arena (not needed) | host-pinned (syevd) | 4.3–10.2× |
 | 9 | `laggauss` | laguerre | **composition** (as leggauss, no symmetrisation) | — | host-pinned | 18.9× (deg 20) |
@@ -461,6 +484,11 @@ Measured proxies (the unit functions the members call; the class adds an object 
 7. *Optional:* fusing `mapdomain` into the U3 kernel prologue for the classes' `__call__`.
 8. *Not needed:* X23 (NDExpr `Power` fast path). The weights use `Square`, which is what NumPy's `x**2` runs; X23
    remains open for np.kaiser.
+9. *Optional, library-wide (found by the weights):* **a 65,536-entry table for float16 `np.exp`.** The house float16
+   `exp` (`(Half)MathF.Exp((float)h)`) runs 0.77× NumPy's scalar HALF loop at 100K (1,082 against 831 µs), which caps
+   the float16 weights at 0.76–0.87× and the int8 / uint8 / bool ones (a float16 `exp` loop) at 0.88–0.95×. A table of
+   the house's own result for every bit pattern is exact by construction and would read one 128 KB L2-resident table
+   per element; it is an `np.exp` change with its own validation, not a weights change.
 
 ## 6. Findings on the way
 
@@ -480,6 +508,15 @@ Measured proxies (the unit functions the members call; the class adds an object 
   does not reproduce. Any weight or point generator dominated by one of them inherits this floor.
 - **F5 — measurement trap:** repeatedly dividing one buffer in place by values ≥ 1 drives it into subnormals; the
   timing then measures denormal arithmetic, not the kernel. Time in-place routes on a fresh buffer per call.
+- **F6 — NumPy's SCALAR `x**2` is the C runtime's `pow`, not the product** (found delivering the weights). CPython's
+  `float ** 2` calls `pow` after `float_pow`'s special cases, NumPy's `np.float64 ** 2` `npy_pow` and its
+  `np.float32 ** 2` `npy_powf`. ucrtbase's `pow` is not the correctly rounded square: `Math.Pow(x, 2)` differs from
+  `x*x` on 5,182 of 20M random doubles, `MathF.Pow` on 33,574 of 20M floats (it flushes subnormal squares to zero:
+  `np.float32(2.9465066e-23)**2` is 0, its `np.square` 1e-45). An ARRAY `x**2` is `np.square` (F1), the product. float16
+  is the one dtype where the two agree on every bit pattern. `PyScalar.PowTwo` / `PolyNumber.PowTwo` port this.
+- **F7 — the scalar floor.** A NumSharp function of a scalar returns a 0-d NDArray, and `NDArray.Scalar` alone costs
+  0.34 µs (allocation plus disposal); NumPy returns a Python float or a NumPy scalar. So any scalar call NumPy answers
+  in under ~0.5 µs of Python arithmetic stays below 1.5×, whatever the computation costs.
 
 ## 7. Oracle and test hooks per family
 
@@ -500,7 +537,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
   proposes, or `Func<NDArray, object[], NDArray>` only?
 - **F2.** Fix the F-result broadcast binary path library-wide (it also affects any `x.T op v`), or only spell the fit's
   scaling in C order?
-- **The float16 weights.** Accept the eager route (the `np.var` precedent), or wait for lever 6?
+- **The float16 weights.** Decided at delivery: the eager route (the `np.var` precedent). Its speed is the house
+  float16 `exp`'s (lever 9), not the route's: NDExpr's float16 path measured 2–5× slower still.
 
 ## 9. Reproduce
 

@@ -168,6 +168,77 @@ namespace NumSharp.Backends.Kernels
         };
 
         /// <summary>
+        ///     CPython 3.12's <c>a ** 2</c> — the power with the exact int exponent 2, as <c>numpy.polynomial</c>'s weight
+        ///     functions write it (<c>np.exp(-x**2)</c>) and run it on a Python-scalar x before any NumPy call. An int (a
+        ///     bool too: <c>True**2</c> is the int 1) squares exactly; a float runs <c>float_pow</c>; a complex runs
+        ///     <c>complex_pow</c>'s small-integer branch <c>c_powu</c>.
+        /// </summary>
+        /// <param name="a">The base.</param>
+        /// <returns><c>a ** 2</c>, of CPython's result type (an int for an int or bool base).</returns>
+        /// <exception cref="OverflowException">
+        ///     A float whose square is past the float range — <c>float_pow</c> sees the platform <c>pow</c> return
+        ///     <c>HUGE_VAL</c> and raises <c>OverflowError: (34, 'Result too large')</c>, the text of
+        ///     <c>PyErr_SetFromErrno(ERANGE)</c>; or a complex whose square has an infinite part, which
+        ///     <c>_Py_ADJUST_ERANGE2</c> turns into <c>OverflowError: complex exponentiation</c>.
+        /// </exception>
+        /// <remarks>
+        ///     <para><b>Float</b> (<c>Objects/floatobject.c</c> <c>float_pow</c>, in its order): a NaN base is returned as it is
+        ///     (not even quieted — CPython returns <c>iv</c> itself); an infinite base gives +inf (the exponent is positive
+        ///     and even); a zero base, either sign, gives +0.0; a negative base is replaced by its magnitude (2 is an
+        ///     integer, and even, so the result is not negated); 1.0 gives 1.0; anything else is the platform
+        ///     <c>pow(|a|, 2.0)</c>. <see cref="Math.Pow"/> calls that same C runtime function (ucrtbase on win-amd64, the
+        ///     corpus host; libm elsewhere), so its result — not <c>a*a</c>, which ucrtbase's <c>pow</c> does not always equal
+        ///     (measured: 5,182 of 20M random doubles differ; <c>(2.3315311434106746e+132)**2</c> is CPython's <c>pow</c>
+        ///     answer, one ULP below the product) — is the faithful one. A square that underflows to zero or to a subnormal is returned without an error on
+        ///     win-amd64 (probed: ucrtbase's <c>pow</c> does not set <c>ERANGE</c> there).</para>
+        ///     <para><b>Complex</b> (<c>Objects/complexobject.c</c>): an exponent with a zero imaginary part and an integral
+        ///     real part within ±100 takes <c>c_powi</c> → <c>c_powu(a, 2)</c>, which starts from <c>r = 1+0j</c>, squares
+        ///     <c>p = a*a</c> for bit 1 (clear), and multiplies <c>r = r*p</c> for bit 2 — two <c>_Py_c_prod</c> naive
+        ///     products, so <c>(inf+0j)**2</c> is <c>(nan+nanj)</c> (the <c>0*inf</c> of the first product meets the 1 of
+        ///     the second), not inf. Only then is the result tested for an infinite part.</para>
+        /// </remarks>
+        public static PyScalar PowTwo(in PyScalar a)
+        {
+            switch (a.Kind)
+            {
+                case PyKind.Int:
+                    // int_pow: exact at any magnitude; a bool base gives a plain int (the tag is a leaf property).
+                    return Int(a.I * a.I);
+                case PyKind.Float:
+                {
+                    double v = a.F;
+                    if (double.IsNaN(v))
+                        return a;                                  // nan**w = nan: the operand itself, bits untouched
+                    if (double.IsInfinity(v))
+                        return Float(double.PositiveInfinity);     // (±inf)**2 = |inf| (even exponent)
+                    if (v == 0.0)
+                        return Float(0.0);                         // (±0)**2 = +0 (even exponent: no copysign)
+                    if (v < 0.0)
+                        v = -v;                                    // integral exponent: pow(|v|, 2), even, not negated
+                    if (v == 1.0)
+                        return Float(1.0);                         // 1**w = 1, kept away from the libm
+                    double r = Math.Pow(v, 2.0);
+                    if (double.IsInfinity(r))
+                        throw new OverflowException("(34, 'Result too large')");
+                    return Float(r);
+                }
+                default:
+                {
+                    // c_powu(a, 2): r = c_1; bit 1 clear -> p = p*p; bit 2 set -> r = r*p. The third squaring c_powu
+                    // performs before its loop ends is unused and cannot raise, so it is omitted.
+                    Complex p = ComplexProd(a.C, a.C);
+                    Complex r = ComplexProd(s_complexOne, p);
+                    if (double.IsInfinity(r.Real) || double.IsInfinity(r.Imaginary))
+                        throw new OverflowException("complex exponentiation");
+                    return Cplx(r);
+                }
+            }
+        }
+
+        /// <summary>CPython's <c>c_1</c>, the <c>1+0j</c> <c>c_powu</c> starts its product from.</summary>
+        private static readonly Complex s_complexOne = new Complex(1.0, 0.0);
+
+        /// <summary>
         ///     CPython's <c>x != 0</c>: an int compares exactly, a float is nonzero unless it is ±0 (NaN IS
         ///     nonzero), a complex is nonzero unless both parts are ±0.
         /// </summary>
