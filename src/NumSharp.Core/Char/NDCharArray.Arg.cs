@@ -13,8 +13,9 @@ using NumSharp.Backends.Strings;
 // sort is in place, searchsorted allocates a plain array): the inherited NDArray members already answer as NumPy does.
 //
 // chararray.partition(sep) is the string partition (np.char.partition), not ndarray's in-place sort partition:
-// c.partition(1) partitions the strings around the text '1'. NumSharp's string partition is a later stage of the string
-// support (np.strings P2.5), so it raises the deferral; the forms that pass axis= meet NumPy's TypeError.
+// c.partition(1) partitions the strings around the text '1'. It computes through np.strings.partition (strings phase 2,
+// P2.5), the three parts stacked on a new last axis and returned as a chararray; the forms that pass axis= meet NumPy's
+// TypeError.
 //
 // =============================================================================
 

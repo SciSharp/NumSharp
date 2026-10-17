@@ -55,7 +55,7 @@ namespace NumSharp.Backends.Strings
     ///     dynamic code) call the same bodies with run-time widths.
     ///     </para>
     /// </remarks>
-    internal static unsafe class NDTextElements
+    internal static unsafe partial class NDTextElements
     {
         /// <summary>The <c>STRIPTYPE</c> of a strip loop: strip leading units only (<c>lstrip</c>).</summary>
         internal const int LeftStrip = 0;
@@ -94,13 +94,18 @@ namespace NumSharp.Backends.Strings
         /// <param name="width">The element width in bytes (a whole number of units).</param>
         /// <returns>The length in units, 0 for an element that is all NULs.</returns>
         /// <remarks>
-        ///     Scans from the element's END in vector chunks (32, then 16 bytes) and then 8 / 4 / 1-byte steps, never
-        ///     reading before <paramref name="p"/> or past <c>p + width</c>; with a constant <paramref name="width"/> the
-        ///     chunk sequence folds to straight-line code (one compare for a <c>&lt;U8</c> element).
+        ///     Up to 32 bytes: scans from the element's END in vector chunks (32, then 16 bytes) and then 8 / 4 / 1-byte
+        ///     steps, never reading before <paramref name="p"/> or past <c>p + width</c>; with a constant
+        ///     <paramref name="width"/> the chunk sequence folds to straight-line code (one compare for a <c>&lt;U8</c>
+        ///     element). Wider elements of at most 64 units take the lane masks (<see cref="UnitsByLanes{TUnit}"/>: every
+        ///     chunk tested at once), because the scan's exit chunk depends on the text's length and mispredicts on
+        ///     random lengths (<c>str_len</c> of a <c>&lt;U40</c> array: ~10 ns per element scanning, ~2.5 ns by the masks).
         /// </remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static int Units<TUnit>(byte* p, int width) where TUnit : unmanaged
-            => LengthBytes(p, width, sizeof(TUnit)) / sizeof(TUnit);
+            => width > 32 && MasksFit<TUnit>(width)
+                ? UnitsByLanes<TUnit>(p, width)
+                : LengthBytes(p, width, sizeof(TUnit)) / sizeof(TUnit);
 
         /// <summary>
         ///     The byte length of an element's text: one past its last nonzero byte, rounded up to the end of the unit that
@@ -241,10 +246,53 @@ namespace NumSharp.Backends.Strings
         /// <param name="start">The start index (CPython's slice notation, see <see cref="AdjustOffsets"/>).</param>
         /// <param name="end">The end index.</param>
         /// <returns>The index in units, or -1.</returns>
-        /// <remarks>The results depend only on CPython's match semantics (fastsearch finds the first occurrence), which
-        ///     <see cref="MemoryExtensions.IndexOf{T}(ReadOnlySpan{T}, ReadOnlySpan{T})"/> shares.</remarks>
+        /// <remarks>The results depend only on CPython's match semantics (fastsearch finds the first occurrence): the lane
+        ///     masks' lowest match (<see cref="FindLanes{TUnit}"/>, elements of at most 64 units on AVX2 hosts) and
+        ///     <see cref="MemoryExtensions.IndexOf{T}(ReadOnlySpan{T}, ReadOnlySpan{T})"/> (<see cref="FindScalar{TUnit}"/>)
+        ///     share them.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static long Find<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
+            where TUnit : unmanaged, IEquatable<TUnit>
+            => MasksFit<TUnit>(hayWidth)
+                ? FindLanes<TUnit>(hay, hayWidth, sub, subWidth, start, end)
+                : FindScalar<TUnit>(hay, hayWidth, sub, subWidth, start, end);
+
+        /// <summary><see cref="Find{TUnit}"/> by the lane masks: the lowest lane of the needle's match mask in the range.</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The searched element.</param>
+        /// <param name="hayWidth">Its width in bytes (<see cref="MasksFit{TUnit}"/> holds).</param>
+        /// <param name="sub">The searched-for element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <returns>The index in units, or -1.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long FindLanes<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(hay, hayWidth);
+            int len2 = Units<TUnit>(sub, subWidth);
+            AdjustOffsets(ref start, ref end, len1);
+            if (end - start < len2)
+                return -1;
+            if (len2 == 0)
+                return start;
+            // A match at p needs p in [start, end - len2]: 0 <= start and end <= len1 <= 64, so the range is lanes.
+            ulong cand = MatchLanes<TUnit>(hay, hayWidth, sub, len2) & RangeLanes(start, end - len2);
+            return cand == 0 ? -1 : BitOperations.TrailingZeroCount(cand);
+        }
+
+        /// <summary><see cref="Find{TUnit}"/> by span searches (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The searched element.</param>
+        /// <param name="hayWidth">Its width in bytes.</param>
+        /// <param name="sub">The searched-for element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <returns>The index in units, or -1.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long FindScalar<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
             int len1 = Units<TUnit>(hay, hayWidth);
@@ -273,8 +321,50 @@ namespace NumSharp.Backends.Strings
         /// <param name="start">The start index.</param>
         /// <param name="end">The end index.</param>
         /// <returns>The index in units, or -1.</returns>
+        /// <remarks>The lane masks' highest match (<see cref="RFindLanes{TUnit}"/>) on AVX2 hosts for elements of at most 64
+        ///     units, span searches (<see cref="RFindScalar{TUnit}"/>) otherwise.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static long RFind<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
+            where TUnit : unmanaged, IEquatable<TUnit>
+            => MasksFit<TUnit>(hayWidth)
+                ? RFindLanes<TUnit>(hay, hayWidth, sub, subWidth, start, end)
+                : RFindScalar<TUnit>(hay, hayWidth, sub, subWidth, start, end);
+
+        /// <summary><see cref="RFind{TUnit}"/> by the lane masks: the highest lane of the needle's match mask in the range.</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The searched element.</param>
+        /// <param name="hayWidth">Its width in bytes (<see cref="MasksFit{TUnit}"/> holds).</param>
+        /// <param name="sub">The searched-for element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <returns>The index in units, or -1.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long RFindLanes<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(hay, hayWidth);
+            int len2 = Units<TUnit>(sub, subWidth);
+            AdjustOffsets(ref start, ref end, len1);
+            if (end - start < len2)
+                return -1;
+            if (len2 == 0)
+                return end;
+            ulong cand = MatchLanes<TUnit>(hay, hayWidth, sub, len2) & RangeLanes(start, end - len2);
+            return cand == 0 ? -1 : 63 - BitOperations.LeadingZeroCount(cand);
+        }
+
+        /// <summary><see cref="RFind{TUnit}"/> by span searches (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The searched element.</param>
+        /// <param name="hayWidth">Its width in bytes.</param>
+        /// <param name="sub">The searched-for element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <returns>The index in units, or -1.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long RFindScalar<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
             int len1 = Units<TUnit>(hay, hayWidth);
@@ -304,8 +394,63 @@ namespace NumSharp.Backends.Strings
         /// <param name="start">The start index.</param>
         /// <param name="end">The end index.</param>
         /// <returns>The count (0 for a reversed or too-short range).</returns>
+        /// <remarks>The lane masks (<see cref="CountLanes{TUnit}"/>) on AVX2 hosts for elements of at most 64 units, span
+        ///     searches (<see cref="CountScalar{TUnit}"/>) otherwise.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static long Count<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
+            where TUnit : unmanaged, IEquatable<TUnit>
+            => MasksFit<TUnit>(hayWidth)
+                ? CountLanes<TUnit>(hay, hayWidth, sub, subWidth, start, end)
+                : CountScalar<TUnit>(hay, hayWidth, sub, subWidth, start, end);
+
+        /// <summary>
+        ///     <see cref="Count{TUnit}"/> by the lane masks: the match mask's population for a one-unit needle, else the
+        ///     greedy walk over its bits (each match clears the lanes it covers, as FAST_COUNT resumes after a match).
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The searched element.</param>
+        /// <param name="hayWidth">Its width in bytes (<see cref="MasksFit{TUnit}"/> holds).</param>
+        /// <param name="sub">The counted element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <returns>The count.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long CountLanes<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(hay, hayWidth);
+            int len2 = Units<TUnit>(sub, subWidth);
+            AdjustOffsets(ref start, ref end, len1);
+            if (end < start || end - start < len2)
+                return 0;
+            if (len2 == 0)
+                return end - start + 1;
+            ulong c = MatchLanes<TUnit>(hay, hayWidth, sub, len2) & RangeLanes(start, end - len2);
+            if (len2 == 1)
+                return BitOperations.PopCount(c);
+            long count = 0;
+            while (c != 0)
+            {
+                int p = BitOperations.TrailingZeroCount(c);
+                count++;
+                // The next match starts at or after p + len2.
+                c &= ~LowLanes(p + len2);
+            }
+            return count;
+        }
+
+        /// <summary><see cref="Count{TUnit}"/> by span searches (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The searched element.</param>
+        /// <param name="hayWidth">Its width in bytes.</param>
+        /// <param name="sub">The counted element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <returns>The count.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long CountScalar<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
             int len1 = Units<TUnit>(hay, hayWidth);
@@ -344,8 +489,54 @@ namespace NumSharp.Backends.Strings
         /// <param name="end">The end index.</param>
         /// <param name="back">True for <c>endswith</c> (NumPy's <c>STARTPOSITION::BACK</c>).</param>
         /// <returns>1 for a match, 0 otherwise (the bool the loop stores).</returns>
+        /// <remarks>The lane masks (<see cref="TailMatchLanes{TUnit}"/>: the match mask's bit at the tested offset) on AVX2
+        ///     hosts for elements of at most 64 units, a span compare (<see cref="TailMatchScalar{TUnit}"/>) otherwise.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static byte TailMatch<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end, bool back)
+            where TUnit : unmanaged, IEquatable<TUnit>
+            => MasksFit<TUnit>(hayWidth)
+                ? TailMatchLanes<TUnit>(hay, hayWidth, sub, subWidth, start, end, back)
+                : TailMatchScalar<TUnit>(hay, hayWidth, sub, subWidth, start, end, back);
+
+        /// <summary><see cref="TailMatch{TUnit}"/> by the lane masks: the needle's match mask read at the tested offset.</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The tested element.</param>
+        /// <param name="hayWidth">Its width in bytes (<see cref="MasksFit{TUnit}"/> holds).</param>
+        /// <param name="sub">The prefix / suffix element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <param name="back">True for <c>endswith</c>.</param>
+        /// <returns>1 for a match, 0 otherwise.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static byte TailMatchLanes<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end, bool back)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(hay, hayWidth);
+            int len2 = Units<TUnit>(sub, subWidth);
+            AdjustOffsets(ref start, ref end, len1);
+            end -= len2;
+            if (end < start)
+                return 0;
+            if (len2 == 0)
+                return 1;
+            // 0 <= start <= offset <= end = (adjusted end) - len2 <= 63: a lane of the mask.
+            long offset = back ? end : start;
+            return (byte)((MatchLanes<TUnit>(hay, hayWidth, sub, len2) >> (int)offset) & 1);
+        }
+
+        /// <summary><see cref="TailMatch{TUnit}"/> by a span compare (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The tested element.</param>
+        /// <param name="hayWidth">Its width in bytes.</param>
+        /// <param name="sub">The prefix / suffix element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index.</param>
+        /// <param name="end">The end index.</param>
+        /// <param name="back">True for <c>endswith</c>.</param>
+        /// <returns>1 for a match, 0 otherwise.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static byte TailMatchScalar<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end, bool back)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
             int len1 = Units<TUnit>(hay, hayWidth);
@@ -380,10 +571,61 @@ namespace NumSharp.Backends.Strings
         ///     NumPy's trailing loop also strips an embedded NUL (<c>*traverse_buf != 0 &amp;&amp; !isspace</c> keeps only a
         ///     nonzero non-space unit), while the leading loop stops at one: <c>strip(' \0ab')</c> is <c>'\0ab'</c> and
         ///     <c>strip('ab\0 ')</c> is <c>'ab'</c> (probed 2.4.2). Whitespace is the element class's
-        ///     (<see cref="IsSpace{TUnit}"/>).
+        ///     (<see cref="IsSpace{TUnit}"/>). Elements of at most 64 bytes on AVX2 hosts take the lane masks and one gather
+        ///     (<see cref="StripWhitespaceLanes{TUnit}"/>), the rest the unit loops (<see cref="StripWhitespaceScalar{TUnit}"/>).
         /// </remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void StripWhitespace<TUnit>(byte* src, int width, byte* dst, int type) where TUnit : unmanaged
+        {
+            if (SelectsFit(width))
+                StripWhitespaceLanes<TUnit>(src, width, dst, type);
+            else
+                StripWhitespaceScalar<TUnit>(src, width, dst, type);
+        }
+
+        /// <summary>
+        ///     <see cref="StripWhitespace{TUnit}"/> by the lane masks: the first kept unit is the lowest non-whitespace lane,
+        ///     the last the highest lane that is neither whitespace nor NUL (NumPy's trailing loop), and one gather moves
+        ///     the kept units to the front of the output.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes (<see cref="SelectsFit"/> holds).</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="type">The strip type.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void StripWhitespaceLanes<TUnit>(byte* src, int width, byte* dst, int type) where TUnit : unmanaged
+        {
+            // One NUL mask serves the length (one past the last nonzero unit) and the trailing loop's NUL test.
+            ulong zero = EqualLanes<TUnit>(src, width, 0);
+            int len = 64 - BitOperations.LeadingZeroCount(~zero & LowLanes(width / sizeof(TUnit)));
+            ulong inText = LowLanes(len);
+            ulong space = SpaceLanes<TUnit>(src, width) & inText;
+            int start = 0;
+            if (type != RightStrip)
+            {
+                ulong kept = ~space & inText;
+                start = kept == 0 ? len : BitOperations.TrailingZeroCount(kept);
+            }
+            int stop = len;
+            if (type != LeftStrip)
+            {
+                // Only a nonzero non-space unit at or after start stops the trailing loop.
+                ulong kept = ~(space | zero) & inText & ~LowLanes(start);
+                stop = kept == 0 ? start : 64 - BitOperations.LeadingZeroCount(kept);
+            }
+            LoadElement(src, width, out var lo, out var hi);
+            CopyLanes<TUnit>(lo, hi, width, start, stop - start, dst, width);
+        }
+
+        /// <summary><see cref="StripWhitespace{TUnit}"/> by NumPy's unit loops (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="type">The strip type.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void StripWhitespaceScalar<TUnit>(byte* src, int width, byte* dst, int type) where TUnit : unmanaged
         {
             int len = Units<TUnit>(src, width);
             int start = 0;
@@ -416,8 +658,70 @@ namespace NumSharp.Backends.Strings
         /// <param name="charsWidth">Its width in bytes.</param>
         /// <param name="dst">The output element.</param>
         /// <param name="type">The strip type.</param>
+        /// <remarks>Elements of at most 64 bytes with a set of at most <see cref="StripCharsLaneSet"/> units take the lane
+        ///     masks (<see cref="StripCharsLanes{TUnit}"/>: one equality mask per set unit, OR-ed), the rest the unit loops
+        ///     (<see cref="StripCharsScalar{TUnit}"/>).</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void StripChars<TUnit>(byte* src, int width, byte* chars, int charsWidth, byte* dst, int type)
+            where TUnit : unmanaged, IEquatable<TUnit>
+        {
+            if (SelectsFit(width) && Units<TUnit>(chars, charsWidth) <= StripCharsLaneSet)
+                StripCharsLanes<TUnit>(src, width, chars, charsWidth, dst, type);
+            else
+                StripCharsScalar<TUnit>(src, width, chars, charsWidth, dst, type);
+        }
+
+        /// <summary>The largest strip set (units) <see cref="StripChars{TUnit}"/> tests lane by lane: each set unit costs one
+        ///     equality mask, and a long set is cheaper searched per unit.</summary>
+        internal const int StripCharsLaneSet = 16;
+
+        /// <summary>
+        ///     <see cref="StripChars{TUnit}"/> by the lane masks: the set's lanes are the OR of one equality mask per set
+        ///     unit; the first kept unit is the lowest lane outside the set, the last the highest, and one gather moves them.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes (<see cref="SelectsFit"/> holds).</param>
+        /// <param name="chars">The strip-set element.</param>
+        /// <param name="charsWidth">Its width in bytes.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="type">The strip type.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void StripCharsLanes<TUnit>(byte* src, int width, byte* chars, int charsWidth, byte* dst, int type)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(src, width);
+            int len2 = len1 == 0 ? 0 : Units<TUnit>(chars, charsWidth);
+            int start = 0, stop = len1;
+            if (len2 != 0)
+            {
+                ulong inSet = 0;
+                for (int j = 0; j < len2; j++)
+                    inSet |= EqualLanes<TUnit>(src, width, UnitAt<TUnit>(chars, j));
+                // The units past len1 are trailing NULs: never kept, never part of the text.
+                ulong kept = ~inSet & LowLanes(len1);
+                if (type != RightStrip)
+                    start = kept == 0 ? len1 : BitOperations.TrailingZeroCount(kept);
+                if (type != LeftStrip)
+                {
+                    ulong keptRight = kept & ~LowLanes(start);
+                    stop = keptRight == 0 ? start : 64 - BitOperations.LeadingZeroCount(keptRight);
+                }
+            }
+            LoadElement(src, width, out var lo, out var hi);
+            CopyLanes<TUnit>(lo, hi, width, start, stop - start, dst, width);
+        }
+
+        /// <summary><see cref="StripChars{TUnit}"/> by NumPy's unit loops (any width or set; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes.</param>
+        /// <param name="chars">The strip-set element.</param>
+        /// <param name="charsWidth">Its width in bytes.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="type">The strip type.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void StripCharsScalar<TUnit>(byte* src, int width, byte* chars, int charsWidth, byte* dst, int type)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
             int len1 = Units<TUnit>(src, width);
@@ -447,8 +751,48 @@ namespace NumSharp.Backends.Strings
         /// <param name="stop">The slice stop.</param>
         /// <param name="step">The slice step (never 0: the wrapper raises first).</param>
         /// <param name="dst">The output element.</param>
+        /// <remarks>Elements of at most 64 bytes on AVX2 hosts take one gather by <c>start + i·step</c>
+        ///     (<see cref="SelectUnits{TUnit}"/>), the rest a copy (step 1) or a unit loop.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void Slice<TUnit>(byte* src, int width, long start, long stop, long step, byte* dst) where TUnit : unmanaged
+        {
+            if (SelectsFit(width))
+                SliceLanes<TUnit>(src, width, start, stop, step, dst);
+            else
+                SliceScalar<TUnit>(src, width, start, stop, step, dst);
+        }
+
+        /// <summary><see cref="Slice{TUnit}"/> by one gather: output unit i is input unit <c>start + i·step</c> for the
+        ///     adjusted slice's units.</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes (<see cref="SelectsFit"/> holds).</param>
+        /// <param name="start">The slice start.</param>
+        /// <param name="stop">The slice stop.</param>
+        /// <param name="step">The slice step (never 0).</param>
+        /// <param name="dst">The output element.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void SliceLanes<TUnit>(byte* src, int width, long start, long stop, long step, byte* dst) where TUnit : unmanaged
+        {
+            int len = Units<TUnit>(src, width);
+            long n = AdjustSliceIndices(len, ref start, ref stop, step);
+            // n <= len <= 64, and every start + i*step below n is a unit index; a step past int's range selects at most
+            // one unit, so its truncation reaches only lanes the count zeroes.
+            LoadElement(src, width, out var lo, out var hi);
+            SelectUnits<TUnit>(lo, hi, width, width, (int)start, unchecked((int)step), (int)n, out var rlo, out var rhi);
+            StoreElement(dst, width, rlo, rhi);
+        }
+
+        /// <summary><see cref="Slice{TUnit}"/> by a copy (step 1) or a unit walk (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes.</param>
+        /// <param name="start">The slice start.</param>
+        /// <param name="stop">The slice stop.</param>
+        /// <param name="step">The slice step (never 0).</param>
+        /// <param name="dst">The output element.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void SliceScalar<TUnit>(byte* src, int width, long start, long stop, long step, byte* dst) where TUnit : unmanaged
         {
             int len = Units<TUnit>(src, width);
             long n = AdjustSliceIndices(len, ref start, ref stop, step);
@@ -529,8 +873,60 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The output element.</param>
         /// <param name="outWidth">The output width in bytes (at least the result's).</param>
         /// <param name="pos">The justification (<see cref="Center"/>, <see cref="Left"/>, <see cref="Right"/>).</param>
+        /// <remarks>Input and output elements of at most 64 bytes on AVX2 hosts take one gather with the fill blended in
+        ///     (<see cref="PadLanes{TUnit}"/>), the rest fills and copies (<see cref="PadScalar{TUnit}"/>).</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void Pad<TUnit>(byte* src, int width, long padWidth, byte* fill, byte* dst, int outWidth, int pos)
+            where TUnit : unmanaged
+        {
+            if (SelectsFit(width) && SelectsFit(outWidth))
+                PadLanes<TUnit>(src, width, padWidth, UnitAt<TUnit>(fill, 0), dst, outWidth, pos);
+            else
+                PadScalar<TUnit>(src, width, padWidth, fill, dst, outWidth, pos);
+        }
+
+        /// <summary>
+        ///     <see cref="Pad{TUnit}"/> (and <see cref="ZFill{TUnit}"/>'s padding) by one gather: output unit o is input unit
+        ///     <c>o - left</c> inside the text, the fill elsewhere below the final width, and 0 past it.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">Its width in bytes (<see cref="SelectsFit"/> holds).</param>
+        /// <param name="padWidth">The requested width in units.</param>
+        /// <param name="fillUnit">The fill character.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="outWidth">The output width in bytes (<see cref="SelectsFit"/> holds; at least the result's).</param>
+        /// <param name="pos">The justification.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void PadLanes<TUnit>(byte* src, int width, long padWidth, uint fillUnit, byte* dst, int outWidth, int pos)
+            where TUnit : unmanaged
+        {
+            int len = Units<TUnit>(src, width);
+            long final = padWidth > 0 ? padWidth : 0;
+            LoadElement(src, width, out var lo, out var hi);
+            if (len >= final)
+            {
+                CopyLanes<TUnit>(lo, hi, width, 0, len, dst, outWidth);
+                return;
+            }
+            long pad = final - len;
+            long left = pos == Center ? pad / 2 + (pad & final & 1) : pos == Left ? 0 : pad;
+            // final <= the output's units <= 64 (the wrapper sized the output to the largest result).
+            PadUnits<TUnit>(lo, hi, width, outWidth, (int)left, len, (int)final, fillUnit, out var rlo, out var rhi);
+            StoreElement(dst, outWidth, rlo, rhi);
+        }
+
+        /// <summary><see cref="Pad{TUnit}"/> by fills and copies (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">Its width in bytes.</param>
+        /// <param name="padWidth">The requested width in units.</param>
+        /// <param name="fill">The fill element (its first unit is the fill character).</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="outWidth">The output width in bytes.</param>
+        /// <param name="pos">The justification.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void PadScalar<TUnit>(byte* src, int width, long padWidth, byte* fill, byte* dst, int outWidth, int pos)
             where TUnit : unmanaged
         {
             int len = Units<TUnit>(src, width);
@@ -562,16 +958,44 @@ namespace NumSharp.Backends.Strings
         /// <remarks>
         ///     NumPy reads the sign at <c>final - len</c>, which assumes the width is at least the length (the wrapper's
         ///     <c>np.maximum(str_len(a), width)</c>); a smaller width is taken as the length here, which is that rule.
+        ///     Input and output elements of at most 64 bytes on AVX2 hosts build the padded result by one gather
+        ///     (<see cref="PadUnits{TUnit}"/>); the sign move is two unit writes either way.
         /// </remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void ZFill<TUnit>(byte* src, int width, long padWidth, byte* dst, int outWidth) where TUnit : unmanaged
+            => ZFillCore<TUnit>(src, width, padWidth, dst, outWidth, SelectsFit(width) && SelectsFit(outWidth));
+
+        /// <summary>
+        ///     The body of <see cref="ZFill{TUnit}"/> with the padding's form chosen by the caller: one gather
+        ///     (<paramref name="lanes"/>, which needs <see cref="SelectsFit"/> for both widths) or fills and a copy.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">Its width in bytes.</param>
+        /// <param name="padWidth">The requested width in units.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="outWidth">The output width in bytes.</param>
+        /// <param name="lanes">True for the gather (a constant at the call, so the other form is dropped).</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void ZFillCore<TUnit>(byte* src, int width, long padWidth, byte* dst, int outWidth, bool lanes)
+            where TUnit : unmanaged
         {
             int len = Units<TUnit>(src, width);
             long final = padWidth > len ? padWidth : len;
             long left = final - len;
-            FillUnits<TUnit>(dst, 0, left, '0');
-            Buffer.MemoryCopy(src, dst + left * sizeof(TUnit), len * sizeof(TUnit), len * sizeof(TUnit));
-            ClearFrom(dst, (int)(final * sizeof(TUnit)), outWidth);
+            if (lanes)
+            {
+                LoadElement(src, width, out var lo, out var hi);
+                // final <= the output's units <= 64.
+                PadUnits<TUnit>(lo, hi, width, outWidth, (int)left, len, (int)final, '0', out var rlo, out var rhi);
+                StoreElement(dst, outWidth, rlo, rhi);
+            }
+            else
+            {
+                FillUnits<TUnit>(dst, 0, left, '0');
+                Buffer.MemoryCopy(src, dst + left * sizeof(TUnit), len * sizeof(TUnit), len * sizeof(TUnit));
+                ClearFrom(dst, (int)(final * sizeof(TUnit)), outWidth);
+            }
             if (len == 0)
                 return;
             uint c = UnitAt<TUnit>(dst, left);
@@ -673,6 +1097,60 @@ namespace NumSharp.Backends.Strings
         ///     length negative, which the overflow test catches as NumPy's does.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static long ExpandTabsLength<TUnit>(byte* src, int width, long tabsize) where TUnit : unmanaged
+            => MasksFit<TUnit>(width)
+                ? ExpandTabsLengthLanes<TUnit>(src, width, tabsize)
+                : ExpandTabsLengthScalar<TUnit>(src, width, tabsize);
+
+        /// <summary>
+        ///     <see cref="ExpandTabsLength{TUnit}"/> by the lane masks for an element without a line break: the non-tab units'
+        ///     bytes at once, then one step per tab (an element holding <c>'\n'</c> / <c>'\r'</c> takes the unit loop, whose
+        ///     column resets there).
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The element.</param>
+        /// <param name="width">Its width in bytes (<see cref="MasksFit{TUnit}"/> holds).</param>
+        /// <param name="tabsize">The tab size.</param>
+        /// <returns>NumPy's expanded "length", or -1 past <see cref="ExpandTabsMaxLength"/>.</returns>
+        /// <remarks>The running length only grows (or wraps negative on a huge tab size), so testing it after each tab and
+        ///     at the end finds every overflow the unit loop's test after each unit finds.</remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long ExpandTabsLengthLanes<TUnit>(byte* src, int width, long tabsize) where TUnit : unmanaged
+        {
+            int len = Units<TUnit>(src, width);
+            ulong inText = LowLanes(len);
+            if (((EqualLanes<TUnit>(src, width, '\n') | EqualLanes<TUnit>(src, width, '\r')) & inText) != 0)
+                return ExpandTabsLengthScalar<TUnit>(src, width, tabsize);
+            ulong tabs = EqualLanes<TUnit>(src, width, '\t') & inText;
+            unchecked
+            {
+                // Every other character adds its bytes (num_bytes_next_character); its column is its output position.
+                long newLen = (long)(len - BitOperations.PopCount(tabs)) * sizeof(TUnit);
+                long pos = 0;
+                int prev = 0;
+                while (tabs != 0)
+                {
+                    int i = BitOperations.TrailingZeroCount(tabs);
+                    tabs &= tabs - 1;
+                    pos += i - prev;
+                    long incr = TabRun(pos, tabsize);
+                    pos += incr;
+                    newLen += incr;
+                    if (newLen > ExpandTabsMaxLength || newLen < 0)
+                        return -1;
+                    prev = i + 1;
+                }
+                return newLen > ExpandTabsMaxLength || newLen < 0 ? -1 : newLen;
+            }
+        }
+
+        /// <summary><see cref="ExpandTabsLength{TUnit}"/> by NumPy's unit loop (any element; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The element.</param>
+        /// <param name="width">Its width in bytes.</param>
+        /// <param name="tabsize">The tab size.</param>
+        /// <returns>NumPy's expanded "length", or -1.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static long ExpandTabsLengthScalar<TUnit>(byte* src, int width, long tabsize) where TUnit : unmanaged
         {
             int len = Units<TUnit>(src, width);
             unchecked
@@ -717,6 +1195,35 @@ namespace NumSharp.Backends.Strings
         /// <param name="outWidth">The output width in bytes (the size pass's maximum, so the expansion fits).</param>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void ExpandTabs<TUnit>(byte* src, int width, long tabsize, byte* dst, int outWidth) where TUnit : unmanaged
+        {
+            if (SelectsFit(width))
+            {
+                // An element without a line break whose expansion fits 64 bytes: one gather with the runs blended in.
+                int len = Units<TUnit>(src, width);
+                ulong inText = LowLanes(len);
+                if (((EqualLanes<TUnit>(src, width, '\n') | EqualLanes<TUnit>(src, width, '\r')) & inText) == 0)
+                {
+                    LoadElement(src, width, out var lo, out var hi);
+                    if (ExpandTabsUnits<TUnit>(lo, hi, width, EqualLanes<TUnit>(src, width, '\t') & inText, len, tabsize,
+                                               out var rlo, out var rhi))
+                    {
+                        StoreElementZeroTail(dst, outWidth, rlo, rhi);
+                        return;
+                    }
+                }
+            }
+            ExpandTabsScalar<TUnit>(src, width, tabsize, dst, outWidth);
+        }
+
+        /// <summary><see cref="ExpandTabs{TUnit}"/> by NumPy's unit loop (any element; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">Its width in bytes.</param>
+        /// <param name="tabsize">The tab size.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="outWidth">The output width in bytes.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void ExpandTabsScalar<TUnit>(byte* src, int width, long tabsize, byte* dst, int outWidth) where TUnit : unmanaged
         {
             int len = Units<TUnit>(src, width);
             long o = 0, linePos = 0;
@@ -775,11 +1282,76 @@ namespace NumSharp.Backends.Strings
                                               byte* o1, int w1, byte* o2, int w2, byte* o3, int w3)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
+            if (SelectsFit(width) && SelectsFit(sepWidth) && SelectsFit(w1) && SelectsFit(w2) && SelectsFit(w3))
+                PartitionLanes<TUnit>(src, width, sep, sepWidth, back, o1, w1, o2, w2, o3, w3);
+            else
+                PartitionScalar<TUnit>(src, width, sep, sepWidth, back, o1, w1, o2, w2, o3, w3);
+        }
+
+        /// <summary>
+        ///     <see cref="Partition{TUnit}"/> by the lane masks and gathers: the occurrence from <see cref="FindLanes{TUnit}"/>
+        ///     / <see cref="RFindLanes{TUnit}"/>, each part one gather of the loaded element (or the separator) and one store.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">Its width in bytes (<see cref="SelectsFit"/> holds for it and every part).</param>
+        /// <param name="sep">The separator element (never empty here).</param>
+        /// <param name="sepWidth">Its width in bytes.</param>
+        /// <param name="back">True for <c>rpartition</c>.</param>
+        /// <param name="o1">The first part's output element.</param>
+        /// <param name="w1">Its width in bytes.</param>
+        /// <param name="o2">The separator part's output element.</param>
+        /// <param name="w2">Its width in bytes.</param>
+        /// <param name="o3">The third part's output element.</param>
+        /// <param name="w3">Its width in bytes.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void PartitionLanes<TUnit>(byte* src, int width, byte* sep, int sepWidth, bool back,
+                                                   byte* o1, int w1, byte* o2, int w2, byte* o3, int w3)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(src, width);
+            int len2 = Units<TUnit>(sep, sepWidth);
+            long idx = back ? RFindLanes<TUnit>(src, width, sep, sepWidth, 0, long.MaxValue)
+                            : FindLanes<TUnit>(src, width, sep, sepWidth, 0, long.MaxValue);
+            LoadElement(src, width, out var lo, out var hi);
+            if (idx < 0)
+            {
+                // The whole element in the first part (partition) or the third (rpartition); the others empty.
+                CopyLanes<TUnit>(lo, hi, width, 0, back ? 0 : len1, o1, w1);
+                StoreElement(o2, w2, Vector256<byte>.Zero, Vector256<byte>.Zero);
+                CopyLanes<TUnit>(lo, hi, width, 0, back ? len1 : 0, o3, w3);
+                return;
+            }
+            int at = (int)idx;
+            CopyLanes<TUnit>(lo, hi, width, 0, at, o1, w1);
+            LoadElement(sep, sepWidth, out var slo, out var shi);
+            CopyLanes<TUnit>(slo, shi, sepWidth, 0, len2, o2, w2);
+            CopyLanes<TUnit>(lo, hi, width, at + len2, len1 - at - len2, o3, w3);
+        }
+
+        /// <summary><see cref="Partition{TUnit}"/> by span searches and copies (any width; the hosts without AVX2).</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">Its width in bytes.</param>
+        /// <param name="sep">The separator element (never empty here).</param>
+        /// <param name="sepWidth">Its width in bytes.</param>
+        /// <param name="back">True for <c>rpartition</c>.</param>
+        /// <param name="o1">The first part's output element.</param>
+        /// <param name="w1">Its width in bytes.</param>
+        /// <param name="o2">The separator part's output element.</param>
+        /// <param name="w2">Its width in bytes.</param>
+        /// <param name="o3">The third part's output element.</param>
+        /// <param name="w3">Its width in bytes.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void PartitionScalar<TUnit>(byte* src, int width, byte* sep, int sepWidth, bool back,
+                                                    byte* o1, int w1, byte* o2, int w2, byte* o3, int w3)
+            where TUnit : unmanaged, IEquatable<TUnit>
+        {
             int u = sizeof(TUnit);
             int len1 = Units<TUnit>(src, width);
             int len2 = Units<TUnit>(sep, sepWidth);
-            long idx = back ? RFind<TUnit>(src, width, sep, sepWidth, 0, long.MaxValue)
-                            : Find<TUnit>(src, width, sep, sepWidth, 0, long.MaxValue);
+            long idx = back ? RFindScalar<TUnit>(src, width, sep, sepWidth, 0, long.MaxValue)
+                            : FindScalar<TUnit>(src, width, sep, sepWidth, 0, long.MaxValue);
             if (idx < 0)
             {
                 CopyUnitsAndClear<TUnit>(back ? null : src, back ? 0 : len1, o1, w1);

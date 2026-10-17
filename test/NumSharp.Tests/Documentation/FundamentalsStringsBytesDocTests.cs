@@ -291,6 +291,40 @@ namespace NumSharp.Tests.Documentation
         }
 
         /// <summary>
+        ///     The "Length and substring search", "Stripping, padding, replacing and slicing" and "Partitioning each string"
+        ///     snippets (strings phase 2, P2.5; every value probed against NumPy 2.4.2): the int64 / bool results, the output
+        ///     widths each function sizes (<c>strip</c> keeps <c>&lt;U5</c>, <c>replace</c> sizes <c>&lt;U4</c>,
+        ///     <c>center</c> <c>&lt;U7</c>, <c>slice</c> keeps <c>&lt;U3</c>), the three partition parts, and lengths in code
+        ///     points for both Unicode dtypes.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, on a divergence from NumPy.</exception>
+        [TestMethod]
+        public void Computing_SearchStripPadReplaceSlicePartition()
+        {
+            var words = np.array(new[] { "cat", "dog" });
+            np.strings.str_len(words).ToString(true).Should().Be("array([3, 3])");
+            np.strings.find(words, "a").ToString(true).Should().Be("array([ 1, -1])");
+            np.strings.startswith(words, "c").ToString(true).Should().Be("array([ True, False])");
+            np.strings.count(np.array(new[] { "banana", "pear" }), "a").ToString(true).Should().Be("array([3, 1])");
+
+            np.strings.strip(np.array(new[] { " cat ", "dog\t" })).ToString(true).Should().Be("array(['cat', 'dog'], dtype='<U5')");
+            np.strings.replace(words, "a", "oo").ToString(true).Should().Be("array(['coot', 'dog'], dtype='<U4')");
+            np.strings.center(words, 7, fillchar: "-").ToString(true).Should().Be("array(['--cat--', '--dog--'], dtype='<U7')");
+            np.strings.zfill(np.array(new[] { "-7", "12" }), 4).ToString(true).Should().Be("array(['-007', '0012'], dtype='<U4')");
+            np.strings.slice(words, 0, 2).ToString(true).Should().Be("array(['ca', 'do'], dtype='<U3')");
+
+            var fields = np.array(new[] { "a-b", "c" });
+            var (before, separator, after) = np.strings.partition(fields, "-");
+            before.ToString(true).Should().Be("array(['a', 'c'], dtype='<U1')");
+            separator.ToString(true).Should().Be("array(['-', ''], dtype='<U1')");
+            after.ToString(true).Should().Be("array(['b', ''], dtype='<U1')");
+
+            // Code points, not UTF-16 or UTF-8 units, for either Unicode dtype.
+            np.strings.str_len(np.array(new[] { "é中😀" })).ToString(true).Should().Be("array([3])");
+            np.strings.str_len(np.array(new[] { "é中😀" }, np.dtypes.StringDType())).ToString(true).Should().Be("array([3])");
+        }
+
+        /// <summary>
         ///     The "Sorting" snippets (strings phase 2, P2.2; every value probed against NumPy 2.4.2): code-point order, the
         ///     in-place sort, NumPy's introsort order of equal strings for the default kind and the input order for the
         ///     stable kind (20 single letters, past the 16 elements NumPy insertion-sorts), the partitions as full sorts,

@@ -163,7 +163,7 @@ namespace NumSharp.Backends.Strings
     ///     NumPy's <c>StringDType</c> loops of <c>numpy.strings</c>: the ufunc-level resolution and drivers, and the UTF-8
     ///     element bodies (see the file header).
     /// </summary>
-    internal static unsafe class NDVStringMethods
+    internal static unsafe partial class NDVStringMethods
     {
         /// <summary>The flags byte of a short cell, its size nibble cleared (<c>INITIALIZED | OUTSIDE_ARENA</c>).</summary>
         private const byte ShortFlags = VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA;
@@ -1188,10 +1188,9 @@ namespace NumSharp.Backends.Strings
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static long VLength(byte* cell, VStringMethodAux* aux)
         {
-            uint f = cell[15];
-            // A short cell: the text is the cell itself, its size the low nibble.
-            if ((f & VStringAllocator.NPY_STRING_FLAG_MASK) == ShortFlags)
-                return CodePoints(cell, f & VStringAllocator.NPY_SHORT_STRING_SIZE_MASK);
+            // A short cell: the text is the cell itself, its size the low nibble (one vector: ShortCodePoints).
+            if (IsShort(cell))
+                return ShortCodePoints(cell, ShortSize(cell));
             if (Load(cell, aux->ArenaA, out byte* buf, out long size, aux))
             {
                 if (aux->Rule != VStringNARule.String)
@@ -1220,6 +1219,15 @@ namespace NumSharp.Backends.Strings
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static long VFindLike(byte* a, byte* b, long start, long end, int mode, int index, VStringMethodAux* aux)
         {
+            long r;
+            if (ShortSearchSupported && IsShort(a) && IsShort(b))
+            {
+                // Two short cells (never an NA): the vector form, FindShort.
+                r = FindShort(a, b, start, end, mode);
+                if (index != 0 && r == -1)
+                    Fail(aux, VStringMethodError.NotFound);
+                return r;
+            }
             bool na1 = Load(a, aux->ArenaA, out byte* s1, out long n1, aux);
             bool na2 = Load(b, aux->ArenaB, out byte* s2, out long n2, aux);
             if (na1 || na2)
@@ -1234,7 +1242,7 @@ namespace NumSharp.Backends.Strings
                 if (na2)
                     Default(aux, out s2, out n2);
             }
-            long r = FindCore(s1, n1, s2, n2, start, end, mode);
+            r = FindCore(s1, n1, s2, n2, start, end, mode);
             if (index != 0 && r == -1)
                 Fail(aux, VStringMethodError.NotFound);
             return r;
@@ -1314,6 +1322,9 @@ namespace NumSharp.Backends.Strings
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static byte VTailMatch(byte* a, byte* b, long start, long end, int back, VStringMethodAux* aux)
         {
+            // Two short cells (never an NA): the vector form, TailMatchShort.
+            if (ShortSearchSupported && IsShort(a) && IsShort(b))
+                return TailMatchShort(a, b, start, end, back != 0);
             bool na1 = Load(a, aux->ArenaA, out byte* s1, out long n1, aux);
             bool na2 = Load(b, aux->ArenaB, out byte* s2, out long n2, aux);
             if (na1 || na2)
