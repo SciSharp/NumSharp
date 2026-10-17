@@ -163,8 +163,7 @@ replays the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names (Inconclusive when
   of a non-contiguous `T` view holding an arena text misorders (that call only), an empty text times a negative count
   hangs. NumPy's values-only `np.unique` hashes the FULL bytes and sorts unstably, so two strncmp-equal texts survive
   in an order the C++ library picks: the soak's `TieExcuse` accepts an element that compares EQUAL to NumPy's. The
-  harness rebuilds a 1-D view of a whole base as the base (OWNDATA), so the generator never builds one. Open:
-  `float16` / `float32` `q` arrays (NumPy computes in `q`'s precision).
+  harness rebuilds a 1-D view of a whole base as the base (OWNDATA), so the generator never builds one.
 **The quantile family's `weights=` (2026-10-16, `467f0729`; plan state log).** `NDArray weights = null` on all 28
 overloads of `np.quantile` / `np.percentile` / `np.nanquantile` / `np.nanpercentile` runs NumPy 2.4.2's weighted
 branch (`inverted_cdf` only) for every dtype, text included (`Statistics/QuantileWeighted.cs`): NumPy's check order and
@@ -187,6 +186,51 @@ against a C# number literal names `_PyLongDType` / `_PyFloatDType` in its refusa
 **Benchmark trap:** a harness that warms each cell just before timing it measures its FIRST cells before loops that
 run once per call (the radix passes) reach tier-1 code (59 µs vs 28 µs for one call in one process): warm every cell,
 pause, then time.
+**The quantile family in `q`'s dtype (2026-10-17, `7a761f74`; plan state log).** NumPy computes the virtual index, the
+neighbours, the weight and `1 - t` in `q`'s dtype (the Python ints `n` / `n - 1` and the methods' constants are weak
+under NEP 50). `Statistics/QuantileIndexes.cs` computes each operation in double and rounds it to `q`'s dtype (exact for
+float16 / float32: a double carries at least 2p + 2 bits); a call's plan comes from one builder per precision
+(`DirectILKernelGenerator.QuantilePlan`, cached per dtype), and the text paths (`S` / `U` / `StringDType`) use it too.
+- **float16 / float32 `q`:** `(n - 1) * q` rounds (float16(0.999) over 2053 elements gives 2050.0, the same `q` as float64
+  2049.99609375; from 65,520 elements `n - 1` is inf). `.astype(np.intp)` is x86's (NaN, ±inf and anything outside int64
+  become INT64_MIN), and `partition_prep_kth_array`'s check runs in NumPy's order with NumPy's text (`kth(=2052) out of
+  bounds (2052)` for 'lower' over 2052 elements), skipped for a size-0 array. np.percentile divides `q / 100` in `q`'s
+  dtype and checks the quotient's range.
+- **Integer `q` arrays** compute in their integer dtype: wrapping arithmetic, NEP 50's conversion of `n` (`Python integer
+  300 out of bounds for uint8`), weibull's clipped -1 stored into an unsigned index array (`Python integer -1 out of bounds
+  for uint8`); 'linear' takes the element, a bool `q` computes in int64, a uint64 'linear' index cannot partition
+  (`Partition index must be integer`). weibull / averaged_inverted_cdf / interpolated_inverted_cdf lerp with an int64
+  weight (integer data gives int64).
+- **The lerp** runs in `result_type(data, q)` for a `q` ARRAY (a float16 `q` over float32 data: float32; over integer
+  data: float64). An `out=` of another float / complex dtype receives the t >= 0.5 branch computed in ITS dtype
+  (`subtract(..., dtype=type(out.dtype))`), not the float64 answer cast.
+- **`out=`** follows NumPy's routes: the take (exact shape, the safe out-to-data cast check, `WRITEBACKIFCOPY base is
+  read-only`, an unsafe store, the NaN slices' same_kind refusal), the lerp (the add's same_kind cast, broadcast, `output
+  array is read-only`), the nan forms' `out[...] = result` (an array by the unsafe cast; a NumPy SCALAR by `PyArray_Pack`,
+  `ReductionInitial.PackNumPyScalar`: only a SIGNED integer out converts with `int()`, so NaN, infinity and 400 into int8
+  raise there, while an unsigned / bool / float out casts: NaN is 0 in uint8 and 2^63 in uint64), keepdims' out index.
+- **The nan forms along an axis** return `np.apply_along_axis`'s object: a view of its C buffer with `q`'s axes moved
+  first (F-ordered, OWNDATA false). An all-NaN slice is Python's `np.nan` (`0x7FF8...`), a plain form's NaN slice copies
+  the data's own NaN. Empty data raises NumPy's IndexError (`index -1 ...`; `index 0 ...` for integer data).
+- **The partition (`Utilities/QuickSelect.cs`, shared with np.partition / np.argpartition / np.median)** takes NumPy's
+  `introselect_` shortcuts: dumb_select for `kth - low < 3`, and the float32 / float64 maximum pass for `kth == n - 1`
+  (`npy_half` is a `uint16_t`, so float16 takes the quickselect, as in NumPy). Both are vector passes that keep NumPy's
+  choice among ties (the first minimum, the last maximum: the zero sign and the argpartition index). A window of up to
+  16 elements is insertion-sorted before them, and the kernel's int entry sorts a line of up to 16 whole. float16
+  compares through `HalfOrderKey` (the magnitude, negated for a negative value: IEEE `<` without branches, checked over
+  all 63,490 non-NaN halves). The nan path plans each NaN-free length once per call (`planLength` / `planCount`, locals
+  of the emitted kernel).
+- **TRAP:** on .NET 9+ `Vector.Min` / `Vector.Max` of floats is the IEEE 754-2019 minimum, a compare-and-blend sequence.
+  Chained through one accumulator it read 100,000 doubles in ~110 µs; `Vector.MinNative` with four accumulators takes
+  ~20 µs.
+- **Fixed with it:** the lerp widened uint64 data with C#'s implicit conversion, which .NET 8 performs from 2^63 on as
+  a signed conversion plus 2^64 (two roundings): large uint64 data was 1 ulp off NumPy on net8.0 only. The kernel and
+  the index helpers widen through `Converts.ToDouble` / `Converts.ToSingle` (rounded once).
+- **Gates:** section `qprec` (17,586 cases, 6,208 NumPy errors, zero excuses), `np.quantile_family.Precision.Tests.cs`
+  (12), two partition tie tests, 16 planted bugs killed. Perf (NPY/NS, 70 cells, two P-cores): geomean 5.45x, min 1.69x;
+  integer `q` 2.25-46x (were 0.71-1.40x), 100,000 rows of 5 2.0-3.0x (were 1.5-1.75x), float16 data 2.7x (1.53x);
+  np.median / np.partition of float16 data 2.0x / 1.8x at 60K (were 1.16x / 1.05x). np.partition of float16 at 1K is
+  1.09x.
 **`numpy.char` (2026-10-15, `docs/plans/np-char.md`, phase 1).** `np.@char` is the MODULE object `CharModule`
 (`APIs/np.char.cs`, `[ModuleName("np.char")]`) with an implicit conversion to the `Char` dtype it used to be, so
 `astype(np.@char)` / `a.dtype == np.@char` / `(DType, DType)` tuple keys keep working (a descriptor member needs

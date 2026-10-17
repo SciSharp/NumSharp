@@ -23,7 +23,7 @@
 
 ---
 
-## 0. Where phase 2 stands (2026-10-16, after P2.2 over `T`, the validation soak and the quantile family's `weights=`)
+## 0. Where phase 2 stands (2026-10-17, after P2.2 over `T`, the validation soak and the quantile family's `weights=` and `q` precision)
 
 Commit hashes in this plan: the branch was rebased onto journey4 on 2026-10-12, so the hashes of §0's first edition and
 of the 2026-10-09 state-log entries are the OLD ones; `git log -1 --format=%B a8d7f17c | grep -- '->'` translates them
@@ -42,10 +42,10 @@ lock-free cast table `07903e85`; NumPy's member names in the DTypes folder, `8de
 | P2.A shared machinery | Part 1 done (2026-10-15, `b8003693`, the rows contract D16 and the masked blend D17, retrofitted to the shipped comparison and truth kernels; state log). The `T` kernel shell landed with P2.T (`450f930b`: the cell kernels `NDVStringCells`, the IL `T` kernels, the size pass and the exact arena reservation). Left: the unary text driver and width-class helpers (with P2.5), the Unicode tables and the sticky escalation (with P2.6) — each lands with its first consumer. |
 | P2.T `StringDType` computes | Done (2026-10-16, `450f930b`, state log): the six comparisons and their operators over (`T`, `T`) / (`T`, `U`), the truth readers and `np.isnan`, `add` / `multiply` / `maximum` / `minimum`, `np.sum` / `np.cumsum` / `np.max` / `np.min` / `np.argmax` / `np.argmin` / `np.trace` and the statistics that refuse after computing, `np.char.add` / `np.char.multiply` and numpy.ma over `T`; oracle sections `tcomp` (4,138 cases), `tarith` (1,281), `treduce` (6,692), zero excuses; `tma`'s last 5 cases (its sorting ones) became strict with P2.2 over `T`. |
 | P2.2 sorting, searching, set routines | Milestone A done (2026-10-15, `9771aa9c`, state log): `np.sort` / `np.argsort` / `ndarray.sort` / `np.partition` / `np.argpartition` over `S` / `U` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (its introsort replayed); oracle section `strsort` (4,998 cases, zero excuses). Milestone B done (2026-10-15, `a9ec801a`, state log): `np.argmax` / `np.argmin` / `np.nanargmax` / `np.nanargmin` and the methods (axis, keepdims, `out=`), `np.searchsorted` / `ndarray.searchsorted` (NumPy's exact path over unsorted haystacks), `np.digitize`, and the bin search of `np.histogram2d` / `np.histogramdd`; oracle section `strsearch` (7,142 cases, zero excuses). Milestone C done (2026-10-16, `0b0a31ac`, state log): `np.unique` with every flag, axis and keyword and its Array-API forms, `np.isin`, the four set routines, `np.lexsort`, `np.sort_complex`, `np.histogram` / `histogram_bin_edges`, the methods of `np.quantile` / `np.percentile` that pick an element; oracle section `strsets` (7,299 cases, strict but for the `unique_values` order excuse). Every `S` / `U` computation of the stage is done. The `T` part done (2026-10-16, `287c3e2e`, state log): the sorts, partitions and `np.lexsort`, `np.searchsorted` / `np.digitize`, `np.unique` and its Array-API forms, `np.isin`, the four set routines, `np.sort_complex`, `np.histogram`, `np.median`, the quantile family with its nan forms, and numpy.ma's `sort` / `argsort` / `median` / `unique` over `T`, with NumPy's ordering of missing values; oracle section `tsort` (12,515 cases, 5,209 of them NumPy errors, zero excuses). The stage is done. |
-| Validation (soak) | Done (2026-10-16, `b57c3e8b`, state log): a randomized NumPy 2.4.2 soak of every family phase 2 computes (`test/oracle/soak_strings_oracle.py`, replayed by `StringOracleTests.StringSoak` from the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names). 77,824 cases over 10 seeds match, after the fixes it found: `NpyString_cmp` is strncmp (a NUL both texts share ends the comparison: `'a\0c' == 'a\0b'`), `np.searchsorted`'s promoted descriptor, `where=` into an out of another dtype, the masked reduction's layout, `_remove_nan_1d`'s order in the nan forms, `np.array_equal` / `np.array_equiv` over `T`, numeric `np.isin`'s empty views, numpy.ma's `filled()` and set-routine errors, and the quantile family's 2-d `q` and `np.nanquantile`'s integer take. The quantile family's `weights=` keyword, the completeness gap the soak listed, is done (2026-10-16, `467f0729`, state log; section `qfamily`). Open: `float16` / `float32` `q` arrays. |
+| Validation (soak) | Done (2026-10-16, `b57c3e8b`, state log): a randomized NumPy 2.4.2 soak of every family phase 2 computes (`test/oracle/soak_strings_oracle.py`, replayed by `StringOracleTests.StringSoak` from the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names). 77,824 cases over 10 seeds match, after the fixes it found: `NpyString_cmp` is strncmp (a NUL both texts share ends the comparison: `'a\0c' == 'a\0b'`), `np.searchsorted`'s promoted descriptor, `where=` into an out of another dtype, the masked reduction's layout, `_remove_nan_1d`'s order in the nan forms, `np.array_equal` / `np.array_equiv` over `T`, numeric `np.isin`'s empty views, numpy.ma's `filled()` and set-routine errors, and the quantile family's 2-d `q` and `np.nanquantile`'s integer take. The quantile family's `weights=` keyword, the completeness gap the soak listed, is done (2026-10-16, `467f0729`, state log; section `qfamily`), and so is its index arithmetic in `q`'s dtype (float16 / float32 / integer `q` arrays) with the `out=` routes and the nan forms' result objects (2026-10-17, `7a761f74`, state log; section `qprec`). |
 | P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
 | Deferral sites | 8 call sites left, all `NDStringUfuncs.NextPhase`: the 7 fixed-width ones of P2.7 and `chararray.partition(sep)` (P2.5: the STRING partition, `np.char.partition`, which numpy.char phase 3 `d343a5bc` routes there). Counted after P2.2 over `T` (`287c3e2e`), which removed the last four `NextPhaseVString` sites — `NDArray.unique` over `T`, `np.median`'s reduction answer, the sorts' and searches' loop answer, their shape-decided guard (`VStringStandIn`, now an internal error) — and `NextPhaseVString` itself. P2.T had removed five `T` sites, P2.2 milestone C the 19 fixed-width sites of `unique`, `isin`, the set routines, `lexsort`, `sort_complex`, `np.histogram`, the reduction guard's default and the discontinuous quantiles. `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
-| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 46 sections, 153,728 cases since the quantile family's `qfamily` (`467f0729`), numpy.char phase 4's `strcharobj` and P2.2 over `T`'s `tsort`). 22 of them still pass only as deferrals (the ceilings of `StringOracleTests.DeferralCeilings`): `chararray.partition(sep)`, the string partition of P2.5 (section `strcharops`). Every other case is strict: P2.2 over `T` made `tma`'s last 5 strict. Appendix B lists the deferred cases by stage. |
+| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 47 sections, 171,314 cases since the quantile family's `qprec` (`7a761f74`), its `qfamily` (`467f0729`), numpy.char phase 4's `strcharobj` and P2.2 over `T`'s `tsort`). 22 of them still pass only as deferrals (the ceilings of `StringOracleTests.DeferralCeilings`): `chararray.partition(sep)`, the string partition of P2.5 (section `strcharops`). Every other case is strict: P2.2 over `T` made `tma`'s last 5 strict. Appendix B lists the deferred cases by stage. |
 | Iteration and machinery | `np.nditer` and `NDIter` carry string operands with NumPy's descriptors (`4d5b9f26`) and, since P1.7g (`97a168bf`), NumPy's own buffering: element sizes, string buffers, casts between every string dtype and the numbers, `T` buffers with their own allocators. This is the iteration base of every phase-2 kernel. |
 | Refusals and shape-decided answers | Where NumPy has no string loop, NumSharp raises NumPy's type and text, after NumPy's earlier checks in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence,.ShapeDecided,.VString}.cs`); empty inputs, lines of one element and pairs the `==` operator cannot compare are answered from the shape. These stay. |
 
@@ -868,6 +868,55 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-17 — The quantile family in `q`'s dtype, its `out=` routes and the nan forms' objects** (`7a761f74`; the
+  gap the two previous entries left open). Continued under the same `/np-function` request ("Validate the implementation so
+  far and its completeness").
+  1. **NumPy's index arithmetic in `q`'s dtype** (`Statistics/QuantileIndexes.cs`): `get_virtual_index`, `_get_indexes`,
+     `_get_gamma` and the selection methods' boundaries, each operation computed in double and rounded to `q`'s dtype
+     (float16 / float32; a double carries at least 2p + 2 bits, so the rounding is NumPy's). An integer `q` array computes in
+     its integer dtype (wrapping, NEP 50's conversion of `n` / `n - 1`, the -1 stored into an unsigned index array, the
+     int64 weight of weibull / averaged_inverted_cdf / interpolated_inverted_cdf, a bool `q` in int64, a uint64 'linear'
+     index refused). `.astype(np.intp)` is x86's (INT64_MIN for NaN, ±inf and anything outside int64), and
+     `partition_prep_kth_array`'s validation runs in NumPy's order (q's order for the take path, ascending for the
+     interpolating one, skipped for an empty array). np.percentile divides in `q`'s dtype. One plan builder per precision
+     (`DirectILKernelGenerator.QuantilePlan`) serves the kernel, the nan path per slice, and the `S` / `U` / `StringDType`
+     paths.
+  2. **The lerp and `out=`.** The lerp runs in `result_type(data, q)` for a `q` array; an out of another float / complex
+     dtype receives the t >= 0.5 branch computed in its own dtype. The four `out=` routes: the take (NumPy's shape, cast,
+     WRITEBACKIFCOPY and NaN-slice checks), the lerp (the add's cast, broadcast, read-only), the nan forms' assignment
+     (an array by the unsafe cast, a NumPy scalar by `PyArray_Pack`: `int()` for a signed integer out, the cast for every
+     other out), keepdims' out index.
+  3. **The nan forms' objects.** Along an axis: `np.apply_along_axis`'s buffer viewed with `q`'s axes first (F-ordered,
+     OWNDATA false). An all-NaN slice is Python's `np.nan`; the plain forms copy the data's own NaN into a NaN slice.
+     Empty data raises NumPy's IndexError texts.
+  4. **Performance findings, fixed.** (a) The float16-`q` nan path rebuilt its plan for every slice (2x slower on 100,000
+     rows of 5): each NaN-free length plans once per call. (b) Five integer-`q` cells ran 0.71-1.40x NumPy: NumPy's
+     `introselect_` places a kth within 3 of the window's start by dumb_select and a float kth at the line's end by one
+     maximum pass; `QuickSelect` takes both shortcuts now (as vector passes keeping NumPy's choice among ties; float16
+     excluded, as NumPy's `inexact<npy_half>()` is false), sorts a window of up to 16 elements first, and the kernel's int
+     entry sorts a line of up to 16 whole (100,000 rows of 5: 1.5-1.75x -> 2.0-3.0x). (c) float16 data partitioned at
+     1.05-1.53x NumPy: .NET's `Half <` branches inside the branchless block partition; `HalfOrderKey` compares the bits
+     (np.median / np.partition / np.quantile of float16 at 60K: 1.16x / 1.05x / 1.53x -> 2.0x / 1.8x / 2.7x). Trap:
+     .NET 9+'s `Vector.Min` of floats is the IEEE minimum (a compare-and-blend sequence, ~5x slower chained through one
+     accumulator); the passes use `Vector.MinNative` with four accumulators.
+  5. **Found by the mutation pass.** The first corpus never stored a NaN into a nan form's 0-d out, nor ran an integer `q`
+     over a line longer than its dtype; the cases added for that found the store wrong for unsigned outs (NumPy casts
+     there, NumSharp raised) and too lenient for a narrow signed out (400 into int8 raises in NumPy). Fixed with
+     `PyArray_Pack`'s rule above; the generator's platform skip for unsigned outs went too (the cast is the same
+     everywhere). The net8.0 replay found a pre-existing one: the lerp widened uint64 data with C#'s implicit
+     conversion, which .NET 8 performs from 2^63 on as a signed conversion plus 2^64 (two roundings), so large uint64
+     data was 1 ulp off NumPy there; the kernel and the index helpers widen through `Converts.ToDouble` /
+     `Converts.ToSingle` now (rounded once).
+  6. **Gate.** Section `qprec` (17,586 cases, 6,208 NumPy errors, zero excuses: q precision over 11 dtypes x 13 methods x
+     the 4 functions x 3 layouts, the kth boundaries from 2047 to 4097 and past 65,519 elements, percentile quotients,
+     every `out=` route and dtype, integer `q`, empty data, the nan forms' scalar store, text with a float16 `q`);
+     `np.quantile_family.Precision.Tests.cs` (12) and two partition tie tests in `np.partition.Test.cs`; 16 planted bugs
+     each killed (the one that disables the shortcuts only by the unit tests: the oracle compares values, not tie order); the oracle and
+     unit suites on both frameworks; no doc warning on the new lines (Core built with its NoWarn list replaced).
+  7. **Perf** (NPY/NS, 70 cells over float64 / float32 / float16 / int8 / int32 / int64 data, float16 / float32 / integer
+     `q`, `out=`, nan forms, 2-D along either axis, two P-cores, every cell warmed first): geomean 5.45x, min 1.69x.
+  8. **Open.** np.partition of float16 data at 1K is 1.09x NumPy (the wrapper's NaN compaction and allocation, not the
+     partition).
 - **2026-10-16 — The quantile family's `weights=` keyword** (`467f0729`, with `9065078f` and `09f11b41`; the gap the
   validation soak listed). Continued under the same `/np-function` request ("Validate the implementation so far and its
   completeness").
