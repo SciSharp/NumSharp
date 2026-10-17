@@ -133,7 +133,7 @@ for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 N
 `np.strings` functions of P2.6 (the predicates, the case maps, `translate`, `mod`, `encode`, `decode`) and 7
 `NextPhase` sites, all of P2.7; no oracle case is deferred any more (P2.5 made `chararray.partition(sep)`'s 22 strict).
 **`np.strings` searches, strips, pads, replaces, partitions and slices since P2.5 (2026-10-17, `5dc14393` +
-`ade78fa9`; plan state log).** `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`,
+`5127e47c`; plan state log).** `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`,
 `strip` / `lstrip` / `rstrip`, `center` / `ljust` / `rjust`, `zfill`, `expandtabs`, `replace`, `partition` /
 `rpartition`, `slice` and the six comparison names over `S` / `U` / `T` (`np.strings`: 28 of NumPy's 46 names), with
 NumPy's arguments, defaults and ufunc stages in NumPy's order (the promoter's no-loop TypeError — `_zfill` /
