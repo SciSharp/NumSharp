@@ -15,10 +15,19 @@ overloads and 7 taking a dtype as ``NPTypeCode`` / ``Type``, every one of them "
 Schema 7 of ``NumSharp.Tools.ApiInventory`` carries every overload's parameters as data, and this module turns them
 into a per-row verdict, so the artifact reports what it used to hide.
 
+That comparison still missed what ``docs/plans/API_DIFF_GAP.md`` (the gap map of ``tools/api-parameter-parity``)
+finds: NumPy parameters a runtime signature hides behind ``(*args, **kwargs)`` (read from NumPy's stubs), the
+constructors, extension methods and typed ``NDArray<T>`` spellings, ``numpy.char.chararray``, and the compile
+probe's B / L / Q marks. Generator 1.16.0 therefore joins the gap map itself onto the rows (``attach`` with a
+``signature_gap.GapMap``): one engine decides the marks, the inventory reports them per API, and this module's own
+comparison is kept for the credited rows the gap map does not reach.
+
 The record (``row["signature"]``)
 ---------------------------------
 Every credited NumPy row that names a call (a function, ufunc or method, or a class credited to a factory method)
-gets one, except the Python protocols, whose C# spelling is an operator, indexer or cast rather than a call:
+gets one, except the Python protocols, whose C# spelling is an operator, indexer or cast rather than a call; with
+the gap map, a protocol method NumSharp declares under its own name (``NDArray.__getitem__``) and a class with a C#
+constructor get one too, and so does a NumSharp-only member the gap map marks (O / T):
 
 * ``status``: ``identical`` (no mark below and no closest-overload difference), ``differs``, or ``not-compared``
   with a ``reason`` (NumPy states no signature, the credit is a property or an instance member of another surface;
@@ -38,7 +47,17 @@ gets one, except the Python protocols, whose C# spelling is an operator, indexer
   (the one the fewest weighted edits from NumPy's signature, what the one surviving overload must become): a
   positional parameter at another slot, a parameter NumPy defaults that C# requires, two different default values,
   ``*args`` spelled without a ``params`` array, and (informational) a null default where NumPy has a value;
-* ``closest`` and ``numpy``: the closest overload's text and the NumPy signature it was compared with.
+* ``closest`` and ``numpy``: the closest overload's text and the NumPy signature it was compared with;
+* ``source``: ``gap-map`` when the record comes from the API diff gap map (generator 1.16.0: every C# spelling
+  ``tools/api-parameter-parity`` compares, joined by ``attach``; see ``signature_gap``), ``inventory`` when it is
+  this module's own reflection comparison (a credited row the gap map does not reach: never compile-probed);
+* ``marks``: the gap map's symbol per mark (``M`` ● / ◦, ``X`` ●, ``O`` the overload count, ``T`` ● and / or ◇,
+  ``B`` / ``Q`` ● / ◐, ``L`` ● / ◐ / ◦, ``—`` not probed), the strongest over the spellings;
+* ``generic``: the generic overloads whose type argument picks the dtype (mark T ◇, ``<T>(int[] shape)``);
+* ``binding`` / ``null`` / ``sequence``: the compile probe's findings (marks B, L, Q) for the primary spelling, each
+  the call and the compiler's reason;
+* ``spellings``: one entry per C# spelling of the API (``np.ndarray(...)``, ``new NDArray(...)``,
+  ``new NDArray<T>(...)``; ``a.reshape`` and ``NDArray<T>.reshape``), each with its own marks and details.
 
 Matching rules (§1 of the plan): a positional-only NumPy parameter is matched by SLOT (Python cannot pass it by
 name), a positional-or-keyword one by NAME and must sit at NumPy's slot, a keyword-only one by name anywhere;
@@ -60,6 +79,8 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
 from object_surfaces import resolve_api_id
+from signature_gap import (CONSTRUCTOR, TYPED_NDARRAY_GROUP, GapMap, catalog_id, csharp_spelling, is_module_group,
+                           split_findings, split_list)
 
 P = inspect.Parameter
 
@@ -846,23 +867,351 @@ def assess(np: Any, row: Mapping[str, Any], member: Mapping[str, Any] | None) ->
 WIRING_REASONS = ("the credited member is not in the inventory",
                   "the inventory carries no overload data for the credited member")
 
+#: Gap-map rows with a NumPy counterpart that join no catalog row, each with the reviewed reason. Any OTHER unjoined
+#: row fails the generator (the inventory would silently lose a finding of ``API_DIFF_GAP.md``), and an entry that
+#: stops occurring fails it too (stale), so the list cannot hide a new gap.
+GAP_JOIN_EXEMPT = {
+    ("np.random.MT19937", "_legacy_seeding"): "NumPy's name is private (a leading underscore): the catalog lists "
+                                              "public NumPy APIs only, while NumSharp exposes the member publicly",
+}
 
-def attach(rows: list[dict[str, Any]], inventory: Mapping[str, Any], np: Any) -> list[str]:
+#: The gap map's mark symbols, strongest first. ``●`` a difference at both C# versions (or the plain mark), ``◐`` only
+#: at C# 12 (an overload set that relies on [OverloadResolutionPriority], which a net8.0 consumer's C# 12 ignores),
+#: ``◦`` the weak form (M: only plan-excluded parameters missing; L: only ``Shape`` refuses ``null`` and ``default``
+#: binds), ``◇`` (T) a generic overload whose type argument picks the dtype.
+_SYMBOL_RANK = {"●": 3, "◐": 2, "◦": 1}
+
+#: Marks the gap map's compile probe adds, with the symbols that count as a difference. ``—`` (not probed) and ``?``
+#: (the probe could not write a call) are not differences.
+PROBE_MARKS = {"B": ("●", "◐"), "L": ("●", "◐", "◦"), "Q": ("●", "◐")}
+
+#: The mark letters in display order: the reflection marks, the probe marks, then N (credited through another name).
+MARK_ORDER = "MXOTBLQN"
+
+
+def _strongest(symbols: Iterable[str]) -> str:
+    """The strongest of several mark symbols.
+
+    Args:
+        symbols: Symbols from the gap map (``●``, ``◐``, ``◦``, ``""``, ``—``, ``?``).
+
+    Returns:
+        The highest-ranked of ``●`` / ``◐`` / ``◦``; else ``—`` when every spelling was unprobed, else ``""``.
+    """
+    symbols = list(symbols)
+    ranked = [s for s in symbols if s in _SYMBOL_RANK]
+    if ranked:
+        return max(ranked, key=_SYMBOL_RANK.__getitem__)
+    return "—" if symbols and all(s in ("—", "?") for s in symbols) else ""
+
+
+def spelling_from_gap(row: Mapping[str, str], group_types: Mapping[str, str], via: str | None = None) -> dict[str, Any]:
+    """One C# spelling of a NumPy API, from one gap-map row.
+
+    Args:
+        row: A row of the gap map's CSV.
+        group_types: ``GapMap.group_types`` (for the C# spelling's receiver).
+        via: The catalog id whose gap row this spelling was adopted from (same C# member, same NumPy object), or None.
+
+    Returns:
+        ``csharp`` (``np.sum``, ``a.sum``, ``new NDArray(...)``), ``group`` / ``name`` (the gap map's keys),
+        ``numpy_kind`` (``absent`` for a NumSharp-only name), ``marks`` (the gap map's symbol per mark), ``status``
+        (its closest-overload status) and the non-empty detail lists:
+        ``missing``, ``excluded``, ``foreign``, ``typecode``, ``generic`` (T ◇ selectors), ``binding`` / ``null`` /
+        ``sequence`` (the probe's B / L / Q findings), ``order``, ``required``, ``default``, ``varargs``, ``split``,
+        ``renamed``, ``extra``, ``null_default``, ``numpy_added`` (parameters read from NumPy's stubs / docs),
+        ``extension_hosts``; ``overloads``, ``closest``, ``numpy`` and ``via``.
+    """
+    lists = {
+        "missing": "missing_any_overload", "excluded": "missing_excluded", "foreign": "numsharp_only_params",
+        "typecode": "typecode_params", "generic": "typecode_generic_selectors", "binding": "probe_binding",
+        "null": "probe_null", "sequence": "probe_sequence", "order": "slot", "required": "required",
+        "default": "default", "varargs": "varargs", "split": "split", "renamed": "renamed", "extra": "extra",
+        "null_default": "null_default", "numpy_added": "numpy_params_added", "extension_hosts": "extension_hosts",
+    }
+    spelling: dict[str, Any] = {
+        "csharp": csharp_spelling(row["module"], row["name"], group_types),
+        "group": row["module"], "name": row["name"], "numpy_kind": row["numpy_kind"], "status": row["status"],
+        "marks": {mark: row[f"mark_{mark}"] for mark in "MXOTBLQ"},
+        "overloads": int(row["overloads"] or 0), "closest": row["best"], "numpy": row["numpy_signature"],
+    }
+    for key, column in lists.items():
+        # A probe finding can hold "; " in its own text, so those cells are split by how a finding starts.
+        values = split_findings(row[column]) if key in ("binding", "null", "sequence") else split_list(row[column])
+        if values:
+            spelling[key] = values
+    if via:
+        spelling["via"] = via
+    return spelling
+
+
+def spelling_differs(spelling: Mapping[str, Any]) -> bool:
+    """Whether one C# spelling differs from NumPy's signature (the gap map's "has a mark", M ◦ aside).
+
+    A spelling missing only plan-excluded parameters (M ◦) does not differ: the parity plan leaves those parameters out
+    of scope. Every other mark does, and so does a closest-overload difference (the gap map never shows one without a
+    mark, but a hard difference is a difference whatever the marks say).
+
+    Args:
+        spelling: From ``spelling_from_gap``.
+
+    Returns:
+        True when the spelling carries M ●, X, O, T (● or ◇), B / Q (● or ◐), L (● / ◐ / ◦) or a hard
+        closest-overload difference.
+    """
+    marks = spelling["marks"]
+    if marks["M"] == "●" or marks["X"] == "●" or marks["O"] or marks["T"]:
+        return True
+    if any(marks[mark] in symbols for mark, symbols in PROBE_MARKS.items()):
+        return True
+    return any(spelling.get(kind) for kind in ("order", "required", "default", "varargs", "split", "renamed", "extra"))
+
+
+def _primary(spellings: Sequence[Mapping[str, Any]], target: str, group_types: Mapping[str, str]) -> Mapping[str, Any]:
+    """The spelling a record's top-level fields describe.
+
+    Args:
+        spellings: The row's spellings (at least one).
+        target: The row's credited C# member (``NumSharp.np.sum``), or empty.
+        group_types: ``GapMap.group_types``.
+
+    Returns:
+        The spelling of the credited member when one is; else a module function or ``ndarray`` member, then another
+        class's member, then a constructor, then the typed ``NDArray<T>`` spelling (the first of the best kind).
+    """
+    def rank(spelling: Mapping[str, Any]) -> int:
+        """Order the spellings by how directly they spell the row's NumPy API.
+
+        Args:
+            spelling: One spelling.
+
+        Returns:
+            0 for the credited member, then 1 (a function or ndarray member), 2 (another class's member),
+            3 (a constructor), 4 (the typed receiver).
+        """
+        member = group_types.get(spelling["group"], "").replace("+", ".") + "." + spelling["name"]
+        if target and member == target:
+            return 0
+        if spelling["group"] == TYPED_NDARRAY_GROUP:
+            return 4
+        if spelling["name"] == CONSTRUCTOR:
+            return 3
+        return 1 if spelling["group"] == "ndarray" or is_module_group(spelling["group"]) else 2
+
+    return min(spellings, key=rank)
+
+
+def record_from_spellings(spellings: Sequence[Mapping[str, Any]], spelling_kind: str, target: str,
+                          group_types: Mapping[str, str]) -> dict[str, Any]:
+    """The signature record of a row from its C# spellings (gap-map rows).
+
+    The row-level marks are the union over the spellings (the strongest symbol of each mark); the list fields
+    ``missing`` / ``excluded`` / ``foreign`` / ``typecode`` are the union too (a port may write any of the spellings),
+    and ``overloads``, ``closest``, ``numpy`` and the closest-overload lists describe the primary spelling
+    (``_primary``). Every spelling keeps its own detail under ``spellings``.
+
+    Args:
+        spellings: The row's spellings (at least one).
+        spelling_kind: ``exact``, or ``alias`` when the row is credited through another name (mark N).
+        target: The row's credited C# member, or empty.
+        group_types: ``GapMap.group_types``.
+
+    Returns:
+        The record: ``status`` (``identical``, ``differs``, or ``not-compared`` when no spelling has a NumPy signature
+        to compare), ``spelling``, ``source`` (``gap-map``), ``marks``, the union lists, the primary spelling's fields,
+        and ``spellings``.
+    """
+    primary = _primary(spellings, target, group_types)
+    compared = [s for s in spellings if s["marks"]["M"] != "—"]
+    marks = {mark: _strongest(s["marks"][mark] for s in spellings) for mark in "MXBLQ"}
+    marks["O"] = str(max(s["overloads"] for s in spellings)) if any(s["marks"]["O"] for s in spellings) else ""
+    t_symbols = "".join(s["marks"]["T"] for s in spellings)
+    marks["T"] = ("●" if "●" in t_symbols else "") + ("◇" if "◇" in t_symbols else "")
+    record: dict[str, Any] = {"spelling": spelling_kind, "source": "gap-map", "marks": marks,
+                              "overloads": primary["overloads"]}
+    for key in ("missing", "excluded", "foreign", "typecode", "generic"):
+        union: list[str] = []
+        for spelling in spellings:
+            union.extend(value for value in spelling.get(key, []) if value not in union)
+        if union:
+            record[key] = union
+    for key in ("order", "required", "default", "varargs", "null_default", "binding", "null", "sequence"):
+        if primary.get(key):
+            record[key] = list(primary[key])
+    record["closest"] = primary["closest"]
+    record["numpy"] = primary["numpy"]
+    record["spellings"] = [dict(s) for s in spellings]
+    if not compared:
+        record["status"] = "not-compared"
+        record["reason"] = "the gap map compares no NumPy signature here (" + primary["status"] + ")"
+    else:
+        record["status"] = "differs" if spelling_kind == "alias" or any(spelling_differs(s) for s in compared) \
+            else "identical"
+    return record
+
+
+def inventory_marks(record: Mapping[str, Any]) -> dict[str, str]:
+    """The mark symbols of a record the inventory computed itself (no gap-map spelling: never compile-probed).
+
+    Args:
+        record: From ``assess``.
+
+    Returns:
+        The gap map's symbol per mark: ``M`` ``●`` / ``◦``, ``X`` ``●``, ``O`` the overload count above one, ``T``
+        ``●``, and ``—`` for B / L / Q (not probed).
+    """
+    return {"M": "●" if record.get("missing") else "◦" if record.get("excluded") else "",
+            "X": "●" if record.get("foreign") else "",
+            "O": str(record["overloads"]) if record.get("overloads", 1) > 1 else "",
+            "T": "●" if record.get("typecode") else "", "B": "—", "L": "—", "Q": "—"}
+
+
+def same_numpy_object(np: Any, first: str, second: str) -> bool:
+    """Whether two catalog ids name the same NumPy object (``numpy.acos`` and ``numpy.arccos``,
+    ``numpy.matrix.fill`` and ``numpy.ndarray.fill``).
+
+    Args:
+        np: The imported numpy module.
+        first: A catalog id.
+        second: Another catalog id.
+
+    Returns:
+        True when both resolve and are the same object once a bound method is unwrapped to its function.
+    """
+    resolved_a, a = resolve_api_id(np, first)
+    resolved_b, b = resolve_api_id(np, second)
+    if not (resolved_a and resolved_b) or a is None:
+        return False
+    return getattr(a, "__func__", a) is getattr(b, "__func__", b)
+
+
+def gap_member_id(row: Mapping[str, str], group_types: Mapping[str, str]) -> str | None:
+    """The C# member a gap-map row compares, in the catalog's target spelling (``NumSharp.np.sum``).
+
+    Args:
+        row: A gap-map row.
+        group_types: ``GapMap.group_types``.
+
+    Returns:
+        ``<CLR type with + read as .>.<name>``, or None for a constructor, the typed group (its members are not a
+        catalog target) or a group of unknown type.
+    """
+    clr = group_types.get(row["module"])
+    if not clr or row["name"] == CONSTRUCTOR or row["module"] == TYPED_NDARRAY_GROUP:
+        return None
+    return clr.replace("+", ".") + "." + row["name"]
+
+
+def declared_member_ids(member: Mapping[str, Any] | None, target: str) -> list[str]:
+    """The C# members a credited target stands for when its overloads are inherited.
+
+    ``NumSharp.NDMatrix.fill`` is ``NDArray.fill`` (NDMatrix declares no ``fill``): the gap map compares it once, under
+    the declaring type's group, so the adoption looks it up there.
+
+    Args:
+        member: The target's inventory member (``member_index``), or None.
+        target: The credited target id.
+
+    Returns:
+        The target, then ``<declaring type>.<name>`` when every overload is declared by one other type.
+    """
+    ids = [target]
+    declaring = (member or {}).get("declaringTypes") or []
+    owner, _, name = target.rpartition(".")
+    if len(declaring) == 1 and declaring[0].replace("+", ".") != owner:
+        ids.append(declaring[0].replace("+", ".") + "." + name)
+    return ids
+
+
+def attach(rows: list[dict[str, Any]], inventory: Mapping[str, Any], np: Any, gap: GapMap | None = None) -> list[str]:
     """Attach the signature-parity record to every row that takes part (``row["signature"]``).
+
+    Without a gap map, every record is the inventory's own comparison (``assess``: reflection only, no compile probe).
+    With one, every C# spelling the gap map compares joins the catalog row of the NumPy API it implements, and the
+    record is built from those spellings (``record_from_spellings``), so the inventory reports exactly the gap map's
+    marks. The joins, in order:
+
+    1. by id: a NumPy row of the gap map joins ``signature_gap.catalog_id`` (a constructor joins the class row, the
+       typed ``NDArray<T>`` group joins ``numpy.ndarray``'s rows);
+    2. by C# member: a NumSharp-only row of the gap map (and a NumPy one whose catalog id the catalog does not list,
+       such as ``numpy.random.get_bit_generator``, outside NumPy's ``__all__`` and documentation) joins the
+       NumSharp-only catalog row of the same member;
+    3. by adoption: a credited row no gap row joined adopts the spellings of a row that compares the SAME C# member
+       (or the type that declares it, for an inherited member) against the SAME NumPy object, because the verdict
+       depends on nothing else: ``numpy.acos`` adopts ``numpy.arccos``'s (and keeps its N mark),
+       ``numpy.matrix.fill`` adopts ``numpy.ndarray.fill``'s, ``numpy.random.RandomState.beta`` ``numpy.random.beta``'s.
+
+    Rows left without a spelling keep the inventory's own record (``source: inventory``, B / L / Q not probed).
 
     Args:
         rows: The catalog rows (changed in place).
         inventory: The reflected NumSharp inventory (schema 7).
         np: The imported numpy module.
+        gap: The gap map (``signature_gap.run``), or None for the inventory's own comparison only.
 
     Returns:
-        One problem line per row whose record carries a ``WIRING_REASONS`` reason (``"numpy.x -> NumSharp.np.x:
-        reason"``); empty when every credited call resolved to a reflected method with overload data.
+        Problem lines: a row whose record carries a ``WIRING_REASONS`` reason (``"numpy.x -> NumSharp.np.x:
+        reason"``); a gap-map row with a NumPy counterpart that joins no catalog row and is not in
+        ``GAP_JOIN_EXEMPT``; an exemption that no longer occurs. Empty when everything joined.
     """
     index = member_index(inventory)
     problems = []
+    by_id = {row["id"]: row for row in rows}
+    joined: dict[str, list[dict[str, Any]]] = {}
+    exempt_seen = set()
+    if gap is not None:
+        types = gap.group_types
+        numsharp_rows = {row["numsharp_target"]: row for row in rows
+                         if row.get("origin") == "numsharp" and row.get("numsharp_target")}
+        for gap_row in gap.rows:
+            key = (gap_row["module"], gap_row["name"])
+            if gap_row["numpy_kind"] != "absent":
+                cid = catalog_id(*key)
+                if cid in by_id:
+                    if not by_id[cid].get("numsharp_target"):
+                        # The gap map compares a C# spelling of an API the catalog calls missing: the two disagree on
+                        # what exists (numpy.char.chararray read "missing" while NDCharArray implemented it).
+                        problems.append(f"gap map {key[0]} / {key[1]}: compares a C# member for {cid}, which the "
+                                        "catalog does not credit")
+                    joined.setdefault(cid, []).append(spelling_from_gap(gap_row, types))
+                    continue
+            member = gap_member_id(gap_row, types)
+            if member in numsharp_rows:
+                joined.setdefault(numsharp_rows[member]["id"], []).append(spelling_from_gap(gap_row, types))
+                continue
+            if gap_row["numpy_kind"] == "absent":
+                continue  # A NumSharp-only member of an object type: the catalog lists those of the facades only.
+            if key in GAP_JOIN_EXEMPT:
+                exempt_seen.add(key)
+                continue
+            problems.append(f"gap map {key[0]} / {key[1]}: joins no catalog row ({catalog_id(*key)})")
+        problems.extend(f"stale gap-map exemption {key[0]} / {key[1]}: it joins a row now, or the gap map no longer "
+                        "lists it" for key in GAP_JOIN_EXEMPT if key not in exempt_seen)
+        # The C# member each joined NumPy spelling compares, for the adoption below.
+        by_member: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+        for gap_row in gap.rows:
+            member = gap_member_id(gap_row, types)
+            if member and gap_row["numpy_kind"] != "absent" and catalog_id(gap_row["module"], gap_row["name"]) in by_id:
+                by_member.setdefault(member, []).append((catalog_id(gap_row["module"], gap_row["name"]), gap_row))
     for row in rows:
-        record = assess(np, row, index.get(row.get("numsharp_target") or ""))
+        target = row.get("numsharp_target") or ""
+        member = index.get(target)
+        record = assess(np, row, member)
+        spellings = joined.get(row["id"])
+        if gap is not None and spellings is None and target and row.get("origin") == "numpy" \
+                and not row.get("python_protocol"):
+            for candidate in declared_member_ids(member, target):
+                adopted = [spelling_from_gap(gap_row, gap.group_types, via=cid) for cid, gap_row
+                           in by_member.get(candidate, ()) if cid != row["id"] and same_numpy_object(np, row["id"], cid)]
+                if adopted:
+                    spellings = adopted
+                    break
+        if spellings:
+            kind = (record or {}).get("spelling") or ("alias" if row.get("availability") == "alias" else "exact")
+            record = record_from_spellings(spellings, kind, target, gap.group_types)
+        elif record is not None:
+            record["source"] = "inventory"
+            record["marks"] = inventory_marks(record)
         if record is None:
             continue
         row["signature"] = record
@@ -872,24 +1221,107 @@ def attach(rows: list[dict[str, Any]], inventory: Mapping[str, Any], np: Any) ->
 
 
 def marks(record: Mapping[str, Any] | None) -> str:
-    """The marks of one record as letters, in a fixed order.
+    """The marks of one record as letters, in ``MARK_ORDER``.
 
     Args:
         record: A row's signature record, or None.
 
     Returns:
-        ``"MXOTN"``-style letters: M missing, X foreign, O overloads, T NPTypeCode / Type, N other name; an empty
-        string for no mark or no record.
+        ``"MXOTBLQN"``-style letters: M a missing NumPy parameter (● only; M ◦, plan-excluded only, is no mark), X a
+        parameter NumPy lacks, O more than one overload, T a dtype as NPTypeCode / Type or picked by a generic type
+        argument, B a NumPy-style call that does not bind (● or ◐), L ``null`` refused for NumPy's None (● / ◐ / ◦), Q
+        an integer sequence refused (● or ◐), N credited through another name. A not-compared record carries N at
+        most, plus the O / T of a NumSharp-only member's spellings. Empty for no mark or no record.
     """
-    if not record or record.get("status") == "not-compared":
-        return "N" if record and record.get("spelling") == "alias" else ""
+    if not record:
+        return ""
+    symbols = record.get("marks") or {}
+    alias = record.get("spelling") == "alias"
+    if record.get("status") == "not-compared":
+        letters = "".join(letter for letter in "OT" if symbols.get(letter))
+        return letters + ("N" if alias else "")
     letters = ""
-    letters += "M" if record.get("missing") else ""
-    letters += "X" if record.get("foreign") else ""
-    letters += "O" if record.get("overloads", 1) > 1 else ""
-    letters += "T" if record.get("typecode") else ""
-    letters += "N" if record.get("spelling") == "alias" else ""
+    letters += "M" if symbols.get("M") == "●" or (not symbols and record.get("missing")) else ""
+    letters += "X" if symbols.get("X") == "●" or (not symbols and record.get("foreign")) else ""
+    letters += "O" if symbols.get("O") or (not symbols and record.get("overloads", 1) > 1) else ""
+    letters += "T" if symbols.get("T") or (not symbols and record.get("typecode")) else ""
+    for letter, counted in PROBE_MARKS.items():
+        letters += letter if symbols.get(letter) in counted else ""
+    letters += "N" if alias else ""
     return letters
+
+
+#: The gap map's own count keys (``signature_diff.mark_counts``), in its order: the reconciliation counts the
+#: spellings the artifact carries under the same keys, so the two lists can be compared line by line.
+GAP_COUNT_KEYS = ("numpy", "M", "M_excluded_only", "X", "O", "T", "T_generic", "B", "B_12", "L", "L_12", "L_default",
+                  "Q", "no_mark")
+
+
+def spelling_counts(symbols: Mapping[str, str]) -> dict[str, int]:
+    """Count one spelling's marks under the gap map's keys (``signature_diff.mark_counts``' rules).
+
+    Args:
+        symbols: A spelling's ``marks`` (the gap map's symbol per mark).
+
+    Returns:
+        ``GAP_COUNT_KEYS`` -> 0 or 1 (``numpy`` is always 1: the spelling has a NumPy counterpart).
+    """
+    m, b, n, q, t = symbols["M"], symbols["B"], symbols["L"], symbols["Q"], symbols["T"]
+    flags = {
+        "numpy": 1, "M": m == "●", "M_excluded_only": m == "◦", "X": symbols["X"] == "●", "O": bool(symbols["O"]),
+        "T": "●" in t, "T_generic": "◇" in t, "B": b == "●", "B_12": b == "◐", "L": n == "●", "L_12": n == "◐",
+        "L_default": n == "◦", "Q": q in ("●", "◐"),
+    }
+    flags["no_mark"] = not (m in ("●", "◦") or flags["X"] or flags["O"] or t or b in ("●", "◐")
+                            or n in ("●", "◐", "◦") or flags["Q"])
+    return {key: int(flags[key]) for key in GAP_COUNT_KEYS}
+
+
+def reconcile(gap: GapMap, rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Prove that the artifact carries every finding of the gap map: count the spellings the rows carry under the gap
+    map's own keys, and say where each spelling with a NumPy counterpart that the rows do not carry went.
+
+    Args:
+        gap: The gap map.
+        rows: The emitted (projected) rows.
+
+    Returns:
+        ``tool`` (the gap map's own counts), ``carried`` (the same keys over the spellings the rows carry, each
+        spelling once however many rows carry it), ``probe`` (the compile probe's counts), ``elsewhere`` (spellings carried by a
+        NumSharp-only row: NumPy has the name outside its ``__all__`` and documentation) and ``outside`` (spellings no
+        emitted row carries: an exemption, or a row the dashboard projection leaves out, ``numpy.lib`` /
+        ``numpy.testing``), each a list of ``{"group", "name", "id", "reason"}``.
+    """
+    carried = {key: 0 for key in GAP_COUNT_KEYS}
+    seen, elsewhere = set(), []
+    for row in rows:
+        for spelling in (row.get("signature") or {}).get("spellings", []):
+            key = (spelling["group"], spelling["name"])
+            # A spelling counts once however many rows carry it (an adopted copy is the same finding as its
+            # source row's, and still carries it when the projection drops the source); a NumSharp-only spelling
+            # has no NumPy counterpart, and the gap map's counts leave those out too.
+            if key in seen or spelling.get("numpy_kind") == "absent":
+                continue
+            seen.add(key)
+            for count_key, value in spelling_counts(spelling["marks"]).items():
+                carried[count_key] += value
+            if row.get("origin") == "numsharp":
+                elsewhere.append({"group": key[0], "name": key[1], "id": row["id"],
+                                  "reason": "NumPy has the name outside its __all__ and documentation; the catalog "
+                                            "lists the NumSharp member as NumSharp-only"})
+    emitted = {row["id"] for row in rows}
+    outside = []
+    for gap_row in gap.rows:
+        key = (gap_row["module"], gap_row["name"])
+        if gap_row["numpy_kind"] == "absent" or key in seen:
+            continue
+        cid = catalog_id(*key)
+        reason = GAP_JOIN_EXEMPT.get(key) or ("the dashboard projection leaves the row out (numpy.lib and "
+                                              "numpy.testing are not shown, by the owner's rule)"
+                                              if cid not in emitted else "carried by no emitted row")
+        outside.append({"group": key[0], "name": key[1], "id": cid, "reason": reason})
+    return {"tool": {key: gap.marks.get(key, 0) for key in GAP_COUNT_KEYS}, "carried": carried, "probe": gap.probe,
+            "elsewhere": elsewhere, "outside": outside}
 
 
 def classify(row: Mapping[str, Any]) -> str:
@@ -912,17 +1344,22 @@ def counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int | float]:
         rows: The rows of one scope.
 
     Returns:
-        ``signature_identical`` / ``signature_differs`` / ``signature_not_compared``, the per-mark row counts
-        (``signature_missing`` M, ``signature_foreign`` X, ``signature_overloaded`` O, ``signature_typecode`` T,
-        ``signature_other_name`` N, ``signature_excluded_only`` rows missing only excluded parameters), the
-        closest-overload counts (``signature_order``, ``signature_required``, ``signature_default``,
-        ``signature_varargs``), and ``signature_percent``: identical rows over every row of the scope (the
-        denominator of ``coverage_percent``).
+        ``signature_identical`` / ``signature_differs`` / ``signature_not_compared``; the per-mark row counts over the
+        compared rows (``signature_missing`` M, ``signature_foreign`` X, ``signature_overloaded`` O,
+        ``signature_typecode`` T ●, ``signature_generic`` T ◇, ``signature_typecode_any`` T with either symbol (a row
+        can carry both, so the two counts above do not add up to it), ``signature_binding`` B, ``signature_null`` L,
+        ``signature_sequence`` Q, ``signature_excluded_only`` rows missing only plan-excluded parameters) and
+        ``signature_other_name`` (N, every record); the closest-overload counts (``signature_order``,
+        ``signature_required``, ``signature_default``, ``signature_varargs``); ``signature_unprobed`` (compared rows
+        whose record is the inventory's own comparison: the gap map's compile probe never saw them); and
+        ``signature_percent``: identical rows over every row of the scope (the denominator of ``coverage_percent``).
     """
     tally = {key: 0 for key in (
         "signature_identical", "signature_differs", "signature_not_compared", "signature_missing",
-        "signature_foreign", "signature_overloaded", "signature_typecode", "signature_other_name",
-        "signature_excluded_only", "signature_order", "signature_required", "signature_default", "signature_varargs")}
+        "signature_foreign", "signature_overloaded", "signature_typecode", "signature_generic",
+        "signature_typecode_any", "signature_binding", "signature_null", "signature_sequence", "signature_other_name",
+        "signature_excluded_only", "signature_order", "signature_required", "signature_default", "signature_varargs",
+        "signature_unprobed")}
     for row in rows:
         record = row.get("signature")
         if not record:
@@ -933,11 +1370,19 @@ def counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int | float]:
             tally["signature_other_name"] += 1
         if status == "not-compared":
             continue
-        tally["signature_missing"] += bool(record.get("missing"))
-        tally["signature_foreign"] += bool(record.get("foreign"))
-        tally["signature_overloaded"] += record.get("overloads", 1) > 1
-        tally["signature_typecode"] += bool(record.get("typecode"))
-        tally["signature_excluded_only"] += bool(record.get("excluded")) and not record.get("missing")
+        letters = marks(record)
+        symbols = record.get("marks") or {}
+        tally["signature_missing"] += "M" in letters
+        tally["signature_foreign"] += "X" in letters
+        tally["signature_overloaded"] += "O" in letters
+        tally["signature_typecode"] += "●" in symbols.get("T", "") or (not symbols and bool(record.get("typecode")))
+        tally["signature_generic"] += "◇" in symbols.get("T", "")
+        tally["signature_typecode_any"] += "T" in letters
+        tally["signature_binding"] += "B" in letters
+        tally["signature_null"] += "L" in letters
+        tally["signature_sequence"] += "Q" in letters
+        tally["signature_excluded_only"] += bool(record.get("excluded")) and "M" not in letters
+        tally["signature_unprobed"] += record.get("source") == "inventory"
         for key in CLOSEST_HARD_KINDS:
             tally["signature_" + key] += bool(record.get(key))
     total = len(rows)

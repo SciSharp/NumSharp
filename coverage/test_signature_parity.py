@@ -15,10 +15,14 @@ from __future__ import annotations
 
 import inspect
 import unittest
+from pathlib import Path
 
 import numpy as np
 
+import signature_gap as gap_module
 import signature_parity as sp
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def parameter(text: str) -> dict:
@@ -354,6 +358,276 @@ class SignatureRuleTests(unittest.TestCase):
         index = sp.member_index(inventory)
         self.assertEqual(1, len(index["NumSharp.np.sum"]["overloads"]))
         self.assertIn("NumSharp.np.random.seed", index)
+
+
+# ---- The API diff gap map joined onto the catalog (generator 1.16.0) ----
+
+#: The CLR types of the groups the synthetic gap maps below use (the dump's module types and the object surfaces').
+GROUP_TYPES = {"np": "NumSharp.np", "ndarray": "NumSharp.NDArray", "np.random": "NumSharp.NumPyRandom",
+               "np.matrix": "NumSharp.NDMatrix", "np.char.chararray": "NumSharp.NDCharArray",
+               "np.random.MT19937": "NumSharp.MT19937", gap_module.TYPED_NDARRAY_GROUP: gap_module.TYPED_NDARRAY_TYPE}
+
+
+def gap_row(module: str, name: str, numpy_kind: str = "function", **cells: str) -> dict:
+    """One row of the gap map's CSV, every column the join reads defaulting to empty.
+
+    :param module: the group key.
+    :param name: the C# name (``(constructor)`` for a class call).
+    :param numpy_kind: NumPy's kind of the name (``absent`` for a NumSharp-only name).
+    :param cells: column overrides (``mark_M="●"``, ``missing_any_overload="out; where"``, ...).
+    :returns: the row as csv.DictReader gives it (every value a string).
+    """
+    row = {column: "" for column in gap_module.REQUIRED_COLUMNS}
+    row.update({"module": module, "name": name, "numpy_kind": numpy_kind, "status": "identical", "overloads": "1",
+                "best": f"NDArray {name}(NDArray a)", "numpy_signature": f"{name}(a)"})
+    row.update(cells)
+    return row
+
+
+def catalog_row(api_id: str, target: str | None, **fields) -> dict:
+    """A catalog row as resolve_rows builds it, credited to ``target``.
+
+    :param api_id: the row id (``numpy.sum``, ``numsharp.random.x`` for a NumSharp-only row).
+    :param target: the credited C# member, or None for an API the catalog calls missing.
+    :param fields: overrides (``origin``, ``kind``, ``availability``, ``python_protocol``, ...).
+    :returns: the row.
+    """
+    row = {"id": api_id, "origin": "numpy", "kind": "function", "availability": "exact" if target else "missing",
+           "numsharp_target": target}
+    row.update(fields)
+    return row
+
+
+def inventory_for(*members) -> dict:
+    """A schema-7 inventory holding the given members, each with one ``(NDArray a)`` overload.
+
+    :param members: ``(target, declaring types)`` pairs, or plain targets (declared by their own type).
+    :returns: the inventory (``objectTypes`` keyed by type).
+    """
+    types: dict = {}
+    for member in members:
+        target, declaring = member if isinstance(member, tuple) else (member, None)
+        owner, _, name = target.rpartition(".")
+        entry = types.setdefault(owner, {"type": owner, "methods": []})
+        entry["methods"].append({"name": name, "kind": "method", "declaringTypes": declaring or [owner],
+                                 "overloads": [overload(name, "NDArray a")]})
+    return {"objectTypes": types, "modules": {}}
+
+
+def gap_map(*rows, marks=None, with_exemptions=True) -> "gap_module.GapMap":
+    """A gap map over the given rows, plus (by default) every row ``GAP_JOIN_EXEMPT`` exempts, as the real gap map
+    has them: without them each synthetic map would report the exemptions as stale.
+
+    :param rows: gap-map rows (``gap_row``).
+    :param marks: the gap map's own counts (defaults to empty).
+    :param with_exemptions: False to leave the exempted rows out (the stale-exemption test).
+    :returns: the GapMap.
+    """
+    rows = list(rows)
+    if with_exemptions:
+        present = {(row["module"], row["name"]) for row in rows}
+        rows.extend(gap_row(module, name, numpy_kind="method") for module, name in sp.GAP_JOIN_EXEMPT
+                    if (module, name) not in present)
+    return gap_module.GapMap(rows, {}, marks or {}, dict(GROUP_TYPES))
+
+
+class GapMapJoinTests(unittest.TestCase):
+    """How the gap map's C# spellings become the catalog rows' signature records."""
+
+    def test_an_id_join_takes_the_gap_maps_marks_and_probe_findings(self):
+        """np.sum's spelling carries M, O, L and Q; the probe cells split into findings, "; " inside one kept."""
+        rows = [catalog_row("numpy.sum", "NumSharp.np.sum")]
+        gap = gap_map(gap_row("np", "sum", mark_M="●", mark_O="7", mark_L="●", mark_Q="●", overloads="7",
+                              missing_any_overload="out; initial; where",
+                              probe_null="`axis`: argument 2: `<null>` -> `int`",
+                              probe_sequence="`axis` as a sequence: no overload fits; the closest one wants `int` "
+                                             "for argument 2"))
+        self.assertEqual([], sp.attach(rows, inventory_for("NumSharp.np.sum"), np, gap))
+        record = rows[0]["signature"]
+        self.assertEqual(("differs", "gap-map", "MOLQ"), (record["status"], record["source"], sp.marks(record)))
+        self.assertEqual(["out", "initial", "where"], record["missing"])
+        self.assertEqual(["`axis` as a sequence: no overload fits; the closest one wants `int` for argument 2"],
+                         record["sequence"])
+        self.assertEqual("np.sum", record["spellings"][0]["csharp"])
+
+    def test_constructors_and_the_typed_receiver_join_the_class_and_member_rows(self):
+        """``new NDArray(...)`` and ``new NDArray<T>(...)`` spell numpy.ndarray; NDArray<T>.reshape spells reshape."""
+        rows = [catalog_row("numpy.ndarray", "NumSharp.NDArray", kind="class"),
+                catalog_row("numpy.ndarray.reshape", "NumSharp.NDArray.reshape", kind="method")]
+        gap = gap_map(gap_row("np", "ndarray", numpy_kind="class", mark_O="2", overloads="2", mark_L="◦"),
+                      gap_row("ndarray", "(constructor)", numpy_kind="class", mark_M="●", mark_B="●", mark_O="11",
+                              overloads="11", mark_L="●"),
+                      gap_row(gap_module.TYPED_NDARRAY_GROUP, "(constructor)", numpy_kind="class", mark_T="◇",
+                              typecode_generic_selectors="<TDType>(Shape shape)", mark_L="◐"),
+                      gap_row("ndarray", "reshape", numpy_kind="method"),
+                      gap_row(gap_module.TYPED_NDARRAY_GROUP, "reshape", numpy_kind="method", mark_M="●",
+                              missing_any_overload="order; copy"))
+        problems = sp.attach(rows, inventory_for("NumSharp.np.ndarray", "NumSharp.NDArray.reshape"), np, gap)
+        self.assertEqual([], problems)
+        ndarray, reshape = rows[0]["signature"], rows[1]["signature"]
+        self.assertEqual(["np.ndarray", "new NDArray(...)", "new NDArray<T>(...)"],
+                         [s["csharp"] for s in ndarray["spellings"]])
+        self.assertEqual("MOTBL", sp.marks(ndarray), "the row's marks are the union over its spellings")
+        self.assertEqual(("●", "11", "◇"), (ndarray["marks"]["L"], ndarray["marks"]["O"], ndarray["marks"]["T"]),
+                         "each mark keeps its strongest symbol (● over ◐ over ◦) and the largest overload count")
+        self.assertEqual(2, ndarray["overloads"], "the top-level count is the primary spelling's (np.ndarray)")
+        counts = sp.counts(rows)
+        self.assertEqual((1, 1, 1, 0), (counts["signature_binding"], counts["signature_null"],
+                                        counts["signature_generic"], counts["signature_sequence"]))
+        self.assertEqual(["a.reshape", "NDArray<T>.reshape"], [s["csharp"] for s in reshape["spellings"]])
+        self.assertEqual(["order", "copy"], reshape["missing"])
+
+    def test_an_alias_and_an_inherited_member_adopt_the_spelling_of_the_same_member_and_object(self):
+        """numpy.acos IS numpy.arccos and NDMatrix.fill IS NDArray.fill: the verdict can only be the same."""
+        rows = [catalog_row("numpy.acos", "NumSharp.np.arccos", availability="alias", kind="ufunc"),
+                catalog_row("numpy.arccos", "NumSharp.np.arccos", kind="ufunc"),
+                catalog_row("numpy.matrix.fill", "NumSharp.NDMatrix.fill", kind="method", object_surface=True),
+                catalog_row("numpy.ndarray.fill", "NumSharp.NDArray.fill", kind="method"),
+                catalog_row("numpy.matrix.tolist", "NumSharp.NDMatrix.tolist", kind="method", object_surface=True),
+                catalog_row("numpy.ndarray.tolist", "NumSharp.NDArray.tolist", kind="method")]
+        gap = gap_map(gap_row("np", "arccos", numpy_kind="ufunc", mark_M="◦", missing_excluded="casting"),
+                      gap_row("ndarray", "fill", numpy_kind="method"),
+                      gap_row("ndarray", "tolist", numpy_kind="method"))
+        inventory = inventory_for("NumSharp.np.arccos", ("NumSharp.NDMatrix.fill", ["NumSharp.NDArray"]),
+                                  "NumSharp.NDArray.fill", ("NumSharp.NDMatrix.tolist", ["NumSharp.NDArray"]),
+                                  "NumSharp.NDArray.tolist")
+        self.assertEqual([], sp.attach(rows, inventory, np, gap))
+        by_id = {row["id"]: row["signature"] for row in rows}
+        acos = by_id["numpy.acos"]
+        self.assertEqual(("differs", "N", "numpy.arccos"),
+                         (acos["status"], sp.marks(acos), acos["spellings"][0]["via"]),
+                         "M ◦ is no mark; the alias keeps its N")
+        self.assertEqual("identical", by_id["numpy.arccos"]["status"], "M ◦ alone does not make a row differ")
+        self.assertEqual(("gap-map", "numpy.ndarray.fill"),
+                         (by_id["numpy.matrix.fill"]["source"], by_id["numpy.matrix.fill"]["spellings"][0]["via"]))
+        # NumPy's matrix overrides tolist (another object): the ndarray verdict does not apply.
+        self.assertEqual("inventory", by_id["numpy.matrix.tolist"]["source"])
+        self.assertEqual("—", by_id["numpy.matrix.tolist"]["marks"]["B"], "an unprobed row says so")
+
+    def test_a_numsharp_only_row_carries_the_spelling_of_its_member(self):
+        """numpy.random.get_bit_generator is outside NumPy's __all__ and docs: the NumSharp-only row carries it."""
+        rows = [catalog_row("numsharp.random.get_bit_generator", "NumSharp.NumPyRandom.get_bit_generator",
+                            origin="numsharp", availability="extension")]
+        gap = gap_map(gap_row("np.random", "get_bit_generator"),
+                      gap_row("np.random", "bernoulli", numpy_kind="absent", mark_O="2", mark_M="—", mark_X="—"))
+        rows.append(catalog_row("numsharp.random.bernoulli", "NumSharp.NumPyRandom.bernoulli", origin="numsharp",
+                                availability="extension"))
+        self.assertEqual([], sp.attach(rows, inventory_for(), np, gap))
+        self.assertEqual("identical", rows[0]["signature"]["status"])
+        bernoulli = rows[1]["signature"]
+        self.assertEqual(("not-compared", "O"), (bernoulli["status"], sp.marks(bernoulli)))
+        reconciliation = sp.reconcile(gap, rows)
+        self.assertEqual([("np.random", "get_bit_generator")],
+                         [(item["group"], item["name"]) for item in reconciliation["elsewhere"]])
+        self.assertEqual(1, reconciliation["carried"]["numpy"], "a NumSharp-only spelling is not a NumPy name")
+
+    def test_an_unjoined_spelling_fails_and_an_exemption_goes_stale(self):
+        """A lost finding is a problem; so is a gap-map spelling of an API the catalog calls missing."""
+        rows = [catalog_row("numpy.char.chararray.center", None, kind="method")]
+        gap = gap_map(gap_row("np", "nowhere"), gap_row("np.char.chararray", "center", numpy_kind="method"),
+                      gap_row("np.random.MT19937", "_legacy_seeding", numpy_kind="method"),
+                      gap_row("np.matrix", "Clone", numpy_kind="absent", mark_M="—"))
+        problems = sp.attach(rows, inventory_for(), np, gap)
+        self.assertTrue(any("np / nowhere: joins no catalog row" in p for p in problems), problems)
+        self.assertTrue(any("does not credit" in p for p in problems), problems)
+        self.assertFalse(any("_legacy_seeding" in p for p in problems), "an exempted spelling is no problem")
+        self.assertFalse(any("Clone" in p for p in problems),
+                         "a NumSharp-only member of an object type has no catalog row by design (no problem)")
+        self.assertEqual(2, len(problems), problems)
+        stale = sp.attach([], inventory_for(), np, gap_map(with_exemptions=False))
+        self.assertTrue(any("stale gap-map exemption" in p for p in stale), stale)
+
+    def test_the_status_follows_the_marks(self):
+        """M ◦ and a null default are not differences; L ◦, B ◐ and a hard closest difference are."""
+        def status(**cells):
+            """The record status of one numpy.f row whose only spelling has the given cells.
+
+            :param cells: gap-map row cells.
+            :returns: the status.
+            """
+            rows = [catalog_row("numpy.f", "NumSharp.np.f")]
+            sp.attach(rows, inventory_for("NumSharp.np.f"), np, gap_map(gap_row("np", "f", **cells)))
+            return rows[0]["signature"]["status"]
+
+        self.assertEqual("identical", status(mark_M="◦", missing_excluded="like"))
+        self.assertEqual("identical", status(null_default="order: 'C' vs null"))
+        self.assertEqual("identical", status(mark_B="—", mark_L="—", mark_Q="—"), "an unprobed spelling has no mark")
+        self.assertEqual("differs", status(mark_L="◦"))
+        self.assertEqual("differs", status(mark_B="◐"))
+        self.assertEqual("differs", status(mark_T="◇"))
+        self.assertEqual("differs", status(slot="dtype: NumPy #2, C# #3"))
+
+    def test_a_row_with_both_t_symbols_counts_once_under_t(self):
+        """T ● and T ◇ on one row: each symbol's count takes it, and the any-T count (the per-surface T column of
+        summary.md) takes it once, where adding the two counts would take it twice."""
+        rows = [catalog_row("numpy.zeros", "NumSharp.np.zeros")]
+        gap = gap_map(gap_row("np", "zeros", mark_T="●◇", typecode_params="dtype: NPTypeCode",
+                              typecode_generic_selectors="<T>(Shape shape)"))
+        self.assertEqual([], sp.attach(rows, inventory_for("NumSharp.np.zeros"), np, gap))
+        self.assertEqual("T", sp.marks(rows[0]["signature"]))
+        counts = sp.counts(rows)
+        self.assertEqual((1, 1, 1), (counts["signature_typecode"], counts["signature_generic"],
+                                     counts["signature_typecode_any"]))
+
+    def test_reconcile_counts_the_carried_spellings_under_the_gap_maps_keys(self):
+        """The artifact's carried counts plus what it does not show equal the gap map's own counts."""
+        rows = [catalog_row("numpy.sum", "NumSharp.np.sum"), catalog_row("numpy.acos", "NumSharp.np.arccos",
+                                                                         availability="alias", kind="ufunc"),
+                catalog_row("numpy.arccos", "NumSharp.np.arccos", kind="ufunc")]
+        gap = gap_map(gap_row("np", "sum", mark_M="●", mark_O="7", mark_L="◦"),
+                      gap_row("np", "arccos", numpy_kind="ufunc", mark_M="◦"),
+                      gap_row("np.random.MT19937", "_legacy_seeding", numpy_kind="method", mark_O="5"),
+                      marks={"numpy": 3, "M": 1, "M_excluded_only": 1, "O": 2, "L_default": 1, "no_mark": 0})
+        sp.attach(rows, inventory_for("NumSharp.np.sum", "NumSharp.np.arccos"), np, gap)
+        reconciliation = sp.reconcile(gap, rows)
+        carried = reconciliation["carried"]
+        self.assertEqual((2, 1, 1, 1, 1, 0), (carried["numpy"], carried["M"], carried["M_excluded_only"],
+                                               carried["O"], carried["L_default"], carried["no_mark"]),
+                         "numpy.acos's adopted copy of np.arccos is not counted twice")
+        self.assertEqual([("np.random.MT19937", "_legacy_seeding")],
+                         [(item["group"], item["name"]) for item in reconciliation["outside"]])
+        self.assertEqual(3, reconciliation["tool"]["numpy"])
+
+    def test_cell_splitting_and_tool_output_parsing(self):
+        """List cells split on "; "; probe findings only where a finding starts; the tools' summary lines parse."""
+        self.assertEqual(["out", "where"], gap_module.split_list("out; where"))
+        self.assertEqual([], gap_module.split_list(""))
+        self.assertEqual(["`device` alone: needs `dtype`", "positionally up to `order`: no overload fits; the closest "
+                          "one wants `string` for argument 3"],
+                         gap_module.split_findings("`device` alone: needs `dtype`; positionally up to `order`: no "
+                                                   "overload fits; the closest one wants `string` for argument 3"))
+        self.assertEqual([{"a": 1}, {"b": 2}], gap_module.json_lines('noise\n{"a": 1}\n{"b": 2}\n'))
+        self.assertEqual({"probes": 7259, "skipped": 0, "fail_12": 488, "fail_14": 455},
+                         gap_module.probe_counts("7259 probes (0 names skipped): 488 fail at C# 12, 455 at C# 14"))
+        self.assertEqual("numpy.random.Generator", gap_module.catalog_id("np.random.Generator", "(constructor)"))
+        self.assertEqual("numpy.ndarray.reshape", gap_module.catalog_id(gap_module.TYPED_NDARRAY_GROUP, "reshape"))
+        types = dict(GROUP_TYPES)
+        self.assertEqual("np.@char.find", gap_module.csharp_spelling("np.char", "find", types))
+        self.assertEqual("NDMatrix.sum", gap_module.csharp_spelling("np.matrix", "sum", types))
+        self.assertEqual("new NDArray<T>(...)",
+                         gap_module.csharp_spelling(gap_module.TYPED_NDARRAY_GROUP, "(constructor)", types))
+
+
+class CommittedGapMapTests(unittest.TestCase):
+    """The committed gap map (docs/plans/numpy-signature-diff.csv) keeps the interface the join reads."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Read the committed CSV once."""
+        cls.rows = gap_module.read_csv(ROOT / "docs" / "plans" / "numpy-signature-diff.csv")
+
+    def test_every_row_maps_to_a_numpy_id_and_every_finding_splits_where_it_starts(self):
+        """A group the join cannot map, or a probe text the splitter misreads, fails here before the generator."""
+        self.assertGreater(len(self.rows), 1000)
+        for row in self.rows:
+            cid = gap_module.catalog_id(row["module"], row["name"])
+            self.assertTrue(cid.startswith("numpy."), cid)
+            for column in ("probe_binding", "probe_null", "probe_sequence"):
+                for finding in gap_module.split_findings(row[column]):
+                    self.assertTrue(finding.startswith(gap_module._FINDING_STARTS), (row["module"], row["name"],
+                                                                                     finding))
+            for mark in "MXBLQ":
+                self.assertIn(row[f"mark_{mark}"], ("", "●", "◐", "◦", "—", "?"), (row["name"], mark))
 
 
 if __name__ == "__main__":

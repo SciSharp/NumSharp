@@ -552,7 +552,7 @@ test('detail pane renders marks, closest-overload differences and the not-compar
   assert.match(sum, /Closest overload: <code>at another position: keepdims: NumPy #4, C# #3<\/code>/);
   const inner = show('numpy.inner');
   assert.match(inner, /Identical to NumPy/);
-  assert.match(inner, /One C# overload has exactly NumPy's parameters under NumPy's name/);
+  assert.match(inner, /No mark: one C# overload has exactly NumPy's parameters under NumPy's name/);
   assert.match(inner, /cov-signature-block is-match/);
   const acos = show('numpy.acos');
   assert.match(acos, /<strong>N<\/strong> · credited through another name/);
@@ -581,7 +581,7 @@ test('metadata recounts the signature headline and rejects a drift', () => {
   api.initializeMetadata(data);
   assert.equal(api.state.hasSignature, true);
   assert.equal(element('cov-signature-reference').textContent,
-    'Headline NumPy-identical signatures: 22.2% (2/9 APIs; 5 differ: 2 M, 1 X, 1 O, 1 T, 1 N).');
+    'Headline NumPy-identical signatures: 22.2% (2/9 APIs; 5 differ: 2 M, 1 X, 1 O, 1 T, 0 B, 0 L, 0 Q, 1 N).');
   assert.equal(element('cov-lede-signature').hidden, false);
   assert.equal(element('cov-signature-explainer').hidden, false);
   data.summary.default_scope.signature_identical = 3;
@@ -613,4 +613,116 @@ test('an artifact without signature records (generator < 1.15) hides every signa
   api.filterRows();
   assert.doesNotMatch(element('cov-detail').innerHTML, /NumPy signature<\/div>|NumPy signature parity/);
   assert.doesNotMatch(element('cov-results').innerHTML, /cov-result-signature/);
+});
+
+// ---- Generator 1.16+: records joined from the API diff gap map (marks symbols, probe findings, spellings) ----
+
+// One C# spelling of a NumPy API as the generator writes it (coverage/signature_parity.spelling_from_gap).
+function spelling(csharp, marks, extra = {}) {
+  return { csharp, group: 'np', name: csharp.split('.').at(-1), numpy_kind: 'function', status: '',
+    marks: { M: '', X: '', O: '', T: '', B: '', L: '', Q: '', ...marks }, overloads: 1, ...extra };
+}
+
+// One record per mark the gap map adds (B, L ● / ◦ / ◐, Q, T ◇), a row with three C# spellings, an adopted spelling,
+// a row only the inventory's reflection compared, and a NumSharp-only member the gap map marks.
+const gapRows = () => [
+  signed('numpy.sum', { status: 'differs', spelling: 'exact', source: 'gap-map', overloads: 7,
+    marks: { M: '●', X: '', O: '7', T: '', B: '', L: '●', Q: '●' }, missing: ['out', 'initial', 'where'],
+    null: ['`axis`: argument 2: `<null>` -> `int`'],
+    sequence: ['`axis` as a sequence: no overload fits; the closest one wants `int` for argument 2'],
+    spellings: [spelling('np.sum', { M: '●', O: '7', L: '●', Q: '●' }, { overloads: 7 })] }),
+  signed('numpy.linspace', { status: 'differs', spelling: 'exact', source: 'gap-map', overloads: 1,
+    marks: { M: '', X: '', O: '', T: '', B: '●', L: '', Q: '' }, required: ['num'],
+    binding: ['required parameters only: no overload takes 2 arguments — `np.linspace(1.0, 1.0)`'],
+    spellings: [spelling('np.linspace', { B: '●' })] }),
+  signed('numpy.random.normal', { status: 'differs', spelling: 'exact', source: 'gap-map', overloads: 3,
+    marks: { M: '', X: '', O: '3', T: '', B: '', L: '◦', Q: '' }, null: ['`size`: null -> `Shape` (`default` binds)'],
+    spellings: [spelling('np.random.normal', { O: '3', L: '◦' }, { overloads: 3 })] }),
+  signed('numpy.all', { status: 'differs', spelling: 'exact', source: 'gap-map', overloads: 1,
+    marks: { M: '', X: '', O: '', T: '', B: '', L: '◐', Q: '' }, null: ['`axis`: ambiguous (C# 12 only)'],
+    spellings: [spelling('np.all', { L: '◐' })] }),
+  signed('numpy.ndarray', { status: 'differs', spelling: 'exact', source: 'gap-map', overloads: 2,
+    marks: { M: '●', X: '●', O: '11', T: '◇', B: '●', L: '', Q: '' }, missing: ['offset'], foreign: ['fillZeros'],
+    generic: ['<TDType>(Shape shape)'], binding: ['required parameters only: no overload fits — `new NDArray(new Shape(2))`'],
+    spellings: [spelling('np.ndarray', { O: '2' }, { overloads: 2 }),
+      spelling('new NDArray(...)', { M: '●', X: '●', O: '11', B: '●' }, { overloads: 11 }),
+      spelling('new NDArray<T>(...)', { M: '●', O: '9', T: '◇', B: '●' }, { overloads: 9 })] }, { kind: 'class' }),
+  signed('numpy.acos', { status: 'differs', spelling: 'alias', source: 'gap-map', overloads: 1,
+    marks: { M: '◦', X: '', O: '', T: '', B: '', L: '', Q: '' }, excluded: ['casting'],
+    spellings: [spelling('np.arccos', { M: '◦' }, { via: 'numpy.arccos' })] }, { availability: 'alias' }),
+  signed('numpy.matrix.tolist', { status: 'identical', spelling: 'exact', source: 'inventory', overloads: 1,
+    marks: { M: '', X: '', O: '', T: '', B: '—', L: '—', Q: '—' } }, { surface: 'matrix', kind: 'method' }),
+  row('numsharp.np.evaluate', 'NumSharp-only APIs', { origin: 'numsharp', status: 'extension', availability: 'extension',
+    signature: { status: 'not-compared', spelling: 'exact', source: 'gap-map', reason: 'the gap map compares no NumPy signature here (NumSharp only)',
+      marks: { M: '—', X: '—', O: '2', T: '', B: '', L: '', Q: '' },
+      spellings: [spelling('np.evaluate', { M: '—', X: '—', O: '2' }, { numpy_kind: 'absent', overloads: 2 })] } }),
+];
+
+test('gap-map records: probe marks and their symbols mirror the generator, NumSharp-only rows keep O / T', () => {
+  const { api } = dashboard();
+  const rows = gapRows();
+  const shown = Object.fromEntries(rows.map((item) => [item.id, `${api.signatureClass(item)}:${api.signatureMarks(item)}`]));
+  assert.deepEqual(shown, {
+    'numpy.sum': 'differs:MOLQ', 'numpy.linspace': 'differs:B', 'numpy.random.normal': 'differs:OL',
+    'numpy.all': 'differs:L', 'numpy.ndarray': 'differs:MXOTB', 'numpy.acos': 'differs:N',
+    'numpy.matrix.tolist': 'identical:', 'numsharp.np.evaluate': 'not-compared:O',
+  });
+  const counts = api.summarize(rows);
+  assert.deepEqual([counts.signatureBinding, counts.signatureNull, counts.signatureSequence, counts.signatureMissing,
+    counts.signatureOverloaded, counts.signatureTypecode], [2, 3, 1, 2, 3, 1],
+    'the NumSharp-only O is not counted: only compared rows enter the mark counts');
+});
+
+test('gap-map records: B / L / Q filters, the findings, every C# spelling and the adopted source', () => {
+  const { api, element } = dashboard();
+  api.state.rows = gapRows();
+  element('cov-scope').value = 'all';
+  api.changeScope();
+  const options = Array.from(element('cov-signature').options, (item) => item.value);
+  for (const mark of ['mark:B', 'mark:L', 'mark:Q']) assert.ok(options.includes(mark), mark);
+  element('cov-signature').value = 'mark:L';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.all', 'numpy.random.normal', 'numpy.sum']);
+  element('cov-signature').value = 'mark:B';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id).sort(), ['numpy.linspace', 'numpy.ndarray']);
+  api.resetFilters();
+  const show = (id) => { element('cov-search').value = id; api.filterRows(); return element('cov-detail').innerHTML; };
+  const sum = show('numpy.sum');
+  assert.match(sum, /<strong>L<\/strong> · <code>null<\/code> refused where NumPy's default is None: <code>`axis`: argument 2: `&lt;null&gt;` -&gt; `int`<\/code>/);
+  assert.match(sum, /<strong>Q<\/strong> · an integer sequence refused where NumPy's stubs allow one: <code>`axis` as a sequence: no overload fits; the closest one wants `int` for argument 2<\/code>/);
+  assert.match(sum, /<strong>O<\/strong> · 7 C# overloads/);
+  const normal = show('numpy.random.normal');
+  assert.match(normal, /<strong>L ◦<\/strong> · <code>null<\/code> refused where NumPy's default is None \(only a <code>Shape<\/code>; <code>default<\/code> binds\)/);
+  const all = show('numpy.all');
+  assert.match(all, /<strong>L ◐<\/strong>.* at C# 12/);
+  const linspace = show('numpy.linspace');
+  assert.match(linspace, /<strong>B<\/strong> · a NumPy-style call does not compile: <code>required parameters only/);
+  const ndarray = show('numpy.ndarray');
+  assert.match(ndarray, /C# spellings: <code>np.ndarray<\/code> O2 · <code>new NDArray\(...\)<\/code> M● X● O11 B● · <code>new NDArray&lt;T&gt;\(...\)<\/code> M● O9 T◇ B●/);
+  assert.match(ndarray, /<strong>T ◇<\/strong> · a generic type argument picks the dtype: <code>&lt;TDType&gt;\(Shape shape\)<\/code>/);
+  const acos = show('numpy.acos');
+  assert.match(acos, /\(as <code>np.arccos<\/code>: same C# member, same NumPy object\)/);
+  assert.doesNotMatch(acos, /<strong>M<\/strong>/, 'M ◦ (plan-excluded parameters only) is not a missing-parameter line');
+  const tolist = show('numpy.matrix.tolist');
+  assert.match(tolist, /Compared by the inventory&#039;s own reflection only|Compared by the inventory's own reflection only/);
+  assert.doesNotMatch(tolist, /and NumPy-style calls compile/, 'an unprobed identical row does not claim the probe ran');
+  const evaluate = show('numsharp.np.evaluate');
+  assert.match(evaluate, /Not compared: the gap map compares no NumPy signature here \(NumSharp only\)\. <strong>O<\/strong> · 2 C# overloads\./);
+  element('cov-search').value = 'new ndarray<t>';
+  api.filterRows();
+  assert.deepEqual(api.state.filtered.map((item) => item.id), ['numpy.ndarray'], 'C# spellings are searchable');
+});
+
+test('metadata names the gap map when the artifact carries one', () => {
+  const { api, element } = dashboard();
+  api.state.rows = gapRows();
+  api.initializeMetadata({
+    numpy_version: '2.4.2', numsharp_assembly_version: 'test', schema_version: 1,
+    signature_gap: { reconciliation: { tool: { numpy: 1206 } } },
+    summary: { default_scope: { total: 7, available: 7, signature_identical: 1, signature_differs: 6 }, catalog_rows: 8 },
+  });
+  assert.match(element('cov-meta').innerHTML, /1,206 C# spellings signature-checked/);
+  assert.equal(element('cov-signature-reference').textContent,
+    'Headline NumPy-identical signatures: 14.3% (1/7 APIs; 6 differ: 2 M, 1 X, 3 O, 1 T, 2 B, 3 L, 1 Q, 1 N).');
 });

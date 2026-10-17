@@ -98,7 +98,10 @@ OBJECT_SURFACES = (
     ObjectSurface("matrix", "Matrix objects", "NumSharp.NDMatrix"),
     ObjectSurface("recarray", "Record arrays", disposition="subsystem"),
     ObjectSurface("record", "Record arrays", disposition="subsystem"),
-    ObjectSurface("char.chararray", "String array objects", disposition="subsystem"),
+    # numpy.char's chararray is NumSharp's NDCharArray (an NDArray subclass, like NDMatrix): its members, the
+    # inherited ones included, are credited against it. Before generator 1.16.0 the surface had no owner, so all of
+    # chararray read "missing" while NDCharArray implemented it (and the API diff gap map compared it).
+    ObjectSurface("char.chararray", "String array objects", "NumSharp.NDCharArray"),
     ObjectSurface("memmap", "Memory-mapped arrays", disposition="subsystem"),
     ObjectSurface("lib.npyio.DataSource", "Data sources"),
     ObjectSurface("lib.npyio.NpzFile", "Archive objects", "NumSharp.IO.NpzFile"),

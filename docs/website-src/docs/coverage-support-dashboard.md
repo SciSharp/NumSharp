@@ -402,7 +402,7 @@
     <section class="cov-metrics" id="cov-metrics" aria-label="Coverage summary"></section>
     <div class="cov-definition">
       <strong>Coverage math</strong>
-      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias.</span> <span id="cov-oracle-reference"></span> <span id="cov-signature-explainer"><strong>NumPy-identical signature</strong> is a separate check: one C# overload with exactly NumPy's parameters (names, positions, defaults) under NumPy's name. Marks of a differing call: M a NumPy parameter no overload offers, X a parameter NumPy does not have, O more than one overload, T a dtype taken as NPTypeCode / Type instead of DType, N credited through another name.</span> <span id="cov-signature-reference"></span> <span id="cov-applicability-note"></span></p>
+      <p><span id="cov-headline-reference"></span> Summaries, cards, and the explorer follow the selected scope. Availability is <code>available ÷ NumPy APIs in that scope</code>; supporting types, constants, modules, and NumSharp-only APIs do not enter this percentage. “Available” means an exact public member or a reviewed alias exists and is not marked partial/unsupported. The headline comparison also excludes extended APIs. API presence is not a blanket edge-case, dtype, layout, or signature parity claim. <span id="cov-oracle-explainer"><strong>Oracle-verified</strong> is that claim's evidence: committed NumPy 2.4.2 output (the differential-fuzz corpus plus the .npy, flags and layout oracles) that CI replays against NumSharp, bit-exact or a documented divergence, resolved to the API directly or through an identity or reviewed delegation alias.</span> <span id="cov-oracle-reference"></span> <span id="cov-signature-explainer"><strong>NumPy-identical signature</strong> is a separate check: one C# overload with exactly NumPy's parameters (names, positions, defaults) under NumPy's name, and NumPy-style calls of it compile. It comes from the API diff gap map (<code>tools/api-parameter-parity</code>), which compares every C# spelling (functions, members, constructors, extension methods, <code>NDArray&lt;T&gt;</code>) and compiles NumPy-style calls at C# 12 and C# 14. Marks of a differing call: M a NumPy parameter no overload offers, X a parameter NumPy does not have, O more than one overload, T a dtype taken as NPTypeCode / Type or picked by a generic type argument, B a NumPy-style call that does not compile, L <code>null</code> refused where NumPy's default is None, Q an integer sequence refused where NumPy allows one, N credited through another name.</span> <span id="cov-signature-reference"></span> <span id="cov-applicability-note"></span></p>
     </div>
     <section class="cov-section" aria-labelledby="cov-status-heading">
       <div class="cov-section-head">
@@ -472,9 +472,12 @@
   const oracleLabels = { verified: "Oracle-verified (any)", "verified-direct": "Direct oracle contracts", "verified-alias": "Verified via alias", uncredited: "Oracle-gated, not credited", unverified: "Available, no oracle contracts", none: "No oracle evidence" };
   const parityOrder = ["verified-direct", "verified-alias", "uncredited", "unverified", "none"];
   // Filter values: the four signature classes, plus one entry per mark ("mark:M" ...) over the compared rows.
-  const signatureLabels = { identical: "NumPy-identical signature", differs: "Signature differs (any)", "mark:M": "M · missing a NumPy parameter", "mark:X": "X · parameter NumPy lacks", "mark:O": "O · more than one overload", "mark:T": "T · dtype as NPTypeCode / Type", "mark:N": "N · credited through another name", "not-compared": "Credited, not compared", none: "No signature record" };
-  const signatureOrder = ["identical", "differs", "mark:M", "mark:X", "mark:O", "mark:T", "mark:N", "not-compared", "none"];
-  const markMeanings = { M: "missing a NumPy parameter", X: "a parameter NumPy lacks", O: "more than one overload", T: "a dtype as NPTypeCode / Type", N: "credited through another name" };
+  const signatureLabels = { identical: "NumPy-identical signature", differs: "Signature differs (any)", "mark:M": "M · missing a NumPy parameter", "mark:X": "X · parameter NumPy lacks", "mark:O": "O · more than one overload", "mark:T": "T · dtype as NPTypeCode / Type / generic", "mark:B": "B · NumPy-style call does not compile", "mark:L": "L · null refused for None", "mark:Q": "Q · integer sequence refused", "mark:N": "N · credited through another name", "not-compared": "Credited, not compared", none: "No signature record" };
+  const signatureOrder = ["identical", "differs", "mark:M", "mark:X", "mark:O", "mark:T", "mark:B", "mark:L", "mark:Q", "mark:N", "not-compared", "none"];
+  const markMeanings = { M: "missing a NumPy parameter", X: "a parameter NumPy lacks", O: "more than one overload", T: "a dtype as NPTypeCode / Type or a generic type argument", B: "a NumPy-style call does not compile", L: "null refused where NumPy's default is None", Q: "an integer sequence refused", N: "credited through another name" };
+  // The gap map's probe marks and the symbols that count as a difference (generator 1.16+): ◐ is a call
+  // that fails at C# 12 only, ◦ (L) a `Shape` that refuses null while `default` binds.
+  const probeMarks = { B: ["●", "◐"], L: ["●", "◐", "◦"], Q: ["●", "◐"] };
   const creditedStatuses = new Set(["available", "partial", "extension"]);
   const pinLabels = { "host-libm": "the win-amd64 CRT libm", "pinned-blas": "the content-hash-pinned OpenBLAS" };
   const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -539,13 +542,21 @@
     return row.signature?.status || "none";
   }
 
-  // Mirrors coverage/signature_parity.py marks(): M X O T N in that order. A not-compared row can still
-  // carry N (its credit is another name even when nothing could be compared).
+  // Mirrors coverage/signature_parity.py marks(): M X O T B L Q N in that order, read from the record's
+  // `marks` symbols (generator 1.16+; M ◦, only plan-excluded parameters missing, is no mark). A
+  // not-compared row can still carry the O / T of a NumSharp-only member and N (its credit is another
+  // name even when nothing could be compared). A generator-1.15 record has no `marks`: its lists decide.
   function signatureMarks(row) {
     const record = state.hasSignature ? row.signature : null;
     if (!record) return "";
-    if (record.status === "not-compared") return record.spelling === "alias" ? "N" : "";
-    return `${record.missing?.length ? "M" : ""}${record.foreign?.length ? "X" : ""}${number(record.overloads) > 1 ? "O" : ""}${record.typecode?.length ? "T" : ""}${record.spelling === "alias" ? "N" : ""}`;
+    const symbols = record.marks;
+    const alias = record.spelling === "alias" ? "N" : "";
+    if (record.status === "not-compared") return `${symbols?.O ? "O" : ""}${symbols?.T ? "T" : ""}${alias}`;
+    if (!symbols) {
+      return `${record.missing?.length ? "M" : ""}${record.foreign?.length ? "X" : ""}${number(record.overloads) > 1 ? "O" : ""}${record.typecode?.length ? "T" : ""}${alias}`;
+    }
+    const probe = Object.entries(probeMarks).map(([mark, counted]) => counted.includes(symbols[mark]) ? mark : "").join("");
+    return `${symbols.M === "●" ? "M" : ""}${symbols.X === "●" ? "X" : ""}${symbols.O ? "O" : ""}${symbols.T ? "T" : ""}${probe}${alias}`;
   }
 
   function matchesSignatureFilter(row, value) {
@@ -555,7 +566,7 @@
   }
 
   function summarize(rows) {
-    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0, signature: 0, signatureApis: 0, signatureDiffers: 0, signatureNotCompared: 0, signatureMissing: 0, signatureForeign: 0, signatureOverloaded: 0, signatureTypecode: 0, signatureOtherName: 0 };
+    const counts = { total: rows.length, numpy: rows.filter(isComparableApi).length, availableApis: 0, available: 0, partial: 0, unsupported: 0, missing: 0, extension: 0, exact: 0, alias: 0, oracle: 0, oracleApis: 0, oracleDirect: 0, oracleAlias: 0, oracleUnverified: 0, oracleUncredited: 0, signature: 0, signatureApis: 0, signatureDiffers: 0, signatureNotCompared: 0, signatureMissing: 0, signatureForeign: 0, signatureOverloaded: 0, signatureTypecode: 0, signatureBinding: 0, signatureNull: 0, signatureSequence: 0, signatureOtherName: 0 };
     rows.forEach((row) => {
       if (counts[row.status] !== undefined) counts[row.status] += 1;
       if (isComparableApi(row) && row.status === "available") counts.availableApis += 1;
@@ -575,14 +586,18 @@
       }
       if (signature === "differs") counts.signatureDiffers += 1;
       if (signature === "not-compared") counts.signatureNotCompared += 1;
-      // signatureMarks gives a not-compared row at most N, so M X O T count compared rows only, as the
-      // generator's counts() does.
+      // signatureMarks gives a not-compared row at most O, T and N, so the other marks count compared
+      // rows only, as the generator's counts() does (O and T only on compared rows too).
       const marks = signatureMarks(row);
       if (marks.includes("N")) counts.signatureOtherName += 1;
+      if (signature === "not-compared") return;
       if (marks.includes("M")) counts.signatureMissing += 1;
       if (marks.includes("X")) counts.signatureForeign += 1;
       if (marks.includes("O")) counts.signatureOverloaded += 1;
       if (marks.includes("T")) counts.signatureTypecode += 1;
+      if (marks.includes("B")) counts.signatureBinding += 1;
+      if (marks.includes("L")) counts.signatureNull += 1;
+      if (marks.includes("Q")) counts.signatureSequence += 1;
     });
     counts.coverage = percent(counts.availableApis, counts.numpy);
     counts.oracleCoverage = percent(counts.oracleApis, counts.numpy);
@@ -665,22 +680,39 @@
     return values.map((value) => `<code>${escapeHtml(value)}</code>`).join(" ");
   }
 
+  // A spelling's marks as compact text ("M● O7 L◦"), the gap map's symbols; "—" (not probed) is left out.
+  function spellingMarks(marks) {
+    return Object.entries(marks || {}).filter(([, symbol]) => symbol && symbol !== "—" && symbol !== "?").map(([mark, symbol]) => `${mark}${symbol}`).join(" ");
+  }
+
   function signatureSection(row) {
     const signature = signatureClass(row);
     const record = row.signature;
     if (signature === "none") return "";
+    const symbols = record.marks || {};
+    // Every C# spelling of the API (a function, a member, a constructor, NDArray<T>), each with its marks; an
+    // adopted spelling names the row whose identical C# member and NumPy object it was taken from.
+    const spellings = (record.spellings || []).length > 1 || (record.spellings || []).some((spelling) => spelling.via)
+      ? `<p>C# spellings: ${record.spellings.map((spelling) => `<code>${escapeHtml(spelling.csharp)}</code>${spellingMarks(spelling.marks) ? ` ${escapeHtml(spellingMarks(spelling.marks))}` : " no mark"}${spelling.via ? ` (as <code>${escapeHtml(idLabel(spelling.via))}</code>: same C# member, same NumPy object)` : ""}`).join(" · ")}</p>`
+      : "";
     if (signature === "not-compared") {
-      return `<h4>NumPy signature parity</h4><div class="cov-signature-block is-gap"><p>Not compared: ${escapeHtml(record.reason || "")}.${record.spelling === "alias" ? " Credited through another name (N): NumPy's spelling does not compile." : ""}</p></div>`;
+      const counted = [symbols.O ? `<strong>O</strong> · ${escapeHtml(symbols.O)} C# overloads.` : "", symbols.T ? `<strong>T</strong> · ${escapeHtml(markMeanings.T)}.` : ""].filter(Boolean).join(" ");
+      return `<h4>NumPy signature parity</h4><div class="cov-signature-block is-gap"><p>Not compared: ${escapeHtml(record.reason || "")}.${record.spelling === "alias" ? " Credited through another name (N): NumPy's spelling does not compile." : ""}${counted ? ` ${counted}` : ""}</p>${spellings}</div>`;
     }
     const parts = [];
     if (signature === "identical") {
-      parts.push(`<p>One C# overload has exactly NumPy's parameters under NumPy's name.</p>`);
+      parts.push(`<p>No mark: one C# overload has exactly NumPy's parameters under NumPy's name${record.source === "gap-map" ? ", and NumPy-style calls compile" : ""}.</p>`);
     }
     if (record.spelling === "alias") parts.push(`<p><strong>N</strong> · credited through another name: NumPy's spelling does not compile.</p>`);
-    if (record.missing?.length) parts.push(`<p><strong>M</strong> · no overload offers ${codeList(record.missing)}</p>`);
+    if (record.missing?.length && symbols.M !== "◦") parts.push(`<p><strong>M</strong> · no overload offers ${codeList(record.missing)}</p>`);
     if (record.foreign?.length) parts.push(`<p><strong>X</strong> · NumPy has no ${codeList(record.foreign)}</p>`);
-    if (number(record.overloads) > 1) parts.push(`<p><strong>O</strong> · ${number(record.overloads)} C# overloads; NumPy has one signature.</p>`);
+    if (symbols.O || number(record.overloads) > 1) parts.push(`<p><strong>O</strong> · ${escapeHtml(symbols.O || record.overloads)} C# overloads; NumPy has one signature.</p>`);
     if (record.typecode?.length) parts.push(`<p><strong>T</strong> · dtype taken as ${codeList(record.typecode)} instead of <code>DType</code></p>`);
+    if (record.generic?.length) parts.push(`<p><strong>T ◇</strong> · a generic type argument picks the dtype: ${codeList(record.generic)}</p>`);
+    // The compile probe's findings: the call written as a port writes it, and why the compiler refused it.
+    if (record.binding?.length) parts.push(`<p><strong>B${symbols.B === "◐" ? " ◐" : ""}</strong> · a NumPy-style call does not compile${symbols.B === "◐" ? " at C# 12 (it relies on [OverloadResolutionPriority])" : ""}: ${codeList(record.binding)}</p>`);
+    if (record.null?.length) parts.push(`<p><strong>L${symbols.L && symbols.L !== "●" ? ` ${escapeHtml(symbols.L)}` : ""}</strong> · <code>null</code> refused where NumPy's default is None${symbols.L === "◦" ? " (only a <code>Shape</code>; <code>default</code> binds)" : symbols.L === "◐" ? " at C# 12" : ""}: ${codeList(record.null)}</p>`);
+    if (record.sequence?.length) parts.push(`<p><strong>Q</strong> · an integer sequence refused where NumPy's stubs allow one: ${codeList(record.sequence)}</p>`);
     const closest = [
       ...(record.order || []).map((item) => `at another position: ${item}`),
       ...(record.required || []).map((item) => `C# requires ${item}`),
@@ -690,7 +722,9 @@
     if (closest.length) parts.push(`<p>Closest overload: ${codeList(closest)}</p>`);
     if (record.null_default?.length) parts.push(`<p>Informational, a null default where NumPy has a value: ${codeList(record.null_default)}</p>`);
     if (record.excluded?.length) parts.push(`<p>Not modelled by design (docs/plans/api-parameter-parity.md section 3), not counted: ${codeList(record.excluded)}</p>`);
+    if (spellings) parts.push(spellings);
     if (record.closest) parts.push(`<p>Compared overload: <code>${escapeHtml(record.closest)}</code></p>`);
+    if (record.source === "inventory") parts.push(`<p>Compared by the inventory's own reflection only: the API diff gap map does not reach this member, so no NumPy-style call of it was compiled.</p>`);
     return `<h4>NumPy signature parity</h4><div class="cov-signature-block${signature === "identical" ? " is-match" : ""}">${parts.join("")}</div>`;
   }
 
@@ -772,6 +806,8 @@
       `NumSharp assembly ${data.numsharp_assembly_version}`,
       `${data.summary.catalog_rows.toLocaleString()} searchable rows`,
       ...(data.oracle ? [`${number(data.oracle.contracts).toLocaleString()} NumPy oracle contracts`] : []),
+      // Generator 1.16+: the API diff gap map the signature records come from (C# spellings compared).
+      ...(data.signature_gap?.reconciliation ? [`${number(data.signature_gap.reconciliation.tool?.numpy).toLocaleString()} C# spellings signature-checked`] : []),
       `schema v${data.schema_version}`
     ].map((item) => `<span class="cov-pill">${escapeHtml(item)}</span>`).join("");
 
@@ -780,7 +816,7 @@
       ? `Headline oracle-verified: ${percent(stats.oracle, stats.total).toFixed(1)}% (${stats.oracle}/${stats.total} APIs; ${stats.oracleUnverified} available APIs without contracts).`
       : "";
     byId("cov-signature-reference").textContent = hasSignature
-      ? `Headline NumPy-identical signatures: ${percent(stats.signature, stats.total).toFixed(1)}% (${stats.signature}/${stats.total} APIs; ${stats.signatureDiffers} differ: ${stats.signatureMissing} M, ${stats.signatureForeign} X, ${stats.signatureOverloaded} O, ${stats.signatureTypecode} T, ${stats.signatureOtherName} N).`
+      ? `Headline NumPy-identical signatures: ${percent(stats.signature, stats.total).toFixed(1)}% (${stats.signature}/${stats.total} APIs; ${stats.signatureDiffers} differ: ${stats.signatureMissing} M, ${stats.signatureForeign} X, ${stats.signatureOverloaded} O, ${stats.signatureTypecode} T, ${stats.signatureBinding} B, ${stats.signatureNull} L, ${stats.signatureSequence} Q, ${stats.signatureOtherName} N).`
       : "";
     // The lede and the reading guide describe the oracle evidence; an artifact without it shows none.
     byId("cov-lede-oracle").hidden = !hasOracle;
@@ -926,8 +962,9 @@
       if (!matchesSignatureFilter(row, filters.signature)) return false;
       if (!terms.length) return true;
       // Oracle keys/files are searchable so "polyeval.jsonl" or "rnd:normal" finds the APIs they prove;
-      // so are the signature's missing and foreign parameter names ("premute", "initial").
-      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || []), ...(row.oracle?.keys || []), ...(row.oracle?.files || []), row.oracle?.via?.id, ...(row.signature?.missing || []), ...(row.signature?.foreign || [])].join(" ").toLowerCase();
+      // so are the signature's missing and foreign parameter names ("premute", "initial") and its C#
+      // spellings ("new NDArray", "NDArray<T>.reshape").
+      const haystack = [row.id, apiLabel(row), row.name, row.surface, surfaceLabel(row.surface), row.category, row.kind, row.disposition, row.status, row.availability, row.numsharp_target, row.numpy_signature, row.notes, ...(row.numsharp_signatures || []), ...(row.oracle?.keys || []), ...(row.oracle?.files || []), row.oracle?.via?.id, ...(row.signature?.missing || []), ...(row.signature?.foreign || []), ...(row.signature?.spellings || []).map((spelling) => spelling.csharp)].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
     results.sort((a, b) => {
