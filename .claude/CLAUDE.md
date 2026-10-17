@@ -130,7 +130,7 @@ undisposed views earlier entries left of the shared fixture, and the measurement
 mid-entry — `ScopeAudit.Quiesce()` before the snapshot, plus `OwnershipLedger.DropMayBeFinalization` / `DrainAndRebase`
 for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 NumPy errors, zero excuses; the 5 deferred
 `tma` cases strict), `StringDTypeOrderTests` (24). Benchmark: 168 cells 1.8–32× NumPy, geomean 7.8×. Left: the
-`np.strings` functions of P2.6 after its predicates (the case maps, `translate`, `mod`, `encode`, `decode`) and 7
+`np.strings` functions of P2.6 after its predicates and case maps (`translate`, `mod`, `encode`, `decode`) and 7
 `NextPhase` sites, all of P2.7; no oracle case is deferred any more (P2.5 made `chararray.partition(sep)`'s 22 strict).
 **`np.strings` searches, strips, pads, replaces, partitions and slices since P2.5 (2026-10-17, `5dc14393` +
 `5127e47c`; plan state log).** `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`,
@@ -179,6 +179,32 @@ shift count modulo 32 (`uint >> 32` shifts by 0: `ReadSmall` repeated bytes 0–
 Gates: oracle `strprop` (4,937 cases) / `tprop` (1,512; 782 NumPy errors in all), zero excuses; `StringPredicatesTests`
 (14: the table pin, elements and UTF-8 forms against the code-point loop over every width, `FencedMemory`, IL against
 managed kernels). Benchmark: 64 cells 3.99–33× NumPy, geomean 7.50×.
+**`np.strings`' case maps since P2.6 milestone 2 (2026-10-17, `9d8d1a7b`; plan state log).** `upper`, `lower`,
+`swapcase`, `capitalize`, `title` are NumPy's `_vec_string(a, a.dtype, name)`: a fresh C-ordered result of the operand's
+own dtype (`T`: a new descriptor with its NA object and coercion), each element the `bytes` method (`S`: ASCII letters
+only, the length kept) or the `str` method (`U` / `T`: CPython 3.12's full mappings, up to three code points per
+character, `lower_ucs4`'s final sigma, title's previous-cased state of the INPUT character) of NumPy's scalar (`S` / `U`
+without trailing NULs, `T` with them); an `S` / `U` result is cut to the width (`upper(np.array(['ß'], 'U1'))` is `'S'`).
+Errors: a non-text operand `string operation on non-string array`; a `U` unit past U+10FFFF CPython's `SystemError`
+`invalid maximum character passed to PyUnicode_New` (raised after the loop: every element's text is the same); a `T`
+NA whose object is not a str `descriptor 'upper' for 'str' objects doesn't apply to a 'float' object`; under a string NA
+object a result equal to the NA's text is stored as the NA (setitem's `na_eq_cmp`). Loops
+(`Backends/Strings/NDTextElements.Case.cs`, `NDVStringMethods.Case.cs`, IL kernels `CaseMap` / `VCaseMap`): `S` 32-byte
+chunks as a stencil of (previous byte a letter, byte); `U` the same over 32-bit lanes until the CALL meets its first
+non-ASCII element (D14), then per eight units one gather of the BMP flags words and one of the deltas from
+`PyUnicodeData.CaseDeltas` (`[upper | lower | title]` side by side, each lane's table chosen by its index); title gathers
+both of its mappings and selects with the previous-cased mask, carried between chunks in a register
+(`UnitsShiftedUpFrom`); a unit past U+FFFF, a multi-code-point mapping (`EXTENDED_CASE`) or U+03A3 under a lowering
+map sends the element to CPython's algorithm (`CaseMapCodePoints`, whose common case is one table read and an
+index-chosen delta); `T`: a short ASCII cell in one 16-byte vector, any other text decoded, mapped and re-encoded.
+TRAPS: a gather whose index depends on the previous chunk's carry waits for the previous chunk's gathers (title 48–62
+→ 31.6 ns per 32-unit element as two gathers and a select); a `T` result's arena grew by 25 % steps, each a reallocation
+that copies and zeroes it (53 % of a call) — the case-map driver reserves it once (`VStringAllocator.TryReserve` with
+`NDVStringCopy.ArenaBytesForCopy`), and a fresh arena is `NativeMemory.AllocZeroed`; EVERY fresh `StringDType` array
+paid first-touch page faults (`SizeBucketedBufferPool.TakeZeroed` is always calloc: 4.5 ns per element at 100K) —
+`VStringArraySlice.Allocate` now takes a recycled pooled buffer and clears it up to `np.PrefersWriteOnce`'s 64 MiB
+(~1 ns), which every function that returns `T` gains. Gates: oracle `strcase` (2,100 cases) / `tcase` (955; 210 NumPy
+errors in all), zero excuses; `StringCaseMapTests` (12). Benchmark: 55 cells 4.5–237× NumPy, geomean 37.6×.
 **Phase 2 validated against a randomized NumPy soak (2026-10-16, `b57c3e8b`; plan state log).** `test/oracle/soak_strings_oracle.py`
 draws fresh random cases for every family phase 2 computes (the sorts and partitions, `np.lexsort`, the searches,
 `np.unique` and its Array-API forms, `np.isin` and the set routines, `np.sort_complex`, the histograms, the quantile
@@ -569,9 +595,10 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
     (`InitializeArc` ignores `TryAddRef`'s failure).
   Gates: string-oracle section `tma` (4,167 cases; its 437 deferred cases became strict with P2.T and P2.2 over `T`) +
   `Ma/np.ma.StringDType.Test.cs`.
-- Still refused loudly (phase 2): the `np.strings` functions of P2.6 after its predicates (the case maps, `translate`,
+- Still refused loudly (phase 2): the `np.strings` functions of P2.6 after its predicates and case maps (`translate`,
   `mod`, `encode`, `decode`). Text I/O for `T` landed with P1.7c, comparisons and reductions with P2.T, sorting with
-  P2.2 over `T`, the search / strip / pad / replace / partition / slice functions with P2.5, the predicates with P2.6.
+  P2.2 over `T`, the search / strip / pad / replace / partition / slice functions with P2.5, the predicates and the
+  case maps with P2.6.
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
