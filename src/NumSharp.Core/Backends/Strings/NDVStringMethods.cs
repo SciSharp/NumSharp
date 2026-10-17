@@ -103,6 +103,13 @@ namespace NumSharp.Backends.Strings
         ///     gather (a <c>DynamicMethod</c> is compiled without knowing that the class is initialized).
         /// </summary>
         internal uint* Flags;
+
+        /// <summary>
+        ///     An operation's own state, set by its driver inside the locked pass (translate's
+        ///     <see cref="TranslateState"/>: the compiled table and its error word), or null. The operations that need none
+        ///     never read it.
+        /// </summary>
+        internal void* Extra;
     }
 
     /// <summary>The errors a <c>StringDType</c> loop records; the driver raises NumPy's exception for the first one.</summary>

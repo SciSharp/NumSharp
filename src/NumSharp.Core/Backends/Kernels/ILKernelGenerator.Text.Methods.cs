@@ -118,6 +118,10 @@ namespace NumSharp.Backends.Kernels
         ///     <see cref="NDTextElements.CaseState"/>.</summary>
         CaseMap,
 
+        /// <summary><c>translate</c> over a compiled table: (text, text out of the input's width); aux = the call's
+        ///     <see cref="TranslateState"/> (the table and the error word).</summary>
+        Translate,
+
         // The StringDType loops (NDVStringMethods). Their "text" operands are 16-byte cells (every width in the key is
         // the cell size), aux is the call's VStringMethodAux, and the unit is 1 (UTF-8).
 
@@ -171,6 +175,10 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>The case maps over <c>StringDType</c>: (cell, cell out); Extra = the map.</summary>
         VCaseMap,
+
+        /// <summary><c>translate</c> over <c>StringDType</c>: (cell, cell out); the call's <see cref="TranslateState"/> is the
+        ///     auxdata's <see cref="VStringMethodAux.Extra"/>.</summary>
+        VTranslate,
     }
 
     /// <summary>
@@ -465,6 +473,13 @@ namespace NumSharp.Backends.Kernels
                     plan.Args = new[] { P(0), C(key.W0), P(1), C(key.Extra), aux };
                     plan.Operands = 2;
                     break;
+                case TextMethodOp.Translate:
+                    // The width is a literal (the S body's loops and the U gather's chunking fold on it); the body writes its
+                    // own output element and reads the compiled table from the auxdata.
+                    name = nameof(NDTextElements.Translate);
+                    plan.Args = new[] { P(0), C(key.W0), P(1), aux };
+                    plan.Operands = 2;
+                    break;
                 default:
                     return PlanVStringMethod(key, plan);
             }
@@ -567,6 +582,11 @@ namespace NumSharp.Backends.Kernels
                 case TextMethodOp.VCaseMap:
                     name = nameof(NDVStringMethods.VCaseMap);
                     plan.Args = new[] { P(0), P(1), C(key.Extra), aux };
+                    plan.Operands = 2;
+                    break;
+                case TextMethodOp.VTranslate:
+                    name = nameof(NDVStringMethods.VTranslate);
+                    plan.Args = new[] { P(0), P(1), aux };
                     plan.Operands = 2;
                     break;
                 default:

@@ -495,6 +495,9 @@ namespace NumSharp.Backends.Strings
                 case TextMethodOp.VCaseMap:
                     NDVStringMethods.VCaseMap(p[0], p[1], key.Extra, aux);
                     break;
+                case TextMethodOp.VTranslate:
+                    NDVStringMethods.VTranslate(p[0], p[1], aux);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a StringDType text method operation.");
             }
@@ -527,8 +530,9 @@ namespace NumSharp.Backends.Strings
         internal static int OperandCount(TextMethodOp op) => op switch
         {
             TextMethodOp.Length or TextMethodOp.StripWhitespace or TextMethodOp.PadSize or TextMethodOp.ExpandTabsSize
-                or TextMethodOp.PartitionSize or TextMethodOp.IsKind or TextMethodOp.CaseMap or TextMethodOp.VLength
-                or TextMethodOp.VStripWhitespace or TextMethodOp.VIsKind or TextMethodOp.VCaseMap => 2,
+                or TextMethodOp.PartitionSize or TextMethodOp.IsKind or TextMethodOp.CaseMap or TextMethodOp.Translate
+                or TextMethodOp.VLength or TextMethodOp.VStripWhitespace or TextMethodOp.VIsKind or TextMethodOp.VCaseMap
+                or TextMethodOp.VTranslate => 2,
             TextMethodOp.StripChars or TextMethodOp.ZFill or TextMethodOp.ExpandTabs
                 or TextMethodOp.VStripChars or TextMethodOp.VZFill or TextMethodOp.VExpandTabs => 3,
             TextMethodOp.Pad or TextMethodOp.ReplaceSize or TextMethodOp.VPad => 4,
@@ -612,6 +616,10 @@ namespace NumSharp.Backends.Strings
                 case TextMethodOp.CaseMap:
                     // The auxdata is the call's CaseState (escalation word, error status, tables), as in the IL shell.
                     NDTextElements.CaseMap<TUnit>(p[0], key.W0, p[1], key.Extra, (NDTextElements.CaseState*)acc);
+                    break;
+                case TextMethodOp.Translate:
+                    // The auxdata is the call's TranslateState (the compiled table and the error word), as in the IL shell.
+                    NDTextElements.Translate<TUnit>(p[0], key.W0, p[1], (TranslateState*)acc);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a text method operation.");

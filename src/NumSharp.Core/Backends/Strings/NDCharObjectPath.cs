@@ -65,11 +65,12 @@ using NumSharp.Backends.Unmanaged;
 namespace NumSharp.Backends.Strings
 {
     /// <summary>
-    ///     The object path of <c>numpy.char</c> — <c>np.char.split</c>, <c>rsplit</c>, <c>splitlines</c> and <c>join</c>:
+    ///     The object path of <c>numpy.char</c> — <c>np.char.split</c>, <c>rsplit</c>, <c>splitlines</c> and <c>join</c> —
+    ///     and the <c>_vec_string</c> functions of <c>numpy.strings</c> (<c>translate</c>, NDCharObjectPath.Translate.cs):
     ///     NumPy's <c>_vec_string</c> over CPython's <c>str</c> / <c>bytes</c> methods, ported element for element (see the
     ///     file header for the structure, the per-element order and the result rules).
     /// </summary>
-    internal static unsafe class NDCharObjectPath
+    internal static unsafe partial class NDCharObjectPath
     {
         /// <summary>NumPy's TypeError when the first <c>_vec_string</c> argument is not text (<c>_is_user_defined_string_array</c>).</summary>
         internal const string NonStringArrayText = "string operation on non-string array";
@@ -138,7 +139,9 @@ namespace NumSharp.Backends.Strings
             ///     NumPy's <c>np.asarray(value)</c> of one argument under <c>numpy.char</c>'s text rule
             ///     (<see cref="CharModule.TextOperand"/>), with a C# Python literal at NumPy's default dtype (a Python int is
             ///     int64, or uint64 past int64; a float float64; a complex complex128; an int past uint64 an object element)
-            ///     and null as Python's <c>None</c> (<c>np.asarray(None)</c>: a 0-d object array holding None).
+            ///     and null as Python's <c>None</c> (<c>np.asarray(None)</c>: a 0-d object array holding None), an
+            ///     <see cref="IDictionary"/> as a dict (the 0-d object array holding it), and a C# list holding a dict as an
+            ///     object array.
             /// </summary>
             /// <param name="value">The argument (null is Python's <c>None</c>).</param>
             /// <param name="name">The parameter name (for the conversion's messages).</param>
@@ -149,6 +152,9 @@ namespace NumSharp.Backends.Strings
             {
                 if (value is null)
                     return new VecArg(NDArray.Scalar(0L), true, objects: new object[] { null });
+                // A dict (translate's table): np.asarray(dict) is the 0-d object array holding it, whose scalar is the dict.
+                if (value is IDictionary)
+                    return new VecArg(NDArray.Scalar(0L), true, objects: new[] { value });
                 if (value is NDListArray lists)
                     return new VecArg(lists.Starts, false, lists: lists);
                 if (value is BigInteger big)
@@ -266,8 +272,8 @@ namespace NumSharp.Backends.Strings
 
             /// <summary>
             ///     Whether a C# array holds, at any depth, an element NumPy's array coercion can only hold in an OBJECT array:
-            ///     null (Python's None) or a Python int outside [int64.min, uint64.max] (<c>np.asarray([1, 2**64])</c> is an
-            ///     object array).
+            ///     null (Python's None), a dict (an <see cref="IDictionary"/>: not a sequence to the coercion, so a leaf) or a
+            ///     Python int outside [int64.min, uint64.max] (<c>np.asarray([1, 2**64])</c> is an object array).
             /// </summary>
             /// <param name="array">The array.</param>
             /// <returns>True when such an element exists.</returns>
@@ -275,7 +281,7 @@ namespace NumSharp.Backends.Strings
             {
                 foreach (var item in array)
                 {
-                    if (item is null)
+                    if (item is null || item is IDictionary)
                         return true;
                     if (item is BigInteger bi && (bi < long.MinValue || bi > ulong.MaxValue))
                         return true;

@@ -622,6 +622,27 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeCaseMaps() => Run("tcase");
 
         /// <summary>
+        ///     Section strtrans (strings phase 2, P2.6): numpy.strings.translate over S / U text — every layout kind with the
+        ///     main tables; every str.translate table kind (dicts of every key / value kind incl. the values that raise, str /
+        ///     bytes / None / number tables, lists, arrays and object lists of tables, broadcast and mismatched tables) and
+        ///     every bytes.translate table / deletechars kind (256-byte tables, wrong lengths incl. a trailing NUL np.bytes_
+        ///     drops, np.str_ tables read as UCS-4 bytes, numbers, dicts, None, element-wise delete sets); the C-order first
+        ///     error; U units past U+10FFFF mapped, deleted, kept and alone; a width sweep; deletechars ignored for U; Python
+        ///     operands, 0-d, empty and non-text operands. Strict.
+        /// </summary>
+        [TestMethod] public void StringTranslate() => Run("strtrans");
+
+        /// <summary>
+        ///     Section ttrans (strings phase 2, P2.6): numpy.strings.translate over NEP 55 StringDType — every table kind x
+        ///     every NA kind (an NA object that is not a str is the descriptor's TypeError; a string NA is translated as its
+        ///     text, and a result equal to it is stored as the NA) x the layout kinds; deletechars (str.translate takes one
+        ///     argument), surrogate results (_vec_string's "result array type does not match underlying function"), the
+        ///     C-order first error, StringDType arrays of tables, and a length sweep over the byte routes and the UTF-8
+        ///     route. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeTranslate() => Run("ttrans");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -740,7 +761,8 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strsets", "tcomp", "tarith",
-                "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase",
+                "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
+                "ttrans",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

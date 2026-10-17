@@ -249,7 +249,9 @@ namespace NumSharp.Tests.Strings
         ///     A value the generator encoded with <c>enc()</c>: <c>{"u"}</c> → <see cref="string"/>, <c>{"b"}</c> →
         ///     <c>byte[]</c>, <c>{"none"}</c> → null, <c>{"bool"}</c> / <c>{"int"}</c> / <c>{"float"}</c> → bool / long /
         ///     double (a non-finite float travels as <c>"nan"</c> / <c>"inf"</c> / <c>"-inf"</c>), a JSON array → a
-        ///     <see cref="List{T}"/> of decoded items.
+        ///     <see cref="List{T}"/> of decoded items, <c>{"dict": [[k, v], …]}</c> → a <see cref="Dictionary{TKey, TValue}"/>
+        ///     of object to object in the generator's item order, each key and value decoded with its own type (a Python
+        ///     float key stays a double, True a bool, a str a string — the C# values a ported translate table holds).
         /// </summary>
         /// <param name="e">The encoded value.</param>
         /// <returns>The decoded value.</returns>
@@ -260,6 +262,13 @@ namespace NumSharp.Tests.Strings
                 return e.EnumerateArray().Select(Decode).ToList();
             if (e.ValueKind == JsonValueKind.Null)
                 return null;
+            if (e.TryGetProperty("dict", out var items))
+            {
+                var dict = new Dictionary<object, object>();
+                foreach (var item in items.EnumerateArray())
+                    dict[Decode(item[0])] = Decode(item[1]);
+                return dict;
+            }
             if (e.TryGetProperty("u", out var u))
                 return Utf32HexToString(u.GetString());
             if (e.TryGetProperty("b", out var b))

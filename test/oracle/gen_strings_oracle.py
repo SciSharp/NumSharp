@@ -102,6 +102,10 @@ def enc(v):
         return {"float": _jf(float(v))}
     if isinstance(v, (list, tuple)):
         return [enc(x) for x in v]
+    if isinstance(v, dict):
+        # A dict (translate's table): its items in insertion order, each key and value encoded (the replay builds a C#
+        # dictionary with the keys' own types: a float key 97.0 stays a double, True a bool, 'a' a string).
+        return {"dict": [[enc(k), enc(x)] for k, x in v.items()]}
     raise TypeError(f"cannot encode {type(v)}")
 
 
@@ -13723,13 +13727,322 @@ def gen_tcase():
                     fn_case(S, name, [(base, base)], [_Op(0)], f"{lab0}:len{w}:{'uni' if unicode else 'ascii'}")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# numpy.strings.translate (strtrans over S / U, ttrans over StringDType), strings phase 2, P2.6 milestone 3, strict
+# ----------------------------------------------------------------------------------------------------------------------
+
+# str.translate tables (U, StringDType): maketrans maps (ASCII one-to-one, with deletions), replacements that grow or
+# delete, values of every kind (None, '', ints, a bool, the maximum code point, a lone surrogate), keys that equal a code
+# point (97.0, True) or never do ('a') or lie past the BMP / U+10FFFF, a NUL mapped / produced, and the values that raise
+# (a float, an int out of range or huge, bytes) — only for a text holding that key.
+TR_U_TABLES = {
+    "mk": str.maketrans("abcdef", "uvwxyz"),
+    "mkdel": str.maketrans("abc", "xyz", "def"),
+    "exp": {97: "XYZ", 98: "Q", 99: ""},
+    "none": {97: None, 32: None},
+    "uni": {0xE9: "e", 0x4E2D: "Z", 97: "á", 0x10400: "\U00010428"},
+    "astral": {0x10400: "x", 99: "\U00010401", 0x1F600: None},
+    "keys": {97.0: "z", True: "T", "b": "never", 2**70: "big", 99: True},
+    "nul": {0: "Z"},
+    "toNul": {97: 0},
+    "maxcp": {97: 0x10FFFF},
+    "surr": {97: 0xDC00, 98: "\ud800"},
+    # A key of 2^31 or more is looked up as a negative C long on Windows (32-bit long) and as itself on Linux / macOS
+    # (NumSharp models the 64-bit long): the keys past U+10FFFF stay below 2^31, where every platform agrees.
+    "past": {0x110000: "p", 0x7FFFFFF0: None},
+    "empty": {},
+    "err_float": {97: 3.5},
+    "err_range": {97: 0x110000},
+    "err_neg": {98: -1},
+    "err_big": {99: 2**70},
+    "err_bytes": {97: b"z"},
+}
+# Texts the tables separate: their keys present and absent, non-ASCII and astral characters, NULs inside and at the end,
+# lone surrogates, the empty string.
+TR_U_POOL = ["", "a", "abc", "cab", "abcdef", "def", "xyz", "aaaa", "a b c", "ABC", "hello world", "é中文", "aé中b",
+             "\U00010400\U00010401c", "a\U0001F600b", "a\x00b\x00", "\x00a", "zzz", "ab", "ç", "\ud800a", "Q"]
+TR_S_POOL = [b"", b"a", b"abc", b"cab", b"abcdef", b"def", b"xyz", b"aaaa", b"a b c", b"ABC", b"\x00ab", b"a\x00b\x00",
+             b"\xe9t\xe9", b"\xff\x80", b"zz", b"hello"]
+
+
+def _tr_bytes_map(src, dst):
+    """bytes.maketrans(src, dst) (a 256-byte table)."""
+    return bytes.maketrans(src, dst)
+
+
+def gen_strtrans():
+    """Section strtrans: numpy.strings.translate over S / U, strict — every layout kind of both classes with the main
+    tables; every str.translate table kind (dicts of every key / value kind, str / bytes / None / number tables, arrays
+    and object lists of tables, broadcast tables) and every bytes.translate table / deletechars kind (256-byte tables,
+    wrong lengths incl. a trailing NUL dropped by np.bytes_, np.str_ tables read as UCS-4 bytes, numbers, dicts, None,
+    element-wise delete sets); the C-order first error; U units past U+10FFFF mapped, deleted, kept and alone; the gather
+    route's width sweep; deletechars ignored for U; Python str / bytes operands, 0-d, empty and non-text operands."""
+    import random
+    S = "strtrans"
+    mk = _tr_bytes_map(b"abcdef", b"uvwxyz")
+    rev = bytes(range(256))[::-1]
+    # A. Every layout kind x both classes x the main tables.
+    for spec in ["<U5", "<U12", "|S5", "|S12"]:
+        pool = TR_U_POOL if spec[1] == "U" else TR_S_POOL
+        for layout in LAYOUTS:
+            op = fn_operand(spec, layout, seed=2, pool=pool)
+            lab = f"{spec}:{layout}"
+            if spec[1] == "U":
+                for tname in ["mk", "mkdel", "exp", "uni"]:
+                    fn_case(S, "translate", [op], [_Op(0), TR_U_TABLES[tname]], f"{lab}:{tname}")
+            else:
+                fn_case(S, "translate", [op], [_Op(0), mk], f"{lab}:mk")
+                fn_case(S, "translate", [op], [_Op(0), mk, b"de"], f"{lab}:mkdel")
+                fn_case(S, "translate", [op], [_Op(0), None, b"a\x00"], f"{lab}:del")
+    # B. Every str.translate table over the U pool (one call each), at three widths.
+    for spec in ["<U1", "<U3", "<U12"]:
+        op = plain(np.array(TR_U_POOL, dtype=spec))
+        for tname, table in TR_U_TABLES.items():
+            fn_case(S, "translate", [op], [_Op(0), table], f"{spec}:pool:{tname}")
+        for label, table in [("str", "xyz"), ("str100", "x" * 100), ("strNul", "q\x00\x00"),
+                             ("strAstral", "x\U00010400y" * 40), ("strSurr", "\ud800" * 120), ("bytes100", b"x" * 100),
+                             ("bytesNul", b"\x00\x01xyz" * 30), ("none", None), ("int", 5), ("float", 1.5),
+                             ("bool", True), ("bigint", 2**70), ("strLong", "".join(chr(0x4E00 + i % 50) for i in range(300)))]:
+            fn_case(S, "translate", [op], [_Op(0), table], f"{spec}:pool:{label}")
+    # C. Arrays of tables: lists, U arrays (operands), object lists of dicts / None / ints / Python bytes / strs, a 2-D
+    #    object list (the broadcast grows), mismatched shapes.
+    two = plain(np.array(["abc", "de"], dtype="<U3"))
+    fn_case(S, "translate", [two], [_Op(0), ["x" * 100, "y" * 120]], "list:str")
+    fn_case(S, "translate", [two, plain(np.array(["x" * 100]))], [_Op(0), _Op(1)], "arr:U:one")
+    fn_case(S, "translate", [two, plain(np.array(["x" * 100, "y" * 101]))], [_Op(0), _Op(1)], "arr:U:two")
+    fn_case(S, "translate", [two, plain(np.array([1, 2, 3]))], [_Op(0), _Op(1)], "arr:int:mismatch")
+    fn_case(S, "translate", [plain(np.array(["abc"]))], [_Op(0), [{97: "z"}, None]], "obj:dict,none")
+    fn_case(S, "translate", [plain(np.array(["", "b"]))], [_Op(0), [None, {98: "q"}]], "obj:none,dict")
+    fn_case(S, "translate", [plain(np.array(["abc"]))], [_Op(0), [5, 2**70]], "obj:int,bigint")
+    fn_case(S, "translate", [plain(np.array(["abc"]))], [_Op(0), [b"\x00\x01xyz" * 30, None]], "obj:bytes,none")
+    fn_case(S, "translate", [plain(np.array(["abc"]))], [_Op(0), ["xyz\x00" * 30, None]], "obj:str,none")
+    fn_case(S, "translate", [plain(np.array(["abc"]))], [_Op(0), [1.5, None]], "obj:float,none")
+    fn_case(S, "translate", [plain(np.array(["abc", "bcd"]))], [_Op(0), [[{97: "z"}], [{98: "y", 99: None}]]], "obj:2d")
+    fn_case(S, "translate", [plain(np.array(["abc", "bcd", "x"]))], [_Op(0), [{97: "z"}, None]], "obj:mismatch")
+    fn_case(S, "translate", [plain(np.array([["abc"], ["cab"]]))], [_Op(0), [{97: "z"}, {99: "q"}, {98: None}]], "obj:bcast")
+    # D. The C-order first error: elements raising different errors in several layouts.
+    errs = {97: 3.5, 99: -1, 100: 0x110000}
+    for layout in ["c1", "c2", "f2", "t3", "r2", "s1", "col"]:
+        n, build = LAYOUTS[layout]
+        texts = [["bd", "ab", "cc", "xyz"][i % 4] for i in range(n)]
+        base = np.array(texts, dtype="<U4") if n else np.zeros(0, dtype="<U4")
+        fn_case(S, "translate", [(base, build(base))], [_Op(0), errs], f"errorder:{layout}")
+    # E. U units past U+10FFFF: alone (the scalar refuses it), kept (the writer refuses it), mapped / deleted (fine).
+    for units, label in [([0x61, 0x110000], "kept"), ([0x110000, 0], "alone"), ([0x110000, 0x61], "first"),
+                         ([0x61, 0x110000, 0x62, 0], "mixed"), ([0x61, 0x62, 0x63, 0xFFFFFFF0], "last"), ([0x61, 0x62, 0x63, 0x7FFFFFF0], "last31"),
+                         ([0xD800, 0x61], "surrogate")]:
+        raw = plain(np.frombuffer(np.array(units, dtype="<u4").tobytes(), dtype="<U2").copy())
+        for tname in ["mk", "past", "uni", "empty"]:
+            fn_case(S, "translate", [raw], [_Op(0), TR_U_TABLES[tname]], f"U:{label}:{tname}")
+        fn_case(S, "translate", [raw], [_Op(0), {0x110000: "x"}], f"U:{label}:mapped")
+        fn_case(S, "translate", [raw], [_Op(0), {0x110000: None, 0x7FFFFFF0: "y"}], f"U:{label}:deleted")
+    # F. bytes.translate: tables, wrong lengths, np.str_ / number / dict tables, delete sets of every kind.
+    sop = plain(np.array(TR_S_POOL, dtype="|S6"))
+    for label, table in [("mk", mk), ("rev", rev), ("rev255", rev[:-1] + b"\x01"), ("x255", b"x" * 255),
+                         ("x256", b"x" * 256), ("x257", b"x" * 257), ("nulEnd", bytes(range(255)) + b"\x00"),
+                         ("none", None), ("str64", "xyzw" * 16), ("str256", "x" * 256), ("int", 5), ("dict", {97: 98}),
+                         ("float", 1.5)]:
+        fn_case(S, "translate", [sop], [_Op(0), table], f"S:table:{label}")
+    for label, delete in [("bytes", b"ab"), ("nul", b"\x00"), ("empty", b""), ("str", "a"), ("strAcc", "\xe9"),
+                          ("int", 97), ("bool", True), ("dict", {1: 2}), ("float", 2.5), ("list", [b"a", b"b"]),
+                          ("objNone", [None, b"a"]), ("objBool", [True, None]), ("long", b"abc" * 100)]:
+        sub = plain(np.array([b"abc", b"cab"], dtype="|S4"))
+        fn_case(S, "translate", [sub], [_Op(0), mk, delete], f"S:delete:{label}")
+        fn_case(S, "translate", [sub], [_Op(0), None, delete], f"S:delete:{label}:notable")
+    fn_case(S, "translate", [plain(np.array([b"abc"]))], [_Op(0), b"x" * 10, {1: 2}], "S:order:table-first")
+    fn_case(S, "translate", [plain(np.array([b"abc"]))], [_Op(0), {1: 2}, b"x" * 10], "S:order:dict-table")
+    fn_case(S, "translate", [plain(np.zeros(0, dtype="|S3"))], [_Op(0), b"x" * 255], "S:empty:badtable")
+    fn_case(S, "translate", [plain(np.array([b""]))], [_Op(0), b"x" * 255], "S:emptytext:badtable")
+    fn_case(S, "translate", [plain(np.array([b"abc"]))], [_Op(0), [b"x" * 256, b"y" * 256]], "S:list:tables")
+    fn_case(S, "translate", [plain(np.array([b"abc", b"cab"]))], [_Op(0), None, [b"a", b"b", b"c"]], "S:delete:mismatch")
+    # G. The width sweep (the U gather route's chunking and the S whole-width loops): random texts per width.
+    rng = random.Random(2618)
+    letters = "abcdefghijklmnopqrstuvwxyz é中"
+    for w in [1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64, 65, 100]:
+        texts = ["".join(rng.choice(letters) for _ in range(rng.choice([w, rng.randint(0, w)]))) for _ in range(20)]
+        uop = plain(np.array(texts, dtype=f"<U{w}"))
+        for tname in ["mk", "mkdel", "exp", "uni", "nul", "toNul"]:
+            fn_case(S, "translate", [uop], [_Op(0), TR_U_TABLES[tname]], f"<U{w}:sweep:{tname}")
+        stexts = [t.encode("latin-1", "replace").replace(b"?", b"q") for t in texts]
+        sop2 = plain(np.array(stexts, dtype=f"|S{w}"))
+        fn_case(S, "translate", [sop2], [_Op(0), mk], f"|S{w}:sweep:mk")
+        fn_case(S, "translate", [sop2], [_Op(0), mk, b"de "], f"|S{w}:sweep:mkdel")
+        fn_case(S, "translate", [sop2], [_Op(0), _tr_bytes_map(b"\x00a", b"Zb")], f"|S{w}:sweep:nulmap")
+        fn_case(S, "translate", [sop2], [_Op(0), None, b"\x00a"], f"|S{w}:sweep:nuldel")
+    # H. deletechars is ignored for U (even one that would not broadcast); Python operands; 0-d, empty, non-text.
+    u = plain(np.array(["abc", "cab"]))
+    for delete in ["b", b"b", [1, 2, 3], None, {1: 2}]:
+        fn_case(S, "translate", [u], [_Op(0), TR_U_TABLES["mk"], delete], f"U:deleteIgnored:{type(delete).__name__}")
+    fn_case(S, "translate", [], ["abc", TR_U_TABLES["mk"]], "pystr")
+    fn_case(S, "translate", [], [b"abc", mk], "pybytes")
+    fn_case(S, "translate", [plain(np.array("abc"))], [_Op(0), {97: "z"}], "0d")
+    fn_case(S, "translate", [plain(np.zeros((2, 0), dtype="<U3"))], [_Op(0), {97: "z"}], "empty")
+    fn_case(S, "translate", [plain(np.zeros((2, 0), dtype="<U3"))], [_Op(0), None], "empty:none")
+    for arr in [np.array([1, 2]), np.array([1.5]), np.array([True]), np.zeros((2, 0), dtype="i4")]:
+        fn_case(S, "translate", [plain(arr)], [_Op(0), {97: "z"}], f"num:{arr.dtype}")
+    # R. Random tables over random texts, widths and layouts (seeded): dicts of 1-8 entries whose values are characters,
+    #    replacements of 0-4 characters, None, code points and (rarely) a value that raises; random bytes.maketrans tables
+    #    with random delete sets.
+    rng = random.Random(2620)
+    for i in range(240):
+        unicode = i % 3 != 2
+        w = rng.choice([1, 2, 3, 5, 8, 9, 16, 17, 33])
+        layout = rng.choice(list(LAYOUTS))
+        if unicode:
+            pool = [_tr_random_text(rng, w, True) for _ in range(8)]
+            spec = f"<U{w}"
+            op = fn_operand(spec, layout, seed=0, pool=pool)
+            fn_case(S, "translate", [op], [_Op(0), _tr_random_table(rng)], f"rand{i}:{spec}:{layout}")
+        else:
+            pool = [_tr_random_text(rng, w, False).encode("latin-1") for _ in range(8)]
+            spec = f"|S{w}"
+            op = fn_operand(spec, layout, seed=0, pool=pool)
+            frm = bytes(rng.sample(range(256), rng.randint(0, 12)))
+            to = bytes(rng.randrange(256) for _ in frm)
+            delete = bytes(rng.sample(range(256), rng.randint(0, 4))) if rng.random() < 0.6 else None
+            fn_case(S, "translate", [op], [_Op(0), bytes.maketrans(frm, to), delete], f"rand{i}:{spec}:{layout}")
+
+
+# The characters random translate texts and tables draw from: ASCII letters and space, NUL, Latin-1 and BMP characters
+# (two- and three-byte UTF-8), an astral one.
+_TR_CHARS_U = "abcdefxyz ABC\x00éßñ中文\U00010400"
+_TR_CHARS_S = "abcdefxyz ABC\x00\xe9\xff"
+
+
+def _tr_random_text(rng, width, unicode):
+    """A random translate text of up to ``width`` characters (often exactly ``width``).
+
+    :param rng: the random.Random.
+    :param width: the most characters.
+    :param unicode: whether non-Latin-1 characters may appear.
+    :returns: the text.
+    """
+    chars = _TR_CHARS_U if unicode else _TR_CHARS_S
+    n = rng.choice([width, width, rng.randint(0, width)])
+    return "".join(rng.choice(chars) for _ in range(n))
+
+
+def _tr_random_table(rng):
+    """A random str.translate dict: 1-8 keys drawn from the text characters, each value a character, a replacement of 0-4
+    characters, None, a code point or True, and rarely (4 %) a value that raises (a float, a negative int).
+
+    :param rng: the random.Random.
+    :returns: the dict.
+    """
+    table = {}
+    for _ in range(rng.randint(1, 8)):
+        key = ord(rng.choice(_TR_CHARS_U))
+        r = rng.random()
+        if r < 0.3:
+            table[key] = rng.choice(_TR_CHARS_U)
+        elif r < 0.55:
+            table[key] = "".join(rng.choice(_TR_CHARS_U) for _ in range(rng.randint(0, 4)))
+        elif r < 0.7:
+            table[key] = None
+        elif r < 0.9:
+            table[key] = ord(rng.choice(_TR_CHARS_U))
+        elif r < 0.96:
+            table[key] = True
+        else:
+            table[key] = rng.choice([3.5, -1])
+    return table
+
+
+def gen_ttrans():
+    """Section ttrans: numpy.strings.translate over NEP 55 StringDType, strict — every table kind x every NA kind (a str
+    method refuses an NA object that is not a str; a string NA is translated as its text, and any result equal to it is
+    stored as the NA) x the layout kinds over short / long / ASCII / non-ASCII texts; deletechars (str.translate takes one
+    argument), surrogate results (the setitem failure _vec_string reports as a TypeError), the C-order first error,
+    StringDType arrays of tables, and a length sweep over the byte routes and the UTF-8 route."""
+    import random
+    S = "ttrans"
+    tpool = ["", "a", "abc", "cab", "abcdef", "hello world", "a\x00b\x00", "\x00", "é中文", "aé中b", "x" * 15, "x" * 16,
+             "abc" * 10, "é" * 20, "\U00010400\U00010401c", "a\U0001F600b", "Q", "ABC", "def def def"]
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        for layout in T_COMPUTE_LAYOUTS:
+            op = t_operand(spec, layout, seed=1, pool=tpool, na_every=5)
+            for tname in ["mk", "mkdel", "exp", "uni"]:
+                fn_case(S, "translate", [op], [_Op(0), TR_U_TABLES[tname]], f"{lab0}:{layout}:{tname}")
+        for na_every in (0, 3):
+            base = np.array(t_values(spec, len(tpool), 0, tpool, na_every), dtype=spec.build())
+            for tname, table in TR_U_TABLES.items():
+                fn_case(S, "translate", [(base, base)], [_Op(0), table], f"{lab0}:pool:na{na_every}:{tname}")
+            for label, table in [("str", "xyz"), ("str100", "x" * 100), ("bytes", b"x" * 100), ("none", None),
+                                 ("int", 5), ("float", 1.5), ("bigint", 2**70)]:
+                fn_case(S, "translate", [(base, base)], [_Op(0), table], f"{lab0}:pool:na{na_every}:{label}")
+    # deletechars: every element raises (the descriptor's check first for an NA that is not a str); none raise when the
+    # broadcast is empty; None is not passed.
+    for spec in [TD, TDN, TDNAN, TDS]:
+        lab0 = _t_label(spec)
+        variants = [["abc", "x"]]
+        if spec.na is not _ABSENT:
+            variants += [[spec.na, "abc"], ["abc", spec.na]]
+        for k, values in enumerate(variants):
+            base = np.array(values, dtype=spec.build())
+            fn_case(S, "translate", [(base, base)], [_Op(0), {97: "z"}, "b"], f"{lab0}:deletechars{k}")
+            fn_case(S, "translate", [(base, base)], [_Op(0), {97: "z"}, None], f"{lab0}:deletechars{k}:none")
+        empty = np.array([], dtype=spec.build())
+        fn_case(S, "translate", [(empty, empty)], [_Op(0), {97: "z"}, "b"], f"{lab0}:deletechars:empty")
+    # NA first / later with tables that raise or not (the C-order first error).
+    for spec in [TDN, TDNAN]:
+        lab0 = _t_label(spec)
+        for values in (["abc", spec.na], [spec.na, "abc"], ["", spec.na]):
+            base = np.array(values, dtype=spec.build())
+            for label, table in [("ok", {97: "XYZ"}), ("none", None), ("err", {97: 3.5})]:
+                fn_case(S, "translate", [(base, base)], [_Op(0), table], f"{lab0}:naorder:{label}")
+    # Sentinels equal to some results: setitem stores a result equal to the NA string as the NA.
+    for sentinel, values, table in [("Q", ["abc", "Q", "x"], {97: "Q", 98: None, 99: None}),
+                                    ("", ["abc", "", "z"], {97: None, 98: None, 99: None}),
+                                    ("xyz", ["abc", "xyz", "aBc"], {97: "x", 98: "y", 99: "z"})]:
+        spec = TSpec(sentinel)
+        base = np.array(values, dtype=spec.build())
+        fn_case(S, "translate", [(base, base)], [_Op(0), table], f"TS[{sentinel}]:eq")
+    # Surrogate results (raised at setitem, after the element's own translate errors), and their order.
+    base = np.array(["abc", "b"], dtype=TD.build())
+    fn_case(S, "translate", [(base, base)], [_Op(0), {97: 0xD800}], "surr:int")
+    fn_case(S, "translate", [(base, base)], [_Op(0), {97: "\ud800"}], "surr:str")
+    fn_case(S, "translate", [(base, base)], [_Op(0), {97: 0xD800, 98: 3.5}], "surr:then-err")
+    base2 = np.array(["xyz", "abc"], dtype=TD.build())
+    fn_case(S, "translate", [(base2, base2)], [_Op(0), {97: 0xD800, 98: 3.5}], "surr:err-first")
+    fn_case(S, "translate", [(base, base)], [_Op(0), "x\ud800yz" * 30], "surr:strtable")
+    # StringDType tables (Python strs: no buffer, so a bytes.translate refuses them; str.translate indexes them).
+    tab = np.array(["xy" * 60, "z" * 120], dtype=TD.build())
+    two = np.array(["abc", "de"], dtype=TD.build())
+    fn_case(S, "translate", [(two, two), (tab, tab)], [_Op(0), _Op(1)], "Ttable")
+    fn_case(S, "translate", [plain(np.array([b"abc", b"cab"])), (tab, tab)], [_Op(0), None, _Op(1)], "S:Tdelete")
+    # The length sweep: random texts of every length class over each route (one-to-one / compaction byte maps, ASCII
+    # replacements, the UTF-8 route).
+    rng = random.Random(2619)
+    for spec in [TD, TDS]:
+        lab0 = _t_label(spec)
+        for w in [0, 1, 3, 7, 8, 14, 15, 16, 17, 31, 32, 33, 64, 100]:
+            for unicode in (False, True):
+                letters = "abcdefghij é中文ßñ\U00010400" if unicode else "abcdefghij xyz"
+                texts = ["".join(rng.choice(letters) for _ in range(rng.choice([w, rng.randint(0, w)]))) for _ in range(20)]
+                base = np.array(texts, dtype=spec.build())
+                for tname in ["mk", "mkdel", "exp", "uni", "astral", "nul"]:
+                    fn_case(S, "translate", [(base, base)], [_Op(0), TR_U_TABLES[tname]],
+                            f"{lab0}:len{w}:{'uni' if unicode else 'ascii'}:{tname}")
+    # Random tables over random texts, NA kinds and layouts (seeded).
+    rng = random.Random(2621)
+    specs = [TD, TDS, TDN, TDNAN, TSpec("ab")]
+    for i in range(200):
+        spec = rng.choice(specs)
+        w = rng.choice([0, 3, 8, 15, 16, 24, 40])
+        layout = rng.choice(T_COMPUTE_LAYOUTS)
+        pool = [_tr_random_text(rng, w, True) for _ in range(8)]
+        op = t_operand(spec, layout, seed=0, pool=pool, na_every=rng.choice([0, 0, 4]))
+        fn_case(S, "translate", [op], [_Op(0), _tr_random_table(rng)], f"rand{i}:{_t_label(spec)}:{layout}")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strcharmeth, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
-              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase]
+              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans]
 
 
 def main():

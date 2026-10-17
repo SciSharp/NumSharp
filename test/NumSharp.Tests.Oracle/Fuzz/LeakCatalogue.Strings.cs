@@ -7,9 +7,10 @@ namespace NumSharp.Tests.Fuzz
     ///     Catalogue entries for the <c>numpy.strings</c> functions of strings phase 2, P2.5 (<c>str_len</c>, the find family,
     ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
     ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c> and the six comparison names) and P2.6 (the predicates
-    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>). The string oracle's sections
-    ///     <c>strfn</c> / <c>tfn</c> / <c>strprop</c> / <c>tprop</c> / <c>strcase</c> / <c>tcase</c> replay them through its
-    ///     own harness, outside the corpus sweep, so each is measured here.
+    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>, <c>translate</c>). The string
+    ///     oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> / <c>tprop</c> / <c>strcase</c> / <c>tcase</c> /
+    ///     <c>strtrans</c> / <c>ttrans</c> replay them through its own harness, outside the corpus sweep, so each is measured
+    ///     here.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -548,6 +549,81 @@ namespace NumSharp.Tests.Fuzz
                       return map(u);
                   });
             }
+            AddStringsTranslate(l);
+        }
+
+        /// <summary>
+        ///     The P2.6 <c>translate</c>: every route that holds a temporary — the one-table kernel route over <c>U</c> (the
+        ///     gather path and the exact path), <c>S</c> (a 256-byte table and a delete set) and <c>StringDType</c> (the byte maps,
+        ///     the UTF-8 route, a string NA); the C-order walk over an object list of tables and a <c>U</c> array of tables; the
+        ///     walk that raises an element's error after the kernel flagged it (the fresh result it abandons); the call errors
+        ///     of bytes.translate; the descriptor error of a None NA; a chararray operand and a non-text operand's TypeError.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        private static void AddStringsTranslate(List<LeakCase> l)
+        {
+            E(l, "np.strings.translate",
+              "U gather / exact, S table + delete, T byte maps / UTF-8 / string NA, object-list and array tables, flagged errors, S call errors, None NA, chararray, int",
+              f =>
+              {
+                  var mk = new Dictionary<object, object> { [97] = 120, [98] = 121 };
+                  var grow = new Dictionary<object, object> { [97] = "XYZ", [0xE9] = null, [0x4E2D] = "é" };
+                  var bad = new Dictionary<object, object> { [98] = 3.5 };
+                  // 256 bytes whose last is not NUL (np.bytes_ drops trailing NULs: a table ending in one is 255 bytes long).
+                  var bytesTable = new byte[256];
+                  for (int i = 0; i < 256; i++)
+                      bytesTable[i] = (byte)(i ^ 0x20);
+                  using var u = np.array(new[] { "abc", "éb中" });
+                  using var s = np.array(new object[] { new byte[] { 97, 66 }, new byte[] { 49, 120 } });
+                  using var t = np.array(new object[] { "abc", null, "héllo wörld and a text past the cell" }, np.dtypes.StringDType("ab"));
+                  using var none = np.array(new object[] { "ab", null }, np.dtypes.StringDType(null));
+                  using var tables = np.array(new[] { "xyz", "q" });
+                  using var c = np.@char.array(new[] { "ab", "c" });
+                  using var ints = np.array(new[] { 1, 2 });
+                  using var r1 = np.strings.translate(u, grow);
+                  using var r2 = np.strings.translate(s, bytesTable, new byte[] { 66 });
+                  using var r3 = np.strings.translate(t, mk);
+                  using var r4 = np.strings.translate(t, grow);
+                  using var r5 = np.strings.translate(u, new object[] { mk, grow });
+                  using var r6 = np.strings.translate(u, tables);
+                  using var r7 = np.strings.translate(c, mk);
+                  try
+                  {
+                      np.strings.translate(u, bad);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.translate(t, bad);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.translate(s, new byte[10]);
+                  }
+                  catch (ValueError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.translate(none, mk);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.translate(ints, mk);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  return np.strings.translate(u, mk);
+              });
         }
     }
 }

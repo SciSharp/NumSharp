@@ -425,6 +425,25 @@ namespace NumSharp.Backends.Strings
         }
 
         // =============================================================================================================
+        // translate (NumPy's _vec_string over bytes.translate / str.translate; the driver is NDCharObjectPath.Translate)
+        // =============================================================================================================
+
+        /// <summary>
+        ///     The <c>S</c> / <c>U</c> loop of <c>translate</c> over a compiled table: every element of <paramref name="a"/>
+        ///     translated into <paramref name="result"/> (a fresh C-ordered array of <paramref name="a"/>'s dtype), elements
+        ///     that raise flagged in <paramref name="st"/>.
+        /// </summary>
+        /// <param name="a">The operand (<c>S</c> or <c>U</c>; any layout).</param>
+        /// <param name="result">The fresh result of the operand's dtype and shape.</param>
+        /// <param name="st">The call's state: the compiled table (with its handle set for <c>U</c>) and the error word.</param>
+        /// <remarks>The error word is the caller's to read: a translate error is raised by its C-order walk, never here.</remarks>
+        internal static void TranslateKernel(NDArray a, NDArray result, TranslateState* st)
+        {
+            var key = new TextMethodKey(TextMethodOp.Translate, IsStr(a) ? 4 : 1, a.dtype.itemsize, result.dtype.itemsize);
+            NDTextLoop.Execute(key, new[] { a, result }, 1, null, st, callerOut: false);
+        }
+
+        // =============================================================================================================
         // find / rfind / index / rindex / count / startswith / endswith
         // =============================================================================================================
 
