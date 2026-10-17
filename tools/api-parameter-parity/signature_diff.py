@@ -481,6 +481,14 @@ def stub_args(node):
     a = node.args
 
     def annotation(arg):
+        """A stub parameter's annotation as source text.
+
+        Args:
+            arg: An ``ast.arg``.
+
+        Returns:
+            The annotation (``SupportsIndex | Sequence[SupportsIndex]``), or None when the stub gives none.
+        """
         return ast.unparse(arg.annotation) if arg.annotation is not None else None
 
     positional = [(x, P.POSITIONAL_ONLY) for x in a.posonlyargs] + [(x, P.POSITIONAL_OR_KEYWORD) for x in a.args]
@@ -1610,7 +1618,8 @@ def attach_probe_results(marked, results):
             parameters only, ``S`` the optional positional ones positionally up to one, ``P`` one optional parameter
             with an ordinary value, ``N`` one parameter as None, ``D`` the same with ``default``, ``A`` every NumPy
             parameter the C# side names, ``V`` that call without the None values, ``Q`` / ``U`` a sequence parameter as
-            an int array / a C# tuple, ``Y`` the dtype as a string —, ``param``, ``call`` and ``errors``, the
+            an int array / a C# tuple, ``Y`` the dtype as a string, ``K`` several values at NumPy's ``*args``, ``W``
+            the call without the parameters NumPy leaves "not passed" —, ``param``, ``call`` and ``errors``, the
             compiler's ``[code, message]`` pairs per language version: ``{"12": [...], "14": [...]}``) and ``skipped``
             (``group``, ``name``, ``reason`` for the names it could not write a call for).
     """
@@ -1678,19 +1687,40 @@ def classify_probes(probes):
     Returns:
         ``(b, n, q)``: lists of findings ``{"what", "call", "code", "message", "lang"}``, ``lang`` being ``"both"``,
         ``"12"`` (C# 12 only: the call relies on [OverloadResolutionPriority], which a net8.0 consumer's C# 12 ignores)
-        or ``"14"``. B: a NumPy-style call that does not bind for a reason other than None (R, S, P, Y, V, or A without
-        None values); L (the ``n`` list): a parameter whose None NumSharp refuses (an N probe, or the None values only
-        together), with
-        ``default_ok`` True when ``default`` binds where ``null`` does not (NumSharp's ``Shape`` idiom for
-        ``size=None``); Q: a parameter NumPy lets take a sequence of integers where neither ``new[] { 0, 1 }`` nor
-        ``(0, 1)`` binds.
+        or ``"14"``. B: a NumPy-style call that does not bind for a reason other than None (R, S, P, Y, K, W, V, or A
+        without None values); L (the ``n`` list): a parameter whose None NumSharp refuses (an N probe, or the None
+        values only together), with ``default_ok`` True when ``default`` binds where ``null`` does not (NumSharp's
+        ``Shape`` idiom for ``size=None``); Q: a parameter NumPy lets take a sequence of integers where neither
+        ``new[] { 0, 1 }`` nor ``(0, 1)`` binds. A K or W probe is not reported where R already fails: R is the call
+        they extend or shorten.
     """
     by_kind = {(p["kind"], p["param"]): p for p in probes}
 
     def fails(p, lang):
+        """Whether a probe failed to compile at a language version.
+
+        Args:
+            p: The probe, or None when the name has no probe of that kind (then nothing failed).
+            lang: ``"12"`` or ``"14"``.
+
+        Returns:
+            True when the compiler reported an error for the probe's line at that version.
+        """
         return bool(p and p["errors"].get(lang))
 
     def finding(p, what, blocked):
+        """A probe's failure as a finding, unless a smaller probe already explains it.
+
+        Args:
+            p: The probe, or None.
+            what: The finding's text (``required parameters only``, ``several `*axes` values``, ...).
+            blocked: The language versions at which a smaller probe of the name already fails; a failure there is the
+                same failure and is not reported again.
+
+        Returns:
+            ``{"what", "call", "code", "message", "lang"}`` with the first error of the latest failing version, or
+            None when the probe compiles at every version not blocked.
+        """
         langs = [lang for lang in ("12", "14") if fails(p, lang) and lang not in blocked]
         if not langs:
             return None
@@ -1719,6 +1749,18 @@ def classify_probes(probes):
         own = by_kind.get(("P", p["param"]))
         f = finding(p, f"`{p['param']}` as a dtype string",
                     r_blocked | {lang for lang in ("12", "14") if fails(own, lang)})
+        if f:
+            b.append(f)
+    for p in probes:
+        # K passes several values at NumPy's *args (`a.transpose(1, 0)`), W leaves out the parameters NumPy marks "not
+        # passed" (`np.ma.where(condition)`): both are R changed in one place, so R's own failure explains theirs.
+        if p["kind"] == "K":
+            what = f"several `*{p['param']}` values"
+        elif p["kind"] == "W":
+            what = "without " + ", ".join(f"`{name}`" for name in p["param"].split(","))
+        else:
+            continue
+        f = finding(p, what, r_blocked)
         if f:
             b.append(f)
     # The positional calls grow one slot at a time, so only the first failing one is new: every longer call holds
@@ -1806,14 +1848,15 @@ def probe_text(findings):
         findings: From ``classify_probes``.
 
     Returns:
-        One finding per ``<br>``-separated line: ``what: short error`` with the call for the R / A probes, and
-        ``(C# 12 only)`` / ``(default binds)`` notes.
+        One finding per ``<br>``-separated line: ``what: short error`` with the call for the R, S, A, V, K and W
+        probes (the ones whose call is not named by a single parameter), and ``(C# 12 only)`` / ``(default binds)``
+        notes.
     """
     parts = []
     for f in findings:
         text = f"{f['what']}: {short_error(f['code'], f['message'])}"
         if f["what"] in ("required parameters only", "all NumPy parameters in one call",
-                         "the None values in one call") or f["what"].startswith("positionally"):
+                         "the None values in one call") or f["what"].startswith(("positionally", "several", "without")):
             text += f" — `{f['call']}`"
         if f["lang"] == "12":
             text += " (C# 12 only)"
@@ -2165,8 +2208,9 @@ def write_marks_markdown(path, marked, modules, surface, modules_missing=()):
     if probed:
         w("| **B** ● | a NumPy-style call does not compile: the required parameters alone, the optional positional "
           "ones positionally in NumPy's order, one optional parameter alone (it binds only together with another "
-          "one), the dtype as a string (`dtype: \"float64\"`), or all NumPy parameters in one call (they are split "
-          "across overloads, or the overloads tie) |")
+          "one), the dtype as a string (`dtype: \"float64\"`), several values where NumPy takes `*args` "
+          "(`a.transpose(1, 0)`), the call without a parameter NumPy leaves unset (`np.ma.where(condition)`), or all "
+          "NumPy parameters in one call (they are split across overloads, or the overloads tie) |")
         w("| **B** ◐ | such a call compiles at the latest C# but not at C# 12, a net8.0 consumer's default: it relies "
           "on `[OverloadResolutionPriority]`, which C# 12 ignores |")
         w("| **L** ● | passing `null` where NumPy's default is None does not compile (a value-type parameter, or two "
@@ -2191,9 +2235,11 @@ def write_marks_markdown(path, marked, modules, surface, modules_missing=()):
         w("positional ones positionally in NumPy's order (`np.sum(a, 1, np.float64)`), each optional parameter alone by")
         w("name with an ordinary value (`np.empty(shape, device: \"x\")`) and, where NumPy's default is None, with `null`")
         w("(and `default` for a `Shape`), every NumPy parameter in one call with NumPy's defaults (and again with ordinary")
-        w("values where those are None), a sequence where the stubs allow one, and the dtype as a string. A failure")
-        w("already explained by a smaller call is not repeated. The column *compile probe* lists what failed, with the")
-        w("compiler's reason.")
+        w("values where those are None), a sequence where the stubs allow one, the dtype as a string, several values at")
+        w("NumPy's `*args` (`a.transpose(1, 0)`, `np.meshgrid(x, y, z)`), and the call without the parameters NumPy marks")
+        w("\"not passed\" where every overload requires them (`np.ma.where(condition)`; not `np.vectorize()`, NumPy's")
+        w("decorator form). A failure already explained by a smaller call is not repeated. The column *compile probe*")
+        w("lists what failed, with the compiler's reason.")
     w("")
     counts_by_module = {k: mark_counts([r for r in marked if r["module"] == k]) for k in modules}
     w("## Summary")

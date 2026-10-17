@@ -19,8 +19,9 @@ it is updated when the data is regenerated (§10), not per fix.
 
 **Data snapshot.** Every count and list below comes from
 [`numpy-signature-diff.csv`](numpy-signature-diff.csv) and [`numpy-signature-marks.md`](numpy-signature-marks.md) as
-regenerated in the commit that adds this file (branch `strings`, after `9d8d1a7b`). When the tree changes, the
-generated files are the truth; regenerate them (§10) before acting on a list here.
+regenerated on 2026-10-17 on branch `strings` after `ffa74606` (the latest change to a public signature then: the
+`np.char` padding and partition functions). When the tree changes, the generated files are the truth; regenerate them
+(§10) before acting on a list here.
 
 ---
 
@@ -51,7 +52,7 @@ Three tools in `tools/api-parameter-parity/` produce the data:
 |---|---|
 | `dump_modules.cs` | Builds NumSharp.Core (Debug) and reflects every public overload of every `[ModuleName]` facade (`np`, `ndarray`, `np.linalg`, `np.fft`, `np.random`, `np.ma`, `np.emath`, `np.char`, `np.strings`, `np.dtypes`, `np.typing`, `np.polynomial` and its 7 submodules), the object API `np.random.Generator`, and (second output) every exported type: constructors, extension methods, the typed `NDArray<T>`. |
 | `signature_diff.py` | Compares every name with NumPy 2.4.2's signature under the matching rules of [`api-parameter-parity.md`](api-parameter-parity.md) §1. NumPy's side is its runtime signature, completed from NumPy's `.pyi` type stubs and numpydoc `Parameters` sections where the runtime signature forwards `(*args, **kwargs)`. NumPy's other classes are compared through the C# type that implements each (`np.matrix` -> `NDMatrix`, `np.char.chararray` -> `NDCharArray`, `np.ma.MaskedArray` -> `NDMaskedArray`, `np.dtype` -> `DType`, `np.nditer`, `np.broadcast`, `np.flatiter`, `np.ndindex`, `np.ndenumerate`, `np.poly1d`, `np.vectorize`, `np.finfo`, `np.iinfo`, `NpzFile`, `SeedSequence`, `BitGenerator` and the five engines). |
-| `binding_probe.py` | Writes NumPy-style C# calls of every compared name (7,064 calls) and compiles them against the NumSharp.dll the dump came from, at C# 12 (the default of a `net8.0` consumer, which ignores `[OverloadResolutionPriority]`) and C# 14. Reflection can say that a parameter exists in some overload; only the compiler says whether a NumPy call, written the way a port writes it, binds. |
+| `binding_probe.py` | Writes NumPy-style C# calls of every compared name (7,137 calls) and compiles them against the NumSharp.dll the dump came from, at C# 12 (the default of a `net8.0` consumer, which ignores `[OverloadResolutionPriority]`) and C# 14. Reflection can say that a parameter exists in some overload; only the compiler says whether a NumPy call, written the way a port writes it, binds. |
 
 Outputs (all generated, never edited by hand):
 
@@ -67,14 +68,14 @@ Totals of this snapshot:
 
 | | count |
 |---|---|
-| C# names / overloads | 1,346 / 2,401 |
-| names with a NumPy counterpart | 1,178 |
+| C# names / overloads | 1,359 / 2,414 |
+| names with a NumPy counterpart | 1,191 |
 | names NumPy does not have (NumSharp-only) | 168 |
-| NumPy names a group lacks | 205 |
+| NumPy names a group lacks | 192 |
 | NumPy public modules without a facade | 15 (140 names) |
-| compile probes | 7,064 (442 fail at C# 14, 475 at C# 12) |
+| compile probes | 7,137 (455 fail at C# 14, 488 at C# 12) |
 
-Marks over the 1,178 names with a NumPy counterpart:
+Marks over the 1,191 names with a NumPy counterpart:
 
 | mark | names | work package |
 |---|---|---|
@@ -84,12 +85,12 @@ Marks over the 1,178 names with a NumPy counterpart:
 | **O** more than one overload | 360 (+63 NumSharp-only names) | AD1 |
 | **T ●** a dtype as `NPTypeCode` / `Type` | 10 (+8 NumSharp-only) | AD6 |
 | **T ◇** a generic type argument picks the dtype | 17 (+18 NumSharp-only) | AD7 |
-| **B** a NumPy-style call does not compile | 32 | AD8 |
+| **B** a NumPy-style call does not compile | 45 | AD8 |
 | **L ●** `null` refused for NumPy's None | 31 | AD9 |
 | **L ◐** the same, at C# 12 only | 19 | AD9 |
 | **L ◦** only `Shape` refuses `null`; `default` binds | 73 | AD9 |
 | **Q** an integer sequence refused | 77 | AD10 |
-| no mark at all | 503 | Appendix B |
+| no mark at all | 508 | Appendix B |
 
 ## 2. The marks, explained
 
@@ -126,11 +127,14 @@ overload (O) of a name NumPy spells with `dtype=`.
 
 **B ● (does not bind).** A NumPy-style call does not compile, although every parameter may exist somewhere. The probe
 tries, per name: the required parameters only; the optional positional ones positionally in NumPy's order; each
-optional parameter alone by name; the dtype as a string; all NumPy parameters together. Typical causes: a parameter
-lives only in an overload that requires another one (`np.empty(shape, device: ...)` needs `dtype`), C# requires a
-parameter NumPy defaults (`np.linspace(start, stop)` needs `num`), a C# overload orders the parameters differently
-from NumPy (`np.std(a, 1, np.float64)` lands `np.float64` on `keepdims`). **B ◐** would be a call that compiles only
-at C# 14 (none in this snapshot).
+optional parameter alone by name; the dtype as a string; several values at NumPy's `*args` (`a.transpose(1, 0)`,
+`np.meshgrid(x, y, z)`); the call without a parameter NumPy marks "not passed" (`np._NoValue`) where every C# overload
+requires it (`np.ma.where(condition)`; `np.vectorize()`, NumPy's decorator form, is exempt); all NumPy parameters
+together. Typical causes: a parameter lives only in an overload that requires another one (`np.empty(shape, device:
+...)` needs `dtype`), C# requires a parameter NumPy defaults (`np.linspace(start, stop)` needs `num`), a C# overload
+orders the parameters differently from NumPy (`np.std(a, 1, np.float64)` lands `np.float64` on `keepdims`), NumPy's
+`*args` is a C# array without `params` (`a.transpose(1, 0)` has no overload; only `a.transpose(new[] { 1, 0 })`
+binds). **B ◐** would be a call that compiles only at C# 14 (none in this snapshot).
 
 **L (`null` refused).** NumPy's default is None, and the C# call with `null` does not compile:
 - **L ●** at both language versions: the C# parameter is a value type (`int axis`, `char order`, `bool density`), or
@@ -178,7 +182,8 @@ Follow this for every item of §5. It is the procedure that worked for the max/m
    the stubs allow one. Record the outputs. A behavior change (not only a signature change) follows the parity plan's
    cycle: prove the divergence first, then fix (`api-parameter-parity.md` §2).
 3. **Write down the one C# signature** under §3. Check it against the probe kinds: required only, positional in
-   NumPy's order, each parameter alone by name, `null` for every None default, all parameters together.
+   NumPy's order, each parameter alone by name, `null` for every None default, several values at `*args`, the call
+   without a "not passed" parameter, all parameters together.
 4. **Census the callers before deleting anything.** Mark every overload that will go
    `[System.Obsolete("AD<n>", false)]` (a warning, so Core still builds and dependents get built), build a scratch
    solution holding every csproj that references NumSharp.Core (33 on `strings`, the examples included), and collect
@@ -462,8 +467,10 @@ converts). For the typed iterators and accessors, decision OD7 / OD5.
 
 ### AD8: NumPy-style calls that do not compile (B)
 
-**What.** 32 names. Each line: the failing call form, the compiler's reason, the fix. Most fixes are the one NumPy
-signature of AD1 for that name.
+**What.** 45 names. Each line: the failing call form, the compiler's reason, the fix. Most fixes are the one NumPy
+signature of AD1 for that name. 13 of the names come from two probe kinds added after the second pass (§2 B): several
+values at NumPy's `*args` (`a.transpose(1, 0)`) and the call without a parameter NumPy leaves unset
+(`np.ma.where(condition)`).
 
 **`np`** (18):
 - `arange`: `step` alone and `device` alone do not bind (no 2-argument overload). NumPy:
@@ -487,25 +494,65 @@ signature of AD1 for that name.
   slot 2 or 3). NumPy: `std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=<no value>, *, where=<no value>,
   mean=<no value>, correction=<no value>)` (B4, B6, B7).
 
-**`ndarray`** (6):
+**`ndarray`** (7):
 - `astype`: `order` and `casting` need `copy`; NumPy's positional `(dtype, order)` fails. NumPy:
   `a.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` (plan G2). The same failure on
   `NDMatrix.astype` and `NDCharArray.astype` (their `new` overloads inherit the order).
 - `mean`: `dtype` needs `axis`; `keepdims` alone has no overload. `sum`: `dtype` and `keepdims` need `axis`; positional
   `(axis, dtype)` fails. `std`, `var`: positional `(axis, dtype)` fails. NumPy:
   `a.sum(axis=None, dtype=None, out=None, *, keepdims=<no value>, initial=<no value>, where=<no value>)` (B1–B4).
+- `transpose`: `a.transpose(1, 0)` does not compile (CS1501): the only overload takes an `int[] premute`, not a
+  `params` array, so only `a.transpose(new[] { 1, 0 })` binds. NumPy: `a.transpose(*axes)` takes the axes one by one
+  or as one sequence and no keyword (`a.transpose(axes=...)` is NumPy's TypeError). One overload
+  `transpose(params int[] axes)` binds all three spellings (none, several, one array); an empty array then stands for
+  NumPy's `a.transpose()` (reverse the axes), so NumPy's explicit empty tuple `a.transpose(())`, an error for an array
+  of one or more axes, has no spelling of its own: document it. The same on `NDMatrix`, `NDCharArray` and
+  `NDMaskedArray`, which declare their own `transpose`.
 - `(constructor)`: `new NDArray(new Shape(2))` has no overload. NumPy's class call `ndarray(shape, dtype=None,
   buffer=None, offset=0, strides=None, order=None)` (decision OD6; `np.ndarray(...)` has this signature).
 
-**Others** (8):
-- `np.ma.arange`: `step` alone does not bind (as `np.arange`).
-- `np.ma.masked_array`: the call with no argument does not compile (C# requires `data`; NumPy's `data=None`).
+**`np.ma`** (8):
+- `apply_along_axis`: `np.ma.apply_along_axis(f, 1, m, 2)` does not compile: the only overload takes
+  `Func<NDMaskedArray, NDMaskedArray>` and no further arguments. NumPy: `apply_along_axis(func1d, axis, arr, *args,
+  **kwargs)` hands `*args` and `**kwargs` to `func1d`. Take a `params object[] args` and a `func1d` that receives them,
+  as `np.apply_along_axis` does (`Func<NDArray, object[], NDArray>`); a port passes keyword arguments through a lambda.
+- `arange`: `step` alone does not bind (as `np.arange`).
+- `atleast_1d`, `atleast_2d`, `atleast_3d`: `np.ma.atleast_1d(x, y)` does not compile: the only overload takes one
+  `object a`. NumPy: `atleast_1d(*arys)` returns one masked array for one input and a tuple for several, the same
+  contract as `np.atleast_1d` (which takes `params object[] arys` and is O 4): give `np.ma` the single signature AD1
+  settles for `np.atleast_1d`.
+- `clip`: `np.ma.clip(m)` and `np.ma.clip(m, min: 1, max: 2)` do not compile (CS7036, `a_min` and `a_max` required).
+  NumPy's `np.ma.clip` is `np.clip` over masked arrays: `clip(a, a_min=<no value>, a_max=<no value>, out=None, *,
+  min=<no value>, max=<no value>, **kwargs)`, with no bound a positive copy. Take `np.clip`'s signature and keyword
+  rule (`a_min` / `a_max` optional, `min` / `max`, `out`, `dtype`, `where`; AD3c, AD3d, AD3e and AD3g list the
+  missing ones).
+- `masked_array`: the call with no argument does not compile (C# requires `data`; NumPy's `data=None`).
+- `where`: `np.ma.where(m)` does not compile (CS7036, `x` and `y` required). NumPy: `where(condition, x=<no value>,
+  y=<no value>)` returns `condition.nonzero()` when neither `x` nor `y` is given (masked entries count as False) and
+  raises when only one is. `np.where` has that one-argument form as a separate overload returning `NDArray<long>[]`;
+  give `np.ma.where` the same form AD1 settles for `np.where`.
+
+**Object classes** (7):
+- `np.matrix`, `np.char.chararray`: `astype` (see `ndarray.astype`) and `transpose` (see `ndarray.transpose`).
+- `np.ma.MaskedArray.transpose`: as `ndarray.transpose`.
+- `np.ma.MaskedArray.clip`: `m.clip()` does not compile (CS7036, `a_min` required). NumPy: `MaskedArray.clip(min=<no
+  value>, max=<no value>, out=None, **kwargs)`; no bound is a copy. Take `ndarray.clip`'s signature (`min`, `max`,
+  `out`, `dtype`, `where`); the C# names `a_min` / `a_max` are also AD2 renames.
+- `np.ma.MaskedArray.item`: `m.item(4)` and `m.item(0, 1)` do not compile: the only overload is `item()`. NumPy:
+  `MaskedArray.item(*args)` IS `ndarray.item` (no argument for a one-element array, one flat index, or one index per
+  axis), so it returns the stored value of a masked element too (`np.ma.array([1, 2], mask=[0, 1]).item(1)` is 2).
+  Take `ndarray.item`'s `params long[]` form.
+
+**Others** (5):
 - `np.random.SeedSequence` and the `SeedSequence` constructor: `spawn_key`, `pool_size`, `n_children_spawned` need
   `entropy` (NumPy: `SeedSequence(entropy=None, *, spawn_key=(), pool_size=4, n_children_spawned=0)`; None draws fresh
   OS entropy).
 - `NDArray<T>` constructor: `order` alone binds no overload (OD6).
 - `np.dtype` constructor: a dtype string does not bind (it takes `Type`) (OD6). This is the only place where NumPy's
   `dtype='float64'` spelling fails: every T ● name also has a `DType` overload.
+- `np.broadcast` constructor: `new np.Broadcast(a, b)` does not compile; the class has only a parameterless
+  constructor (NumPy's `np.broadcast()`). `np.broadcast(a, b)`, the NumPy spelling, compiles through the factory
+  (`params NDArray[]`); decision OD6 decides whether constructors mirror the class call.
 
 ### AD9: `null` refused where NumPy's default is None (L)
 
@@ -578,7 +625,7 @@ already take `int[] axis` with `out=` / `where=`.
 
 ## 6. NumPy names NumSharp lacks
 
-205 NumPy names have no member of that name in their NumSharp group. "(in `X`)" means NumSharp has the name in
+192 NumPy names have no member of that name in their NumSharp group. "(in `X`)" means NumSharp has the name in
 another group. Classes and what to do:
 
 | class | meaning | action |
@@ -619,14 +666,16 @@ another group. Classes and what to do:
 **`ndarray`** (3) and **`NDArray<T>`** (3): `ctypes` (N/A: `nd.Unsafe.Pointer<T>()` is the .NET form), `dump`,
 `dumps` (pickle: N/A).
 
-**`np.char`** (37) and **`np.char.chararray`** (34): **Plan** [`np-char.md`](np-char.md) (C3 / C4: the `np.@char`
-module forms and the `chararray` methods over `np.strings`' functions). 33 of the `np.char` names already exist in
-`np.strings`: `capitalize`, `center`, `count`, `endswith`, `expandtabs`, `find`, `index`, `isalnum`, `isalpha`,
-`isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `ljust`, `lower`, `lstrip`,
-`partition`, `replace`, `rfind`, `rindex`, `rjust`, `rpartition`, `rstrip`, `startswith`, `str_len`, `strip`,
-`swapcase`, `title`, `upper`, `zfill`. Not yet anywhere as text functions: `decode`, `encode`, `translate`, `mod`
-(string `%` formatting): [`strings-phase2.md`](strings-phase2.md). `chararray` lacks the same methods except
-`str_len` / `mod` / `partition` (it has `partition(sep)`).
+**`np.char`** (30) and **`np.char.chararray`** (28): **Plan** [`np-char.md`](np-char.md) (C5: the `chararray` string
+methods land in batches, one family each, with the `np.@char` re-exports of the same functions; `ffa74606`, C4 and the
+first batch, gave `np.@char` `partition`, `rpartition` and the padding functions `center`, `ljust`, `rjust`, `zfill`,
+`expandtabs`, and `chararray` the same methods but `partition(sep)`, which it had). 26 of the `np.char` names already
+compute in `np.strings`: `capitalize`, `count`, `endswith`, `find`, `index`, `isalnum`, `isalpha`, `isdecimal`,
+`isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `lower`, `lstrip`, `replace`, `rfind`, `rindex`,
+`rstrip`, `startswith`, `str_len`, `strip`, `swapcase`, `title`, `upper`. Not yet anywhere as text functions:
+`decode`, `encode`, `translate`, `mod` (string `%` formatting): [`strings-phase2.md`](strings-phase2.md). `chararray`
+lacks the same methods except `str_len` and `mod`, which NumPy's `chararray` does not have either (its `%` is the
+`__mod__` operator).
 
 **`np.strings`** (4): `decode`, `encode`, `mod`, `translate`: **Plan** [`strings-phase2.md`](strings-phase2.md).
 
@@ -764,6 +813,17 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 - **T ● counts by type name**: `view(type=...)` is a correct use of `Type` (§AD6).
 - **Q covers integer sequences only**, from the stubs' annotations. Python lists of values for array_like parameters
   are decision OD2, not probed.
+- **A `null` default is not a mark.** 55 names give 68 parameters the default `null` (or `default`) where NumPy's
+  default is a value: `np.strings.find`'s `start=0`, `np.fft.fft2`'s `axes=(-2, -1)`, the polynomial package's
+  `scl=1`, `lbnd=0` and `k=[]`, `np.char.center`'s `fillchar=' '`, `np.divmod`'s `out=(None, None)`, ... 63 of them
+  are `object`, array, `NDArray` or tuple parameters, because NumPy accepts an array_like there, and C# allows no
+  other default for those types: a NumPy call binds, and `null` stands for NumPy's value. The other 5 are nullable
+  value types: `np.matmul`'s `bool? keepdims = null` means "not passed" (NumPy raises for any explicit value), the
+  `ddof` of `np.std`, `np.var`, `ndarray.std`, `ndarray.var` (`int? ddof = null` for NumPy's 0) could be `int ddof = 0`
+  in their AD1 signature. What a fix keeps: the `<param>` documentation names the NumPy value `null` stands for. The
+  diff report's *null default* column lists every such parameter; its *only null defaults* count (54) is the names
+  whose closest overload differs in nothing else. The reverse, NumPy's None against a C# value (6 names: `order` of
+  `np.asarray`, `np.asarray_chkfinite`, `np.ndarray`, `density` of the three histograms), is the L mark (AD9a).
 - **NumPy's side** is the documented signature for ndarray methods (their C forwarding accepts some keywords
   positionally that the documentation makes keyword-only), the stubs where the runtime signature forwards
   `(*args, **kwargs)`, and the wrapped callable for numpy.ma's ufunc wrappers.
@@ -774,13 +834,13 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 | group | NumPy names | M ● | M ◦ only | X | O | T ● | T ◇ | B | L ● | L ◐ | L ◦ | Q | no mark | NumSharp-only |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `np` | 366 | 46 | 108 | 45 | 150 | 6 | 11 | 18 | 23 | 2 | 1 | 22 | 109 | 18 |
-| `ndarray` | 57 | 9 | 1 | 5 | 24 | 1 | 4 | 6 | 4 | 0 | 0 | 10 | 23 | 83 |
-| `np.char` | 16 | 0 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 13 | 1 |
+| `ndarray` | 57 | 9 | 1 | 5 | 24 | 1 | 4 | 7 | 4 | 0 | 0 | 10 | 22 | 83 |
+| `np.char` | 23 | 0 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 1 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.emath` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 | 0 |
 | `np.fft` | 18 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 0 |
 | `np.linalg` | 31 | 0 | 0 | 1 | 4 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 27 | 0 |
-| `np.ma` | 211 | 130 | 3 | 31 | 10 | 0 | 0 | 2 | 1 | 0 | 0 | 17 | 73 | 4 |
+| `np.ma` | 211 | 130 | 3 | 31 | 10 | 0 | 0 | 8 | 1 | 0 | 0 | 17 | 69 | 4 |
 | `np.polynomial.chebyshev` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 1 |
 | `np.polynomial.hermite` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 1 |
 | `np.polynomial.hermite_e` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 1 |
@@ -792,12 +852,12 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 | `np.random.Generator` | 45 | 0 | 0 | 0 | 36 | 0 | 0 | 0 | 0 | 0 | 38 | 0 | 5 | 1 |
 | `np.strings` | 42 | 0 | 17 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 23 | 0 |
 | `NDArray<T>` | 2 | 2 | 0 | 1 | 2 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 3 |
-| `np.matrix` | 53 | 10 | 1 | 0 | 19 | 1 | 0 | 1 | 0 | 0 | 0 | 13 | 22 | 4 |
-| `np.char.chararray` | 26 | 3 | 1 | 2 | 12 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 12 | 4 |
-| `np.ma.MaskedArray` | 59 | 30 | 0 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 13 | 26 | 2 |
+| `np.matrix` | 53 | 10 | 1 | 0 | 19 | 1 | 0 | 2 | 0 | 0 | 0 | 13 | 21 | 4 |
+| `np.char.chararray` | 32 | 3 | 1 | 2 | 12 | 1 | 0 | 2 | 0 | 0 | 0 | 1 | 17 | 4 |
+| `np.ma.MaskedArray` | 59 | 30 | 0 | 1 | 2 | 0 | 0 | 3 | 0 | 0 | 0 | 13 | 25 | 2 |
 | `np.dtype` | 4 | 1 | 0 | 0 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 2 | 5 |
 | `np.nditer` | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 8 | 3 |
-| `np.broadcast` | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 3 |
+| `np.broadcast` | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 3 |
 | `np.flatiter` | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 3 |
 | `np.ndindex` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `np.ndenumerate` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -813,19 +873,19 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 | `PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 |
 | `Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 |
 | `SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
-| **total** | **1,178** | **234** | **132** | **90** | **360** | **10** | **17** | **32** | **31** | **19** | **73** | **77** | **503** | **168** |
+| **total** | **1,191** | **234** | **132** | **90** | **360** | **10** | **17** | **45** | **31** | **19** | **73** | **77** | **508** | **168** |
 
 ## Appendix B: names with no mark
 
-503 names match NumPy in every respect the marks check (a NumPy call of each binds at C# 12 and C# 14):
+508 names match NumPy in every respect the marks check (a NumPy call of each binds at C# 12 and C# 14):
 
 - **`np`** (109): `allclose`, `angle`, `argwhere`, `array_equiv`, `array_str`, `bartlett`, `bincount`, `blackman`, `block`, `broadcast_shapes`, `clip`, `column_stack`, `common_type`, `compress`, `convolve`, `copy`, `corrcoef`, `correlate`, `cov`, `cross`, `datetime_data`, `diag`, `diag_indices`, `diag_indices_from`, `diagflat`, `diagonal`, `diff`, `digitize`, `dot`, `dstack`, `ediff1d`, `extract`, `fill_diagonal`, `fix`, `flatnonzero`, `fliplr`, `flipud`, `format_float_positional`, `format_float_scientific`, `get_printoptions`, `getbufsize`, `hamming`, `hanning`, `i0`, `imag`, `inner`, `isclose`, `isfortran`, `isin`, `isneginf`, `isposinf`, `iterable`, `ix_`, `kaiser`, `kron`, `mask_indices`, `matrix_transpose`, `may_share_memory`, `min_scalar_type`, `nan_to_num`, `nancumprod`, `nancumsum`, `nonzero`, `outer`, `packbits`, `permute_dims`, `poly`, `polyadd`, `polyder`, `polydiv`, `polyfit`, `polymul`, `polysub`, `put_along_axis`, `real`, `real_if_close`, `resize`, `rollaxis`, `roots`, `rot90`, `select`, `setbufsize`, `setdiff1d`, `setxor1d`, `shares_memory`, `sinc`, `sort`, `sort_complex`, `swapaxes`, `take_along_axis`, `trace`, `trapezoid`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `typename`, `union1d`, `unique`, `unique_all`, `unique_counts`, `unique_inverse`, `unique_values`, `unpackbits`, `unstack`, `vander`, `vdot`
-- **`ndarray`** (23): `__contains__`, `__iter__`, `__len__`, `byteswap`, `clip`, `compress`, `copy`, `cumprod`, `cumsum`, `diagonal`, `fill`, `flatten`, `nonzero`, `put`, `round`, `setflags`, `sort`, `swapaxes`, `to_device`, `tobytes`, `tolist`, `trace`, `transpose`
-- **`np.char`** (13): `array`, `asarray`, `chararray`, `equal`, `greater`, `greater_equal`, `less`, `less_equal`, `multiply`, `not_equal`, `rsplit`, `split`, `splitlines`
+- **`ndarray`** (22): `__contains__`, `__iter__`, `__len__`, `byteswap`, `clip`, `compress`, `copy`, `cumprod`, `cumsum`, `diagonal`, `fill`, `flatten`, `nonzero`, `put`, `round`, `setflags`, `sort`, `swapaxes`, `to_device`, `tobytes`, `tolist`, `trace`
+- **`np.char`** (20): `array`, `asarray`, `center`, `chararray`, `equal`, `expandtabs`, `greater`, `greater_equal`, `less`, `less_equal`, `ljust`, `multiply`, `not_equal`, `partition`, `rjust`, `rpartition`, `rsplit`, `split`, `splitlines`, `zfill`
 - **`np.emath`** (9): `arccos`, `arcsin`, `arctanh`, `log`, `log10`, `log2`, `logn`, `power`, `sqrt`
 - **`np.fft`** (14): `fft`, `fft2`, `fftn`, `hfft`, `ifft`, `ifft2`, `ifftn`, `ihfft`, `irfft`, `irfft2`, `irfftn`, `rfft`, `rfft2`, `rfftn`
 - **`np.linalg`** (27): `cholesky`, `cond`, `cross`, `det`, `diagonal`, `eig`, `eigh`, `eigvals`, `eigvalsh`, `inv`, `lstsq`, `matmul`, `matrix_norm`, `matrix_power`, `matrix_rank`, `matrix_transpose`, `outer`, `pinv`, `qr`, `slogdet`, `solve`, `svd`, `svdvals`, `tensorinv`, `tensorsolve`, `trace`, `vecdot`
-- **`np.ma`** (73): `allclose`, `allequal`, `alltrue`, `anom`, `anomalies`, `append`, `atleast_1d`, `atleast_2d`, `atleast_3d`, `clump_masked`, `clump_unmasked`, `column_stack`, `common_fill_value`, `compress_cols`, `compress_nd`, `compress_rowcols`, `compress_rows`, `concatenate`, `convolve`, `corrcoef`, `correlate`, `cov`, `diag`, `diagflat`, `diagonal`, `diff`, `dstack`, `ediff1d`, `filled`, `fix_invalid`, `flatnotmasked_contiguous`, `flatnotmasked_edges`, `flatten_mask`, `getmask`, `harden_mask`, `ids`, `in1d`, `inner`, `innerproduct`, `intersect1d`, `isMA`, `isMaskedArray`, `is_masked`, `isarray`, `isin`, `mask_rowcols`, `masked_all`, `masked_invalid`, `masked_where`, `maximum`, `minimum`, `nonzero`, `notmasked_contiguous`, `notmasked_edges`, `outer`, `outerproduct`, `polyfit`, `power`, `put`, `putmask`, `ravel`, `repeat`, `resize`, `set_fill_value`, `setdiff1d`, `setxor1d`, `soften_mask`, `sometrue`, `swapaxes`, `transpose`, `union1d`, `vander`, `where`
+- **`np.ma`** (69): `allclose`, `allequal`, `alltrue`, `anom`, `anomalies`, `append`, `clump_masked`, `clump_unmasked`, `column_stack`, `common_fill_value`, `compress_cols`, `compress_nd`, `compress_rowcols`, `compress_rows`, `concatenate`, `convolve`, `corrcoef`, `correlate`, `cov`, `diag`, `diagflat`, `diagonal`, `diff`, `dstack`, `ediff1d`, `filled`, `fix_invalid`, `flatnotmasked_contiguous`, `flatnotmasked_edges`, `flatten_mask`, `getmask`, `harden_mask`, `ids`, `in1d`, `inner`, `innerproduct`, `intersect1d`, `isMA`, `isMaskedArray`, `is_masked`, `isarray`, `isin`, `mask_rowcols`, `masked_all`, `masked_invalid`, `masked_where`, `maximum`, `minimum`, `nonzero`, `notmasked_contiguous`, `notmasked_edges`, `outer`, `outerproduct`, `polyfit`, `power`, `put`, `putmask`, `ravel`, `repeat`, `resize`, `set_fill_value`, `setdiff1d`, `setxor1d`, `soften_mask`, `sometrue`, `swapaxes`, `transpose`, `union1d`, `vander`
 - **`np.polynomial.chebyshev`** (20): `cheb2poly`, `chebadd`, `chebcompanion`, `chebder`, `chebdiv`, `chebfromroots`, `chebgrid2d`, `chebgrid3d`, `chebint`, `chebline`, `chebmul`, `chebmulx`, `chebroots`, `chebsub`, `chebval`, `chebval2d`, `chebval3d`, `chebvander2d`, `chebvander3d`, `poly2cheb`
 - **`np.polynomial.hermite`** (20): `herm2poly`, `hermadd`, `hermcompanion`, `hermder`, `hermdiv`, `hermfromroots`, `hermgrid2d`, `hermgrid3d`, `hermint`, `hermline`, `hermmul`, `hermmulx`, `hermroots`, `hermsub`, `hermval`, `hermval2d`, `hermval3d`, `hermvander2d`, `hermvander3d`, `poly2herm`
 - **`np.polynomial.hermite_e`** (20): `herme2poly`, `hermeadd`, `hermecompanion`, `hermeder`, `hermediv`, `hermefromroots`, `hermegrid2d`, `hermegrid3d`, `hermeint`, `hermeline`, `hermemul`, `hermemulx`, `hermeroots`, `hermesub`, `hermeval`, `hermeval2d`, `hermeval3d`, `hermevander2d`, `hermevander3d`, `poly2herme`
@@ -836,9 +896,9 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 - **`np.random`** (5): `Generator`, `bytes`, `get_bit_generator`, `set_bit_generator`, `shuffle`
 - **`np.random.Generator`** (5): `bytes`, `permuted`, `shuffle`, `spawn`, `(constructor)`
 - **`np.strings`** (23): `capitalize`, `center`, `count`, `endswith`, `expandtabs`, `find`, `index`, `ljust`, `lower`, `lstrip`, `partition`, `replace`, `rfind`, `rindex`, `rjust`, `rpartition`, `rstrip`, `startswith`, `strip`, `swapcase`, `title`, `upper`, `zfill`
-- **`np.matrix`** (22): `__imul__`, `__ipow__`, `__iter__`, `__mul__`, `__rmul__`, `__rpow__`, `argpartition`, `byteswap`, `conj`, `conjugate`, `copy`, `diagonal`, `flatten`, `getA`, `getA1`, `getH`, `getI`, `getT`, `getfield`, `swapaxes`, `to_device`, `transpose`
-- **`np.char.chararray`** (12): `__iter__`, `byteswap`, `copy`, `diagonal`, `flatten`, `getfield`, `rsplit`, `split`, `splitlines`, `swapaxes`, `to_device`, `transpose`
-- **`np.ma.MaskedArray`** (26): `anom`, `argpartition`, `byteswap`, `compressed`, `conj`, `conjugate`, `diagonal`, `fill`, `filled`, `flatten`, `harden_mask`, `ids`, `iscontiguous`, `nonzero`, `put`, `ravel`, `repeat`, `searchsorted`, `shrink_mask`, `soften_mask`, `swapaxes`, `tobytes`, `tofile`, `tolist`, `transpose`, `unshare_mask`
+- **`np.matrix`** (21): `__imul__`, `__ipow__`, `__iter__`, `__mul__`, `__rmul__`, `__rpow__`, `argpartition`, `byteswap`, `conj`, `conjugate`, `copy`, `diagonal`, `flatten`, `getA`, `getA1`, `getH`, `getI`, `getT`, `getfield`, `swapaxes`, `to_device`
+- **`np.char.chararray`** (17): `__iter__`, `byteswap`, `center`, `copy`, `diagonal`, `expandtabs`, `flatten`, `getfield`, `ljust`, `rjust`, `rpartition`, `rsplit`, `split`, `splitlines`, `swapaxes`, `to_device`, `zfill`
+- **`np.ma.MaskedArray`** (25): `anom`, `argpartition`, `byteswap`, `compressed`, `conj`, `conjugate`, `diagonal`, `fill`, `filled`, `flatten`, `harden_mask`, `ids`, `iscontiguous`, `nonzero`, `put`, `ravel`, `repeat`, `searchsorted`, `shrink_mask`, `soften_mask`, `swapaxes`, `tobytes`, `tofile`, `tolist`, `unshare_mask`
 - **`np.dtype`** (2): `__getitem__`, `__len__`
 - **`np.nditer`** (8): `close`, `copy`, `debug_print`, `enable_external_loop`, `iternext`, `remove_axis`, `remove_multi_index`, `reset`
 - **Others** (12): `np.broadcast.reset`, `np.flatiter.copy`, `np.poly1d.deriv`, `np.poly1d.integ`, `np.finfo` (constructor), `SeedSequence.generate_state`, `SeedSequence.spawn`, `BitGenerator.spawn`, `MT19937.jumped`, and `advance` of `PCG64`, `PCG64DXSM`, `Philox`

@@ -1941,8 +1941,17 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
 
 - **2026-10-17**: [`API_DIFF_GAP.md`](API_DIFF_GAP.md) written on `strings`: the complete gap map of the second pass
   with explanations and instructions (work packages AD1–AD10, owner decisions OD1–OD11, absent names and modules
-  classified, order of work). The signature reports were regenerated for it after `9d8d1a7b` (np.strings' five case
-  maps: 1,178 names with a NumPy counterpart, 503 with no mark, 205 NumPy names absent).
+  classified, order of work). Commit `8628b203`, whose data predates `ffa74606` (another session's commit that landed
+  first). The follow-up commit regenerated the signature reports after `ffa74606` (np.strings' five case maps of
+  `9d8d1a7b` and numpy.char's partition and padding functions) and added two compile-probe kinds to
+  `binding_probe.py`, found by checking the document against the diff report's *varargs* and *C# requires* columns:
+  **K**, several values at NumPy's `*args` (`a.transpose(1, 0)` has no overload on `NDArray`, `NDMatrix`,
+  `NDCharArray`, `NDMaskedArray`; `np.ma.atleast_1d(x, y)`; `np.ma.apply_along_axis`'s extra arguments;
+  `MaskedArray.item(i)`; `new np.Broadcast(a, b)`), and **W**, the call without the parameters NumPy marks "not
+  passed" (`np.ma.where(condition)`, `np.ma.clip(a)`, `m.clip()`; `np.vectorize()`, NumPy's decorator form, is exempt).
+  Counts: 1,191 names with a NumPy counterpart, B 45 (was 32), 508 with no mark, 192 NumPy names absent, 7,137 probes;
+  the document's §2, AD8 (13 more names), §11 (the `null` defaults: 55 names, 68 parameters, no mark by design) and
+  appendices follow.
 
 - **2026-10-17**: second pass of the signature inventory on `strings` (§2 "Second pass"): NumPy's other classes,
   constructors, extension methods and `NDArray<T>` compared too (1,173 names with a NumPy counterpart, was 983), the

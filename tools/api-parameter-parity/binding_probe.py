@@ -34,6 +34,15 @@ effective one signature_diff.py builds: runtime signature plus the stub / numpyd
   Y  for a ``dtype`` parameter: the call with a dtype string, ``dtype: "float64"`` (NumPy's ``dtype='float64'``). It
      binds where the parameter is a ``DType``, which converts from a string, and not where it is an ``NPTypeCode`` or
      a ``Type``.
+  K  for NumPy's ``*args``: the call with several values at its slot, the way NumPy code passes them
+     (``a.transpose(1, 0)``, ``np.ma.atleast_1d(x, y)``, ``np.meshgrid(x, y, z)``). R writes the closest overload's
+     own parameters there, so it binds where a C# array parameter takes the elements as ONE array
+     (``a.transpose(new int[] { 1 })``); K binds only where they can be passed one by one (``params``, or enough C#
+     parameters). ``several_varargs_values`` chooses the values.
+  W  for a parameter NumPy marks "not passed" (``np._NoValue``) that R passes because every overload requires it: the
+     call without it, a call NumPy defines (``np.ma.where(condition)`` returns ``condition.nonzero()``,
+     ``np.ma.clip(a)`` and ``mk.clip()`` clip with no bound). The forms C# cannot express are exempt
+     (``OMISSION_NOT_PORTED``).
 
 Each probe's argument VALUES are chosen from the C# parameter types (the closest overload's first; a delegate gets a
 typed lambda, ``new Func<NDArray, int, NDArray>((p0, p1) => default(NDArray))``), so a failure is a binding failure, not a
@@ -86,6 +95,13 @@ INSTANCES = {
 #: Optional positional parameters NumPy only accepts together with the next one (``where(condition, [x, y], /)``:
 #: "either both or neither of x and y should be given"), per (group, name): a positional probe never stops at them.
 JOINT_POSITIONAL = {("np", "where"): frozenset({"x"}), ("np.ma", "where"): frozenset({"x"})}
+
+#: Names whose NumPy call without its "not passed" (``np._NoValue``) parameters has no C# counterpart by design, with
+#: the reason; the W probe is not written for them. ``np.vectorize()`` without ``pyfunc`` returns a decorator
+#: (``@np.vectorize(otypes=[float])`` over a ``def``): C# has no decorator syntax, so a port passes the function.
+OMISSION_NOT_PORTED = {
+    ("np", "vectorize"): "without `pyfunc` NumPy returns a decorator; C# has no decorator syntax",
+}
 
 #: One C# value per simple C# parameter type, the value a port would pass.
 SIMPLE_VALUES = {
@@ -244,6 +260,59 @@ def required_by_every_overload(overloads, slot):
         for ov in overloads)
 
 
+def several_varargs_values(overloads, best_index, start, np_names):
+    """The arguments a port writes at NumPy's ``*args`` slot when it passes several values there (the K probe).
+
+    Walks the closest overload's parameters from the slot, as the R probe does, to find the parameter that carries
+    NumPy's elements:
+
+    - a parameter with a NumPy name ends the slot without a carrier;
+    - an array parameter (``params`` or not, optional or not) carries them: two elements of its element type
+      (``a.transpose(1, 1)`` for ``int[] premute``, ``np.einsum("x", a, a)`` after ``string subscripts``);
+    - an optional parameter carries them: two values of its type (``np.gradient(a, a, a)`` for ``object spacing``);
+    - a required parameter without a NumPy name keeps the R probe's value and is remembered.
+
+    When the walk ends without a carrier, the last remembered parameter gets one more value of its type
+    (``np.meshgrid(a, a, a)`` after R's ``np.meshgrid(a, a)``, ``np.ma.atleast_1d(a, a)`` after ``object a``). When
+    nothing sits at the slot (``item()``), the elements are two values of another overload's ``params`` element type
+    there, else two ``1`` placeholders: no overload has a parameter for them, so any value fails to bind (CS1501).
+
+    Args:
+        overloads: The name's overload dictionaries.
+        best_index: The closest overload's index (signature_diff).
+        start: The index of NumPy's ``*args`` slot in the C# parameter list (the positional values written before it).
+        np_names: NumPy's parameter names other than ``*args`` / ``**kwargs``.
+
+    Returns:
+        The argument texts for the slot (at least two), or None when a value cannot be written (an open generic type,
+        an unsupported delegate type).
+    """
+    written, last = [], None
+    for c in overloads[best_index]["params"][start:]:
+        if c["name"] in np_names:
+            break
+        cs_type = c["type"]
+        if cs_type.endswith("[]") or c["optional"]:
+            # The carrier: an array takes the elements (one array in R, one by one here), an optional parameter the
+            # first of them.
+            v = value_for(cs_type[:-2] if cs_type.endswith("[]") else cs_type)
+            return None if v is None else written + [v, v]
+        v = value_for(cs_type)
+        if v is None:
+            return None
+        written.append(v)
+        last = cs_type
+    if last is not None:
+        return written + [value_for(last)]
+    for ov in overloads:
+        cs = ov["params"]
+        if start < len(cs) and cs[start]["params"] and cs[start]["type"].endswith("[]"):
+            v = value_for(cs[start]["type"][:-2])
+            if v is not None:
+                return [v, v]
+    return ["1", "1"]
+
+
 def default_value(np_param, cs_param):
     """NumPy's default of an optional parameter, written as a C# value of the C# parameter's type.
 
@@ -295,9 +364,10 @@ def probes_for(row):
     required = []
     written = set()  # the NumPy parameters the call already carries
     at = {}  # a required positional parameter's index in `required` (the Q probes replace its value)
+    unset = []  # (index in `required`, name) of the "not passed" parameters R passes only because C# requires them
     for slot, p in enumerate(positional):
-        needed = p.default is sd.REQUIRED or (p.default == "<no value>" and required_by_every_overload(overloads, slot))
-        if not needed:
+        unset_only = p.default == "<no value>" and required_by_every_overload(overloads, slot)
+        if p.default is not sd.REQUIRED and not unset_only:
             continue
         c = find_cs_param(overloads, best, p, slot, positional=True)
         if c is None:
@@ -305,6 +375,8 @@ def probes_for(row):
         v = value_for(c["type"])
         if v is None:
             return [], f"cannot write a {c['type']} for `{p.name}`"
+        if unset_only:
+            unset.append((len(required), p.name))
         at[p.name] = len(required)
         required.append(v)
         written.add(p.name)
@@ -330,6 +402,7 @@ def probes_for(row):
             if v is None:
                 return [], f"cannot write a {c['type']} for NumPy's *{var_positional.name}"
             required.append(v)
+    var_end = len(required)  # the R values at NumPy's *args slot are required[positional_count:var_end]
     for p in params:
         # A keyword-only parameter without a default is required too, and only reachable by name.
         if p.kind == sd.P.KEYWORD_ONLY and p.default is sd.REQUIRED:
@@ -342,6 +415,21 @@ def probes_for(row):
             required.append(f"{cs_name(p.name)}: {v}")
             written.add(p.name)
     probes = [("R", None, list(required))]
+    if var_positional is not None:
+        # NumPy code passes several values at *args (`a.transpose(1, 0)`, `np.meshgrid(x, y, z)`); R only shows that the
+        # slot's C# parameters bind, which an array parameter does with ONE array of the elements.
+        np_names = {p.name for p in params if p.kind not in (sd.P.VAR_POSITIONAL, sd.P.VAR_KEYWORD)}
+        several = several_varargs_values(overloads, best, positional_count, np_names)
+        if several is not None:
+            probes.append(("K", var_positional.name, required[:positional_count] + several + required[var_end:]))
+    elif unset and (row["module"], row["name"]) not in OMISSION_NOT_PORTED:
+        # NumPy defines the call without its "not passed" parameters (`np.ma.where(condition)`, `np.ma.clip(a)`); R
+        # passes them because every C# overload requires them. Only a trailing run of the positional values can be
+        # left out without moving a later value into its slot.
+        dropped = {i for i, _ in unset}
+        if dropped == set(range(positional_count - len(dropped), positional_count)):
+            probes.append(("W", ",".join(name for _, name in unset),
+                           [v for i, v in enumerate(required) if i not in dropped]))
     if var_positional is None:
         # NumPy code passes the leading optional parameters positionally (`a.sum(0)`, `np.linspace(0, 1, 5)`), so each
         # further positional slot gets a probe holding every slot up to it, in NumPy's order. A C# overload with
