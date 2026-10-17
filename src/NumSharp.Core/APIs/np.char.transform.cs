@@ -121,8 +121,11 @@ namespace NumSharp
         ///     operand 'width'</c>); a fill that is not one character (<c>The fill character must be exactly one
         ///     character long</c>); a non-text operand; no common dtype or no loop for the classes; a uint64 width (NumPy's
         ///     <c>data type 'U6.0' not understood</c>).</exception>
-        /// <exception cref="ValueError">An empty broadcast (<c>zero-size array to reduction operation maximum which has no
-        ///     identity</c>); a <c>StringDType</c> NA its rule refuses.</exception>
+        /// <exception cref="ValueError">An empty broadcast (<c>zero-size array to reduction operation maximum which has
+        ///     no identity</c>); a <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+        ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at
+        ///     most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a larger one
+        ///     computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
@@ -141,7 +144,10 @@ namespace NumSharp
         /// <returns>A fresh array (see <see cref="center"/>).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="width"/> is null.</exception>
         /// <exception cref="TypeError">See <see cref="center"/>.</exception>
-        /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses.</exception>
+        /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses; a chararray
+        ///     operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d,
+        ///     or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string
+        ///     data.</c>; a larger one computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
@@ -160,7 +166,10 @@ namespace NumSharp
         /// <returns>A fresh array (see <see cref="center"/>).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="width"/> is null.</exception>
         /// <exception cref="TypeError">See <see cref="center"/>.</exception>
-        /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses.</exception>
+        /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses; a chararray
+        ///     operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d,
+        ///     or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string
+        ///     data.</c>; a larger one computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
@@ -230,9 +239,10 @@ namespace NumSharp
         ///     NumPy's no-loop text, naming <c>_strip_chars</c> or <c>_strip_whitespace</c>); two different
         ///     <c>StringDType</c> NA objects.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> whose
-        ///     result is not text a chararray holds (<c>Can only create a chararray from string data.</c>, a
-        ///     <c>StringDType</c> set).</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+        ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at
+        ///     most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a larger one
+        ///     computes NumPy's plain result).</exception>
         /// <remarks>NumPy's trailing scan also strips NUL characters, its leading scan does not (<c>strip(' \0ab')</c> is
         ///     <c>'\0ab'</c>).</remarks>
         [NDScoped]
@@ -251,8 +261,10 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> whose
-        ///     result is not text a chararray holds.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+        ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at
+        ///     most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a larger one
+        ///     computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray lstrip(object a, object chars = null)
             => np.strings.lstrip(TextOperand(a, nameof(a)), OptionalOperand(chars));
@@ -269,8 +281,10 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> whose
-        ///     result is not text a chararray holds.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+        ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at
+        ///     most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a larger one
+        ///     computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray rstrip(object a, object chars = null)
             => np.strings.rstrip(TextOperand(a, nameof(a)), OptionalOperand(chars));
@@ -298,8 +312,10 @@ namespace NumSharp
         ///     operand 'count'</c>); no common dtype or no loop for the classes; a uint64 count (NumPy's float descriptor);
         ///     two different <c>StringDType</c> NA objects.</exception>
         /// <exception cref="IncorrectShapeException">A statement's operands do not broadcast.</exception>
-        /// <exception cref="ValueError">An empty broadcast; a number cast to text; a <c>StringDType</c> NA its rule refuses;
-        ///     a chararray <paramref name="a"/> whose result is not text a chararray holds.</exception>
+        /// <exception cref="ValueError">An empty broadcast; a number cast to text; a <c>StringDType</c> NA its rule
+        ///     refuses; a chararray operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into
+        ///     <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a
+        ///     chararray from string data.</c>; a larger one computes NumPy's plain result).</exception>
         /// <exception cref="UnicodeEncodeError">A non-ASCII <paramref name="old"/> / <paramref name="new"/> cast to
         ///     <c>S</c>.</exception>
         [NDScoped]

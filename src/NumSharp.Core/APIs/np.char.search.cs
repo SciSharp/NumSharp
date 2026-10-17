@@ -76,7 +76,10 @@ namespace NumSharp
         ///     dtype('int64') with casting rule 'same_kind'</c>).</exception>
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
+        ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
+        ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a
+        ///     larger one computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray count(object a, object sub, object start = null, object end = null)
             => np.strings.count(TextOperand(a, nameof(a)), TextOperand(sub, nameof(sub)), OptionalOperand(start), OptionalOperand(end));
@@ -96,7 +99,10 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
+        ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
+        ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a
+        ///     larger one computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray find(object a, object sub, object start = null, object end = null)
             => np.strings.find(TextOperand(a, nameof(a)), TextOperand(sub, nameof(sub)), OptionalOperand(start), OptionalOperand(end));
@@ -116,7 +122,10 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
+        ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
+        ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>; a
+        ///     larger one computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray rfind(object a, object sub, object start = null, object end = null)
             => np.strings.rfind(TextOperand(a, nameof(a)), TextOperand(sub, nameof(sub)), OptionalOperand(start), OptionalOperand(end));
@@ -135,8 +144,11 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">An element without a match (<c>substring not found</c>); a <c>StringDType</c> NA
-        ///     whose NA object is not a string.</exception>
+        /// <exception cref="ValueError">An element without a match (<c>substring not found</c>); a <c>StringDType</c>
+        ///     NA whose NA object is not a string; a chararray operand beside a <c>StringDType</c> one that NumPy's
+        ///     trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements:
+        ///     <c>Can only create a chararray from string data.</c>; a larger one computes NumPy's plain
+        ///     result).</exception>
         [NDScoped]
         public NDArray index(object a, object sub, object start = null, object end = null)
             => np.strings.index(TextOperand(a, nameof(a)), TextOperand(sub, nameof(sub)), OptionalOperand(start), OptionalOperand(end));
@@ -156,7 +168,9 @@ namespace NumSharp
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">An element without a match; a <c>StringDType</c> NA whose NA object is not a
-        ///     string.</exception>
+        ///     string; a chararray operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into
+        ///     <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a
+        ///     chararray from string data.</c>; a larger one computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray rindex(object a, object sub, object start = null, object end = null)
             => np.strings.rindex(TextOperand(a, nameof(a)), TextOperand(sub, nameof(sub)), OptionalOperand(start), OptionalOperand(end));
@@ -176,7 +190,9 @@ namespace NumSharp
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like (a
-        ///     NaN-like NA is False).</exception>
+        ///     NaN-like NA is False); a chararray operand beside a <c>StringDType</c> one that NumPy's trivial loop
+        ///     copies into <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only
+        ///     create a chararray from string data.</c>; a larger one computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray startswith(object a, object prefix, object start = null, object end = null)
             => np.strings.startswith(TextOperand(a, nameof(a)), TextOperand(prefix, nameof(prefix)), OptionalOperand(start), OptionalOperand(end));
@@ -195,7 +211,10 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like; a
+        ///     chararray operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into
+        ///     <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a
+        ///     chararray from string data.</c>; a larger one computes NumPy's plain result).</exception>
         [NDScoped]
         public NDArray endswith(object a, object suffix, object start = null, object end = null)
             => np.strings.endswith(TextOperand(a, nameof(a)), TextOperand(suffix, nameof(suffix)), OptionalOperand(start), OptionalOperand(end));
