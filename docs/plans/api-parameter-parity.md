@@ -292,7 +292,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     (np.any / np.all keep C order: they do not use `AllocateReductionResult`).
 - [x] **A4d max/min family: one NumPy signature per function, nothing else** for `np.max`, `np.min`, `np.amax`,
   `np.amin`, `np.nanmax`, `np.nanmin`, `ndarray.max`, `ndarray.min` (branch `strings`). The owner's rule, 2026-10-17: "We
-  must have one whole api per function as numpy provides. b. remove others". Done 2026-10-17 (see the state log).
+  must have one whole api per function as numpy provides. b. remove others". Done 2026-10-17 (`795560d5`).
   - Proof (2026-10-17, `strings` at `948b5350`): the family had 30 public overloads — `np.amin` / `np.amax` 4 each (the
     generic `<T>(a)`, the dtype extension `(a, axis, keepdims, dtype)`, NumPy's form, the positional shim
     `(a, axis, keepdims)`), `np.min` / `np.max` 3, `np.nanmin` / `np.nanmax` 2, `NDArray.min` / `NDArray.max` 5 each and
@@ -1868,6 +1868,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-17**: A4d done on `strings` (the max/min family is NumPy's one signature per function: `np.amin` / `np.amax` /
+  `np.min` / `np.max` / `np.nanmin` / `np.nanmax` and `ndarray.min` / `ndarray.max` keep only NumPy's form; the generic
+  forms, the `dtype=` extension, the positional keepdims shim and `NDArray.amin` / `NDArray.amax` are gone; a C# literal
+  in the `out` slot raises NumPy's "return arrays must be of ArrayType"). The owner's rule, which reaches past this
+  family: "We must have one whole api per function as numpy provides. b. remove others". Found on the way: the old set
+  made `benchmark/NumSharp.Benchmark.CSharp` fail to build for net8.0 (11 CS0121), and its dtype paths returned NaN for
+  an int64 → float64 minimum. An intermittent AccessViolation in `np.nansum`'s NaN axis kernel aborted one net10.0
+  oracle run (not reproduced in two reruns; untouched code). Commit: `795560d5`.
 
 - **2026-10-09**: X38 done (np.nditer's construction checks are NumPy's: the itershape rule, `npyiter_check_op_axes`,
   `npyiter_fill_axisdata`'s shape pass with NumPy's broadcast / invalid-axis / extra-dimension texts and negative
