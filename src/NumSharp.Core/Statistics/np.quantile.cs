@@ -408,7 +408,7 @@ namespace NumSharp
                 double[] qText = QArrayFromNDArray(q);
                 ValidateQuantileArray(q, qText);
                 return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axisArr, @out, method, keepdims, chararray);
+                    axisArr, @out, method, keepdims, chararray, QuantileIndexes.IndexDtypeOf(q));
             }
             bool qIsScalar = q.ndim == 0;
             double[] qArr = QArrayFromNDArray(q);
@@ -425,7 +425,7 @@ namespace NumSharp
             // rank (a 2-d q keeps both axes) are checked inside, in NumPy's order.
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
                 weakQ: q.WasPythonLiteral, qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(),
-                methodName: method, integerQ: IsIntegerQuantile(q));
+                methodName: method, integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
         }
 
         /// <summary>
@@ -510,7 +510,7 @@ namespace NumSharp
                 double[] qText = QArrayFromNDArray(q);
                 ValidateQuantileArray(q, qText);
                 return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axis, @out, method, keepdims, chararray);
+                    axis, @out, method, keepdims, chararray, QuantileIndexes.IndexDtypeOf(q));
             }
             double[] qArr = QArrayFromNDArray(q);
             // `_quantile_is_valid(q)` at any rank; q's rank is checked after the axes, inside the engine.
@@ -520,7 +520,7 @@ namespace NumSharp
             // float64.
             return QuantileEngine.Compute(a, qArr, axis, @out, overwrite_input, default, keepdims, qIsScalar: q.ndim == 0,
                 weakQ: q.WasPythonLiteral, qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone(),
-                methodName: method, integerQ: IsIntegerQuantile(q));
+                methodName: method, integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
         }
 
         /// <summary>

@@ -977,7 +977,8 @@ namespace NumSharp.Statistics
 
         /// <summary>
         ///     NumPy's <c>target[...] = value</c> as the nan forms store a line's answer: an array value by the unsafe cast and
-        ///     broadcast, a Python object (the NaN NA object) by the destination's setitem.
+        ///     broadcast, a Python object (the NaN NA object) or a NumPy scalar (a 0-d q's answer) by the destination's setitem
+        ///     (<see cref="QuantileEngine.StoreNumPyScalar"/>: an integer destination refuses NaN and infinity).
         /// </summary>
         /// <param name="target">The destination (out, its view, or the result's slice).</param>
         /// <param name="value">The value.</param>
@@ -987,6 +988,9 @@ namespace NumSharp.Statistics
         {
             if (pyObject)
                 NDVStringStatistics.PyAssign(target, value);
+            else if (value.ndim == 0)
+                // A 0-d q's answer is a NumPy SCALAR: stored by the target's setitem (an integer target refuses NaN).
+                QuantileEngine.StoreNumPyScalar(target, value);
             else
                 np.copyto(target, value, "unsafe");
         }

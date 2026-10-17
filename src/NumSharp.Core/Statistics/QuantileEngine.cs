@@ -104,9 +104,10 @@ namespace NumSharp.Statistics
         ///     forms: stages each reduced line, partitions it at the indexes the method needs and selects or interpolates.
         /// </summary>
         /// <param name="a">The numeric data.</param>
-        /// <param name="q">The quantiles in [0, 1], in C order.</param>
+        /// <param name="q">The quantiles in [0, 1], in C order (values of q's dtype, see <paramref name="qType"/>).</param>
         /// <param name="axisArr">The reduced axes, or null for the flattened data.</param>
-        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="out">An optional output array, written and returned itself: NumPy's two routes (see the
+        ///     remarks).</param>
         /// <param name="overwrite_input">Whether the data may be partitioned in place (a copy is staged anyway).</param>
         /// <param name="method">The estimation method (ignored when <paramref name="methodName"/> is given).</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
@@ -127,7 +128,7 @@ namespace NumSharp.Statistics
         /// </param>
         /// <param name="weakQ">NumPy 2.4's <c>weak_q = type(q) in (int, float)</c>: true when q was a Python int or float
         ///     (a C# number), whose interpolation weight is a WEAK float that keeps float16 / float32 data's dtype; false for
-        ///     a q ARRAY, 0-d included, whose float64 weight promotes the result to float64
+        ///     a q ARRAY, 0-d included, whose weight promotes the result to <c>result_type(data, q)</c>
         ///     (<c>np.quantile(f32, np.array(0.5))</c> is float64). Null (the default) reads <paramref name="qIsScalar"/>,
         ///     the rule of the callers that pass a C# number for a scalar q.</param>
         /// <param name="qShape">The dims of a q ARRAY of rank 1 or more (its values are <paramref name="q"/>, in C order):
@@ -140,36 +141,82 @@ namespace NumSharp.Statistics
         ///     <paramref name="method"/> was parsed by the caller (np.median's fixed 'linear').</param>
         /// <param name="integerQ">Whether q is an integer (or bool) array: 'linear''s virtual index <c>(n - 1) * q</c> is
         ///     then an integer, which NumPy's <c>_quantile</c> takes instead of interpolating (its "supports_integers"
-        ///     path) — the 'lower' selection, in the data's dtype.</param>
+        ///     path) — the 'lower' selection, in the data's dtype. For an integer q ARRAY the virtual index of weibull,
+        ///     averaged_inverted_cdf and interpolated_inverted_cdf is an integer too, so their lerp runs with an int64
+        ///     weight: an int64 result over integer data (not uint64).</param>
+        /// <param name="qType">q's dtype for a q ARRAY: <see cref="NPTypeCode.Half"/> or <see cref="NPTypeCode.Single"/>
+        ///     makes NumPy compute the virtual index, the neighbours, the weight and <c>1 - t</c> in float16 / float32, and
+        ///     the lerp in <c>result_type(data, q)</c>; an integer dtype (Int64 for a bool q) computes them in that integer
+        ///     dtype, wrapping (see <see cref="QuantileIndexes"/>). Every other value (the default, a weak q) computes in
+        ///     float64.</param>
         /// <returns>The quantiles; <paramref name="out"/> itself when one is given; a read-only 0-d result for a scalar q
         ///     over every axis (NumPy's scalar).</returns>
         /// <exception cref="ValueError">A q of rank above 2 (<paramref name="qShape"/>), except for the nan forms over data
         ///     that is NaN everywhere, where every slice returns <c>np.full(q.shape, nan)</c> before NumPy reaches the
         ///     check.</exception>
+        /// <exception cref="ValueError">The partition refuses an index (NumPy's <c>kth(=k) out of bounds (n)</c>): a float16
+        ///     q over a line of about 2051 elements or more (or a float32 q past 2^24) rounds an index to n, or makes it
+        ///     NaN or infinite (INT64_MIN as intp), and an unsigned integer q's 0 makes inverted_cdf / closest_observation
+        ///     take its dtype's maximum (<c>kth(=255) out of bounds (8)</c>) — for the nan forms per slice, at the first
+        ///     slice in C order.</exception>
+        /// <exception cref="OverflowException">An integer q array: <c>n</c> or <c>n - 1</c> outside its dtype (<c>Python
+        ///     integer 200 out of bounds for int8</c>), or an unsigned q under weibull / averaged_inverted_cdf /
+        ///     interpolated_inverted_cdf (<c>Python integer -1 out of bounds for uint8</c>) — before every other check of
+        ///     the computation.</exception>
+        /// <exception cref="TypeError">'linear' with a uint64 q array: <c>Partition index must be integer</c> (its kth list is
+        ///     uint64, or float64 with the -1 NumPy appends over float data).</exception>
         /// <remarks>
-        ///     <b>The nan forms' all-NaN slices.</b> NumPy's <c>_nanquantile_1d</c> returns
+        ///     <para><b>The nan forms' all-NaN slices.</b> NumPy's <c>_nanquantile_1d</c> returns
         ///     <c>np.full(q.shape, np.nan, dtype=arr1d.dtype)</c> for a slice holding nothing but NaN — the DATA's dtype even
         ///     when a strong q array makes every other slice float64 — and <c>np.apply_along_axis</c> allocates its result
         ///     from the FIRST slice's answer. So float16 / float32 data with a q array gives a result of the data's dtype
         ///     exactly when the first slice (the only one for a flat reduction) is all NaN, the other slices' float64
         ///     answers rounded into it (probed 2.4.2: <c>np.nanquantile([[nan, nan], [1, 2]] as float32, np.array(0.5),
-        ///     axis=1)</c> is float32 <c>[nan, 1.5]</c>; with the rows swapped it is float64).
+        ///     axis=1)</c> is float32 <c>[nan, 1.5]</c>; with the rows swapped it is float64).</para>
+        ///     <para><b>out=.</b> <c>_ureduce</c> first indexes out with <c>(Ellipsis,) + index_out</c> under keepdims. A
+        ///     selection method then runs <c>take(arr, indexes, axis=0, out=out)</c>: out must have the result's shape, cast
+        ///     SAFELY to the data's dtype and be writeable, and receives the values through an unsafe cast; a slice holding
+        ///     NaN is then copied in with <c>np.copyto</c> (same_kind from the data). An interpolating method runs
+        ///     <c>_lerp(..., out=out)</c>: <c>add</c> casts its output into out (same_kind) and broadcasts it (out may be
+        ///     larger), and <c>subtract(..., dtype=type(out.dtype))</c> computes the t &gt;= 0.5 branch in out's dtype. The
+        ///     nan forms assign their result (<c>out[...] = result</c>: broadcast, unsafe). np.median / np.nanmedian keep
+        ///     the result-then-copy rule (NumPy's median writes through <c>np.mean(..., out=out)</c>, not ported), and so
+        ///     do the NumSharp-only decimal and complex data and a decimal out.</para>
         /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="q"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
         /// <exception cref="ValueError">An axis repeats.</exception>
-        /// <exception cref="TypeError">Bool data with an interpolating method (NumPy's boolean-subtract text), unless
-        ///     <paramref name="allowBooleanContinuous"/>.</exception>
-        /// <exception cref="IndexOutOfRangeException">An empty reduced line without
-        ///     <paramref name="emptyReturnsNaN"/> (NumPy's IndexError text).</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="IndexError">keepdims with an out of too few dimensions (NumPy's <c>too many indices for
+        ///     array</c>).</exception>
+        /// <exception cref="TypeError">Bool data with an interpolating method (NumPy's boolean-subtract text, after the
+        ///     partition's validation and the neighbour lookup), unless <paramref name="allowBooleanContinuous"/>.</exception>
+        /// <exception cref="IndexOutOfRangeException">An array with no element whose lookup fails (NumPy's IndexError
+        ///     texts): float data with an empty reduced line (<c>index -1 is out of bounds for axis 0 with size 0</c>); a
+        ///     selection method over integer data with an empty line and a non-empty result (<c>cannot do a non-empty take
+        ///     from an empty axes.</c>) or an index out of range (<c>index k is out of bounds for axis 0 with size n</c>);
+        ///     an interpolating method whose neighbour is out of range — unless
+        ///     <paramref name="emptyReturnsNaN"/>.</exception>
+        /// <exception cref="ValueError">A selection method's out of another shape (<c>output array does not match result of
+        ///     ndarray.take</c>) or read-only (<c>WRITEBACKIFCOPY base is read-only</c>); an interpolating method's out that
+        ///     is read-only (<c>output array is read-only</c>) or does not broadcast (<c>operands could not be broadcast
+        ///     together with shapes ...</c>, <c>non-broadcastable output operand with shape ... doesn't match the broadcast
+        ///     shape ...</c>); the nan forms' assignment (<c>could not broadcast input array from shape ... into shape
+        ///     ...</c>, <c>assignment destination is read-only</c>).</exception>
+        /// <exception cref="TypeError">A selection method's out whose dtype does not cast safely to the data's
+        ///     (<c>Cannot cast array data from dtype('float64') to dtype('float32') according to the rule 'safe'</c>; "scalar"
+        ///     for a 0-d out), or a slice holding NaN copied into an out the data does not cast to under same_kind (NumPy's
+        ///     <c>np.copyto</c> text).</exception>
+        /// <exception cref="ArgumentException">An interpolating method's out that the lerp's dtype does not cast to under
+        ///     same_kind: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('int64')
+        ///     with casting rule 'same_kind'</c> (the house type of the ufunc out= routes). The legacy routes: an
+        ///     <paramref name="out"/> of another shape than the result.</exception>
         [NDScoped]
         public static NDArray Compute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
             bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
             bool medianMean = false, bool? weakQ = null, long[] qShape = null, string methodName = null,
-            bool integerQ = false)
+            bool integerQ = false, NPTypeCode qType = NPTypeCode.Double)
         {
             if (a is null) throw new ArgumentNullException(nameof(a));
             if (q is null) throw new ArgumentNullException(nameof(q));
@@ -189,8 +236,15 @@ namespace NumSharp.Statistics
 
             // _ureduce normalizes the axis BEFORE the reduction function runs, so an out-of-range or repeated axis is
             // reported before the boolean subtract below (np.quantile(bool, 0.5, axis=5) is NumPy's AxisError).
-            if (axisArr != null)
-                NormalizeAxes(axisArr, a.ndim);
+            int[] reducedAxes = axisArr != null ? NormalizeAxes(axisArr, a.ndim) : null;
+
+            // The out NumPy's reduction writes into: under keepdims, _ureduce's `out[(Ellipsis,) + index_out]` (each reduced
+            // axis taken at 0), indexed right after the axes and before anything else is checked. np.median's out
+            // (np.mean's rules), the NumSharp-only decimal / complex data and a decimal out keep the legacy
+            // result-then-copy rule instead (see the remarks).
+            bool legacyOut = medianMean || a.typecode == NPTypeCode.Decimal || a.typecode == NPTypeCode.Complex
+                             || (@out is not null && @out.typecode == NPTypeCode.Decimal);
+            NDArray target = @out is not null && keepdims && !legacyOut ? KeepdimsOutTarget(@out, a.ndim, reducedAxes) : @out;
 
             // `_quantile_ureduce_func`'s first statement refuses a q of rank above 2, after the axis checks (and, for the
             // nan forms, after the empty-input return above). The nan forms reach it per slice and only for a slice that
@@ -215,25 +269,42 @@ namespace NumSharp.Statistics
             }
             // An integer (or bool) q: 'linear''s virtual index is an integer, which `_quantile` takes ("supports_integers")
             // instead of interpolating: the 'lower' selection.
-            if (integerQ && method == QuantileMethod.Linear)
+            bool linearTake = integerQ && method == QuantileMethod.Linear;
+            if (linearTake)
                 method = QuantileMethod.Lower;
 
+            bool weak = weakQ ?? qIsScalar;
+            // q's precision: a float16 / float32 q ARRAY computes its indexes and weights in its own dtype, an integer q
+            // array in its integer dtype (wrapping; NumPy's NEP 50 arithmetic with the Python numbers of the method); a
+            // Python q became a float64 / int64 array, exact in double.
+            NPTypeCode precision = !weak && qType is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.SByte or NPTypeCode.Byte
+                or NPTypeCode.Int16 or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64
+                or NPTypeCode.UInt64
+                ? qType
+                : NPTypeCode.Double;
+            // An integer q ARRAY makes weibull / averaged_inverted_cdf / interpolated_inverted_cdf's virtual index an
+            // integer: their lerp then runs with an integer weight of q's dtype (a weak Python int's `float(gamma)` does
+            // not).
+            bool integerWeight = integerQ && !weak && method is QuantileMethod.AveragedInvertedCdf or QuantileMethod.Weibull
+                or QuantileMethod.InterpolatedInvertedCdf;
+            bool discrete = IsDiscrete(method);
+            // `np.issubdtype(arr.dtype, np.inexact)`: a float array may hold NaN (the take path appends -1 to its kth list,
+            // `_get_indexes` maps a NaN virtual index to the last element, and an empty line fails at `arr[-1, ...]`).
+            bool inexact = IsFloatTc(a.typecode);
             // NumPy raises TypeError for boolean input with a continuous (interpolating)
             // method: the underlying lerp performs `b - a` and boolean subtraction is
             // unsupported. Discrete methods only index (never subtract), so they are fine;
             // np.median / np.nanmedian coerce through mean() and pass
-            // allowBooleanContinuous: true to keep computing a float64 result.
-            if (!allowBooleanContinuous && a.typecode == NPTypeCode.Boolean && !IsDiscrete(method))
-                throw new TypeError(
-                    "numpy boolean subtract, the `-` operator, is not supported, use the "
-                    + "bitwise_xor, the `^` operator, or the logical_xor function instead.");
+            // allowBooleanContinuous: true to keep computing a float64 result. NumPy reaches `b - a` after the partition and
+            // the neighbour lookup, so the check runs after their errors below.
+            bool booleanSubtract = !discrete && !allowBooleanContinuous && a.typecode == NPTypeCode.Boolean;
 
-            NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method, weakQ ?? qIsScalar);
+            NPTypeCode outTypeCode = ResolveOutputDtype(a.typecode, method, weak, precision, integerWeight);
 
             // NaN-ignoring (np.nan*) is only meaningful for dtypes that can hold a NaN.
             // Integer / bool / char rows never contain NaN, so the regular kernel (with
             // its precomputed partition indices) is both correct and faster there.
-            bool nanAware = ignoreNaN && IsFloatTc(a.typecode);
+            bool nanAware = ignoreNaN && inexact;
 
             // ── Stage the data so the reduction axis is innermost (stride-1 rows). ──
             // The IL kernel below walks rows by adding (n * sizeof(T)) per iteration.
@@ -254,7 +325,7 @@ namespace NumSharp.Statistics
             }
             else
             {
-                int[] normalized = NormalizeAxes(axisArr, a.ndim);
+                int[] normalized = reducedAxes;
 
                 if (normalized.Length == 1)
                 {
@@ -306,41 +377,126 @@ namespace NumSharp.Statistics
                 for (int i = 0; i < outerDims; i++) outShape[qDims.Length + i] = staged.Shape.dimensions[i];
             }
             int qNdim = qDims.Length;
+            Shape resultShape = outShape.Length == 0 ? new Shape() : Shape.Adopt(outShape);
 
-            NDArray resultRaw = new NDArray(outTypeCode, outShape.Length == 0 ? new Shape() : Shape.Adopt(outShape));
-
-            // ── Empty reduction axis ──
-            // The IL/Complex row kernels assume at least one element per row and index
-            // relative to (n-1); invoking them with n == 0 reads out of bounds and
-            // crashes the process. Match NumPy instead:
-            //   * np.median([])               -> nan          (emptyReturnsNaN == true)
-            //   * np.quantile/percentile([])  -> raises IndexError
-            // When n != 0 but there are no rows (outerSize == 0, e.g. a 0-length
-            // non-reduced axis) the result is already an empty array — skip the kernel.
-            if (n == 0)
+            // ── np.median's empty reduction axis: NaN (its mean of nothing). ──
+            if (n == 0 && emptyReturnsNaN)
             {
-                if (!emptyReturnsNaN)
-                    throw new IndexOutOfRangeException(
-                        "index -1 is out of bounds for axis 0 with size 0");
-                FillWithNaN(resultRaw, outTypeCode);
-                return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
+                NDArray nanResult = new NDArray(outTypeCode, resultShape);
+                FillWithNaN(nanResult, outTypeCode);
+                return FinalizeResult(nanResult, a, axisArr, keepdims, qNdim, @out);
             }
-            if (outerSize == 0)
-                return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
 
-            // ── Pre-compute the sorted list of buffer indices the partition needs to touch. ──
-            // For continuous methods that's (floor, ceil) per q; discrete methods touch one
-            // index per q. Deduplicating shrinks the number of QuickSelect passes when q
-            // values share indices (e.g. q=[25,50,75] often share neighbouring picks on
-            // small n).
-            int[] kSortedManaged = BuildSortedTargetIndices(n, q, method);
+            // ── The index plan: NumPy's virtual indexes, neighbours and weights in q's precision, for a line of n. ──
+            // The nan forms plan each slice again in the kernel (their slices lose their NaNs), but an empty array and the
+            // plain path read this one.
+            var raw = new long[2 * qLen];
+            var weight = new double[2 * qLen];
+            unsafe
+            {
+                fixed (double* qPtr = q)
+                fixed (long* rawPtr = raw)
+                fixed (double* weightPtr = weight)
+                    DirectILKernelGenerator.QuantilePlan(precision, method, n, qPtr, qLen, inexact, rawPtr, weightPtr);
+            }
+
+            // 'linear' with a uint64 q takes `(n - 1) * q`, a uint64 array, and partitions at it (with -1 appended over
+            // float data): neither uint64 nor its promotion with -1 (float64) casts safely to intp, so
+            // partition_prep_kth_array refuses it — whatever the array's size, before the take or `arr[-1, ...]`; the nan
+            // forms reach it at their first slice that holds a value.
+            if (linearTake && precision == NPTypeCode.UInt64 && !(nanAware && AllNaN(a)))
+                throw new TypeError("Partition index must be integer");
+
+            // How NumPy writes the result into out (see the remarks): 0 none, 1 take, 2 lerp, 3 the nan forms' assignment,
+            // 4 the legacy copy.
+            int outRoute = @out is null ? 0 : legacyOut ? 4 : ignoreNaN ? 3 : discrete ? 1 : 2;
+
+            // ── An array with no element (an empty line, or no line at all). ──
+            // NumPy's partition validates nothing then (partition_prep_kth_array skips an array of size 0); the take or the
+            // neighbour lookup reports what it reads, in _quantile's order.
+            if (n == 0 || outerSize == 0)
+            {
+                if (n == 0 && inexact)
+                    // `slices_having_nans = np.isnan(arr[-1, ...])`, before the take and the neighbour lookup alike.
+                    throw new IndexOutOfRangeException("index -1 is out of bounds for axis 0 with size 0");
+                long resultSize = 1;
+                foreach (long d in outShape) resultSize *= d;
+                if (discrete)
+                {
+                    // take(arr, virtual_indexes, axis=0, out=out): out's checks, then the empty axis, then every index.
+                    if (outRoute == 1)
+                        TakeOutChecks(target, outShape, a);
+                    if (n == 0 && resultSize != 0)
+                        throw new IndexOutOfRangeException("cannot do a non-empty take from an empty axes.");
+                    CheckLookups(raw, qLen, 0, n);
+                }
+                else
+                {
+                    // `previous = arr[previous_indexes]`, then `next = arr[next_indexes]`, then _lerp.
+                    CheckLookups(raw, qLen, 0, n);
+                    CheckLookups(raw, qLen, 1, n);
+                    if (booleanSubtract)
+                        throw BooleanSubtractError();
+                    if (outRoute == 2)
+                        LerpOutChecks(target, outTypeCode, outShape);
+                }
+                NDArray emptyResult = new NDArray(outTypeCode, resultShape);
+                return FinishResult(emptyResult, a, axisArr, keepdims, qNdim, @out, target, outRoute, staged: null, outerDims);
+            }
+
+            // ── partition_prep_kth_array (the plain path's one partition; the nan forms validate each slice). ──
+            if (!nanAware)
+            {
+                unsafe
+                {
+                    fixed (long* rawPtr = raw)
+                    {
+                        if (discrete)
+                            QuantileIndexes.CheckTakeKth(rawPtr, qLen, 2, n);
+                        else
+                            QuantileIndexes.CheckInterpolationKth(rawPtr, 2 * qLen, n);
+                    }
+                }
+            }
+            if (booleanSubtract)
+                throw BooleanSubtractError();
+
+            // out's checks before anything is written: the take's (shape, safe cast, writeable), or the lerp's add (writeable,
+            // same_kind cast, broadcast). A float / complex out other than the lerp's dtype receives the lerp itself: its
+            // t >= 0.5 branch is computed in out's dtype (NumPy's `subtract(..., dtype=type(out.dtype))`).
+            NPTypeCode bufferType = outTypeCode;
+            if (outRoute == 1)
+                TakeOutChecks(target, outShape, a);
+            else if (outRoute == 2)
+            {
+                LerpOutChecks(target, outTypeCode, outShape);
+                if (LerpsIntoOut(outTypeCode, target.typecode, integerWeight))
+                    bufferType = target.typecode;
+            }
+
+            NDArray resultRaw = new NDArray(bufferType, resultShape);
+
+            // The plain path's partition indexes: every plan index made partition-ready (NumPy's -1 is the last element),
+            // kept per quantile for the cells and sorted + deduplicated for the partition. Deduplicating shrinks the
+            // number of QuickSelect passes when q values share indices (e.g. q=[25,50,75] often share neighbouring
+            // picks on small n).
+            var cellIndex = new int[2 * qLen];
+            for (int i = 0; i < cellIndex.Length; i++)
+            {
+                long k = raw[i];
+                cellIndex[i] = (int)(k < 0 ? k + n : k);
+            }
+            int[] kSortedManaged = nanAware || n <= 1 ? Array.Empty<int>() : SortedDistinct(cellIndex);
 
             int srcSize = TypeSize(a.typecode);
             byte[] scratchBytes = ArrayPool<byte>.Shared.Rent(checked(srcSize * n));
             double[] qCopy = q;   // q is already a flat array we own; no need to copy
-            // Per-row partition-index scratch for the NaN path (capacity 2*nQs, reused
-            // across rows so the per-row index recomputation allocates nothing).
-            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(Math.Max(1, 2 * qCopy.Length)) : null;
+            // Per-row plan scratch for the NaN path (2 entries per q, reused across rows so the per-row plan allocates
+            // nothing).
+            int rowScratch = Math.Max(1, 2 * qCopy.Length);
+            int[] rowKManaged = nanAware ? ArrayPool<int>.Shared.Rent(rowScratch) : null;
+            long[] rowRawManaged = nanAware ? ArrayPool<long>.Shared.Rent(rowScratch) : null;
+            double[] rowWeightManaged = nanAware ? ArrayPool<double>.Shared.Rent(rowScratch) : null;
 
             try
             {
@@ -348,8 +504,12 @@ namespace NumSharp.Statistics
                 {
                     fixed (byte* scratchPtr = scratchBytes)
                     fixed (int* kPtr = kSortedManaged)
+                    fixed (int* cellIndexPtr = cellIndex)
+                    fixed (double* cellWeightPtr = weight)
                     fixed (double* qPtr = qCopy)
                     fixed (int* rowKPtr = rowKManaged)
+                    fixed (long* rowRawPtr = rowRawManaged)
+                    fixed (double* rowWeightPtr = rowWeightManaged)
                     {
                         long dstOuterStride = qIsScalar ? 0L : outerSize;
                         // Logical element 0 of the staged operand. Most staging paths copy/flatten
@@ -378,7 +538,9 @@ namespace NumSharp.Statistics
                         {
                             DirectILKernelGenerator.Quantile(
                                 srcType: a.typecode,
-                                outType: outTypeCode,
+                                outType: bufferType,
+                                lerpType: outTypeCode,
+                                qType: precision,
                                 method: method,
                                 srcBase: stagedBase,
                                 scratchBase: scratchPtr,
@@ -386,12 +548,16 @@ namespace NumSharp.Statistics
                                 n: n,
                                 kSorted: kPtr,
                                 nKs: kSortedManaged.Length,
+                                cellIndex: cellIndexPtr,
+                                cellWeight: cellWeightPtr,
                                 q: qPtr,
                                 nQs: qCopy.Length,
                                 dstBase: resultRaw.Address,
                                 dstOuterStride: dstOuterStride,
                                 ignoreNaN: nanAware,
                                 rowKScratch: rowKPtr,
+                                rowRaw: rowRawPtr,
+                                rowWeight: rowWeightPtr,
                                 medianMean: medianMean);
                         }
                     }
@@ -401,6 +567,8 @@ namespace NumSharp.Statistics
             {
                 ArrayPool<byte>.Shared.Return(scratchBytes);
                 if (rowKManaged != null) ArrayPool<int>.Shared.Return(rowKManaged);
+                if (rowRawManaged != null) ArrayPool<long>.Shared.Return(rowRawManaged);
+                if (rowWeightManaged != null) ArrayPool<double>.Shared.Return(rowWeightManaged);
             }
 
             // The nan forms' all-NaN FIRST slice (see the remarks): np.apply_along_axis allocates its result from the
@@ -411,7 +579,11 @@ namespace NumSharp.Statistics
             if (nanAware && outTypeCode != a.typecode && FirstRowAllNaN(staged, outerSize, n))
                 resultRaw = resultRaw.astype(a.typecode);
 
-            return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
+            // The nan forms along an axis return np.apply_along_axis's layout (an out receives the values instead).
+            if (ignoreNaN && !legacyOut && axisArr != null && outerDims > 0 && outRoute == 0)
+                resultRaw = AlongAxisLayout(resultRaw, qNdim);
+
+            return FinishResult(resultRaw, a, axisArr, keepdims, qNdim, @out, target, outRoute, staged, outerDims);
         }
 
         /// <summary>
@@ -586,12 +758,21 @@ namespace NumSharp.Statistics
         ///     <list type="bullet">
         ///       <item>Discrete methods index via <c>take</c> → preserve the input dtype
         ///             (bool→bool, int→int, float32→float32).</item>
-        ///       <item>Continuous methods interpolate via <c>_lerp</c>:
+        ///       <item>Continuous methods interpolate via <c>_lerp</c>, whose <c>diff_b_a * t</c> and <c>a + ...</c> promote
+        ///             the data's dtype with t's:
         ///         <list type="bullet">
+        ///           <item>an integer q ARRAY with an integer virtual index (weibull, averaged_inverted_cdf,
+        ///                 interpolated_inverted_cdf: <paramref name="integerWeight"/>) → <c>result_type(data, q)</c>: int32
+        ///                 for int32 data with an int8 q, int16 for uint8 data with an int16 q, int64 for a bool q (its
+        ///                 arithmetic is int64), float64 for uint64 data, float16 for float16 data with an int8 q.</item>
+        ///           <item>a float16 / float32 q ARRAY (<paramref name="qType"/>) → <c>result_type(data, q)</c>: float16 for
+        ///                 bool / int8 / uint8 data with a float16 q, float32 for int16 / uint16 / char (or any of those with
+        ///                 a float32 q) and float32 data, the data's own dtype for float16 / float32 data, float64 for
+        ///                 int32 and wider.</item>
         ///           <item>integer / bool / char → float64.</item>
         ///           <item>float64 → float64.</item>
         ///           <item>float16 / float32 → float64 when <paramref name="weakQ"/> is
-        ///                 false (an array q, 0-d included, makes gamma a strong float64 that
+        ///                 false (a float64 q array, 0-d included, makes gamma a strong float64 that
         ///                 upcasts), but the input width is preserved for NumPy 2.4's
         ///                 <c>weak_q</c> (a Python int or float q: NEP50 weak promotion). This is
         ///                 also why np.median(float32)→float32.</item>
@@ -603,12 +784,27 @@ namespace NumSharp.Statistics
         /// <param name="inTc">The data's dtype.</param>
         /// <param name="method">The estimation method.</param>
         /// <param name="weakQ">Whether q is a weak Python number (NumPy's <c>weak_q</c>).</param>
-        /// <returns>The result's dtype.</returns>
+        /// <param name="qType">q's precision: Half or Single for a float16 / float32 q array, an integer q's dtype (Int64 for a
+        ///     bool q), Double otherwise; ignored under a weak q.</param>
+        /// <param name="integerWeight">Whether the lerp's weight is an integer array of <paramref name="qType"/> (see the
+        ///     summary).</param>
+        /// <returns>The result's dtype (the lerp's dtype for an interpolating method).</returns>
         /// <exception cref="NotSupportedException">A dtype the engine has no rule for.</exception>
-        internal static NPTypeCode ResolveOutputDtype(NPTypeCode inTc, QuantileMethod method, bool weakQ)
+        internal static NPTypeCode ResolveOutputDtype(NPTypeCode inTc, QuantileMethod method, bool weakQ,
+            NPTypeCode qType = NPTypeCode.Double, bool integerWeight = false)
         {
             if (IsDiscrete(method))
                 return inTc;   // take() preserves the input dtype for every dtype
+
+            // The int64 weight and a float16 / float32 q array: NumPy's own promotion of the data's dtype with t's (the
+            // NumSharp-only decimal and complex keep their dtype, as the rules below do).
+            if (inTc != NPTypeCode.Decimal && inTc != NPTypeCode.Complex)
+            {
+                if (integerWeight)
+                    return np.promote_types(inTc, qType).GetTypeCode();
+                if (!weakQ && qType is NPTypeCode.Half or NPTypeCode.Single)
+                    return np.promote_types(inTc, qType).GetTypeCode();
+            }
 
             // Continuous (interpolating) methods.
             switch (inTc)
@@ -812,24 +1008,287 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     Builds the unique, ascending list of buffer indices the partition will touch.
-        ///     Same formula as <see cref="DirectILKernelGenerator.ComputeIndex"/> — duplicated here so
-        ///     the engine can hand the IL kernel a pre-sized int[] without circular calls.
+        ///     <c>_ureduce</c>'s keepdims out: <c>out[(Ellipsis,) + index_out]</c>, every reduced axis taken at 0 (every axis
+        ///     for a flattened reduction) — the view the reduction writes into.
         /// </summary>
-        private static int[] BuildSortedTargetIndices(int n, double[] q, QuantileMethod method)
+        /// <param name="out">The caller's out.</param>
+        /// <param name="nd">The data's rank.</param>
+        /// <param name="reduced">The normalized reduced axes, or null for every axis.</param>
+        /// <returns>The view of <paramref name="out"/>.</returns>
+        /// <exception cref="IndexError">An out of fewer dimensions than the data (NumPy's <c>too many indices for array:
+        ///     array is 1-dimensional, but 2 were indexed</c>), or an empty axis where a reduced axis is taken at 0.</exception>
+        internal static NDArray KeepdimsOutTarget(NDArray @out, int nd, int[] reduced)
         {
-            if (n <= 1) return Array.Empty<int>();
-            var set = new HashSet<int>();
-            for (int j = 0; j < q.Length; j++)
-            {
-                DirectILKernelGenerator.ComputeIndex(n, q[j], method, out int prev, out int next, out _);
-                set.Add(prev);
-                set.Add(next);
-            }
-            int[] arr = set.ToArray();
-            Array.Sort(arr);
-            return arr;
+            var index = new Slice[1 + nd];
+            index[0] = Slice.Ellipsis;
+            for (int d = 0; d < nd; d++)
+                index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
+            return @out[index];
         }
+
+        /// <summary>
+        ///     <c>PyArray_TakeFrom</c>'s checks of out, in its order: the result's exact shape, a SAFE cast from out's dtype to
+        ///     the data's (<c>PyArray_FromArray(out, data dtype)</c>), and writeability (its WRITEBACKIFCOPY base).
+        /// </summary>
+        /// <param name="target">The out the take writes (keepdims' view of the caller's).</param>
+        /// <param name="resultShape">The result's shape.</param>
+        /// <param name="data">The data (its dtype).</param>
+        /// <exception cref="ValueError">Another shape (<c>output array does not match result of ndarray.take</c>), or a
+        ///     read-only out (<c>WRITEBACKIFCOPY base is read-only</c>).</exception>
+        /// <exception cref="TypeError">A dtype that does not cast safely to the data's: NumPy's <c>Cannot cast array data
+        ///     from dtype('float64') to dtype('float32') according to the rule 'safe'</c> ("scalar" for a 0-d out).</exception>
+        private static void TakeOutChecks(NDArray target, long[] resultShape, NDArray data)
+        {
+            if (!target.Shape.dimensions.AsSpan().SequenceEqual(resultShape))
+                throw new ValueError("output array does not match result of ndarray.take");
+            if (!np.can_cast(target.dtype, data.dtype, "safe"))
+                throw new TypeError($"Cannot cast {(target.ndim == 0 ? "scalar" : "array data")} from {target.dtype.ToString(true)} " +
+                                    $"to {data.dtype.ToString(true)} according to the rule 'safe'");
+            if (!target.Shape.IsWriteable)
+                throw new ValueError("WRITEBACKIFCOPY base is read-only");
+        }
+
+        /// <summary>
+        ///     The checks of <c>_lerp</c>'s <c>add(a, diff_b_a * t, out=out)</c> before it writes, in the ufunc's order: out's
+        ///     writeability, the same_kind cast of the lerp's dtype into out's, then the broadcast of the two inputs (the
+        ///     result's shape each) with out — which may be larger than the result, but never stretched.
+        /// </summary>
+        /// <param name="target">The out the lerp writes.</param>
+        /// <param name="lerpType">The lerp's dtype (the add's output).</param>
+        /// <param name="resultShape">The result's shape.</param>
+        /// <exception cref="ValueError">A read-only out (<c>output array is read-only</c>); shapes that do not broadcast
+        ///     (<c>operands could not be broadcast together with shapes (2,) (2,) (3,) </c>) or would stretch out
+        ///     (<c>non-broadcastable output operand with shape (2,1) doesn't match the broadcast shape (2,2)</c>).</exception>
+        /// <exception cref="ArgumentException">A dtype the lerp's does not cast to under same_kind: NumPy's UFuncTypeError
+        ///     <c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('int64') with casting rule 'same_kind'</c>
+        ///     (the house type of the ufunc out= routes).</exception>
+        private static void LerpOutChecks(NDArray target, NPTypeCode lerpType, long[] resultShape)
+        {
+            NumSharpException.ThrowIfNotWriteable(target.Shape, "output array");
+            DType lerp = DType.From(lerpType);
+            if (lerpType != target.typecode && !np.can_cast(lerp, target.dtype, "same_kind"))
+                throw new ArgumentException($"Cannot cast ufunc 'add' output from {lerp.ToString(true)} to " +
+                                            $"{target.dtype.ToString(true)} with casting rule 'same_kind'");
+
+            // NpyIter's broadcast of (a, diff_b_a * t, out): right-aligned, a dimension of 1 stretches; out may not stretch.
+            long[] outDims = target.Shape.dimensions;
+            int nd = Math.Max(resultShape.Length, outDims.Length);
+            var broadcast = new long[nd];
+            bool compatible = true;
+            for (int i = 0; i < nd; i++)
+            {
+                long r = i < nd - resultShape.Length ? 1 : resultShape[i - (nd - resultShape.Length)];
+                long o = i < nd - outDims.Length ? 1 : outDims[i - (nd - outDims.Length)];
+                if (r != o && r != 1 && o != 1)
+                {
+                    compatible = false;
+                    break;
+                }
+                broadcast[i] = r == 1 ? o : r;
+            }
+            string result = PyTuple(resultShape), outShape = PyTuple(outDims);
+            if (!compatible)
+                throw new ValueError($"operands could not be broadcast together with shapes {result} {result} {outShape} ");
+            if (!broadcast.AsSpan().SequenceEqual(outDims))
+                throw new ValueError($"non-broadcastable output operand with shape {outShape} doesn't match the broadcast " +
+                                     $"shape {PyTuple(broadcast)}");
+        }
+
+        /// <summary>
+        ///     Whether out receives the lerp itself (the kernel writes out's dtype): a float or complex out other than the
+        ///     lerp's dtype, whose t &gt;= 0.5 branch NumPy computes in out's dtype. An integer lerp (an integer q's weight
+        ///     over integer data) takes one element, so its value cast afterwards is the same and it keeps its own buffer.
+        /// </summary>
+        /// <param name="lerpType">The lerp's dtype.</param>
+        /// <param name="outType">out's dtype.</param>
+        /// <param name="integerWeight">Whether the lerp runs with an integer weight (its float lerp, over float data, still
+        ///     computes the out's branch in out's dtype).</param>
+        /// <returns>True when the kernel must write out's dtype.</returns>
+        private static bool LerpsIntoOut(NPTypeCode lerpType, NPTypeCode outType, bool integerWeight)
+            => lerpType != outType
+               && outType is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex
+               && lerpType is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double;
+
+        /// <summary>
+        ///     The result written where NumPy writes it: returned (keepdims applied; a 0-d result marked as NumPy's scalar),
+        ///     or into out by its route — the take's unsafe cast and its NaN-slice <c>np.copyto</c> check, the lerp's
+        ///     (broadcast) write, the nan forms' <c>out[...] = result</c>, or the legacy copy.
+        /// </summary>
+        /// <param name="resultRaw">The computed result: q's axes, then the kept axes.</param>
+        /// <param name="a">The data.</param>
+        /// <param name="axisArr">The reduced axes, or null.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="qNdim">How many leading axes of the result are q's.</param>
+        /// <param name="out">The caller's out, or null.</param>
+        /// <param name="target">The view of out the reduction writes (keepdims), or out itself.</param>
+        /// <param name="outRoute">0 none, 1 take, 2 lerp, 3 the nan forms, 4 legacy.</param>
+        /// <param name="staged">The staged data (the NaN-slice check of the take route), or null for an empty array.</param>
+        /// <param name="keptDims">How many kept axes the data has (0: NumPy's <c>arr[-1, ...]</c> is a scalar).</param>
+        /// <returns>The result, or <paramref name="out"/> itself.</returns>
+        /// <exception cref="ArgumentException">The legacy route: out of another shape.</exception>
+        /// <exception cref="ValueError">The nan forms' assignment does not broadcast, or out is read-only.</exception>
+        /// <exception cref="TypeError">The take route: a slice holding NaN is copied into an out the data's dtype does not
+        ///     cast to under same_kind (NumPy's <c>np.copyto(result, arr[-1, ...], where=slices_having_nans)</c>: <c>Cannot
+        ///     cast scalar from dtype('float64') to dtype('int64') according to the rule 'same_kind'</c>, "array data" with
+        ///     kept axes) — after the take wrote out, as NumPy's does.</exception>
+        private static NDArray FinishResult(NDArray resultRaw, NDArray a, int[] axisArr, bool keepdims, int qNdim, NDArray @out,
+            NDArray target, int outRoute, NDArray staged, int keptDims)
+        {
+            switch (outRoute)
+            {
+                case 0:
+                    return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, null);
+                case 1:
+                    // take(..., out=out): the values through an unsafe cast; then `np.copyto(result, arr[-1, ...],
+                    // where=slices_having_nans)` (same_kind from the data's dtype) wherever a slice holds NaN.
+                    np.copyto(target, resultRaw, "unsafe");
+                    if (staged is not null && IsFloatTc(a.typecode) && !np.can_cast(a.dtype, target.dtype, "same_kind")
+                        && HasNaN(staged))
+                        throw new TypeError($"Cannot cast {(keptDims == 0 ? "scalar" : "array data")} from " +
+                                            $"{a.dtype.ToString(true)} to {target.dtype.ToString(true)} according to the rule 'same_kind'");
+                    return @out;
+                case 2:
+                    // _lerp's add / subtract wrote out (broadcast; the buffer already has out's dtype when the lerp computed
+                    // in it). The NaN slices' np.copyto reaches every float / complex out under same_kind.
+                    np.copyto(target, resultRaw, "unsafe");
+                    return @out;
+                case 3:
+                    // the nan forms: `out[...] = result` — an array broadcast through the unsafe cast, but a 0-d result
+                    // (a 0-d q over a flat line) is a NumPy SCALAR, stored by out's setitem.
+                    if (resultRaw.ndim == 0)
+                        StoreNumPyScalar(target, resultRaw);
+                    else
+                        np.copyto(target, resultRaw, "unsafe");
+                    return @out;
+                default:
+                    return FinalizeResult(resultRaw, a, axisArr, keepdims, qNdim, @out);
+            }
+        }
+
+        /// <summary>
+        ///     The layout of the nan forms' result along an axis: <c>_nanquantile_ureduce_func</c> calls
+        ///     <c>np.apply_along_axis</c>, which fills a C-contiguous buffer of the kept axes followed by q's axes and returns
+        ///     it transposed (q's axes where the reduced axis was), and then moves q's axes first — a view that does not own
+        ///     its data and whose q axes are the innermost in memory (F-ordered for one kept axis and a 1-d q). A scalar q
+        ///     leaves the buffer's C order, still as a view.
+        /// </summary>
+        /// <param name="result">The computed result: q's axes, then the kept axes (C-contiguous).</param>
+        /// <param name="qNdim">How many leading axes are q's.</param>
+        /// <returns>The same values in NumPy's layout.</returns>
+        private static NDArray AlongAxisLayout(NDArray result, int qNdim)
+        {
+            if (qNdim == 0)
+                return result.view();
+            int nd = result.ndim;
+            var front = new int[qNdim];
+            var back = new int[qNdim];
+            for (int i = 0; i < qNdim; i++)
+            {
+                front[i] = i;
+                back[i] = nd - qNdim + i;
+            }
+            // apply_along_axis's buffer: the kept axes, then q's, in C order; nanquantile's moveaxis then views it with q's
+            // axes first.
+            NDArray buffer = np.moveaxis(result, front, back).copy();
+            return np.moveaxis(buffer, back, front);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>out[...] = result</c> when the result is a NumPy SCALAR (the nan forms' answer for a 0-d q over a flat
+        ///     line): <c>PyArray_Pack</c> of the scalar into out's dtype (<see cref="ReductionInitial.PackNumPyScalar"/>). Only a
+        ///     SIGNED integer out treats a NumPy scalar of another type as its own (<c>signed_integers_is_known_scalar_types</c>)
+        ///     and stores it with its setitem: Python's <c>int()</c> (NaN and infinity raise), the C long conversion, then
+        ///     <c>@TYPE@_safe_pyint_setitem</c>'s range check (an int8 / int16 / int32 out refuses a value outside its range).
+        ///     Every other out (unsigned, bool, float, complex) knows only Python's own scalar types, so it CASTS the NumPy
+        ///     scalar (<c>npy_cast_raw_scalar_item</c>): an unsigned out wraps a negative value and takes the cast's value for
+        ///     NaN and infinity (0 into uint8, 2^63 into uint64), a bool out takes its truth. A text out or a text answer
+        ///     (the weighted branch picks elements of S / U / StringDType data) keeps the string store.
+        /// </summary>
+        /// <param name="target">The out (or its keepdims view): one element.</param>
+        /// <param name="scalar">The 0-d result.</param>
+        /// <exception cref="ValueError">A read-only out (<c>assignment destination is read-only</c>, checked first, as
+        ///     NumPy's subscript assignment does), or a NaN into a signed integer out (<c>cannot convert float NaN to
+        ///     integer</c>).</exception>
+        /// <exception cref="OverflowException">Into a signed integer out: an infinity (<c>cannot convert float infinity to
+        ///     integer</c>), a value outside C long (<c>Python int too large to convert to C long</c>; C long is 64 bits here:
+        ///     NumPy on Windows has a 32-bit long, and the LP64 (Linux / macOS) answer is the one pinned), or a value outside
+        ///     the out's range (<c>Python integer 300 out of bounds for int8</c>).</exception>
+        internal static unsafe void StoreNumPyScalar(NDArray target, NDArray scalar)
+        {
+            NumSharpException.ThrowIfNotWriteable(target.Shape);
+            NPTypeCode tt = target.typecode;
+            if (!tt.IsNumerical() || !scalar.typecode.IsNumerical())
+            {
+                // A text out or a text answer (S / U / StringDType: the weighted branch picks elements of text data) goes
+                // through the string store, whose casts and refusals are the text paths' own.
+                np.copyto(target, scalar, "unsafe");
+                return;
+            }
+
+            byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
+            ReductionInitial.PackNumPyScalar(scalar.Storage.GetAtIndex(0), tt,
+                new Span<byte>(slot, ReductionInitial.SlotBytes));
+            using var packed = new NDArray(tt, Shape.Scalar, false);
+            Buffer.MemoryCopy(slot, (byte*)packed.Address, packed.dtypesize, packed.dtypesize);
+            // The packed element already has out's dtype, so the store is exact (and reaches a keepdims view's element).
+            np.copyto(target, packed, "unsafe");
+        }
+
+        /// <summary>Whether a float array holds a NaN anywhere (any of its lines holds one).</summary>
+        /// <param name="x">The array.</param>
+        /// <returns>True when an element is NaN.</returns>
+        private static bool HasNaN(NDArray x)
+        {
+            using var nan = np.isnan(x);
+            return np.any(nan);
+        }
+
+        /// <summary>
+        ///     The lookups of an array with no element (the take's index check, or <c>arr[previous_indexes]</c> /
+        ///     <c>arr[next_indexes]</c>): each index of the plan in q's order must lie in <c>[-n, n)</c>.
+        /// </summary>
+        /// <param name="raw">The plan's raw indexes (2 per quantile).</param>
+        /// <param name="qLen">The number of quantiles.</param>
+        /// <param name="slot">0 for the previous (or taken) index, 1 for the next one.</param>
+        /// <param name="n">The axis' length.</param>
+        /// <exception cref="IndexOutOfRangeException">NumPy's IndexError <c>index k is out of bounds for axis 0 with size
+        ///     n</c> for the first index out of range (k as computed).</exception>
+        private static void CheckLookups(long[] raw, int qLen, int slot, long n)
+        {
+            for (int j = 0; j < qLen; j++)
+            {
+                long k = raw[2 * j + slot];
+                if (k < -n || k >= n)
+                    throw new IndexOutOfRangeException($"index {k} is out of bounds for axis 0 with size {n}");
+            }
+        }
+
+        /// <summary>The ascending distinct values of a list (the partition's kth list).</summary>
+        /// <param name="values">The values (not modified).</param>
+        /// <returns>A new sorted array without repeats.</returns>
+        private static int[] SortedDistinct(int[] values)
+        {
+            var sorted = (int[])values.Clone();
+            Array.Sort(sorted);
+            int u = 0;
+            for (int i = 0; i < sorted.Length; i++)
+                if (u == 0 || sorted[u - 1] != sorted[i])
+                    sorted[u++] = sorted[i];
+            Array.Resize(ref sorted, u);
+            return sorted;
+        }
+
+        /// <summary>NumPy's TypeError for <c>_lerp</c>'s <c>b - a</c> over bool data.</summary>
+        /// <returns>The exception to throw.</returns>
+        private static TypeError BooleanSubtractError()
+            => new TypeError("numpy boolean subtract, the `-` operator, is not supported, use the "
+                             + "bitwise_xor, the `^` operator, or the logical_xor function instead.");
+
+        /// <summary>A shape as NumPy prints it in error texts: <c>(2,3)</c>, <c>(3,)</c>, <c>()</c>.</summary>
+        /// <param name="dims">The dimensions.</param>
+        /// <returns>The text.</returns>
+        private static string PyTuple(long[] dims)
+            => dims.Length == 0 ? "()" : dims.Length == 1 ? $"({dims[0]},)" : "(" + string.Join(",", dims) + ")";
 
         private static int TypeSize(NPTypeCode tc) => tc switch
         {

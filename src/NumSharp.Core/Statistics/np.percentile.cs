@@ -60,7 +60,9 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
-            ValidatePercentile(q);
+            // `q = np.true_divide(q, 100, out=...)` (float64 for a Python number), then `_quantile_is_valid` on the
+            // QUOTIENT: -5e-324 divides to -0.0 and passes.
+            double fraction = PercentileFraction(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
@@ -74,12 +76,12 @@ namespace NumSharp
                 if (chararray)
                     return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                         static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = NDArray.Scalar(q / 100.0);
+                using var qArray = NDArray.Scalar(fraction);
                 return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
             }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, new[] { q / 100.0 }, axisArr, @out, overwrite_input,
+                return QuantileOfText("percentile", a, new[] { fraction }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
+            return QuantileEngine.Compute(a, new[] { fraction }, axisArr, @out, overwrite_input,
                 default, keepdims, qIsScalar: true, methodName: method);
         }
 
@@ -141,8 +143,7 @@ namespace NumSharp
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
             {
-                ValidatePercentile(q[i]);
-                qFracs[i] = q[i] / 100.0;
+                qFracs[i] = PercentileFraction(q[i]);
             }
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
@@ -226,7 +227,9 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
-            ValidatePercentile(q);
+            // `q = np.true_divide(q, 100, out=...)` (float64 for a Python number), then `_quantile_is_valid` on the
+            // QUOTIENT: -5e-324 divides to -0.0 and passes.
+            double fraction = PercentileFraction(q);
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
             // a StringDType array reads the two neighbours before _lerp refuses them).
@@ -238,12 +241,12 @@ namespace NumSharp
                 if (chararray)
                     return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                         static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = NDArray.Scalar(q / 100.0);
+                using var qArray = NDArray.Scalar(fraction);
                 return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
             }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, new[] { q / 100.0 }, axis, @out, overwrite_input,
+                return QuantileOfText("percentile", a, new[] { fraction }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
+            return QuantileEngine.Compute(a, new[] { fraction }, axis, @out, overwrite_input,
                 default, keepdims, qIsScalar: true, methodName: method);
         }
 
@@ -312,8 +315,7 @@ namespace NumSharp
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
             {
-                ValidatePercentile(q[i]);
-                qFracs[i] = q[i] / 100.0;
+                qFracs[i] = PercentileFraction(q[i]);
             }
             // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
             // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
@@ -415,7 +417,7 @@ namespace NumSharp
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 // np.true_divide(q, 100) is float64 whatever q held: percentile never takes the integer index.
                 return QuantileOfText("percentile", a, PercentileFractions(q), (long[])q.Shape.dimensions.Clone(), false,
-                    axis.HasValue ? new[] { axis.Value } : null, @out, method, keepdims, chararray);
+                    axis.HasValue ? new[] { axis.Value } : null, @out, method, keepdims, chararray, QuantileIndexes.PrecisionOf(q));
             bool qIsScalar = q.ndim == 0;
             // `np.true_divide(q, 100)` and `_quantile_is_valid` at any rank; q's rank is `_quantile_ureduce_func`'s check,
             // after the axes, inside the engine (a 2-d q keeps both axes).
@@ -425,7 +427,7 @@ namespace NumSharp
             // float32 data's dtype under interpolation; an array q, 0-d included, is a strong float64.
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input,
                 default, keepdims, qIsScalar, weakQ: q.WasPythonLiteral, methodName: method,
-                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone());
+                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), qType: QuantileIndexes.PrecisionOf(q));
         }
 
         /// <summary>
@@ -510,45 +512,67 @@ namespace NumSharp
             }
             if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                 return QuantileOfText("percentile", a, fractions, (long[])q.Shape.dimensions.Clone(), false, axis, @out,
-                    method, keepdims, chararray);
+                    method, keepdims, chararray, QuantileIndexes.PrecisionOf(q));
             // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. q's rank
             // is checked after the axes, inside the engine (a 2-d q keeps both axes).
             return QuantileEngine.Compute(a, fractions, axis, @out, overwrite_input,
                 default, keepdims, qIsScalar: q.ndim == 0, weakQ: q.WasPythonLiteral, methodName: method,
-                qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone());
+                qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone(), qType: QuantileIndexes.PrecisionOf(q));
         }
 
         /// <summary>
-        ///     NumPy's <c>q = np.true_divide(q, 100)</c> followed by <c>_quantile_is_valid(q)</c>, over a q array: the
-        ///     fractions in C order, every percentile checked to lie in [0, 100], and an empty q of rank other than 1
-        ///     refused by the <c>q.min()</c> that NumPy's check takes for it.
+        ///     NumPy's <c>q = np.true_divide(q, 100, out=...)</c> followed by <c>_quantile_is_valid(q)</c>, over a q array: the
+        ///     quotients in C order, computed in q's own dtype (a float16 / float32 q divides in float16 / float32 and its
+        ///     quotient is what NumPy's index arithmetic reads; every other q divides in float64), each checked to lie in
+        ///     [0, 1], and an empty q of rank other than 1 refused by the <c>q.min()</c> that NumPy's check takes for it.
         /// </summary>
         /// <param name="q">The percentiles (any numeric dtype).</param>
-        /// <returns>The quantiles <c>q / 100</c> in C order.</returns>
-        /// <exception cref="ValueError">A percentile outside [0, 100] (or NaN): <c>Percentiles must be in the range [0,
-        ///     100]</c>; an empty q of rank other than 1: <c>zero-size array to reduction operation minimum which has no
-        ///     identity</c>.</exception>
+        /// <returns>The quantiles <c>q / 100</c> in C order (values of q's precision, see
+        ///     <see cref="QuantileIndexes.PrecisionOf"/>).</returns>
+        /// <exception cref="ValueError">A quotient outside [0, 1] (or NaN): <c>Percentiles must be in the range [0,
+        ///     100]</c> — a float16 <c>100.0625</c> divides to <c>1.0009765625</c> and is refused, while a negative value that
+        ///     divides to <c>-0.0</c> passes; an empty q of rank other than 1: <c>zero-size array to reduction operation
+        ///     minimum which has no identity</c>.</exception>
         private static double[] PercentileFractions(NDArray q)
         {
             var fractions = new double[q.size];
             if (fractions.Length == 0 && q.ndim != 1)
                 throw new ValueError("zero-size array to reduction operation minimum which has no identity");
+            NPTypeCode precision = QuantileIndexes.PrecisionOf(q);
             for (long i = 0; i < fractions.Length; i++)
             {
-                double v = QuantileValueAt(q, i);
-                ValidatePercentile(v);
-                fractions[i] = v / 100.0;
+                // One true_divide in q's dtype: the double quotient rounded once to float16 / float32 is NumPy's (a float16
+                // or float32 division computed in double and rounded is correctly rounded).
+                double fraction = QuantileIndexes.Round(precision, QuantileValueAt(q, i) / 100.0);
+                ValidatePercentileFraction(fraction);
+                fractions[i] = fraction;
             }
             return fractions;
         }
 
-        /// <summary>NumPy's <c>_quantile_is_valid</c> for one percentile: inside <c>[0, 100]</c> (NaN is not).</summary>
+        /// <summary>
+        ///     NumPy's <c>q = np.true_divide(q, 100, out=...)</c> and <c>_quantile_is_valid(q)</c> for one float64 percentile (a
+        ///     Python number, or an element of a list): the quotient, checked to lie in [0, 1].
+        /// </summary>
         /// <param name="q">The percentile.</param>
-        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 100] ("Percentiles must be in the range [0,
-        ///     100]").</exception>
-        private static void ValidatePercentile(double q)
+        /// <returns><c>q / 100</c>.</returns>
+        /// <exception cref="ValueError">The quotient is outside [0, 1] (or NaN): "Percentiles must be in the range [0,
+        ///     100]". The check reads the quotient, so a percentile of <c>-5e-324</c> (whose quotient is <c>-0.0</c>)
+        ///     passes, as in NumPy.</exception>
+        private static double PercentileFraction(double q)
         {
-            if (!(q >= 0.0 && q <= 100.0))
+            double fraction = q / 100.0;
+            ValidatePercentileFraction(fraction);
+            return fraction;
+        }
+
+        /// <summary>NumPy's <c>_quantile_is_valid</c> of one quotient <c>q / 100</c>: inside <c>[0, 1]</c> (NaN is not).</summary>
+        /// <param name="fraction">The quotient.</param>
+        /// <exception cref="ValueError"><paramref name="fraction"/> is outside [0, 1] ("Percentiles must be in the range [0,
+        ///     100]").</exception>
+        private static void ValidatePercentileFraction(double fraction)
+        {
+            if (!(fraction >= 0.0 && fraction <= 1.0))
                 throw new ValueError("Percentiles must be in the range [0, 100]");
         }
     }

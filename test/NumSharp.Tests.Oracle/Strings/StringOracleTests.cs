@@ -542,6 +542,18 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void QuantileFamilyKeywords() => Run("qfamily");
 
         /// <summary>
+        ///     Section qprec (the validation of strings phase 2): the quantile family's index arithmetic in q's dtype — a
+        ///     float16 / float32 q array computes the virtual index, the neighbours, the weight and the lerp's dtype as NumPy
+        ///     does (11 data dtypes x the 13 methods x the four functions x three layouts), the partition's kth validation
+        ///     where float16 rounds an index to n or overflows ``n - 1`` (per slice for the nan forms), percentile's quotient
+        ///     in q's dtype and its range check; out= by NumPy's two routes (take: exact shape, safe cast, NaN slices'
+        ///     same_kind copy; lerp: same_kind cast, broadcast, the t &gt;= 0.5 branch in out's dtype) and the nan forms'
+        ///     assignment, keepdims' out index, read-only outs; an integer q array's int64 weight; empty data's errors; text
+        ///     with a float16 q. Strict.
+        /// </summary>
+        [TestMethod] public void QuantilePrecisionAndOut() => Run("qprec");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -660,7 +672,7 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strsets", "tcomp", "tarith",
-                "treduce", "tsort", "qfamily",
+                "treduce", "tsort", "qfamily", "qprec",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

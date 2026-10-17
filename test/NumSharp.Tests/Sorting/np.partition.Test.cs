@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using NumSharp.Tests.Utilities;
 
@@ -410,6 +411,25 @@ namespace NumSharp.Tests.Sorting
             var rc = np.partition(c, 1);
             rc.GetValue<Complex>(1).Should().Be(new Complex(8, 0));
         }
+
+        /// <summary>
+        ///     kth 0, 1 and n - 1 of a line longer than 16 elements are placed by NumPy's own linear passes (introselect_'s
+        ///     dumb_select and its float maximum pass), so a ±0 tie leaves NumPy's zero there, the FIRST equal minimum:
+        ///     <c>np.partition([0., -0., 1., -0., 0., 1.] * 4, [0, 1, 23])</c> holds +0.0 at 0 and -0.0 at 1 (probed, numpy
+        ///     2.4.2; several kths, so NumPy's single-kth SIMD qselect is not involved).
+        /// </summary>
+        [TestMethod]
+        public void Partition_EndKths_KeepNumPysZeroSign()
+        {
+            var z = Enumerable.Repeat(new[] { 0.0, -0.0, 1.0, -0.0, 0.0, 1.0 }, 4).SelectMany(x => x).ToArray();
+            var r = np.partition(np.array(z), new[] { 0, 1, 23 });
+            BitConverter.DoubleToInt64Bits(r.GetDouble(0)).Should().Be(0L, "+0.0, the first zero");
+            BitConverter.DoubleToInt64Bits(r.GetDouble(1)).Should().Be(long.MinValue, "-0.0, the next zero");
+            r.GetDouble(23).Should().Be(1.0);
+            var ends = np.partition(np.array(z), new[] { 0, 23 });
+            BitConverter.DoubleToInt64Bits(ends.GetDouble(0)).Should().Be(0L);
+            ends.GetDouble(23).Should().Be(1.0);
+        }
     }
 
     [TestClass]
@@ -586,6 +606,28 @@ namespace NumSharp.Tests.Sorting
             Check(new[] { 9f, 1f, 5f, 3f }, 2);
             Check(new[] { 9.0, 1.0, 5.0, 3.0 }, 2);
             Check(new decimal[] { 9, 1, 5, 3 }, 2);
+        }
+
+        /// <summary>
+        ///     The linear passes that place kth 0, 1, 2 and a float line's last position report NumPy's index for a tie: the
+        ///     first equal minimum and the last equal maximum. For <c>[3, 0, 4, 0, 4, 1, 0, 4, 2, 4] * 3</c> NumPy 2.4.2 gives
+        ///     <c>argpartition(a, [0, 29])[[0, -1]] == [1, 29]</c> and <c>argpartition(a, [0, 1, 2])[:3] == [1, 3, 6]</c>, in
+        ///     float64 and float32 alike (probed).
+        /// </summary>
+        [TestMethod]
+        public void ArgPartition_EndKths_ReportNumPysTieIndex()
+        {
+            var t = Enumerable.Repeat(new[] { 3.0, 0, 4, 0, 4, 1, 0, 4, 2, 4 }, 3).SelectMany(x => x).ToArray();
+            var a = np.array(t);
+            var ends = np.argpartition(a, new[] { 0, 29 });
+            ends.GetInt64(0).Should().Be(1);
+            ends.GetInt64(29).Should().Be(29);
+            var first3 = np.argpartition(a, new[] { 0, 1, 2 });
+            new[] { first3.GetInt64(0), first3.GetInt64(1), first3.GetInt64(2) }.Should().Equal(1L, 3L, 6L);
+            var ends32 = np.argpartition(a.astype(np.float32), new[] { 0, 29 });
+            ends32.GetInt64(0).Should().Be(1);
+            ends32.GetInt64(29).Should().Be(29);
+            AssertArgPartitionInvariant(a, ends, 0, 29);
         }
     }
 }

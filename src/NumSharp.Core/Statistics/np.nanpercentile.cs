@@ -62,14 +62,16 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
-            ValidatePercentile(q);
+            // `q = np.true_divide(q, 100, out=...)` (float64 for a Python number), then `_quantile_is_valid` on the
+            // QUOTIENT: -5e-324 divides to -0.0 and passes.
+            double fraction = PercentileFraction(q);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
             // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
             // values (QuantileWeighted).
             if (weights is not null)
             {
-                using var qArray = NDArray.Scalar(q / 100.0);
+                using var qArray = NDArray.Scalar(fraction);
                 return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights,
                     (a, q, axis, @out, overwrite_input, method, keepdims),
                     static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
@@ -78,11 +80,11 @@ namespace NumSharp
             // text itself (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
                 // StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the percentile of the rest.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanpercentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axisArr,
+                return Backends.Strings.NDVStringStatistics.NanQuantile("nanpercentile", a, new[] { fraction }, System.Array.Empty<long>(), false, axisArr,
                     @out, method, keepdims);
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axisArr, true);
-            return QuantileEngine.Compute(a, new[] { q / 100.0 }, axisArr, @out, overwrite_input,
+            return QuantileEngine.Compute(a, new[] { fraction }, axisArr, @out, overwrite_input,
                 default, keepdims, qIsScalar: true,
                 emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
         }
@@ -146,8 +148,7 @@ namespace NumSharp
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
             {
-                ValidatePercentile(q[i]);
-                qFracs[i] = q[i] / 100.0;
+                qFracs[i] = PercentileFraction(q[i]);
             }
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
@@ -236,13 +237,15 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
             RejectComplexQuantileData(a);
-            ValidatePercentile(q);
+            // `q = np.true_divide(q, 100, out=...)` (float64 for a Python number), then `_quantile_is_valid` on the
+            // QUOTIENT: -5e-324 divides to -0.0 and passes.
+            double fraction = PercentileFraction(q);
             // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
             // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
             // values (QuantileWeighted).
             if (weights is not null)
             {
-                using var qArray = NDArray.Scalar(q / 100.0);
+                using var qArray = NDArray.Scalar(fraction);
                 return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights,
                     (a, q, axis, @out, overwrite_input, method, keepdims),
                     static s => nanpercentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
@@ -251,11 +254,11 @@ namespace NumSharp
             // text itself (NDStringUfuncs.QuantileAnswer).
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
                 // StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the percentile of the rest.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanpercentile", a, new[] { q / 100.0 }, System.Array.Empty<long>(), false, axis,
+                return Backends.Strings.NDVStringStatistics.NanQuantile("nanpercentile", a, new[] { fraction }, System.Array.Empty<long>(), false, axis,
                     @out, method, keepdims);
             if (Backends.Strings.NDStringUfuncs.IsString(a))
                 throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanpercentile", a, method, axis, true);
-            return QuantileEngine.Compute(a, new[] { q / 100.0 }, axis, @out, overwrite_input,
+            return QuantileEngine.Compute(a, new[] { fraction }, axis, @out, overwrite_input,
                 default, keepdims, qIsScalar: true,
                 emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
         }
@@ -328,8 +331,7 @@ namespace NumSharp
             double[] qFracs = new double[q.Length];
             for (int i = 0; i < q.Length; i++)
             {
-                ValidatePercentile(q[i]);
-                qFracs[i] = q[i] / 100.0;
+                qFracs[i] = PercentileFraction(q[i]);
             }
             // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
             // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
@@ -516,7 +518,7 @@ namespace NumSharp
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
                 // StringDType data: q divided by 100 and checked (any rank), then the data; q's rank is checked per line.
                 return Backends.Strings.NDVStringStatistics.NanQuantile("nanpercentile", a, qArr, (long[])q.Shape.dimensions.Clone(),
-                    false, axisArr, @out, method, keepdims);
+                    false, axisArr, @out, method, keepdims, QuantileIndexes.PrecisionOf(q));
             bool qIsScalar = q.ndim == 0;
             // Fixed-width text: NumPy checks the axes and then meets isnan, which has no text loop (q's rank is never
             // reached), or np.nanmean's add.reduce refusal for empty text (NDStringUfuncs.QuantileAnswer).
@@ -526,7 +528,7 @@ namespace NumSharp
             // (a 2-d q keeps both axes) and the method name are checked inside the engine, in NumPy's order.
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
                 emptyReturnsNaN: true, ignoreNaN: true, weakQ: q.WasPythonLiteral,
-                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), methodName: method);
+                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), methodName: method, qType: QuantileIndexes.PrecisionOf(q));
         }
     }
 }

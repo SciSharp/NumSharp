@@ -25,6 +25,9 @@ namespace NumSharp
         ///     <see cref="NDMatrixBoundary.PlainFor(NDArray, NDArray)"/> region, which would hide the chararray). Such an
         ///     operand comes here whatever its dtype (an <c>int8</c> chararray too): NumPy's statements up to the
         ///     <c>partition</c> call do not depend on it.</param>
+        /// <param name="qType">q's precision (<see cref="QuantileIndexes.PrecisionOf"/>): a float16 / float32 q array
+        ///     computes the virtual indexes in its own dtype, and the partition then validates them (NumPy's <c>kth(=k) out
+        ///     of bounds (n)</c> for a long line).</param>
         /// <returns>The selected strings (or <paramref name="out"/> itself).</returns>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="ValueError">An axis repeats, or <paramref name="out"/>'s shape differs from the result's.</exception>
@@ -38,13 +41,13 @@ namespace NumSharp
         ///     <see cref="TypeError"/> <c>chararray.partition() got an unexpected keyword argument 'axis'</c> for every method
         ///     (see <see cref="QuantileText.Compute"/>).</remarks>
         private static NDArray QuantileOfText(string op, NDArray a, double[] q, long[] qShape, bool qIsInteger, int[] axes,
-            NDArray @out, string method, bool keepdims, bool chararray)
+            NDArray @out, string method, bool keepdims, bool chararray, NPTypeCode qType = NPTypeCode.Double)
         {
             // _ureduce normalizes the axes before anything else reads them (AxisError, or a repeated axis's ValueError);
             // QuantileText.Compute then runs the rest in NumPy's order (keepdims' out index, q's rank, the method) — and for
             // a chararray operand stops at NumPy's arr.partition(..., axis=0), the STRING partition's TypeError.
             Backends.Strings.NDStringUfuncs.ValidateReduceAxes(op, a.ndim, axes);
-            return QuantileText.Compute(op, a, q, qShape, qIsInteger, axes, @out, method, keepdims, chararray);
+            return QuantileText.Compute(op, a, q, qShape, qIsInteger, axes, @out, method, keepdims, chararray, qType);
         }
 
         /// <summary>Whether a q array holds integers or bools: NumPy's <c>(n - 1) * q</c> is then an integer index.</summary>

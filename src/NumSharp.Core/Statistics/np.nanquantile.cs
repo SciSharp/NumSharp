@@ -620,7 +620,7 @@ namespace NumSharp
                 // StringDType data: NumPy validates q (above), then reads the data; q's rank is checked per line, by the
                 // quantile of what is left after the NaN-like NAs are removed.
                 return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, qArr, (long[])q.Shape.dimensions.Clone(),
-                    IsIntegerQuantile(q), axisArr, @out, method, keepdims);
+                    IsIntegerQuantile(q), axisArr, @out, method, keepdims, QuantileIndexes.IndexDtypeOf(q));
             bool qIsScalar = q.ndim == 0;
             // Fixed-width text: NumPy checks the axes and then meets isnan, which has no text loop (q's rank is never
             // reached), or np.nanmean's add.reduce refusal for empty text (NDStringUfuncs.QuantileAnswer).
@@ -632,7 +632,7 @@ namespace NumSharp
             return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
                 emptyReturnsNaN: true, ignoreNaN: true, weakQ: q.WasPythonLiteral,
                 qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), methodName: method,
-                integerQ: IsIntegerQuantile(q));
+                integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
         }
     }
 }

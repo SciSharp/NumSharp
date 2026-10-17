@@ -61,6 +61,9 @@ namespace NumSharp.Statistics
         /// <param name="partitionRaises">True for a <c>numpy.char.chararray</c> operand of the user's call: NumPy's
         ///     <c>arr.partition(..., axis=0)</c> is then <c>chararray.partition(sep)</c>, which raises once the method is
         ///     resolved (see the exceptions).</param>
+        /// <param name="qType">q's precision (<see cref="QuantileIndexes.PrecisionOf"/>): NumPy computes the virtual indexes
+        ///     in a float16 / float32 q's own dtype, so they can round to the line's length (or to NaN / infinity), which the
+        ///     partition refuses.</param>
         /// <returns>The selected strings, of shape <c>q.shape + kept dims</c> (a read-only 0-d array for a scalar q over every
         ///     axis: NumPy's scalar, or a <c>StringDType</c> element's Python object); <paramref name="out"/> itself when
         ///     given. A <c>StringDType</c> interpolating method returns only where NumPy's <c>_lerp</c> does: two NaN-like
@@ -95,11 +98,14 @@ namespace NumSharp.Statistics
         /// <exception cref="TypeError">With <paramref name="partitionRaises"/>, for every known method:
         ///     <c>chararray.partition() got an unexpected keyword argument 'axis'</c> — after the checks above it, before the
         ///     interpolating methods' refusal and the take.</exception>
+        /// <exception cref="ValueError">The partition refuses a virtual index (NumPy's <c>kth(=k) out of bounds (n)</c>): a
+        ///     float16 q over a line of about 2051 elements or more (a float32 q past 2^24) — before the interpolating
+        ///     methods' refusal, whose subtraction NumPy reaches after the partition.</exception>
         /// <remarks>Scoped: the flattened or merged data, the sorted lines and the indexes are reclaimed; the result (or
         ///     the caller's <paramref name="out"/>) survives.</remarks>
         [NDScoped]
         internal static NDArray Compute(string op, NDArray a, double[] q, long[] qShape, bool qIsInteger, int[] axes,
-            NDArray @out, string method, bool keepdims, bool partitionRaises = false)
+            NDArray @out, string method, bool keepdims, bool partitionRaises = false, NPTypeCode qType = NPTypeCode.Double)
         {
             int nd = a.ndim;
             int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
@@ -162,25 +168,57 @@ namespace NumSharp.Statistics
                 throw NDCharArrayBoundary.PartitionKeywordError();
             }
 
-            // _quantile: the method (unknown names refused), then the interpolating methods' refusal (an empty reduced axis
-            // first: their arr[previous_indexes] indexes it). A selection method — or 'linear' with an integer q — goes on;
-            // so does an interpolating method over StringDType, whose answer depends on the neighbours' values.
-            var refusal = Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, qShape.Length == 0, qIsInteger, q);
-            if (refusal is not null)
-                throw refusal;
-            QuantileMethod parsed = QuantileEngine.ParseMethod(method);
-
             // _quantile: the axis moved first; values_count = arr.shape[0]. 'linear' with an integer q indexes
             // (n - 1) * q itself (an integer, so its floor); every selection method keeps its own index rule, which for an
             // EMPTY line differs from linear's (inverted_cdf clips n * q - 1 = -1 to 0 where linear's (0 - 1) * 1 is -1).
             NDArray arr = np.moveaxis(work, axis, 0);
             long n = arr.Shape.dimensions[0];
+
+            // _quantile: the method (an unknown name is QuantileAnswer's ValueError below), the virtual indexes in q's
+            // precision, and `arr.partition(...)`, whose kth validation (partition_prep_kth_array; an array with no element
+            // skips it) comes before the interpolating methods' subtraction — so it runs before their refusal. Text is not
+            // inexact: the take path's list is the indexes alone, and a NaN virtual index stays INT64_MIN.
+            long[] plan = null;
+            if (QuantileEngine.TryParseMethod(method, out QuantileMethod known))
+            {
+                QuantileMethod planned = qIsInteger && known == QuantileMethod.Linear ? QuantileMethod.Lower : known;
+                plan = Plan(planned, n, q, qType);
+                // 'linear' with a uint64 q partitions at a uint64 kth array, which does not cast safely to intp: NumPy's
+                // partition_prep_kth_array refuses its dtype before any value (an array with no element included).
+                if (qIsInteger && known == QuantileMethod.Linear && qType == NPTypeCode.UInt64)
+                    throw new TypeError("Partition index must be integer");
+                if (n > 0 && a.size != 0)
+                {
+                    unsafe
+                    {
+                        fixed (long* planPtr = plan)
+                        {
+                            if (QuantileEngine.IsDiscrete(planned))
+                                QuantileIndexes.CheckTakeKth(planPtr, q.Length, 2, n);
+                            else
+                                QuantileIndexes.CheckInterpolationKth(planPtr, 2 * q.Length, n);
+                        }
+                    }
+                }
+            }
+
+            // _quantile: the interpolating methods' refusal (an empty reduced axis first: their arr[previous_indexes]
+            // indexes it). A selection method — or 'linear' with an integer q — goes on; so does an interpolating method over
+            // StringDType, whose answer depends on the neighbours' values.
+            var refusal = Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, qShape.Length == 0, qIsInteger, q);
+            if (refusal is not null)
+                throw refusal;
+            QuantileMethod parsed = QuantileEngine.ParseMethod(method);
+
             bool vstring = Backends.Strings.NDStringUfuncs.IsVString(a);
             if (vstring && !(QuantileEngine.IsDiscrete(parsed) || (parsed == QuantileMethod.Linear && qIsInteger)))
                 // StringDType's interpolating branch: the sort, the neighbours, and _lerp's Python subtraction of them.
                 return Backends.Strings.NDVStringStatistics.QuantileInterpolate(arr, q, qShape, parsed, target, @out, keepdims,
-                    nd, reduced);
-            long[] indexes = VirtualIndexes(n, q, qIsInteger && parsed == QuantileMethod.Linear ? QuantileMethod.Lower : parsed);
+                    nd, reduced, qType);
+            // The take path's indexes: the plan's selected index of each quantile (in q's precision).
+            var indexes = new long[q.Length];
+            for (int i = 0; i < indexes.Length; i++)
+                indexes[i] = plan[2 * i];
 
             // take(arr, virtual_indexes, axis=0, out=out): its shape is q.shape + arr.shape[1:].
             var resultShape = new long[qShape.Length + arr.ndim - 1];
@@ -252,50 +290,30 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     NumPy's virtual indexes (intp) of a take-path method for a line of <paramref name="n"/> elements, one per
-        ///     quantile, computed as <c>_QuantileMethods[method]['get_virtual_index']</c> computes them in float64.
+        ///     NumPy's index plan of a line of <paramref name="n"/> elements, in q's precision (see
+        ///     <see cref="QuantileIndexes"/>): per quantile, two raw indexes — a selection method's index twice, or an
+        ///     interpolating method's previous and next neighbour (intp, before the partition's negative adjustment).
         /// </summary>
-        /// <param name="n">The line's length (NumPy's <c>values_count</c>).</param>
-        /// <param name="q">The quantiles in [0, 1].</param>
-        /// <param name="method">A selection method: <see cref="QuantileMethod.Lower"/> also serves 'linear' with an integer
-        ///     q, whose index <c>(n - 1) * q</c> is an integer already (the other selection methods keep their own rules,
-        ///     which differ from it over an empty line).</param>
-        /// <returns>The indexes; out of range only for an empty line (n = 0), where NumPy's take reports them.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">A method that interpolates (never passed: the caller refuses those
-        ///     first).</exception>
-        private static long[] VirtualIndexes(long n, double[] q, QuantileMethod method)
+        /// <param name="method">The method ('linear' with an integer q already mapped to 'lower').</param>
+        /// <param name="n">The line's length (NumPy's <c>values_count</c>; 0 for an empty line).</param>
+        /// <param name="q">The quantiles in [0, 1] (values of q's precision).</param>
+        /// <param name="qType">q's precision.</param>
+        /// <returns>The raw indexes, two per quantile: out of range only for an empty line (n = 0, where NumPy's take or
+        ///     neighbour lookup reports them) or where q's rounding reaches n (the partition reports those).</returns>
+        internal static long[] Plan(QuantileMethod method, long n, double[] q, NPTypeCode qType)
         {
-            var indexes = new long[q.Length];
-            for (int i = 0; i < q.Length; i++)
+            var raw = new long[2 * q.Length];
+            var weight = new double[2 * q.Length];
+            unsafe
             {
-                double qi = q[i];
-                switch (method)
-                {
-                    case QuantileMethod.Lower:
-                        // np.floor((n - 1) * quantiles).astype(np.intp)
-                        indexes[i] = (long)Math.Floor((n - 1) * qi);
-                        break;
-                    case QuantileMethod.Higher:
-                        indexes[i] = (long)Math.Ceiling((n - 1) * qi);
-                        break;
-                    case QuantileMethod.Nearest:
-                        // np.around rounds half to even.
-                        indexes[i] = (long)Math.Round((n - 1) * qi, MidpointRounding.ToEven);
-                        break;
-                    case QuantileMethod.InvertedCdf:
-                        // _discrete_interpolation_to_boundaries(n * q - 1, gamma == 0): the previous index where the
-                        // virtual index is integral, the next one otherwise, negatives clipped to 0.
-                        indexes[i] = DiscreteBoundary(n * qi - 1, closestObservation: false);
-                        break;
-                    case QuantileMethod.ClosestObservation:
-                        // ... with (n * q - 1 - 0.5) and the previous index only at an integral index whose floor is odd.
-                        indexes[i] = DiscreteBoundary(n * qi - 1 - 0.5, closestObservation: true);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(method), method, "not a take-path method");
-                }
+                fixed (double* qPtr = q)
+                fixed (long* rawPtr = raw)
+                fixed (double* weightPtr = weight)
+                    // Text is not an inexact dtype: a NaN virtual index is not mapped to the last element.
+                    Backends.Kernels.DirectILKernelGenerator.QuantilePlan(qType, method, n, qPtr, q.Length, false, rawPtr,
+                        weightPtr);
             }
-            return indexes;
+            return raw;
         }
 
         /// <summary>
@@ -364,26 +382,6 @@ namespace NumSharp.Statistics
         /// <returns><c>n * q + (alpha + q * (1 - alpha - beta)) - 1</c>.</returns>
         private static double ComputeVirtualIndex(double n, double q, double alpha, double beta)
             => n * q + (alpha + q * (1 - alpha - beta)) - 1;
-
-        /// <summary>
-        ///     NumPy's <c>_discrete_interpolation_to_boundaries(index, gamma_condition_fun)</c>: <c>previous = floor(index)</c>,
-        ///     <c>next = previous + 1</c>, <c>gamma = index - previous</c>; the previous index where the condition holds, the
-        ///     next one otherwise, as intp, a negative result clipped to 0.
-        /// </summary>
-        /// <param name="index">The virtual index (float64).</param>
-        /// <param name="closestObservation">The closest_observation condition (<c>gamma == 0 &amp; floor(index) % 2 == 1</c>)
-        ///     instead of inverted_cdf's (<c>gamma == 0</c>).</param>
-        /// <returns>The index.</returns>
-        private static long DiscreteBoundary(double index, bool closestObservation)
-        {
-            double previous = Math.Floor(index);
-            double gamma = index - previous;
-            // Python's float % is a floored modulo: (-3.0) % 2 == 1.0.
-            double mod = previous - 2 * Math.Floor(previous / 2);
-            bool takePrevious = gamma == 0 && (!closestObservation || mod == 1);
-            long result = (long)(takePrevious ? previous : previous + 1);
-            return result < 0 ? 0 : result;
-        }
 
         /// <summary>Whether two dimension lists are equal.</summary>
         /// <param name="a">The first.</param>

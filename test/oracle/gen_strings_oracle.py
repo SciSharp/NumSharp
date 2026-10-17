@@ -11957,12 +11957,400 @@ def gen_qfamily():
             _quant(f"ties{ti}", op, name=fn, q=qs, qkind="fl", method="inverted_cdf", weights=w, section=QFAM)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section qprec: the quantile family's index arithmetic in q's dtype, its out= routes, an integer q's integer weight and
+# empty data (the validation of strings phase 2, 2026-10-16)
+# ----------------------------------------------------------------------------------------------------------------------
+
+QPREC = "qprec"
+QP_METHODS = ["inverted_cdf", "averaged_inverted_cdf", "closest_observation", "interpolated_inverted_cdf", "hazen",
+              "weibull", "linear", "median_unbiased", "normal_unbiased", "lower", "higher", "midpoint", "nearest"]
+QP_NUM = ["float64", "float32", "float16", "int8", "uint8", "int16", "uint16", "int32", "int64", "uint64", "bool"]
+QP_FUNCS = ("quantile", "percentile", "nanquantile", "nanpercentile")
+
+
+def _qp_values(dtype, n, seed, nan_every=0):
+    """``n`` values of ``dtype`` that make the lerp's rounding visible: floats with full mantissas (in float16's range for
+    float16), integers over their whole range (the wrapping ``b - a`` and the int64 / uint64 rounding to float64 included),
+    random bools; every ``nan_every``-th float replaced by NaN.
+
+    :param dtype: the dtype name.
+    :param n: how many values.
+    :param seed: the seed.
+    :param nan_every: put a NaN at every multiple of it (floats only; 0 for none).
+    :returns: a 1-D array.
+    """
+    rng = np.random.default_rng(seed)
+    dt = np.dtype(dtype)
+    if dt.kind == "b":
+        vals = rng.integers(0, 2, n).astype(bool)
+    elif dt.kind == "f":
+        vals = rng.uniform(-60.0, 60.0, n).astype(dt)
+        if nan_every:
+            vals[::nan_every] = np.nan
+    else:
+        info = np.iinfo(dt)
+        vals = rng.integers(int(info.min), int(info.max), n, dtype=dt, endpoint=True)
+        vals[0] = info.min
+        vals[-1] = info.max
+    return vals
+
+
+def _qp_q(fn, values, dtype):
+    """A q ARRAY of ``dtype`` (float16 / float32 / float64, or an integer / bool dtype) holding ``values`` (scaled by 100
+    for a percentile, before the conversion: NumPy divides in q's dtype).
+
+    :param fn: the function name.
+    :param values: the quantiles in [0, 1] (a scalar for a 0-d q).
+    :param dtype: q's dtype.
+    :returns: the (base, view) operand.
+    """
+    arr = np.asarray(values, dtype=np.float64)
+    if fn.endswith("percentile"):
+        arr = arr * 100
+    return plain(arr.astype(dtype))
+
+
+def _qp_broadcast(dtype, value, shape):
+    """A read-only broadcast view of one element: a long line that costs one element of corpus.
+
+    :param dtype: the dtype name.
+    :param value: the element.
+    :param shape: the view's shape.
+    :returns: the (base, view) operand.
+    """
+    base = np.array([value], dtype=dtype)
+    return base, np.broadcast_to(base, shape)
+
+
+def _qp_out(dtype, shape, writeable=True):
+    """An out operand of ``dtype`` and ``shape`` (zeros), read-only when ``writeable`` is False.
+
+    :param dtype: the dtype name.
+    :param shape: the shape.
+    :param writeable: False for a read-only view.
+    :returns: the (base, view) operand.
+    """
+    # An empty out is its own base: a view of a zero-size buffer is rebuilt as an owner by the replay.
+    base, view = own(np.zeros(shape, dtype=dtype)) if 0 in tuple(shape) else plain(np.zeros(shape, dtype=dtype))
+    if not writeable:
+        view = view.view()
+        view.flags.writeable = False
+    return base, view
+
+
+def gen_qprec():
+    """Section qprec: the quantile family's index arithmetic in q's dtype, and the routes around it (op ``quant_kw``).
+    Every case is phase 1.
+
+    * q's precision: data of 11 dtypes x float16 / float32 q arrays (1-d and 0-d) x the 13 methods x the four functions x
+      a flat line, rows along an axis and a transposed operand. NumPy computes the virtual index, the neighbours, the weight
+      t and ``1 - t`` in q's dtype, and the lerp in ``result_type(data, q)`` (float16 for int8 data under a float16 q);
+    * the partition's kth validation: float16 q over lines of 2047 to 4097 elements and of 65519 / 65520 / 65521 / 70000
+      (broadcast lines, one element of corpus): ``n - 1`` rounds in float16 (2051 is 2052) or overflows to inf, so an index
+      reaches n (``kth(=2052) out of bounds (2052)``), or is NaN / inf (``kth(=-9223372036854705808) out of bounds
+      (70000)``, or NaN results over float data); the nan forms per slice, a long slice after a short one and the reverse;
+    * percentile's ``np.true_divide(q, 100)`` in q's dtype, and the range check on the quotient (float16 ``100.0625`` is
+      refused, ``-2**-24`` and float64 ``-5e-324`` pass);
+    * out=: the take route (exact shape, a safe cast from out to the data, ``WRITEBACKIFCOPY base is read-only``, the
+      NaN slices' same_kind ``np.copyto``), the lerp route (the add's same_kind cast, the broadcast into a larger out, the
+      t >= 0.5 branch computed in out's dtype, ``output array is read-only``), the nan forms' assignment, keepdims' out
+      index — over out dtypes float16 / float32 / float64 / complex128 / int64 / int32 / bool / uint8;
+    * an integer q ARRAY under weibull / averaged_inverted_cdf / interpolated_inverted_cdf: an int64 weight, so integer
+      data gives an int64 result (uint64 and float data float64), with out=;
+    * empty data: the take's ``cannot do a non-empty take from an empty axes.`` and index checks, the neighbour lookup's
+      ``index 0`` / ``index -1``, float data's ``arr[-1, ...]``, bool data's IndexError before the subtract, empty results
+      with out=;
+    * text with a float16 q: the take path's kth errors over 2052 strings, the interpolating refusal after them, an
+      inverted_cdf index that a float16 q moves, StringDType's NaN-like NA lerp in float16 / float32.
+    """
+    # --- q's precision over every dtype and method.
+    layouts = [("flat", (37,), None), ("rows", (5, 23), 1), ("cols", (23, 5), 0)]
+    qvals = [0.0, 0.1, 0.3, 0.33, 0.5, 0.7, 0.999, 1.0]
+    for di, dtype in enumerate(QP_NUM):
+        for li, (lname, shape, ax) in enumerate(layouts):
+            n = int(np.prod(shape))
+            vals = _qp_values(dtype, n, 1000 + 31 * di + li)
+            data = plain(vals.reshape(shape)) if lname != "cols" else plain(vals.reshape(shape[::-1]))
+            if lname == "cols":
+                base, view = data
+                data = (base, view.T)
+            for qdt in ("float16", "float32"):
+                for fn in QP_FUNCS:
+                    q = _qp_q(fn, qvals, qdt)
+                    for m in QP_METHODS:
+                        _quant(f"{dtype}-{lname}-q{qdt}", data, name=fn, q=q, qkind="arr", axis=ax, method=m,
+                               section=QPREC)
+        # 0-d q arrays (the scalar result) and keepdims.
+        data = plain(_qp_values(dtype, 29, 77 + di))
+        for qdt in ("float16", "float32"):
+            for fn in ("quantile", "nanquantile"):
+                for m in QP_METHODS:
+                    _quant(f"{dtype}-0d-q{qdt}", data, name=fn, q=_qp_q(fn, 0.33, qdt), qkind="arr", method=m,
+                           keepdims=m in ("linear", "lower"), section=QPREC)
+
+    # --- the partition's kth validation and the float16 overflow of n - 1.
+    for n in (2047, 2048, 2049, 2050, 2051, 2052, 2053, 2056, 2060, 4097):
+        for dtype in ("int16", "float32"):
+            vals = (np.arange(n) * 7 % n).astype(dtype)      # distinct values, a known order
+            data = plain(vals)
+            for m in QP_METHODS:
+                _quant(f"kth{n}-{dtype}", data, name="quantile", q=_qp_q("quantile", [0.5, 0.999, 0.9995, 1.0], "float16"),
+                       qkind="arr", method=m, section=QPREC)
+                for qv in (0.9995, 1.0):
+                    _quant(f"kth{n}-{dtype}-q{qv}", data, name="quantile", q=_qp_q("quantile", [qv], "float16"),
+                           qkind="arr", method=m, section=QPREC)
+            if n in (2051, 2052, 2056):
+                for m in ("lower", "inverted_cdf", "linear", "midpoint"):
+                    _quant(f"kth{n}-{dtype}-pct", data, name="percentile", q=_qp_q("percentile", [0.999, 1.0], "float16"),
+                           qkind="arr", method=m, section=QPREC)
+                    _quant(f"kth{n}-{dtype}-q32", data, name="quantile", q=_qp_q("quantile", [0.999, 1.0], "float32"),
+                           qkind="arr", method=m, section=QPREC)
+    for n in (65519, 65520, 65521, 70000):
+        for dtype, value in (("int8", 5), ("float64", 2.5), ("float16", 1.5), ("bool", True)):
+            for shape, ax in (((n,), None), ((2, n), 1)):
+                data = _qp_broadcast(dtype, value, shape)
+                for m in QP_METHODS:
+                    for qv in ([0.0], [0.5], [1.0], [0.5, 0.0]):
+                        _quant(f"ovf{n}-{dtype}-{len(shape)}d", data, name="quantile", q=_qp_q("quantile", qv, "float16"),
+                               qkind="arr", axis=ax, method=m, section=QPREC)
+                if dtype == "float64":
+                    for fn in ("nanquantile", "percentile"):
+                        _quant(f"ovf{n}-{dtype}-{fn}", data, name=fn, q=_qp_q(fn, [0.0, 0.5], "float16"), qkind="arr",
+                               axis=ax, method="linear", section=QPREC)
+    # The nan forms decide per slice: a slice of 2048 values and one of 2052 (NaN-padded rows of 2100), in both orders.
+    for order in ("short-first", "long-first"):
+        rows = np.empty((2, 2100), dtype=np.float32)
+        rows[0] = np.arange(2100) * 0.5
+        rows[1] = np.arange(2100) * 0.25
+        short, long_ = (0, 1) if order == "short-first" else (1, 0)
+        rows[short, 2048:] = np.nan
+        rows[long_, 2052:] = np.nan
+        data = plain(rows)
+        for m in QP_METHODS:
+            for fn in ("nanquantile", "nanpercentile"):
+                _quant(f"nanslices-{order}", data, name=fn, q=_qp_q(fn, [0.5, 1.0], "float16"), qkind="arr", axis=1,
+                       method=m, section=QPREC)
+
+    # --- percentile: the quotient in q's dtype and the range check on it.
+    pdata = plain(np.arange(9.0) * 1.5)
+    pqs = [("float16", [100.0]), ("float16", [100.0625]), ("float16", [100.125]), ("float16", [99.95]),
+           ("float16", [-0.0]), ("float16", [-2.0 ** -24]), ("float16", [33.3, 66.7]), ("float16", [0.1]),
+           ("float32", [100.0]), ("float32", [float(np.nextafter(np.float32(100), np.float32(200)))]),
+           ("float32", [-1e-45]), ("float32", [33.3]), ("float64", [-5e-324]), ("float64", [33.3])]
+    for qdt, qv in pqs:
+        for fn in ("percentile", "nanpercentile"):
+            for m in ("linear", "lower", "hazen"):
+                _quant(f"pct-{qdt}", pdata, name=fn, q=plain(np.array(qv, dtype=qdt)), qkind="arr", method=m,
+                       section=QPREC)
+    for fn in ("percentile", "nanpercentile"):
+        _quant("pct-py", pdata, name=fn, q=-5e-324, qkind="f", method="linear", section=QPREC)
+        _quant("pct-pylist", pdata, name=fn, q=[-5e-324, 50.0], qkind="fl", method="linear", section=QPREC)
+
+    # --- out=: the take, the lerp and the nan forms' routes over every out dtype.
+    out_dtypes = ["float16", "float32", "float64", "complex128", "int64", "int32", "bool", "uint8"]
+    for di, dtype in enumerate(["float64", "float32", "float16", "int32", "int64", "uint64", "bool"]):
+        vals = _qp_values(dtype, 11, 500 + di)
+        nanvals = _qp_values(dtype, 11, 500 + di, nan_every=4) if dtype.startswith("float") else None
+        for dset, dv in (("v", vals), ("nan", nanvals)):
+            if dv is None:
+                continue
+            data = plain(dv)
+            for qform in ("weak", "f64", "f16", "f32-0d"):
+                for fn in ("quantile", "nanquantile"):
+                    if qform == "weak":
+                        q, qk, rshape = 0.3, "f", ()
+                    elif qform == "f64":
+                        q, qk, rshape = _qp_q(fn, [0.3, 0.65], "float64"), "arr", (2,)
+                    elif qform == "f16":
+                        q, qk, rshape = _qp_q(fn, [0.3, 0.65], "float16"), "arr", (2,)
+                    else:
+                        q, qk, rshape = _qp_q(fn, 0.3, "float32"), "arr", ()
+                    for m in ("linear", "lower", "hazen", "midpoint"):
+                        for odt in out_dtypes:
+                            # The nan forms store a 0-d answer as a NumPy SCALAR (PyArray_Pack): a SIGNED integer out
+                            # converts it with int() through C long, so a value past 2^31 into int32 raises "Python int
+                            # too large to convert to C long" on Windows (32-bit long) but "Python integer ... out of
+                            # bounds for int32" on LP64, and a uint64 past 2^63 into int64 raises "int too big to
+                            # convert" on Windows (C long long) but "... to C long" on LP64 — LP64 is the answer NumSharp
+                            # pins, left to the unit tests. An unsigned out casts the scalar: the same on every platform.
+                            if fn.startswith("nan") and rshape == () and (
+                                    (dtype in ("int64", "uint64") and odt == "int32")
+                                    or (dtype == "uint64" and odt == "int64")):
+                                continue
+                            _quant(f"out-{dtype}-{dset}-{qform}-{odt}", data, name=fn, q=q, qkind=qk, method=m,
+                                   out=_qp_out(odt, rshape), section=QPREC)
+    # out's shapes, read-only outs and keepdims' out index, per route.
+    data = plain(_qp_values("float64", 9, 901))
+    datan = plain(_qp_values("float64", 9, 902, nan_every=3))
+    data2 = plain(_qp_values("float64", 12, 903).reshape(3, 4))
+    shape_cases = [((3, 2), "f8"), ((3,), "f8"), ((2, 1), "f8"), ((1, 2), "f8"), ((2, 3), "f8"), ((), "f8"),
+                   ((3,), "i8"), ((), "i8"), ((3, 2), "i8")]
+    for fn in ("quantile", "nanquantile"):
+        for m in ("linear", "lower"):
+            for oshape, odt in shape_cases:
+                _quant(f"outshape-{oshape}-{odt}", data, name=fn, q=_qp_q(fn, [0.3, 0.6], "float64"), qkind="arr",
+                       method=m, out=_qp_out(np.dtype(odt).name, oshape), section=QPREC)
+            _quant("outshape-scalar-into-1", data, name=fn, q=0.3, qkind="f", method=m, out=_qp_out("float64", (1,)),
+                   section=QPREC)
+            _quant("outshape-scalar-into-3x1", data, name=fn, q=0.3, qkind="f", method=m, out=_qp_out("float64", (3, 1)),
+                   section=QPREC)
+            for odt in ("float64", "float32", "int64"):
+                _quant(f"readonly-{odt}", data, name=fn, q=_qp_q(fn, [0.3], "float64"), qkind="arr", method=m,
+                       out=_qp_out(odt, (1,), writeable=False), section=QPREC)
+                _quant(f"readonly-nan-{odt}", datan, name=fn, q=_qp_q(fn, [0.3], "float64"), qkind="arr", method=m,
+                       out=_qp_out(odt, (1,), writeable=False), section=QPREC)
+            for ax, oshape in ((1, (3, 1)), (1, (1, 3, 1)), (1, (3,)), (0, (1, 4)), (0, (2, 1, 4)), (None, (1, 1)),
+                               (None, (2,)), (1, (0, 1)), (1, (3, 1, 2))):
+                for odt in ("float64", "float32", "int64"):
+                    _quant(f"keepdims-out-{ax}-{oshape}-{odt}", data2, name=fn, q=0.3, qkind="f", axis=ax, method=m,
+                           keepdims=True, out=_qp_out(odt, oshape), section=QPREC)
+        _quant("bool-lerp-readonly", plain(np.array([True, False, True])), name=fn, q=_qp_q(fn, [0.5], "float64"),
+               qkind="arr", method="linear", out=_qp_out("float64", (1,), writeable=False), section=QPREC)
+    # The take path's NaN slices into an out the data does not reach under same_kind.
+    for fn in ("quantile", "percentile"):
+        nan2 = plain(np.array([[1.0, np.nan, 3.0], [2.0, 4.0, 6.0]]))
+        for odt in ("int64", "bool", "float16", "complex128", "uint8"):
+            _quant(f"take-nan-{odt}-flat", datan, name=fn, q=_qp_q(fn, [0.5], "float64"), qkind="arr", method="lower",
+                   out=_qp_out(odt, (1,)), section=QPREC)
+            _quant(f"take-nan-{odt}-0d", datan, name=fn, q=0.5 * (100 if fn == "percentile" else 1), qkind="f",
+                   method="nearest", out=_qp_out(odt, ()), section=QPREC)
+            _quant(f"take-nan-{odt}-axis", nan2, name=fn, q=_qp_q(fn, [0.5], "float64"), qkind="arr", axis=1,
+                   method="lower", out=_qp_out(odt, (1, 2)), section=QPREC)
+
+    # --- an integer q ARRAY: the int64 weight of weibull / averaged_inverted_cdf / interpolated_inverted_cdf.
+    int_dtypes = ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "bool", "float16", "float32",
+                  "float64"]
+    for di, dtype in enumerate(int_dtypes):
+        vals = _qp_values(dtype, 8, 300 + di)
+        data = plain(vals)
+        data2 = plain(_qp_values(dtype, 12, 400 + di).reshape(3, 4))
+        for qv, qdt in (([0, 1], "int64"), ([1], "int32"), (1, "int64"), ([False, True], "bool"), ([1, 0, 1], "uint8")):
+            for fn in ("quantile", "nanquantile"):
+                for m in QP_METHODS:
+                    _quant(f"intq-{dtype}-{qdt}", data, name=fn, q=plain(np.array(qv, dtype=qdt)), qkind="arr",
+                           method=m, section=QPREC)
+                for m in ("weibull", "averaged_inverted_cdf", "interpolated_inverted_cdf"):
+                    _quant(f"intq-axis-{dtype}-{qdt}", data2, name=fn, q=plain(np.array(qv, dtype=qdt)), qkind="arr",
+                           axis=1, method=m, section=QPREC)
+        for m in ("weibull", "averaged_inverted_cdf"):
+            _quant(f"intq-py-{dtype}", data, name="quantile", q=1, qkind="i", method=m, section=QPREC)
+            for odt in ("int32", "bool", "float32", "uint8", "complex128", "float16"):
+                _quant(f"intq-out-{dtype}-{odt}", data, name="quantile", q=plain(np.array([0, 1])), qkind="arr",
+                       method=m, out=_qp_out(odt, (2,)), section=QPREC)
+    big = plain(np.array([2 ** 60 + 1, 3, -(2 ** 62) - 7], dtype=np.int64))
+    for odt in ("float32", "float16", "int64"):
+        _quant(f"intq-int64-big-{odt}", big, name="quantile", q=plain(np.array([0, 1])), qkind="arr", method="weibull",
+               out=_qp_out(odt, (2,)), section=QPREC)
+    # An integer q over a line longer than its dtype: NEP 50 converts the Python int n (or n - 1) to q's dtype first and
+    # raises (``Python integer 128 out of bounds for int8``) — at n for the methods that multiply n, at n - 1 for the
+    # others, so the line of exactly 128 / 256 / 32768 / 65536 elements raises for some methods only. Broadcast lines: one
+    # element of corpus each.
+    for qdt, n in (("int8", 128), ("int8", 200), ("uint8", 256), ("uint8", 300), ("int16", 32768), ("int16", 40000),
+                   ("uint16", 65536), ("uint16", 70000)):
+        for dtype, value in (("float64", 2.5), ("int32", 5)):
+            data = _qp_broadcast(dtype, value, (n,))
+            for fn in ("quantile", "nanquantile"):
+                for m in QP_METHODS:
+                    _quant(f"intq-long-{qdt}-{n}-{dtype}", data, name=fn, q=plain(np.array([0, 1], dtype=qdt)),
+                           qkind="arr", method=m, section=QPREC)
+
+    # --- the nan forms' 0-d answer stored into an out by PyArray_Pack: a SIGNED integer out converts the NumPy scalar
+    # with int() (a NaN answer — an all-NaN line, or inf - inf in the lerp — raises ``cannot convert float NaN to
+    # integer``, an infinite one ``cannot convert float infinity to integer``, a value past the out's range ``Python integer
+    # 400 out of bounds for int8``, one past C long ``Python int too large to convert to C long``); every other out casts
+    # it (an unsigned out wraps, and takes 0 or 2^63 for NaN / infinity; a bool out its truth). These outcomes are the same
+    # on every platform but one: 1e20 into int64 names C long long on Windows (skipped).
+    nan_lines = [("allnan", [np.nan, np.nan, np.nan], 0.5, "linear"), ("infdiff", [np.inf, 1.0], 1.0, "linear"),
+                 ("inf", [np.inf, np.nan], 0.5, "linear"), ("neginf", [-np.inf, np.nan, 2.0], 0.0, "lower"),
+                 ("finite", [1.0, np.nan, 4.0], 0.5, "linear"), ("big", [300.0, np.nan, 500.0], 0.5, "linear"),
+                 ("negative", [-7.5, np.nan, -2.5], 0.5, "linear"), ("huge", [1e20, np.nan, 3e20], 0.0, "lower")]
+    for lname, line, qv, m in nan_lines:
+        for dtype in ("float64", "float32", "float16"):
+            data = plain(np.array(line, dtype=dtype))
+            for fn in ("nanquantile", "nanpercentile"):
+                for odt in ("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "bool"):
+                    if lname == "huge" and dtype != "float16" and odt == "int64":
+                        continue
+                    _quant(f"nan0d-{lname}-{dtype}-{odt}", data, name=fn, q=qv * (100 if fn == "nanpercentile" else 1),
+                           qkind="f", method=m, out=_qp_out(odt, ()), section=QPREC)
+                _quant(f"nan0d-{lname}-{dtype}-readonly", data, name=fn, q=qv * (100 if fn == "nanpercentile" else 1),
+                       qkind="f", method=m, out=_qp_out("int8", (), writeable=False), section=QPREC)
+
+    # --- empty data.
+    empty_shapes = [("e1", (0,), None), ("e0x3-0", (0, 3), 0), ("e0x3-1", (0, 3), 1), ("e3x0-0", (3, 0), 0),
+                    ("e3x0-1", (3, 0), 1), ("e0x0-0", (0, 0), 0), ("e0x0-1", (0, 0), 1)]
+    empty_methods = ["linear", "lower", "higher", "nearest", "inverted_cdf", "closest_observation", "weibull",
+                     "midpoint", "averaged_inverted_cdf", "hazen"]
+    for dtype in ("int32", "bool", "float64", "float16", "uint8", "int64"):
+        for sname, shape, ax in empty_shapes:
+            data = plain(np.zeros(shape, dtype=dtype))
+            for qname, q, qk in (("q[]", [], "fl"), ("q.5", [0.5], "fl"), ("q0", [0.0], "fl"), ("qs", 0.5, "f"),
+                                 ("q.5,0", [0.5, 0.0], "fl"), ("q16", None, "arr")):
+                for fn in ("quantile", "percentile"):
+                    if qk == "arr":
+                        qq = _qp_q(fn, [0.5, 1.0], "float16")
+                    elif fn == "percentile":
+                        qq = q * 100 if qk == "f" else [v * 100 for v in q]
+                    else:
+                        qq = q
+                    for m in empty_methods:
+                        _quant(f"empty-{dtype}-{sname}-{qname}", data, name=fn, q=qq, qkind=qk, axis=ax, method=m,
+                               section=QPREC)
+        data = plain(np.zeros((0,), dtype=dtype))
+        for m in ("linear", "lower"):
+            for oname, oshape, odt in (("i8", (1,), "int64"), ("f4", (1,), "float32"), ("i1", (1,), "int8"),
+                                       ("bad", (2,), dtype), ("ro", (1,), dtype)):
+                _quant(f"empty-out-{dtype}-{oname}", data, name="quantile", q=[0.5], qkind="fl", method=m,
+                       out=_qp_out(odt, oshape, writeable=oname != "ro"), section=QPREC)
+            for odt in ("int64", "float32", dtype):
+                _quant(f"empty-out-q[]-{dtype}-{odt}", data, name="quantile", q=[], qkind="fl", method=m,
+                       out=_qp_out(odt, (0,)), section=QPREC)
+
+    # --- text with a float16 q.
+    for spec in ("<U5", "|S5"):
+        strs = ["%05d" % i for i in range(2052)]
+        arr = np.array([s.encode() for s in strs], dtype=spec) if spec == "|S5" else np.array(strs, dtype=spec)
+        data = plain(arr)
+        for m in QP_METHODS:
+            _quant(f"text2052-{spec}", data, name="quantile", q=_qp_q("quantile", [1.0], "float16"), qkind="arr",
+                   method=m, section=QPREC)
+        for m in ("lower", "inverted_cdf"):
+            _quant(f"text2052-{spec}-pct", data, name="percentile", q=_qp_q("percentile", [0.999], "float16"),
+                   qkind="arr", method=m, section=QPREC)
+    strs = ["%05d" % i for i in range(3001)]
+    data = plain(np.array(strs, dtype="<U5"))
+    for m in ("lower", "higher", "nearest", "inverted_cdf", "closest_observation"):
+        for qdt in ("float16", "float32", "float64"):
+            _quant(f"text3001-{qdt}", data, name="quantile", q=_qp_q("quantile", [0.3, 0.7, 0.999], qdt), qkind="arr",
+                   method=m, section=QPREC)
+    _quant("text-ovf", _qp_broadcast("<U3", "abc", (70000,)), name="quantile", q=_qp_q("quantile", [0.0], "float16"),
+           qkind="arr", method="lower", section=QPREC)
+    _quant("text-ovf-linear", _qp_broadcast("<U3", "abc", (70000,)), name="quantile",
+           q=_qp_q("quantile", [0.5, 0.0], "float16"), qkind="arr", method="linear", section=QPREC)
+    # StringDType: the take path in float16, and the NaN-like NA lerp in q's dtype.
+    tspec = QF_TSPEC["Tnan"]
+    tnan = t_plain(np.array([np.nan, np.nan, np.nan], dtype=tspec.build()))
+    tstr = t_plain(np.array(["a", "b", "c", "d"], dtype=QF_TSPEC["T"].build()))
+    for qdt in ("float16", "float32", "float64"):
+        for m in ("linear", "hazen", "midpoint"):
+            _quant(f"T-nan-{qdt}", tnan, name="quantile", q=plain(np.array(0.3, dtype=qdt)), qkind="arr", method=m,
+                   section=QPREC)
+        for m in ("lower", "inverted_cdf", "nearest"):
+            _quant(f"T-str-{qdt}", tstr, name="quantile", q=plain(np.array([0.3, 0.9], dtype=qdt)), qkind="arr",
+                   method=m, section=QPREC)
+        _quant(f"T-str-lerp-{qdt}", tstr, name="quantile", q=plain(np.array(0.5, dtype=qdt)), qkind="arr",
+               method="linear", section=QPREC)
+        _quant(f"T-nan-out-{qdt}", tnan, name="quantile", q=plain(np.array(0.3, dtype=qdt)), qkind="arr",
+               method="linear", out=_qp_out("float64", ()), section=QPREC)
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
-              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily]
+              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec]
 
 
 def main():

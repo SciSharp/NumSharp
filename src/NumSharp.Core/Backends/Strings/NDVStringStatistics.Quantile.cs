@@ -356,6 +356,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The out array, or null.</param>
         /// <param name="method">The method name (checked per line, only where a line has a non-NaN element).</param>
         /// <param name="keepdims">Keep the reduced axes with length one.</param>
+        /// <param name="qType">q's precision (<see cref="QuantileIndexes.PrecisionOf"/>): each line's virtual indexes are
+        ///     computed in it.</param>
         /// <returns>The quantiles: a read-only 0-d <c>StringDType</c> array for NumPy's Python object (a str or the NA
         ///     object), a <c>StringDType</c> array for an array q, the <c>&lt;U</c> / float64 array
         ///     <c>np.apply_along_axis</c> builds along an axis, or <paramref name="out"/> itself.</returns>
@@ -367,7 +369,7 @@ namespace NumSharp.Backends.Strings
         /// <remarks>Scoped: the merged copy, the masks, the compacted lines and the row results are reclaimed.</remarks>
         [NDScoped]
         internal static NDArray NanQuantile(string op, NDArray a, double[] q, long[] qShape, bool qIsInteger, int[] axes,
-            NDArray @out, string method, bool keepdims)
+            NDArray @out, string method, bool keepdims, NPTypeCode qType = NPTypeCode.Double)
         {
             int nd = a.ndim;
             if (a.size == 0)
@@ -381,7 +383,7 @@ namespace NumSharp.Backends.Strings
             NDArray r;
             if (axis is null || work.ndim == 1)
             {
-                r = NanQuantile1D(quantileOp, work.ndim == 1 ? work : np.ravel(work), q, qShape, qIsInteger, method);
+                r = NanQuantile1D(quantileOp, work.ndim == 1 ? work : np.ravel(work), q, qShape, qIsInteger, method, qType);
                 // `if out is not None: out[...] = result`.
                 if (target is not null)
                     PyAssign(target, r);
@@ -389,7 +391,7 @@ namespace NumSharp.Backends.Strings
             else
             {
                 int ax = axis.Value;
-                r = np.apply_along_axis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method)), ax, work);
+                r = np.apply_along_axis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method, qType)), ax, work);
                 // `from_ax = [axis + i for i in range(q.ndim)]; np.moveaxis(result, from_ax, list(range(q.ndim)))`.
                 if (qShape.Length != 0)
                 {
@@ -421,10 +423,12 @@ namespace NumSharp.Backends.Strings
         /// <param name="qShape">q's shape.</param>
         /// <param name="qIsInteger">True for an integer or bool q.</param>
         /// <param name="method">The method name.</param>
+        /// <param name="qType">q's precision.</param>
         /// <returns>A read-only 0-d <c>StringDType</c> array (NumPy's Python object), a <c>StringDType</c> array, or the
         ///     interpolation's <c>np.float64</c>.</returns>
         /// <exception cref="Exception">The errors of <see cref="QuantileText.Compute"/>.</exception>
-        private static NDArray NanQuantile1D(string op, NDArray line, double[] q, long[] qShape, bool qIsInteger, string method)
+        private static NDArray NanQuantile1D(string op, NDArray line, double[] q, long[] qShape, bool qIsInteger, string method,
+            NPTypeCode qType)
         {
             using var nan = np.isnan(line);
             long nans = np.count_nonzero(nan);
@@ -442,7 +446,7 @@ namespace NumSharp.Backends.Strings
             // NumPy's _remove_nan_1d order, not a mask selection: the partition that picks the element sorts what is left,
             // and texts equal under NpyString_cmp (the same bytes up to a shared NUL) keep the order they arrive in.
             using var kept = nans == 0 ? null : RemoveNaN1D(line, nan, nans);
-            return QuantileText.Compute(op, kept ?? line, q, qShape, qIsInteger, null, null, method, false);
+            return QuantileText.Compute(op, kept ?? line, q, qShape, qIsInteger, null, null, method, false, qType: qType);
         }
 
         /// <summary>
@@ -495,15 +499,18 @@ namespace NumSharp.Backends.Strings
         /// <param name="keepdims">Keep the reduced axes.</param>
         /// <param name="nd">The input's rank.</param>
         /// <param name="reduced">The normalized reduced axes, or null for every axis.</param>
-        /// <returns>The interpolation of two numeric NA objects: <c>np.float64</c> (a read-only 0-d float64; complex128 for a
-        ///     complex NA object), its keepdims view, or <paramref name="out"/> itself.</returns>
+        /// <param name="qType">q's precision (<see cref="QuantileIndexes.PrecisionOf"/>): a float16 / float32 q array computes
+        ///     the neighbours, the weight and the lerp in its own dtype, and the result has that dtype.</param>
+        /// <returns>The interpolation of two numeric NA objects: <c>np.float64</c> (a read-only 0-d float64, or q's float16 /
+        ///     float32 for such a q array; complex128 for a complex NA object), its keepdims view, or <paramref name="out"/>
+        ///     itself.</returns>
         /// <exception cref="ValueError">A None-like NA in a sorted line of two or more elements.</exception>
         /// <exception cref="TypeError">The subtraction: Python's <c>unsupported operand type(s) for -: 'str' and 'str'</c> (the
         ///     types of the next and the previous neighbour), or <c>subtract</c>'s no-loop text for an array result; the out's
         ///     casts (<c>Cannot cast ufunc 'add' output from dtype('float64') to dtype('int64') with casting rule
         ///     'same_kind'</c>; a text out passes the add and meets <c>subtract</c>'s refusal of its class).</exception>
         internal static NDArray QuantileInterpolate(NDArray arr, double[] q, long[] qShape, QuantileMethod method,
-            NDArray target, NDArray @out, bool keepdims, int nd, int[] reduced)
+            NDArray target, NDArray @out, bool keepdims, int nd, int[] reduced, NPTypeCode qType = NPTypeCode.Double)
         {
             long n = arr.Shape.dimensions[0];
             // `arr.partition(np.unique(np.concatenate(([0, -1], previous_indexes.ravel(), next_indexes.ravel()))), axis=0)`:
@@ -514,39 +521,35 @@ namespace NumSharp.Backends.Strings
             // scalar (a scalar q over a 1-D line): `b - a` is then np.subtract, which has no StringDType loop.
             if (qShape.Length != 0 || arr.ndim != 1)
                 throw NDStringUfuncs.NoLoop("subtract", arr.dtype, arr.dtype);
-            double virtualIndex = QuantileText.VirtualIndex(method, n, q[0]);
-            // _get_indexes: floor / +1, both -1 at or past the last index, both 0 before the first.
-            long previous = (long)Math.Floor(virtualIndex);
-            long next = previous + 1;
-            if (virtualIndex >= n - 1)
-                previous = next = -1;
-            if (virtualIndex < 0)
-                previous = next = 0;
-            double gamma = Gamma(method, virtualIndex, previous);
+            // _get_indexes (floor / +1, both -1 at or past the last index, both 0 before the first) and _get_gamma (the
+            // method's fix_gamma), in q's precision (QuantileIndexes); the partition already refused an index out of range.
+            long[] plan = QuantileText.Plan(method, n, q, qType);
+            long previous = plan[0], next = plan[1];
+            NeighbourWeight(method, n, q[0], qType, out double gamma, out double oneMinusGamma);
             object a = line.Storage.GetAtIndex(previous < 0 ? previous + n : previous);
             object b = line.Storage.GetAtIndex(next < 0 ? next + n : next);
-            return PyLerp(a, b, gamma, target, @out, keepdims, nd, reduced);
+            return PyLerp(a, b, gamma, oneMinusGamma, qType, target, @out, keepdims, nd, reduced);
         }
 
         /// <summary>
-        ///     NumPy's <c>_get_gamma</c>: <c>virtual_indexes - previous_indexes</c> (the FIXED previous index), then the
-        ///     method's <c>fix_gamma</c> — averaged_inverted_cdf's 0.5 where gamma is 0 (else 1.0), midpoint's 0 at an
-        ///     integral virtual index (else 0.5), the others unchanged.
+        ///     NumPy's <c>_get_gamma</c> of one quantile in q's precision: the weight t (the method's fix_gamma applied) and
+        ///     <c>_lerp</c>'s <c>1 - t</c>, both values of q's dtype (see <see cref="QuantileIndexes.Neighbours{TQ}"/>).
         /// </summary>
         /// <param name="method">The interpolating method.</param>
-        /// <param name="virtualIndex">The virtual index.</param>
-        /// <param name="previous">The previous index after the bound fixes (-1 past the end, 0 before the start).</param>
-        /// <returns>The interpolation weight.</returns>
-        private static double Gamma(QuantileMethod method, double virtualIndex, long previous)
+        /// <param name="n">The line's length.</param>
+        /// <param name="q">The quantile.</param>
+        /// <param name="qType">q's precision.</param>
+        /// <param name="t">The weight.</param>
+        /// <param name="oneMinusT"><c>1 - t</c> in q's dtype.</param>
+        private static unsafe void NeighbourWeight(QuantileMethod method, long n, double q, NPTypeCode qType, out double t,
+            out double oneMinusT)
         {
-            double gamma = virtualIndex - previous;
-            return method switch
-            {
-                QuantileMethod.AveragedInvertedCdf => gamma == 0 ? 0.5 : 1.0,
-                // Python's float % is floored: `index % 1 == 0` holds exactly at the integers (negative ones included).
-                QuantileMethod.Midpoint => virtualIndex - Math.Floor(virtualIndex) == 0 ? 0.0 : 0.5,
-                _ => gamma,
-            };
+            long* raw = stackalloc long[2];
+            double* weight = stackalloc double[2];
+            // StringDType is not an inexact dtype (a NaN virtual index is not mapped to the last element).
+            Kernels.DirectILKernelGenerator.QuantilePlan(qType, method, n, &q, 1, false, raw, weight);
+            t = weight[0];
+            oneMinusT = weight[1];
         }
 
         /// <summary>
@@ -557,7 +560,10 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="a">The previous neighbour (a <see cref="string"/>, null, or the NA object).</param>
         /// <param name="b">The next neighbour.</param>
-        /// <param name="t">The weight (gamma).</param>
+        /// <param name="t">The weight (gamma), a value of q's precision.</param>
+        /// <param name="oneMinusT"><c>1 - t</c> in q's precision.</param>
+        /// <param name="precision">q's precision: under a float16 / float32 q array t is an array of that dtype and the two
+        ///     Python numbers are weak, so every operation rounds to it and the result has that dtype; double otherwise.</param>
         /// <param name="target">The out (keepdims' view of it), or null.</param>
         /// <param name="out">The caller's out, or null.</param>
         /// <param name="keepdims">Keep the reduced axes.</param>
@@ -565,7 +571,10 @@ namespace NumSharp.Backends.Strings
         /// <param name="reduced">The normalized reduced axes, or null.</param>
         /// <returns>The result (see <see cref="QuantileInterpolate"/>).</returns>
         /// <exception cref="TypeError">See <see cref="QuantileInterpolate"/>.</exception>
-        private static NDArray PyLerp(object a, object b, double t, NDArray target, NDArray @out, bool keepdims, int nd, int[] reduced)
+        /// <remarks>A complex NA object under a float16 / float32 q is complex64 in NumPy (a Python complex meeting the q's
+        ///     dtype); NumSharp has one complex dtype, so it stays complex128.</remarks>
+        private static NDArray PyLerp(object a, object b, double t, double oneMinusT, NPTypeCode precision, NDArray target,
+            NDArray @out, bool keepdims, int nd, int[] reduced)
         {
             // `b - a`: Python's binary subtraction, which names the left operand (b) first.
             if (!TryPyNumber(a, out double ra, out Complex ca, out bool aComplex)
@@ -583,19 +592,22 @@ namespace NumSharp.Backends.Strings
             }
             else
             {
-                // The same operation order as NumPy's float64 loops: a + diff * t, replaced where t >= 0.5.
+                // The same operation order as NumPy's loops: a + diff * t, replaced where t >= 0.5 by b - diff * (1 - t). The
+                // Python subtraction `b - a` is a double; each later operation meets t (q's dtype) and rounds to it.
                 double diff = rb - ra;
-                real = t >= 0.5 ? rb - diff * (1 - t) : ra + diff * t;
+                double tm(double x) => QuantileIndexes.Round(precision, x);
+                real = t >= 0.5 ? tm(tm(rb) - tm(tm(diff) * oneMinusT)) : tm(tm(ra) + tm(tm(diff) * t));
             }
 
+            NPTypeCode realType = precision is NPTypeCode.Half or NPTypeCode.Single ? precision : NPTypeCode.Double;
             if (target is null)
             {
-                var r = (complex ? NDArray.Scalar(value) : NDArray.Scalar(real)).MarkReductionScalar();
+                var r = (complex ? NDArray.Scalar(value) : RealScalar(real, realType)).MarkReductionScalar();
                 return keepdims ? KeepdimsResult(r, nd, reduced) : r;
             }
 
-            DType loop = complex ? np.complex128 : np.float64;
-            using var lerp = complex ? NDArray.Scalar(value) : NDArray.Scalar(real);
+            DType loop = complex ? np.complex128 : DType.From(realType);
+            using var lerp = complex ? NDArray.Scalar(value) : RealScalar(real, realType);
             if (target.typecode == NPTypeCode.String)
             {
                 // A text out: the add's output cast lets the value through (written as its str), and the subtract's dtype=
@@ -610,6 +622,19 @@ namespace NumSharp.Backends.Strings
                                     "with casting rule 'same_kind'");
             np.copyto(target, lerp, "unsafe");
             return @out;
+        }
+
+        /// <summary>The lerp's real result as a 0-d array of its dtype (float64, or q's float16 / float32).</summary>
+        /// <param name="real">The value (already rounded to <paramref name="realType"/>).</param>
+        /// <param name="realType">Double, Half or Single.</param>
+        /// <returns>A new 0-d array.</returns>
+        private static NDArray RealScalar(double real, NPTypeCode realType)
+        {
+            if (realType == NPTypeCode.Double)
+                return NDArray.Scalar(real);
+            // The value is exact in the narrower dtype, so the cast does not round it again.
+            using var wide = NDArray.Scalar(real);
+            return wide.astype(realType);
         }
 
         /// <summary>The NEP 50 class of a Python number (the abstract DType a weak Python scalar resolves through).</summary>
