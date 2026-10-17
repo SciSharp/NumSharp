@@ -40,11 +40,11 @@ the finalize errors of the index members, and the `np.*` functions that keep, wr
 object path (`join`, `split`, `rsplit`, `splitlines` and their chararray members, with C-D3's `NDListArray`), is done
 (phase 4). C4 is done (`partition` / `rpartition`, 2026-10-17, `ffa74606`), and C5's string methods land in batches, one
 family each, as their phase-2 functions compute: batch 1 (`rpartition`, `center`, `ljust`, `rjust`, `zfill`,
-`expandtabs`, with the module's re-exports of the last five) and batch 2 (the search family: `count`, `find`, `rfind`,
-`index`, `rindex`, `startswith`, `endswith`, with the module's re-exports and `np.@char.str_len`; `6d06fa3c`) are done. Open:
-the other string methods of C5 — `lstrip`, `rstrip`, `strip`, `replace`, the nine predicates and the five case maps
-compute in phase 2 already (P2.5, P2.6 milestones 1 and 2); `translate`, `encode`, `decode` and `%` wait for the rest of
-P2.6.
+`expandtabs`, with the module's re-exports of the last five), batch 2 (the search family: `count`, `find`, `rfind`,
+`index`, `rindex`, `startswith`, `endswith`, with the module's re-exports and `np.@char.str_len`; `6d06fa3c`) and batch 3
+(`strip`, `lstrip`, `rstrip`, `replace`, with the module's re-exports; `66b68e96`) are done. Open: the other string methods of
+C5 — the nine predicates and the five case maps compute in phase 2 already (P2.6 milestones 1 and 2); `translate`,
+`encode`, `decode` and `%` wait for the rest of P2.6.
 
 ---
 
@@ -431,7 +431,8 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
 - Each member lands with its function (C1–C4, or the phase-2 subphase). Size: medium (many small members).
 - In batches of one family each, with the module's re-exports of the same names: batch 1 (`rpartition`, `center`,
   `ljust`, `rjust`, `zfill`, `expandtabs`) is done (2026-10-17, `ffa74606`), batch 2 (`count`, `find`, `rfind`, `index`,
-  `rindex`, `startswith`, `endswith`, and the module's `str_len`) too (2026-10-17, `6d06fa3c`).
+  `rindex`, `startswith`, `endswith`, and the module's `str_len`) too (2026-10-17, `6d06fa3c`), and batch 3 (`strip`,
+  `lstrip`, `rstrip`, `replace`; 2026-10-17, `66b68e96`).
 
 ### C6 Completion
 
@@ -887,6 +888,48 @@ C-D1 decision and C3 for C-D3.
     runs before the background tier-1 compiler finishes the shared call path (`str_len` over `U` at 1K read 4.3 µs,
     2.55 µs warm).
   - **Open:** the strips and `replace` (batch 3), the predicates, the case maps.
+- **2026-10-17 — C5's third batch: the strips and `replace`** (`66b68e96`; the same scope, one family per batch).
+  - **Built.** `np.@char.strip` / `lstrip` / `rstrip` / `replace` (`APIs/np.char.transform.cs`: `np.strings`' functions)
+    and the chararray members of the four names (`Char/NDCharArray.Transform.cs`), NumPy's rule 2: the member returns the
+    function's result itself, the chararray view `chararray.__array_wrap__` makes (OWNDATA false), over the STORED text
+    (`np.char.array([' xa ']).rstrip('x')` keeps `' xa '`: its spaces end it). `replace`'s `old` / `new` without a dtype —
+    a C# string, a `byte[]` (Python bytes, `NDArray.WasPythonBytes`), a number, a chararray ELEMENT stand-in (`c[i]` is
+    `__getitem__`'s Python str / bytes, so `getattr(old, 'dtype', None)` is None) — is cast to the text's dtype.
+  - **Found and fixed: NumPy's trivial-loop copy over a chararray, on the whole P2.5 surface.** A `StringDType` argument
+    makes the function's loop StringDType, and NumPy's `check_for_trivial_loop` copies each input the loop casts — 0-d,
+    or 1-d with at most `np.getbufsize()` elements — with `PyArray_CastToType`, which keeps the class: a chararray copied
+    into `StringDType()` is refused by `__array_finalize__` (`Can only create a chararray from string data.`). The inputs
+    are checked in order and the first larger one stops every later copy, a non-text one too (a 2-d int32 `width` before
+    a chararray fill). Phase 3 had the rule for the operators and the comparison / logical ufuncs; batch 3 gives it a
+    third input mark (`NDCharArrayBoundary.WrappedUfunc`, `PlainUfunc` for a chararray only in `old` / `new` /
+    `fillchar` — NumPy's result stays plain there — and `InsideUfunc` for the pad members) and runs it in every P2.5
+    function with a second text input: the search family, the strips with a set, `replace`, the pads with a fill
+    (after the input casts, before the broadcast). Past the copy NumPy computes a PLAIN result: a StringDType array for
+    the strips and `replace`, which the rule-2 members' `NDCharArray` type cannot hold (`NotSupportedException` naming
+    `np.char.<name>`, the `+` operator's precedent, an excused refusal); a pad member converts it with
+    `np.char.asarray`, an `S` chararray of its ASCII text, as NumPy's does.
+  - **Found and fixed in `np.strings`.** The `chars` strips over `U` elements wider than 64 bytes searched the set once per
+    tested unit (1K `<U27` with a three-unit set: 1.20× NumPy). `NDTextElements.StripCharsWide` tests 32-byte chunks from
+    each end against every set unit at once (stripped runs are short: one chunk from each end usually decides), then one
+    constant-width zero fill and one copy: 2.32×. Whole-element masks measured 1.5× SLOWER for the whitespace strip (they
+    test every unit against 29 code points where the unit loops stop at the first kept one), which keeps its loops.
+  - **Gates.** Oracle section `strcharmeth` +2,306 cases (10,505 in all, 3,323 NumPy errors, with the boundary audit): the
+    members over both classes × 14 layouts with every set / old / new / count form, the functions over plain and chararray
+    operands, StringDType, Python values, broadcasting, wide `<U44` elements whose stripped runs cross the chunks, and the
+    copy rule (234 cases: 10 layouts, the chararray in every text position, an earlier input that refuses the trivial
+    loop, an `S` chararray). Excused: 20 rule-2 member results NumPy returns plain, and 18 strips of a 0-d text NumPy
+    returns as a NumPy scalar (VF01). Unit tests: `CharStringMethodsTests` (22), `StringMethodsLanesTests`
+    (`StripCharsWide` against the scalar body over every wide width and over fenced pages). 10 planted bugs: 9 killed by
+    both gates (two only after the gaps they found were closed: a bytes element stand-in in a unit test, wide elements in
+    the oracle); the tenth is equivalent.
+  - **Performance** (117 cells: the 4 functions over `U` / `S` / `StringDType` and the members over `U` / `S` at 1K / 100K
+    / 1M, whitespace and a set, `replace` growing, shrinking and with a count, reversed and F-ordered views): 106 cells
+    geomean 2.70×, min 1.56×. The 11 1M `U` strip cells are page-fault bound: the fresh 103 MiB `<U27` result costs both
+    libraries the same faults (a copy of the input: NumPy 27.9 ms, NumSharp 28.6 ms), and NumPy's whitespace strip is
+    1.43–1.51× its own copy, so even a free kernel stays near 1.5×; measured alone and alternating (min of 3) the
+    whitespace strips read 1.07–1.32×, the set strips 1.40–1.48×. The levers left are non-temporal stores through an L1
+    staging block and a pool that keeps blocks past its 64 MiB cap.
+  - **Open:** the predicates (batch 4), the case maps (batch 5).
 
 ---
 
@@ -899,7 +942,7 @@ C-D1 decision and C3 for C-D3.
 | C3 | `join`, `split`, `rsplit`, `splitlines` (phase 4, done) |
 | C4 | `multiply` (phase 1, done), `partition`, `rpartition` (done, `ffa74606`) |
 | P2.3 | `add` |
-| P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith` (done, `6d06fa3c`), `lstrip`, `rstrip`, `strip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
+| P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith` (done, `6d06fa3c`), `lstrip`, `rstrip`, `strip`, `replace` (done, `66b68e96`), `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
 | P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal`, `mod`, `encode`, `decode`, `translate` |
 
 The facade (C0) declares all 53; a row is complete when its computation lands.
@@ -909,7 +952,7 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 | Group | Members | NumPy's result | Lands with |
 |---|---|---|---|
 | String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 (`center`, `expandtabs`, `ljust`, `partition`, `rjust`, `rpartition`, `zfill`: done, `ffa74606`) |
-| String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 |
+| String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 (done, `66b68e96`) |
 | String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done) |
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 (`count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`: done, `6d06fa3c`) |
 | String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 (phase 4, done) |
