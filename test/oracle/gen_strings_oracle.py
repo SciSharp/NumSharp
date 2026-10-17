@@ -13243,13 +13243,182 @@ def gen_tprop():
                     fn_case(S, name, [op], [_Op(0)], f"{lab0}:len{w}:{'uni' if unicode else 'ascii'}")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# numpy.strings' case maps (strcase over S / U, tcase over StringDType), strings phase 2, P2.6 milestone 2, strict
+# ----------------------------------------------------------------------------------------------------------------------
+
+CASE_NAMES = ["upper", "lower", "swapcase", "capitalize", "title"]
+# The texts that separate the maps: ASCII words with apostrophes and digits (title's "any uncased character starts a
+# word"), leading non-letters (capitalize), the full mappings that grow ('ß' -> 'SS', ligatures, 'ŉ', 'ΐ', 'ᾳ', 'İ'), the
+# titlecase digraphs ('ǆ' / 'ǅ' / 'Ǆ', 'ǉ'), the final sigma's contexts (case-ignorable marks around it, a NUL after it),
+# cased characters that are not letters ('ʰ', 'ª', U+0345), mappings that change the UTF-8 size ('ı', 'ſ', 'ⱥ', 'ɐ'),
+# Cherokee (far deltas), astral letters, embedded / leading / trailing NULs and the empty string.
+CASE_U_POOL = ["", "a", "abc", "ABC", "Abc", "aBc", "hello world", "Hello World", "HELLO", "they're bill's",
+               "hello2world", "a1b2", "1abc", " lead", "trail ", "ß", "straße", "ﬃ", "ﬁx", "ŉ", "ǆ", "ǅ", "Ǆ",
+               "ǉubljana", "ΐ", "ᾳ", "ᾀ", "ᾈ", "İ", "ı", "ſ", "ⱥ", "ɐ", "ΑΣ", "ΌΣΟΣ", "aΣ", "aΣa", "aΣ́",
+               "aΣ́b", ".Σ", "ΣΣ", "aΣͅb", "ʰa", "ª", "é", "Éa", "ÀÉÎÕÜ", "àéîõü", "Ωω", "Жж", "a\x00b",
+               "\x00ab", "ab\x00", "\U00010400\U00010428", "\U0001D400", "\U0001F600a", "xͅy", "ǈungla Ǉ", "ﬀ",
+               "ﬓ", "ẞ", "ꭰ", "Ꭰ", "ㄱ", "٣a", "²a", "_x_", "-a-b", "aΣ\x00"]
+CASE_S_POOL = [b"", b"a", b"abc", b"ABC", b"Abc", b"aBc", b"hello world", b"Hello World", b"they're bill's",
+               b"hello2world", b"1abc", b" lead", b"\xe9t\xe9", b"\xc9A", b"a\x00b", b"\x00ab", b"ab\x00", b"\x80\xff",
+               b"@[`{", b"_x_", b"A B c", b"aZ09 zA"]
+CASE_SPECS = ["<U5", "<U12", "<U70", "|S5", "|S12", "|S70"]
+# The unit widths of the width sweep: one padded chunk (up to 32 bytes), whole chunks plus an overlapping last one, the
+# 64-unit lane cap and past it.
+CASE_WIDTHS = [1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 24, 31, 32, 33, 40, 63, 64, 65, 70, 96, 100, 129, 300]
+_CASE_ALPHABETS = {
+    "lower": "abcdefghijklmnopqrstuvwxyz",
+    "upper": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "mixed": "aBcDeF gH1!'.\x00",
+    "letters": "abcXYZqwERTyu",
+    "uni": "éÉßẞΩωЖжǅǆǄıſⱥɐ",
+    "grow": "ßﬃŉΐᾳİabc",
+    "sigma": "ΑΣαΣ́ͅ. ",
+    "astral": "\U00010400\U00010428a",
+}
+
+
+def _case_texts(rng, width, n, unicode):
+    """``n`` texts for a case-map sweep array: each drawn from one character class (some title-cased words), some cut
+    short, some with a trailing NUL; the S form keeps the ASCII classes.
+
+    :param rng: the random.Random.
+    :param width: the unit width.
+    :param n: the count.
+    :param unicode: whether the non-ASCII classes may appear.
+    :returns: the texts.
+    """
+    names = [k for k in _CASE_ALPHABETS if unicode or k in ("lower", "upper", "mixed", "letters")]
+    texts = []
+    for i in range(n):
+        length = rng.choice([width, width, width, rng.randint(0, width)])
+        if rng.random() < 0.25:
+            t = _prop_title_text(rng, length, unicode)
+        else:
+            t = _prop_text(rng, _CASE_ALPHABETS[rng.choice(names)], length)
+        if t and rng.random() < 0.1:
+            t = t[:-1] + "\x00"
+        texts.append(t)
+    return texts
+
+
+def gen_strcase():
+    """Section strcase: numpy.strings' case maps over S / U, strict — upper, lower, swapcase, capitalize and title
+    (``_vec_string``: a fresh C-ordered array of the operand's dtype, each element the bytes / str method's result cut to
+    the width) over every layout kind and three widths of both classes; a width sweep over every chunk class and the
+    stream past 64 units, with all-ASCII arrays and arrays whose first non-ASCII element comes first, midway or last (the
+    call's escalation); the full mappings cut at the width; the final sigma; U units past U+10FFFF (CPython's
+    SystemError); lone surrogates; Python strs / bytes as the operand; non-text operands."""
+    import random
+    S = "strcase"
+    # A. Every map x every layout x three widths of both classes.
+    for spec in CASE_SPECS:
+        pool = CASE_U_POOL if spec[1] == "U" else CASE_S_POOL
+        for layout in LAYOUTS:
+            op = fn_operand(spec, layout, seed=3, pool=pool)
+            for name in CASE_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"{spec}:{layout}")
+    # B. The pools whole, per map and width (every text in one call; the narrow widths cut the mappings that grow).
+    for spec in CASE_SPECS + ["<U1", "<U2", "<U3", "|S1", "|S2"]:
+        pool = CASE_U_POOL if spec[1] == "U" else CASE_S_POOL
+        op = plain(np.array(pool, dtype=spec))
+        for name in CASE_NAMES:
+            fn_case(S, name, [op], [_Op(0)], f"{spec}:pool")
+    # C. The width sweep: random texts per width, U (every class) and S (the ASCII classes), plus U arrays whose first
+    #    non-ASCII element is first, midway or last.
+    rng = random.Random(2616)
+    for w in CASE_WIDTHS:
+        for rep in range(2):
+            utexts = _case_texts(rng, w, 24, unicode=True)
+            atexts = _case_texts(rng, w, 24, unicode=False)
+            ops = [(f"<U{w}", plain(np.array(utexts, dtype=f"<U{w}")), "uni"),
+                   (f"<U{w}", plain(np.array(atexts, dtype=f"<U{w}")), "ascii"),
+                   (f"|S{w}", plain(np.array(_prop_bytes(atexts), dtype=f"|S{w}")), "ascii"),
+                   (f"|S{w}", plain(np.array(_prop_bytes(utexts), dtype=f"|S{w}")), "bytes")]
+            for spec, op, tag in ops:
+                for name in CASE_NAMES:
+                    fn_case(S, name, [op], [_Op(0)], f"{spec}:sweep{rep}:{tag}")
+        for where_first in (0, 11, 23):
+            texts = _case_texts(rng, w, 24, unicode=False)
+            texts[where_first] = "é" + texts[where_first][1:]
+            op = plain(np.array(texts, dtype=f"<U{w}"))
+            for name in CASE_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"<U{w}:escalate@{where_first}")
+    # D. Units past U+10FFFF (a one-unit text raises at the scalar, a longer one at the result; any element does), and
+    #    lone surrogates (code points with no property, kept).
+    for units, label in [([0x61, 0x62, 0x110000, 0, 0x63, 0], "one-unit"),
+                         ([0x61, 0x62, 0x63, 0x110000, 0x41, 0x42], "multi-unit"),
+                         ([0x61, 0x110000, 0x63, 0x64, 0x65, 0x66], "first"),
+                         ([0x61, 0x62, 0x63, 0x64, 0x65, 0xFFFFFFFF], "last"),
+                         ([0xD800, 0x61, 0xDC00, 0x41, 0xDFFF, 0x62], "surrogates"),
+                         ([0x10FFFF, 0x61, 0x10FFFF, 0x41, 0, 0], "max")]:
+        raw = np.frombuffer(np.array(units, dtype="<u4").tobytes(), dtype="<U2")
+        for name in CASE_NAMES:
+            fn_case(S, name, [plain(raw.copy())], [_Op(0)], f"U:{label}")
+    # E. Python strs / bytes as the operand, 0-d and empty arrays, non-text operands.
+    for name in CASE_NAMES:
+        fn_case(S, name, [], ["hello World"], "pystr")
+        fn_case(S, name, [], [b"hello World"], "pybytes")
+        fn_case(S, name, [], ["straße ǅ"], "pystr:uni")
+        for arr in [np.array([1, 2]), np.array([1.5]), np.array([True]), np.zeros((2, 0), dtype="i4")]:
+            fn_case(S, name, [plain(arr)], [_Op(0)], f"num:{arr.dtype}")
+
+
+# StringDType case-map texts: short (in the cell) and long (arena / heap), ASCII and not, mappings that change the UTF-8
+# size both ways, the final sigma, NULs (characters of a StringDType text), the empty string.
+CASE_T_POOL = ["", "a", "abc", "ABC", "Abc", "hello world", "Hello World From A Long Title Text", "they're bill's",
+               "ß", "straße", "ﬃx" * 5, "ı" * 8, "ſtraße", "ⱥ" * 10, "ɐ" * 10, "ΌΣΟΣ ΌΣΟΣ", "aΣ", "aΣ\x00", "a\x00",
+               "\x00ab", "ǆemal ǈungla", "İstanbul", "x" * 15, "x" * 16, "é" * 20, "\U00010400\U00010428" * 3,
+               "日本語のテキスト", "Ünïcödé Wörds Here", "a\x00b", "ᾳ" * 6]
+
+
+def gen_tcase():
+    """Section tcase: numpy.strings' case maps over NEP 55 StringDType, strict — every map x every NA kind (a str method
+    refuses an NA object that is not a str; a string NA is computed as its text, and any result equal to it is stored as
+    the NA) x the layout kinds over short / long / ASCII / non-ASCII texts, results that change the UTF-8 size, the NA
+    equality quirk with sentinels equal to results ('ABC', ''), coerce off, and a length sweep over the short-cell
+    vector, the arena chunks and the decoded path."""
+    import random
+    S = "tcase"
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        for layout in T_COMPUTE_LAYOUTS:
+            op = t_operand(spec, layout, seed=2, pool=CASE_T_POOL, na_every=5)
+            for name in CASE_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"{lab0}:{layout}")
+        # The whole pool in one call, without NAs and with an NA every 3rd element.
+        for na_every in (0, 3):
+            base = np.array(t_values(spec, len(CASE_T_POOL), 0, CASE_T_POOL, na_every), dtype=spec.build())
+            for name in CASE_NAMES:
+                fn_case(S, name, [(base, base)], [_Op(0)], f"{lab0}:pool:na{na_every}")
+    # Sentinels equal to some results: setitem stores a result equal to the NA string as the NA.
+    for sentinel, values in [("ABC", ["abc", "ABC", "Abc", "x", "aBC", "ABCD"]),
+                             ("", ["", "a", "", "B"]),
+                             ("Abc", ["abc", "ABC", "aBC", "abC"]),
+                             ("SS", ["ß", "ss", "SS", "ſſ"])]:
+        spec = TSpec(sentinel)
+        base = np.array(values, dtype=spec.build())
+        for name in CASE_NAMES:
+            fn_case(S, name, [(base, base)], [_Op(0)], f"TS[{sentinel}]:eq")
+    # The length sweep: random texts of every length class, ASCII and not.
+    rng = random.Random(2617)
+    for spec in [TD, TDS]:
+        lab0 = _t_label(spec)
+        for w in [0, 1, 3, 7, 8, 14, 15, 16, 17, 31, 32, 33, 40, 63, 64, 65, 100, 300]:
+            for unicode in (False, True):
+                texts = _case_texts(rng, w, 24, unicode)
+                base = np.array(texts, dtype=spec.build())
+                for name in CASE_NAMES:
+                    fn_case(S, name, [(base, base)], [_Op(0)], f"{lab0}:len{w}:{'uni' if unicode else 'ascii'}")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
-              gen_tfn, gen_strprop, gen_tprop]
+              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase]
 
 
 def main():

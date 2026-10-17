@@ -593,6 +593,24 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypePredicates() => Run("tprop");
 
         /// <summary>
+        ///     Section strcase (strings phase 2, P2.6): numpy.strings' case maps over S / U text — upper, lower, swapcase,
+        ///     capitalize and title (NumPy's _vec_string: a fresh C-ordered array of the operand's dtype, each element the
+        ///     bytes / str method's result cut to the width) over every layout kind and three widths of both classes, a width
+        ///     sweep over every chunk class and the stream past 64 units with the call's first non-ASCII element first,
+        ///     midway or last, the full mappings that grow cut at narrow widths, the final sigma, U units past U+10FFFF
+        ///     (CPython's SystemError), lone surrogates, Python strs / bytes and non-text operands. Strict.
+        /// </summary>
+        [TestMethod] public void StringCaseMaps() => Run("strcase");
+
+        /// <summary>
+        ///     Section tcase (strings phase 2, P2.6): the case maps over NEP 55 StringDType — every NA kind (an NA object
+        ///     that is not a str is the str method's TypeError; a string NA is computed as its text, and any result equal to
+        ///     it is stored as the NA), the layout kinds, results that change the UTF-8 size, sentinels equal to results, and
+        ///     a length sweep over the short-cell vector, the arena chunks and the decoded path. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCaseMaps() => Run("tcase");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -711,7 +729,7 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strsets", "tcomp", "tarith",
-                "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop",
+                "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

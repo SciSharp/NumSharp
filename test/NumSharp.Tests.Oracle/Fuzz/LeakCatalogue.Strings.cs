@@ -7,8 +7,9 @@ namespace NumSharp.Tests.Fuzz
     ///     Catalogue entries for the <c>numpy.strings</c> functions of strings phase 2, P2.5 (<c>str_len</c>, the find family,
     ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
     ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c> and the six comparison names) and P2.6 (the predicates
-    ///     <c>isalpha</c> … <c>isnumeric</c>). The string oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> /
-    ///     <c>tprop</c> replay them through its own harness, outside the corpus sweep, so each is measured here.
+    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>). The string oracle's sections
+    ///     <c>strfn</c> / <c>tfn</c> / <c>strprop</c> / <c>tprop</c> / <c>strcase</c> / <c>tcase</c> replay them through its
+    ///     own harness, outside the corpus sweep, so each is measured here.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -482,6 +483,69 @@ namespace NumSharp.Tests.Fuzz
                       {
                       }
                       return predicate(u, null, null, null);
+                  });
+            }
+            AddStringsCaseMaps(l);
+        }
+
+        /// <summary>
+        ///     The P2.6 case maps <c>upper</c> / <c>lower</c> / <c>swapcase</c> / <c>capitalize</c> / <c>title</c>: one entry per
+        ///     function over every loop and route that holds a temporary — <c>S</c>, <c>U</c> on ASCII and non-ASCII text (the
+        ///     call's escalation and the scalar fallback of a mapping that grows), <c>U</c>'s SystemError for a unit past
+        ///     U+10FFFF (the fresh result the error abandons), <c>StringDType</c> short / arena texts under a string NA object
+        ///     (the scratch buffer, the arena reservation, an NA result) and the TypeError of a None NA object, a chararray
+        ///     operand (the plain view of the boundary) and a non-text operand's TypeError.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        private static void AddStringsCaseMaps(List<LeakCase> l)
+        {
+            foreach (var (name, map) in new (string, Func<NDArray, NDArray>)[]
+                     {
+                         ("upper", np.strings.upper),
+                         ("lower", np.strings.lower),
+                         ("swapcase", np.strings.swapcase),
+                         ("capitalize", np.strings.capitalize),
+                         ("title", np.strings.title),
+                     })
+            {
+                E(l, "np.strings." + name,
+                  "S, U ASCII / non-ASCII / growing, U past U+10FFFF's SystemError, T short and arena under a string NA, None's TypeError, chararray, int's TypeError",
+                  f =>
+                  {
+                      using var s = np.array(new object[] { new byte[] { 97, 66 }, new byte[] { 49, 120 } });
+                      using var u = np.array(new[] { "aBc dE", "ß éΣ" });
+                      using var big = np.zeros(new Shape(2), np.dtype("U2"));
+                      using (var units = big.view(np.uint32))
+                          units.SetUInt32(0x110000u, 1L);
+                      using var t = np.array(new object[] { "abc", null, "héllo wörld and a text past the cell" }, np.dtypes.StringDType("ABC"));
+                      using var none = np.array(new object[] { "ab", null }, np.dtypes.StringDType(null));
+                      using var c = np.@char.array(new[] { "ab", "c" });
+                      using var ints = np.array(new[] { 1, 2 });
+                      using var bytes = map(s);
+                      using var vstring = map(t);
+                      using var chars = map(c);
+                      try
+                      {
+                          map(big);
+                      }
+                      catch (SystemError)
+                      {
+                      }
+                      try
+                      {
+                          map(none);
+                      }
+                      catch (TypeError)
+                      {
+                      }
+                      try
+                      {
+                          map(ints);
+                      }
+                      catch (TypeError)
+                      {
+                      }
+                      return map(u);
                   });
             }
         }

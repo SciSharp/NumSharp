@@ -7,10 +7,11 @@ namespace NumSharp.Tests.Strings
 {
     /// <summary>
     ///     The string oracle's op for sections <c>strfn</c> / <c>tfn</c> (<c>gen_strfn</c> / <c>gen_tfn</c>, strings phase 2,
-    ///     P2.5) and <c>strprop</c> / <c>tprop</c> (P2.6): one <c>numpy.strings</c> function per case — <c>str_len</c>, the
-    ///     find family, <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>,
-    ///     <c>replace</c>, <c>partition</c> / <c>rpartition</c>, <c>slice</c>, the comparison names and the predicates
-    ///     <c>isalpha</c> … <c>isnumeric</c> — called with the generator's positional arguments.
+    ///     P2.5), <c>strprop</c> / <c>tprop</c> and <c>strcase</c> / <c>tcase</c> (P2.6): one <c>numpy.strings</c> function per
+    ///     case — <c>str_len</c>, the find family, <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>,
+    ///     <c>expandtabs</c>, <c>replace</c>, <c>partition</c> / <c>rpartition</c>, <c>slice</c>, the comparison names, the
+    ///     predicates <c>isalpha</c> … <c>isnumeric</c> and the case maps <c>upper</c> / <c>lower</c> / <c>swapcase</c> /
+    ///     <c>capitalize</c> / <c>title</c> — called with the generator's positional arguments.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -83,6 +84,11 @@ namespace NumSharp.Tests.Strings
                 case "istitle": return np.strings.istitle(A(0), kwOut, kwWhere, kwDtype);
                 case "isdecimal": return np.strings.isdecimal(A(0), kwOut, kwWhere, kwDtype);
                 case "isnumeric": return np.strings.isnumeric(A(0), kwOut, kwWhere, kwDtype);
+                case "upper": return np.strings.upper(A(0));
+                case "lower": return np.strings.lower(A(0));
+                case "swapcase": return np.strings.swapcase(A(0));
+                case "capitalize": return np.strings.capitalize(A(0));
+                case "title": return np.strings.title(A(0));
                 case "find": return np.strings.find(A(0), A(1), A(2), A(3));
                 case "rfind": return np.strings.rfind(A(0), A(1), A(2), A(3));
                 case "index": return np.strings.index(A(0), A(1), A(2), A(3));

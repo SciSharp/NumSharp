@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Runtime.InteropServices;
 using NumSharp.Backends.Strings;
 using NumSharp.Backends.Unmanaged.Pooling;
 using NumSharp.Utilities;
@@ -85,7 +86,21 @@ namespace NumSharp.Backends.Unmanaged
                 throw new ArgumentException($"{descr.ToString(true)} is not a StringDType descriptor.", nameof(descr));
             long bytes = count * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             var allocator = new VStringAllocator();
-            IntPtr ptr = SizeBucketedBufferPool.TakeZeroed(bytes);
+            IntPtr ptr;
+            if (bytes > 0 && np.PrefersWriteOnce(bytes))
+            {
+                // Up to the pool's window a recycled buffer cleared once beats calloc: calloc hands out fresh pages, whose
+                // first-touch faults cost about eight times the clear (a 100K-cell result: ~450 us of faults against ~55
+                // us), and every cell of a fresh StringDType array is touched anyway — written by the kernel that filled
+                // it, or read as '' by NumPy's NPY_NEEDS_INIT contract. Past the window the allocator's fresh demand-zero
+                // pages are the cheaper zero (np.tri's measured cliff).
+                ptr = SizeBucketedBufferPool.Take(bytes);
+                NativeMemory.Clear((void*)ptr, (nuint)bytes);
+            }
+            else
+            {
+                ptr = SizeBucketedBufferPool.TakeZeroed(bytes);
+            }
             // The block OWNS the allocator: its release (the last view's Release, or the block's finalizer) runs NumPy's
             // clear loop over every cell of the WHOLE buffer, frees the arena, and only then returns the cells to the pool —
             // so no heap string outlives the buffer and no cell outlives its allocator.

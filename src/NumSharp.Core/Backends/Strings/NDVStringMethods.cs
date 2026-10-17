@@ -168,6 +168,10 @@ namespace NumSharp.Backends.Strings
         /// <summary><c>ValueError: Cannot use the {ufunc} function with a null that is not a nan-like value</c> (the
         ///     predicates isalpha ... isnumeric).</summary>
         PredicateNull,
+
+        /// <summary><c>TypeError: descriptor '{method}' for 'str' objects doesn't apply to a '{type}' object</c>: a case map's
+        ///     <c>str</c> method given an NA object that is not a str (<c>_vec_string</c> calls it with the NA object).</summary>
+        CaseMapNull,
     }
 
     /// <summary>
@@ -754,7 +758,7 @@ namespace NumSharp.Backends.Strings
                     SizeBucketedBufferPool.Return((IntPtr)aux.ScratchBuffer, aux.ScratchCapacity);
             }
             if (aux.Status != 0)
-                throw Raise((VStringMethodError)aux.Status, ufunc);
+                throw Raise((VStringMethodError)aux.Status, ufunc, ruleDescr);
         }
 
         /// <summary>Adds an allocator to the lock list once (two operands may share one).</summary>
@@ -770,10 +774,14 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>NumPy's exception for a recorded loop error.</summary>
         /// <param name="error">The error.</param>
-        /// <param name="ufunc">NumPy's ufunc name.</param>
+        /// <param name="ufunc">NumPy's ufunc name (a case map's Python method name).</param>
+        /// <param name="ruleDescr">The descriptor whose NA rule the loop read (a case map's error quotes its NA object's
+        ///     Python type), or null.</param>
         /// <returns>The exception (not thrown).</returns>
-        internal static Exception Raise(VStringMethodError error, string ufunc) => error switch
+        internal static Exception Raise(VStringMethodError error, string ufunc, DType ruleDescr = null) => error switch
         {
+            VStringMethodError.CaseMapNull => new TypeError(
+                $"descriptor '{ufunc}' for 'str' objects doesn't apply to a '{NDPyObject.TypeName(ruleDescr?.VString.na_object)}' object"),
             VStringMethodError.LengthOfNull => new ValueError("The length of a null string is undefined"),
             VStringMethodError.FindNull => new ValueError($"'{ufunc}' not supported for null values that are not strings."),
             VStringMethodError.TailNull => new ValueError($"'{ufunc}' not supported for null values that are not nan-like or strings."),

@@ -104,6 +104,45 @@ namespace NumSharp.Backends.Strings
             get => (uint*)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(s_bmp));
         }
 
+        /// <summary>
+        ///     The three mapping tables of the records side by side — <c>[upper | lower | title]</c>, <see cref="RecordCount"/>
+        ///     entries each — as one pinned array, so a lookup picks its mapping by the index alone (record, plus
+        ///     <see cref="CaseDeltaStride"/> for lower, twice that for title): a vector gather chooses swapcase's upper or lower
+        ///     mapping per lane in one gather instead of two, and the scalar case map chooses without a data-dependent branch.
+        ///     (title's vector form still gathers both of its mappings: choosing by the index would make its gather wait for the
+        ///     previous chunk's carry.)
+        /// </summary>
+        /// <remarks>For a record without <see cref="ExtendedCaseMask"/> an entry is the delta to add to the code point; WITH
+        ///     the flag it is an extended-table entry, so a gather reader tests the flag first.</remarks>
+        private static readonly int[] s_caseDeltas = BuildCaseDeltas();
+
+        /// <summary>The length of each mapping table in <see cref="CaseDeltas"/> (the number of records): the lower table starts
+        ///     at this index, the title table at twice it.</summary>
+        internal const int CaseDeltaStride = RecordCount;
+
+        /// <summary>
+        ///     The first entry of the side-by-side mapping tables (<c>[upper | lower | title]</c>, see <see cref="s_caseDeltas"/>):
+        ///     <c>CaseDeltas[rec]</c> is the uppercase delta, <c>CaseDeltas[CaseDeltaStride + rec]</c> the lowercase one,
+        ///     <c>CaseDeltas[2 * CaseDeltaStride + rec]</c> the titlecase one. Valid for the process's lifetime (a pinned array).
+        /// </summary>
+        internal static int* CaseDeltas
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (int*)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(s_caseDeltas));
+        }
+
+        /// <summary>Builds <see cref="s_caseDeltas"/> from the three record tables (once, at type initialization).</summary>
+        /// <returns>The pinned array.</returns>
+        private static int[] BuildCaseDeltas()
+        {
+            int n = RecordUpper.Length;
+            var table = GC.AllocateUninitializedArray<int>(3 * n, pinned: true);
+            RecordUpper.CopyTo(table.AsSpan(0, n));
+            RecordLower.CopyTo(table.AsSpan(n, n));
+            RecordTitle.CopyTo(table.AsSpan(2 * n, n));
+            return table;
+        }
+
         /// <summary>Builds the BMP table from the two-stage tables (once, at type initialization; about 0.3 ms).</summary>
         /// <returns>The pinned table.</returns>
         private static uint[] BuildBmp()

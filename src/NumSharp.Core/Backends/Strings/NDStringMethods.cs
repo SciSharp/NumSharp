@@ -368,6 +368,55 @@ namespace NumSharp.Backends.Strings
         }
 
         // =============================================================================================================
+        // upper / lower / swapcase / capitalize / title (NumPy's _vec_string over the bytes / str methods)
+        // =============================================================================================================
+
+        /// <summary>
+        ///     NumPy's case maps <c>upper</c>, <c>lower</c>, <c>swapcase</c>, <c>capitalize</c>, <c>title</c>:
+        ///     <c>_vec_string(a, a.dtype, name)</c> — a fresh C-ordered array of the operand's own dtype, each element the
+        ///     <c>bytes</c> (<c>S</c>) or <c>str</c> (<c>U</c>, <c>StringDType</c>) method's result, an <c>S</c> / <c>U</c>
+        ///     result cut to the element width.
+        /// </summary>
+        /// <param name="map">The map (<see cref="NDTextElements.UpperMap"/> ...).</param>
+        /// <param name="a">The operand (any layout; NumPy's <c>np.asarray</c> has been applied by the caller).</param>
+        /// <returns>The fresh result (0-d for a 0-d operand).</returns>
+        /// <exception cref="TypeError">A non-text operand (<c>string operation on non-string array</c>); a <c>StringDType</c>
+        ///     NA whose object is not a str (<c>descriptor 'upper' for 'str' objects doesn't apply to a 'float' object</c>).</exception>
+        /// <exception cref="SystemError">A <c>U</c> element holding a unit past U+10FFFF (CPython's <c>invalid maximum
+        ///     character passed to PyUnicode_New</c>).</exception>
+        /// <remarks>
+        ///     The loop's order cannot show: every element's error is the same text. NumPy's loop visits C order and ends at
+        ///     the first failing element; this one computes every element and raises after the loop, and the result is
+        ///     discarded either way.
+        /// </remarks>
+        internal static NDArray CaseMap(int map, NDArray a)
+        {
+            var loop = ResolveOne(a);
+            // _vec_string picks bytes.<name> for S, str.<name> for U and StringDType, and refuses anything else.
+            if (loop == TextLoop.None)
+                throw new TypeError(NDCharObjectPath.NonStringArrayText);
+            if (loop == TextLoop.VString)
+                return NDVStringMethods.CaseMap(map, a);
+            // PyArray_SimpleNewFromDescr: C order whatever the operand's layout; the kernel writes every byte.
+            var result = NDArray.ForOverwrite(a.dtype, new Shape(a.Shape.dimensions));
+            try
+            {
+                // The call's state: D14's escalation word (U), the error status, the tables (read once here).
+                var state = NDTextElements.NewCaseState();
+                var key = new TextMethodKey(TextMethodOp.CaseMap, UnitOf(loop), a.dtype.itemsize, Extra: map);
+                NDTextLoop.Execute(key, new[] { a, result }, 1, null, &state, callerOut: false);
+                if (state.Status != 0)
+                    throw new SystemError(NDTextElements.InvalidMaxCharText);
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
+        }
+
+        // =============================================================================================================
         // find / rfind / index / rindex / count / startswith / endswith
         // =============================================================================================================
 

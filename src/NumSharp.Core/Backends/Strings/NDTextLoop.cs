@@ -492,6 +492,9 @@ namespace NumSharp.Backends.Strings
                 case TextMethodOp.VIsKind:
                     *p[1] = NDVStringMethods.VIsKind(p[0], key.Extra, aux);
                     break;
+                case TextMethodOp.VCaseMap:
+                    NDVStringMethods.VCaseMap(p[0], p[1], key.Extra, aux);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a StringDType text method operation.");
             }
@@ -524,8 +527,8 @@ namespace NumSharp.Backends.Strings
         internal static int OperandCount(TextMethodOp op) => op switch
         {
             TextMethodOp.Length or TextMethodOp.StripWhitespace or TextMethodOp.PadSize or TextMethodOp.ExpandTabsSize
-                or TextMethodOp.PartitionSize or TextMethodOp.IsKind or TextMethodOp.VLength or TextMethodOp.VStripWhitespace
-                or TextMethodOp.VIsKind => 2,
+                or TextMethodOp.PartitionSize or TextMethodOp.IsKind or TextMethodOp.CaseMap or TextMethodOp.VLength
+                or TextMethodOp.VStripWhitespace or TextMethodOp.VIsKind or TextMethodOp.VCaseMap => 2,
             TextMethodOp.StripChars or TextMethodOp.ZFill or TextMethodOp.ExpandTabs
                 or TextMethodOp.VStripChars or TextMethodOp.VZFill or TextMethodOp.VExpandTabs => 3,
             TextMethodOp.Pad or TextMethodOp.ReplaceSize or TextMethodOp.VPad => 4,
@@ -606,6 +609,10 @@ namespace NumSharp.Backends.Strings
                         *p[1] = r ? (byte)1 : (byte)0;
                     break;
                 }
+                case TextMethodOp.CaseMap:
+                    // The auxdata is the call's CaseState (escalation word, error status, tables), as in the IL shell.
+                    NDTextElements.CaseMap<TUnit>(p[0], key.W0, p[1], key.Extra, (NDTextElements.CaseState*)acc);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a text method operation.");
             }

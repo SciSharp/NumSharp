@@ -112,6 +112,11 @@ namespace NumSharp.Backends.Kernels
         ///     (<see cref="NDTextElements.IsAlphaKind"/> …); aux = the call's escalation word (an int64, 0 at the start).</summary>
         IsKind,
 
+        /// <summary>The case maps <c>upper</c> / <c>lower</c> / <c>swapcase</c> / <c>capitalize</c> / <c>title</c>: (text,
+        ///     text out of the input's width); Extra = the map (<see cref="NDTextElements.UpperMap"/> …); aux = the call's
+        ///     <see cref="NDTextElements.CaseState"/>.</summary>
+        CaseMap,
+
         // The StringDType loops (NDVStringMethods). Their "text" operands are 16-byte cells (every width in the key is
         // the cell size), aux is the call's VStringMethodAux, and the unit is 1 (UTF-8).
 
@@ -162,6 +167,9 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>The predicates over <c>StringDType</c>: (cell, bool out); Extra = the predicate.</summary>
         VIsKind,
+
+        /// <summary>The case maps over <c>StringDType</c>: (cell, cell out); Extra = the map.</summary>
+        VCaseMap,
     }
 
     /// <summary>
@@ -450,6 +458,12 @@ namespace NumSharp.Backends.Kernels
                     plan.StoreOperand = 1;
                     plan.Operands = 2;
                     break;
+                case TextMethodOp.CaseMap:
+                    // The map is a literal, so the body's branches on it fold; the body writes its own output element.
+                    name = nameof(NDTextElements.CaseMap);
+                    plan.Args = new[] { P(0), C(key.W0), P(1), C(key.Extra), aux };
+                    plan.Operands = 2;
+                    break;
                 default:
                     return PlanVStringMethod(key, plan);
             }
@@ -547,6 +561,11 @@ namespace NumSharp.Backends.Kernels
                     plan.Args = new[] { P(0), C(key.Extra), aux };
                     plan.Store = TextStore.Bool;
                     plan.StoreOperand = 1;
+                    plan.Operands = 2;
+                    break;
+                case TextMethodOp.VCaseMap:
+                    name = nameof(NDVStringMethods.VCaseMap);
+                    plan.Args = new[] { P(0), P(1), C(key.Extra), aux };
                     plan.Operands = 2;
                     break;
                 default:

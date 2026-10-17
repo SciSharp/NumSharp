@@ -463,22 +463,27 @@ namespace NumSharp.Backends.Strings
         /// <returns>True when the arena now holds <paramref name="newsize"/> bytes; false when the reallocation failed, in
         ///     which case the arena, its capacity and the accounted bytes are unchanged.</returns>
         /// <remarks>
-        ///     <c>NativeMemory.Realloc</c> with a null pointer is an allocation, as <c>realloc(NULL, n)</c> is, so the first
-        ///     growth creates the arena. The space past the cursor must read as zero, as NumPy's <c>memset</c> leaves it: a
-        ///     realloc returns the new tail uninitialized. The lock must be held.
+        ///     The space past the cursor must read as zero, as NumPy's <c>memset</c> leaves it. The first growth creates the
+        ///     arena with <c>calloc</c> (<c>NativeMemory.AllocZeroed</c>): a large block's pages come zeroed from the operating
+        ///     system as they are first written, so no clearing pass touches them all up front (a reserved arena of a few
+        ///     megabytes is written once, by the strings, instead of twice). A later growth reallocates, and a realloc returns
+        ///     the new tail uninitialized, so that tail is cleared. Both blocks are freed by <c>NativeMemory.Free</c> (the same
+        ///     C allocator). The lock must be held.
         /// </remarks>
         private bool TryGrowArena(ulong newsize)
         {
             byte* newbuf;
+            bool fresh = _arena == null;
             try
             {
-                newbuf = (byte*)NativeMemory.Realloc(_arena, (nuint)newsize);
+                newbuf = fresh ? (byte*)NativeMemory.AllocZeroed((nuint)newsize) : (byte*)NativeMemory.Realloc(_arena, (nuint)newsize);
             }
             catch (OutOfMemoryException)
             {
                 return false;
             }
-            NativeMemory.Clear(newbuf + _arenaCursor, (nuint)(newsize - _arenaCursor));
+            if (!fresh)
+                NativeMemory.Clear(newbuf + _arenaCursor, (nuint)(newsize - _arenaCursor));
             AccountArena((long)(newsize - _arenaSize));
             _arena = newbuf;
             _arenaSize = newsize;
