@@ -174,10 +174,33 @@ namespace NumSharp
         ///     around the first <paramref name="sep"/> into three parts), which hides ndarray's in-place sort partition.
         ///     The result adds a final axis of length three for the before, separator and after parts.
         /// </summary>
-        /// <param name="sep">The separator, broadcast against the array's elements.</param>
-        /// <returns>A chararray containing the three parts of each element on its last axis.</returns>
-        /// <exception cref="StringComputationNotSupportedException">The execution path cannot provide a text partition.</exception>
-        public NDCharArray partition(object sep) => throw NDStringUfuncs.NextPhase("chararray.partition", this);
+        /// <param name="sep">The separator, broadcast against the array's elements: a C# string (NumPy's Python <c>str</c>), a
+        ///     <c>byte[]</c> (Python <c>bytes</c>), or an array; it is cast to this array's dtype first.</param>
+        /// <returns>A chararray containing the three parts of each element on its last axis, at the widest part's width, laid
+        ///     out as NumPy's <c>np.stack</c> lays it out: a VIEW of the stacked parts for bytes, a COPY for str (NumPy's
+        ///     <c>np.char.asarray</c> compares a str array's width in characters with its itemsize in bytes and copies).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sep"/> is null.</exception>
+        /// <exception cref="ValueError">An empty separator (<c>empty separator</c>); an empty array (<c>zero-size array to
+        ///     reduction operation maximum which has no identity</c>, NumPy's sizing).</exception>
+        /// <exception cref="TypeError">No <c>find</c> loop for the classes (a <c>str</c> separator beside a bytes chararray is
+        ///     cast, a number is not text).</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII separator for a bytes chararray.</exception>
+        /// <exception cref="IncorrectShapeException">The separator does not broadcast.</exception>
+        /// <remarks>
+        ///     NumPy's <c>chararray.partition</c> is <c>asarray(partition(self, sep))</c> with numpy.char's
+        ///     <c>partition = np.stack(np.strings.partition(a, sep), axis=-1)</c>: the three parts (chararray views here, as
+        ///     NumPy's ufunc hands them back) stacked into a plain array (<c>np.concatenate</c> keeps no subclass of equal
+        ///     priority), seen as a chararray by <c>np.char.asarray</c>.
+        /// </remarks>
+        [NDScoped]
+        public NDCharArray partition(object sep)
+        {
+            var separator = CharModule.TextOperand(sep, nameof(sep));
+            var (before, middle, after) = np.strings.partition(this, separator);
+            var stacked = np.stack(new NDArray[] { before, middle, after }, -1);
+            // np.char.asarray of the stacked ndarray: a chararray view of bytes, a copy of str (its width check).
+            return np.@char.asarray(stacked);
+        }
 
         /// <summary>
         ///     <c>c.partition(kth, axis, ...)</c>, the call <c>np.partition</c> makes: NumPy's TypeError, because

@@ -278,6 +278,9 @@ namespace NumSharp.Tests.Strings
             // statistics, np.trace and the integer operator live in their own partial; the rest replays through shared ops.
             if (TryInvokeVCompute(c.Op, p, ops, out var vcomputed))
                 return vcomputed;
+            // Sections strfn / tfn (numpy.strings' P2.5 functions over S / U and StringDType) live in their own partial.
+            if (TryInvokeMethods(c.Op, p, ops, out var method))
+                return method;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

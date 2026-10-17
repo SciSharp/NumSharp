@@ -494,8 +494,10 @@ namespace NumSharp.Backends.Strings
         ///     its offset — null when the arena does not exist yet.
         /// </summary>
         /// <param name="s">A vstring cell (not short).</param>
-        /// <returns>The first text byte, or null.</returns>
-        private byte* VStringBuffer(byte* s)
+        /// <returns>The first text byte, or null. An arena address is valid only until this allocator next allocates (the
+        ///     arena can move), so a caller writes the text before its next allocation — as the <c>numpy.strings</c> loops do
+        ///     after <see cref="newemptysize"/> (NumPy's <c>load_new_string</c>).</returns>
+        internal byte* VStringBuffer(byte* s)
         {
             if ((s[15] & NPY_STRING_OUTSIDE_ARENA) != 0)
                 return (byte*)*(ulong*)s;

@@ -554,6 +554,27 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void QuantilePrecisionAndOut() => Run("qprec");
 
         /// <summary>
+        ///     Section strfn (strings phase 2, P2.5): numpy.strings' search, strip, pad, replace, partition and slice
+        ///     functions over S / U text — str_len (a ufunc with out= / where= / dtype=), find / rfind / index / rindex /
+        ///     count, startswith / endswith, strip / lstrip / rstrip, center / ljust / rjust, zfill, expandtabs, replace,
+        ///     partition / rpartition, slice and the comparison names — over every layout kind of both classes, every
+        ///     parameter form (Python ints, arrays of each integer width, broadcast operands, the defaults), NumPy's quirks
+        ///     (U expandtabs sized four times wide, the S buffer / U fill casts, a NUL separator that is empty) and the
+        ///     refusals in NumPy's order. Strict; partition's three parts are compared by value (NumPy's structured field
+        ///     views are the excused layout, a zero-width part is recorded as width 1).
+        /// </summary>
+        [TestMethod] public void StringFunctions() => Run("strfn");
+
+        /// <summary>
+        ///     Section tfn (strings phase 2, P2.5): the same functions over NEP 55 StringDType — every NA kind (none, None,
+        ///     NaN, a string sentinel, coerce off) with each loop's own NA rule, the layout kinds, U operands the promoters
+        ///     cast, S operands without a loop, two descriptors (the compatible NA object or NumPy's TypeError), NumPy's UTF-8
+        ///     rules (code points, trailing NULs, the strip quirks, slice's buffer end), results of every cell kind, and
+        ///     str_len's mask (an NA where it is off is never read). Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeFunctions() => Run("tfn");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -645,9 +666,10 @@ namespace NumSharp.Tests.Strings
         ///     strshape 190 → 142, strma 113 → 18); searching it (argmax / argmin and the nan forms, searchsorted, digitize,
         ///     histogram2d / histogramdd's bin search) since milestone B (reductions 24 → 14, straxis 90 → 50, strshape
         ///     142 → 84, strvalid 5 → 0, strsurface 67 → 54, strma 18 → 6); the set routines, lexsort, sort_complex,
-        ///     np.histogram and the quantiles over text since milestone C; computing on <c>StringDType</c> since P2.T, and
-        ///     ordering it since P2.2 over <c>StringDType</c>. The one deferral left is <c>chararray.partition(sep)</c>
-        ///     (numpy.char phase 3), the string method that lands with phase 5. A section not listed may defer nothing.
+        ///     np.histogram and the quantiles over text since milestone C; computing on <c>StringDType</c> since P2.T,
+        ///     ordering it since P2.2 over <c>StringDType</c>, and <c>chararray.partition(sep)</c> (numpy.char phase 3's one
+        ///     deferral, the string partition) since P2.5. No section defers anything now; a section not listed may defer
+        ///     nothing, and the table stays for a later phase's deferrals.
         /// </summary>
         private static readonly Dictionary<string, int> DeferralCeilings = new()
         {
@@ -656,9 +678,8 @@ namespace NumSharp.Tests.Strings
             // (the comparisons, the truth values, add / multiply / maximum / minimum, the reductions and statistics, numpy.ma
             // over them: tma 437 → 5, strchar 3 → 0), and StringDType's part of P2.2 the sorts, searches, set routines and
             // order statistics (tma 5 → 0: numpy.ma's median, sort and unique over StringDType).
-            // numpy.char phase 3: chararray.partition(sep) is the STRING partition NumPy computes; NumSharp's lands with the
-            // string methods (phase 5).
-            ["strcharops"] = 22,
+            // numpy.char phase 3's chararray.partition(sep) — the STRING partition — computes since P2.5 (strcharops 22 → 0):
+            // no section defers anything.
         };
 
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
@@ -672,7 +693,7 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strsets", "tcomp", "tarith",
-                "treduce", "tsort", "qfamily", "qprec",
+                "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
@@ -1048,6 +1069,12 @@ namespace NumSharp.Tests.Strings
                 && chargs.GetArrayLength() > 0 && chargs[0].ValueKind == JsonValueKind.Object && chargs[0].TryGetProperty("elem", out _)
                 && c.Params["fn"].GetString() == "atleast_2d")
                 return "a view of an element stand-in is read-only; NumPy's str becomes a fresh writeable array";
+            // Section strfn: np.strings.partition / rpartition of S / U text. NumPy returns three FIELD VIEWS of one structured
+            // array (np.empty_like(a, dtype="U3,U1,U5")["f0"] ...); NumSharp has no structured dtype and returns three arrays
+            // laid out like a (their values and descriptors are NumPy's; a zero-width part is recorded as width 1).
+            if (c.Op == "str_fn" && c.Params is not null && c.Params.TryGetValue("name", out var fnName)
+                && fnName.GetString() is "partition" or "rpartition" && c.Operands.Length > 0 && c.Operands[0].T is null)
+                return "partition of S / U: NumPy's three structured field views, NumSharp's three arrays (no structured dtype)";
             if (c.Op != "getitem" || c.Params is null || !c.Params.TryGetValue("index", out var index))
                 return null;
             bool basicSeen = false;
@@ -1980,6 +2007,9 @@ namespace NumSharp.Tests.Strings
                         items[i] = AsArray(t[i]);
                     return items;
                 }
+                // A function of several outputs replayed as an object[] (section strfn's partition): its arrays.
+                case object[] objects when objects.All(o => o is NDArray):
+                    return objects.Cast<NDArray>().ToArray();
                 case IEnumerable<NDArray> e: return e.ToArray();
             }
             return Array.Empty<NDArray>();

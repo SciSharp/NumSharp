@@ -467,6 +467,37 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     <see cref="Wrapped{TState}"/> for a function whose ufunc returns several TEXT outputs (<c>np.strings.partition</c>:
+        ///     NumPy's <c>_partition_index</c> / <c>_partition</c> hand back three outputs, each through
+        ///     <c>chararray.__array_wrap__</c>): every result becomes a chararray view of its text (a non-text one stays plain).
+        /// </summary>
+        /// <typeparam name="TState">The packed arguments.</typeparam>
+        /// <param name="state">The arguments.</param>
+        /// <param name="call">Calls the public function again (plain-array semantics). Pass a <c>static</c> lambda.</param>
+        /// <returns>The results, each wrapped.</returns>
+        /// <exception cref="Exception">Whatever <paramref name="call"/> throws; the depth is restored first.</exception>
+        internal static NDArray[] WrappedAll<TState>(TState state, Func<TState, NDArray[]> call)
+        {
+            NDScope scope = NDScope.Open();
+            var region = NDMatrixBoundary.Inside();
+            try
+            {
+                NDArray[] results = call(state);
+                if (results is null)
+                    return null;
+                var wrapped = new NDArray[results.Length];
+                for (int i = 0; i < results.Length; i++)
+                    wrapped[i] = scope.Returns(WrapText(results[i]));
+                return wrapped;
+            }
+            finally
+            {
+                region.Dispose();
+                scope.Dispose();
+            }
+        }
+
         /// <summary>Set while the unique family's chararray rule computes a call with a return flag (see
         ///     <see cref="WrappedFirst{TState}"/>).</summary>
         [ThreadStatic] private static bool t_stripUniqueRuns;

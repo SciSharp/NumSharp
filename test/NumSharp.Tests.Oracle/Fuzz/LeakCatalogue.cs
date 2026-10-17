@@ -415,6 +415,7 @@ namespace NumSharp.Tests.Fuzz
                 using var an = np.strings.multiply(a, n);
                 return np.strings.multiply("xy", n);
             });
+            AddStringsFunctions(l);
             // numpy.char ([ModuleName("np.char")], the np-char plan's phase 1): the string oracle's strchar section replays
             // these through its own harness, outside the corpus sweep. Each comparison strips trailing whitespace; the entries
             // also take the routes that allocate their own operands (a C# string, a byte[] / byte[][] as NumPy's bytes) and

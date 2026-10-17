@@ -265,6 +265,10 @@ def expect_of(r, operands):
         return array_expect(r, operands)
     if isinstance(r, (tuple, list)) and r and all(isinstance(x, np.ndarray) for x in r):
         return {"kind": "tuple", "items": [array_expect(x, operands) for x in r]}
+    if isinstance(r, tuple) and r and all(isinstance(x, (str, bytes, np.generic, np.ndarray)) for x in r):
+        # A ufunc of several outputs over 0-d operands (np.strings.partition of a 0-d StringDType array): NumPy's NumPy
+        # scalars / Python strs, each by its own kind.
+        return {"kind": "items", "items": [expect_of(x, operands) for x in r]}
     if isinstance(r, _TProps):
         return tprops(r.d)
     if isinstance(r, _TCells):
@@ -9303,8 +9307,9 @@ def gen_strcharops():
             member("partition", [_chx_v(1)], {"axis": _chx_v(0)})
             member("partition", [_chx_v(1)], {"axis": _chx_v(None)})
             member("partition", [_chx_v([0, 1])], {"axis": _chx_v(-1)})
-            # chararray.partition(sep): the string partition, computed by NumPy, deferred by NumSharp (phase 5).
-            member("partition", [_chx_v(word("a"))], phase=2)
+            # chararray.partition(sep): the STRING partition (np.char.partition = np.stack(np.strings.partition(a, sep),
+            # axis=-1), seen as a chararray), strict since P2.5.
+            member("partition", [_chx_v(word("a"))])
             member("sort")
             member("sort", kw={"axis": _chx_v(0)})
             member("sort", kw={"kind": _chx_v("stable")})
@@ -12345,12 +12350,653 @@ def gen_qprec():
                method="linear", out=_qp_out("float64", ()), section=QPREC)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Sections strfn / tfn: numpy.strings' search, strip, pad, replace, partition and slice functions over S / U (strfn) and
+# NEP 55 StringDType (tfn), strings phase 2, P2.5, strict
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Texts that reach every rule of the P2.5 loops over S / U: the whitespace of each class (ASCII for S, Python's
+# str.isspace for U — \x1c-\x1f, NBSP and IDEOGRAPHIC SPACE included), embedded NULs, signs for zfill, tabs and line breaks
+# for expandtabs, repeated patterns for count / replace (non-overlapping greedy matches), bytes past 0x7f for S, non-ASCII
+# and supplementary-plane characters for U, and the empty string. np.array truncates a value longer than the descriptor.
+FN_U_POOL = ["", " ", "a", "ab", "abc", "aaaa", "abab", "  x y  ", "\tx\n", "x\ty\tz", "-12", "+3.5", "-", "+", "0",
+             "a\x00b", "é日本", "\U0001F600x", "it's", "Hello World", "\x1cz\x1f", "\xa0a　", "abcabcab", "zz\r\nq"]
+FN_S_POOL = [b"", b" ", b"a", b"ab", b"abc", b"aaaa", b"abab", b"  x y  ", b"\tx\n", b"x\ty\tz", b"-12", b"+3.5", b"-",
+             b"+", b"0", b"a\x00b", b"\x80\xff", b"\xe9t\xe9", b"it's", b"Hello World", b"\x0bv\x0c", b"abcabcab",
+             b"zz\r\nq", b"\x1cz"]
+FN_SPECS = ["<U5", "<U12", "|S5", "|S12"]
+
+
+def _fn_nonempty(spec):
+    """The P2.5 pool of ``spec``'s class without the empty string: NumPy 2.4.2's zfill of an EMPTY element reads the
+    output byte at the width for a sign before the loop zero-fills it (``string_zfill``'s ``*tmp`` past the copied text:
+    uninitialized ``np.empty_like`` memory), so its answer depends on what the allocator recycled; NumSharp's ``'0' *
+    width`` (Python's ``''.zfill``) is pinned by the unit tests instead.
+
+    :param spec: an S / U descriptor string.
+    :returns: the texts.
+    """
+    return [v for v in (FN_U_POOL if spec[1] == "U" else FN_S_POOL) if v]
+
+
+def fn_operand(spec, layout, seed=0, pool=None):
+    """An S / U operand over the P2.5 pools: a base cycling through the texts from ``seed`` and the layout's view of it.
+
+    :param spec: the descriptor string.
+    :param layout: a ``LAYOUTS`` name.
+    :param seed: the first pool index.
+    :param pool: the texts (``FN_U_POOL`` / ``FN_S_POOL`` by the class by default).
+    :returns: the (base, view) pair.
+    """
+    n, build = LAYOUTS[layout]
+    pool = pool or (FN_U_POOL if spec[1] == "U" else FN_S_POOL)
+    base = np.array([pool[(seed + i) % len(pool)] for i in range(n)], dtype=spec) if n else np.zeros(0, dtype=spec)
+    return base, build(base)
+
+
+class _Op:
+    """An argument of a numpy.strings call that is the case's operand ``i`` (its view)."""
+
+    def __init__(self, i):
+        """Keeps the operand index.
+
+        :param i: the operand index.
+        """
+        self.i = i
+
+
+class _NpStr:
+    """A NumPy ``np.str_`` argument: a 0-d text that HAS a dtype (NumSharp's ``NDArray.Scalar(string)``), where a Python
+    str has none (NumSharp's implicit ``string`` conversion) — replace casts only the dtype-less one to the array's
+    descriptor."""
+
+    def __init__(self, text):
+        """Keeps the text.
+
+        :param text: the str.
+        """
+        self.text = text
+
+
+def _fn_arg_enc(x):
+    """One argument of a numpy.strings call as the replay reads it: ``{"op": i}`` for an operand, ``{"npstr": …}`` for a
+    np.str_, otherwise ``{"py": enc(value)}`` (a str is a Python str, bytes are np.bytes_ — a dtype-carrying scalar, as
+    NumSharp's ``NDArray.Scalar(byte[])`` is — an int a Python int, None NumSharp's null default).
+
+    :param x: the argument.
+    :returns: the encoding.
+    """
+    if isinstance(x, _Op):
+        return {"op": x.i}
+    if isinstance(x, _NpStr):
+        return {"npstr": enc(x.text)}
+    return {"py": enc(x)}
+
+
+def _fn_arg_value(x, views):
+    """One argument of a numpy.strings call as NumPy receives it.
+
+    :param x: the argument.
+    :param views: the operand views.
+    :returns: the value (bytes become np.bytes_, a np.str_ marker its np.str_).
+    """
+    if isinstance(x, _Op):
+        return views[x.i]
+    if isinstance(x, _NpStr):
+        return np.str_(x.text)
+    if isinstance(x, bytes):
+        return np.bytes_(x)
+    return x
+
+
+def _fn_zero_width_parts():
+    """Records the S / U partition parts NumPy sizes at width 0 (``'U0'`` / ``'S0'``, a structured field of no bytes) as
+    the width-1 arrays of empty strings NumSharp returns: NumSharp has no zero-width string dtype, the one documented
+    divergence of these sections (its layout — NumPy's three field views of one structured array — is the replay's
+    excused layout). Applied to the case just added."""
+    exp = CASES[-1].get("expected")
+    if not exp or exp.get("kind") != "tuple":
+        return
+    for item in exp["items"]:
+        if item.get("dtype") in ("<U0", "|S0"):
+            n = 1
+            for d in item["shape"]:
+                n *= d
+            item["dtype"] = "<U1" if item["dtype"] == "<U0" else "|S1"
+            item["buffer"] = "00" * (n * (4 if item["dtype"] == "<U1" else 1))
+            CASES[-1]["note"] = "a zero-width part recorded as width 1 (NumSharp has no zero-width string dtype)"
+
+
+def fn_case(section, name, operands, args, layout, kw=None):
+    """Records one numpy.strings call: ``np.strings.<name>(*args, **kw)`` (op ``str_fn``), each ``_Op(i)`` argument the
+    view of operand ``i``, every other argument a Python value (``_fn_arg_value``); ``kw`` names operands for out= /
+    where= and a dtype string for dtype=.
+
+    :param section: the section.
+    :param name: the numpy.strings function.
+    :param operands: the (base, view) pairs.
+    :param args: the positional arguments.
+    :param layout: the case's layout label.
+    :param kw: ``{"out": i, "where": i, "dtype": str}`` (each optional), or None.
+    """
+    params = {"name": name, "args": [_fn_arg_enc(x) for x in args]}
+    if kw:
+        params["kw"] = kw
+
+    def call(*views):
+        values = [_fn_arg_value(x, views) for x in args]
+        kwargs = {}
+        if kw:
+            if "out" in kw:
+                kwargs["out"] = views[kw["out"]]
+            if "where" in kw:
+                kwargs["where"] = views[kw["where"]]
+            if "dtype" in kw:
+                kwargs["dtype"] = kw["dtype"]
+        return getattr(np.strings, name)(*values, **kwargs)
+
+    add(section, "str_fn", params=params, operands=operands, call=call, layout=layout)
+    if "error" in CASES[-1] and _platform_text(CASES[-1]["error"]["text"]):
+        # NumPy's C long overflow text is the host's (Windows: "int too big to convert"); NumSharp pins the LP64 text in
+        # its unit tests, the policy of _platform_text.
+        _pop_case()
+        return
+    if name in ("partition", "rpartition"):
+        _fn_zero_width_parts()
+
+
+def _fn_t(spec):
+    """The text-parameter maker of a class: the str itself for U (and StringDType), its latin-1 bytes for S.
+
+    :param spec: an S / U descriptor string, or ``"T"``.
+    :returns: the maker.
+    """
+    return (lambda s: s.encode("latin-1")) if spec[1:2] == "S" else (lambda s: s)
+
+
+_FN_FIND = ["find", "rfind", "index", "rindex", "count", "startswith", "endswith"]
+_FN_RANGES = [(), (0,), (1,), (-3,), (10,), (0, 3), (2, -1), (5, 2), (-10, -1), (1, None), (0, 2**62), (-(2**62), 3)]
+_FN_SLICES = [(), (3,), (None,), (-2,), (1, 4), (None, 3), (2, None), (-3, -1), (4, 1), (1, 4, 2), (None, None, -1),
+              (None, None, -2), (5, 0, -1), (-1, None, -3), (0, 100, 3), (-100, 100, 1), (2**62, None, -1),
+              (None, None, 2**62), (None, None, -(2**62)), (3, 3), (-1, -100, -1)]
+
+
+def gen_strfn():
+    """Section strfn: numpy.strings' P2.5 functions over S / U text, strict — str_len, the find family, startswith /
+    endswith, the strips, the pads, zfill, expandtabs, replace, partition / rpartition, slice and the comparison names:
+    every layout kind of both classes, every parameter form (Python ints, arrays of each integer width, broadcast operands,
+    the defaults), NumPy's quirks (expandtabs sizes U four times wide, partition's empty separator, the S buffer / U fill
+    casts), and the wrappers' and ufuncs' refusals in NumPy's order."""
+    S = "strfn"
+    # A. Every function over every layout kind, both classes, two widths (a representative parameter set each).
+    for spec in FN_SPECS:
+        t = _fn_t(spec)
+        for layout in LAYOUTS:
+            op = fn_operand(spec, layout, seed=1)
+            lab = f"{spec}:{layout}"
+            fn_case(S, "str_len", [op], [_Op(0)], lab)
+            for name in ["find", "rfind", "count", "index", "rindex"]:
+                fn_case(S, name, [op], [_Op(0), t("ab")], lab)
+                fn_case(S, name, [op], [_Op(0), t("a"), 1, -1], lab)
+            for name in ["startswith", "endswith"]:
+                fn_case(S, name, [op], [_Op(0), t("a")], lab)
+                fn_case(S, name, [op], [_Op(0), t("b"), 0, 2], lab)
+            for name in ["strip", "lstrip", "rstrip"]:
+                fn_case(S, name, [op], [_Op(0)], lab)
+                fn_case(S, name, [op], [_Op(0), t(" a")], lab)
+            for name in ["center", "ljust", "rjust"]:
+                fn_case(S, name, [op], [_Op(0), 9], lab)
+                fn_case(S, name, [op], [_Op(0), 4, t("*")], lab)
+            zop = fn_operand(spec, layout, seed=1, pool=_fn_nonempty(spec))
+            fn_case(S, "zfill", [zop], [_Op(0), 7], lab)
+            fn_case(S, "expandtabs", [op], [_Op(0)], lab)
+            fn_case(S, "expandtabs", [op], [_Op(0), 3], lab)
+            fn_case(S, "replace", [op], [_Op(0), t("a"), t("XY")], lab)
+            fn_case(S, "replace", [op], [_Op(0), t("ab"), t(""), 1], lab)
+            for name in ["partition", "rpartition"]:
+                fn_case(S, name, [op], [_Op(0), t("b")], lab)
+            fn_case(S, "slice", [op], [_Op(0), 3], lab)
+            fn_case(S, "slice", [op], [_Op(0), 1, None, 2], lab)
+            fn_case(S, "slice", [op], [_Op(0), None, None, -1], lab)
+
+    # B. The find family and the tail matches: every needle kind (empty, longer than the text, a trailing NUL — which
+    #    never counts — and a lone NUL, non-ASCII) x every start / end form, over a contiguous and an F-ordered operand.
+    for spec in ["<U8", "|S8"]:
+        t = _fn_t(spec)
+        for layout in ["c2", "f2"]:
+            op = fn_operand(spec, layout, seed=3)
+            for name in _FN_FIND:
+                for sub in ["a", "ab", "", "abc", "x y", "b\x00", "\x00", "é", "aa", "Z"]:
+                    for rng in _FN_RANGES:
+                        fn_case(S, name, [op], [_Op(0), t(sub), *rng], f"{spec}:{layout}:{sub!r}:{rng}")
+    # Start / end arrays of every integer width (and bool, which casts safely), broadcast columns, a 3-D end that
+    # broadcasts the text up, per-element needles, a needle row.
+    for spec in ["<U6", "|S6"]:
+        t = _fn_t(spec)
+        op = fn_operand(spec, "c2", seed=4)
+        for dt in ["i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "?"]:
+            vals = [0, 1, 2, 3] if dt[0] in "u?" else [0, 1, -2, 3]
+            st = plain(np.array(vals, dtype=dt))
+            for name in ["find", "rfind", "count", "startswith", "endswith"]:
+                fn_case(S, name, [op, st], [_Op(0), t("a"), _Op(1)], f"{spec}:start:{dt}")
+                fn_case(S, name, [op, st], [_Op(0), t("b"), 0, _Op(1)], f"{spec}:end:{dt}")
+        col = plain(np.array([[0], [1], [-1]]))
+        e3 = plain(np.arange(8).reshape(2, 1, 4) - 3)
+        needles = plain(np.array([t("a"), t("b"), t(""), t("ab")], dtype=spec))
+        per = plain(np.array([[t("a"), t("x"), t(""), t("ab")]] * 3, dtype="<U2" if spec[1] == "U" else "|S2"))
+        for name in _FN_FIND:
+            fn_case(S, name, [op, col], [_Op(0), t("b"), _Op(1)], f"{spec}:startcol")
+            fn_case(S, name, [op, e3], [_Op(0), t("b"), 0, _Op(1)], f"{spec}:end3d")
+            fn_case(S, name, [op, needles], [_Op(0), _Op(1)], f"{spec}:needlerow")
+            fn_case(S, name, [op, per], [_Op(0), _Op(1), 1], f"{spec}:needles")
+    # The refusals: a float / complex start (the input cast), a Python int past int64, a bytes / str mix, a number, a
+    # needle row that does not broadcast, index's miss.
+    for spec in ["<U6", "|S6"]:
+        t = _fn_t(spec)
+        other = (lambda s: s.encode("latin-1")) if spec[1] == "U" else (lambda s: s)
+        op = fn_operand(spec, "c2", seed=5)
+        for name in _FN_FIND:
+            fn_case(S, name, [op], [_Op(0), t("a"), 1.5], f"{spec}:float")
+            fn_case(S, name, [op], [_Op(0), t("a"), 0, 2.5], f"{spec}:floatend")
+            fn_case(S, name, [op], [_Op(0), t("a"), 2**63], f"{spec}:bigint")
+            fn_case(S, name, [op, plain(np.array([0.5] * 4))], [_Op(0), t("a"), _Op(1)], f"{spec}:floatarr")
+            fn_case(S, name, [op, plain(np.array([1j]))], [_Op(0), t("a"), _Op(1)], f"{spec}:complexarr")
+            fn_case(S, name, [op], [_Op(0), other("a")], f"{spec}:mix")
+            fn_case(S, name, [op, num_operand(np.arange(4))], [_Op(1), t("a")], f"{spec}:numeric")
+            fn_case(S, name, [op, num_operand(np.arange(4))], [_Op(0), _Op(1)], f"{spec}:numericsub")
+            fn_case(S, name, [op, plain(np.array([t("a")] * 5, dtype=spec))], [_Op(0), _Op(1)], f"{spec}:nobroadcast")
+            fn_case(S, name, [op], [_Op(0), t("zzz")], f"{spec}:miss")
+            fn_case(S, name, [op], [_Op(0), 5], f"{spec}:intsub")
+
+    # C. The strips: every set (None = whitespace, empty, a NUL, non-ASCII, one character, several), the whitespace of
+    #    each class (U strips Python's whitespace, S only the ASCII six), per-element sets, the refusals.
+    ws_u = ["\x1c\x1d\x1e\x1fa\x85", " b　", "\x0b\x0cc\r", " \t\n", "a \x00b ", "\xa0\xa0", "x​y"]
+    ws_s = [b"\x1c\x1d\x1e\x1fa\x85", b"\xa0b\xa0", b"\x0b\x0cc\r", b" \t\n", b"a \x00b ", b"\x85\x85", b"x\x0by"]
+    for spec, ws in [("<U8", ws_u), ("|S8", ws_s)]:
+        t = _fn_t(spec)
+        wop = plain(np.array(ws, dtype=spec))
+        for layout in ["c2", "r2", "bc", "z0", "e2"]:
+            op = fn_operand(spec, layout, seed=6)
+            for name in ["strip", "lstrip", "rstrip"]:
+                for chars in [None, " ", "a", "ab", "", " \t\n", "\x00", "xa ", "é", "a\x00", "\x1c"]:
+                    fn_case(S, name, [op], [_Op(0), t(chars) if chars is not None else None],
+                            f"{spec}:{layout}:{chars!r}")
+        for name in ["strip", "lstrip", "rstrip"]:
+            fn_case(S, name, [wop], [_Op(0)], f"{spec}:whitespace")
+            fn_case(S, name, [wop], [_Op(0), t("\x1c\x85 ")], f"{spec}:whitespace:set")
+            sets = plain(np.array([t("a"), t(" "), t("xy"), t("")], dtype=spec))
+            op = fn_operand(spec, "c2", seed=7)
+            fn_case(S, name, [op, sets], [_Op(0), _Op(1)], f"{spec}:setrow")
+            other = (lambda s: s.encode("latin-1")) if spec[1] == "U" else (lambda s: s)
+            fn_case(S, name, [op], [_Op(0), other("a")], f"{spec}:mix")
+            fn_case(S, name, [num_operand(np.arange(3))], [_Op(0)], f"{spec}:numeric")
+            fn_case(S, name, [num_operand(np.arange(3))], [_Op(0), t("a")], f"{spec}:numericset")
+            fn_case(S, name, [op], [_Op(0), 5], f"{spec}:intset")
+            fn_case(S, name, [op, plain(np.array([t("a")] * 5, dtype=spec))], [_Op(0), _Op(1)], f"{spec}:nobroadcast")
+
+    # D. The pads: every width (negative, zero, shorter and longer than the texts, widths of each integer dtype — a uint64
+    #    one makes NumPy's descriptor 'U12.0' —, per-element widths), every fill (the default, a character, a non-ASCII
+    #    character, a fill of the other class: cast to an S buffer, a U fill decodes), per-element fills, and the refusals
+    #    (a float / bool width, a fill that is not one character, a number, the order of center's descriptor and
+    #    ljust / rjust's broadcast_shapes).
+    for spec in ["<U8", "|S8"]:
+        t = _fn_t(spec)
+        other = (lambda s: s.encode("latin-1")) if spec[1] == "U" else (lambda s: s)
+        for layout in ["c2", "f2", "s1", "bc", "z0"]:
+            op = fn_operand(spec, layout, seed=8)
+            for name in ["center", "ljust", "rjust"]:
+                for width in [-1, 0, 1, 3, 5, 8, 12, 20]:
+                    fn_case(S, name, [op], [_Op(0), width], f"{spec}:{layout}:{width}")
+                for fill in ["*", "é", "\x00", "ab", "", "-"]:
+                    fn_case(S, name, [op], [_Op(0), 10, t(fill)], f"{spec}:{layout}:fill{fill!r}")
+                    fn_case(S, name, [op], [_Op(0), 10, other(fill)], f"{spec}:{layout}:otherfill{fill!r}")
+        op = fn_operand(spec, "c2", seed=9)
+        for name in ["center", "ljust", "rjust"]:
+            for dt in ["i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8"]:
+                fn_case(S, name, [op, plain(np.array([3, 6, 9, 12], dtype=dt))], [_Op(0), _Op(1)], f"{spec}:width:{dt}")
+                fn_case(S, name, [op, plain(np.array(7, dtype=dt))], [_Op(0), _Op(1), t("~")], f"{spec}:width0d:{dt}")
+            fn_case(S, name, [op, plain(np.array([[4], [8], [11]]))], [_Op(0), _Op(1)], f"{spec}:widthcol")
+            fn_case(S, name, [op, plain(np.array(["*", "-", "+", "~"], dtype=spec))], [_Op(0), 7, _Op(1)],
+                    f"{spec}:fillrow")
+            fn_case(S, name, [op], [_Op(0), 2.5], f"{spec}:floatwidth")
+            fn_case(S, name, [op], [_Op(0), True], f"{spec}:boolwidth")
+            fn_case(S, name, [op], [_Op(0), 6, 5], f"{spec}:numericfill")
+            fn_case(S, name, [num_operand(np.arange(3))], [_Op(0), 6], f"{spec}:numeric")
+            fn_case(S, name, [op, plain(np.array([t("*")] * 5, dtype=spec))], [_Op(0), 7, _Op(1)], f"{spec}:fillbad")
+            fn_case(S, name, [op, plain(np.array([3] * 5))], [_Op(0), _Op(1)], f"{spec}:widthbad")
+            e2 = fn_operand(spec, "e2", seed=9)
+            fn_case(S, name, [e2, plain(np.array([t("*")] * 5, dtype=spec))], [_Op(0), 7, _Op(1)], f"{spec}:emptyfillbad")
+            fn_case(S, name, [e2], [_Op(0), 7], f"{spec}:empty")
+            fn_case(S, name, [op], [_Op(0), 2**40], f"{spec}:hugewidth")
+
+    # E. zfill: every width over texts with and without signs (no empty text: see _fn_nonempty), integer widths of each
+    #    dtype, per-element widths, the refusals.
+    for spec in ["<U8", "|S8"]:
+        pool = _fn_nonempty(spec)
+        for layout in ["c2", "f2", "r2", "bc", "z0", "e2"]:
+            op = fn_operand(spec, layout, seed=10, pool=pool)
+            for width in [-2, 0, 2, 5, 9, 15]:
+                fn_case(S, "zfill", [op], [_Op(0), width], f"{spec}:{layout}:{width}")
+        op = fn_operand(spec, "c2", seed=11, pool=pool)
+        for dt in ["i1", "u1", "i4", "u4", "i8", "u8"]:
+            fn_case(S, "zfill", [op, plain(np.array([3, 6, 9, 1], dtype=dt))], [_Op(0), _Op(1)], f"{spec}:width:{dt}")
+        fn_case(S, "zfill", [op, plain(np.array([[4], [8], [11]]))], [_Op(0), _Op(1)], f"{spec}:widthcol")
+        fn_case(S, "zfill", [op], [_Op(0), 2.5], f"{spec}:floatwidth")
+        fn_case(S, "zfill", [op], [_Op(0), False], f"{spec}:boolwidth")
+        fn_case(S, "zfill", [num_operand(np.arange(3))], [_Op(0), 6], f"{spec}:numeric")
+        fn_case(S, "zfill", [op, plain(np.array([3] * 5))], [_Op(0), _Op(1)], f"{spec}:widthbad")
+        signs = plain(np.array(["+1", "-1", "+", "-", "1+", "+-2", "--", "a-1"], dtype=spec))
+        for width in [0, 1, 2, 4]:
+            fn_case(S, "zfill", [signs], [_Op(0), width], f"{spec}:signs:{width}")
+
+    # F. expandtabs: every tab size (the default 8, 0 and negative remove tabs, sizes per element, of each integer dtype),
+    #    column resets at \n and \r, NumPy's U sizing (four characters per non-tab character), the overflow past 2^31 - 1,
+    #    the refusals.
+    tabs_u = ["a\tb", "\t", "ab\tc\td", "x\ny\tz", "1\r\t2", "\t\t\t", "abcdefg\th", "é\t日"]
+    for spec, vals in [("<U12", tabs_u), ("|S12", [v.encode("utf-8") for v in tabs_u])]:
+        tab = plain(np.array(vals, dtype=spec))
+        for size in [None, 0, 1, 2, 4, 8, -1, 13]:
+            fn_case(S, "expandtabs", [tab], [_Op(0)] + ([] if size is None else [size]), f"{spec}:tabs:{size}")
+        for layout in ["c2", "f2", "r2", "bc", "z0", "e2"]:
+            op = fn_operand(spec, layout, seed=12)
+            fn_case(S, "expandtabs", [op], [_Op(0), 4], f"{spec}:{layout}")
+        for dt in ["i1", "u1", "i4", "u8"]:
+            fn_case(S, "expandtabs", [tab, plain(np.array([1, 2, 3, 4, 5, 6, 7, 8], dtype=dt))], [_Op(0), _Op(1)],
+                    f"{spec}:tabsize:{dt}")
+        fn_case(S, "expandtabs", [tab], [_Op(0), 2.5], f"{spec}:floattab")
+        fn_case(S, "expandtabs", [tab], [_Op(0), 2**31], f"{spec}:overflow")
+        fn_case(S, "expandtabs", [tab], [_Op(0), 2**63], f"{spec}:bigint")
+        fn_case(S, "expandtabs", [num_operand(np.arange(3))], [_Op(0)], f"{spec}:numeric")
+        fn_case(S, "expandtabs", [tab, plain(np.array([2] * 5))], [_Op(0), _Op(1)], f"{spec}:nobroadcast")
+
+    # G. replace: every old / new / count form — an empty old (interleaving), an old longer than the descriptor (a Python
+    #    str is cast to the array's dtype, truncated; a np.str_ keeps its own), a count of each sign, per-element counts of
+    #    each dtype (uint64: NumPy's float sizes), broadcast olds / news / counts, the classes' mix, the refusals.
+    for spec in ["<U6", "|S6"]:
+        t = _fn_t(spec)
+        other = (lambda s: s.encode("latin-1")) if spec[1] == "U" else (lambda s: s)
+        for layout in ["c2", "f2", "r2", "bc", "z0", "e2"]:
+            op = fn_operand(spec, layout, seed=13)
+            for old in ["a", "ab", "", "aa", "b", "x", "abcdefgh"]:
+                for new in ["", "Q", "XY", "longer!"]:
+                    for count in [(), (0,), (1,), (2,), (-1,), (-5,)]:
+                        fn_case(S, "replace", [op], [_Op(0), t(old), t(new), *count],
+                                f"{spec}:{layout}:{old!r}->{new!r}:{count}")
+        op = fn_operand(spec, "c2", seed=14)
+        if spec[1] == "U":
+            for old, new in [("ab", "Z"), ("abcdefgh", "Q"), ("a", "longer!"), ("", "-")]:
+                fn_case(S, "replace", [op], [_Op(0), _NpStr(old), t(new)], f"{spec}:npstr-old:{old!r}")
+                fn_case(S, "replace", [op], [_Op(0), t(old), _NpStr(new)], f"{spec}:npstr-new:{new!r}")
+        for dt in ["i1", "u1", "i4", "u4", "i8", "u8"]:
+            fn_case(S, "replace", [op, plain(np.array([0, 1, 2, 3], dtype=dt))], [_Op(0), t("a"), t("XY"), _Op(1)],
+                    f"{spec}:count:{dt}")
+        olds = plain(np.array([t("a"), t("b"), t(""), t("ab")], dtype=spec))
+        news = plain(np.array([[t("1")], [t("22")], [t("")]], dtype=spec))
+        counts = plain(np.array([[[1]], [[-1]]]))
+        fn_case(S, "replace", [op, olds], [_Op(0), _Op(1), t("Z")], f"{spec}:oldrow")
+        fn_case(S, "replace", [op, news], [_Op(0), t("a"), _Op(1)], f"{spec}:newcol")
+        fn_case(S, "replace", [op, olds, news, counts], [_Op(0), _Op(1), _Op(2), _Op(3)], f"{spec}:all")
+        fn_case(S, "replace", [op], [_Op(0), other("a"), t("Z")], f"{spec}:mixold")
+        fn_case(S, "replace", [op], [_Op(0), t("a"), other("Z")], f"{spec}:mixnew")
+        fn_case(S, "replace", [op], [_Op(0), "é", "Z"], f"{spec}:nonascii")
+        fn_case(S, "replace", [op], [_Op(0), t("a"), t("b"), 1.5], f"{spec}:floatcount")
+        fn_case(S, "replace", [op], [_Op(0), t("a"), t("b"), True], f"{spec}:boolcount")
+        fn_case(S, "replace", [num_operand(np.arange(3))], [_Op(0), t("a"), t("b")], f"{spec}:numeric")
+        fn_case(S, "replace", [op], [_Op(0), 5, t("b")], f"{spec}:numericold")
+        fn_case(S, "replace", [op, plain(np.array([t("a")] * 5, dtype=spec))], [_Op(0), _Op(1), t("b")],
+                f"{spec}:oldbad")
+        fn_case(S, "replace", [op, plain(np.array([1] * 5))], [_Op(0), t("a"), t("b"), _Op(1)], f"{spec}:countbad")
+        fn_case(S, "replace", [op, plain(np.array([t("b")] * 5, dtype=spec))], [_Op(0), t("a"), _Op(1)],
+                f"{spec}:newbad")
+
+    # H. partition / rpartition: every separator (found once, several times, nowhere, a space, a NUL: empty after its
+    #    trailing-NUL strip — 'empty separator'), per-element separators, a separator of the other class (cast to the
+    #    array's descriptor), the refusals.
+    for spec in ["<U6", "|S6"]:
+        t = _fn_t(spec)
+        other = (lambda s: s.encode("latin-1")) if spec[1] == "U" else (lambda s: s)
+        for layout in ["c2", "f2", "r2", "bc", "z0", "e2", "d5"]:
+            op = fn_operand(spec, layout, seed=15)
+            for name in ["partition", "rpartition"]:
+                for sep in ["a", "b", "ab", "x y", " ", "zz", "\x00", "", "abcdefgh"]:
+                    fn_case(S, name, [op], [_Op(0), t(sep)], f"{spec}:{layout}:{sep!r}")
+        op = fn_operand(spec, "c2", seed=16)
+        seps = plain(np.array([t("a"), t("b"), t(" "), t("c")], dtype=spec))
+        for name in ["partition", "rpartition"]:
+            fn_case(S, name, [op, seps], [_Op(0), _Op(1)], f"{spec}:seprow")
+            fn_case(S, name, [op], [_Op(0), other("a")], f"{spec}:mix")
+            fn_case(S, name, [num_operand(np.arange(3))], [_Op(0), t("1")], f"{spec}:numeric")
+            fn_case(S, name, [num_operand(np.arange(3))], [_Op(0), t("x")], f"{spec}:numericparse")
+            fn_case(S, name, [op, plain(np.array([t("a")] * 5, dtype=spec))], [_Op(0), _Op(1)], f"{spec}:sepbad")
+
+    # I. slice: every arity (one argument is the stop), negative and huge bounds, every step sign, per-element bounds and
+    #    steps of each integer dtype, broadcast bounds, the refusals (step 0, a float / bool step, a float bound).
+    for spec in ["<U8", "|S8"]:
+        for layout in ["c2", "f2", "r2", "bc", "z0", "e2"]:
+            op = fn_operand(spec, layout, seed=17)
+            for args in _FN_SLICES:
+                fn_case(S, "slice", [op], [_Op(0), *args], f"{spec}:{layout}:{args}")
+        op = fn_operand(spec, "c2", seed=18)
+        for dt in ["i1", "u1", "i4", "u4", "i8", "u8"]:
+            vals = [1, 2, 3, 1] if dt[0] == "u" else [1, -1, 2, -3]
+            arr = plain(np.array(vals, dtype=dt))
+            fn_case(S, "slice", [op, arr], [_Op(0), None, None, _Op(1)], f"{spec}:step:{dt}")
+            fn_case(S, "slice", [op, arr], [_Op(0), _Op(1), None], f"{spec}:start:{dt}")
+            fn_case(S, "slice", [op, arr], [_Op(0), _Op(1)], f"{spec}:stop:{dt}")
+        fn_case(S, "slice", [op, plain(np.array([[1], [-1], [2]]))], [_Op(0), None, None, _Op(1)], f"{spec}:stepcol")
+        fn_case(S, "slice", [op, plain(np.array([0, 1, -1, 2]))], [_Op(0), None, None, _Op(1)], f"{spec}:stepzero")
+        fn_case(S, "slice", [op], [_Op(0), 0, 5, 0], f"{spec}:zero")
+        fn_case(S, "slice", [op], [_Op(0), 0, 5, 1.5], f"{spec}:floatstep")
+        fn_case(S, "slice", [op], [_Op(0), 0, 5, True], f"{spec}:boolstep")
+        fn_case(S, "slice", [op], [_Op(0), 1.5, 5], f"{spec}:floatstart")
+        fn_case(S, "slice", [op], [_Op(0), 2**63], f"{spec}:bigstop")
+        fn_case(S, "slice", [num_operand(np.arange(3))], [_Op(0), 1], f"{spec}:numeric")
+        fn_case(S, "slice", [op, plain(np.array([1] * 5))], [_Op(0), _Op(1)], f"{spec}:stopbad")
+
+    # J. str_len as a ufunc (out= / where= / dtype=), and the comparison names (np.strings.equal IS np.equal).
+    for spec in ["<U5", "|S5"]:
+        t = _fn_t(spec)
+        op = fn_operand(spec, "c2", seed=19)
+        for odt in ["i8", "i4", "f8", "i1", "?", "u8"]:
+            out = target(np.zeros((3, 4), dtype=odt))
+            fn_case(S, "str_len", [op, out], [_Op(0)], f"{spec}:out:{odt}", kw={"out": 1})
+        mask = plain(np.array([[True, False, True, False]]))
+        out = target(np.full((3, 4), -7, dtype="i8"))
+        fn_case(S, "str_len", [op, out, mask], [_Op(0)], f"{spec}:where", kw={"out": 1, "where": 2})
+        fn_case(S, "str_len", [op], [_Op(0)], f"{spec}:dtype:i8", kw={"dtype": "i8"})
+        fn_case(S, "str_len", [op], [_Op(0)], f"{spec}:dtype:f8", kw={"dtype": "f8"})
+        fn_case(S, "str_len", [num_operand(np.arange(3))], [_Op(0)], f"{spec}:numeric")
+        fn_case(S, "str_len", [op, target(np.zeros((2, 4), dtype="i8"))], [_Op(0)], f"{spec}:outbad", kw={"out": 1})
+        rhs = fn_operand(spec, "c2", seed=20)
+        for name in ["equal", "not_equal", "less", "less_equal", "greater", "greater_equal"]:
+            fn_case(S, name, [op, rhs], [_Op(0), _Op(1)], f"{spec}:compare")
+            fn_case(S, name, [op], [_Op(0), t("ab")], f"{spec}:compare-text")
+
+
+# The texts of section tfn: the P2.5 pool's rules plus the cell kinds of StringDType — short (<= 15 UTF-8 bytes), medium
+# (16 - 255) and long (> 255) — trailing NULs (StringDType keeps them: they never count for a length, and NumPy's UTF-8
+# loops handle them in their own ways, see NDVStringMethods), and multi-byte characters.
+TFN_POOL = ["", " ", "a", "ab", "abc", "aaaa", "abab", "  x y  ", "\tx\n", "x\ty\tz", "-12", "+3.5", "-", "a\x00b", "ab\x00",
+            "é日本", "\U0001F600x", "Hello World", "\x1cz\x1f", "\xa0a　", "abcabcab" * 3, "q" * 20, "m" * 15,
+            "s" * 300, "  " + "é" * 10 + "  ", "zz\r\nq", "\U0001F600" * 5, "-" + "9" * 20]
+# zfill's texts: no empty text and no text that is only NULs (NumPy reads the byte after the written buffer for a sign: an
+# arena / heap neighbour, see _fn_nonempty); tail-match needles: no trailing NULs (NumPy compares the needle's full bytes and
+# reads past a shorter haystack); replace's old: never only NULs (NumPy sizes its buffer by bytes and writes past it).
+TFN_ZPOOL = [v for v in TFN_POOL if v.strip("\x00")]
+TFN_NEEDLES = [v for v in TFN_POOL if not v.endswith("\x00")]
+# Slices whose step NumPy's StringDType loop can walk: its outsize loop counts with a C int (`int i += step`), which a step
+# past 2^31 overflows (an endless loop on 2.4.2), so tfn keeps the steps in range.
+TFN_SLICES = [a for a in _FN_SLICES if not (len(a) == 3 and a[2] is not None and abs(a[2]) >= 2**31)]
+
+
+def _t_scalar(spec, text):
+    """A 0-d StringDType operand of ``spec`` holding ``text`` (or the NA object).
+
+    :param spec: the TSpec.
+    :param text: the value.
+    :returns: the (base, view) pair.
+    """
+    base = np.array([text], dtype=spec.build())
+    return base, base.reshape(())
+
+
+def gen_tfn():
+    """Section tfn: numpy.strings' P2.5 functions over NEP 55 StringDType, strict — every function x every NA kind
+    (none, None, NaN, a string sentinel, coerce off) x the layout kinds, the U operands the promoters cast, the S operands
+    with no loop, two descriptors (the compatible NA object, or NumPy's TypeError), NumPy's UTF-8 rules (code points,
+    trailing NULs, the strip quirks, slice's buffer end), the cell kinds of the results (short / arena / heap), str_len's
+    mask (an NA where the mask is off never raises), and the refusals."""
+    S = "tfn"
+    layouts = ["c1", "c2", "f2", "t3", "s1", "r2", "o1", "col", "bc", "z0", "one", "d5", "e1", "e2"]
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        for layout in layouts:
+            b, v = t_operand(spec, layout, seed=1, pool=TFN_POOL, na_every=5)
+            op = (b, v)
+            lab = f"{lab0}:{layout}"
+            fn_case(S, "str_len", [op], [_Op(0)], lab)
+            for name in ["find", "rfind", "count", "index", "rindex"]:
+                fn_case(S, name, [op], [_Op(0), "ab"], lab)
+                fn_case(S, name, [op], [_Op(0), "a", 1, -1], lab)
+                fn_case(S, name, [op], [_Op(0), "b\x00"], lab)
+            for name in ["startswith", "endswith"]:
+                fn_case(S, name, [op], [_Op(0), "a"], lab)
+                fn_case(S, name, [op], [_Op(0), "é", 0, 3], lab)
+            for name in ["strip", "lstrip", "rstrip"]:
+                fn_case(S, name, [op], [_Op(0)], lab)
+                fn_case(S, name, [op], [_Op(0), " aé"], lab)
+            for name in ["center", "ljust", "rjust"]:
+                fn_case(S, name, [op], [_Op(0), 9], lab)
+                fn_case(S, name, [op], [_Op(0), 30, "é"], lab)
+            zb, zv = t_operand(spec, layout, seed=1, pool=TFN_ZPOOL, na_every=5)
+            fn_case(S, "zfill", [(zb, zv)], [_Op(0), 7], lab)
+            fn_case(S, "zfill", [(zb, zv)], [_Op(0), 25], lab)
+            fn_case(S, "expandtabs", [op], [_Op(0)], lab)
+            fn_case(S, "expandtabs", [op], [_Op(0), 3], lab)
+            fn_case(S, "replace", [op], [_Op(0), "a", "XY"], lab)
+            fn_case(S, "replace", [op], [_Op(0), "", "-", 3], lab)
+            fn_case(S, "replace", [op], [_Op(0), "ab", "é" * 9], lab)
+            sep = _t_scalar(spec, "b")
+            for name in ["partition", "rpartition"]:
+                fn_case(S, name, [op, sep], [_Op(0), _Op(1)], lab)
+            fn_case(S, "slice", [op], [_Op(0), 3], lab)
+            fn_case(S, "slice", [op], [_Op(0), 1, None, 2], lab)
+            fn_case(S, "slice", [op], [_Op(0), None, None, -1], lab)
+            fn_case(S, "slice", [op], [_Op(0), 2, 100], lab)
+
+    # B. Parameter sweeps over a contiguous operand of each NA kind: needles x ranges, the strip sets, the pad widths /
+    #    fills, zfill's widths, tab sizes, replace's forms, separators, slices.
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        b, v = t_operand(spec, "c2", seed=3, pool=TFN_POOL, na_every=6)
+        op = (b, v)
+        for name in _FN_FIND:
+            for sub in ["a", "ab", "", "abc", "x y", "\x00", "é", "日本", "\U0001F600", "q" * 18, "Z"]:
+                for rng in [(), (1,), (-3,), (0, 3), (2, -1), (5, 2), (1, None), (0, 2**62)]:
+                    fn_case(S, name, [op], [_Op(0), sub, *rng], f"{lab0}:{sub!r}:{rng}")
+        for name in ["find", "rfind", "count", "index", "rindex"]:
+            fn_case(S, name, [op], [_Op(0), "ab\x00"], f"{lab0}:trailingnul")
+            fn_case(S, name, [op], [_Op(0), "\x00\x00"], f"{lab0}:nuls")
+        for name in ["strip", "lstrip", "rstrip"]:
+            for chars in [None, " ", "a", "ab", "", " \t\n", "\x00", "xa ", "é", "a\x00", "\x1c", "日é", "\U0001F600"]:
+                fn_case(S, name, [op], [_Op(0), chars], f"{lab0}:{chars!r}")
+        for name in ["center", "ljust", "rjust"]:
+            for width in [-1, 0, 3, 8, 16, 300]:
+                fn_case(S, name, [op], [_Op(0), width], f"{lab0}:{width}")
+            for fill in ["*", "é", "\U0001F600", "ab", "", "\x00"]:
+                fn_case(S, name, [op], [_Op(0), 12, fill], f"{lab0}:fill{fill!r}")
+        zb, zv = t_operand(spec, "c2", seed=3, pool=TFN_ZPOOL, na_every=6)
+        for width in [-2, 0, 5, 15, 16, 40]:
+            fn_case(S, "zfill", [(zb, zv)], [_Op(0), width], f"{lab0}:{width}")
+        for size in [0, 1, 4, 8, -1, 13]:
+            fn_case(S, "expandtabs", [op], [_Op(0), size], f"{lab0}:{size}")
+        for old in ["a", "ab", "", "é", "q", "b"]:
+            for new in ["", "Q", "é" * 8, "longer than fifteen!"]:
+                for count in [(), (0,), (1,), (-1,), (-5,)]:
+                    # NumPy 2.4.2's StringDType loop sizes its buffer as size + count * growth with a size_t product: a
+                    # negative count other than -1 (which replaces nothing there) wraps it, the calloc fails and the copy
+                    # writes through NULL — an access violation whenever the replacement is longer than the old text.
+                    # NumSharp's copy of the text is pinned by the unit tests.
+                    if count == (-5,) and old and len(new.encode()) > len(old.encode()):
+                        continue
+                    fn_case(S, "replace", [op], [_Op(0), old, new, *count], f"{lab0}:{old!r}->{new!r}:{count}")
+        for name in ["partition", "rpartition"]:
+            for text in ["a", "b", "ab", " ", "é", "q" * 5, "zz", "\x00", ""]:
+                fn_case(S, name, [op, _t_scalar(spec, text)], [_Op(0), _Op(1)], f"{lab0}:{text!r}")
+        for args in TFN_SLICES:
+            fn_case(S, "slice", [op], [_Op(0), *args], f"{lab0}:{args}")
+
+    # C. U operands beside StringDType (the promoters cast them to StringDType()), S operands (no loop), two descriptors
+    #    (compatible NA objects, or NumPy's TypeError), a descriptor whose NA reads as a string beside one that does not.
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        b, v = t_operand(spec, "c2", seed=4, pool=TFN_POOL, na_every=4)
+        op = (b, v)
+        u = plain(np.array([["a", "é", "", "ab"]] * 3, dtype="U2"))
+        s = plain(np.array([[b"a", b"b", b"", b"ab"]] * 3, dtype="S2"))
+        for name in _FN_FIND:
+            fn_case(S, name, [op, u], [_Op(0), _Op(1)], f"{lab0},U")
+            fn_case(S, name, [op, u], [_Op(1), _Op(0)], f"U,{lab0}")
+            fn_case(S, name, [op, s], [_Op(0), _Op(1)], f"{lab0},S")
+        for name in ["strip", "lstrip", "rstrip"]:
+            fn_case(S, name, [op, u], [_Op(0), _Op(1)], f"{lab0},U")
+            fn_case(S, name, [op, u], [_Op(1), _Op(0)], f"U,{lab0}")
+            fn_case(S, name, [op, s], [_Op(0), _Op(1)], f"{lab0},S")
+        for name in ["center", "ljust", "rjust"]:
+            fn_case(S, name, [op, plain(np.array("*", dtype="U1"))], [_Op(0), 6, _Op(1)], f"{lab0},Ufill")
+            fn_case(S, name, [op, plain(np.array(b"*", dtype="S1"))], [_Op(0), 6, _Op(1)], f"{lab0},Sfill")
+            fn_case(S, name, [u, _t_scalar(spec, "*")], [_Op(0), 6, _Op(1)], f"U,{lab0}fill")
+        fn_case(S, "replace", [op, u], [_Op(0), _Op(1), "Z"], f"{lab0},Uold")
+        fn_case(S, "replace", [op, u], [_Op(1), "a", _Op(0)], f"U,{lab0}new")
+        fn_case(S, "replace", [op, s], [_Op(0), _Op(1), "Z"], f"{lab0},Sold")
+        for name in ["partition", "rpartition"]:
+            fn_case(S, name, [op, u], [_Op(0), _Op(1)], f"{lab0},U")
+            fn_case(S, name, [op], [_Op(0), "b"], f"{lab0},str")
+            fn_case(S, name, [op, u], [_Op(1), _Op(0)], f"U,{lab0}")
+        for other in T_COMPUTE_SPECS:
+            ob, ov = t_operand(other, "c2", seed=5, pool=TFN_POOL, na_every=3)
+            nb, nv = t_operand(other, "c2", seed=5, pool=TFN_NEEDLES, na_every=3)
+            pair = f"{lab0},{_t_label(other)}"
+            fn_case(S, "find", [op, (ob, ov)], [_Op(0), _Op(1)], pair)
+            fn_case(S, "startswith", [op, (nb, nv)], [_Op(0), _Op(1)], pair)
+            fn_case(S, "strip", [op, (ob, ov)], [_Op(0), _Op(1)], pair)
+            fn_case(S, "replace", [op, (ob, ov)], [_Op(0), _Op(1), "Z"], pair)
+            fn_case(S, "center", [op, _t_scalar(other, "*")], [_Op(0), 6, _Op(1)], pair)
+            fn_case(S, "partition", [op, _t_scalar(other, "b")], [_Op(0), _Op(1)], pair)
+
+    # D. str_len with where= (an NA where the mask is off is never read) and out= of other dtypes; the refusals of the
+    #    integer parameters and of the shapes.
+    for spec in [TDN, TDNAN, TDS, TD]:
+        lab0 = _t_label(spec)
+        b, v = t_operand(spec, "c2", seed=6, pool=TFN_POOL, na_every=4)
+        op = (b, v)
+        na_mask = plain(np.array([[(i * 4 + j) % 4 != 3 for j in range(4)] for i in range(3)]))
+        out = target(np.full((3, 4), -7, dtype="i8"))
+        fn_case(S, "str_len", [op, out, na_mask], [_Op(0)], f"{lab0}:where", kw={"out": 1, "where": 2})
+        for odt in ["i4", "f8", "?"]:
+            fn_case(S, "str_len", [op, target(np.zeros((3, 4), dtype=odt))], [_Op(0)], f"{lab0}:out:{odt}", kw={"out": 1})
+        fn_case(S, "find", [op], [_Op(0), "a", 1.5], f"{lab0}:float")
+        fn_case(S, "find", [op], [_Op(0), "a", 2**63], f"{lab0}:bigint")
+        fn_case(S, "find", [op, plain(np.array(["a"] * 5))], [_Op(0), _Op(1)], f"{lab0}:nobroadcast")
+        fn_case(S, "center", [op], [_Op(0), 2.5], f"{lab0}:floatwidth")
+        fn_case(S, "center", [op, plain(np.array([3, 4, 5, 6], dtype="u8"))], [_Op(0), _Op(1)], f"{lab0}:u8width")
+        fn_case(S, "zfill", [op, plain(np.array([3, 4, 5, 6], dtype="u8"))], [_Op(0), _Op(1)], f"{lab0}:u8width")
+        fn_case(S, "expandtabs", [op], [_Op(0), 2.5], f"{lab0}:floattab")
+        fn_case(S, "replace", [op], [_Op(0), "a", "b", 1.5], f"{lab0}:floatcount")
+        fn_case(S, "replace", [op, plain(np.array([1, 2, 3, 4], dtype="u8"))], [_Op(0), "a", "b", _Op(1)], f"{lab0}:u8count")
+        fn_case(S, "slice", [op], [_Op(0), 0, 5, 0], f"{lab0}:zero")
+        fn_case(S, "slice", [op], [_Op(0), 1.5], f"{lab0}:floatstop")
+        tab = t_plain(np.array(["\t" * 3, "a\tb"], dtype=spec.build()))
+        fn_case(S, "expandtabs", [tab], [_Op(0), 2**31], f"{lab0}:overflow")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
-              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec]
+              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
+              gen_tfn]
 
 
 def main():

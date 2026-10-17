@@ -440,9 +440,13 @@ namespace NumSharp.Tests.Fuzz
                 c.partition(0, -1);
                 return null;
             });
-            T(l, "NDCharArray.partition", "the string partition (np.char.partition): the next phase of np.char", f =>
+            E(l, "NDCharArray.partition", "the string partition (np.strings.partition, stacked on a new last axis): U, S, a str and an array separator", f =>
             {
                 using var c = np.@char.array(new[] { "a b", "c" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 44, 98 }, new byte[] { 99 } });
+                using var bySep = s.partition(new byte[] { 44 });
+                using var seps = np.array(new[] { " ", "c" });
+                using var byArray = c.partition(seps);
                 return c.partition(" ");
             });
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----

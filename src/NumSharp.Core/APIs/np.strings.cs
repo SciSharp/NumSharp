@@ -138,7 +138,7 @@ namespace NumSharp
                 if (NDStringUfuncs.IsVString(a))
                     return np.multiply(a, reps);
                 // a_len = str_len(a)
-                using var aLen = str_len(a);
+                using var aLen = TextLengths(a);
                 // if np.any(a_len > sys.maxsize / np.maximum(i, 1)): raise OverflowError(...)
                 // sys.maxsize / x is the double loop: the Python int becomes 9.223372036854775807e18 and x a double.
                 using (var floor = np.maximum(reps, 1))
@@ -189,13 +189,15 @@ namespace NumSharp
 
             /// <summary>
             ///     NumPy's <c>str_len</c> for the internal size pass of <see cref="multiply(NDArray, NDArray)"/>: the length of
-            ///     every string (trailing NULs never count, embedded ones do), int64.
+            ///     every string (trailing NULs never count, embedded ones do), int64. The public ufunc is
+            ///     <see cref="str_len(NDArray, NDArray, NDArray, DType)"/>; this one keeps multiply's own error text (the
+            ///     operand's dtype class, after NumPy's <c>np.asanyarray</c>).
             /// </summary>
             /// <param name="x">The operand.</param>
             /// <returns>A fresh int64 array of <paramref name="x"/>'s dimensions.</returns>
             /// <exception cref="TypeError"><paramref name="x"/> is not text: NumPy's <c>ufunc 'str_len' did not contain a loop
             ///     with signature matching types &lt;class 'numpy.dtypes.Int64DType'&gt; -&gt; None</c>.</exception>
-            internal static NDArray str_len(NDArray x)
+            internal static NDArray TextLengths(NDArray x)
             {
                 if (!NDStringUfuncs.IsString(x))
                     throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
@@ -213,9 +215,34 @@ namespace NumSharp
             /// <returns>The output descriptor.</returns>
             /// <exception cref="TypeError">The string is not a descriptor NumPy understands (a float size, a width past the
             ///     class limit): "data type 'U6.0' not understood".</exception>
-            private static DType OutputDescriptor(DType text, NDArray largest)
+            internal static DType OutputDescriptor(DType text, NDArray largest)
+                => ParseOutputDescriptor($"{text.@char}{largest.ToString(false)}");
+
+            /// <summary>
+            ///     <see cref="OutputDescriptor(DType, NDArray)"/> for a size the fused size passes computed as a number: NumPy
+            ///     prints an int64 size as <c>6</c> and a float64 one (a uint64 width or count promotes the sizes) as
+            ///     <c>6.0</c>, which never parses.
+            /// </summary>
+            /// <param name="text">The text operand's descriptor (its class letter).</param>
+            /// <param name="largest">The largest size.</param>
+            /// <param name="floatSizes">True when NumPy's sizes are float64 (the descriptor then fails: <c>'U6.0'</c>).</param>
+            /// <returns>The output descriptor.</returns>
+            /// <exception cref="TypeError">A float size, or a width past the class limit: "data type 'U6.0' not understood".</exception>
+            internal static DType OutputDescriptor(DType text, long largest, bool floatSizes)
             {
-                string spec = $"{text.@char}{largest.ToString(false)}";
+                if (!floatSizes)
+                    return ParseOutputDescriptor($"{text.@char}{largest.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                // The float64 maximum printed as NumPy prints that scalar ('6.0', '1e+16').
+                using var size = NDArray.Scalar((double)largest);
+                return OutputDescriptor(text, size);
+            }
+
+            /// <summary>Parses a size descriptor string as NumPy's <c>np.empty_like(..., dtype=out_dtype)</c> does.</summary>
+            /// <param name="spec">The descriptor string (<c>'U6'</c>, <c>'S6.0'</c>, …).</param>
+            /// <returns>The descriptor (an unsized <c>'U0'</c> / <c>'S0'</c> as width 1).</returns>
+            /// <exception cref="TypeError">NumPy cannot parse it: "data type 'U6.0' not understood".</exception>
+            private static DType ParseOutputDescriptor(string spec)
+            {
                 DType parsed;
                 try
                 {
