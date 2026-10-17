@@ -11770,10 +11770,117 @@ def _chm_transform():
     _chm_fn([col], "partition", [_chx_arr(0), _chx_v([[" ", "-"], ["y", "z"]])], layout="broadcast:mismatch")
 
 
+def _chm_search():
+    """numpy.char's length and search functions (numpy.strings' str_len, count, find, rfind, index, rindex, startswith,
+    endswith) and the chararray members of the seven search names (C5's second batch): plain int64 / bool results."""
+    search = [("count", "sub"), ("find", "sub"), ("rfind", "sub"), ("index", "sub"), ("rindex", "sub"),
+              ("startswith", "prefix"), ("endswith", "suffix")]
+    for spec in ["<U4", "|S4"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            cha = _chx_pool(spec, layout, 3)
+            shape = _chx_shape(cha)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            row = shape[-1] if nd else 0
+            label = f"{spec}:{layout}"
+            # ---- the members: chararray.<name>(sub, start, end) -> <name>(self, sub, start, end), a plain result ----
+            for name, argname in search:
+                # The stored text is searched unstripped: a space or a NUL finds the trailing whitespace c[i] hides.
+                for sub, sl in [(word("a"), "a"), (word(" "), "space"), (word(""), "empty"), (word("ab"), "ab"),
+                                (word("\x00"), "nul"), (word("  "), "two_spaces")]:
+                    _chm_member([cha], name, [_chx_v(sub)], layout=f"{label}:{sl}")
+                _chm_member([cha], name, [_chx_v(word(" ")), _chx_v(1)], layout=f"{label}:start1")
+                _chm_member([cha], name, [_chx_v(word(" ")), _chx_v(0), _chx_v(2)], layout=f"{label}:end2")
+                _chm_member([cha], name, [_chx_v(word(" "))], {"end": _chx_v(-1)}, layout=f"{label}:end_neg")
+                _chm_member([cha], name, [_chx_v(word(" ")), _chx_v(-3), _chx_v(100)], layout=f"{label}:wide_range")
+                _chm_member([cha], name, [_chx_v(word("")), _chx_v(5), _chx_v(2)], layout=f"{label}:empty_range")
+                _chm_member([cha], name, [], {argname: _chx_v(word(" ")), "start": _chx_v(1)}, layout=f"{label}:kw")
+                # NumPy's refusals: no loop for a substring of the other class or a number, a start that cannot reach
+                # int64 under same_kind (a float, text).
+                _chm_member([cha], name, [_chx_v(alien("a"))], layout=f"{label}:alien")
+                _chm_member([cha], name, [_chx_v(1)], layout=f"{label}:int_sub")
+                _chm_member([cha], name, [_chx_v(word("a")), _chx_v(1.5)], layout=f"{label}:float_start")
+                _chm_member([cha], name, [_chx_v(word("a")), _chx_v(word("1"))], layout=f"{label}:text_start")
+                if nd >= 1 and size > 0:
+                    subs = [word(w) for w in ["a", " ", "", "c d"] * 3][:row]
+                    _chm_member([cha], name, [_chx_v(subs)], layout=f"{label}:subs")
+                    _chm_member([cha], name, [_chx_v(word(" ")), _chx_v(([0, 1, -1, 2] * 3)[:row])],
+                                layout=f"{label}:starts")
+                    _chm_member([cha], name, [_chx_v(word(" ")), _chx_v(0), _chx_v(([1, 3, -2, 9] * 3)[:row])],
+                                layout=f"{label}:ends")
+                    _chm_member([cha], name, [_chx_v(subs + [word("x")])], layout=f"{label}:subs_longer")
+        # Long texts: the search kernels' vector paths (a match past the first vector, a miss over a whole element).
+        longs = [word(v) for v in ["x" * 40 + "ab" + "y" * 20, "ab" * 33, "q" * 64, "a b " * 15 + "ab", "", "ab"]]
+        recipe = _chx_vals(longs, spec.replace("4", "70"))
+        for name, _ in search:
+            _chm_member([recipe], name, [_chx_v(word("ab"))], layout=f"{spec}:long")
+            _chm_member([recipe], name, [_chx_v(word("ab")), _chx_v(10), _chx_v(60)], layout=f"{spec}:long:range")
+        for name, _ in search:
+            _chm_member([recipe], name, [_chx_v(word("b "))], layout=f"{spec}:long:other")
+            _chm_member([recipe], name, [_chx_v(word("y"))], {"start": _chx_v(-30)}, layout=f"{spec}:long:tail")
+
+    # ---- the module functions over plain and chararray operands (numpy.strings' class rules: always plain) ----
+    for spec in ["<U4", "|S4"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            base = _chx_pool(spec, layout, 4)
+            shape = _chx_shape(base)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            label = f"{spec}:{layout}"
+            for view, vl in [(_chx_arr(0), "plain"), (_chx_cha(0), "chararray")]:
+                _chm_fn([base], "str_len", [view], layout=f"{label}:{vl}")
+                for name, argname in search:
+                    _chm_fn([base], name, [view, _chx_v(word(" "))], layout=f"{label}:{vl}")
+                    _chm_fn([base], name, [view, _chx_v(word("a")), _chx_v(1)], layout=f"{label}:{vl}:start")
+                    _chm_fn([base], name, [view], {argname: _chx_v(word("")), "end": _chx_v(2)},
+                            layout=f"{label}:{vl}:kw")
+            if nd >= 1 and size > 0:
+                # A chararray in a non-text position (the substring): the result stays plain.
+                sub = _chx_vals([word(" ")], spec)
+                for name, _ in search:
+                    _chm_fn([base, sub], name, [_chx_arr(0), _chx_cha(1)], layout=f"{label}:chararray_sub")
+                # str_len's ufunc keywords: out= (a same_kind int32 out; a chararray out is not int64-castable text),
+                # where= with an out, dtype= (only int64 has a loop).
+                out = _chx_vals(np.zeros(shape, dtype=np.int32).tolist(), "int32", out=True)
+                _chm_fn([base, out], "str_len", [_chx_cha(0)], {"out": _chx_arr(1)}, layout=f"{label}:out")
+                outz = _chx_vals(np.full(shape, 7, dtype=np.int64).tolist(), "int64", out=True)
+                mask = _chx_vals((np.arange(size) % 2 == 0).reshape(shape).tolist(), "bool")
+                _chm_fn([base, outz, mask], "str_len", [_chx_arr(0)], {"out": _chx_arr(1), "where": _chx_arr(2)},
+                        layout=f"{label}:where")
+                _chm_fn([base], "str_len", [_chx_arr(0)], {"dtype": {"dt": "int64"}}, layout=f"{label}:dtype")
+                _chm_fn([base], "str_len", [_chx_arr(0)], {"dtype": {"dt": "int32"}}, layout=f"{label}:dtype_noloop")
+    # StringDType text (a StringDType or str substring; a bytes one has no loop).
+    t_text = {"T": enc(CHM_T)}
+    t_sub = {"T": enc([" "])}
+    _chm_fn([t_text], "str_len", [_chx_arr(0)], layout="T")
+    for name, _ in search:
+        _chm_fn([t_text, t_sub], name, [_chx_arr(0), _chx_arr(1)], layout="T:T_sub")
+        _chm_fn([t_text], name, [_chx_arr(0), _chx_v(" ")], layout="T:str_sub")
+        _chm_fn([t_text], name, [_chx_arr(0), _chx_v(b" ")], layout="T:bytes_sub")
+        _chm_fn([t_text], name, [_chx_arr(0), _chx_v("b"), _chx_v(1), _chx_v(-1)], layout="T:range")
+    # Python values as the text: a str, bytes, lists, numbers (no loop: str_len, a one-input ufunc, names a number by its
+    # default DType, Int64DType / Float64DType; the four-input search ufuncs name the weak _PyLongDType / _PyFloatDType).
+    for value, vl in [("ab cd", "str"), (b"ab cd", "bytes"), (["ab cd", "x y"], "list"), ([b"a-b", b"c"], "bytes_list"),
+                      ([["a b", "c"], ["d", "e f"]], "nested"), (5, "int"), (5.5, "float")]:
+        sub = b" " if isinstance(value, bytes) or (isinstance(value, list) and isinstance(value[0], bytes)) else " "
+        _chm_fn([], "str_len", [_chx_v(value)], layout=f"value:{vl}")
+        for name, _ in search:
+            _chm_fn([], name, [_chx_v(value), _chx_v(sub)], layout=f"value:{vl}")
+    # Broadcasting: a column of texts against a row of substrings / starts, and a shape mismatch.
+    col = _chx_vals([["ab cd"], ["x-y z"], ["q"]], "<U5")
+    for name, _ in search:
+        _chm_fn([col], name, [_chx_arr(0), _chx_v([" ", "-"])], layout="broadcast")
+        _chm_fn([col], name, [_chx_cha(0), _chx_v("y"), _chx_v([0, 3])], layout="broadcast:chararray")
+        _chm_fn([col], name, [_chx_arr(0), _chx_v([[" ", "-"], ["y", "z"]])], layout="broadcast:mismatch")
+
+
 def gen_strcharmeth():
     """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
-    C5): partition / rpartition and the padding functions."""
+    C5): partition / rpartition, the padding functions, str_len and the search functions."""
     _chm_transform()
+    _chm_search()
     _chx_flush()
 
 # ----------------------------------------------------------------------------------------------------------------------

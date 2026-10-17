@@ -489,14 +489,116 @@ namespace NumSharp.Backends.Strings
         /// <param name="end">The end index.</param>
         /// <param name="back">True for <c>endswith</c> (NumPy's <c>STARTPOSITION::BACK</c>).</param>
         /// <returns>1 for a match, 0 otherwise (the bool the loop stores).</returns>
-        /// <remarks>The lane masks (<see cref="TailMatchLanes{TUnit}"/>: the match mask's bit at the tested offset) on AVX2
-        ///     hosts for elements of at most 64 units, a span compare (<see cref="TailMatchScalar{TUnit}"/>) otherwise.</remarks>
+        /// <remarks>A range from a non-negative <paramref name="start"/> to the element's end (NumPy's default
+        ///     <c>end=None</c>) takes one compare at the one offset that can match (<see cref="TailMatchWholeRange{TUnit}"/>);
+        ///     any other range takes the lane masks (<see cref="TailMatchLanes{TUnit}"/>: the match mask's bit at the tested
+        ///     offset) on AVX2 hosts for elements of at most 64 units, a span compare (<see cref="TailMatchScalar{TUnit}"/>)
+        ///     otherwise.</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static byte TailMatch<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, long end, bool back)
             where TUnit : unmanaged, IEquatable<TUnit>
-            => MasksFit<TUnit>(hayWidth)
+        {
+            // An end at or past the element's width can only clamp to the element's length, and a non-negative start is
+            // not adjusted: the offset that can match is known without the general paths' mask of every offset.
+            if (start >= 0 && end >= hayWidth / sizeof(TUnit))
+                return TailMatchWholeRange<TUnit>(hay, hayWidth, sub, subWidth, start, back);
+            return MasksFit<TUnit>(hayWidth)
                 ? TailMatchLanes<TUnit>(hay, hayWidth, sub, subWidth, start, end, back)
                 : TailMatchScalar<TUnit>(hay, hayWidth, sub, subWidth, start, end, back);
+        }
+
+        /// <summary>
+        ///     <see cref="TailMatch{TUnit}"/> over a range that runs from a non-negative <paramref name="start"/> to the
+        ///     element's end (an <c>end</c> at or past the element's width, as NumPy's default <c>None</c> is): one compare of
+        ///     the needle's units at the one offset that can match — <paramref name="start"/> for <c>startswith</c>, the
+        ///     element's length minus the needle's for <c>endswith</c>.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="hay">The tested element.</param>
+        /// <param name="hayWidth">Its width in bytes.</param>
+        /// <param name="sub">The prefix / suffix element.</param>
+        /// <param name="subWidth">Its width in bytes.</param>
+        /// <param name="start">The start index, 0 or more.</param>
+        /// <param name="back">True for <c>endswith</c>.</param>
+        /// <returns>1 for a match, 0 otherwise: the general paths' answer for the same range.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     <c>startswith</c> reads no length of the element. A non-empty needle's last unit is not NUL (its length runs to
+        ///     its last nonzero unit), so units equal at <c>[start, start + len2)</c> put a nonzero unit at
+        ///     <c>start + len2 - 1</c>, and the element's length is at least <c>start + len2</c>: the general paths' test
+        ///     <c>min(end, len1) - len2 &gt;= start</c> holds. A start past the element's length meets only trailing NULs
+        ///     there, so the compare fails as the general paths' empty range does. Only an empty needle with a start above 0
+        ///     needs the length (it matches while <c>start &lt;= len1</c>).
+        ///     </para>
+        ///     <para>
+        ///     <c>endswith</c> needs the length (the suffix ends at it) but not the match mask: the general lane path built the
+        ///     needle's equality mask at every offset of the element and read one bit of it (one vector compare per needle
+        ///     unit and element vector; <c>startswith('alpha be')</c> over <c>&lt;U24</c> text ran at NumPy's speed).
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static byte TailMatchWholeRange<TUnit>(byte* hay, int hayWidth, byte* sub, int subWidth, long start, bool back)
+            where TUnit : unmanaged
+        {
+            int len2 = Units<TUnit>(sub, subWidth);
+            long offset;
+            if (back)
+            {
+                // The range ends at the element's length: the suffix starts len2 units before it, at or after start.
+                long len1 = Units<TUnit>(hay, hayWidth);
+                offset = len1 - len2;
+                if (offset < start)
+                    return 0;
+                if (len2 == 0)
+                    return 1;
+            }
+            else
+            {
+                if (len2 == 0)
+                    return start == 0 || start <= Units<TUnit>(hay, hayWidth) ? (byte)1 : (byte)0;
+                offset = start;
+                // A prefix that does not fit in the element's width cannot match (the element's length is at most it).
+                if (offset > hayWidth / sizeof(TUnit) - len2)
+                    return 0;
+            }
+            return BytesEqual(hay + offset * sizeof(TUnit), sub, len2 * sizeof(TUnit)) ? (byte)1 : (byte)0;
+        }
+
+        /// <summary>
+        ///     Whether the <paramref name="bytes"/> bytes at <paramref name="a"/> equal those at <paramref name="b"/>, read
+        ///     with overlapping loads that stay inside both ranges (no byte before or past either is touched).
+        /// </summary>
+        /// <param name="a">The first range.</param>
+        /// <param name="b">The second range.</param>
+        /// <param name="bytes">The length in bytes, 0 or more.</param>
+        /// <returns>True when every byte is equal (true for 0 bytes).</returns>
+        /// <remarks>Up to 32 bytes the compare is inline (two 16-byte loads per side, or two 8 / 4-byte reads); a longer
+        ///     needle goes to the span compare, whose call costs less than its length there.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool BytesEqual(byte* a, byte* b, int bytes)
+        {
+            if (bytes >= 16)
+            {
+                if (bytes > 32)
+                    return new ReadOnlySpan<byte>(a, bytes).SequenceEqual(new ReadOnlySpan<byte>(b, bytes));
+                // The first and the last 16 bytes (they overlap below 32).
+                var diff = (Vector128.Load(a) ^ Vector128.Load(b)) | (Vector128.Load(a + bytes - 16) ^ Vector128.Load(b + bytes - 16));
+                return diff == Vector128<byte>.Zero;
+            }
+            if (bytes >= 8)
+                return ((Unsafe.ReadUnaligned<ulong>(a) ^ Unsafe.ReadUnaligned<ulong>(b))
+                        | (Unsafe.ReadUnaligned<ulong>(a + bytes - 8) ^ Unsafe.ReadUnaligned<ulong>(b + bytes - 8))) == 0;
+            if (bytes >= 4)
+                return ((Unsafe.ReadUnaligned<uint>(a) ^ Unsafe.ReadUnaligned<uint>(b))
+                        | (Unsafe.ReadUnaligned<uint>(a + bytes - 4) ^ Unsafe.ReadUnaligned<uint>(b + bytes - 4))) == 0;
+            // 0 to 3 bytes: only an S needle (a U needle is a whole number of 4-byte units).
+            for (int i = 0; i < bytes; i++)
+            {
+                if (a[i] != b[i])
+                    return false;
+            }
+            return true;
+        }
 
         /// <summary><see cref="TailMatch{TUnit}"/> by the lane masks: the needle's match mask read at the tested offset.</summary>
         /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>

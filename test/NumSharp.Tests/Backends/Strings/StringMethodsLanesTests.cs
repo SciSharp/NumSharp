@@ -222,6 +222,54 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     startswith / endswith over a range from a non-negative start to the element's end (NumPy's default
+        ///     <c>end=None</c>): the one-compare body (<see cref="NDTextElements.TailMatchWholeRange{TUnit}"/>, which reads no
+        ///     length for startswith) equals the span body for every width (past the 64-unit lane cap too), every needle kind
+        ///     (empty, longer than the element, NULs inside), every start from 0 to past the width, and an end of exactly
+        ///     the width as well as <c>long.MaxValue</c>.
+        /// </summary>
+        [TestMethod]
+        public void TailMatchWholeRange_EqualsTheSpanBody_EveryWidth()
+        {
+            WholeRange<byte>(1);
+            WholeRange<uint>(4);
+        }
+
+        /// <summary>The body of <see cref="TailMatchWholeRange_EqualsTheSpanBody_EveryWidth"/> for one unit type.</summary>
+        /// <typeparam name="TUnit">The code unit.</typeparam>
+        /// <param name="unit">Its size.</param>
+        private static void WholeRange<TUnit>(int unit) where TUnit : unmanaged, IEquatable<TUnit>
+        {
+            var rng = new System.Random(4026 + unit);
+            foreach (int w in Widths(unit).Concat(unit == 4 ? new[] { 160, 256, 400 } : new[] { 100, 200 }))
+            {
+                var hay = new byte[w];
+                int units = w / unit;
+                for (int trial = 0; trial < 120; trial++)
+                {
+                    fixed (byte* h = hay)
+                    {
+                        Fill(rng, h, w, unit);
+                        Needle(rng, h, w, unit, out var sub);
+                        fixed (byte* n = sub)
+                        {
+                            // 0 a quarter of the time (the default), else any start up to two units past the width.
+                            long s = rng.Next(4) == 0 ? 0 : rng.Next(units + 3);
+                            foreach (long e in new[] { (long)units, long.MaxValue })
+                            {
+                                foreach (bool back in new[] { false, true })
+                                    Assert.AreEqual(NDTextElements.TailMatchScalar<TUnit>(h, w, n, sub.Length, s, e, back),
+                                                    NDTextElements.TailMatchWholeRange<TUnit>(h, w, n, sub.Length, s, back),
+                                                    $"{(back ? "endswith" : "startswith")} w={w} unit={unit} hay={Hex(hay)} " +
+                                                    $"sub={Hex(sub)} start={s} end={e}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         ///     strip / lstrip / rstrip (whitespace and chars) and slice: the lane bodies write the scalar bodies' output
         ///     element byte for byte (zero fill included) and nothing past it, for every width up to 64 bytes.
         /// </summary>
@@ -532,6 +580,8 @@ namespace NumSharp.Tests.Backends.Strings
                     _ = NDTextElements.RFindLanes<TUnit>(p, w, s, sw, 0, long.MaxValue);
                     _ = NDTextElements.CountLanes<TUnit>(p, w, s, sw, 0, long.MaxValue);
                     _ = NDTextElements.TailMatchLanes<TUnit>(p, w, s, sw, 0, long.MaxValue, true);
+                    _ = NDTextElements.TailMatchWholeRange<TUnit>(p, w, s, sw, 0, false);
+                    _ = NDTextElements.TailMatchWholeRange<TUnit>(p, w, s, sw, 0, true);
                     _ = NDTextElements.Units<TUnit>(p, w);
                     _ = NDTextElements.ExpandTabsLengthLanes<TUnit>(p, w, 8);
                     for (int t = 0; t < 3; t++)

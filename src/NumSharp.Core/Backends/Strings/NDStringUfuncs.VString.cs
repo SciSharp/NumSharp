@@ -66,6 +66,8 @@ namespace NumSharp.Backends.Strings
         ///     A Python bool is NOT weak (<c>BoolDType</c>), and a 0-d ARRAY is strong whatever it holds: only the literal mark
         ///     picks the abstract class, exactly as NumPy's <c>NPY_ARRAY_WAS_PYTHON_LITERAL</c> flag does. (The numeric ufuncs
         ///     keep the house rule that reads every 0-d operand as weak for their RESULT dtype; this name is for the text.)
+        ///     This is the name for a ufunc of two or more inputs; a ONE-input ufunc marks no operand weak, see
+        ///     <see cref="UnaryDispatchClass"/>.
         /// </remarks>
         internal static string DispatchClass(NDArray x)
         {
@@ -79,6 +81,35 @@ namespace NumSharp.Backends.Strings
                     _ => DTypeRegistry.PyLong.ToString(),
                 };
             return x.dtype.Meta.ToString();
+        }
+
+        /// <summary>
+        ///     The class NumPy's ufunc dispatcher names for the operand of a ONE-input ufunc (<c>str_len</c>, the nine
+        ///     predicates, the whitespace strips) in a refusal: the DTypeMeta of the array NumPy makes of the operand — for a
+        ///     C# number literal the default descriptor of its Python scalar (<c>Int64DType</c>, <c>UInt64DType</c> past
+        ///     int64, <c>Float64DType</c>, <c>Complex128DType</c>), never the abstract NEP 50 class.
+        /// </summary>
+        /// <param name="x">The operand, or null for an absent slot.</param>
+        /// <returns>NumPy's repr of the class (<c>&lt;class 'numpy.dtypes.Int64DType'&gt;</c>), or <c>None</c>.</returns>
+        /// <remarks>
+        ///     NumPy's <c>convert_ufunc_arguments</c> (ufunc_object.c) leaves its input loop after the first input when
+        ///     <c>nin == 1</c>, before <c>npy_mark_tmp_array_if_pyscalar</c> could mark the operand weak. So
+        ///     <c>np.strings.str_len(5)</c> names <c>Int64DType</c> where <c>np.strings.count(5, ' ')</c> names
+        ///     <c>_PyLongDType</c>, and <c>np.strings.isalpha(5.0)</c> names <c>Float64DType</c> (probed against 2.4.2). The
+        ///     mapping is <see cref="NDStringMethods.AsAnyArray"/>'s, NumPy's <c>np.asarray</c> of the Python scalar. (A
+        ///     Python int past uint64 is an object array there, <c>ObjectDType</c>; no C# literal holds one.)
+        /// </remarks>
+        internal static string UnaryDispatchClass(NDArray x)
+        {
+            if (x is null || !x.WasPythonLiteral)
+                return DispatchClass(x);
+            return x.Storage.GetAtIndex(0) switch
+            {
+                Complex => np.complex128.Meta.ToString(),
+                float or double => np.float64.Meta.ToString(),
+                ulong u when u > long.MaxValue => np.uint64.Meta.ToString(),
+                _ => np.int64.Meta.ToString(),
+            };
         }
 
         /// <summary>The number of outputs of NumPy's ufunc <paramref name="ufunc"/> (2 for <c>frexp</c>, <c>modf</c>, <c>divmod</c>).</summary>

@@ -570,6 +570,43 @@ namespace NumSharp.Tests.Fuzz
                 using var bySize = c.expandtabs(4);
                 return c.expandtabs();
             });
+            // The length and search functions (numpy.strings' own) and the chararray search members: plain int64 / bool
+            // results, so a chararray operand leaves no chararray view behind.
+            E(l, "np.char.str_len", "U / S / StringDType, a chararray input, out= with where=, a number (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "ab", "cde" });
+                using var s = np.array(new object[] { new byte[] { 97, 98 } });
+                using var t = np.array(new[] { "xy", "z" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "p  ", "qr" });
+                using var o = np.zeros(new Shape(2), np.int32);
+                using var mask = np.array(new[] { true, false });
+                using var bytes = np.@char.str_len(s);
+                using var vstring = np.@char.str_len(t);
+                using var chars = np.@char.str_len(c);
+                np.@char.str_len(u, o, mask);
+                try
+                {
+                    np.@char.str_len(5);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.str_len(u);
+            });
+            AddCharSearch(l, "np.char.count", (a, sub, start, end) => np.@char.count(a, sub, start, end));
+            AddCharSearch(l, "np.char.find", (a, sub, start, end) => np.@char.find(a, sub, start, end));
+            AddCharSearch(l, "np.char.rfind", (a, sub, start, end) => np.@char.rfind(a, sub, start, end));
+            AddCharSearch(l, "np.char.index", (a, sub, start, end) => np.@char.index(a, sub, start, end));
+            AddCharSearch(l, "np.char.rindex", (a, sub, start, end) => np.@char.rindex(a, sub, start, end));
+            AddCharSearch(l, "np.char.startswith", (a, prefix, start, end) => np.@char.startswith(a, prefix, start, end));
+            AddCharSearch(l, "np.char.endswith", (a, suffix, start, end) => np.@char.endswith(a, suffix, start, end));
+            AddCharArraySearch(l, "NDCharArray.count", (c, sub, start, end) => c.count(sub, start, end));
+            AddCharArraySearch(l, "NDCharArray.find", (c, sub, start, end) => c.find(sub, start, end));
+            AddCharArraySearch(l, "NDCharArray.rfind", (c, sub, start, end) => c.rfind(sub, start, end));
+            AddCharArraySearch(l, "NDCharArray.index", (c, sub, start, end) => c.index(sub, start, end));
+            AddCharArraySearch(l, "NDCharArray.rindex", (c, sub, start, end) => c.rindex(sub, start, end));
+            AddCharArraySearch(l, "NDCharArray.startswith", (c, prefix, start, end) => c.startswith(prefix, start, end));
+            AddCharArraySearch(l, "NDCharArray.endswith", (c, suffix, start, end) => c.endswith(suffix, start, end));
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
             // Python scalar, an object list holding None), the element errors (whose piece store and readers must be
@@ -787,6 +824,79 @@ namespace NumSharp.Tests.Fuzz
                 {
                 }
                 return pad(c, 6, null);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of numpy.char's search functions (<c>count</c>, <c>find</c>, <c>rfind</c>, <c>index</c>,
+        ///     <c>rindex</c>, <c>startswith</c>, <c>endswith</c>, numpy.strings' own): the U, S and StringDType routes, a
+        ///     chararray input (a plain result), substring and start arrays, a range, and the two refusals (a bytes substring
+        ///     beside U: TypeError; a float start: the cast's ArgumentException). Every element holds every substring searched
+        ///     outside the refusals, so <c>index</c> / <c>rindex</c> raise only where meant to.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The function's inventory id.</param>
+        /// <param name="search">The function: text, substring, start, end (null for NumPy's defaults).</param>
+        private static void AddCharSearch(List<LeakCase> l, string api, Func<object, object, object, object, NDArray> search)
+        {
+            E(l, api, "U / S / StringDType, a chararray input, substring and start arrays, a range; a bytes substring beside U (TypeError) and a float start (the cast error)", f =>
+            {
+                using var u = np.array(new[] { "ab ab", "abba" });
+                using var s = np.array(new object[] { new byte[] { 97, 98 } });
+                using var t = np.array(new[] { "xy", "yz" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "b  ", "a b" });
+                using var subs = np.array(new[] { "a", "b" });
+                using var starts = np.array(new long[] { 1, 0 });
+                using var bytes = search(s, new byte[] { 98 }, null, null);
+                using var vstring = search(t, "y", null, null);
+                using var chars = search(c, " ", null, null);
+                using var bySubs = search(u, subs, starts, null);
+                using var ranged = search(u, "b", 1, -1);
+                try
+                {
+                    search(u, new byte[] { 98 }, null, null);
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    search(u, "b", 1.5, null);
+                }
+                catch (ArgumentException)
+                {
+                }
+                return search(u, "b", null, null);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of chararray's search members: U and S receivers (plain results), substring and end arrays, a
+        ///     range, and a refusal (a str substring beside an S receiver: TypeError). Every element holds every substring
+        ///     searched outside the refusal, so <c>index</c> / <c>rindex</c> do not raise.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The member's inventory id.</param>
+        /// <param name="search">The member: receiver, substring, start, end (null for NumPy's defaults).</param>
+        private static void AddCharArraySearch(List<LeakCase> l, string api, Func<NDCharArray, object, object, object, NDArray> search)
+        {
+            E(l, api, "U and S receivers, substring and end arrays, a range; a str substring beside S (TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab ab", "abba" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 98 }, new byte[] { 98, 98 } });
+                using var subs = np.array(new[] { "a", "b" });
+                using var ends = np.array(new long[] { 3, 4 });
+                using var bytes = search(s, new byte[] { 98 }, null, null);
+                using var bySubs = search(c, subs, null, ends);
+                using var ranged = search(c, "b", 1, -1);
+                try
+                {
+                    search(s, "b", null, null);
+                }
+                catch (TypeError)
+                {
+                }
+                return search(c, "b", null, null);
             });
         }
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Strings;
 
@@ -595,10 +596,71 @@ namespace NumSharp.Backends.Kernels
             var dm = NewTextKernelMethod(TextMethodName(key) + (masked ? "_m" : ""));
             var il = dm.GetILGenerator();
             var frame = EmitTextFrame(il, Slots(plan.Operands + (masked ? 1 : 0)));
-            EmitTextElementLoop(il, frame, AllTrue(frame.Pointers.Length),
-                () => EmitTextMethodBody(il, plan, frame, auxArgument: 3, mask: masked ? frame.Pointers[plan.Operands] : null));
+            var prefetch = EmitTextPrefetchDelta(il, frame, key.W0);
+            EmitTextElementLoop(il, frame, AllTrue(frame.Pointers.Length), () =>
+            {
+                EmitTextPrefetch(il, frame, prefetch);
+                EmitTextMethodBody(il, plan, frame, auxArgument: 3, mask: masked ? frame.Pointers[plan.Operands] : null);
+            });
             il.Emit(OpCodes.Ret);
             return (NDInnerLoopFunc)dm.CreateDelegate(typeof(NDInnerLoopFunc));
+        }
+
+        /// <summary>The narrowest text element (bytes) whose 1-D loop prefetches its text operand
+        ///     (<see cref="EmitTextPrefetchDelta"/>).</summary>
+        private const int TextPrefetchMinWidth = 32;
+
+        /// <summary>How far ahead (bytes, in the direction of travel) the 1-D loop prefetches its text operand.</summary>
+        private const int TextPrefetchBytes = 4096;
+
+        /// <summary><c>Sse.Prefetch0(void*)</c>, or null where the host has no SSE (the loop then emits no prefetch).</summary>
+        private static readonly MethodInfo s_textPrefetch0 =
+            Sse.IsSupported ? typeof(Sse).GetMethod(nameof(Sse.Prefetch0), new[] { typeof(void*) }) : null;
+
+        /// <summary>
+        ///     Emits the prologue of the text operand's software prefetch: a local holding the byte offset, from the current
+        ///     element, of the element <see cref="TextPrefetchBytes"/> ahead in the direction of travel
+        ///     (<c>stride * (TextPrefetchBytes / width)</c>), or nothing when the loop should not prefetch.
+        /// </summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="frame">The frame (operand 0 is the text the operation reads: every plan's first argument).</param>
+        /// <param name="width">Operand 0's element width in bytes (the key's <c>W0</c>).</param>
+        /// <returns>The offset local, or null: elements narrower than <see cref="TextPrefetchMinWidth"/> bytes, or a host
+        ///     without SSE.</returns>
+        /// <remarks>
+        ///     A text loop over elements of 32 bytes or more is limited by memory latency, not by the hardware prefetcher's
+        ///     stream detection: <c>str_len</c> of 1M <c>&lt;U24</c> elements (96 MB) took 8.3 ms without a prefetch and
+        ///     5.9 ms prefetching 4 KB ahead (a bare read of the 96 MB takes 5.2 ms on that core), and the same loop over 100K
+        ///     elements (in L3) 0.88 against 0.44 ms. Narrower elements lose 3–7 % to the extra instruction (their loop
+        ///     body is short and the hardware keeps up), so they emit none. The offset follows the stride: a reversed view
+        ///     prefetches downward, a broadcast operand (stride 0) its own element, a stepped one further ahead; a prefetch
+        ///     never faults, so an address past the operand's end is harmless.
+        /// </remarks>
+        private static LocalBuilder EmitTextPrefetchDelta(ILGenerator il, TextFrame frame, int width)
+        {
+            if (s_textPrefetch0 is null || width < TextPrefetchMinWidth)
+                return null;
+            var delta = il.DeclareLocal(typeof(long));
+            il.Emit(OpCodes.Ldloc, frame.Strides[0]);
+            il.Emit(OpCodes.Ldc_I8, (long)(TextPrefetchBytes / width));
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Stloc, delta);
+            return delta;
+        }
+
+        /// <summary>Emits <c>Sse.Prefetch0(p0 + delta)</c> for one element, or nothing when <paramref name="delta"/> is null.</summary>
+        /// <param name="il">The generator.</param>
+        /// <param name="frame">The frame.</param>
+        /// <param name="delta">The offset local of <see cref="EmitTextPrefetchDelta"/>, or null.</param>
+        private static void EmitTextPrefetch(ILGenerator il, TextFrame frame, LocalBuilder delta)
+        {
+            if (delta is null)
+                return;
+            il.Emit(OpCodes.Ldloc, frame.Pointers[0]);
+            il.Emit(OpCodes.Ldloc, delta);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Call, s_textPrefetch0);
         }
 
         /// <summary>Emits a rows kernel: the 1-D element loop inside the row loop of <see cref="EmitTextRowLoop"/>.</summary>

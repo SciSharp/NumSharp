@@ -313,5 +313,132 @@ namespace NumSharp.Tests.Backends.Strings
             Texts(cu.center(7, null)).Should().Equal(Texts(cu.center(7, " ")));
             Texts(np.@char.expandtabs(np.array(new[] { "a\tb" }), null)).Should().Equal("a       b");
         }
+
+        // ------------------------------------------------------------------ the length and search family: plain results
+
+        /// <summary>
+        ///     The search members return PLAIN int64 / bool arrays (<c>chararray.__array_wrap__</c> keeps the class only for
+        ///     a text result) over the STORED text: <c>'ab  '</c> holds two trailing spaces that <c>c[0]</c> strips, and
+        ///     <c>count(' ')</c> counts them. A 0-d chararray gives a 0-d array, not a scalar.
+        /// </summary>
+        [TestMethod]
+        public void SearchMembers_ReturnPlainArrays_OverTheStoredText()
+        {
+            var c = np.@char.array(new[] { "ab  ", "cab", "b b " });
+            var count = c.count("b");
+            count.Should().NotBeOfType<NDCharArray>();
+            count.dtype.ToString().Should().Be("int64");
+            count.ToArray<long>().Should().Equal(1L, 1L, 2L);
+            c.count(" ").ToArray<long>().Should().Equal(2L, 0L, 2L);
+            c.find(" ").ToArray<long>().Should().Equal(2L, -1L, 1L);
+            c.rfind(" ").ToArray<long>().Should().Equal(3L, -1L, 3L);
+            c.find("b", 0, 2).ToArray<long>().Should().Equal(1L, -1L, 0L);
+            c.rfind("b", end: -1).ToArray<long>().Should().Equal(1L, -1L, 2L);
+            c.index("b", 1).ToArray<long>().Should().Equal(1L, 2L, 2L);
+            c.rindex("b").ToArray<long>().Should().Equal(1L, 2L, 2L);
+            var ends = c.endswith(" ");
+            ends.Should().NotBeOfType<NDCharArray>();
+            ends.dtype.ToString().Should().Be("bool");
+            ends.ToArray<bool>().Should().Equal(true, false, true);
+            c.startswith("b").ToArray<bool>().Should().Equal(false, false, true);
+            c.startswith("b", 1).ToArray<bool>().Should().Equal(true, false, false);
+            c.endswith("b", 0, 2).ToArray<bool>().Should().Equal(true, false, false);
+
+            var s = np.@char.array(new object[]
+            {
+                System.Text.Encoding.Latin1.GetBytes("ab  "), System.Text.Encoding.Latin1.GetBytes("cab"),
+                System.Text.Encoding.Latin1.GetBytes("b b "),
+            });
+            s.count(new byte[] { 98 }).ToArray<long>().Should().Equal(1L, 1L, 2L);
+
+            var zero = (NDCharArray)((NDCharArray)c["0:1"]).reshape(Shape.Scalar);
+            var one = zero.count("b");
+            one.ndim.Should().Be(0);
+            one.Should().NotBeOfType<NDCharArray>();
+            one.ToArray<long>().Should().Equal(1L);
+        }
+
+        /// <summary>
+        ///     <c>np.char.str_len</c> IS numpy.strings' ufunc: the stored length (trailing whitespace counts), a plain result
+        ///     for a chararray, <c>out=</c> returned itself (any int64-castable dtype), <c>where=</c> leaving the masked-off
+        ///     elements of the out, and a Python <c>str</c> giving a 0-d result.
+        /// </summary>
+        [TestMethod]
+        public void StrLen_IsTheUfunc_OverTheStoredText()
+        {
+            var c = np.@char.array(new[] { "ab  ", "cab", "b b " });
+            var lengths = np.@char.str_len(c);
+            lengths.Should().NotBeOfType<NDCharArray>();
+            lengths.ToArray<long>().Should().Equal(4L, 3L, 4L);
+            var o = np.zeros(new Shape(3), np.int32);
+            np.@char.str_len(c, o).Should().BeSameAs(o);
+            o.ToArray<int>().Should().Equal(4, 3, 4);
+            var masked = np.zeros(new Shape(3), np.int64);
+            np.@char.str_len(c, masked, np.array(new[] { true, false, true }));
+            masked.ToArray<long>().Should().Equal(4L, 0L, 4L);
+            var scalar = np.@char.str_len("abc");
+            scalar.ndim.Should().Be(0);
+            scalar.ToArray<long>().Should().Equal(3L);
+        }
+
+        /// <summary>The search family's refusals, verbatim: no loop for a substring of the other class or for a number, the
+        ///     start's same_kind cast, index's missing substring, str_len's int64-only loop.</summary>
+        [TestMethod]
+        public void Search_Refusals_AreNumPys()
+        {
+            var cu = CU();
+            Action alien = () => cu.count(new byte[] { 98 });
+            alien.Should().Throw<TypeError>().Where(e => e.Message ==
+                "ufunc 'count' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, " +
+                "<class 'numpy.dtypes.BytesDType'>, <class 'numpy.dtypes._PyLongDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
+            Action floatStart = () => cu.find("b", 1.5);
+            floatStart.Should().Throw<ArgumentException>().Where(e => e.Message.StartsWith(
+                "Cannot cast ufunc 'find' input 2 from dtype('float64') to dtype('int64') with casting rule 'same_kind'"));
+            Action missing = () => cu.index("z");
+            missing.Should().Throw<ValueError>().Where(e => e.Message == "substring not found");
+            Action int32Loop = () => np.@char.str_len(U(), dtype: np.int32);
+            int32Loop.Should().Throw<TypeError>().Where(e => e.Message ==
+                "ufunc 'str_len' did not contain a loop with signature matching types <class 'numpy.dtypes.StrDType'> -> " +
+                "<class 'numpy.dtypes.Int32DType'>");
+            Action number = () => np.@char.str_len(5);
+            number.Should().Throw<TypeError>().Where(e => e.Message ==
+                "ufunc 'str_len' did not contain a loop with signature matching types <class 'numpy.dtypes.Int64DType'> -> None");
+        }
+
+        /// <summary>
+        ///     A ONE-input text ufunc names a C# literal operand by its default DType in its no-loop refusal (NumPy's
+        ///     <c>convert_ufunc_arguments</c> marks no operand of a one-input ufunc weak): <c>Int64DType</c>,
+        ///     <c>UInt64DType</c> past int64, <c>Float64DType</c>, <c>Complex128DType</c>. A ufunc of more inputs names the
+        ///     abstract <c>_PyLongDType</c>. The re-exports share the texts (<c>np.char.str_len</c> IS
+        ///     <c>np.strings.str_len</c>). Every text was probed against NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void UnaryTextUfuncs_NameALiteralByItsDefaultDType()
+        {
+            static string NoLoop(string ufunc, string cls, string output = "None")
+                => $"ufunc '{ufunc}' did not contain a loop with signature matching types <class 'numpy.dtypes.{cls}'> -> {output}";
+            static void Raises(Func<NDArray> call, string text)
+            {
+                Action act = () => call();
+                act.Should().Throw<TypeError>().Where(e => e.Message == text);
+            }
+
+            Raises(() => np.strings.str_len(5), NoLoop("str_len", "Int64DType"));
+            Raises(() => np.@char.str_len(5), NoLoop("str_len", "Int64DType"));
+            Raises(() => np.strings.str_len(5.0), NoLoop("str_len", "Float64DType"));
+            Raises(() => np.strings.str_len(new System.Numerics.Complex(0, 1)), NoLoop("str_len", "Complex128DType"));
+            Raises(() => np.strings.isalpha(5), NoLoop("isalpha", "Int64DType"));
+            Raises(() => np.strings.isdecimal(5.0), NoLoop("isdecimal", "Float64DType"));
+            Raises(() => np.strings.isspace(9223372036854775808UL), NoLoop("isspace", "UInt64DType"));
+            Raises(() => np.strings.lstrip(5), NoLoop("_lstrip_whitespace", "Int64DType"));
+            Raises(() => np.strings.rstrip(new System.Numerics.Complex(0, 1)), NoLoop("_rstrip_whitespace", "Complex128DType"));
+            Raises(() => np.strings.strip(5.5), NoLoop("_strip_whitespace", "Float64DType"));
+            Raises(() => np.strings.str_len(5, dtype: np.int32), NoLoop("str_len", "Int64DType", "<class 'numpy.dtypes.Int32DType'>"));
+            Raises(() => np.strings.isalpha(5, dtype: np.int32), NoLoop("isalpha", "Int64DType", "<class 'numpy.dtypes.Int32DType'>"));
+            // Four inputs: the literal stays weak.
+            Raises(() => np.strings.count(5, " "),
+                "ufunc 'count' did not contain a loop with signature matching types (<class 'numpy.dtypes._PyLongDType'>, " +
+                "<class 'numpy.dtypes.StrDType'>, <class 'numpy.dtypes._PyLongDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
+        }
     }
 }

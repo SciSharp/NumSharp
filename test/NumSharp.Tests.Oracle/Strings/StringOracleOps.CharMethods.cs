@@ -62,6 +62,27 @@ namespace NumSharp.Tests.Strings
                 case "expandtabs":
                     result = c.expandtabs(arg(0, "tabsize"));
                     return true;
+                case "count":
+                    result = c.count(arg(0, "sub"), arg(1, "start"), arg(2, "end"));
+                    return true;
+                case "find":
+                    result = c.find(arg(0, "sub"), arg(1, "start"), arg(2, "end"));
+                    return true;
+                case "rfind":
+                    result = c.rfind(arg(0, "sub"), arg(1, "start"), arg(2, "end"));
+                    return true;
+                case "index":
+                    result = c.index(arg(0, "sub"), arg(1, "start"), arg(2, "end"));
+                    return true;
+                case "rindex":
+                    result = c.rindex(arg(0, "sub"), arg(1, "start"), arg(2, "end"));
+                    return true;
+                case "startswith":
+                    result = c.startswith(arg(0, "prefix"), arg(1, "start"), arg(2, "end"));
+                    return true;
+                case "endswith":
+                    result = c.endswith(arg(0, "suffix"), arg(1, "start"), arg(2, "end"));
+                    return true;
             }
             result = null;
             return false;
@@ -88,6 +109,16 @@ namespace NumSharp.Tests.Strings
                 "char.rjust" => np.@char.rjust(arg(0, "a"), arg(1, "width"), arg(2, "fillchar")),
                 "char.zfill" => np.@char.zfill(arg(0, "a"), arg(1, "width")),
                 "char.expandtabs" => np.@char.expandtabs(arg(0, "a"), arg(1, "tabsize")),
+                // str_len is a ufunc: out= may come positionally, where= and dtype= by keyword.
+                "char.str_len" => np.@char.str_len(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.count" => np.@char.count(arg(0, "a"), arg(1, "sub"), arg(2, "start"), arg(3, "end")),
+                "char.find" => np.@char.find(arg(0, "a"), arg(1, "sub"), arg(2, "start"), arg(3, "end")),
+                "char.rfind" => np.@char.rfind(arg(0, "a"), arg(1, "sub"), arg(2, "start"), arg(3, "end")),
+                "char.index" => np.@char.index(arg(0, "a"), arg(1, "sub"), arg(2, "start"), arg(3, "end")),
+                "char.rindex" => np.@char.rindex(arg(0, "a"), arg(1, "sub"), arg(2, "start"), arg(3, "end")),
+                "char.startswith" => np.@char.startswith(arg(0, "a"), arg(1, "prefix"), arg(2, "start"), arg(3, "end")),
+                "char.endswith" => np.@char.endswith(arg(0, "a"), arg(1, "suffix"), arg(2, "start"), arg(3, "end")),
                 var f => throw new InvalidOperationException($"the chararray behavior sections have no function '{f}'"),
             };
         }

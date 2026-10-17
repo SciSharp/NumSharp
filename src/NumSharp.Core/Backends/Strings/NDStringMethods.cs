@@ -103,6 +103,8 @@ namespace NumSharp.Backends.Strings
         ///     NumPy's UFuncTypeError of a call no loop accepts: <c>ufunc 'find' did not contain a loop with signature
         ///     matching types (&lt;class …&gt;, …) -&gt; None</c>, naming each operand's DType class (a C# literal's abstract
         ///     <c>_PyLongDType</c> / <c>_PyFloatDType</c>; a null default parameter is the Python int NumPy's wrapper passes).
+        ///     A one-input ufunc names a C# literal by its default DType instead (<c>Int64DType</c>), as NumPy marks no
+        ///     operand of such a ufunc weak (<see cref="NDStringUfuncs.UnaryDispatchClass"/>).
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="operands">The inputs, in order (null = a Python-int default).</param>
@@ -110,8 +112,12 @@ namespace NumSharp.Backends.Strings
         internal static TypeError NoLoop(string ufunc, params NDArray[] operands)
         {
             var classes = new string[operands.Length];
+            // NumPy marks a Python scalar weak only for a ufunc of two or more inputs (convert_ufunc_arguments stops at the
+            // first input when nin == 1): a one-input ufunc (the whitespace strips) names a C# literal by its default DType.
             for (int i = 0; i < classes.Length; i++)
-                classes[i] = operands[i] is null ? DTypeRegistry.PyLong.ToString() : NDStringUfuncs.DispatchClass(operands[i]);
+                classes[i] = operands[i] is null ? DTypeRegistry.PyLong.ToString()
+                    : classes.Length == 1 ? NDStringUfuncs.UnaryDispatchClass(operands[i])
+                    : NDStringUfuncs.DispatchClass(operands[i]);
             string types = classes.Length == 1 ? classes[0] : "(" + string.Join(", ", classes) + ")";
             return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {types} -> None");
         }
@@ -246,10 +252,11 @@ namespace NumSharp.Backends.Strings
             if (parse is not null)
                 throw parse;
             var loop = ResolveOne(x);
+            // A one-input ufunc marks no Python scalar weak: a C# literal is named by its default DType (Int64DType).
             if (dtype is not null && dtype.Meta != Int64Descr.Meta)
-                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(x)} -> {dtype.Meta}");
+                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> {dtype.Meta}");
             if (loop == TextLoop.None)
-                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(x)} -> " +
+                throw new TypeError($"ufunc 'str_len' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> " +
                                     (dtype is null ? "None" : dtype.Meta.ToString()));
             if (@out is not null && !DTypeCasting.CanCastTypeTo(Int64Descr, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new ArgumentException(
@@ -323,10 +330,11 @@ namespace NumSharp.Backends.Strings
             // The S loop (ENCODING::ASCII) is registered for the first seven predicates only.
             if (loop == TextLoop.Bytes && kind is NDTextElements.IsDecimalKind or NDTextElements.IsNumericKind)
                 loop = TextLoop.None;
+            // A one-input ufunc marks no Python scalar weak: a C# literal is named by its default DType (Int64DType).
             if (dtype is not null && dtype.Meta != DType.Boolean.Meta)
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(x)} -> {dtype.Meta}");
+                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> {dtype.Meta}");
             if (loop == TextLoop.None)
-                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(x)} -> " +
+                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.UnaryDispatchClass(x)} -> " +
                                     (dtype is null ? "None" : dtype.Meta.ToString()));
             if (@out is not null && !DTypeCasting.CanCastTypeTo(DType.Boolean, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw new ArgumentException(
