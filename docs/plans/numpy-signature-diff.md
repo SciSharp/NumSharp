@@ -45,7 +45,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.polynomial.polyutils` | 6 | 21 | 6 | 2 | 4 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
 | `np.random` | 64 | 236 | 61 | 6 | 55 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 0 | 0 | 1 | 0 | 0 | 3 | 1 |
 | `np.random.Generator` | 46 | 85 | 45 | 9 | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
-| `np.strings` | 37 | 44 | 37 | 6 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 12 | 17 | 0 | 0 | 9 |
+| `np.strings` | 42 | 49 | 42 | 11 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 12 | 17 | 0 | 0 | 4 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 5 | 21 | 2 | 0 | 2 | 2 | 0 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 |
 | `np.matrix` | 57 | 84 | 53 | 22 | 19 | 17 | 12 | 10 | 0 | 0 | 0 | 3 | 7 | 0 | 1 | 0 | 0 | 0 | 4 | 0 |
@@ -69,7 +69,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 3 | 11 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 12 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 8 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | 1341 | 2396 | 1173 | 479 | 360 | 300 | 207 | 193 | 8 | 54 | 5 | 61 | 74 | 2 | 13 | 46 | 121 | 0 | 168 | 210 |
+| **total** | 1346 | 2401 | 1178 | 484 | 360 | 300 | 207 | 193 | 8 | 54 | 5 | 61 | 74 | 2 | 13 | 46 | 121 | 0 | 168 | 205 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -3141,13 +3141,13 @@ PascalCase: `ToString`
   NDArray slice(NDArray a, NDArray start, NDArray stop, NDArray step)
   ```
 
-### Identical to NumPy (6)
+### Identical to NumPy (11)
 
-`lstrip`, `partition`, `rpartition`, `rstrip`, `strip`, `zfill`
+`capitalize`, `lower`, `lstrip`, `partition`, `rpartition`, `rstrip`, `strip`, `swapcase`, `title`, `upper`, `zfill`
 
-### NumPy public names that `np.strings` lacks (9)
+### NumPy public names that `np.strings` lacks (4)
 
-`capitalize`, `decode`, `encode`, `lower`, `mod`, `swapcase`, `title`, `translate`, `upper`
+`decode`, `encode`, `mod`, `translate`
 
 ## `np.typing`
 

@@ -95,6 +95,15 @@ L 31 (+19 at C# 12 only, +73 `default`), Q 77; 525 carry none of the four reflec
 all. 168 names are NumSharp-only (63 with several overloads, 26 with a T mark); 210 NumPy names have no member in
 their group.
 
+**The gap worklist** ([`API_DIFF_GAP.md`](API_DIFF_GAP.md), 2026-10-17, the owner's request "covering all those with
+explanations and instructions"): every mark explained, the procedure that fixes one name or family, ten work
+packages (AD1 overloads, AD2 renames, AD3 missing parameters, AD4 excluded ones, AD5 foreign parameters, AD6
+`NPTypeCode` / `Type`, AD7 generic selectors, AD8 calls that do not compile, AD9 `null`, AD10 integer sequences) with
+every affected name, the absent NumPy names and modules classified (alias / expose / implement / plan / N/A), the
+eleven decisions only the owner can make (OD1–OD11: the axis type, array_like and file parameters, `size=None`,
+NumSharp-only API, constructors, generic forms, seeds, NumPy module paths, absent names, `subok`), and an order of
+work. Its items name this plan's items where they overlap.
+
 "Working" cannot come from signatures. Its sources: the `[OpenBugs]` pins that test parameters (phase A), the probe
 done for each item, and the audit of existing parameters (phase X).
 
@@ -1929,6 +1938,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-17**: [`API_DIFF_GAP.md`](API_DIFF_GAP.md) written on `strings`: the complete gap map of the second pass
+  with explanations and instructions (work packages AD1–AD10, owner decisions OD1–OD11, absent names and modules
+  classified, order of work). The signature reports were regenerated for it after `9d8d1a7b` (np.strings' five case
+  maps: 1,178 names with a NumPy counterpart, 503 with no mark, 205 NumPy names absent).
 
 - **2026-10-17**: second pass of the signature inventory on `strings` (§2 "Second pass"): NumPy's other classes,
   constructors, extension methods and `NDArray<T>` compared too (1,173 names with a NumPy counterpart, was 983), the
