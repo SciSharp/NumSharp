@@ -7,9 +7,10 @@ namespace NumSharp.Tests.Strings
 {
     /// <summary>
     ///     The string oracle's op for sections <c>strfn</c> / <c>tfn</c> (<c>gen_strfn</c> / <c>gen_tfn</c>, strings phase 2,
-    ///     P2.5): one <c>numpy.strings</c> function per case — <c>str_len</c>, the find family, <c>startswith</c> /
-    ///     <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>, <c>partition</c> /
-    ///     <c>rpartition</c>, <c>slice</c> and the comparison names — called with the generator's positional arguments.
+    ///     P2.5) and <c>strprop</c> / <c>tprop</c> (P2.6): one <c>numpy.strings</c> function per case — <c>str_len</c>, the
+    ///     find family, <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>,
+    ///     <c>replace</c>, <c>partition</c> / <c>rpartition</c>, <c>slice</c>, the comparison names and the predicates
+    ///     <c>isalpha</c> … <c>isnumeric</c> — called with the generator's positional arguments.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -57,23 +58,31 @@ namespace NumSharp.Tests.Strings
             string name = Str(p, "name");
             var args = p["args"].EnumerateArray().Select(e => StringsArgument(e, ops)).ToArray();
             NDArray A(int i) => i < args.Length ? args[i] : null;
+            // The ufunc keywords of the ufunc-shaped functions (str_len, the predicates): out= / where= name operands,
+            // dtype= a descriptor string.
+            NDArray kwOut = null, kwWhere = null;
+            DType kwDtype = null;
+            if (p.TryGetValue("kw", out var kw))
+            {
+                if (kw.TryGetProperty("out", out var o))
+                    kwOut = ops[o.GetInt32()];
+                if (kw.TryGetProperty("where", out var w))
+                    kwWhere = ops[w.GetInt32()];
+                if (kw.TryGetProperty("dtype", out var d))
+                    kwDtype = np.dtype(d.GetString());
+            }
             switch (name)
             {
-                case "str_len":
-                {
-                    NDArray @out = null, where = null;
-                    DType dtype = null;
-                    if (p.TryGetValue("kw", out var kw))
-                    {
-                        if (kw.TryGetProperty("out", out var o))
-                            @out = ops[o.GetInt32()];
-                        if (kw.TryGetProperty("where", out var w))
-                            where = ops[w.GetInt32()];
-                        if (kw.TryGetProperty("dtype", out var d))
-                            dtype = np.dtype(d.GetString());
-                    }
-                    return np.strings.str_len(A(0), @out, where, dtype);
-                }
+                case "str_len": return np.strings.str_len(A(0), kwOut, kwWhere, kwDtype);
+                case "isalpha": return np.strings.isalpha(A(0), kwOut, kwWhere, kwDtype);
+                case "isdigit": return np.strings.isdigit(A(0), kwOut, kwWhere, kwDtype);
+                case "isspace": return np.strings.isspace(A(0), kwOut, kwWhere, kwDtype);
+                case "isalnum": return np.strings.isalnum(A(0), kwOut, kwWhere, kwDtype);
+                case "islower": return np.strings.islower(A(0), kwOut, kwWhere, kwDtype);
+                case "isupper": return np.strings.isupper(A(0), kwOut, kwWhere, kwDtype);
+                case "istitle": return np.strings.istitle(A(0), kwOut, kwWhere, kwDtype);
+                case "isdecimal": return np.strings.isdecimal(A(0), kwOut, kwWhere, kwDtype);
+                case "isnumeric": return np.strings.isnumeric(A(0), kwOut, kwWhere, kwDtype);
                 case "find": return np.strings.find(A(0), A(1), A(2), A(3));
                 case "rfind": return np.strings.rfind(A(0), A(1), A(2), A(3));
                 case "index": return np.strings.index(A(0), A(1), A(2), A(3));

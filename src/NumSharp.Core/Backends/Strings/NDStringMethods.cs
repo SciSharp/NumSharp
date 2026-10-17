@@ -232,10 +232,16 @@ namespace NumSharp.Backends.Strings
         ///     (<c>The length of a null string is undefined</c>).</exception>
         /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an <paramref name="out"/> int64 cannot
         ///     reach by a same_kind cast; operands that do not broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
-        /// <exception cref="TypeError">No loop: a non-text operand, or a <paramref name="dtype"/> other than int64.</exception>
+        /// <exception cref="TypeError">No loop: a non-text operand, or a <paramref name="dtype"/> other than int64; a
+        ///     <paramref name="dtype"/> with details beyond its class (<c>'U1'</c>, <c>'&gt;i8'</c>) or a <c>StringDType</c>
+        ///     instance (NumPy's <c>_get_dtype</c>, checked first).</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (no out= / where=).</exception>
         internal static NDArray StrLen(NDArray x, NDArray @out, NDArray where, DType dtype)
         {
+            // _get_dtype runs before the arguments are converted: a dtype= with details beyond its class ('U1', '>i8') or a
+            // StringDType instance is refused before a read-only out or a non-bool where.
+            if (dtype is not null)
+                DefaultEngine.ThrowIfNotGeneralDType(dtype);
             var parse = NDStringUfuncs.OutWhereError(@out, where);
             if (parse is not null)
                 throw parse;
@@ -268,6 +274,89 @@ namespace NumSharp.Backends.Strings
             {
                 var key = new TextMethodKey(TextMethodOp.Length, UnitOf(loop), x.dtype.itemsize);
                 NDTextLoop.Execute(key, new[] { x, result }, 1, where, null, callerOut: @out is not null, maskedBlend: true);
+                return result;
+            }
+            catch
+            {
+                if (@out is null)
+                    result.Dispose();
+                throw;
+            }
+        }
+
+        // =============================================================================================================
+        // The predicates isalpha ... isnumeric (public ufuncs: out= / where= / dtype=)
+        // =============================================================================================================
+
+        /// <summary>
+        ///     NumPy's predicate ufuncs <c>isalpha</c>, <c>isdigit</c>, <c>isspace</c>, <c>isalnum</c>, <c>islower</c>,
+        ///     <c>isupper</c>, <c>istitle</c>, <c>isdecimal</c>, <c>isnumeric</c>: a bool per element, with the ufunc's
+        ///     <c>out=</c> / <c>where=</c> / <c>dtype=</c>. The loops: <c>S</c> (ASCII rules; none for <c>isdecimal</c> /
+        ///     <c>isnumeric</c>), <c>U</c> and <c>StringDType</c> (CPython's Unicode rules, <see cref="PyUnicodeData"/>).
+        /// </summary>
+        /// <param name="kind">The predicate (<see cref="NDTextElements.IsAlphaKind"/> ...).</param>
+        /// <param name="x">The operand.</param>
+        /// <param name="out">The output, or null (a fresh bool array in NumPy's layout).</param>
+        /// <param name="where">The bool mask, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null (only bool has a loop).</param>
+        /// <returns><paramref name="out"/>, or the fresh result (0-d for a 0-d operand).</returns>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>; a <c>StringDType</c> NA its descriptor refuses
+        ///     (<c>Cannot use the isalpha function with a null that is not a nan-like value</c>).</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>; an <paramref name="out"/> bool cannot reach
+        ///     by a same_kind cast; operands that do not broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
+        /// <exception cref="TypeError">No loop: a non-text operand, an <c>S</c> operand of <c>isdecimal</c> /
+        ///     <c>isnumeric</c>, or a <paramref name="dtype"/> other than bool (NumPy's UFuncTypeError text); a
+        ///     <paramref name="dtype"/> with details beyond its class (<c>'U1'</c>) or a <c>StringDType</c> instance (NumPy's
+        ///     <c>_get_dtype</c>, checked first).</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (no out= / where=).</exception>
+        internal static NDArray Predicate(int kind, NDArray x, NDArray @out, NDArray where, DType dtype)
+        {
+            string ufunc = NDTextElements.PredicateName(kind);
+            // _get_dtype runs before the arguments are converted: a dtype= with details beyond its class ('U1') or a
+            // StringDType instance is refused before a read-only out or a non-bool where.
+            if (dtype is not null)
+                DefaultEngine.ThrowIfNotGeneralDType(dtype);
+            var parse = NDStringUfuncs.OutWhereError(@out, where);
+            if (parse is not null)
+                throw parse;
+            var loop = ResolveOne(x);
+            // The S loop (ENCODING::ASCII) is registered for the first seven predicates only.
+            if (loop == TextLoop.Bytes && kind is NDTextElements.IsDecimalKind or NDTextElements.IsNumericKind)
+                loop = TextLoop.None;
+            if (dtype is not null && dtype.Meta != DType.Boolean.Meta)
+                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(x)} -> {dtype.Meta}");
+            if (loop == TextLoop.None)
+                throw new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types {NDStringUfuncs.DispatchClass(x)} -> " +
+                                    (dtype is null ? "None" : dtype.Meta.ToString()));
+            if (@out is not null && !DTypeCasting.CanCastTypeTo(DType.Boolean, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
+                throw new ArgumentException(
+                    $"Cannot cast ufunc '{ufunc}' output from {DType.Boolean.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
+            var shapeError = NDStringUfuncs.BroadcastError(x, null, @out, where);
+            if (shapeError is not null)
+                throw shapeError;
+
+            if (loop == TextLoop.VString)
+                return NDVStringMethods.Predicate(kind, x, @out, where);
+
+            // An out= of another dtype receives the bool loop's result through NumPy's output cast (computed here into a
+            // temporary, then copied under the mask: the fixed-width loops cannot raise, so computing every element is
+            // safe).
+            if (@out is not null && @out.typecode != NPTypeCode.Boolean)
+                return NDStringArithmetic.CastInto(@out, where, () => Predicate(kind, x, null, null, null));
+
+            var dims = NDTextLoop.BroadcastDims(x, @out, where);
+            NDArray result = @out ?? (where is null
+                ? NDArray.ForOverwrite(DType.Boolean, UfuncLayout(dims, x))
+                : new NDArray(DType.Boolean, UfuncLayout(dims, x, where), true));
+            try
+            {
+                // The call's state: plan D14's escalation word (0 while every U element so far was ASCII, the kernel's
+                // compare path; 1 once one was not, the gather path for the rest of the call) and the BMP flags table,
+                // read here once. One block for the whole call, so a later NDIter chunk starts where the earlier one left
+                // off.
+                var state = NDTextElements.NewKindState();
+                var key = new TextMethodKey(TextMethodOp.IsKind, UnitOf(loop), x.dtype.itemsize, Extra: kind);
+                NDTextLoop.Execute(key, new[] { x, result }, 1, where, &state, callerOut: @out is not null, maskedBlend: true);
                 return result;
             }
             catch

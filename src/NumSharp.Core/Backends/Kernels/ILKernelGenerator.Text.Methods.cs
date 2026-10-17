@@ -108,6 +108,10 @@ namespace NumSharp.Backends.Kernels
         ///     out widths are <see cref="TextMethodKey.W2"/> … <see cref="TextMethodKey.W4"/>; Extra = 1 for the back form.</summary>
         Partition,
 
+        /// <summary>The predicates <c>isalpha</c> … <c>isnumeric</c>: (text, bool out); Extra = the predicate
+        ///     (<see cref="NDTextElements.IsAlphaKind"/> …); aux = the call's escalation word (an int64, 0 at the start).</summary>
+        IsKind,
+
         // The StringDType loops (NDVStringMethods). Their "text" operands are 16-byte cells (every width in the key is
         // the cell size), aux is the call's VStringMethodAux, and the unit is 1 (UTF-8).
 
@@ -155,6 +159,9 @@ namespace NumSharp.Backends.Kernels
         /// <summary><c>_partition</c> / <c>_rpartition</c> over <c>StringDType</c>: (cell, cell sep, cell o1, cell o2,
         ///     cell o3); Extra = 1 for the back form.</summary>
         VPartition,
+
+        /// <summary>The predicates over <c>StringDType</c>: (cell, bool out); Extra = the predicate.</summary>
+        VIsKind,
     }
 
     /// <summary>
@@ -434,6 +441,15 @@ namespace NumSharp.Backends.Kernels
                     plan.Args = new[] { P(0), C(key.W0), P(1), C(key.W1), C(key.Extra), P(2), C(key.W2), P(3), C(key.W3), P(4), C(key.W4) };
                     plan.Operands = 5;
                     break;
+                case TextMethodOp.IsKind:
+                    // The predicate is a literal, so the body's switches on it fold; the auxdata is the call's
+                    // NDTextElements.KindState (escalation word and flags table).
+                    name = nameof(NDTextElements.IsKind);
+                    plan.Args = new[] { P(0), C(key.W0), C(key.Extra), aux };
+                    plan.Store = TextStore.Bool;
+                    plan.StoreOperand = 1;
+                    plan.Operands = 2;
+                    break;
                 default:
                     return PlanVStringMethod(key, plan);
             }
@@ -525,6 +541,13 @@ namespace NumSharp.Backends.Kernels
                     name = nameof(NDVStringMethods.VPartition);
                     plan.Args = new[] { P(0), P(1), P(2), P(3), P(4), C(key.Extra), aux };
                     plan.Operands = 5;
+                    break;
+                case TextMethodOp.VIsKind:
+                    name = nameof(NDVStringMethods.VIsKind);
+                    plan.Args = new[] { P(0), C(key.Extra), aux };
+                    plan.Store = TextStore.Bool;
+                    plan.StoreOperand = 1;
+                    plan.Operands = 2;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a text method operation.");

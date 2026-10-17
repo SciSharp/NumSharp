@@ -96,6 +96,13 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>The <see cref="GCHandle"/> of the third output's allocator (partition).</summary>
         internal IntPtr Out2;
+
+        /// <summary>
+        ///     <see cref="PyUnicodeData.BmpTable"/>, read once per call: the predicates' UTF-8 windows gather from it, and a
+        ///     kernel that read the static itself would re-test the class's initialization and reload the array at every
+        ///     gather (a <c>DynamicMethod</c> is compiled without knowing that the class is initialized).
+        /// </summary>
+        internal uint* Flags;
     }
 
     /// <summary>The errors a <c>StringDType</c> loop records; the driver raises NumPy's exception for the first one.</summary>
@@ -157,6 +164,10 @@ namespace NumSharp.Backends.Strings
 
         /// <summary><c>ValueError: substring not found</c> (index / rindex).</summary>
         NotFound,
+
+        /// <summary><c>ValueError: Cannot use the {ufunc} function with a null that is not a nan-like value</c> (the
+        ///     predicates isalpha ... isnumeric).</summary>
+        PredicateNull,
     }
 
     /// <summary>
@@ -717,6 +728,7 @@ namespace NumSharp.Backends.Strings
                 aux.ArenaB = inputs.Length > 1 ? inputs[1].Storage.VStringSlice.Allocator.ArenaBase : null;
                 aux.ArenaC = inputs.Length > 2 ? inputs[2].Storage.VStringSlice.Allocator.ArenaBase : null;
                 aux.Rule = NDVStringCells.RuleOf(ruleDescr);
+                aux.Flags = PyUnicodeData.BmpTable;
                 // The bodies reach each output allocator through a handle: the auxdata is unmanaged memory.
                 for (int i = 0; i < outputs.Length; i++)
                     handles[i] = GCHandle.Alloc(outputs[i].Storage.VStringSlice.Allocator);
@@ -779,6 +791,7 @@ namespace NumSharp.Backends.Strings
             VStringMethodError.SliceNull => new TypeError("Cannot slice null string"),
             VStringMethodError.Load => new OutOfMemoryException($"Failed to load string in {ufunc}"),
             VStringMethodError.NotFound => new ValueError("substring not found"),
+            VStringMethodError.PredicateNull => new ValueError($"Cannot use the {ufunc} function with a null that is not a nan-like value"),
             _ => new OutOfMemoryException($"Failed to allocate string in {ufunc}"),
         };
 

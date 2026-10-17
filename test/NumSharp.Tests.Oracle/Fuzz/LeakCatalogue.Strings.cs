@@ -6,8 +6,9 @@ namespace NumSharp.Tests.Fuzz
     /// <summary>
     ///     Catalogue entries for the <c>numpy.strings</c> functions of strings phase 2, P2.5 (<c>str_len</c>, the find family,
     ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
-    ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c> and the six comparison names). The string oracle's sections
-    ///     <c>strfn</c> / <c>tfn</c> replay them through its own harness, outside the corpus sweep, so each is measured here.
+    ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c> and the six comparison names) and P2.6 (the predicates
+    ///     <c>isalpha</c> … <c>isnumeric</c>). The string oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> /
+    ///     <c>tprop</c> replay them through its own harness, outside the corpus sweep, so each is measured here.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -407,6 +408,81 @@ namespace NumSharp.Tests.Fuzz
                     using var vstring = compare(t, u);
                     return compare(u, v);
                 });
+            }
+            AddStringsPredicates(l);
+        }
+
+        /// <summary>
+        ///     The P2.6 predicates <c>isalpha</c> … <c>isnumeric</c>: one entry per ufunc over every loop and route that holds a
+        ///     temporary — the <c>U</c> loop on ASCII and non-ASCII text (the call's escalation), the <c>S</c> loop or its
+        ///     no-loop TypeError (no <c>S</c> loop for <c>isdecimal</c> / <c>isnumeric</c>), the <c>StringDType</c> loop with a
+        ///     string NA, a NaN-like NA and the ValueError of a None NA (the arena locks and the default string's pin), an out= of
+        ///     another dtype under a mask (the bool temporary NumPy's output cast reads), and <c>dtype=</c>'s TypeError.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <remarks>Each operand is held and disposed by the entry, so the gate counts only what the ufunc itself leaves
+        ///     behind.</remarks>
+        private static void AddStringsPredicates(List<LeakCase> l)
+        {
+            foreach (var (name, predicate) in new (string, Func<NDArray, NDArray, NDArray, DType, NDArray>)[]
+                     {
+                         ("isalpha", (x, o, w, d) => np.strings.isalpha(x, o, w, d)),
+                         ("isdigit", (x, o, w, d) => np.strings.isdigit(x, o, w, d)),
+                         ("isspace", (x, o, w, d) => np.strings.isspace(x, o, w, d)),
+                         ("isalnum", (x, o, w, d) => np.strings.isalnum(x, o, w, d)),
+                         ("islower", (x, o, w, d) => np.strings.islower(x, o, w, d)),
+                         ("isupper", (x, o, w, d) => np.strings.isupper(x, o, w, d)),
+                         ("istitle", (x, o, w, d) => np.strings.istitle(x, o, w, d)),
+                         ("isdecimal", (x, o, w, d) => np.strings.isdecimal(x, o, w, d)),
+                         ("isnumeric", (x, o, w, d) => np.strings.isnumeric(x, o, w, d)),
+                     })
+            {
+                // NumPy registers the S (ENCODING::ASCII) loop for the first seven predicates only.
+                bool bytesLoop = name is not ("isdecimal" or "isnumeric");
+                E(l, "np.strings." + name,
+                  "U ASCII and not, S (or its no-loop TypeError), T with string / NaN NAs and None's ValueError, out= int8 under where=, dtype='i8''s TypeError",
+                  f =>
+                  {
+                      using var u = np.array(new[] { "Ab1", "é ²Ω" });
+                      using var s = np.array(new object[] { new byte[] { 65, 98 }, new byte[] { 49 } });
+                      using var t = np.array(new object[] { "Ab Cd", null, "héllo wörld and a text past the cell" }, np.dtypes.StringDType("NA"));
+                      using var nan = np.array(new object[] { "ab", double.NaN }, np.dtypes.StringDType(double.NaN));
+                      using var none = np.array(new object[] { "ab", null }, np.dtypes.StringDType(null));
+                      using var o = np.zeros(new Shape(2), np.int8);
+                      using var mask = np.array(new[] { true, false });
+                      using var vstring = predicate(t, null, null, null);
+                      using var nans = predicate(nan, null, null, null);
+                      predicate(u, o, mask, null);
+                      if (bytesLoop)
+                      {
+                          using var bytes = predicate(s, null, null, null);
+                      }
+                      else
+                      {
+                          try
+                          {
+                              predicate(s, null, null, null);
+                          }
+                          catch (TypeError)
+                          {
+                          }
+                      }
+                      try
+                      {
+                          predicate(none, null, null, null);
+                      }
+                      catch (ValueError)
+                      {
+                      }
+                      try
+                      {
+                          predicate(u, null, null, np.int64);
+                      }
+                      catch (TypeError)
+                      {
+                      }
+                      return predicate(u, null, null, null);
+                  });
             }
         }
     }

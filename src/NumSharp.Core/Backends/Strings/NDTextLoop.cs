@@ -489,6 +489,9 @@ namespace NumSharp.Backends.Strings
                 case TextMethodOp.VPartition:
                     NDVStringMethods.VPartition(p[0], p[1], p[2], p[3], p[4], key.Extra, aux);
                     break;
+                case TextMethodOp.VIsKind:
+                    *p[1] = NDVStringMethods.VIsKind(p[0], key.Extra, aux);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a StringDType text method operation.");
             }
@@ -521,7 +524,8 @@ namespace NumSharp.Backends.Strings
         internal static int OperandCount(TextMethodOp op) => op switch
         {
             TextMethodOp.Length or TextMethodOp.StripWhitespace or TextMethodOp.PadSize or TextMethodOp.ExpandTabsSize
-                or TextMethodOp.PartitionSize or TextMethodOp.VLength or TextMethodOp.VStripWhitespace => 2,
+                or TextMethodOp.PartitionSize or TextMethodOp.IsKind or TextMethodOp.VLength or TextMethodOp.VStripWhitespace
+                or TextMethodOp.VIsKind => 2,
             TextMethodOp.StripChars or TextMethodOp.ZFill or TextMethodOp.ExpandTabs
                 or TextMethodOp.VStripChars or TextMethodOp.VZFill or TextMethodOp.VExpandTabs => 3,
             TextMethodOp.Pad or TextMethodOp.ReplaceSize or TextMethodOp.VPad => 4,
@@ -594,6 +598,14 @@ namespace NumSharp.Backends.Strings
                 case TextMethodOp.Partition:
                     NDTextElements.Partition<TUnit>(p[0], key.W0, p[1], key.W1, key.Extra != 0, p[2], key.W2, p[3], key.W3, p[4], key.W4);
                     break;
+                case TextMethodOp.IsKind:
+                {
+                    // The auxdata is the call's KindState (escalation word and flags table), as in the IL shell.
+                    bool r = NDTextElements.IsKind<TUnit>(p[0], key.W0, key.Extra, (NDTextElements.KindState*)acc);
+                    if (!masked || *p[2] != 0)
+                        *p[1] = r ? (byte)1 : (byte)0;
+                    break;
+                }
                 default:
                     throw new ArgumentOutOfRangeException(nameof(key), key.Op, "Not a text method operation.");
             }

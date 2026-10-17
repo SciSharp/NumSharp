@@ -12990,13 +12990,266 @@ def gen_tfn():
         fn_case(S, "expandtabs", [tab], [_Op(0), 2**31], f"{lab0}:overflow")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# numpy.strings' predicates (strprop over S / U, tprop over StringDType), strings phase 2, P2.6, strict
+# ----------------------------------------------------------------------------------------------------------------------
+
+PROP_NAMES = ["isalpha", "isdigit", "isspace", "isalnum", "islower", "isupper", "istitle", "isdecimal", "isnumeric"]
+# The texts that separate the predicates: each class alone and mixed, Python's extra whitespace (U+001C, NEL, NBSP, the
+# ideographic space), digits that are not decimal ('²'), numerics that are not digits ('½', 'Ⅻ', '万'), titlecase letters
+# ('ǅ'), cased characters that are not letters ('ʰ' is lowercase, 'Ⅻ' uppercase), embedded / trailing NULs, astral
+# letters ('𐐀' / '𐐨', an uppercase / lowercase pair) and digits ('𝟘'), and the empty string.
+PROP_U_POOL = ["", "a", "abc", "ABC", "Abc", "aBc", "abc1", "123", "1", "٣", "²", "½", "Ⅻ", "万", " ", "\t\n", "\x1c",
+               "\x85", "\xa0", "　", "a b", "Hello World", "Hello world", "HELLO", "hello", "ǅ", "ǅa", "ǈungla", "ʰ",
+               "ª", "ß", "é", "Éa", "a\x00b", "ab\x00", "\x00", "\U0001F600", "\U00010400", "\U00010428", "𝟘",
+               "x y Z", "It's", "A1b", "1A", "_", "-", "!", "A B c", "Ab1 Cd", "ΑΣ"]
+PROP_S_POOL = [b"", b"a", b"abc", b"ABC", b"Abc", b"aBc", b"abc1", b"123", b"1", b" ", b"\t\n", b"\x0b\x0c", b"\x1c",
+               b"\x85", b"\xe9", b"\xc9a", b"a b", b"Hello World", b"Hello world", b"HELLO", b"hello", b"a\x00b",
+               b"ab\x00", b"\x00", b"1A", b"A1b", b"It's", b"\x80\xff", b"_", b"A B c", b"Ab1 Cd"]
+PROP_SPECS = ["<U5", "<U12", "<U70", "|S5", "|S12", "|S70"]
+# The unit widths of the width sweep: every lane-mask chunk class (below 8 / 16 / 32 bytes, whole and overlapping
+# 32-byte chunks, the 64-unit cap) and the stream past it.
+PROP_WIDTHS = [1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 24, 31, 32, 33, 40, 63, 64, 65, 66, 70, 96, 100, 129, 300]
+# Character classes the random texts are drawn from (U; the S sweep keeps the ASCII ones).
+_PROP_ALPHABETS = {
+    "lower": "abcdefghijklmnopqrstuvwxyz",
+    "upper": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "letters": "abcXYZqwERTyu",
+    "digits": "0123456789",
+    "spaces": " \t\n\r\x0b\x0c",
+    "alnum": "ab1C9z0",
+    "mixed": "aZ 1!\x00é",
+    "uni_letters": "éßΩωЖжǅ",
+    "uni_digits": "٣٤²½Ⅻ万𝟘",
+    "uni_spaces": " \x1c\x1f\x85\xa0　 ",
+    "uni_case": "aAéÉǅʰªΩω𐐀𐐨",
+}
+
+
+def _prop_text(rng, alphabet, length):
+    """A random text of ``length`` characters from ``alphabet``.
+
+    :param rng: the random.Random.
+    :param alphabet: the characters.
+    :param length: the length.
+    :returns: the text.
+    """
+    return "".join(rng.choice(alphabet) for _ in range(length))
+
+
+def _prop_title_text(rng, length, unicode):
+    """A random text of words, each title-cased or not, separated by spaces or digits — istitle's interesting inputs.
+
+    :param rng: the random.Random.
+    :param length: the target length.
+    :param unicode: whether non-ASCII cased letters and titlecase letters may appear.
+    :returns: the text (cut to ``length``).
+    """
+    lowers = "abcdefgh" + ("éωж" if unicode else "")
+    uppers = "ABCDEFGH" + ("ÉΩЖǅ" if unicode else "")
+    out = []
+    while len("".join(out)) < length:
+        word = rng.choice(uppers) + "".join(rng.choice(lowers) for _ in range(rng.randint(0, 6)))
+        r = rng.random()
+        if r < 0.15:
+            word = word.lower()
+        elif r < 0.25:
+            word = word[0] + word[1:].upper()
+        out.append(word)
+        out.append(rng.choice([" ", " ", "1", "-", "'"]))
+    return "".join(out)[:length]
+
+
+def _prop_texts(rng, width, n, unicode):
+    """``n`` texts for a width-sweep array: each array draws its texts from one character class (so every-unit predicates
+    are often True), some perturbed by one character of another class at a random position (any lane, any chunk), some
+    title-cased words, some empty, some with trailing NULs.
+
+    :param rng: the random.Random.
+    :param width: the unit width.
+    :param n: the count.
+    :param unicode: whether the non-ASCII classes may appear.
+    :returns: the texts.
+    """
+    names = [k for k in _PROP_ALPHABETS if unicode or not k.startswith("uni")]
+    texts = []
+    for i in range(n):
+        kind = rng.random()
+        length = rng.choice([width, width, width, rng.randint(0, width)])
+        if kind < 0.25:
+            t = _prop_title_text(rng, length, unicode)
+        else:
+            alphabet = _PROP_ALPHABETS[rng.choice(names)]
+            t = _prop_text(rng, alphabet, length)
+            if t and rng.random() < 0.5:
+                pos = rng.randrange(len(t))
+                other = _PROP_ALPHABETS[rng.choice(names)]
+                t = t[:pos] + rng.choice(other) + t[pos + 1:]
+        if t and rng.random() < 0.1:
+            t = t[:-1] + "\x00"
+        texts.append(t)
+    return texts
+
+
+def _prop_bytes(texts):
+    """The S form of sweep texts: each character's code point modulo 256 as a byte (latin-1 when it fits).
+
+    :param texts: the texts.
+    :returns: the bytes values.
+    """
+    return [bytes(ord(c) % 256 for c in t) for t in texts]
+
+
+def gen_strprop():
+    """Section strprop: numpy.strings' predicate ufuncs over S / U, strict — the nine predicates (S has no isdecimal /
+    isnumeric loop) over every layout kind and three widths of both classes; a width sweep of random texts over every
+    lane-mask chunk class and the stream past 64 units, all-ASCII arrays and arrays where a non-ASCII element comes first,
+    midway or last (the call's escalation); out= of other dtypes, where= masks, dtype= requests and the refusals in
+    NumPy's order (out / where parsing, no loop, the output cast, the broadcast); units past U+10FFFF (record 0)."""
+    import random
+    S = "strprop"
+    # A. Every predicate x every layout x three widths of both classes.
+    for spec in PROP_SPECS:
+        pool = PROP_U_POOL if spec[1] == "U" else PROP_S_POOL
+        for layout in LAYOUTS:
+            op = fn_operand(spec, layout, seed=3, pool=pool)
+            for name in PROP_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"{spec}:{layout}")
+    # B. The pools whole, one array per predicate and width (every text of the pool in one call).
+    for spec in PROP_SPECS:
+        pool = PROP_U_POOL if spec[1] == "U" else PROP_S_POOL
+        op = plain(np.array(pool, dtype=spec))
+        for name in PROP_NAMES:
+            fn_case(S, name, [op], [_Op(0)], f"{spec}:pool")
+    # C. The width sweep: random texts per width, U (Unicode classes) and S (ASCII classes), plus arrays whose first /
+    #    middle / last element is the first non-ASCII one (the escalation mid-call) and all-ASCII U arrays.
+    rng = random.Random(2606)
+    for w in PROP_WIDTHS:
+        for rep in range(3):
+            utexts = _prop_texts(rng, w, 24, unicode=True)
+            atexts = _prop_texts(rng, w, 24, unicode=False)
+            ops = [(f"<U{w}", plain(np.array(utexts, dtype=f"<U{w}")), "uni"),
+                   (f"<U{w}", plain(np.array(atexts, dtype=f"<U{w}")), "ascii"),
+                   (f"|S{w}", plain(np.array(_prop_bytes(atexts), dtype=f"|S{w}")), "ascii"),
+                   (f"|S{w}", plain(np.array(_prop_bytes(utexts), dtype=f"|S{w}")), "bytes")]
+            for spec, op, tag in ops:
+                for name in PROP_NAMES:
+                    fn_case(S, name, [op], [_Op(0)], f"{spec}:sweep{rep}:{tag}")
+        for where_first in (0, 11, 23):
+            texts = _prop_texts(rng, w, 24, unicode=False)
+            texts[where_first] = "é" + texts[where_first][1:]
+            op = plain(np.array(texts, dtype=f"<U{w}"))
+            for name in PROP_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"<U{w}:escalate@{where_first}")
+    # D. out= / where= / dtype= and the refusals, over a contiguous 2-D operand of each class.
+    for spec in ["<U5", "|S5"]:
+        pool = PROP_U_POOL if spec[1] == "U" else PROP_S_POOL
+        op = fn_operand(spec, "c2", seed=5, pool=pool)
+        mask = plain(np.array([[True, False, True, True], [False, False, True, False], [True, True, True, False]]))
+        for name in ["isalpha", "istitle", "isspace", "isdecimal"]:
+            for odt in ["?", "i1", "u8", "f2", "f8", "c16", "U1", "U5", "S1", "S5"]:
+                fn_case(S, name, [op, target(np.zeros((3, 4), dtype=odt))], [_Op(0)], f"{spec}:out:{odt}", kw={"out": 1})
+            fn_case(S, name, [op, target(np.full((3, 4), 7, dtype="i1")), mask], [_Op(0)], f"{spec}:where",
+                    kw={"out": 1, "where": 2})
+            fn_case(S, name, [op, target(np.full((3, 4), True)), mask], [_Op(0)], f"{spec}:wherebool",
+                    kw={"out": 1, "where": 2})
+            # (no "O": NumSharp has no object dtype to pass)
+            for dt in ["?", "i8", "u1", "f8", "U1", "U", "S", ">?", ">i8", "M8", "M8[s]", "T"]:
+                fn_case(S, name, [op], [_Op(0)], f"{spec}:dtype:{dt}", kw={"dtype": dt})
+            ro_where = plain(np.zeros((3, 4), dtype="?"))
+            ro_where[1].flags.writeable = False
+            fn_case(S, name, [op, ro_where], [_Op(0)], f"{spec}:readonly+dtype", kw={"out": 1, "dtype": "U1"})
+            fn_case(S, name, [op, plain(np.zeros((3, 4), dtype="i8"))], [_Op(0)], f"{spec}:whereint+dtype",
+                    kw={"where": 1, "dtype": "U1"})
+            ro = plain(np.zeros((3, 4), dtype="?"))
+            ro[1].flags.writeable = False
+            fn_case(S, name, [op, ro], [_Op(0)], f"{spec}:readonly", kw={"out": 1})
+            fn_case(S, name, [op, plain(np.zeros((3, 4), dtype="i8"))], [_Op(0)], f"{spec}:where-int",
+                    kw={"where": 1})
+            fn_case(S, name, [op, target(np.zeros((2, 4), dtype="?"))], [_Op(0)], f"{spec}:outshape", kw={"out": 1})
+            fn_case(S, name, [op, plain(np.array([True, False, True]))], [_Op(0)], f"{spec}:whereshape", kw={"where": 1})
+            fn_case(S, name, [op, target(np.zeros((2, 3, 4), dtype="?"))], [_Op(0)], f"{spec}:outbroadcast",
+                    kw={"out": 1})
+    # E. Non-text operands (no loop), Python strs / bytes as the operand, 0-d operands.
+    for name in PROP_NAMES:
+        for arr in [np.array([1, 2]), np.array([1.5]), np.array([True]), np.zeros((2, 0), dtype="i4")]:
+            fn_case(S, name, [plain(arr)], [_Op(0)], f"num:{arr.dtype}")
+        fn_case(S, name, [], ["Abc"], "pystr")
+        fn_case(S, name, [], [b"Abc"], "pybytes")
+        fn_case(S, name, [], ["  "], "pystr:space")
+    # F. Units past U+10FFFF (a U array over raw code units): CPython's record 0, no property.
+    raw = np.frombuffer(np.array([0x110000, 0x61, 0x61, 0xFFFFFFFF, 0x41, 0x110000, 0x61, 0x62, 0x10FFFF, 0x0, 0, 0],
+                                 dtype="<u4").tobytes(), dtype="<U3")
+    for name in PROP_NAMES:
+        fn_case(S, name, [plain(raw.copy())], [_Op(0)], "U:past-unicode")
+
+
+# StringDType predicate texts: short (in the cell) and long (arena), ASCII and not, trailing / embedded NULs, the classes.
+PROP_T_POOL = ["", "a", "abc", "ABC", "Abc", "aBc", "123", "٣", "²", "½", " \t", "\x1c", "　", "Hello World", "Hello world",
+               "ǅa", "ʰ", "é", "a\x00b", "ab\x00", "\U00010400", "Hello World From A Long Title Text", "a" * 40,
+               "A" * 33 + "b", "1" * 20, " " * 18 + "\x85", "ΑΣ ΒΣ ΓΣ ΔΣ ΕΣ ΖΣ", "x" * 15, "x" * 16, "Abc Def Ghi Jkl Mno",
+               "日本語のテキスト", "Ünïcödé Wörds Here"]
+
+
+def gen_tprop():
+    """Section tprop: numpy.strings' predicate ufuncs over NEP 55 StringDType, strict — every predicate x every NA kind
+    (none, None, NaN, a string sentinel, coerce off) x the layout kinds over short / long / ASCII / non-ASCII texts; the
+    NA rules (a NaN-like NA is False, a string NA reads as its string, any other NA raises — but only where the mask
+    selects it); out= of other dtypes, dtype= requests; a sweep of random texts by length (the short-cell vector, the
+    32-byte chunk stream, the decoded path)."""
+    import random
+    S = "tprop"
+    layouts = ["c1", "c2", "f2", "t3", "s1", "r2", "o1", "col", "bc", "z0", "one", "d5", "e1", "e2"]
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        for layout in layouts:
+            op = t_operand(spec, layout, seed=1, pool=PROP_T_POOL, na_every=5)
+            for name in PROP_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"{lab0}:{layout}")
+        # The whole pool in one call per NA kind (no NA) and with an NA every 3rd element.
+        for na_every in (0, 3):
+            op = (np.array(t_values(spec, len(PROP_T_POOL), 0, PROP_T_POOL, na_every), dtype=spec.build()), None)
+            op = (op[0], op[0])
+            for name in PROP_NAMES:
+                fn_case(S, name, [op], [_Op(0)], f"{lab0}:pool:na{na_every}")
+    # The mask: an NA in a masked-off position is never read (no error even under a refusing NA kind); out= of other
+    # dtypes; dtype= requests.
+    for spec in [TDN, TDNAN, TDS, TD]:
+        lab0 = _t_label(spec)
+        b, v = t_operand(spec, "c2", seed=6, pool=PROP_T_POOL, na_every=4)
+        op = (b, v)
+        na_mask = plain(np.array([[(i * 4 + j) % 4 != 1 for j in range(4)] for i in range(3)]))
+        for name in ["isalpha", "istitle", "isspace", "isnumeric"]:
+            fn_case(S, name, [op, target(np.full((3, 4), True)), na_mask], [_Op(0)], f"{lab0}:where",
+                    kw={"out": 1, "where": 2})
+            fn_case(S, name, [op, target(np.full((3, 4), 5, dtype="i2")), na_mask], [_Op(0)], f"{lab0}:where:i2",
+                    kw={"out": 1, "where": 2})
+            for odt in ["i4", "f8", "U2"]:
+                fn_case(S, name, [op, target(np.zeros((3, 4), dtype=odt))], [_Op(0)], f"{lab0}:out:{odt}",
+                        kw={"out": 1})
+            for dt in ["?", "i8", "U1", "T"]:
+                fn_case(S, name, [op], [_Op(0)], f"{lab0}:dtype:{dt}", kw={"dtype": dt})
+    # The length sweep: random texts of every length class (short cells up to 15 bytes, the 16 / 31 / 32 / 33 byte
+    # boundaries of the stream, long texts), ASCII and not.
+    rng = random.Random(2607)
+    for spec in [TD, TDS]:
+        lab0 = _t_label(spec)
+        for w in [0, 1, 3, 7, 8, 14, 15, 16, 17, 31, 32, 33, 40, 63, 64, 65, 100, 300]:
+            for unicode in (False, True):
+                texts = _prop_texts(rng, w, 24, unicode)
+                op = (np.array(texts, dtype=spec.build()), None)
+                op = (op[0], op[0])
+                for name in PROP_NAMES:
+                    fn_case(S, name, [op], [_Op(0)], f"{lab0}:len{w}:{'uni' if unicode else 'ascii'}")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
-              gen_tfn]
+              gen_tfn, gen_strprop, gen_tprop]
 
 
 def main():

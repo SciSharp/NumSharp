@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Text;
 
 namespace NumSharp.Backends.Printing
@@ -20,9 +19,10 @@ namespace NumSharp.Backends.Printing
     ///     lone surrogates a <c>str</c> may hold.
     ///     </para>
     ///     <para>
-    ///     <b>Unicode version.</b> <see cref="IsPrintable"/> reads the general category from .NET's tables, which
-    ///     can be a newer Unicode version than the CPython build NumPy runs on; a code point assigned in between
-    ///     (category <c>Cn</c> there, assigned here) is the only place the two can disagree.
+    ///     <b>Unicode version.</b> <see cref="IsPrintable"/> reads CPython 3.12's own type records (Unicode 15.0.0,
+    ///     <see cref="Strings.PyUnicodeData"/>), not .NET's tables, which follow the running runtime's Unicode version: a
+    ///     code point .NET 10 knows from Unicode 16.0 and CPython 3.12 does not (category <c>Cn</c> there) is escaped, as
+    ///     NumPy escapes it.
     ///     </para>
     /// </remarks>
     internal static class PyRepr
@@ -182,31 +182,12 @@ namespace NumSharp.Backends.Printing
         ///     <c>Zl</c>, <c>Zp</c> and <c>Zs</c> — with the ASCII space as the one printable <c>Zs</c>. So a
         ///     no-break space (<c>U+00A0</c>) and a BOM (<c>U+FEFF</c>) are escaped in a repr.
         /// </summary>
-        /// <param name="cp">The code point (a lone surrogate is category <c>Cs</c>, values past U+10FFFF are refused by
-        ///     the caller's decoder before they get here).</param>
+        /// <param name="cp">The code point (a lone surrogate is category <c>Cs</c>, not printable; a value past U+10FFFF or a
+        ///     negative one has CPython's record 0, not printable).</param>
         /// <returns>True when Python prints the character raw.</returns>
-        public static bool IsPrintable(int cp)
-        {
-            if (cp == ' ')
-                return true;
-            // A lone surrogate has no scalar value for CharUnicodeInfo's int overload; it is category Cs.
-            if (cp >= 0xD800 && cp <= 0xDFFF)
-                return false;
-            switch (CharUnicodeInfo.GetUnicodeCategory(cp))
-            {
-                case UnicodeCategory.Control:
-                case UnicodeCategory.Format:
-                case UnicodeCategory.Surrogate:
-                case UnicodeCategory.PrivateUse:
-                case UnicodeCategory.OtherNotAssigned:
-                case UnicodeCategory.LineSeparator:
-                case UnicodeCategory.ParagraphSeparator:
-                case UnicodeCategory.SpaceSeparator:
-                    return false;
-                default:
-                    return true;
-            }
-        }
+        /// <remarks>Reads the <c>PRINTABLE_MASK</c> flag of CPython 3.12's type record (<see cref="Strings.PyUnicodeData"/>):
+        ///     the same answer on every .NET, whatever Unicode version the runtime's own tables follow.</remarks>
+        public static bool IsPrintable(int cp) => Strings.PyUnicodeData.IsPrintable((uint)cp);
 
         /// <summary>
         ///     Python's <c>len()</c> of the text a C# string holds: UTF-16 units minus one per valid surrogate pair, so

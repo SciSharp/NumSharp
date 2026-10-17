@@ -219,7 +219,9 @@ namespace NumSharp.Backends.Strings
             {
                 ulong lo = Unsafe.ReadUnaligned<uint>(p);
                 // The second read holds bytes [width - 4, width); shifted down it holds bytes [4, width) at their place.
-                ulong hi = Unsafe.ReadUnaligned<uint>(p + width - 4) >> (8 * (8 - width));
+                // The shift is a ulong's: at width 4 it is 32, which a uint shift would mask to 0 (C# takes a 32-bit shift
+                // count modulo 32), duplicating bytes 0-3 into bytes 4-7 instead of leaving them zero.
+                ulong hi = (ulong)Unsafe.ReadUnaligned<uint>(p + width - 4) >> (8 * (8 - width));
                 return lo | hi << 32;
             }
             ulong v = p[0];
