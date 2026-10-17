@@ -976,13 +976,14 @@ def write_csv(path, rows):
     """Write one CSV row per compared name, with every difference kind and every overload.
 
     Args:
-        path: The CSV file to write (UTF-8).
+        path: The CSV file to write (UTF-8, LF line ends).
         rows: The rows from ``main``.
     """
     fields = ["module", "name", "numpy_kind", "status", "overloads", "orpa", "generic", "numpy_signature", "best",
               *ALL_KINDS, "all_overloads"]
     with open(path, "w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fields)
+        # LF like the repository stores text: the csv module's default "\r\n" made git warn on every regeneration.
+        writer = csv.DictWriter(fh, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for r in rows:
             d = r["diff"] or {}

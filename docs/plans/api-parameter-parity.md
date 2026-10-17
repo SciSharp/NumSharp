@@ -34,6 +34,24 @@ A NumPy call ported to C# word for word binds, and it gives NumPy 2.4.2's result
 the rules of §1. Result: 66 `np.*` functions and 14 `ndarray` methods with a gap (the `ndarray.clip` row is a false
 positive of the `**kwargs` merge). The scripts are in `tools/api-parameter-parity/`; rerun them to measure progress.
 
+**Second inventory, every module** (2026-10-17, branch `strings` at `5dc14393`). `dump_modules.cs` reflects every
+`[ModuleName]` module (np, ndarray, np.linalg, np.fft, np.random, np.ma, np.emath, np.char, np.strings, np.dtypes,
+np.typing, np.polynomial and its seven submodules) and the object API `np.random.Generator`; `signature_diff.py`
+compares each name with NumPy 2.4.2 under §1 and the owner's rule of 2026-10-17, one public overload per NumPy
+function with NumPy's whole signature. For a name with several overloads the closest one is diffed (the one the fewest
+edits from NumPy's), and a parameter only another overload has is reported apart. The output is
+[`numpy-signature-diff.md`](numpy-signature-diff.md) (per module: the differences, the overload sets, the identical
+names, the names one side lacks) and `numpy-signature-diff.csv`; the script's docstring has the rules and where each
+NumPy signature comes from (ndarray methods: the documented form, numpy.ma's forwarders: the wrapped function).
+Result: 983 of 1,098 names have a NumPy counterpart. 397 are identical, 310 have more than one overload, 230 have a
+closest overload that differs (142 lack a parameter no overload has, 55 require one NumPy defaults, 48 rename one, 36
+misplace a positional one, 10 spell `*args` without a `params` array, 5 add one, 1 default value: `np.array`'s
+`order='C'` against NumPy's `'K'`), 44 differ only by a null default and 112 only by §3 parameters. It reaches past
+phases B to H: numpy.ma (134 of 211 names differ; 48 ufunc wrappers lack `out=` / `where=` / `dtype=`), np.random (55
+of 61 names have several overloads, 16 still rank them with `[OverloadResolutionPriority]`), np.random.Generator (36
+of 44), and names NumPy 2.x removed that NumSharp still exports (`np.round_`, `np.find_common_type`, `np.issctype`,
+`np.issubsctype`, `np.maximum_sctype`, `np.sctype2char`, `np.asscalar`, `ndarray.itemset`).
+
 "Working" cannot come from signatures. Its sources: the `[OpenBugs]` pins that test parameters (phase A), the probe
 done for each item, and the audit of existing parameters (phase X).
 
@@ -1868,6 +1886,14 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-17**: second inventory on `strings`, every `[ModuleName]` module and `np.random.Generator` diffed against
+  NumPy 2.4.2's signatures (§2): 983 names with a NumPy counterpart, 397 identical, 310 with more than one overload,
+  230 whose closest overload differs. The report is `docs/plans/numpy-signature-diff.md` (+ `.csv`); its findings are
+  not items yet. Measured on the way: NumPy's C forwarding of ndarray methods is looser than their documentation
+  (`a.sum(0, None, None, True)` and `a.min(0, None, True)` take keepdims positionally, `a.all(0, None, True)` binds True
+  to `out` because `_methods._all` has `dtype` at slot 2), so the report uses the documented signatures. Commit:
+  `964986b1`.
 
 - **2026-10-17**: A4d done on `strings` (the max/min family is NumPy's one signature per function: `np.amin` / `np.amax` /
   `np.min` / `np.max` / `np.nanmin` / `np.nanmax` and `ndarray.min` / `ndarray.max` keep only NumPy's form; the generic
