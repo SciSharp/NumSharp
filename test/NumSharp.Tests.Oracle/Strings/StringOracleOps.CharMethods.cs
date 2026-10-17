@@ -8,8 +8,9 @@ namespace NumSharp.Tests.Strings
     ///     The string oracle's ops for section <c>strcharmeth</c> (the <c>numpy.char</c> plan's C4 / C5): the chararray
     ///     string members (<c>cha_call</c>) and the <c>numpy.char</c> string functions (<c>cha_fn</c>, names
     ///     <c>char.*</c>) — numpy.char's own <c>partition</c> / <c>rpartition</c> and the functions it re-exports from
-    ///     numpy.strings. Each call binds the C# member a ported NumPy line binds: the positional arguments in NumPy's
-    ///     order, a keyword argument by its NumPy name.
+    ///     numpy.strings (the predicates among them are numpy.strings' ufuncs themselves). Each call binds the C#
+    ///     member a ported NumPy line binds: the positional arguments in NumPy's order, a keyword argument by its NumPy
+    ///     name.
     /// </summary>
     internal static partial class StringOracleOps
     {
@@ -95,6 +96,33 @@ namespace NumSharp.Tests.Strings
                 case "replace":
                     result = c.replace(arg(0, "old"), arg(1, "new"), arg(2, "count"));
                     return true;
+                case "isalnum":
+                    result = c.isalnum();
+                    return true;
+                case "isalpha":
+                    result = c.isalpha();
+                    return true;
+                case "isdecimal":
+                    result = c.isdecimal();
+                    return true;
+                case "isdigit":
+                    result = c.isdigit();
+                    return true;
+                case "islower":
+                    result = c.islower();
+                    return true;
+                case "isnumeric":
+                    result = c.isnumeric();
+                    return true;
+                case "isspace":
+                    result = c.isspace();
+                    return true;
+                case "istitle":
+                    result = c.istitle();
+                    return true;
+                case "isupper":
+                    result = c.isupper();
+                    return true;
             }
             result = null;
             return false;
@@ -135,6 +163,25 @@ namespace NumSharp.Tests.Strings
                 "char.lstrip" => np.@char.lstrip(arg(0, "a"), arg(1, "chars")),
                 "char.rstrip" => np.@char.rstrip(arg(0, "a"), arg(1, "chars")),
                 "char.replace" => np.@char.replace(arg(0, "a"), arg(1, "old"), arg(2, "new"), arg(3, "count")),
+                // The predicates are numpy.strings' ufuncs: out= may come positionally, where= and dtype= by keyword.
+                "char.isalnum" => np.@char.isalnum(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.isalpha" => np.@char.isalpha(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.isdecimal" => np.@char.isdecimal(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                       (DType)arg(3, "dtype")),
+                "char.isdigit" => np.@char.isdigit(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.islower" => np.@char.islower(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.isnumeric" => np.@char.isnumeric(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                       (DType)arg(3, "dtype")),
+                "char.isspace" => np.@char.isspace(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.istitle" => np.@char.istitle(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
+                "char.isupper" => np.@char.isupper(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
+                                                   (DType)arg(3, "dtype")),
                 var f => throw new InvalidOperationException($"the chararray behavior sections have no function '{f}'"),
             };
         }

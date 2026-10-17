@@ -627,5 +627,155 @@ namespace NumSharp.Tests.Backends.Strings
                 np.setbufsize(saved);
             }
         }
+
+        // ------------------------------------------------------------------ the nine predicates (C5, batch 4)
+
+        /// <summary>The texts of the predicate probes: trailing whitespace the element access strips, a titled text,
+        ///     digits with a trailing space, a fraction, only spaces, an Arabic-Indic digit with a superscript, empty.</summary>
+        private static readonly string[] PredicateWords = { "ab  ", "AB  ", "Ab Cd ", "12 ", "½", "  ", "٣²", "" };
+
+        /// <summary>Asserts a predicate result: a PLAIN bool array that owns its data, holding the expected values.</summary>
+        /// <param name="r">The result.</param>
+        /// <param name="expected">NumPy's values.</param>
+        private static void IsPlainBool(NDArray r, params bool[] expected)
+        {
+            r.Should().NotBeOfType<NDCharArray>();
+            r.dtype.ToString().Should().Be("bool");
+            r.flags.owndata.Should().BeTrue();
+            r.ToArray<bool>().Should().Equal(expected);
+        }
+
+        /// <summary>
+        ///     The predicate members are <c>isalpha(self)</c>, numpy.strings' ufunc over the STORED text: <c>'ab  '</c> is
+        ///     lowercase but not alphabetic (its trailing spaces, which <c>c[0]</c> strips, are uncased and not letters),
+        ///     <c>'12 '</c> is not a digit text, <c>'٣²'</c> is digit and numeric but not decimal. The result is a plain
+        ///     bool array (<c>chararray.__array_wrap__</c> keeps the class only for text), equal to the function's, and a
+        ///     0-d chararray gives a 0-d array.
+        /// </summary>
+        [TestMethod]
+        public void PredicateMembers_ReadTheStoredText_AndReturnPlainBool()
+        {
+            var c = np.@char.array(PredicateWords);
+            c.dtype.ToString().Should().Be("<U6");
+            IsPlainBool(c.isalnum(), false, false, false, false, true, false, true, false);
+            IsPlainBool(c.isalpha(), false, false, false, false, false, false, false, false);
+            IsPlainBool(c.isdecimal(), false, false, false, false, false, false, false, false);
+            IsPlainBool(c.isdigit(), false, false, false, false, false, false, true, false);
+            IsPlainBool(c.islower(), true, false, false, false, false, false, false, false);
+            IsPlainBool(c.isnumeric(), false, false, false, false, true, false, true, false);
+            IsPlainBool(c.isspace(), false, false, false, false, false, true, false, false);
+            IsPlainBool(c.istitle(), false, false, true, false, false, false, false, false);
+            IsPlainBool(c.isupper(), false, true, false, false, false, false, false, false);
+            IsPlainBool(np.@char.istitle(c), false, false, true, false, false, false, false, false);
+            IsPlainBool(np.@char.isnumeric(c), false, false, false, false, true, false, true, false);
+
+            var zero = (NDCharArray)((NDCharArray)c["0:1"]).reshape(Shape.Scalar);
+            var lower = zero.islower();
+            lower.Should().NotBeOfType<NDCharArray>();
+            lower.ndim.Should().Be(0);
+            lower.ToArray<bool>().Should().Equal(true);
+            zero.isalpha().ToArray<bool>().Should().Equal(false);
+            zero.isupper().ToArray<bool>().Should().Equal(false);
+        }
+
+        /// <summary>
+        ///     Over an <c>S</c> chararray the predicates follow NumPy's ASCII rules (a byte at or past 0x80 has no property;
+        ///     whitespace is space and <c>\t</c>–<c>\r</c>), and <c>isdecimal</c> / <c>isnumeric</c> have no bytes loop:
+        ///     the members and the functions raise NumPy's no-loop TypeError, verbatim.
+        /// </summary>
+        [TestMethod]
+        public void PredicateMembers_OverBytes_FollowTheAsciiRules_AndRefuseDecimalAndNumeric()
+        {
+            static byte[] L(string s) => System.Text.Encoding.Latin1.GetBytes(s);
+            var s = np.@char.array(new object[] { L("ab  "), L("AB  "), L("12 "), L("é"), L(" \t\v"), L("Ab Cd ") });
+            s.dtype.ToString().Should().Be("|S6");
+            IsPlainBool(s.isalnum(), false, false, false, false, false, false);
+            IsPlainBool(s.isalpha(), false, false, false, false, false, false);
+            IsPlainBool(s.isdigit(), false, false, false, false, false, false);
+            IsPlainBool(s.islower(), true, false, false, false, false, false);
+            IsPlainBool(s.isspace(), false, false, false, false, true, false);
+            IsPlainBool(s.istitle(), false, false, false, false, false, true);
+            IsPlainBool(s.isupper(), false, true, false, false, false, false);
+
+            const string bytesNoLoop = "did not contain a loop with signature matching types <class 'numpy.dtypes.BytesDType'> -> None";
+            Action decimalMember = () => s.isdecimal();
+            decimalMember.Should().Throw<TypeError>().Where(e => e.Message == "ufunc 'isdecimal' " + bytesNoLoop);
+            Action numericMember = () => s.isnumeric();
+            numericMember.Should().Throw<TypeError>().Where(e => e.Message == "ufunc 'isnumeric' " + bytesNoLoop);
+            Action decimalBytes = () => np.@char.isdecimal(new byte[] { 49, 50, 51 });
+            decimalBytes.Should().Throw<TypeError>().Where(e => e.Message == "ufunc 'isdecimal' " + bytesNoLoop);
+            Action numericList = () => np.@char.isnumeric(new object[] { L("ab"), L("12") });
+            numericList.Should().Throw<TypeError>().Where(e => e.Message == "ufunc 'isnumeric' " + bytesNoLoop);
+        }
+
+        /// <summary>
+        ///     The predicate functions convert a Python value as <c>np.asanyarray</c> does — a <c>str</c> is a 0-d
+        ///     <c>U</c> (NumPy answers with a NumPy bool scalar, NumSharp with a 0-d array), a list of <c>str</c> a
+        ///     <c>U</c> array, a list of <c>bytes</c> an <c>S</c> array — and name a number by its default DType in the
+        ///     no-loop TypeError (a one-input ufunc marks no operand weak).
+        /// </summary>
+        [TestMethod]
+        public void PredicateFunctions_ConvertPythonValues_AndNameANumberByItsDefaultDType()
+        {
+            static byte[] L(string s) => System.Text.Encoding.Latin1.GetBytes(s);
+            var alpha = np.@char.isalpha("Abc");
+            alpha.ndim.Should().Be(0);
+            alpha.ToArray<bool>().Should().Equal(true);
+            np.@char.isalpha("").ToArray<bool>().Should().Equal(false);
+            np.@char.isnumeric("⅕").ToArray<bool>().Should().Equal(true);
+            np.@char.isdecimal("⅕").ToArray<bool>().Should().Equal(false);
+            np.@char.isupper(new[] { "ab", "AB", "1 " }).ToArray<bool>().Should().Equal(false, true, false);
+            np.@char.isalpha(new object[] { L("ab"), L("12") }).ToArray<bool>().Should().Equal(true, false);
+            np.@char.isalpha(new byte[] { 49, 50, 51 }).ToArray<bool>().Should().Equal(false);
+            IsPlainBool(np.@char.isalpha(T("ab", "a1", "", "AB", "½")), true, false, false, true, false);
+            IsPlainBool(np.@char.isnumeric(T("ab", "a1", "", "AB", "½")), false, false, false, false, true);
+
+            static string NoLoop(string ufunc, string cls)
+                => $"ufunc '{ufunc}' did not contain a loop with signature matching types <class 'numpy.dtypes.{cls}'> -> None";
+            // Where takes an expression tree, which cannot call a local function: the texts are computed first.
+            string integerText = NoLoop("isalpha", "Int64DType"), realText = NoLoop("isupper", "Float64DType");
+            Action integer = () => np.@char.isalpha(5);
+            integer.Should().Throw<TypeError>().Where(e => e.Message == integerText);
+            Action real = () => np.@char.isupper(5.5);
+            real.Should().Throw<TypeError>().Where(e => e.Message == realText);
+        }
+
+        /// <summary>
+        ///     The predicate functions keep the ufunc's keywords: an <c>out=</c> is returned itself (a same_kind int32 out
+        ///     receives 0 / 1), a chararray <c>out=</c> comes back as a NEW chararray view of it holding <c>'True'</c> /
+        ///     <c>'Fals'</c> (cut to <c>&lt;U4</c>), <c>where=</c> leaves the masked-off elements of the out, only bool has
+        ///     a loop for <c>dtype=</c>, and an out that does not broadcast is NumPy's ValueError text (the house
+        ///     ArgumentException).
+        /// </summary>
+        [TestMethod]
+        public void PredicateFunctions_KeepTheUfuncsOutWhereAndDtype()
+        {
+            var c = np.@char.array(PredicateWords);
+            var counts = np.zeros(new Shape(8), np.int32);
+            np.@char.isupper(c, counts).Should().BeSameAs(counts);
+            counts.ToArray<int>().Should().Equal(0, 1, 0, 0, 0, 0, 0, 0);
+
+            var text = np.@char.array(Enumerable.Repeat("zzzz", 8).ToArray());
+            var view = np.@char.isupper(c, text);
+            view.Should().BeOfType<NDCharArray>();
+            view.Should().NotBeSameAs(text);
+            np.shares_memory(view, text).Should().BeTrue();
+            view.dtype.ToString().Should().Be("<U4");
+            Texts(view).Should().Equal("Fals", "True", "Fals", "Fals", "Fals", "Fals", "Fals", "Fals");
+
+            var kept = np.ones(new Shape(8), np.@bool);
+            var mask = np.array(new[] { true, false, true, false, true, false, true, false });
+            np.@char.isdigit(c, kept, mask).Should().BeSameAs(kept);
+            kept.ToArray<bool>().Should().Equal(false, true, false, true, false, true, true, true);
+
+            IsPlainBool(np.@char.isalpha(c, dtype: np.@bool), false, false, false, false, false, false, false, false);
+            Action noLoop = () => np.@char.isalpha(c, dtype: np.int64);
+            noLoop.Should().Throw<TypeError>().Where(e => e.Message ==
+                "ufunc 'isalpha' did not contain a loop with signature matching types <class 'numpy.dtypes.StrDType'> -> " +
+                "<class 'numpy.dtypes.Int64DType'>");
+            Action shape = () => np.@char.isalpha(c, np.zeros(new Shape(3), np.@bool));
+            shape.Should().Throw<ArgumentException>().Where(e => e.Message ==
+                "operands could not be broadcast together with shapes (8,) (3,) ");
+        }
     }
 }

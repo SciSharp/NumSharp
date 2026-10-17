@@ -687,6 +687,26 @@ namespace NumSharp.Tests.Fuzz
                 }
                 return c.replace(" ", "");
             });
+            // The nine predicates (numpy.strings' ufuncs, re-exported) and their chararray members: plain bool results, so a
+            // chararray operand leaves no chararray view behind; a chararray out= gives a new view of it.
+            AddCharPredicate(l, "np.char.isalnum", (x, o, w, d) => np.@char.isalnum(x, o, w, d), hasBytesLoop: true);
+            AddCharPredicate(l, "np.char.isalpha", (x, o, w, d) => np.@char.isalpha(x, o, w, d), hasBytesLoop: true);
+            AddCharPredicate(l, "np.char.isdecimal", (x, o, w, d) => np.@char.isdecimal(x, o, w, d), hasBytesLoop: false);
+            AddCharPredicate(l, "np.char.isdigit", (x, o, w, d) => np.@char.isdigit(x, o, w, d), hasBytesLoop: true);
+            AddCharPredicate(l, "np.char.islower", (x, o, w, d) => np.@char.islower(x, o, w, d), hasBytesLoop: true);
+            AddCharPredicate(l, "np.char.isnumeric", (x, o, w, d) => np.@char.isnumeric(x, o, w, d), hasBytesLoop: false);
+            AddCharPredicate(l, "np.char.isspace", (x, o, w, d) => np.@char.isspace(x, o, w, d), hasBytesLoop: true);
+            AddCharPredicate(l, "np.char.istitle", (x, o, w, d) => np.@char.istitle(x, o, w, d), hasBytesLoop: true);
+            AddCharPredicate(l, "np.char.isupper", (x, o, w, d) => np.@char.isupper(x, o, w, d), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.isalnum", c => c.isalnum(), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.isalpha", c => c.isalpha(), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.isdecimal", c => c.isdecimal(), hasBytesLoop: false);
+            AddCharArrayPredicate(l, "NDCharArray.isdigit", c => c.isdigit(), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.islower", c => c.islower(), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.isnumeric", c => c.isnumeric(), hasBytesLoop: false);
+            AddCharArrayPredicate(l, "NDCharArray.isspace", c => c.isspace(), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.istitle", c => c.istitle(), hasBytesLoop: true);
+            AddCharArrayPredicate(l, "NDCharArray.isupper", c => c.isupper(), hasBytesLoop: true);
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
             // Python scalar, an object list holding None), the element errors (whose piece store and readers must be
@@ -1116,6 +1136,112 @@ namespace NumSharp.Tests.Fuzz
                 {
                 }
                 return strip(c, null);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of numpy.char's predicates (numpy.strings' ufuncs, re-exported): the U, S and StringDType
+        ///     routes, a chararray input (a plain bool result), Python values (a str, a list), out= with where=, a chararray
+        ///     out (a new chararray view of it), and the refusals (a number and a non-bool dtype=: TypeError; for
+        ///     <c>isdecimal</c> / <c>isnumeric</c> an S operand and Python bytes too, which have no loop).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The function's inventory id.</param>
+        /// <param name="predicate">The function: x, out, where, dtype (null for NumPy's defaults).</param>
+        /// <param name="hasBytesLoop">Whether the ufunc has an S loop (all but <c>isdecimal</c> / <c>isnumeric</c>).</param>
+        private static void AddCharPredicate(List<LeakCase> l, string api, Func<object, NDArray, NDArray, DType, NDArray> predicate,
+                                             bool hasBytesLoop)
+        {
+            E(l, api, hasBytesLoop
+                ? "U / S / StringDType, a chararray input, a Python str / bytes / list, out= with where=, a chararray out; a number and a non-bool dtype (TypeError)"
+                : "U / StringDType, a chararray input, a Python str / list, out= with where=, a chararray out; an S operand, Python bytes, a number and a non-bool dtype (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "ab", "A1 " });
+                using var s = np.array(new object[] { new byte[] { 97, 98 } });
+                using var t = np.array(new[] { "xy", "Z" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "p  ", "QR" });
+                using var o = np.zeros(new Shape(2), np.int32);
+                using var mask = np.array(new[] { true, false });
+                using var text = np.@char.array(new[] { "zzzz", "zzzz" });
+                using var vstring = predicate(t, null, null, null);
+                using var chars = predicate(c, null, null, null);
+                using var str = predicate("Ab", null, null, null);
+                using var list = predicate(new[] { "a", "B" }, null, null, null);
+                using var view = predicate(c, text, null, null);
+                predicate(u, o, mask, null);
+                if (hasBytesLoop)
+                {
+                    using var bytes = predicate(s, null, null, null);
+                    using var pyBytes = predicate(new byte[] { 97 }, null, null, null);
+                }
+                else
+                {
+                    try
+                    {
+                        predicate(s, null, null, null);
+                    }
+                    catch (TypeError)
+                    {
+                    }
+                    try
+                    {
+                        predicate(new byte[] { 97 }, null, null, null);
+                    }
+                    catch (TypeError)
+                    {
+                    }
+                }
+                try
+                {
+                    predicate(5, null, null, null);
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    predicate(u, null, null, np.int64);
+                }
+                catch (TypeError)
+                {
+                }
+                return predicate(u, null, null, null);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of chararray's predicate members (<c>isalpha(self)</c>, a plain bool result): U and S
+        ///     receivers and a 0-d receiver (a 0-d array); for <c>isdecimal</c> / <c>isnumeric</c> the S receiver is the
+        ///     refusal (no bytes loop: TypeError).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The member's inventory id.</param>
+        /// <param name="predicate">The member: receiver to result.</param>
+        /// <param name="hasBytesLoop">Whether the ufunc has an S loop (all but <c>isdecimal</c> / <c>isnumeric</c>).</param>
+        private static void AddCharArrayPredicate(List<LeakCase> l, string api, Func<NDCharArray, NDArray> predicate, bool hasBytesLoop)
+        {
+            E(l, api, hasBytesLoop ? "U and S receivers, a 0-d receiver" : "a U receiver, a 0-d receiver; an S receiver (TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab  ", "A1" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 98 }, new byte[] { 49 } });
+                using var one = (NDCharArray)c["0:1"];
+                using var zero = (NDCharArray)one.reshape(Shape.Scalar);
+                using var scalar = predicate(zero);
+                if (hasBytesLoop)
+                {
+                    using var bytes = predicate(s);
+                }
+                else
+                {
+                    try
+                    {
+                        predicate(s);
+                    }
+                    catch (TypeError)
+                    {
+                    }
+                }
+                return predicate(c);
             });
         }
     }

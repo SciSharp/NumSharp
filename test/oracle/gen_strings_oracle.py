@@ -12072,14 +12072,81 @@ def _chm_tcopy():
     _chm_member([s_cha, tf], "center", [_chx_v(9), _chx_arr(1)], layout="tcopy:S")
 
 
+CHM_PREDICATES = ["isalnum", "isalpha", "isdecimal", "isdigit", "islower", "isnumeric", "isspace", "istitle", "isupper"]
+# Texts for the predicates: cases, titles, ASCII and Unicode digits (decimal U+0661, digit-only U+00B2, numeric-only
+# U+00BD / U+2155), whitespace (ASCII, U+3000, U+1680), an empty text, an embedded NUL, a titlecase letter (U+01C5),
+# letters without case (U+4E2D), trailing whitespace the element access strips.
+CHM_PRED_U = ["abc", "ABC", "Abc Def", "123", "\u0661\u0662", "\u00b2", "\u00bd", "\u2155", " \t", "", "a1", "A b",
+              "\u01c5ab", "Ab  ", "  ", "x\x00y", "\u3000", "\u1680\u2028", "\u00df", "\u4e2d1", "AB  ", "12 ",
+              "Ab Cd ", "aBc"]
+CHM_PRED_S = [b"abc", b"ABC", b"Abc Def", b"123", b" \t", b"", b"a1", b"Ab  ", b"\xe9", b"x\x00y", b"AB  ", b"12 ",
+              b"\x0b\x0c", b"Ab Cd ", b"\xb2", b"aBc"]
+
+
+def _chm_predicates():
+    """numpy.char's nine predicates (numpy.strings' ufuncs, re-exported: np.char.isalpha IS the ufunc) and the chararray
+    members of the nine names (C5's fourth batch): `isalpha(self)`, a PLAIN bool result over the stored text (a 0-d
+    array for a 0-d chararray: chararray.__array_wrap__ keeps the class only for text, and ignores return_scalar), the
+    ufunc's out= / where= / dtype=, and its refusals (isdecimal / isnumeric have no bytes loop; a number has no loop,
+    named by its default DType: a one-input ufunc marks no operand weak)."""
+    for spec in ["<U4", "|S4"]:
+        for layout in CHM_LAYOUTS:
+            cha = _chx_pool(spec, layout, 5)
+            label = f"{spec}:{layout}"
+            for name in CHM_PREDICATES:
+                _chm_member([cha], name, [], layout=label)
+                _chm_fn([cha], name, [_chx_cha(0)], layout=f"{label}:chararray")
+                _chm_fn([cha], name, [_chx_arr(0)], layout=f"{label}:plain")
+    # The predicate texts, as members and functions (the stored text decides: 'Ab  ' is not alpha, 'AB  ' is upper).
+    for spec, texts in [("<U8", CHM_PRED_U), ("|S8", CHM_PRED_S)]:
+        recipe = _chx_vals(texts, spec)
+        col = _chx_vals([[t] for t in texts], spec)
+        for name in CHM_PREDICATES:
+            _chm_member([recipe], name, [], layout=f"{spec}:texts")
+            _chm_member([col], name, [], layout=f"{spec}:texts:column")
+            _chm_fn([recipe], name, [_chx_cha(0)], layout=f"{spec}:texts:chararray")
+    # The ufunc's keywords over a chararray: out= (bool, a same_kind int32, a text chararray out takes 'True' / 'False'
+    # cut to its width and comes back as a new chararray view), where= with an out, dtype= (only bool has a loop).
+    for spec in ["<U4", "|S4"]:
+        base = _chx_pool(spec, "c2", 6)
+        size, shape = 12, (3, 4)
+        mask = _chx_vals((np.arange(size) % 3 != 0).reshape(shape).tolist(), "bool")
+        for name in CHM_PREDICATES:
+            if spec[1] == "S" and name in ("isdecimal", "isnumeric"):
+                continue
+            for odt, ol in [("bool", "bool"), ("int32", "int32")]:
+                out = _chx_vals(np.zeros(shape, dtype=odt).tolist(), odt, out=True)
+                _chm_fn([base, out], name, [_chx_cha(0)], {"out": _chx_arr(1)}, layout=f"{spec}:out_{ol}")
+                _chm_fn([base, out], name, [_chx_cha(0), _chx_arr(1)], layout=f"{spec}:out_{ol}:positional")
+            outt = _chx_vals(np.full(shape, "zzzz").tolist(), "<U4", out=True)
+            _chm_fn([base, outt], name, [_chx_cha(0)], {"out": _chx_cha(1)}, layout=f"{spec}:out_chararray")
+            outz = _chx_vals(np.ones(shape, dtype=bool).tolist(), "bool", out=True)
+            _chm_fn([base, outz, mask], name, [_chx_cha(0)], {"out": _chx_arr(1), "where": _chx_arr(2)},
+                    layout=f"{spec}:where")
+            _chm_fn([base], name, [_chx_cha(0)], {"dtype": {"dt": "bool"}}, layout=f"{spec}:dtype")
+            _chm_fn([base], name, [_chx_cha(0)], {"dtype": {"dt": "int64"}}, layout=f"{spec}:dtype_noloop")
+            outf = _chx_vals(np.zeros((2, 4), dtype=bool).tolist(), "bool", out=True)
+            _chm_fn([base, outf], name, [_chx_cha(0)], {"out": _chx_arr(1)}, layout=f"{spec}:out_shape")
+    # StringDType text (the predicates' NA rules are section tprop's: P2.6 milestone 1).
+    t_text = {"T": enc(CHM_PRED_U)}
+    for name in CHM_PREDICATES:
+        _chm_fn([t_text], name, [_chx_arr(0)], layout="T")
+    # Python values: a str, bytes, lists, numbers (a number has no loop, named Int64DType / Float64DType).
+    for value, vl in [("Abc", "str"), (b"123", "bytes"), (["ab", "AB", "1 "], "list"), ([b"ab", b"12"], "bytes_list"),
+                      ([["a", "B"], ["1", " "]], "nested"), (5, "int"), (5.5, "float"), ("", "empty_str")]:
+        for name in CHM_PREDICATES:
+            _chm_fn([], name, [_chx_v(value)], layout=f"value:{vl}")
+
+
 def gen_strcharmeth():
     """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
-    C5): partition / rpartition, the padding functions, str_len, the search functions, the strips and replace, and
-    NumPy's trivial-loop copy of a chararray beside a StringDType argument."""
+    C5): partition / rpartition, the padding functions, str_len, the search functions, the strips and replace,
+    NumPy's trivial-loop copy of a chararray beside a StringDType argument, and the nine predicates."""
     _chm_transform()
     _chm_search()
     _chm_strip()
     _chm_tcopy()
+    _chm_predicates()
     _chx_flush()
 
 # ----------------------------------------------------------------------------------------------------------------------
