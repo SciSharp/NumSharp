@@ -52,6 +52,15 @@ of 61 names have several overloads, 16 still rank them with `[OverloadResolution
 of 44), and names NumPy 2.x removed that NumSharp still exports (`np.round_`, `np.find_common_type`, `np.issctype`,
 `np.issubsctype`, `np.maximum_sctype`, `np.sctype2char`, `np.asscalar`, `ndarray.itemset`).
 
+**The marks table** ([`numpy-signature-marks.md`](numpy-signature-marks.md), the owner's request of the same day) lists
+every C# name once with four marks taken over ALL its overloads: **M**, a NumPy parameter no overload offers (182
+names; a rename counts; 121 more miss only §3 parameters), **X**, a parameter NumPy does not have (82), **O**, more
+than one overload (310, and 57 of the 115 NumSharp-only names), **T**, a dtype taken as `NPTypeCode` / `Type` instead
+of `DType` (7, and 6 NumSharp-only names: `np.can_cast`, `np.dtype`, `np.frombuffer`, `np.issubdtype`,
+`np.promote_types`, `np.result_type`, `ndarray.view`'s array-class `type`; `np.find_common_type`,
+`np.common_type_code`, `np.issubsctype`, `np.maximum_sctype`, `np.sctype2char`, `ndarray.ReplaceData`). 437 names
+carry no mark.
+
 "Working" cannot come from signatures. Its sources: the `[OpenBugs]` pins that test parameters (phase A), the probe
 done for each item, and the audit of existing parameters (phase X).
 

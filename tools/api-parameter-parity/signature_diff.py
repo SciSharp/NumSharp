@@ -1,10 +1,17 @@
 """Compare every function NumSharp exposes under np.* with NumPy 2.4.2's signature, and write the differences.
 
-Usage (from this directory; the committed outputs are docs/plans/numpy-signature-diff.md and .csv):
+Usage (from this directory; the committed outputs are docs/plans/numpy-signature-diff.md / .csv and
+docs/plans/numpy-signature-marks.md):
     dotnet run --no-cache dump_modules.cs <scratch>/modules_dump.json
-    python -I signature_diff.py <scratch>/modules_dump.json <md> <csv>
-with <md> = ../../docs/plans/numpy-signature-diff.md and <csv> = ../../docs/plans/numpy-signature-diff.csv. The dump
-is compiled from the working tree, so regenerate after any change to a public np.* signature.
+    python -I signature_diff.py <scratch>/modules_dump.json <md> <csv> <marks>
+with <md> = ../../docs/plans/numpy-signature-diff.md, <csv> = ../../docs/plans/numpy-signature-diff.csv and
+<marks> = ../../docs/plans/numpy-signature-marks.md. The dump is compiled from the working tree, so regenerate after
+any change to a public np.* signature.
+
+The marks table (the owner's request of 2026-10-17) lists EVERY C# name once, NumSharp-only names included, with four
+marks taken over ALL its overloads together (``marks_for``): M, a NumPy parameter no overload offers (a rename counts;
+parameters the plan excludes are shown apart); X, a parameter NumPy does not have in some overload; O, more than one
+overload; T, a dtype taken as NPTypeCode or Type instead of DType.
 
 The dump comes from ``dump_modules.cs`` (same directory): every ``[ModuleName]`` module of NumSharp.Core (np, ndarray,
 np.linalg, np.fft, np.random, np.ma, np.emath, np.char, np.strings, np.dtypes, np.typing, np.polynomial and its
@@ -89,6 +96,11 @@ MA_FORWARDERS = {"_MaskedUnaryOperation": 1, "_MaskedBinaryOperation": 2, "_Doma
 #: implementation), "missing" one that no overload has.
 HARD_KINDS = ("missing", "split", "renamed", "extra", "slot", "required", "default", "varargs")
 ALL_KINDS = HARD_KINDS + ("null_default", "policy", "optional", "kwargs", "notes")
+
+#: C# parameter types that select a dtype the pre-DType way: since the dtype system's Stage B every dtype parameter is
+#: meant to be ONE `DType` (an NPTypeCode, a Type or a dtype string converts to it implicitly), so a parameter still
+#: typed NPTypeCode / Type (nullable or array forms included) is a leftover the marks table flags.
+TYPECODE_TYPE = re.compile(r"^(NPTypeCode|Type)\??(\[\])*$")
 
 #: Edits each difference costs when the closest overload is chosen, weighted by the work: a missing parameter needs
 #: an implementation (2), a rename / move / removal / new default value is one edit (1), making a required parameter
@@ -597,6 +609,96 @@ def split_missing(diff, overloads, best_index):
     diff["missing"] = keep
 
 
+def typecode_params(overloads):
+    """The parameters (and return types) of a name's overloads that take a dtype as NPTypeCode or Type.
+
+    Args:
+        overloads: All overload dictionaries of the name.
+
+    Returns:
+        ``(params, returns)``: the distinct ``"Type name"`` texts of such parameters in declaration order, and the
+        distinct NPTypeCode / Type return types (a result NumPy gives as a dtype).
+    """
+    found = []
+    for ov in overloads:
+        for c in ov["params"]:
+            text = f"{c['type']} {c['name']}"
+            if TYPECODE_TYPE.match(c["type"]) and text not in found:
+                found.append(text)
+    returns = sorted({ov["returns"] for ov in overloads if TYPECODE_TYPE.match(ov["returns"])})
+    return found, returns
+
+
+def marks_for(np_params, overloads, policy):
+    """The union view over ALL overloads of one name: which NumPy parameters no overload offers, and which C#
+    parameter names NumPy does not have.
+
+    This differs from ``compare`` (one overload at a time): a NumPy parameter is missing only when no overload has it,
+    and a C# parameter is reported when any overload has it. The same matching rules apply: a positional-only NumPy
+    parameter is offered by any C# parameter at its slot (and any name there is fine), NumPy's ``*args`` is offered by
+    a params array or by the C# parameters at and after its slot that carry no NumPy name, and C# parameters NumPy
+    takes through ``**kwargs`` are not foreign. A NumPy parameter whose slot holds a foreign C# name in some overload is
+    reported with that name (a rename: the NumPy keyword does not compile, and the C# name is foreign).
+
+    Args:
+        np_params: NumPy's Params.
+        overloads: All overload dictionaries of the name.
+        policy: The names this function excludes by policy (reported apart from the missing ones).
+
+    Returns:
+        A dictionary: ``missing`` (NumPy parameters no overload offers, ``"axes (C#: premute)"`` for a rename),
+        ``missing_policy`` (the excluded ones no overload offers), ``extra`` (the foreign C# parameter names, sorted).
+    """
+    # Only the named parameters match by name: a C# `params object[] args` IS NumPy's `*args` whatever its name, so the
+    # names of NumPy's *args / **kwargs must not take part (`common_type(*arrays)` against `params NDArray[] arrays`).
+    np_names = {p.name for p in np_params if p.kind not in (P.VAR_POSITIONAL, P.VAR_KEYWORD)}
+    positional = [p for p in np_params if p.kind in (P.POSITIONAL_ONLY, P.POSITIONAL_OR_KEYWORD)]
+    var_positional = next((p for p in np_params if p.kind == P.VAR_POSITIONAL), None)
+    var_keyword = next((p for p in np_params if p.kind == P.VAR_KEYWORD), None)
+    offered, renamed, extra = set(), {}, set()
+    for ov in overloads:
+        cs = ov["params"]
+        names = [c["name"] for c in cs]
+        for slot, p in enumerate(positional):
+            at_slot = cs[slot] if slot < len(cs) and not cs[slot]["params"] else None
+            if p.kind == P.POSITIONAL_ONLY:
+                # Only the slot counts: Python cannot pass this parameter by name.
+                if at_slot is not None and (at_slot["name"] == p.name or at_slot["name"] not in np_names):
+                    offered.add(p.name)
+            elif p.name in names:
+                offered.add(p.name)
+            elif at_slot is not None and at_slot["name"] not in np_names:
+                renamed.setdefault(p.name, set()).add(at_slot["name"])
+        for p in np_params:
+            if p.kind == P.KEYWORD_ONLY and p.name in names:
+                offered.add(p.name)
+        for i, c in enumerate(cs):
+            if c["name"] in np_names:
+                continue
+            if i < len(positional) and positional[i].kind == P.POSITIONAL_ONLY:
+                continue  # A positional-only slot: Python never sees the name.
+            if var_positional is not None and (c["params"] or i >= len(positional)):
+                offered.add("*" + var_positional.name)  # C# spells what NumPy's *args carries.
+                continue
+            if var_keyword is not None:
+                continue  # A keyword NumPy accepts through **kwargs.
+            extra.add(c["name"])
+    missing, missing_policy = [], []
+    for p in np_params:
+        if p.kind == P.VAR_KEYWORD:
+            continue  # C# has no **kwargs; what it would carry is matched by name above.
+        key = "*" + p.name if p.kind == P.VAR_POSITIONAL else p.name
+        if key in offered:
+            continue
+        if p.name in policy:
+            missing_policy.append(p.name)
+        elif p.name in renamed:
+            missing.append(f"{p.name} (C#: {', '.join(sorted(renamed[p.name]))})")
+        else:
+            missing.append(key)
+    return {"missing": missing, "missing_policy": missing_policy, "extra": sorted(extra)}
+
+
 def cost(diff, overload):
     """The number of edits that would make an overload NumPy's signature, used to pick the closest overload.
 
@@ -723,16 +825,16 @@ def status_of(diff, overload_count):
 
 
 def main():
-    """Read the dump, compare every name, and write the Markdown report (and the CSV).
+    """Read the dump, compare every name, and write the Markdown report (and the CSV, and the marks table).
 
     Raises:
         SystemExit: Wrong number of command-line arguments.
     """
-    if len(sys.argv) not in (3, 4):
-        raise SystemExit("usage: signature_diff.py <modules_dump.json> <out.md> [<out.csv>]")
+    if len(sys.argv) not in (3, 4, 5):
+        raise SystemExit("usage: signature_diff.py <modules_dump.json> <out.md> [<out.csv> [<marks.md>]]")
     with open(sys.argv[1], encoding="utf-8") as fh:
         dump = json.load(fh)
-    rows, summary, surface = [], [], {}
+    rows, summary, surface, marked = [], [], {}, []
     for key in sorted(dump, key=lambda k: (k != "np", k != "ndarray", k)):
         info = dump[key]
         target = resolve_module(key)
@@ -749,7 +851,14 @@ def main():
                    "overloads": len(overloads), "orpa": sum(1 for o in overloads if o["orpa"] is not None),
                    "generic": sum(1 for o in overloads if o["generic"]),
                    "cs_signatures": [cs_signature(name, o) for o in overloads], "best": "", "diff": None}
+            # The marks are kept for EVERY name, NumSharp-only ones included (their overload count and NPTypeCode /
+            # Type parameters still apply); missing / foreign parameters need NumPy's signature, so they stay None.
+            tc_params, tc_returns = typecode_params(overloads)
+            row["marks"] = None
+            row["typecode"], row["typecode_returns"] = tc_params, tc_returns
+            marked.append(row)
             if kind == "absent":
+                row["status"] = "NumSharp only"
                 cs_only.append(name)
                 stats["cs_only"] += 1
                 continue
@@ -763,6 +872,7 @@ def main():
                 rows.append(row)
                 continue
             policy = policy_for(name, is_ufunc)
+            row["marks"] = marks_for(params, overloads, policy)
             scored = []
             for index, ov in enumerate(overloads):
                 d = compare(params, ov, policy)
@@ -793,10 +903,13 @@ def main():
         surface[key] = {"cs_only": sorted(cs_only), "np_absent": absent}
         summary.append(stats)
     write_markdown(sys.argv[2], summary, rows, surface)
-    if len(sys.argv) == 4:
-        write_csv(sys.argv[3], rows)
+    if len(sys.argv) >= 4:
+        write_csv(sys.argv[3], marked)
+    if len(sys.argv) == 5:
+        write_marks_markdown(sys.argv[4], marked, [s["module"] for s in summary], surface)
     totals = {k: sum(s[k] for s in summary) for k in summary[0] if k != "module"}
     print(json.dumps(totals))
+    print(json.dumps(mark_counts(marked)))
 
 
 def fmt_diff(diff, kinds):
@@ -972,26 +1085,203 @@ def write_markdown(path, summary, rows, surface):
         fh.write("\n".join(lines) + "\n")
 
 
+def mark_flags(row):
+    """The four marks of one name, as the marks table shows them.
+
+    Args:
+        row: A row from ``main`` (``marks`` is None for a NumSharp-only name or one without a NumPy signature).
+
+    Returns:
+        A dictionary: ``M`` is "●" when a NumPy parameter no overload offers is not excluded by the plan, "◦" when
+        only excluded ones are missing, "—" when NumPy states no signature; ``X`` "●" when an overload has a parameter
+        NumPy lacks ("—" likewise); ``O`` the overload count when above one; ``T`` "●" when an overload takes a dtype as
+        NPTypeCode or Type.
+    """
+    m = row["marks"]
+    no_signature = row["numpy_kind"] == "absent" or m is None
+    return {
+        "M": "—" if no_signature else ("●" if m["missing"] else "◦" if m["missing_policy"] else ""),
+        "X": "—" if no_signature else ("●" if m["extra"] else ""),
+        "O": str(row["overloads"]) if row["overloads"] > 1 else "",
+        "T": "●" if row["typecode"] else "",
+    }
+
+
+def mark_counts(marked):
+    """Count the marks over every name.
+
+    Args:
+        marked: Every row from ``main``.
+
+    Returns:
+        A dictionary of counts: names with a NumPy counterpart, each mark among them, no mark at all, and the
+        NumSharp-only names with their overload and NPTypeCode / Type marks.
+    """
+    counts = {"numpy": 0, "M": 0, "M_excluded_only": 0, "X": 0, "O": 0, "T": 0, "no_mark": 0, "not_compared": 0,
+              "cs_only": 0, "cs_only_O": 0, "cs_only_T": 0}
+    for r in marked:
+        f = mark_flags(r)
+        if r["numpy_kind"] == "absent":
+            counts["cs_only"] += 1
+            counts["cs_only_O"] += bool(f["O"])
+            counts["cs_only_T"] += bool(f["T"])
+            continue
+        counts["numpy"] += 1
+        counts["M"] += f["M"] == "●"
+        counts["M_excluded_only"] += f["M"] == "◦"
+        counts["X"] += f["X"] == "●"
+        counts["O"] += bool(f["O"])
+        counts["T"] += bool(f["T"])
+        counts["not_compared"] += f["M"] == "—"
+        # A name missing only plan-excluded parameters still misses parameters, so M ◦ is a mark too: "no mark"
+        # means the name matches NumPy in all four respects.
+        counts["no_mark"] += not (f["M"] in ("●", "◦") or f["X"] == "●" or f["O"] or f["T"])
+    return counts
+
+
+def write_marks_markdown(path, marked, modules, surface):
+    """Write every name with its four marks: missing NumPy parameters, foreign parameters, more than one overload,
+    NPTypeCode / Type dtype parameters; then, per module, the NumPy names NumSharp has no member for.
+
+    Args:
+        path: The Markdown file to write (UTF-8, LF line ends).
+        marked: Every row from ``main``.
+        modules: The module keys in report order.
+        surface: Per module, ``np_absent``: NumPy's public names the module lacks (from ``main``).
+    """
+    lines = []
+    w = lines.append
+    w("# NumSharp `np.*` names marked against NumPy 2.4.2")
+    w("")
+    w("Generated by `tools/api-parameter-parity/signature_diff.py` (4th argument) from the same comparison as")
+    w("[`numpy-signature-diff.md`](numpy-signature-diff.md). Do not edit it by hand. Every C# name of every")
+    w("`[ModuleName]` module and of `np.random.Generator` is listed once, NumPy's names first, then the names NumPy")
+    w("does not have. The marks look at ALL overloads of a name together:")
+    w("")
+    w("| mark | meaning |")
+    w("|---|---|")
+    # One table row per line: a Markdown table row cannot continue on the next line.
+    w("| **M** ● | NumSharp is missing a NumPy parameter: no overload offers it. A rename counts, because NumPy's "
+      "keyword does not compile: `axes (C#: premute)` |")
+    w("| **M** ◦ | only parameters the parity plan excludes are missing (`like`, `subok`, a ufunc's `casting` / "
+      "`order` / `signature`, the field `order` of the sorts, `einsum_call`) |")
+    w("| **X** ● | NumSharp has a parameter NumPy does not have, in at least one overload (names at a positional-only "
+      "slot, C# spellings of `*args`, and keywords NumPy takes through `**kwargs` are not counted) |")
+    w("| **O** n | the name has n C# overloads, where NumPy has one signature |")
+    w("| **T** ● | an overload takes a dtype as `NPTypeCode` or `Type` (nullable and array forms included) instead "
+      "of `DType` |")
+    w("| — | not applicable: NumPy states no signature for the name, or NumPy has no such name |")
+    w("")
+    w("Matching: positional-only NumPy parameters by slot, the others by name. `*args` is offered by a `params`")
+    w("array or by C# parameters at its slot. The column *missing on NumSharp* lists the M parameters (excluded ones")
+    w("after `excluded:`), *NumSharp-only parameters* the X ones, *NPTypeCode / Type* the T parameters (and an")
+    w("NPTypeCode / Type return type).")
+    w("")
+    counts_by_module = {k: mark_counts([r for r in marked if r["module"] == k]) for k in modules}
+    w("## Summary")
+    w("")
+    w("| module | names with a NumPy counterpart | M ● | M ◦ only | X | O | T | no mark | not compared | "
+      "NumSharp-only names | of them O | of them T | NumPy names NumSharp lacks |")
+    w("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    keys = ["numpy", "M", "M_excluded_only", "X", "O", "T", "no_mark", "not_compared", "cs_only", "cs_only_O",
+            "cs_only_T"]
+    for k in modules:
+        c = counts_by_module[k]
+        w(f"| `{k}` | " + " | ".join(str(c[x]) for x in keys) + f" | {len(surface[k]['np_absent'])} |")
+    total = mark_counts(marked)
+    w("| **total** | " + " | ".join(str(total[x]) for x in keys)
+      + f" | {sum(len(surface[k]['np_absent']) for k in modules)} |")
+    w("")
+    w("*no mark*: no M (● or ◦), X, O or T: the name matches NumPy in all four respects.")
+    w("")
+    for k in modules:
+        mod_rows = [r for r in marked if r["module"] == k]
+        compared = sorted((r for r in mod_rows if r["numpy_kind"] != "absent"), key=lambda r: r["name"])
+        only = sorted((r for r in mod_rows if r["numpy_kind"] == "absent"), key=lambda r: r["name"])
+        absent = surface[k]["np_absent"]
+        if not compared and not only and not absent:
+            continue
+        w(f"## `{k}`")
+        w("")
+        if compared:
+            w(f"### Names NumPy has ({len(compared)})")
+            w("")
+            w("| name | M | X | O | T | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type |")
+            w("|---|---|---|---|---|---|---|---|---|")
+            for r in compared:
+                f = mark_flags(r)
+                m = r["marks"]
+                missing = ", ".join(f"`{esc(x)}`" for x in m["missing"]) if m else ""
+                if m and m["missing_policy"]:
+                    missing += ("<br>" if missing else "") + "excluded: " + ", ".join(f"`{x}`" for x in m["missing_policy"])
+                extra = ", ".join(f"`{esc(x)}`" for x in m["extra"]) if m else ""
+                numpy_text = f"`{esc(r['numpy_signature'])}`" if m else r.get("status", "")
+                w(f"| `{r['name']}` | {f['M']} | {f['X']} | {f['O']} | {f['T']} | {numpy_text} | {missing} | {extra} "
+                  f"| {typecode_text(r)} |")
+            w("")
+        if only:
+            w(f"### Names NumPy does not have ({len(only)})")
+            w("")
+            w("| name | O | T | NPTypeCode / Type |")
+            w("|---|---|---|---|")
+            for r in only:
+                f = mark_flags(r)
+                w(f"| `{r['name']}` | {f['O']} | {f['T']} | {typecode_text(r)} |")
+            w("")
+        if absent:
+            w(f"### NumPy names NumSharp lacks ({len(absent)})")
+            w("")
+            w(", ".join(f"`{n}`" for n in absent))
+            w("")
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
+def typecode_text(row):
+    """Render a row's NPTypeCode / Type parameters and return types for a table cell.
+
+    Args:
+        row: A row from ``main``.
+
+    Returns:
+        ``\\`NPTypeCode typeCode\\`, ...`` and ``returns \\`NPTypeCode\\``` when present, or an empty string.
+    """
+    parts = [f"`{esc(x)}`" for x in row["typecode"]]
+    if row["typecode_returns"]:
+        parts.append("returns " + ", ".join(f"`{x}`" for x in row["typecode_returns"]))
+    return ", ".join(parts)
+
+
 def write_csv(path, rows):
-    """Write one CSV row per compared name, with every difference kind and every overload.
+    """Write one CSV row per C# name (NumSharp-only names included), with every difference kind of the closest
+    overload, the four marks over all overloads, and every overload.
 
     Args:
         path: The CSV file to write (UTF-8, LF line ends).
-        rows: The rows from ``main``.
+        rows: Every row from ``main``.
     """
     fields = ["module", "name", "numpy_kind", "status", "overloads", "orpa", "generic", "numpy_signature", "best",
-              *ALL_KINDS, "all_overloads"]
+              *ALL_KINDS, "mark_M", "mark_X", "mark_O", "mark_T", "missing_any_overload", "missing_excluded",
+              "numsharp_only_params", "typecode_params", "typecode_returns", "all_overloads"]
     with open(path, "w", encoding="utf-8", newline="") as fh:
         # LF like the repository stores text: the csv module's default "\r\n" made git warn on every regeneration.
         writer = csv.DictWriter(fh, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for r in rows:
             d = r["diff"] or {}
+            m = r["marks"] or {}
+            f = mark_flags(r)
             writer.writerow({
                 "module": r["module"], "name": r["name"], "numpy_kind": r["numpy_kind"], "status": r["status"],
                 "overloads": r["overloads"], "orpa": r["orpa"], "generic": r["generic"],
                 "numpy_signature": r["numpy_signature"], "best": r["best"],
                 **{k: "; ".join(d.get(k, [])) for k in ALL_KINDS},
+                "mark_M": f["M"], "mark_X": f["X"], "mark_O": f["O"], "mark_T": f["T"],
+                "missing_any_overload": "; ".join(m.get("missing", [])),
+                "missing_excluded": "; ".join(m.get("missing_policy", [])),
+                "numsharp_only_params": "; ".join(m.get("extra", [])),
+                "typecode_params": "; ".join(r["typecode"]),
+                "typecode_returns": "; ".join(r["typecode_returns"]),
                 "all_overloads": " || ".join(r["cs_signatures"]),
             })
 
