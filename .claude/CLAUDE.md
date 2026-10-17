@@ -130,7 +130,7 @@ undisposed views earlier entries left of the shared fixture, and the measurement
 mid-entry — `ScopeAudit.Quiesce()` before the snapshot, plus `OwnershipLedger.DropMayBeFinalization` / `DrainAndRebase`
 for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 NumPy errors, zero excuses; the 5 deferred
 `tma` cases strict), `StringDTypeOrderTests` (24). Benchmark: 168 cells 1.8–32× NumPy, geomean 7.8×. Left: the
-`np.strings` functions of P2.6 (the predicates, the case maps, `translate`, `mod`, `encode`, `decode`) and 7
+`np.strings` functions of P2.6 after its predicates (the case maps, `translate`, `mod`, `encode`, `decode`) and 7
 `NextPhase` sites, all of P2.7; no oracle case is deferred any more (P2.5 made `chararray.partition(sep)`'s 22 strict).
 **`np.strings` searches, strips, pads, replaces, partitions and slices since P2.5 (2026-10-17, `5dc14393` +
 `5127e47c`; plan state log).** `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`,
@@ -157,6 +157,28 @@ Gates: oracle `strfn` (10,964 cases) / `tfn` (7,900; 5,280 NumPy errors in all),
 `StringMethodsLanesTests` (every lane body against its scalar body over every width, `FencedMemory`, short cells
 against the general cores, IL against managed kernels) + `StringFunctionsPinsTests`. Benchmark: 237 cells 1.65–15×
 NumPy, geomean 3.64×.
+**`np.strings`' predicates since P2.6 milestone 1 (2026-10-17, `8bbc0f79`; plan state log).** `isalpha`, `isdigit`,
+`isspace`, `isalnum`, `islower`, `isupper`, `istitle`, `isdecimal`, `isnumeric` are NumPy's ufuncs (`out=` / `where=` /
+`dtype=` in NumPy's stage order, `_get_dtype` first; no `S` loop for `isdecimal` / `isnumeric`) over `S` (NumPy's ASCII
+rules), `U` and `T` (CPython's `Py_UNICODE_IS*` per code point, the text without its trailing NULs, empty is False; a
+`T` NA is False under a NaN-like NA object, its text under a string one, NumPy's `ValueError` under any other, and never
+at a masked-off position). The Unicode tables (P2.A, D9): `tools/gen_unicode_tables.py` →
+`Backends/Strings/PyUnicodeData.Tables.cs`, CPython 3.12's `_PyUnicode_TypeRecord` flags, decimal values and full case
+mappings (Unicode 15.0.0 on every .NET: .NET 10's own tables are Unicode 16.0), the pinned 64K-word BMP table
+(`flags | record << 16`) one `vpgatherdd` reads, a SHA-256 pin test; `PyUnicode`'s digit / space tests and
+`PyRepr.IsPrintable` read them (a text repr printed a Unicode-16 character raw on .NET 10, NumPy escapes it). Loops:
+`Backends/Strings/NDTextElements.Properties.cs` (`S` / `U` elements as lane masks; `U` runs ASCII compares until the
+CALL meets its first non-ASCII unit, then gathers — D14's sticky escalation, its state the kernel's auxdata
+`KindState`; a unit past U+FFFF runs the element's scalar loop) and `NDVStringMethods.Properties.cs` (`T`: one 16-byte
+window per short cell, an arena text by ASCII chunks or a vector UTF-8 decode, two `vpshufb` per 16-byte window). TRAPS
+from the disassembly: a `DynamicMethod` re-tests a static class's initialization at every read of a static field (read
+the table pointer once per call into the auxdata); `Sse2.ShiftRightLogical128BitLane` with a non-constant count is a
+CALL of the software fallback; a rare call merged into the hot vector loop spills its registers (run the whole element
+scalar instead); an early exit tested after every chunk mispredicts (test the first chunk only); C# reduces a 32-bit
+shift count modulo 32 (`uint >> 32` shifts by 0: `ReadSmall` repeated bytes 0–3 of a 4-byte element in bytes 4–7).
+Gates: oracle `strprop` (4,937 cases) / `tprop` (1,512; 782 NumPy errors in all), zero excuses; `StringPredicatesTests`
+(14: the table pin, elements and UTF-8 forms against the code-point loop over every width, `FencedMemory`, IL against
+managed kernels). Benchmark: 64 cells 3.99–33× NumPy, geomean 7.50×.
 **Phase 2 validated against a randomized NumPy soak (2026-10-16, `b57c3e8b`; plan state log).** `test/oracle/soak_strings_oracle.py`
 draws fresh random cases for every family phase 2 computes (the sorts and partitions, `np.lexsort`, the searches,
 `np.unique` and its Array-API forms, `np.isin` and the set routines, `np.sort_complex`, the histograms, the quantile
@@ -547,9 +569,9 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
     (`InitializeArc` ignores `TryAddRef`'s failure).
   Gates: string-oracle section `tma` (4,167 cases; its 437 deferred cases became strict with P2.T and P2.2 over `T`) +
   `Ma/np.ma.StringDType.Test.cs`.
-- Still refused loudly (phase 2): the `np.strings` functions of P2.6 (the predicates, the case maps, `translate`, `mod`,
-  `encode`, `decode`). Text I/O for `T` landed with P1.7c, comparisons and reductions with P2.T, sorting with P2.2 over
-  `T`, the search / strip / pad / replace / partition / slice functions with P2.5.
+- Still refused loudly (phase 2): the `np.strings` functions of P2.6 after its predicates (the case maps, `translate`,
+  `mod`, `encode`, `decode`). Text I/O for `T` landed with P1.7c, comparisons and reductions with P2.T, sorting with
+  P2.2 over `T`, the search / strip / pad / replace / partition / slice functions with P2.5, the predicates with P2.6.
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
