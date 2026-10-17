@@ -592,13 +592,15 @@ namespace NumSharp.Tests.Backends.Strings
             sized.Should().Throw<TypeError>().WithMessage("The `dtype` and `signature` arguments to ufuncs only select*");
         }
 
-        /// <summary>A multiply / maximum reduction with a numeric <c>dtype=</c> parses the text first; nancumprod keeps a
-        /// parsed 'nan'; np.cov with a numeric dtype parses too.</summary>
+        /// <summary>A multiply / maximum reduction with a numeric <c>dtype=</c> parses the text first (the maximum is NumPy's
+        /// <c>np.maximum.reduce(a, dtype=np.int64)</c>, NumSharp's engine <see cref="TensorEngine.ReduceAMax"/>: np.amax has no
+        /// <c>dtype=</c>, as in NumPy); nancumprod keeps a parsed 'nan'; np.cov with a numeric dtype parses too.</summary>
         [TestMethod]
         public void NumericDtypeReductions_ParseTheTextFirst()
         {
             np.prod(U("1.5", "2", "4"), (int?)null, np.float64).GetDouble().Should().Be(12.0);
-            np.amax(U("3", "-1", "2"), (int?)null, dtype: np.int64).GetInt64().Should().Be(3L);
+            var text = U("3", "-1", "2");
+            text.TensorEngine.ReduceAMax(text, null, false, np.int64).GetInt64().Should().Be(3L);
             np.cumprod(U("2", "3"), (int?)null, np.int64).ToArray<long>().Should().Equal(2L, 6L);
             // nancumprod's _replace_nan leaves text alone: a parsed 'nan' is multiplied, not replaced by 1.
             var nan = np.nancumprod(U("inf", "nan"), (int?)null, np.float64).ToArray<double>();

@@ -82,8 +82,10 @@ namespace NumSharp.Tests.Strings
 
         /// <summary>
         ///     A reduction with the generator's <c>axis</c> (int or None) or <c>axes</c> (a tuple) and optional
-        ///     <c>dtype</c>, spelled as NumSharp's NumPy-shaped overloads (<c>maximum.reduce</c> is NumSharp's
-        ///     <c>np.amax(dtype:)</c> extension, which is NumPy's <c>np.maximum.reduce(dtype=)</c>).
+        ///     <c>dtype</c>, spelled as NumSharp's NumPy-shaped overloads. <c>maximum.reduce</c> / <c>minimum.reduce</c> are
+        ///     NumPy's typed reductions <c>np.maximum.reduce(a, axis, dtype=)</c>, which NumSharp has only on the engine
+        ///     (<see cref="TensorEngine.ReduceAMax"/> / <see cref="TensorEngine.ReduceAMin"/>): np.amax / np.amin are NumPy's
+        ///     one signature, without a <c>dtype=</c>.
         /// </summary>
         /// <param name="name">The NumPy function name.</param>
         /// <param name="a">The array.</param>
@@ -130,8 +132,8 @@ namespace NumSharp.Tests.Strings
                 case "cumprod": return np.cumprod(a, axis, dt);
                 case "nancumsum": return np.nancumsum(a, axis, dt);
                 case "nancumprod": return np.nancumprod(a, axis, dt);
-                case "maximum.reduce": return np.amax(a, axis, dtype: dt);
-                case "minimum.reduce": return np.amin(a, axis, dtype: dt);
+                case "maximum.reduce": return a.TensorEngine.ReduceAMax(a, axis, false, dt);
+                case "minimum.reduce": return a.TensorEngine.ReduceAMin(a, axis, false, dt);
                 case "max": return np.max(a, axis: axis);
                 case "min": return np.min(a, axis: axis);
                 case "amax": return np.amax(a, axis: axis);

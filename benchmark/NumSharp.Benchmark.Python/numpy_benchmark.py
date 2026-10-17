@@ -756,9 +756,9 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
     r.name, r.category, r.suite, r.dtype = f"np.amin ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
-    def method_amin(): return a.min()
-    r = benchmark(method_amin, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a.amin() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
+    def method_min(): return a.min()
+    r = benchmark(method_min, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a.min() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
     def np_min(): return np.min(a)
@@ -771,9 +771,9 @@ def run_reduction_benchmarks(n: int, dtype_name: str, iterations: int) -> List[B
     r.name, r.category, r.suite, r.dtype = f"np.amax ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
-    def method_amax(): return a.max()
-    r = benchmark(method_amax, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a.amax() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
+    def method_max(): return a.max()
+    r = benchmark(method_max, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a.max() [method] ({dtype_name})", "MinMax", "Reduction", dtype_name
     results.append(r)
 
     def np_max(): return np.max(a)

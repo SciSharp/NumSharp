@@ -148,8 +148,6 @@
     "note": "Rows with no direct contracts whose NumSharp member is a reviewed pure delegation of a row that has them. Mirrors test/NumSharp.Tests.Oracle/Fuzz/OracleSurfaceCoverageTests.cs (EquivalentAliases, NdarrayAliases, MaAliases) plus the np.linalg Array-API forms that delegate verbatim in BOTH NumPy (numpy/linalg/_linalg.py) and NumSharp (LinearAlgebra/linalg/np.linalg.arrayapi.cs). np.linalg.trace/diagonal/outer/cross are NOT here: their contracts differ from the np.* forms (last-two axes, 1-D and 3-vector validation).",
     "numpy.row_stack": {"via": "numpy.vstack", "reason": "NumPy 2.x row_stack is vstack plus a DeprecationWarning; NumSharp credits it to np.vstack."},
     "numsharp.np.common_type_code": {"via": "numpy.common_type", "reason": "NumSharp-only NPTypeCode twin of np.common_type."},
-    "numsharp.ndarray.amax": {"via": "numpy.ndarray.max", "reason": "NumSharp-only instance alias of ndarray.max."},
-    "numsharp.ndarray.amin": {"via": "numpy.ndarray.min", "reason": "NumSharp-only instance alias of ndarray.min."},
     "numsharp.ndarray.array_equal": {"via": "numpy.array_equal", "reason": "NumSharp-only instance convenience over np.array_equal."},
     "numsharp.ndarray.convolve": {"via": "numpy.convolve", "reason": "NumSharp-only instance convenience over np.convolve."},
     "numsharp.ndarray.correlate": {"via": "numpy.correlate", "reason": "NumSharp-only instance convenience over np.correlate."},

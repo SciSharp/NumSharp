@@ -47,10 +47,13 @@ namespace NumSharp.Tests
     ///     are in <c>Logic/np.all_any.tuple_out_where.Test.cs</c> and the <c>reduce_kwargs</c> oracle tier.
     ///     </para>
     ///     <para>
-    ///     <b>NumSharp's earlier forms stay</b>, below the NumPy form in overload priority: <c>(a, axis, keepdims,
-    ///     dtype)</c> (the <c>dtype</c> extension NumPy does not have) and <c>(a, axis, keepdims)</c> for a positional
-    ///     keepdims. NumPy's tuple <c>axis</c> is out of scope here: every NumSharp reduction is single-axis, a
-    ///     library-wide gap.
+    ///     <b>One overload per function, NumPy's</b> (2026-10-17, plan item A4d): NumSharp's earlier forms — the
+    ///     <c>dtype</c> extension <c>(a, axis, keepdims, dtype)</c>, the positional-keepdims shim <c>(a, axis, keepdims)</c>,
+    ///     the generic <c>np.amax&lt;T&gt;</c> / <c>a.max&lt;T&gt;()</c> and the instance <c>a.amax()</c> / <c>a.amin()</c>
+    ///     (NumPy's ndarray has neither) — are gone, so a positional third argument is <c>out</c>, as in NumPy, and a C#
+    ///     literal there raises NumPy's "return arrays must be of ArrayType"
+    ///     (<see cref="MaxMinFamily_ScalarOut_RaisesNumPysTypeError"/>). NumPy's tuple <c>axis</c> is out of scope here:
+    ///     every NumSharp max/min reduction is single-axis.
     ///     </para>
     ///     <para>
     ///     Every expected string is NumPy 2.4.2's output for the same call, probed on 2026-10-04, in
@@ -81,16 +84,18 @@ namespace NumSharp.Tests
         private static readonly string[] NdArrayParameters = { "axis", "out", "keepdims", "initial", "where" };
 
         /// <summary>
-        ///     Every function of the family must have an overload with NumPy's parameter NAMES in NumPy's ORDER, and
-        ///     every parameter after the array must be optional, so a ported call (<c>np.max(a, axis: 1, out: o)</c>,
-        ///     <c>a.min(where: m, initial: 9.0)</c>) compiles and binds. Before plan item A4 NumSharp's overloads were
-        ///     <c>(a, axis, keepdims, dtype)</c> and <c>(axis, keepdims, dtype)</c> / <c>(dtype)</c>.
+        ///     Every function of the family must have exactly ONE public overload, with NumPy's parameter NAMES in NumPy's
+        ///     ORDER and every parameter after the array optional, so a ported call (<c>np.max(a, axis: 1, out: o)</c>,
+        ///     <c>a.min(where: m, initial: 9.0)</c>) compiles and binds — for every C# version, because nothing competes
+        ///     with it. NDArray has no <c>amax</c> / <c>amin</c> member at all: NumPy's ndarray has neither.
         /// </summary>
         /// <remarks>
         ///     The same check as <c>LinAlgSignatureParityTests</c>: a signature is API, and a missing or reordered
-        ///     keyword passes every value test while it breaks every named-argument call ported from Python. Other
-        ///     overloads may exist next to the NumPy form (NumSharp's <c>dtype</c> extension, the generic
-        ///     <c>amax&lt;T&gt;</c>).
+        ///     keyword passes every value test while it breaks every named-argument call ported from Python. Before plan
+        ///     item A4 NumSharp's overloads were <c>(a, axis, keepdims, dtype)</c> and <c>(axis, keepdims, dtype)</c> /
+        ///     <c>(dtype)</c>; A4 added NumPy's form next to them, ranked by <c>[OverloadResolutionPriority]</c>, which C# 12
+        ///     ignores — so a default net8.0 consumer got CS0121 for <c>np.min(a, 0)</c>. A4d (2026-10-17) left NumPy's form
+        ///     alone; a second overload, or the priority attribute coming back, fails here.
         /// </remarks>
         [TestMethod]
         public void MaxMinFamily_TakesNumPysKeywords_InNumPysOrder()
@@ -100,7 +105,60 @@ namespace NumSharp.Tests
                 CheckSignature(fails, typeof(np), method, isStatic: true, NpParameters, requiredCount: 1);
             foreach (var method in NdArrayMaxMin)
                 CheckSignature(fails, typeof(NDArray), method, isStatic: false, NdArrayParameters, requiredCount: 0);
-            AssertNoMismatch(fails, "NumPy's max/min family takes (a, axis, out, keepdims, initial, where)");
+            foreach (var method in new[] { "amax", "amin" })
+            {
+                var members = typeof(NDArray).GetMember(method, BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
+                if (members.Length > 0)
+                    fails.Add($"ndarray.{method}: NumPy's ndarray has no {method} method, but NDArray declares {members.Length} member(s)");
+            }
+            AssertNoMismatch(fails, "NumPy's max/min family is one (a, axis, out, keepdims, initial, where) overload per function");
+        }
+
+        /// <summary>
+        ///     A C# scalar in the <c>out</c> slot — positional, as in the removed <c>np.max(a, 1, true)</c> keepdims spelling,
+        ///     or named — raises NumPy's TypeError "return arrays must be of ArrayType" for every function of the family:
+        ///     NumPy's <c>_set_out_array</c> takes only an ndarray, and it runs before every other argument check, so the
+        ///     error wins over a bad axis and a bad mask. A 0-d array the caller built is a valid out for a flat reduction.
+        /// </summary>
+        /// <remarks>
+        ///     The calls are written in C# (not through <see cref="Np"/>), because the point is what C# BINDS: with one
+        ///     overload, <c>true</c> converts to a 0-d <see cref="NDArray"/> and lands in <c>out</c>. The implicit conversion
+        ///     marks that array (<c>NDArray.WasScalarArgument</c>), which is what the reduce prologue reads. NumPy 2.4.2 probed
+        ///     on 2026-10-17: <c>np.amin(a, 1, True)</c>, <c>a.max(None, True)</c>, <c>a.min(1, 5)</c>,
+        ///     <c>np.amin(a, 1, np.float16(1))</c>, <c>np.amin(a, 99, True)</c> and <c>np.amin(a, 1, True, where=5)</c> all
+        ///     raise this TypeError; <c>np.amin(a, None, np.array(True))</c> returns the out, <c>array(False)</c>.
+        /// </remarks>
+        [TestMethod]
+        public void MaxMinFamily_ScalarOut_RaisesNumPysTypeError()
+        {
+            const string text = "return arrays must be of ArrayType";
+            var fails = new List<string>();
+            var a = np.arange(6.0).reshape(2, 3);
+            CheckRaises(fails, "np.max(a, 1, True)", () => np.max(a, 1, true), text);
+            CheckRaises(fails, "np.min(a, 1, False)", () => np.min(a, 1, false), text);
+            CheckRaises(fails, "np.amax(a, None, True)", () => np.amax(a, null, true), text);
+            CheckRaises(fails, "np.amin(a, 1, True)", () => np.amin(a, 1, true), text);
+            CheckRaises(fails, "np.nanmax(a, 1, True)", () => np.nanmax(a, 1, true), text);
+            CheckRaises(fails, "np.nanmin(a, None, True)", () => np.nanmin(a, null, true), text);
+            CheckRaises(fails, "a.max(None, True)", () => a.max(null, true), text);
+            CheckRaises(fails, "a.min(1, True)", () => a.min(1, true), text);
+            CheckRaises(fails, "a.min(1, 5)", () => a.min(1, 5), text);
+            CheckRaises(fails, "np.amin(a, 1, out=2.5)", () => np.amin(a, 1, @out: 2.5), text);
+            CheckRaises(fails, "np.amin(a, 1, np.float16(1))", () => np.amin(a, 1, (Half)1), text);
+            CheckRaises(fails, "np.amin(a, 1, np.uint16('x'))", () => np.amin(a, 1, 'x'), text);
+            CheckRaises(fails, "np.amin(a, 1, 'x')", () => np.amin(a, 1, "x"), text);
+            // _set_out_array runs first: before the axis check and before the mask's dtype check.
+            CheckRaises(fails, "np.amin(a, 99, True)", () => np.amin(a, 99, true), text);
+            CheckRaises(fails, "np.amin(a, 1, True, where=5)", () => np.amin(a, 1, true, @where: np.array(new[] { 5, 5, 5 })), text);
+
+            // A 0-d array the caller built is an ndarray: a flat reduction writes into it and returns it.
+            var o = np.array(true);
+            var r = np.amin(a, null, o);
+            if (!ReferenceEquals(r, o))
+                fails.Add("np.amin(a, None, np.array(True)): NumPy returns out itself, NumSharp returned another array");
+            else if (Describe(r) != "bool () False")
+                fails.Add($"np.amin(a, None, np.array(True)): expected [bool () False] but NumSharp returned [{Describe(r)}]");
+            AssertNoMismatch(fails, "NumPy's out= takes only an ndarray (TypeError: return arrays must be of ArrayType)");
         }
 
         /// <summary>
@@ -494,8 +552,9 @@ namespace NumSharp.Tests
 
         /// <summary>
         ///     Records a line when <paramref name="owner"/> has no overload of <paramref name="method"/> with exactly
-        ///     <paramref name="expected"/> as its parameter names, or when that overload makes a NumPy keyword
-        ///     mandatory.
+        ///     <paramref name="expected"/> as its parameter names, when any OTHER public overload of that name exists (one
+        ///     whole API per function, as NumPy provides), when the overload carries <c>[OverloadResolutionPriority]</c>
+        ///     (only a competing overload needs it, and C# 12 ignores it), or when it makes a NumPy keyword mandatory.
         /// </summary>
         /// <param name="mismatches">Collects one line per failing function.</param>
         /// <param name="owner">The declaring type.</param>
@@ -516,6 +575,16 @@ namespace NumSharp.Tests
                                + string.Join(" | ", overloads.Select(m => $"({string.Join(", ", m.GetParameters().Select(p => p.Name))})")));
                 return;
             }
+
+            // One whole API per function, as NumPy provides: any other overload (a dtype extension, a positional shim, a
+            // generic T form) is a second spelling NumPy does not have, and it can only coexist through
+            // [OverloadResolutionPriority], which C# 12 ignores.
+            if (overloads.Length != 1)
+                mismatches.Add($"{label}: {overloads.Length} overloads; NumPy has one signature. The others: "
+                               + string.Join(" | ", overloads.Where(m => m != form)
+                                   .Select(m => $"{(m.IsGenericMethod ? "<T>" : "")}({string.Join(", ", m.GetParameters().Select(p => p.Name))})")));
+            if (form.GetCustomAttributes().Any(attribute => attribute.GetType().Name == "OverloadResolutionPriorityAttribute"))
+                mismatches.Add($"{label}: carries [OverloadResolutionPriority], which only a competing overload needs");
 
             var mandatory = form.GetParameters().Skip(requiredCount).Where(p => !p.HasDefaultValue).Select(p => p.Name).ToArray();
             if (mandatory.Length > 0)

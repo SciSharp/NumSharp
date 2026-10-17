@@ -925,7 +925,7 @@ namespace NumSharp.Backends
         /// Host-delegated reductions (plan P2 M4-tail + M4c): the value kinds <c>Ptp</c> / <c>NanMin</c> /
         /// <c>NanMax</c> and the int64 index kinds <c>ArgMax</c> / <c>ArgMin</c> — each answered by the
         /// corresponding public engine reduction (<see cref="np.ptp(NDArray,int?,NDArray,bool)"/> /
-        /// <see cref="np.nanmin(NDArray,int?,bool)"/> / <see cref="np.nanmax(NDArray,int?,bool)"/> /
+        /// <see cref="np.nanmin(NDArray,int?,NDArray,bool,object,NDArray)"/> / <see cref="np.nanmax(NDArray,int?,NDArray,bool,object,NDArray)"/> /
         /// <see cref="np.argmax(NDArray,int,bool)"/> / <see cref="np.argmin(NDArray,int,bool)"/>) over the child's
         /// values. How the child reaches it decides which BITS come back, so the routes differ per kind:
         /// <list type="bullet">
@@ -1010,8 +1010,8 @@ namespace NumSharp.Backends
                 computed = reduce.Kind switch
                 {
                     NDExprReduceKind.Ptp    => np.ptp(materialized, reduce.Axis, keepdims: axisKd),
-                    NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, axisKd),
-                    NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, axisKd),
+                    NDExprReduceKind.NanMin => np.nanmin(materialized, reduce.Axis, keepdims: axisKd),
+                    NDExprReduceKind.NanMax => np.nanmax(materialized, reduce.Axis, keepdims: axisKd),
                     NDExprReduceKind.ArgMax => reduce.Axis is int axMax
                         ? np.argmax(materialized, axMax, reduce.Keepdims)
                         : NDArray.Scalar(np.argmax(materialized)),

@@ -6,7 +6,7 @@ namespace NumSharp.Tests.NpApiOverloads;
 /// <summary>
 /// Tests for overloads that had the 'in' parameter modifier removed.
 /// Covers: Comparison (18), Logical (4), Axis Manipulation (8), Unique (1),
-/// Counting/Indexing (3), Linear Algebra (3), Min with dtype (3).
+/// Counting/Indexing (3), Linear Algebra (3), Min (np.amin / np.min: NumPy's one signature each).
 ///
 /// These tests verify that the overloads compile and work correctly after
 /// removing the 'in' modifier from NDArray parameters.
@@ -671,24 +671,28 @@ public class NpApiOverloadTests_LogicManipulation
 
     #endregion
 
-    #region Min with dtype - np.amin (2 overloads)
+    #region np.amin - NumPy's one signature (a, axis, out, keepdims, initial, where)
 
+    /// <summary>A flat np.amin is a 0-d array of the input's dtype (NumPy's scalar); a cast reads it as a C# value.</summary>
     [TestMethod]
-    public void AminGeneric_ReturnsT_Compiles()
+    public void Amin_Flat_ReturnsZeroDimArray()
     {
-        // NumPy: np.amin([1, 2, 3, 4, 5]) -> 1
+        // NumPy: np.amin(np.array([1, 2, 3, 4, 5], dtype=np.int32)) -> np.int32(1)
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
-        int result = np.amin<int>(a);
+        var result = np.amin(a);
 
-        result.Should().Be(1);
+        result.ndim.Should().Be(0);
+        result.dtype.Should().Be(np.int32);
+        ((int)result).Should().Be(1);
     }
 
+    /// <summary>The flat minimum of a float64 array, read with a cast.</summary>
     [TestMethod]
-    public void AminGeneric_Float_Compiles()
+    public void Amin_Flat_Float_Compiles()
     {
         // NumPy: np.amin([1.5, 2.5, 0.5]) -> 0.5
         var a = np.array(new double[] { 1.5, 2.5, 0.5 });
-        double result = np.amin<double>(a);
+        double result = (double)np.amin(a);
 
         result.Should().Be(0.5);
     }
@@ -718,19 +722,36 @@ public class NpApiOverloadTests_LogicManipulation
         result.shape.Should().BeEquivalentTo(new long[] { 2, 1 });
     }
 
+    /// <summary>Every NumPy parameter by position: out= is the third, then keepdims, initial and where.</summary>
     [TestMethod]
-    public void Amin_WithDtype_Compiles()
+    public void Amin_AllNumPyParameters_Positional()
     {
-        // Test that dtype parameter compiles (behavior may vary)
-        var a = np.array(new int[] { 1, 2, 3, 4, 5 });
-        var result = np.amin(a, dtype: typeof(double));
+        // NumPy: np.amin([[0, 1, 2], [3, 0, 5]], 0, out, False, 9, [True, False, True]) -> out = [0, 9, 2]
+        var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
+        var o = np.zeros(new Shape(3), NPTypeCode.Int32);
+        var result = np.amin(a, 0, o, false, 9, np.array(new[] { true, false, true }));
 
-        result.Should().NotBeNull();
+        ReferenceEquals(result, o).Should().BeTrue();
+        result.ToArray<int>().Should().Equal(0, 9, 2);
+    }
+
+    /// <summary>
+    ///     A positional bool third argument is out=, as in NumPy, which refuses a Python bool there: the call NumSharp's
+    ///     removed (a, axis, keepdims) form used to accept now raises NumPy's TypeError instead of reducing into it.
+    /// </summary>
+    [TestMethod]
+    public void Amin_PositionalBoolThirdArgument_IsOut_RaisesNumPysTypeError()
+    {
+        // NumPy: np.amin([[0, 1, 2], [3, 0, 5]], 1, True) -> TypeError: return arrays must be of ArrayType
+        var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
+        System.Action act = () => np.amin(a, 1, true);
+
+        act.Should().Throw<TypeError>().WithMessage("return arrays must be of ArrayType");
     }
 
     #endregion
 
-    #region Min with dtype - np.min (1 overload)
+    #region np.min - NumPy's one signature (a, axis, out, keepdims, initial, where)
 
     [TestMethod]
     public void Min_WithAxis_Compiles()
@@ -746,25 +767,27 @@ public class NpApiOverloadTests_LogicManipulation
         result.GetInt32(2).Should().Be(2);
     }
 
+    /// <summary>initial= and where= by name: the masked-off column keeps the initial value.</summary>
     [TestMethod]
-    public void Min_WithDtype_Compiles()
+    public void Min_WithInitialWhere_Compiles()
     {
-        // Test that dtype parameter compiles (behavior may vary)
-        var a = np.array(new int[] { 1, 2, 3, 4, 5 });
-        var result = np.min(a, dtype: typeof(double));
+        // NumPy: np.min([[0, 1, 2], [3, 0, 5]], axis=0, initial=9, where=[True, False, True]) -> [0, 9, 2]
+        var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
+        var result = np.min(a, axis: 0, initial: 9, @where: np.array(new[] { true, false, true }));
 
-        result.Should().NotBeNull();
+        result.ToArray<int>().Should().Equal(0, 9, 2);
     }
 
+    /// <summary>keepdims by name with an axis: the reduced axis stays with length one.</summary>
     [TestMethod]
-    public void Min_WithAxisKeepdimsDtype_Compiles()
+    public void Min_WithAxisKeepdims_Compiles()
     {
-        // Test full signature with all optional parameters
+        // NumPy: np.min([[0, 1, 2], [3, 0, 5]], axis=1, keepdims=True) -> [[0], [0]]
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
-        var result = np.min(a, axis: 1, keepdims: true, dtype: null);
+        var result = np.min(a, axis: 1, keepdims: true);
 
-        result.Should().NotBeNull();
         result.shape.Should().BeEquivalentTo(new long[] { 2, 1 });
+        result.ToArray<int>().Should().Equal(0, 0);
     }
 
     #endregion

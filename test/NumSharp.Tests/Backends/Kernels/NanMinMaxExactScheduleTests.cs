@@ -1043,7 +1043,7 @@ public class NanMinMaxExactScheduleTests
         foreach (bool isMax in new[] { true, false })
         {
             string text = $"zero-size array to reduction operation {(isMax ? "fmax" : "fmin")} which has no identity";
-            Func<NDArray, int?, bool, NDArray> f = isMax ? (a, ax, kd) => np.nanmax(a, ax, kd) : (a, ax, kd) => np.nanmin(a, ax, kd);
+            Func<NDArray, int?, bool, NDArray> f = isMax ? (a, ax, kd) => np.nanmax(a, ax, keepdims: kd) : (a, ax, kd) => np.nanmin(a, ax, keepdims: kd);
 
             foreach (var empty in new[] { np.array(new double[0]), np.array(new int[0]), np.array(new Half[0]), np.zeros(new Shape(0, 3)) })
             {
@@ -1085,11 +1085,11 @@ public class NanMinMaxExactScheduleTests
     public void Edges_KeepdimsAndAxisBounds()
     {
         var a = np.arange(6.0).reshape(2, 3);
-        var flat = np.nanmax(a, null, true);
+        var flat = np.nanmax(a, null, keepdims: true);
         CollectionAssert.AreEqual(new long[] { 1, 1 }, flat.shape);
         Assert.AreEqual(5.0, flat.GetAtIndex<double>(0));
-        CollectionAssert.AreEqual(new long[] { 1, 3 }, np.nanmax(a, 0, true).shape);
-        CollectionAssert.AreEqual(new long[] { 2, 1 }, np.nanmin(a, 1, true).shape);
+        CollectionAssert.AreEqual(new long[] { 1, 3 }, np.nanmax(a, 0, keepdims: true).shape);
+        CollectionAssert.AreEqual(new long[] { 2, 1 }, np.nanmin(a, 1, keepdims: true).shape);
         CollectionAssert.AreEqual(new[] { 0.0, 3.0 }, np.nanmin(a, -1).ToArray<double>());
         Assert.ThrowsException<AxisError>(() => np.nanmax(a, 2));
         Assert.ThrowsException<AxisError>(() => np.nanmin(a, -3));
@@ -1294,8 +1294,8 @@ public class NanMinMaxExactScheduleTests
         cf[":, 1"] = np.array(new[] { C(0xFFF8000000000A0AUL, 0x0UL), C(0x0UL, 0x7FF8000000000B0BUL), C(0x7FF8000000000B0BUL, 0x7FF8000000000B0BUL) });
         CollectionAssert.AreEqual(new[] { 0x4008000000000000UL, 0x4000000000000000UL, 0xFFF8000000000A0AUL, 0x0UL }, BitsC(Seq(cf, 0, true, "F axis 0 max")));
         CollectionAssert.AreEqual(new[] { 0x4008000000000000UL, 0x3FF0000000000000UL, 0xFFF8000000000A0AUL, 0x0UL }, BitsC(Seq(cf, 0, false, "F axis 0 min")));
-        CollectionAssert.AreEqual(new long[] { 1, 1 }, np.nanmax(cf, null, true).shape);
-        CollectionAssert.AreEqual(new long[] { 3, 1 }, np.nanmax(cf, 1, true).shape);
+        CollectionAssert.AreEqual(new long[] { 1, 1 }, np.nanmax(cf, null, keepdims: true).shape);
+        CollectionAssert.AreEqual(new long[] { 3, 1 }, np.nanmax(cf, 1, keepdims: true).shape);
     }
 
     /// <summary>

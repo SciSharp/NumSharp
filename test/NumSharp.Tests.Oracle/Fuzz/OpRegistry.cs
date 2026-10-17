@@ -1265,8 +1265,8 @@ namespace NumSharp.Tests.Fuzz
             {
                 case "sum": return np.sum(a, axis, keepdims);
                 case "prod": return np.prod(a, axis, (Type)null, keepdims);
-                case "min": return np.min(a, axis, keepdims);
-                case "max": return np.max(a, axis, keepdims);
+                case "min": return np.min(a, axis, keepdims: keepdims);
+                case "max": return np.max(a, axis, keepdims: keepdims);
                 case "mean": return axis.HasValue ? np.mean(a, axis.Value, keepdims) : np.mean(a, keepdims);
                 case "std": return axis.HasValue ? np.std(a, axis.Value, keepdims) : np.std(a, keepdims);
                 case "var": return axis.HasValue ? np.var(a, axis.Value, keepdims) : np.var(a, keepdims);
@@ -1279,8 +1279,8 @@ namespace NumSharp.Tests.Fuzz
                 case "any": return np.any(a, axis, null, keepdims);
                 case "nansum": return np.nansum(a, axis, keepdims);
                 case "nanprod": return np.nanprod(a, axis, keepdims);
-                case "nanmax": return np.nanmax(a, axis, keepdims);
-                case "nanmin": return np.nanmin(a, axis, keepdims);
+                case "nanmax": return np.nanmax(a, axis, keepdims: keepdims);
+                case "nanmin": return np.nanmin(a, axis, keepdims: keepdims);
                 // keepdims by NAME: positional slot 3 is now `out=` (an implicit bool->NDArray
                 // conversion exists, so a positional bool would silently bind the out parameter).
                 case "nanargmax": return np.nanargmax(a, axis, keepdims: keepdims);

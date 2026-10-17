@@ -30,8 +30,8 @@ namespace NumSharp
                 return Backends.Strings.NDVStringStatistics.Ptp(a, axis, @out, keepdims);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("ptp", a, axis, @out);
 
-            var maxRes = np.amax(a, axis, keepdims);
-            var minRes = np.amin(a, axis, keepdims);
+            var maxRes = np.amax(a, axis, keepdims: keepdims);
+            var minRes = np.amin(a, axis, keepdims: keepdims);
             var diff = maxRes - minRes;
 
             // Fresh 0-d ptp is a numpy SCALAR (read-only); out= returns the writeable out.

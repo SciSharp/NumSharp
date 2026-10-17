@@ -2583,9 +2583,16 @@ range-checked with the LP64 texts, never wrapped —, a `double` a Python float 
 NumPy scalars `int()`-converted by a SIGNED integer loop and CAST by every other, a 0-d array cast, a str parsed, a
 sequence refused); without it a mask raises "... does not have an identity, so to use a where mask one has to specify
 'initial'" and an empty axis "zero-size array to reduction operation ..."; the result starts as the initial value or each
-output's first element (an unsafe cast). Overloads: NumPy's form at priority 1, NumSharp's positional `(a, axis, keepdims)`
-(also priority 1: `np.max(a, 1, true)` must not bind `true` as a 0-d out) and its `dtype=` extension at 0; a keyword-less
-call keeps the engine route above. The C# literal `true` for `where=` is NumPy's `where=True` (no mask) — so is a 0-d bool
+output's first element (an unsafe cast). ONE overload per function (2026-10-17, plan item A4d, the owner's rule "one whole
+api per function as numpy provides, remove others"): NumPy's `(a, axis, out, keepdims, initial, where)` and
+`ndarray.max/min(axis, out, keepdims, initial, where)`, nothing else. Gone: the positional `(a, axis, keepdims)` shim, the
+`dtype=` extension, the generic `np.amax<T>` / `a.max<T>()`, and `NDArray.amax` / `NDArray.amin` (NumPy's ndarray has
+neither). They resolved only through `[OverloadResolutionPriority]`, which C# 12 ignores (`np.min(a, 0)` was CS0121 for a
+default net8.0 consumer), and the dtype paths returned wrong values (int64 `[7, 1, 5]` as float64: NaN). A positional third
+argument is `out`, as in NumPy: `np.max(a, 1, true)` raises NumPy's `TypeError: return arrays must be of ArrayType` (the
+reduce prologue reads `NDArray.WasScalarArgument`, the implicit scalar conversions' mark), so keepdims goes by name. A typed
+reduction, NumPy's `np.maximum.reduce(a, dtype=...)`, is the engine's `TensorEngine.ReduceAMax/ReduceAMin(a, axis, keepdims,
+dtype)`. A keyword-less call keeps the engine route above. The C# literal `true` for `where=` is NumPy's `where=True` (no mask) — so is a 0-d bool
 ARRAY holding true, where NumPy treats `np.array(True)` as a mask needing `initial=` (`[Misaligned]`). Four routes:
 (1) a broadcast input whose answer cannot depend on how often an element recurs reduces ONE copy (`MaxMinBroadcastShortcut`:
 every loop but float32/float64; those only when every NumPy call is elementwise, since each reduce-form `simd_reduce_c` call

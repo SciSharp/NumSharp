@@ -127,17 +127,21 @@ namespace NumSharp.Tests.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<long>(), new long[] {0, 1, 2, 1}));
         }
 
+        /// <summary>
+        ///     np.amax flat and per axis. A flat reduction is a 0-d array of the input's dtype (NumPy's scalar), read as a C#
+        ///     value with a cast; np.amax has no generic <c>amax&lt;T&gt;</c> form, as NumPy has none.
+        /// </summary>
         [TestMethod]
         public void amax()
         {
             //default type
             var n = np.arange(0, 12, 0.1);
-            double d1 = np.amax<double>(n);
+            double d1 = (double)np.amax(n);
             Assert.IsTrue(d1.Equals(11.9));
 
             //no axis
             n = np.arange(4).reshape(2, 2);
-            var max = np.amax<long>(n);
+            var max = (long)np.amax(n);
 
             Assert.IsTrue(max == 3);
 

@@ -4838,7 +4838,7 @@ namespace NumSharp
         /// <param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked minimum.</returns>
         public NDMaskedArray min(object a, int? axis = null, object fill_value = null, bool keepdims = false)
-            => ReduceIdentity(a, fill_value ?? minimum_fill_value(a), (x, ax, kd) => np.min(x, ax, kd), axis, keepdims);
+            => ReduceIdentity(a, fill_value ?? minimum_fill_value(a), (x, ax, kd) => np.min(x, ax, keepdims: kd), axis, keepdims);
 
         /// <summary>Maximum over the axis; masked slots are filled with the dtype's smallest value.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>
@@ -4846,7 +4846,7 @@ namespace NumSharp
         /// <param name="keepdims">Keep reduced axes.</param>
         /// <returns>The masked maximum.</returns>
         public NDMaskedArray max(object a, int? axis = null, object fill_value = null, bool keepdims = false)
-            => ReduceIdentity(a, fill_value ?? maximum_fill_value(a), (x, ax, kd) => np.max(x, ax, kd), axis, keepdims);
+            => ReduceIdentity(a, fill_value ?? maximum_fill_value(a), (x, ax, kd) => np.max(x, ax, keepdims: kd), axis, keepdims);
 
         /// <summary>Peak-to-peak (max − min) over the axis, over unmasked elements.</summary>
         /// <param name="a">Operand.</param><param name="axis">Axis or null.</param>

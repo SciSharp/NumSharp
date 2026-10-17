@@ -290,6 +290,49 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     broadcast-flat float routes above; a 0-d bool ARRAY holding true is read as Python's `where=True` (C# cannot tell
     `np.array(True)` from the literal; `[Misaligned]`, NumPy raises the no-identity error without initial=); X10
     (np.any / np.all keep C order: they do not use `AllocateReductionResult`).
+- [x] **A4d max/min family: one NumPy signature per function, nothing else** for `np.max`, `np.min`, `np.amax`,
+  `np.amin`, `np.nanmax`, `np.nanmin`, `ndarray.max`, `ndarray.min` (branch `strings`). The owner's rule, 2026-10-17: "We
+  must have one whole api per function as numpy provides. b. remove others". Done 2026-10-17 (see the state log).
+  - Proof (2026-10-17, `strings` at `948b5350`): the family had 30 public overloads — `np.amin` / `np.amax` 4 each (the
+    generic `<T>(a)`, the dtype extension `(a, axis, keepdims, dtype)`, NumPy's form, the positional shim
+    `(a, axis, keepdims)`), `np.min` / `np.max` 3, `np.nanmin` / `np.nanmax` 2, `NDArray.min` / `NDArray.max` 5 each and
+    `NDArray.amin` / `NDArray.amax` 3 each. NumPy 2.4.2 has one signature per function: `np.*` `(a, axis=None, out=None,
+    keepdims=<no value>, initial=<no value>, where=<no value>)`, `ndarray.max/min(axis=None, out=None, *, keepdims,
+    initial, where)`, and no `ndarray.amin` / `ndarray.amax`; `np.amin(a, dtype=...)` is `TypeError: amin() got an
+    unexpected keyword argument 'dtype'`; a positional `np.amin(a, 1, True)` is `TypeError: return arrays must be of
+    ArrayType` (so are `a.min(1, 5)`, an `np.float16` or str out, and `np.amin(a, 99, True)` before the axis check).
+    NumSharp: the set resolved only through `[OverloadResolutionPriority]`, which C# 12 ignores, so
+    `benchmark/NumSharp.Benchmark.CSharp` (net8.0, no `LangVersion=latest`) failed to build with 11 CS0121 on calls like
+    `np.amin(a, axis: 0)` (finding: the 0.71.0 surface would have been a source break for every default net8.0 user);
+    the dtype paths returned wrong values (`np.amin<double>(int64 [7, 1, 5])` NaN, `np.amin<int>` of it -1,
+    `np.amin(int64, dtype: float64)` nan, `a.amin<double>()` NaN); `np.amin(m, null, @out: true)` returned `array(False)`
+    and `@out: 5` `array(0)`, where NumPy raises.
+  - Fix: one overload per function, NumPy's (`np.max.Keywords.cs`, `NDArray.max.Keywords.cs`), without the priority
+    attribute; `np.min.cs`, `np.amax.cs`, `np.nanmin.cs`, `np.nanmax.cs`, `NDArray.amin.cs`, `NDArray.amax.cs` deleted
+    (the nan pair's per-dtype notes moved into the single overloads' docs). A positional third argument is now `out`, as
+    in NumPy, and `ReductionArguments.ValidateParsedArguments` (NumPy's `_set_out_array`) refuses a C# scalar there with
+    NumPy's TypeError before the read-only check: `NDArray.WasScalarArgument` (any of the implicit conversions' marks:
+    `WasPythonLiteral`, `WasPythonBool`, `WasPythonStr`, `WasNumPyScalar`) tells `np.max(a, 1, true)` from a 0-d out the
+    caller built. NumPy's typed reduction `np.maximum.reduce(a, dtype=...)` stays on the engine
+    (`TensorEngine.ReduceAMax` / `ReduceAMin`). Callers migrated: positional keepdims → named (Core: np.ptp, numpy.ma's
+    min / max, np.evaluate's NanMin / NanMax; the oracle registry; two test files), the dtype calls → the engine
+    (the string oracle's `maximum.reduce` / `minimum.reduce`, two tests), the generics → casts, the `a.amin()` /
+    `a.amax()` benchmarks → `a.min()` / `a.max()` with their NumPy twins renamed; the coverage alias rows
+    `ndarray.amin` / `ndarray.amax` removed (`OracleSurfaceCoverageTests.NdarrayAliases`, `coverage/oracle_map.json`).
+  - Gates: `Selection/np.max.Keywords.Test.cs` — the signature test now fails on a second overload, on the priority
+    attribute and on any `NDArray.amax` / `NDArray.amin` member; `MaxMinFamily_ScalarOut_RaisesNumPysTypeError` (15
+    calls, every family member and literal kind, the error before the axis and the mask checks; a 0-d out the caller
+    built is written and returned). `NpApiOverloadTests_LogicManipulation`'s amin / min regions test NumPy's signature.
+    An external net8.0 consumer (C# 12, outside the repository) compiles `np.min(a, 0)`, `np.amin(a, axis: 0)`,
+    `np.max(a, axis: 1, keepdims: true)`, `a.min()`, `a.max(0)`, `np.nanmin(a, 0)` and the rest, and gets the TypeError
+    for `np.amin(a, 1, true)`.
+  - Left open: `where=` could be exact now — `WasPythonBool` tells the literal `true` (NumPy's `where=True`) from
+    `np.array(true)` (a mask that needs `initial=`), but the `minmax_kwargs` replay builds its Python bools with
+    `NDArray.Scalar`, so both change together; the engine's dtype path still returns wrong values for a cast it cannot
+    do (`TensorEngine.ReduceAMin(int64, dtype: float64)` NaN; no `np.*` entry reaches it now); numpy.ma's `amin` /
+    `amax` (NumPy: `np.ma.amin is np.amin`, no `fill_value`) and `min` / `max` (no `out=`); `NDMatrix.min` / `max` keep
+    two overloads each (the typed `NDMatrix` return, the class-wide design pending with the owner); the same rule for
+    the other function families.
 - [x] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
   NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`. Done
   2026-10-05 (`f18bc09e`).

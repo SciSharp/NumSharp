@@ -66,10 +66,10 @@ public class HalfMinMaxLayoutTests
 
     private static NDArray Reduce(string op, NDArray v, int? axis, bool keepdims = false) => op switch
     {
-        "max" => np.max(v, axis, keepdims),
-        "min" => np.min(v, axis, keepdims),
-        "nanmax" => np.nanmax(v, axis, keepdims),
-        _ => np.nanmin(v, axis, keepdims),
+        "max" => np.max(v, axis, keepdims: keepdims),
+        "min" => np.min(v, axis, keepdims: keepdims),
+        "nanmax" => np.nanmax(v, axis, keepdims: keepdims),
+        _ => np.nanmin(v, axis, keepdims: keepdims),
     };
 
     /// <summary>The 3×4 fixture: a distinct NaN in most rows and columns, signalling ones included (0x7c04, 0x7c07).</summary>
@@ -346,15 +346,22 @@ public class HalfMinMaxLayoutTests
         using (var r = np.max(v, 2)) AssertBits(r, "axis 2", 0x3c08, 0x3c14, 0x7e01, 0x7c03, 0x3c0a, 0xfc04, 0x3c0b, 0x3c17);
     }
 
+    /// <summary>
+    ///     NumPy's typed reduction <c>np.maximum.reduce(f, dtype=np.float16)</c> — the engine's <c>dtype</c> path
+    ///     (<see cref="TensorEngine.ReduceAMax"/> / <see cref="TensorEngine.ReduceAMin"/>), which np.max / np.min no longer
+    ///     expose because NumPy's np.max has no <c>dtype=</c> — computes in the requested dtype, as the axis path's casting
+    ///     kernel does. The flat path used to hand the float32 buffer to the float16 kernel unconverted (5.0 here, 0.0 for
+    ///     the stepped view).
+    /// </summary>
     [TestMethod]
     public void DtypeFloat16_OverAFloat32Input_CastsThenReduces()
     {
-        // NumSharp's dtype= extension computes in the requested dtype, as the axis path's casting kernel does. The flat path
-        // used to hand the float32 buffer to the float16 kernel unconverted (5.0 here, 0.0 for the stepped view).
         var f = np.array(new float[] { 1f, 5f, -2f, 3f, 100f, 0.5f, 7f, 8f });
-        using (var r = np.max(f, null, false, np.float16)) AssertBits(r, "max(float32, dtype=float16)", 0x5640);
-        using (var r = np.max(f["::2"], null, false, np.float16)) AssertBits(r, "max(float32[::2], dtype=float16)", 0x5640);
-        using (var r = np.min(f, null, false, np.float16)) AssertBits(r, "min(float32, dtype=float16)", 0xc000);
+        var stepped = f["::2"];
+        using (var r = f.TensorEngine.ReduceAMax(f, null, false, np.float16)) AssertBits(r, "maximum.reduce(float32, dtype=float16)", 0x5640);
+        using (var r = stepped.TensorEngine.ReduceAMax(stepped, null, false, np.float16))
+            AssertBits(r, "maximum.reduce(float32[::2], dtype=float16)", 0x5640);
+        using (var r = f.TensorEngine.ReduceAMin(f, null, false, np.float16)) AssertBits(r, "minimum.reduce(float32, dtype=float16)", 0xc000);
     }
 
     [TestMethod]

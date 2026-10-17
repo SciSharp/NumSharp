@@ -13,8 +13,9 @@ namespace NumSharp.Backends
     ///     A port of three NumPy 2.4.2 functions, which run in this order:
     ///     <list type="number">
     ///     <item><c>PyUFunc_GenericReduction</c> (<c>umath/ufunc_object.c</c>) parses the arguments in signature
-    ///     order. Its converters raise first: a read-only <c>out=</c> ("output array is read-only"), then a
-    ///     <c>where=</c> mask that does not cast to bool under the <c>safe</c> rule, then the axis
+    ///     order. Its converters raise first: an <c>out=</c> that is not an array ("return arrays must be of
+    ///     ArrayType" — in C# a scalar literal converted to a 0-d array), a read-only <c>out=</c> ("output array is
+    ///     read-only"), then a <c>where=</c> mask that does not cast to bool under the <c>safe</c> rule, then the axis
     ///     (<c>AxisError</c>; a 0-d input accepts axis 0 and -1 as "no axis"), then a repeated axis.</item>
     ///     <item><c>PyUFunc_ReduceWrapper</c> (<c>umath/reduction.c</c>) maps the result's axes onto the input's
     ///     (<c>result_axes</c>) and checks the rank of <c>out=</c> ("…has the wrong number of dimensions…").</item>
@@ -99,13 +100,25 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="out">The caller's output array, or <c>null</c>.</param>
         /// <param name="where">The caller's mask, or <c>null</c>.</param>
+        /// <exception cref="TypeError"><paramref name="out"/> is a C# scalar that an implicit conversion turned into a 0-d
+        ///     array (<see cref="NDArray.WasScalarArgument"/>): NumPy's "return arrays must be of ArrayType".
+        ///     <c>_set_out_array</c> takes only an ndarray and raises before every other check — the read-only check, the
+        ///     mask, the axis (probed 2.4.2: <c>np.amin(a, 99, True)</c> is this TypeError, not the AxisError).</exception>
         /// <exception cref="ValueError"><paramref name="out"/> is read-only (NumPy checks it before the mask, the axis
         ///     and every shape, probed 2.4.2).</exception>
         /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array.</exception>
         internal static void ValidateParsedArguments(NDArray @out, NDArray @where)
         {
-            if (@out is not null && !@out.Shape.IsWriteable)
-                throw new ValueError("output array is read-only");
+            if (@out is not null)
+            {
+                // _set_out_array: anything but an ndarray is refused first. A C# literal reaches an NDArray parameter through
+                // an implicit conversion, so only its mark tells np.max(a, 1, true) — NumPy's positional out=True, which
+                // the min / max family's single NumPy signature now binds — from a 0-d out the caller built.
+                if (@out.WasScalarArgument)
+                    throw new TypeError("return arrays must be of ArrayType");
+                if (!@out.Shape.IsWriteable)
+                    throw new ValueError("output array is read-only");
+            }
             DefaultEngine.ValidateWhereMask(@where);
         }
 

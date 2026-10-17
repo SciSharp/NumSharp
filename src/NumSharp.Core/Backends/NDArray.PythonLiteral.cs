@@ -26,7 +26,9 @@ namespace NumSharp
         ///     <c>object</c>-typed value parameter through <see cref="ReductionInitial.TryPack"/>. The ufuncs and the
         ///     comparisons keep their own rule, which reads EVERY 0-d operand as a Python scalar (np.clip's rule,
         ///     <c>[Misaligned]</c>): library code builds its scalar operands with <see cref="Scalar{T}(T)"/> and relies on
-        ///     that rule, so switching them to the mark would change their result dtypes.
+        ///     that rule, so switching them to the mark would change their result dtypes. Two readers besides the stores:
+        ///     <see cref="Nep50Operand"/> (a function that promotes by NumPy's <c>result_type</c>), and the reduce prologue
+        ///     through <see cref="WasScalarArgument"/>, which refuses a C# literal given as <c>out=</c>.
         ///     </para>
         ///     <para>
         ///     The mark belongs to this one object, never to its storage: a view, a copy, a reshape or an operation result
@@ -48,7 +50,8 @@ namespace NumSharp
         ///     knows every NumPy scalar and int()-converts it with the range check (<c>a[0] = np.float16(300)</c> on int8
         ///     raises "Python integer 300 out of bounds for int8"), every other DType casts it
         ///     (<c>np.float16(300)</c> into uint8 is 44). A 0-d ARRAY of the same value is always cast. Like
-        ///     <see cref="WasPythonLiteral"/>, the mark belongs to this one object; only the store paths read it.
+        ///     <see cref="WasPythonLiteral"/>, the mark belongs to this one object; the store paths read it, and the reduce
+        ///     prologue through <see cref="WasScalarArgument"/> (a NumPy scalar is not an <c>out=</c> array).
         /// </remarks>
         internal bool WasNumPyScalar { get; private set; }
 
@@ -61,9 +64,10 @@ namespace NumSharp
         /// </summary>
         /// <remarks>
         ///     NumPy's own flag (<c>NPY_ARRAY_WAS_PYTHON_LITERAL</c>) marks only int / float / complex, because it serves
-        ///     NEP 50 promotion; a Python str never takes part in that. This mark serves the store paths only
+        ///     NEP 50 promotion; a Python str never takes part in that. This mark serves the store paths
         ///     (<see cref="PackForStore"/>, <see cref="ReductionInitial.TryPack"/>), which in NumPy receive the str object
-        ///     itself. Like <see cref="WasPythonLiteral"/>, it belongs to this one object: a view or a copy is not marked.
+        ///     itself, and the reduce prologue through <see cref="WasScalarArgument"/> (a str is not an <c>out=</c> array).
+        ///     Like <see cref="WasPythonLiteral"/>, it belongs to this one object: a view or a copy is not marked.
         /// </remarks>
         internal bool WasPythonStr { get; private set; }
 
@@ -72,13 +76,32 @@ namespace NumSharp
         ///     <c>bool</c> in the boundary map.
         /// </summary>
         /// <remarks>
-        ///     Only the NEP 55 <c>StringDType</c> store reads it (<see cref="PackForVStringStore"/>): NumPy's
+        ///     Two readers. The NEP 55 <c>StringDType</c> store (<see cref="PackForVStringStore"/>): NumPy's
         ///     <c>stringdtype_setitem</c> stores <c>str(True)</c> under coercion and REFUSES a bool under <c>coerce=False</c>,
         ///     where a cast of a 0-d bool array stores <c>'True'</c> in both. Every other store packs a bool like its cast,
         ///     which is why <see cref="WasPythonLiteral"/> (NumPy's flag marks only int / float / complex) stays false for a
-        ///     bool. Like the other marks, it belongs to this one object.
+        ///     bool. And the reduce prologue, through <see cref="WasScalarArgument"/>: a Python bool is not an <c>out=</c>
+        ///     array, so <c>np.max(a, 1, true)</c> — the bool landing in NumPy's third positional parameter, <c>out</c> —
+        ///     raises NumPy's TypeError instead of reducing into a 0-d bool. Like the other marks, it belongs to this one
+        ///     object.
         /// </remarks>
         internal bool WasPythonBool { get; private set; }
+
+        /// <summary>
+        ///     True for the 0-d array that a C# scalar became through an implicit conversion operator — a Python <c>int</c> /
+        ///     <c>float</c> / <c>complex</c> (<see cref="WasPythonLiteral"/>), <c>bool</c> (<see cref="WasPythonBool"/>) or
+        ///     <c>str</c> (<see cref="WasPythonStr"/>), or a NumPy scalar (<see cref="WasNumPyScalar"/>: <see cref="Half"/>,
+        ///     <c>char</c>): a value NumPy receives as a scalar OBJECT, never as an ndarray.
+        /// </summary>
+        /// <remarks>
+        ///     NumPy refuses such a value where it requires an array: a reduction's <c>out=</c> takes only an ndarray
+        ///     (<c>_set_out_array</c>: "return arrays must be of ArrayType"), so <c>np.max(a, 1, True)</c> raises there. In C#
+        ///     the same call converts the literal to a 0-d array, and only this mark tells it from a 0-d array the caller built
+        ///     (<c>np.array(true)</c> is a valid out for a flat reduction). A <c>decimal</c> carries no mark (it has no NumPy
+        ///     analog), so it is read as an array. Like the marks it combines, it belongs to this one object: a view or a copy
+        ///     of the array is not marked.
+        /// </remarks>
+        internal bool WasScalarArgument => WasPythonLiteral || WasPythonBool || WasPythonStr || WasNumPyScalar;
 
         /// <summary>
         ///     The C# text a <see cref="WasPythonStr"/> array was made from, exactly (trailing NULs included); null for any other

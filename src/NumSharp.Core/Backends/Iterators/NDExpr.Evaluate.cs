@@ -68,7 +68,7 @@ namespace NumSharp.Backends.Iteration
         /// <c>np.nanmin</c> — minimum ignoring NaN. Result dtype is the child's; a float/complex child
         /// has its NaNs skipped (an ALL-NaN input yields NaN, matching NumPy's all-NaN-slice contract),
         /// while an integer/bool child carries no NaN and folds as a plain minimum. Host-delegated to
-        /// <see cref="np.nanmin(NDArray,int?,bool)"/> over the materialized child, which is why it is
+        /// <see cref="np.nanmin(NDArray,int?,NDArray,bool,object,NDArray)"/> over the materialized child, which is why it is
         /// TYPE-AWARE for free (the ±inf NaN-replacement sentinel that would promote an int child to
         /// float64 lives inside the engine reduction, not in an NDExpr rewrite).
         /// </summary>
@@ -76,7 +76,7 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// <c>np.nanmax</c> — maximum ignoring NaN (the <see cref="NanMin"/> twin, all-NaN → NaN).
-        /// Host-delegated to <see cref="np.nanmax(NDArray,int?,bool)"/> over the materialized child.
+        /// Host-delegated to <see cref="np.nanmax(NDArray,int?,NDArray,bool,object,NDArray)"/> over the materialized child.
         /// </summary>
         NanMax,
 

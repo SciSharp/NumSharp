@@ -297,10 +297,10 @@ namespace NumSharp.Tests.Fuzz
         // is nevertheless a corpus op (the np.* twin or an instance key): the alias target must
         // exist, so a renamed op breaks this map instead of rotting. internal: the leak gate
         // (LeakSurfaceCoverageTests) resolves ndarray coverage through the same delegations.
+        // (NDArray.amax / NDArray.amin used to be listed here as aliases of ndarray.max / ndarray.min; they were removed on
+        // 2026-10-17 because NumPy's ndarray has no amax / amin method — "one whole api per function as numpy provides".)
         internal static readonly Dictionary<string, string> NdarrayAliases = new()
         {
-            ["amax"] = "ndarray.max",           // alias of ndarray.max (np.amax == np.max)
-            ["amin"] = "ndarray.min",
             ["conjugate"] = "ndarray.conj",     // same method, NumPy exposes both names
             // partition/argpartition ARE NumPy methods, but whole-output bytes between kth anchors
             // are introselect-implementation-specific on BOTH sides — the np.* corpus pins the
