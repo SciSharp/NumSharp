@@ -40,10 +40,11 @@ the finalize errors of the index members, and the `np.*` functions that keep, wr
 object path (`join`, `split`, `rsplit`, `splitlines` and their chararray members, with C-D3's `NDListArray`), is done
 (phase 4). C4 is done (`partition` / `rpartition`, 2026-10-17, `ffa74606`), and C5's string methods land in batches, one
 family each, as their phase-2 functions compute: batch 1 (`rpartition`, `center`, `ljust`, `rjust`, `zfill`,
-`expandtabs`, with the module's re-exports of the last five) is done. Open: the other string methods of C5 — `count`,
-`find`, `rfind`, `index`, `rindex`, `startswith`, `endswith`, `lstrip`, `rstrip`, `strip`, `replace`, the nine predicates
-and the five case maps compute in phase 2 already (P2.5, P2.6 milestones 1 and 2); `translate`, `encode`, `decode` and
-`%` wait for the rest of P2.6.
+`expandtabs`, with the module's re-exports of the last five) and batch 2 (the search family: `count`, `find`, `rfind`,
+`index`, `rindex`, `startswith`, `endswith`, with the module's re-exports and `np.@char.str_len`; `6d06fa3c`) are done. Open:
+the other string methods of C5 — `lstrip`, `rstrip`, `strip`, `replace`, the nine predicates and the five case maps
+compute in phase 2 already (P2.5, P2.6 milestones 1 and 2); `translate`, `encode`, `decode` and `%` wait for the rest of
+P2.6.
 
 ---
 
@@ -429,7 +430,8 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
   the plain view.
 - Each member lands with its function (C1–C4, or the phase-2 subphase). Size: medium (many small members).
 - In batches of one family each, with the module's re-exports of the same names: batch 1 (`rpartition`, `center`,
-  `ljust`, `rjust`, `zfill`, `expandtabs`) is done (2026-10-17, `ffa74606`).
+  `ljust`, `rjust`, `zfill`, `expandtabs`) is done (2026-10-17, `ffa74606`), batch 2 (`count`, `find`, `rfind`, `index`,
+  `rindex`, `startswith`, `endswith`, and the module's `str_len`) too (2026-10-17, `6d06fa3c`).
 
 ### C6 Completion
 
@@ -849,6 +851,35 @@ C-D1 decision and C3 for C-D3.
     46 ms; measured alone it is 1.30× (NumPy 139 ms, NumSharp 105 ms). The lever is a vector path for `U` elements wider
     than 64 bytes in P2.5's kernel.
   - **Open:** the other C5 string members, in batches (§0).
+- **2026-10-17 — C5's second batch: the search family** (`6d06fa3c`; the same scope, one family per batch).
+  - **Built.** `np.@char.str_len` / `count` / `find` / `rfind` / `index` / `rindex` / `startswith` / `endswith`
+    (`APIs/np.char.search.cs`: `np.strings`' functions, `str_len` with the ufunc's `out=` / `where=` / `dtype=`) and the
+    chararray members of the seven search names (`Char/NDCharArray.Search.cs`). NumPy's members are the function's int64 /
+    bool result as it is (`chararray.__array_wrap__` keeps the class only for text), so they forward like phase 4's
+    `split`: a PLAIN result, a 0-d array for a 0-d chararray (the wrap ignores `return_scalar`), over the stored text
+    (`np.char.array(['ab  ']).count(' ')` is 2).
+  - **Found and fixed in `np.strings`.** (1) A one-input text ufunc (`str_len`, the nine predicates, the whitespace
+    strips) named a C# literal by NEP 50's weak class in its no-loop refusal; NumPy's `convert_ufunc_arguments` stops at
+    the first input when `nin == 1`, before it marks a Python scalar weak, so `np.strings.str_len(5)` names `Int64DType`
+    (5.0 `Float64DType`, 1j `Complex128DType`, 2**63 `UInt64DType`; `NDStringUfuncs.UnaryDispatchClass`). (2)
+    `startswith` over `U` ran 1.01–1.58× NumPy: the lane path built the needle's match mask at every offset of the element
+    to read one bit, after a length scan. `NDTextElements.TailMatchWholeRange` serves a range from a non-negative start to
+    the element's end (NumPy's default `end=None`): `startswith` compares once at `start` and reads no length (a non-empty
+    needle's last unit is not NUL, so a match proves the element long enough), `endswith` reads the length and compares
+    once. (3) The 1-D text kernels prefetch their text operand 4 KB ahead for elements of 32 bytes or more (`str_len` of
+    1M `<U24`: 6.6–7.4 → 5.2 ms; narrower elements lost 3–7 % to the prefetch and emit none).
+  - **Gates.** Oracle section `strcharmeth` +5,388 cases (8,199 in all, 2,796 NumPy errors, zero excuses, with the
+    boundary audit): the members over both classes × 14 layouts with every needle and range form, long texts past the
+    lane cap, the functions over plain and chararray operands, `str_len`'s ufunc keywords, `StringDType`, Python values
+    (an int and a float among them: the unary refusal), broadcasting. Unit tests: `CharStringMethodsTests` (16) and
+    `StringMethodsLanesTests.TailMatchWholeRange_EqualsTheSpanBody_EveryWidth`. 6 planted bugs each turned the oracle red
+    (6–523 cases).
+  - **Performance** (141 cells: the 8 functions over `U` / `S` / `StringDType` and the 7 members over `U` / `S` at 1K /
+    100K / 1M, plus a range, a long needle, reversed and F-ordered views): geomean 3.18×, min 1.66×; `startswith` over `U`
+    2.26–2.89×, `str_len` over `U` at 1M 1.93×. The C# twin needs a warm-up pass over every case: its first cell otherwise
+    runs before the background tier-1 compiler finishes the shared call path (`str_len` over `U` at 1K read 4.3 µs,
+    2.55 µs warm).
+  - **Open:** the strips and `replace` (batch 3), the predicates, the case maps.
 
 ---
 
@@ -861,7 +892,7 @@ C-D1 decision and C3 for C-D3.
 | C3 | `join`, `split`, `rsplit`, `splitlines` (phase 4, done) |
 | C4 | `multiply` (phase 1, done), `partition`, `rpartition` (done, `ffa74606`) |
 | P2.3 | `add` |
-| P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith`, `lstrip`, `rstrip`, `strip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
+| P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith` (done, `6d06fa3c`), `lstrip`, `rstrip`, `strip`, `replace`, `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
 | P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal`, `mod`, `encode`, `decode`, `translate` |
 
 The facade (C0) declares all 53; a row is complete when its computation lands.
@@ -873,7 +904,7 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 | String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 (`center`, `expandtabs`, `ljust`, `partition`, `rjust`, `rpartition`, `zfill`: done, `ffa74606`) |
 | String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 |
 | String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done) |
-| String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 |
+| String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 (`count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`: done, `6d06fa3c`) |
 | String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 (phase 4, done) |
 | Views and copies (the finalize hook) | `T`, `mT`, `transpose`, `swapaxes`, `reshape`, `ravel`, `flatten`, `squeeze`, `copy`, `take`, `repeat`, `compress`, `diagonal`, `real`, `imag`, `view`, `astype`, `byteswap`, `flat` | chararray (`diagonal`, `imag` read-only); `astype` / `view` to a numeric dtype per §1.6 | C2 |
 | Finalize errors | `argmax`, `argmin`, `argpartition` | `ValueError("Can only create a chararray from string data.")`; with `out=`, the index | phase 3 (done) |

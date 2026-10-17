@@ -421,8 +421,14 @@ null required one `ArgumentNullException`; the class of the result, its layout a
 chararray members follow NumPy's return rules — rule 1 `asarray(f(self, …))`: `NDCharArray.AsArrayOfFresh` TAKES OVER a
 fresh `U` result (owning, no copy: 1M `U` `center` 91.9 → 39.8 ms) and VIEWS an `S` one; rule 2 (strip / replace) a
 chararray view; rule 4 a plain int64 / bool array — and read the STORED text (`np.char.array(['ab  ']).center(6, '*')`
-is `'*ab  *'`). Done: `rpartition`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs` (`ffa74606`). Gates: oracle section
-`strcharmeth` (strict, with the boundary audit), `CharStringMethodsTests`. TRAPS: (1) a function that forwards a
+is `'*ab  *'`). Done: `rpartition`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs` (`ffa74606`); the search family
+`count` / `find` / `rfind` / `index` / `rindex` / `startswith` / `endswith` with `np.@char.str_len` (`6d06fa3c`: plain forwards,
+`Char/NDCharArray.Search.cs`). Gates: oracle section `strcharmeth` (strict, with the boundary audit),
+`CharStringMethodsTests`. Two `np.strings` rules batch 2 found: a ONE-input text ufunc (`str_len`, the predicates, the
+whitespace strips) names a C# literal by its default DType in a refusal (`Int64DType`; NumPy marks no operand of a
+one-input ufunc weak: `NDStringUfuncs.UnaryDispatchClass`), and `startswith` / `endswith` over a range to the element's
+end take one compare (`NDTextElements.TailMatchWholeRange`), with a 4 KB prefetch in the 1-D text kernels for elements
+of 32 bytes or more. TRAPS: (1) a function that forwards a
 chararray to a DIFFERENTLY named public function (partition → `np.stack`) computes inside
 `NDCharArrayBoundary.Inside()`: the audit skips only frames named like the function, and the forward would apply
 `np.stack`'s chararray rule. (2) NumPy 2.4.2's zfill of an EMPTY element reads uninitialized memory for its sign: oracle
