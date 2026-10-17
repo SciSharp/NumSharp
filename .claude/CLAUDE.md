@@ -130,8 +130,33 @@ undisposed views earlier entries left of the shared fixture, and the measurement
 mid-entry — `ScopeAudit.Quiesce()` before the snapshot, plus `OwnershipLedger.DropMayBeFinalization` / `DrainAndRebase`
 for a drop seen after a collection. Gates: oracle `tsort` (12,515 cases, 5,209 NumPy errors, zero excuses; the 5 deferred
 `tma` cases strict), `StringDTypeOrderTests` (24). Benchmark: 168 cells 1.8–32× NumPy, geomean 7.8×. Left: the
-`np.strings` functions beyond `add` / `multiply` (P2.5 / P2.6) and 8 `NextPhase` sites: 7 of P2.7, and numpy.char
-phase 3's `chararray.partition(sep)` (the string partition, P2.5; its 22 oracle cases are the only deferred ones).
+`np.strings` functions of P2.6 (the predicates, the case maps, `translate`, `mod`, `encode`, `decode`) and 7
+`NextPhase` sites, all of P2.7; no oracle case is deferred any more (P2.5 made `chararray.partition(sep)`'s 22 strict).
+**`np.strings` searches, strips, pads, replaces, partitions and slices since P2.5 (2026-10-17, `5dc14393` +
+`ade78fa9`; plan state log).** `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`,
+`strip` / `lstrip` / `rstrip`, `center` / `ljust` / `rjust`, `zfill`, `expandtabs`, `replace`, `partition` /
+`rpartition`, `slice` and the six comparison names over `S` / `U` / `T` (`np.strings`: 28 of NumPy's 46 names), with
+NumPy's arguments, defaults and ufunc stages in NumPy's order (the promoter's no-loop TypeError — `_zfill` /
+`_expandtabs` have no uint64 loop —, `T`'s NA compatibility, the same_kind int64 input casts, the broadcast text);
+`chararray.partition(sep)` is `np.strings.partition` stacked on a new last axis. Code: `APIs/np.strings.{Search,
+Transform}.cs`; `S` / `U` loops `Backends/Strings/NDTextElements{,.Lanes}.cs` behind the IL shell
+`Backends/Kernels/ILKernelGenerator.Text.Methods.cs` and the driver `NDTextLoop` (trivial loop / NDIter / rows /
+masked kernel, plus the fused SIZE passes of the computed-width wrappers); `T` loops `NDVStringMethods{,.Short}.cs`.
+Design: an element of up to 64 units is computed from LANE MASKS (bit i of a ulong per unit: equal to a code,
+whitespace of the class, nonzero; the search family is the AND of each needle unit's mask shifted by its index) and an
+element of up to 64 bytes is moved by ONE GATHER (`vpermd` for `U`; for `S` `vpshufb` of each broadcast 16-byte quarter
+by the index minus the quarter's base plus 0x70 saturating, which reads zero outside the quarter), so no per-element
+branch follows the data; a `T` pair of short cells takes one 16-byte vector per cell (masked to its size, code points =
+lead bytes, `pdep` for the k-th); wider elements and hosts without AVX2 run the scalar bodies (`*Scalar`, the
+differential tests' reference). NumPy defects NOT reproduced (pinned in `StringFunctionsPinsTests`): `zfill('')` reads
+past its output; `T` `replace` with a negative count other than -1 and a longer replacement writes past its buffer;
+`T` `slice` with a step past int's range never returns; `T` tailmatch reads past the haystack. `partition` over `S` /
+`U` returns three arrays (NumPy: field views of one structured array; a NumPy `'U0'` part is `U1`, `[Misaligned]`).
+TRAP: a function given `out=` returns that array — a harness that disposes results disposes the caller's buffer.
+Gates: oracle `strfn` (10,964 cases) / `tfn` (7,900; 5,280 NumPy errors in all), zero excuses;
+`StringMethodsLanesTests` (every lane body against its scalar body over every width, `FencedMemory`, short cells
+against the general cores, IL against managed kernels) + `StringFunctionsPinsTests`. Benchmark: 237 cells 1.65–15×
+NumPy, geomean 3.64×.
 **Phase 2 validated against a randomized NumPy soak (2026-10-16, `b57c3e8b`; plan state log).** `test/oracle/soak_strings_oracle.py`
 draws fresh random cases for every family phase 2 computes (the sorts and partitions, `np.lexsort`, the searches,
 `np.unique` and its Array-API forms, `np.isin` and the set routines, `np.sort_complex`, the histograms, the quantile
@@ -522,8 +547,9 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
     (`InitializeArc` ignores `TryAddRef`'s failure).
   Gates: string-oracle section `tma` (4,167 cases; its 437 deferred cases became strict with P2.T and P2.2 over `T`) +
   `Ma/np.ma.StringDType.Test.cs`.
-- Still refused loudly (phase 2): the `np.strings` functions beyond `add` / `multiply`. Text I/O for `T` landed with
-  P1.7c, comparisons and reductions with P2.T, sorting with P2.2 over `T`.
+- Still refused loudly (phase 2): the `np.strings` functions of P2.6 (the predicates, the case maps, `translate`, `mod`,
+  `encode`, `decode`). Text I/O for `T` landed with P1.7c, comparisons and reductions with P2.T, sorting with P2.2 over
+  `T`, the search / strip / pad / replace / partition / slice functions with P2.5.
 - **The pythonnet bridge carries text (P1.8, 2026-10-13; owner's decision D7 = NumPy's C API).** `S` / `U` are ordinary
   buffers and VIEW both ways (`<U1` and a 4-byte `wchar_t` buffer import as `U1`, never `Char` — breaking; big-endian `U`
   copies byte-swapped; `np.str_` / `np.bytes_` are 0-d `U` / `S`). A `T` array crosses as an exact COPY through numpy's
@@ -579,7 +605,7 @@ request (`'U'`, `'S'`) gets NumPy's per-ufunc answer. Gate: the string oracle (`
 "deferred" only while NumSharp throws `StringComputationNotSupportedException`, so phase 2 is gated by the same corpus,
 and a section may defer no more than its ceiling (`StringOracleTests.DeferralCeilings`, 783 in all when phase 2 began:
 346 `S` / `U` cases of searching, the set routines, histograms and quantiles, and 437 `StringDType` cases through
-numpy.ma; 22 since P2.2 over `T`: section `strcharops`' `chararray.partition(sep)`), so a computation answered today
+numpy.ma; 22 after P2.2 over `T`: section `strcharops`' `chararray.partition(sep)`; none since P2.5), so a computation answered today
 cannot slide back; `NUMSHARP_STRING_ORACLE_DEFERRED=1`
 lists every deferred case with its refusal) + `Backends/Strings/StringCallOrderTests.cs` + `StringShapeDecidedTests.cs`
 + `StringComparisonTruthTests.cs` + `StringArithmeticTests.cs` + `TextNumberConversionTests.cs`. **Validation pass (2026-10-07)** — the deferral rule is now exact: defer ONLY where NumPy
