@@ -449,6 +449,127 @@ namespace NumSharp.Tests.Fuzz
                 using var byArray = c.partition(seps);
                 return c.partition(" ");
             });
+            // ---- numpy.char's string functions and the chararray members over them (C4 / C5: section strcharmeth replays
+            // them outside the sweep) ----
+            // Each entry takes the U, S and StringDType routes, a chararray operand (the parts and results come back as
+            // chararray views: their wrappers must be reclaimed too), an argument array, a C# value and a refusal.
+            E(l, "np.char.partition", "U / S / StringDType, a chararray input, a separator array, the empty-separator error", f =>
+            {
+                using var u = np.array(new[] { "a b", "c" });
+                using var s = np.array(new object[] { new byte[] { 97, 45, 98 }, new byte[] { 99 } });
+                using var t = np.array(new[] { "x y", "z" }, np.dtypes.StringDType());
+                using var tsep = np.array(new[] { " " }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "p q", "r" });
+                using var seps = np.array(new[] { " ", "c" });
+                using var bytes = np.@char.partition(s, new byte[] { 45 });
+                using var vstring = np.@char.partition(t, tsep);
+                using var chars = np.@char.partition(c, " ");
+                using var bySeps = np.@char.partition(u, seps);
+                try
+                {
+                    np.@char.partition(u, "");
+                }
+                catch (ValueError)
+                {
+                }
+                return np.@char.partition(u, " ");
+            });
+            E(l, "np.char.rpartition", "U / StringDType, a chararray input, the no-loop error of a str separator beside StringDType", f =>
+            {
+                using var u = np.array(new[] { "a b c", "d" });
+                using var t = np.array(new[] { "x y z" }, np.dtypes.StringDType());
+                using var tsep = np.array(new[] { " " }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "p q r" });
+                using var vstring = np.@char.rpartition(t, tsep);
+                using var chars = np.@char.rpartition(c, " ");
+                try
+                {
+                    np.@char.rpartition(t, " ");
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.rpartition(u, " ");
+            });
+            AddCharPad(l, "np.char.center", (a, w, fill) => np.@char.center(a, w, fill));
+            AddCharPad(l, "np.char.ljust", (a, w, fill) => np.@char.ljust(a, w, fill));
+            AddCharPad(l, "np.char.rjust", (a, w, fill) => np.@char.rjust(a, w, fill));
+            E(l, "np.char.zfill", "U / S / StringDType, a chararray input, a width array, a float width (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "-7", "12" });
+                using var s = np.array(new object[] { new byte[] { 43, 51 } });
+                using var t = np.array(new[] { "-12", "x" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "5", "-" });
+                using var widths = np.array(new long[] { 3, 5 });
+                using var bytes = np.@char.zfill(s, 4);
+                using var vstring = np.@char.zfill(t, 5);
+                using var chars = np.@char.zfill(c, 4);
+                using var byWidths = np.@char.zfill(u, widths);
+                try
+                {
+                    np.@char.zfill(u, 2.5);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.zfill(u, 6);
+            });
+            E(l, "np.char.expandtabs", "U / S / StringDType, a chararray input, a tab-size array, a float tab size (the cast error)", f =>
+            {
+                using var u = np.array(new[] { "a\tb", "\tc" });
+                using var s = np.array(new object[] { new byte[] { 97, 9, 98 } });
+                using var t = np.array(new[] { "x\ty" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "p\tq" });
+                using var tabs = np.array(new long[] { 2, 4 });
+                using var bytes = np.@char.expandtabs(s);
+                using var vstring = np.@char.expandtabs(t, 3);
+                using var chars = np.@char.expandtabs(c, 2);
+                using var byTabs = np.@char.expandtabs(u, tabs);
+                try
+                {
+                    np.@char.expandtabs(u, 2.0);
+                }
+                catch (ArgumentException)
+                {
+                }
+                return np.@char.expandtabs(u);
+            });
+            E(l, "NDCharArray.rpartition", "U (a copy) and S (a view of the stacked parts), a separator array", f =>
+            {
+                using var c = np.@char.array(new[] { "a b c", "d" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 44, 98 }, new byte[] { 99 } });
+                using var bySep = s.rpartition(new byte[] { 44 });
+                using var seps = np.array(new[] { " ", "d" });
+                using var byArray = c.rpartition(seps);
+                return c.rpartition(" ");
+            });
+            AddCharArrayPad(l, "NDCharArray.center", (c, w, fill) => c.center(w, fill));
+            AddCharArrayPad(l, "NDCharArray.ljust", (c, w, fill) => c.ljust(w, fill));
+            AddCharArrayPad(l, "NDCharArray.rjust", (c, w, fill) => c.rjust(w, fill));
+            E(l, "NDCharArray.zfill", "U (a copy) and S (a view), a width array, a text width (TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "-7", "+3" });
+                using var s = np.@char.array(new object[] { new byte[] { 45, 49 } });
+                using var widths = np.array(new long[] { 4, 2 });
+                using var bytes = s.zfill(5);
+                using var byWidths = c.zfill(widths);
+                try
+                {
+                    c.zfill("3");
+                }
+                catch (TypeError)
+                {
+                }
+                return c.zfill(6);
+            });
+            E(l, "NDCharArray.expandtabs", "U (a copy) and S (a view), the default and a tab size", f =>
+            {
+                using var c = np.@char.array(new[] { "a\tb", "c" });
+                using var s = np.@char.array(new object[] { new byte[] { 9, 97 } });
+                using var bytes = s.expandtabs();
+                using var bySize = c.expandtabs(4);
+                return c.expandtabs();
+            });
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
             // Python scalar, an object list holding None), the element errors (whose piece store and readers must be
@@ -600,6 +721,72 @@ namespace NumSharp.Tests.Fuzz
                     using var reference = none(c);
                 }
                 return chars(c, c);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of numpy.char's justify functions (<c>center</c>, <c>ljust</c>, <c>rjust</c>, numpy.strings'
+        ///     own): the U, S and StringDType routes, a chararray input (a chararray view of the result), a width array, a
+        ///     fill character, and the two refusals (a two-character fill, a float width: TypeError).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The function's inventory id.</param>
+        /// <param name="pad">The function: text, width, fill (null for the default).</param>
+        private static void AddCharPad(List<LeakCase> l, string api, Func<object, object, object, NDArray> pad)
+        {
+            E(l, api, "U / S / StringDType, a chararray input, a width array and a fill; a long fill and a float width (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "ab", "cde" });
+                using var s = np.array(new object[] { new byte[] { 97, 98 } });
+                using var t = np.array(new[] { "xy", "z" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "p", "qr" });
+                using var widths = np.array(new long[] { 4, 6 });
+                using var bytes = pad(s, 5, new byte[] { 42 });
+                using var vstring = pad(t, 6, "*");
+                using var chars = pad(c, 5, null);
+                using var byWidths = pad(u, widths, "-");
+                try
+                {
+                    pad(u, 5, "ab");
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    pad(u, 2.5, null);
+                }
+                catch (TypeError)
+                {
+                }
+                return pad(u, 7, null);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of chararray's justify members (<c>center</c>, <c>ljust</c>, <c>rjust</c>): U (an owning copy,
+        ///     <c>np.char.asarray</c>'s rule) and S (a view of the computed array), a width array, a fill, and a refusal.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The member's inventory id.</param>
+        /// <param name="pad">The member: receiver, width, fill (null for the default).</param>
+        private static void AddCharArrayPad(List<LeakCase> l, string api, Func<NDCharArray, object, object, NDCharArray> pad)
+        {
+            E(l, api, "U (a copy) and S (a view), a width array and a fill; a float width (TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab", "c" });
+                using var s = np.@char.array(new object[] { new byte[] { 97 }, new byte[] { 98, 99 } });
+                using var widths = np.array(new long[] { 3, 5 });
+                using var bytes = pad(s, 4, new byte[] { 42 });
+                using var byWidths = pad(c, widths, "-");
+                try
+                {
+                    pad(c, 2.5, null);
+                }
+                catch (TypeError)
+                {
+                }
+                return pad(c, 6, null);
             });
         }
     }

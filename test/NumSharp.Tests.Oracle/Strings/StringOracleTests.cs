@@ -364,6 +364,17 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void CharObjectPath() => Run("strcharobj");
 
         /// <summary>
+        ///     Section strcharmeth (the <c>numpy.char</c> plan's C4 / C5): numpy.char's string functions — its own
+        ///     <c>partition</c> / <c>rpartition</c> (the three parts stacked on a new last axis) and the functions it
+        ///     re-exports from numpy.strings — over plain and chararray operands of every core layout of both classes,
+        ///     <c>StringDType</c>, Python values and NumPy's refusals, and the chararray string members over them with their
+        ///     return rules (<c>asarray</c>: a <c>U</c> result owns its data, an <c>S</c> result views the computed array; the
+        ///     ufunc's chararray view; a plain int64 / bool array), each result's class, OWNDATA and strides compared. Run
+        ///     with the boundary audit: no library call path may reach a chararray rule.
+        /// </summary>
+        [TestMethod] public void CharStringMethods() => RunWithCharArrayBoundaryAudit("strcharmeth");
+
+        /// <summary>
         ///     The chararray boundary's safety contract over the WHOLE string corpus: every case of every section with an
         ///     <c>S</c> / <c>U</c> operand is replayed with those operands viewed as chararrays while
         ///     <see cref="NDCharArrayBoundary.AuditInternalCallers"/> is on, and no method of the library itself may reach the
@@ -728,7 +739,7 @@ namespace NumSharp.Tests.Strings
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
-                "strsets", "tcomp", "tarith",
+                "strcharmeth", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());

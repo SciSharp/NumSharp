@@ -260,8 +260,8 @@ namespace NumSharp.Tests.Strings
                 {
                     if (!hasAxis)
                     {
-                        // chararray.partition(sep): the string partition.
-                        r = c.partition(a[0]);
+                        // chararray.partition(sep): the string partition (sep positional, or the keyword sep=).
+                        r = c.partition(MethodArg(a, 0, args, p, "sep"));
                         break;
                     }
                     if (a[0] is long kth)
@@ -289,6 +289,9 @@ namespace NumSharp.Tests.Strings
                     r = Items(c.nonzero());
                     break;
                 default:
+                    // The string members of section strcharmeth (StringOracleOps.CharMethods.cs).
+                    if (TryCharStringMember(Str(p, "name"), c, a, args, p, out r))
+                        break;
                     throw new InvalidOperationException($"the strcharops section has no member '{Str(p, "name")}'");
             }
             return new SelfResult(r, c);
@@ -424,7 +427,8 @@ namespace NumSharp.Tests.Strings
                 "strings.multiply" => np.strings.multiply(Nd(a[0]), Nd(a[1])),
                 "char.add" => np.@char.add(a[0], a[1]),
                 "char.multiply" => np.@char.multiply(a[0], a[1]),
-                var f => throw new InvalidOperationException($"the strcharfn section has no function '{f}'"),
+                // The string functions of section strcharmeth (StringOracleOps.CharMethods.cs).
+                var f => CharStringFunction(f, a, args, p),
             };
             return x is NDCharArray chars && !chars.IsScalarStandIn ? new SelfResult(r, chars) : r;
 

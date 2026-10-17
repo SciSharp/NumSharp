@@ -189,19 +189,39 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The separator does not broadcast.</exception>
         /// <remarks>
         ///     NumPy's <c>chararray.partition</c> is <c>asarray(partition(self, sep))</c> with numpy.char's
-        ///     <c>partition = np.stack(np.strings.partition(a, sep), axis=-1)</c>: the three parts (chararray views here, as
-        ///     NumPy's ufunc hands them back) stacked into a plain array (<c>np.concatenate</c> keeps no subclass of equal
-        ///     priority), seen as a chararray by <c>np.char.asarray</c>.
+        ///     <c>partition = np.stack(np.strings.partition(a, sep), axis=-1)</c>: the three parts (chararray views in NumPy,
+        ///     as its ufunc hands them back) stacked into a plain array (<c>np.concatenate</c> keeps no subclass of equal
+        ///     priority), seen as a chararray by <c>np.char.asarray</c>. <see cref="CharModule.partition"/> computes that
+        ///     stacked array (plain parts: their class never reaches the stack's answer), and the array, private to the call,
+        ///     takes its <c>asarray</c> form without a copy (<see cref="AsArrayOfFresh"/>).
         /// </remarks>
         [NDScoped]
-        public NDCharArray partition(object sep)
-        {
-            var separator = CharModule.TextOperand(sep, nameof(sep));
-            var (before, middle, after) = np.strings.partition(this, separator);
-            var stacked = np.stack(new NDArray[] { before, middle, after }, -1);
-            // np.char.asarray of the stacked ndarray: a chararray view of bytes, a copy of str (its width check).
-            return np.@char.asarray(stacked);
-        }
+        public NDCharArray partition(object sep) => AsArrayOfFresh(np.@char.partition(this, sep));
+
+        /// <summary>
+        ///     NumPy's <c>chararray.rpartition(sep)</c>: each element split around the LAST <paramref name="sep"/> into the
+        ///     part before it, the separator and the part after it (without a match: two empty strings and the element). The
+        ///     result adds a final axis of length three for the three parts.
+        /// </summary>
+        /// <param name="sep">The separator, broadcast against the array's elements: a C# string (NumPy's Python <c>str</c>), a
+        ///     <c>byte[]</c> (Python <c>bytes</c>), or an array; it is cast to this array's dtype first (a number is its
+        ///     text).</param>
+        /// <returns>A chararray holding the three parts of each element on its last axis, at the widest part's width: a VIEW
+        ///     of the stacked parts for bytes, a COPY for str (NumPy's <c>np.char.asarray</c> compares a str array's width
+        ///     in characters with its itemsize in bytes and copies).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sep"/> is null.</exception>
+        /// <exception cref="ValueError">An empty separator (<c>empty separator</c>); an empty array (<c>zero-size array to
+        ///     reduction operation maximum which has no identity</c>, NumPy's sizing).</exception>
+        /// <exception cref="TypeError">No loop for the classes.</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII separator for a bytes chararray.</exception>
+        /// <exception cref="IncorrectShapeException">The separator does not broadcast.</exception>
+        /// <remarks>NumPy's <c>chararray.rpartition</c> is <c>asarray(rpartition(self, sep))</c>, numpy.char's
+        ///     <c>rpartition</c> being <c>np.stack(np.strings.rpartition(a, sep), axis=-1)</c> (a plain array, see
+        ///     <see cref="CharModule.rpartition"/>), seen as a chararray by <c>np.char.asarray</c>: the stacked array is
+        ///     private to the call, so its <c>U</c> form takes it over instead of copying it
+        ///     (<see cref="AsArrayOfFresh"/>).</remarks>
+        [NDScoped]
+        public NDCharArray rpartition(object sep) => AsArrayOfFresh(np.@char.rpartition(this, sep));
 
         /// <summary>
         ///     <c>c.partition(kth, axis, ...)</c>, the call <c>np.partition</c> makes: NumPy's TypeError, because

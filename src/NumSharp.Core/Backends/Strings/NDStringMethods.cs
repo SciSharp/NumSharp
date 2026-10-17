@@ -760,17 +760,20 @@ namespace NumSharp.Backends.Strings
         /// <remarks>
         ///     <c>max(maximum(len(a), width))</c> over a non-empty broadcast is <c>max(max(len(a)), max(width))</c> — every
         ///     element of each operand meets some element of the other — so the size pass reads each operand once (no
-        ///     broadcast iteration), the length scan through the size kernel over <paramref name="a"/> alone.
+        ///     broadcast iteration), the length scan through the size kernel over <paramref name="a"/> alone. No string is
+        ///     longer than <paramref name="a"/>'s element width in code units, so when the widest requested width reaches
+        ///     that element width it IS the maximum and the length scan (a read of every element) is skipped: the same
+        ///     descriptor, one pass over the text fewer (a 1M-element <c>U</c> center was ~15 % of its time in it).
         /// </remarks>
         private static DType PadDescriptor(NDArray a, NDArray width, long[] dims, ref NDArray w64)
         {
             var loop = ResolveOne(a);
             if (NDTextLoop.Size(dims) == 0)
                 throw ZeroSizeMaximum();
-            long maxLen = MaxLength(a, loop);
             if (width.typecode == NPTypeCode.UInt64)
             {
                 // int64 against uint64 is float64 in NumPy: the descriptor is a float and never parses.
+                long maxLen = MaxLength(a, loop);
                 using var wmax = np.amax(width);
                 double largest = Math.Max(maxLen, Convert.ToDouble(wmax.Storage.GetAtIndex(0)));
                 using var l = NDArray.Scalar(largest);
@@ -779,7 +782,9 @@ namespace NumSharp.Backends.Strings
             }
             w64 = width.typecode == NPTypeCode.Int64 ? width : width.astype(np.int64);
             using var wm = np.amax(w64);
-            long largestW = Math.Max(maxLen, Convert.ToInt64(wm.Storage.GetAtIndex(0)));
+            long maxWidth = Convert.ToInt64(wm.Storage.GetAtIndex(0));
+            long elementUnits = a.dtype.itemsize / UnitOf(loop);
+            long largestW = maxWidth >= elementUnits ? maxWidth : Math.Max(MaxLength(a, loop), maxWidth);
             return np.strings.OutputDescriptor(a.dtype, largestW, floatSizes: false);
         }
 

@@ -28,11 +28,15 @@ namespace NumSharp
 
     /// <summary>
     ///     The <c>numpy.char</c> module surface, reachable as <see cref="np.@char"/>: NumPy's legacy vectorized string
-    ///     operations over fixed-width <c>S</c> / <c>U</c> arrays. This release covers the comparisons that strip trailing
-    ///     whitespace (<see cref="equal"/>, <see cref="not_equal"/>, <see cref="less"/>, <see cref="less_equal"/>,
-    ///     <see cref="greater"/>, <see cref="greater_equal"/>, <see cref="compare_chararrays(object, object, string, bool)"/>),
-    ///     <see cref="add"/> and <see cref="multiply"/>; the rest of the module follows the plan in
-    ///     <c>docs/plans/np-char.md</c>.
+    ///     operations. Its own functions are the comparisons that strip trailing whitespace (<see cref="equal"/>,
+    ///     <see cref="not_equal"/>, <see cref="less"/>, <see cref="less_equal"/>, <see cref="greater"/>,
+    ///     <see cref="greater_equal"/>, <see cref="compare_chararrays(object, object, string, bool)"/>), <see cref="multiply"/>
+    ///     (its ValueError rule), <see cref="partition"/> / <see cref="rpartition"/> (the three parts stacked on a new last
+    ///     axis), the object path (<see cref="split"/>, <see cref="rsplit"/>, <see cref="splitlines"/>,
+    ///     <see cref="join(object, object)"/>) and the <c>chararray</c> constructors (<see cref="chararray"/>,
+    ///     <see cref="array"/>, <see cref="asarray"/>); the others ARE <see cref="np.strings"/>' functions (NumPy re-exports
+    ///     the same function objects), so they answer exactly as <see cref="np.strings"/> does, over <c>S</c>, <c>U</c> and
+    ///     <c>StringDType</c> text.
     /// </summary>
     /// <remarks>
     ///     <para>

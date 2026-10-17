@@ -8926,8 +8926,10 @@ def _chx_build(recipe):
     """A (base, view) operand from its recipe — the same in the generator and in a worker process.
 
     Args:
-        recipe: ``{"pool": [spec, layout, seed]}`` (``_cha_operand``), ``{"values": enc, "dtype": spec}``
-            (``np.array(values, dtype)``) or ``{"T": enc}`` (a StringDType array of the values).
+        recipe: ``{"pool": [spec, layout, seed]}`` (``_cha_operand``), ``{"nonempty": [spec, layout, seed]}``
+            (``_cha_operand`` over the pool without its empty string: NumPy 2.4.2's zfill of an empty element reads
+            uninitialized memory, see ``_fn_nonempty``), ``{"values": enc, "dtype": spec}`` (``np.array(values, dtype)``)
+            or ``{"T": enc}`` (a StringDType array of the values).
 
     Returns:
         The (base, view) pair.
@@ -8935,6 +8937,13 @@ def _chx_build(recipe):
     if "pool" in recipe:
         spec, layout, seed = recipe["pool"]
         return _cha_operand(spec, layout, seed)
+    if "nonempty" in recipe:
+        spec, layout, seed = recipe["nonempty"]
+        n, build = LAYOUTS[layout]
+        pool = [v for v in (CHA_U if "U" in spec else CHA_S) if v]
+        base = (np.array([pool[(seed + i) % len(pool)] for i in range(n)], dtype=spec) if n
+                else np.zeros(0, dtype=spec))
+        return base, build(base)
     if "T" in recipe:
         return t_plain(np.array(_chx_dec(recipe["T"]), dtype=np.dtypes.StringDType()))
     arr = np.array(_chx_dec(recipe["values"]), dtype=recipe["dtype"])
@@ -11573,6 +11582,201 @@ def gen_strcharobj():
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Section strcharmeth: numpy.char's string functions (its partition / rpartition wrappers and the functions it
+# re-exports from numpy.strings) and the chararray string members over them (the numpy.char plan's C4 / C5)
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# Each case records the result's CLASS, OWNDATA, strides and memory sharing (_chx_expect), so the three return rules of
+# the chararray members are checked, not only their values: asarray(...) (a U result owns its data, an S result views the
+# computed array), the ufunc's chararray view (chararray.__array_wrap__), or a plain int64 / bool array. The functions run
+# over plain and chararray operands of every core layout of both classes, over StringDType, over Python values (str,
+# bytes, lists, numbers) and into NumPy's refusals; a chararray in a position other than the text keeps the result plain
+# where NumPy's out= comes from np.empty_like(a). A C# null is NumPy's default for an optional argument and an
+# ArgumentNullException for a required one (the module's convention), so no case passes Python's None.
+
+CHM = "strcharmeth"
+CHM_LAYOUTS = ["c1", "c2", "f2", "t3", "s1", "r2", "o1", "col", "bc", "z0", "e1", "e2", "one", "d5"]
+# StringDType texts for the module functions: separators, tabs, signs for zfill, non-ASCII text.
+CHM_T = ["ab cd", "x", "", "a\tb c", "-12", "\xe9 中", "+7", "q-r-s"]
+
+
+def _chm_words(spec):
+    """The text constructors of a section-strcharmeth operand class.
+
+    Args:
+        spec: ``"<U4"`` or ``"|S4"``.
+
+    Returns:
+        ``(word, alien)``: a str to a value of spec's class, and a str to a value of the other class.
+    """
+    if spec[1] == "U":
+        return (lambda s: s), (lambda s: s.encode("latin-1"))
+    return (lambda s: s.encode("latin-1")), (lambda s: s)
+
+
+def _chm_member(recipes, name, args=(), kw=None, layout=""):
+    """Records one chararray member call on operand 0's chararray view.
+
+    Args:
+        recipes: the operands' recipes (operand 0 is the receiver's base).
+        name: the member.
+        args: the positional argument specs.
+        kw: the keyword argument specs.
+        layout: the case's layout label.
+    """
+    add_chx(CHM, "cha_call", {"recv": 0, "name": name, "args": list(args), "kw": kw or {}}, recipes, layout=layout)
+
+
+def _chm_fn(recipes, fn, args, kw=None, layout=""):
+    """Records one numpy.char function call.
+
+    Args:
+        recipes: the operands' recipes.
+        fn: the function's name under ``np.char``.
+        args: the positional argument specs.
+        kw: the keyword argument specs.
+        layout: the case's layout label.
+    """
+    add_chx(CHM, "cha_fn", {"fn": "char." + fn, "args": list(args), "kw": kw or {}}, recipes, layout=layout)
+
+
+def _chm_transform():
+    """numpy.char's partition / rpartition (NumPy's np.stack wrappers) and center / ljust / rjust / zfill / expandtabs
+    (numpy.strings' functions), with the chararray members of the six names (C4, and C5's first batch)."""
+    for spec in ["<U4", "|S4"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            cha = _chx_pool(spec, layout, 3)
+            shape = _chx_shape(cha)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            row = shape[-1] if nd else 0
+            label = f"{spec}:{layout}"
+            # ---- the members: chararray.partition / rpartition -> asarray(np.char.partition(self, sep)) ----
+            for name in ["partition", "rpartition"]:
+                for sep, sl in [(word(" "), "space"), (word("a"), "a"), (word("ab"), "ab"), (alien("a"), "alien"),
+                                (1, "int"), (word(""), "empty")]:
+                    _chm_member([cha], name, [_chx_v(sep)], layout=f"{label}:{sl}")
+                _chm_member([cha], name, [], {"sep": _chx_v(word("c"))}, layout=f"{label}:kw")
+                if nd >= 1 and size > 0:
+                    seps = [word(w) for w in [" ", "a", "b", "c d", "\t"] * 3][:row]
+                    _chm_member([cha], name, [_chx_v(seps)], layout=f"{label}:list")
+                    _chm_member([cha], name, [_chx_v(seps + [word("x")])], layout=f"{label}:list_longer")
+            # ---- center / ljust / rjust -> asarray(f(self, width, fillchar)) ----
+            for name in ["center", "ljust", "rjust"]:
+                for width in [0, 3, 9, -1]:
+                    _chm_member([cha], name, [_chx_v(width)], layout=f"{label}:w{width}")
+                _chm_member([cha], name, [_chx_v(9), _chx_v(word("*"))], layout=f"{label}:fill")
+                _chm_member([cha], name, [_chx_v(9)], {"fillchar": _chx_v(alien("*"))}, layout=f"{label}:alien_fill")
+                _chm_member([cha], name, [], {"width": _chx_v(8), "fillchar": _chx_v(word("."))}, layout=f"{label}:kw")
+                _chm_member([cha], name, [_chx_v(9), _chx_v(word("ab"))], layout=f"{label}:long_fill")
+                _chm_member([cha], name, [_chx_v(2.5)], layout=f"{label}:float")
+                _chm_member([cha], name, [_chx_v(word("3"))], layout=f"{label}:text")
+                _chm_member([cha], name, [_chx_v(True)], layout=f"{label}:bool")
+                if spec[1] == "S":
+                    _chm_member([cha], name, [_chx_v(9), _chx_v("\xe9")], layout=f"{label}:nonascii_fill")
+                if nd >= 1 and size > 0:
+                    widths = ([2, 5, 9, 0] * 3)[:row]
+                    _chm_member([cha], name, [_chx_v(widths)], layout=f"{label}:widths")
+                    fills = [word(f) for f in ["*", "-", ".", "#"] * 3][:row]
+                    _chm_member([cha], name, [_chx_v(7), _chx_v(fills)], layout=f"{label}:fills")
+            # ---- zfill -> asarray(zfill(self, width)), over a receiver without an empty element (NumPy 2.4.2's
+            # zfill of an empty element reads uninitialized memory: _fn_nonempty) ----
+            zcha = {"nonempty": [spec, layout, 3]}
+            for width in [0, 3, 7]:
+                _chm_member([zcha], "zfill", [_chx_v(width)], layout=f"{label}:w{width}")
+            _chm_member([zcha], "zfill", [], {"width": _chx_v(5)}, layout=f"{label}:kw")
+            _chm_member([zcha], "zfill", [_chx_v(2.5)], layout=f"{label}:float")
+            _chm_member([zcha], "zfill", [_chx_v(word("3"))], layout=f"{label}:text")
+            if nd >= 1 and size > 0:
+                _chm_member([zcha], "zfill", [_chx_v(([1, 4, 6] * 4)[:row])], layout=f"{label}:widths")
+            # ---- expandtabs -> asarray(expandtabs(self, tabsize)) ----
+            _chm_member([cha], "expandtabs", [], layout=f"{label}:default")
+            for tab in [3, 0, -1]:
+                _chm_member([cha], "expandtabs", [_chx_v(tab)], layout=f"{label}:t{tab}")
+            _chm_member([cha], "expandtabs", [], {"tabsize": _chx_v(2)}, layout=f"{label}:kw")
+            _chm_member([cha], "expandtabs", [_chx_v(2.0)], layout=f"{label}:float")
+        # zfill's sign rule and expandtabs' columns over values that hold them (C order and a reversed view).
+        signs = [word(v) for v in ["-7", "+3", "12", "x", "-", "+-1", " -2", "0"]]
+        tabs = [word(v) for v in ["a\tb", "\t", "ab\tc\td", "x\ny\tz", "\r\t", "", "\t\t", "abcd\te"]]
+        for values, vl in [(signs, "signs"), (tabs, "tabs")]:
+            recipe = _chx_vals(values, spec.replace("4", "8"))
+            if vl == "signs":
+                for width in [1, 5]:
+                    _chm_member([recipe], "zfill", [_chx_v(width)], layout=f"{spec}:{vl}:zfill{width}")
+            for tab in [8, 4, 1, 0]:
+                _chm_member([recipe], "expandtabs", [_chx_v(tab)], layout=f"{spec}:{vl}:tab{tab}")
+            _chm_member([recipe], "center", [_chx_v(11), _chx_v(word("~"))], layout=f"{spec}:{vl}:center")
+            _chm_member([recipe], "partition", [_chx_v(word("\t"))], layout=f"{spec}:{vl}:partition")
+            _chm_member([recipe], "rpartition", [_chx_v(word("-"))], layout=f"{spec}:{vl}:rpartition")
+
+    # ---- the module functions over plain and chararray operands (numpy.strings' class rules) ----
+    for spec in ["<U4", "|S4"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            base = _chx_pool(spec, layout, 4)
+            zbase = {"nonempty": [spec, layout, 4]}
+            shape = _chx_shape(base)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            label = f"{spec}:{layout}"
+            for view, vl in [(_chx_arr(0), "plain"), (_chx_cha(0), "chararray")]:
+                for fn in ["partition", "rpartition"]:
+                    _chm_fn([base], fn, [view, _chx_v(word(" "))], layout=f"{label}:{vl}")
+                    _chm_fn([base], fn, [view], {"sep": _chx_v(word("a"))}, layout=f"{label}:{vl}:kw")
+                    _chm_fn([base], fn, [view, _chx_v(word(""))], layout=f"{label}:{vl}:empty_sep")
+                _chm_fn([base], "center", [view, _chx_v(9)], layout=f"{label}:{vl}")
+                _chm_fn([base], "center", [view, _chx_v(9), _chx_v(word("*"))], layout=f"{label}:{vl}:fill")
+                _chm_fn([base], "ljust", [view, _chx_v(7)], {"fillchar": _chx_v(word("-"))}, layout=f"{label}:{vl}")
+                _chm_fn([base], "rjust", [view, _chx_v(-2)], layout=f"{label}:{vl}")
+                _chm_fn([zbase], "zfill", [view, _chx_v(6)], layout=f"{label}:{vl}")
+                _chm_fn([base], "expandtabs", [view], layout=f"{label}:{vl}")
+                _chm_fn([base], "expandtabs", [view, _chx_v(2)], layout=f"{label}:{vl}:tab2")
+            if nd >= 1 and size > 0:
+                # A chararray in a non-text position: numpy.strings' out= is np.empty_like(a) (plain), and np.stack
+                # keeps no subclass, so the results stay plain.
+                fill = _chx_vals([word("*")], spec)
+                sep = _chx_vals([word(" ")], spec)
+                _chm_fn([base, fill], "center", [_chx_arr(0), _chx_v(9), _chx_cha(1)], layout=f"{label}:chararray_fill")
+                _chm_fn([base, sep], "partition", [_chx_arr(0), _chx_cha(1)], layout=f"{label}:chararray_sep")
+                _chm_fn([base, sep], "rpartition", [_chx_cha(0), _chx_arr(1)], layout=f"{label}:plain_sep")
+    # StringDType text (a StringDType separator: NumPy 2.4.2 has no (StringDType, str) partition loop).
+    t_text = {"T": enc(CHM_T)}
+    t_sep = {"T": enc([" "])}
+    for fn in ["partition", "rpartition"]:
+        _chm_fn([t_text, t_sep], fn, [_chx_arr(0), _chx_arr(1)], layout="T:T_sep")
+        _chm_fn([t_text], fn, [_chx_arr(0), _chx_v(" ")], layout="T:str_sep")
+        _chm_fn([t_text], fn, [_chx_arr(0), _chx_v(b" ")], layout="T:bytes_sep")
+    for fn, args in [("center", [_chx_v(9)]), ("center", [_chx_v(9), _chx_v("*")]), ("ljust", [_chx_v(6)]),
+                     ("rjust", [_chx_v(6), _chx_v("0")]), ("expandtabs", []), ("expandtabs", [_chx_v(3)]),
+                     ("center", [_chx_v(2.5)]), ("center", [_chx_v(9), _chx_v("**")])]:
+        _chm_fn([t_text], fn, [_chx_arr(0)] + args, layout="T")
+    # zfill over StringDType without an empty text (NumPy reads past the written buffer for a sign: _fn_nonempty).
+    _chm_fn([{"T": enc([v for v in CHM_T if v])}], "zfill", [_chx_arr(0), _chx_v(5)], layout="T")
+    # Python values as the text: a str, bytes, lists, a number (cast to text, or NumPy's refusal).
+    for value, vl in [("ab cd", "str"), (b"ab cd", "bytes"), (["ab cd", "x y"], "list"), ([b"a-b", b"c"], "bytes_list"),
+                      ([["a b", "c"], ["d", "e f"]], "nested"), (5, "int")]:
+        sep = b" " if isinstance(value, bytes) or (isinstance(value, list) and isinstance(value[0], bytes)) else " "
+        for fn in ["partition", "rpartition"]:
+            _chm_fn([], fn, [_chx_v(value), _chx_v(sep)], layout=f"value:{vl}")
+        _chm_fn([], "center", [_chx_v(value), _chx_v(8)], layout=f"value:{vl}")
+        _chm_fn([], "zfill", [_chx_v(value), _chx_v(4)], layout=f"value:{vl}")
+        _chm_fn([], "expandtabs", [_chx_v(value)], layout=f"value:{vl}")
+    # Broadcasting: a column of texts against a row of separators / widths, and a shape mismatch.
+    col = _chx_vals([["ab cd"], ["x-y z"], ["q"]], "<U5")
+    _chm_fn([col], "partition", [_chx_arr(0), _chx_v([" ", "-"])], layout="broadcast")
+    _chm_fn([col], "rpartition", [_chx_cha(0), _chx_v([" ", "-"])], layout="broadcast:chararray")
+    _chm_fn([col], "center", [_chx_arr(0), _chx_v([4, 9])], layout="broadcast")
+    _chm_fn([col], "partition", [_chx_arr(0), _chx_v([[" ", "-"], ["y", "z"]])], layout="broadcast:mismatch")
+
+
+def gen_strcharmeth():
+    """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
+    C5): partition / rpartition and the padding functions."""
+    _chm_transform()
+    _chx_flush()
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Section qfamily: the quantile family's keywords over every dtype (the validation of strings phase 2, 2026-10-16)
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -13417,7 +13621,7 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
-              gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
+              gen_strcharmeth, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
               gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase]
 
 

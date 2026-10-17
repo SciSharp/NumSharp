@@ -318,6 +318,8 @@ namespace NumSharp.Tests.Documentation
             before.ToString(true).Should().Be("array(['a', 'c'], dtype='<U1')");
             separator.ToString(true).Should().Be("array(['-', ''], dtype='<U1')");
             after.ToString(true).Should().Be("array(['b', ''], dtype='<U1')");
+            // The np.@char form stacks the three parts on a new last axis (numpy.char's np.stack wrapper).
+            np.@char.partition(fields, "-").ToString(true).Should().Be("array([['a', '-', 'b'],\n       ['c', '', '']], dtype='<U1')");
 
             // Code points, not UTF-16 or UTF-8 units, for either Unicode dtype.
             np.strings.str_len(np.array(new[] { "é中😀" })).ToString(true).Should().Be("array([3])");
