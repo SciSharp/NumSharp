@@ -440,6 +440,13 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
   (`docs/website-src/docs/fundamentals/strings-and-bytes.md`, a `numpy.char` section; `.claude/CLAUDE.md`'s API list);
   the benchmark rows (`benchmark/strings`); the release notes.
 - Size: small.
+- The object-surface mapping `char.chararray` → `NumSharp.NDCharArray` is done (2026-10-17, `b4a3b78f`, with the
+  coverage generator's join of the API diff gap map): 104 of the 193 `numpy.char.chararray` rows read available (90
+  exact, 14 alias) and their signatures are compared. The 24 named members still missing are C5's open batches
+  (`capitalize`, `lower`, `upper`, `swapcase`, `title`, the `is*` predicates, `strip` / `lstrip` / `rstrip`, `replace`,
+  `translate`, `encode`, `decode`) and three ndarray members NumSharp has nowhere (`ctypes`, `dump`, `dumps`); the
+  rest are Python protocols. The `chararray.*` member keys of `oracle_map.json` are still open: the credited rows
+  read oracle-unverified.
 
 ### Order
 

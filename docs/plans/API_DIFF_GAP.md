@@ -798,8 +798,10 @@ python -I signature_diff.py <s>/modules_dump.json ../../docs/plans/numpy-signatu
 - The probe's whole surface compiles at C# 12, which is what an external `net8.0` consumer sees; a C# 12-only failure
   is a `◐` mark.
 - Plan item S1 (a signature-parity gate in CI) can be built on these outputs: commit NumPy's signatures and the marks,
-  and fail when a clean name gains a mark. The coverage pipeline already reports the M / X / O / T marks per credited
-  API since `f949fa17` (its N mark means "credited through another name"; this document's L is the `null` mark).
+  and fail when a clean name gains a mark. The coverage pipeline reports every mark of this document per credited API
+  since generator 1.16.0 (`b4a3b78f`): it runs these three tools on the same tree and joins each C# spelling onto the
+  catalog row of the NumPy API it spells, and the docs build fails when a spelling with a NumPy counterpart joins no
+  row (coverage/README.md, "Signature parity"). Its own N mark means "credited through another name".
 
 ## 11. Limits of the marks
 
