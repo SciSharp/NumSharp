@@ -440,5 +440,192 @@ namespace NumSharp.Tests.Backends.Strings
                 "ufunc 'count' did not contain a loop with signature matching types (<class 'numpy.dtypes._PyLongDType'>, " +
                 "<class 'numpy.dtypes.StrDType'>, <class 'numpy.dtypes._PyLongDType'>, <class 'numpy.dtypes._PyLongDType'>) -> None");
         }
+        // ------------------------------------------------------------------ strip / lstrip / rstrip / replace (C5, batch 3)
+
+        /// <summary>A <c>StringDType</c> array of the given texts.</summary>
+        /// <param name="texts">The texts.</param>
+        /// <returns>The array.</returns>
+        private static NDArray T(params string[] texts) => np.array(texts, np.dtypes.StringDType());
+
+        /// <summary>
+        ///     The strip members are NumPy's rule 2: <c>strip(self, chars)</c>, the function's own chararray VIEW (OWNDATA
+        ///     false) of the STORED text — <c>'ab  '</c>'s trailing spaces, which <c>c[0]</c> hides, are what <c>rstrip()</c>
+        ///     removes, and <c>rstrip('x')</c> keeps <c>' xa '</c> whole (its spaces end it). A 0-d chararray stays one.
+        /// </summary>
+        [TestMethod]
+        public void StripMembers_ReturnTheFunctionsView_OverTheStoredText()
+        {
+            var c = np.@char.array(new[] { "ab  ", " xa ", "b b " });
+            var stripped = c.strip();
+            stripped.dtype.ToString().Should().Be("<U4");
+            stripped.flags.owndata.Should().BeFalse();
+            Texts(stripped).Should().Equal("ab", "xa", "b b");
+            Texts(c.lstrip()).Should().Equal("ab  ", "xa ", "b b ");
+            Texts(c.rstrip()).Should().Equal("ab", " xa", "b b");
+            Texts(c.rstrip("b ")).Should().Equal("a", " xa", "");
+            Texts(c.strip("a ")).Should().Equal("b", "x", "b b");
+            Texts(c.rstrip("x")).Should().Equal("ab  ", " xa ", "b b ");
+            Texts(c.lstrip(" x")).Should().Equal("ab  ", "a ", "b b ");
+            Texts(c.strip()[0]).Should().Equal("ab");
+
+            var s = CS();
+            var bytes = s.strip();
+            bytes.dtype.ToString().Should().Be("|S6");
+            bytes.flags.owndata.Should().BeFalse();
+            Texts(bytes).Should().Equal("ab cd", "x", "a b c");
+
+            var zero = (NDCharArray)np.@char.array(new[] { "  q " }).reshape(Shape.Scalar);
+            var z = zero.strip();
+            z.ndim.Should().Be(0);
+            Texts(z).Should().Equal("q");
+        }
+
+        /// <summary>
+        ///     <c>chararray.replace(old, new, count=None)</c> is <c>replace(self, old, new, count or -1)</c>: the chararray
+        ///     view of the function's result at the widest result width (<c>U2</c> when every element shrinks). An
+        ///     <c>old</c> / <c>new</c> without a dtype — a C# string, a <c>byte[]</c> (Python bytes), an element stand-in
+        ///     (<c>c[2]</c>, the stripped Python str) — is cast to the text's dtype first; an <c>S</c> chararray takes a
+        ///     C# string as ASCII bytes.
+        /// </summary>
+        [TestMethod]
+        public void ReplaceMember_CastsAnOldWithoutADtype_AndCountsAsNumPy()
+        {
+            var c = np.@char.array(new[] { "ab  ", " xa ", "b b " });
+            var all = c.replace(" ", "_");
+            all.flags.owndata.Should().BeFalse();
+            Texts(all).Should().Equal("ab__", "_xa_", "b_b_");
+            Texts(c.replace(" ", "_", 1)).Should().Equal("ab_ ", "_xa ", "b_b ");
+            var shrunk = c.replace(" ", "", null);
+            shrunk.dtype.ToString().Should().Be("<U2");
+            Texts(shrunk).Should().Equal("ab", "xa", "bb");
+            Texts(c.replace(new byte[] { (byte)'a' }, "Z")).Should().Equal("Zb  ", " xZ ", "b b ");
+            Texts(c.replace(c[2], "Q")).Should().Equal("ab  ", " xa ", "Q ");
+            // An element of an S chararray is a Python bytes without a dtype: cast to the U text's dtype, not an S array.
+            var bytesElements = np.@char.array(new object[] { new[] { (byte)'a' }, new[] { (byte)'x' } });
+            Texts(c.replace(bytesElements[0], "Z")).Should().Equal("Zb  ", " xZ ", "b b ");
+            Texts(c.replace("b", bytesElements[1])).Should().Equal("ax  ", " xa ", "x x ");
+            var grown = c.replace("b", new byte[] { (byte)'y', (byte)'y' });
+            grown.dtype.ToString().Should().Be("<U6");
+            Texts(grown).Should().Equal("ayy  ", " xa ", "yy yy ");
+
+            var s = np.@char.array(new object[] { System.Text.Encoding.Latin1.GetBytes("ab  "), System.Text.Encoding.Latin1.GetBytes(" xa ") });
+            var sr = s.replace("a", "AA");
+            sr.dtype.ToString().Should().Be("|S5");
+            Texts(sr).Should().Equal("AAb  ", " xAA ");
+        }
+
+        /// <summary>
+        ///     The functions keep NumPy's class rules: a chararray text gives the chararray view; a chararray SET beside a
+        ///     plain text gives one too (the ufunc's <c>__array_wrap__</c> finds it), while a chararray <c>old</c> beside a
+        ///     plain text gives a PLAIN array (replace's <c>out=</c> is made from the plain text).
+        /// </summary>
+        [TestMethod]
+        public void StripAndReplaceFunctions_FollowNumPysClassRules()
+        {
+            var c = np.@char.array(new[] { "ab  ", " xa ", "b b " });
+            var r = np.@char.replace(c, "b", "B");
+            r.Should().BeOfType<NDCharArray>();
+            Texts(r).Should().Equal("aB  ", " xa ", "B B ");
+            var u = np.array(new[] { "ab  ", " xa " });
+            var set = np.@char.strip(u, np.@char.array(new[] { "a " }));
+            set.Should().BeOfType<NDCharArray>();
+            set.flags.owndata.Should().BeFalse();
+            Texts(set).Should().Equal("b", "x");
+            var old = np.@char.replace(u, np.@char.array(new[] { "a" }), "x");
+            old.Should().NotBeOfType<NDCharArray>();
+            old.flags.owndata.Should().BeTrue();
+            Texts(old).Should().Equal("xb  ", " xx ");
+        }
+
+        /// <summary>
+        ///     NumPy's trivial-loop copy: a <c>StringDType</c> argument makes the loop <c>StringDType</c>, and
+        ///     <c>check_for_trivial_loop</c> copies a 0-d or short 1-d chararray input into <c>StringDType()</c> AS A
+        ///     CHARARRAY, which <c>__array_finalize__</c> refuses — for every function with a second text input: the search
+        ///     family, the strips, replace, the pads, members and functions, the chararray in any text position.
+        /// </summary>
+        [TestMethod]
+        public void StringDTypeArgument_BesideAShortChararray_IsRefusedByTheCopy()
+        {
+            const string finalize = "Can only create a chararray from string data.";
+            var c = np.@char.array(new[] { "ab  ", " xa ", "b b " });
+            var t = T("a");
+            void Refused(Action call) => call.Should().Throw<ValueError>().Where(e => e.Message == finalize);
+            Refused(() => c.strip(t));
+            Refused(() => c.lstrip(t));
+            Refused(() => c.find(t));
+            Refused(() => c.startswith(t));
+            Refused(() => c.replace(t, "q"));
+            Refused(() => c.replace("a", t));
+            Refused(() => c.center(9, T(" ")));
+            Refused(() => np.@char.rstrip(c, t));
+            Refused(() => np.@char.count(c, t));
+            // The chararray as the second / third text input.
+            Refused(() => np.@char.find(T("ab"), np.@char.array(new[] { "a" })));
+            Refused(() => np.@char.replace(np.array(new[] { "ab", "ba" }), np.@char.array(new[] { "a" }), T("Q")));
+            Refused(() => np.@char.ljust(T("ab", "x"), 6, np.@char.array(new[] { "-" })));
+            // A 1-d int32 width is copied too (plain), so the chararray fill after it is still refused.
+            Refused(() => np.@char.center(T("ab", "x"), np.array(new[] { 6 }), np.@char.array(new[] { "-" })));
+            // The refusal leaves no mark behind: the next call over plain arrays computes.
+            np.@char.find(np.array(new[] { "ab" }), t).ToArray<long>().Should().Equal(0L);
+        }
+
+        /// <summary>
+        ///     A chararray NumPy's trivial loop does NOT copy (2-d and up, or 1-d past <c>np.getbufsize()</c> elements; an
+        ///     earlier input that refuses the trivial loop protects the ones after it) leaves the function computing a PLAIN
+        ///     result: <c>StringDType</c> for the strips and replace, int64 / bool for the search. The rule-2 members cannot
+        ///     hold that plain array and refuse with NotSupportedException naming the function; the pad members convert it
+        ///     with <c>np.char.asarray</c>, an <c>S</c> chararray.
+        /// </summary>
+        [TestMethod]
+        public void StringDTypeArgument_BesideALargerChararray_ComputesPlain()
+        {
+            var c2 = np.@char.array(new[] { "ab  ", " xa ", "b b ", "q" }).reshape(2, 2);
+            var c = (NDCharArray)c2;
+            var t = T("a");
+            var stripped = np.@char.strip(c, t);
+            stripped.Should().NotBeOfType<NDCharArray>();
+            stripped.dtype.Should().Be(np.dtypes.StringDType());
+            Texts(stripped).Should().Equal("b  ", " xa ", "b b ", "q");
+            var found = c.find(t);
+            found.Should().NotBeOfType<NDCharArray>();
+            found.ToArray<long>().Should().Equal(0L, 2L, -1L, -1L);
+            c.startswith(t).ToArray<bool>().Should().Equal(true, false, false, false);
+            var padded = c.center(6, T(" "));
+            padded.dtype.ToString().Should().Be("|S6");
+            padded.flags.owndata.Should().BeFalse();
+            Texts(padded).Should().Equal(" ab   ", "  xa  ", " b b  ", "  q   ");
+            Action member = () => c.strip(t);
+            member.Should().Throw<NotSupportedException>().Where(e => e.Message ==
+                "chararray.strip: NumPy returns a plain StringDType() array here, which the NDCharArray result of this member " +
+                "cannot hold; call np.char.strip for it.");
+            Action replace = () => c.replace(t, "q");
+            replace.Should().Throw<NotSupportedException>().Where(e => e.Message.StartsWith("chararray.replace: "));
+            // An earlier 2-d input refuses the trivial loop, so the chararray after it is not copied.
+            var after = np.@char.replace(np.array(new[] { "ab", "ba" }).reshape(1, 2), np.@char.array(new[] { "a" }), T("Q"));
+            Texts(after).Should().Equal("Qb", "bQ");
+            var width = np.@char.center(T("ab", "x"), np.array(new[] { 6 }).reshape(1, 1), np.@char.array(new[] { "-" }));
+            Texts(width).Should().Equal("--ab--", "--x---");
+        }
+
+        /// <summary>The copy's length limit is <c>np.getbufsize()</c>: with a 16-element buffer a 16-element chararray is
+        ///     copied (refused) and a 17-element one is not (computed).</summary>
+        [TestMethod]
+        public void TrivialLoopCopy_LengthLimit_IsTheBufferSize()
+        {
+            long saved = np.setbufsize(16);
+            try
+            {
+                var t = T("a");
+                var c16 = np.@char.array(Enumerable.Repeat("ab", 16).ToArray());
+                Action copied = () => np.@char.find(c16, t);
+                copied.Should().Throw<ValueError>().Where(e => e.Message == "Can only create a chararray from string data.");
+                var c17 = np.@char.array(Enumerable.Repeat("ab", 17).ToArray());
+                np.@char.find(c17, t).ToArray<long>().Should().AllBeEquivalentTo(0L);
+            }
+            finally
+            {
+                np.setbufsize(saved);
+            }
+        }
     }
 }

@@ -11880,11 +11880,206 @@ def _chm_search():
         _chm_fn([col], name, [_chx_arr(0), _chx_v([[" ", "-"], ["y", "z"]])], layout="broadcast:mismatch")
 
 
+def _chm_strip():
+    """numpy.char's strip / lstrip / rstrip / replace (numpy.strings' functions) and the chararray members of the four
+    names (C5's third batch): NumPy's rule 2, the function's own chararray view."""
+    strips = ["strip", "lstrip", "rstrip"]
+    for spec in ["<U4", "|S4"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            cha = _chx_pool(spec, layout, 3)
+            shape = _chx_shape(cha)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            row = shape[-1] if nd else 0
+            label = f"{spec}:{layout}"
+            # ---- the members: chararray.<strip>(chars) -> <strip>(self, chars), a chararray view ----
+            for name in strips:
+                _chm_member([cha], name, [], layout=f"{label}:default")
+                # The stored text: whitespace, NULs and the pool's other code points the element access strips.
+                for chars, cl in [(word(" "), "space"), (word("ab"), "ab"), (word(" \t"), "space_tab"), (word("x"), "x"),
+                                  (word(""), "empty"), (word("\x00 "), "nul_space")]:
+                    _chm_member([cha], name, [_chx_v(chars)], layout=f"{label}:{cl}")
+                _chm_member([cha], name, [], {"chars": _chx_v(word("a "))}, layout=f"{label}:kw")
+                # NumPy's refusals: a set of the other class, a number.
+                _chm_member([cha], name, [_chx_v(alien("a"))], layout=f"{label}:alien")
+                _chm_member([cha], name, [_chx_v(5)], layout=f"{label}:int")
+                if nd >= 1 and size > 0:
+                    sets = [word(w) for w in [" ", "ab", "", "\t "] * 3][:row]
+                    _chm_member([cha], name, [_chx_v(sets)], layout=f"{label}:sets")
+                    _chm_member([cha], name, [_chx_v(sets + [word("x")])], layout=f"{label}:sets_longer")
+            # ---- chararray.replace(old, new, count=None) -> replace(self, old, new, count or -1) ----
+            for old, new, rl in [(word(" "), word("_"), "space"), (word("a"), word("xyz"), "grow"),
+                                 (word("ab"), word(""), "delete"), (word(""), word("-"), "empty_old"),
+                                 (word("  "), word("."), "two_spaces"), (word("q"), word("r"), "absent")]:
+                _chm_member([cha], "replace", [_chx_v(old), _chx_v(new)], layout=f"{label}:{rl}")
+            for count in [0, 1, -1, 3]:
+                _chm_member([cha], "replace", [_chx_v(word(" ")), _chx_v(word("#")), _chx_v(count)],
+                            layout=f"{label}:count{count}")
+            _chm_member([cha], "replace", [], {"old": _chx_v(word("a")), "new": _chx_v(word("A")), "count": _chx_v(1)},
+                        layout=f"{label}:kw")
+            # The cast of a Python value of the other class (old / new have no dtype: astype(a.dtype)), a count of
+            # another kind (NumPy's TypeError).
+            _chm_member([cha], "replace", [_chx_v(alien("a")), _chx_v(word("b"))], layout=f"{label}:alien_old")
+            _chm_member([cha], "replace", [_chx_v(word("a")), _chx_v(alien("b"))], layout=f"{label}:alien_new")
+            _chm_member([cha], "replace", [_chx_v(word("a")), _chx_v(word("b")), _chx_v(1.5)], layout=f"{label}:float_count")
+            if spec[1] == "S":
+                _chm_member([cha], "replace", [_chx_v("\xe9"), _chx_v(word("b"))], layout=f"{label}:nonascii_old")
+            if nd >= 1 and size > 0:
+                counts = ([0, 1, -1, 2] * 3)[:row]
+                _chm_member([cha], "replace", [_chx_v(word(" ")), _chx_v(word("+")), _chx_v(counts)],
+                            layout=f"{label}:counts")
+                olds = [word(w) for w in ["a", " ", "", "b"] * 3][:row]
+                _chm_member([cha], "replace", [_chx_v(olds), _chx_v(word("*"))], layout=f"{label}:olds")
+
+    # ---- the module functions over plain and chararray operands (numpy.strings' class rules) ----
+    for spec in ["<U4", "|S4"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            base = _chx_pool(spec, layout, 4)
+            shape = _chx_shape(base)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            label = f"{spec}:{layout}"
+            for view, vl in [(_chx_arr(0), "plain"), (_chx_cha(0), "chararray")]:
+                for name in strips:
+                    _chm_fn([base], name, [view], layout=f"{label}:{vl}")
+                    _chm_fn([base], name, [view, _chx_v(word(" a"))], layout=f"{label}:{vl}:chars")
+                _chm_fn([base], "replace", [view, _chx_v(word(" ")), _chx_v(word("__"))], layout=f"{label}:{vl}")
+                _chm_fn([base], "replace", [view, _chx_v(word("a")), _chx_v(word("")), _chx_v(1)],
+                        layout=f"{label}:{vl}:count")
+                _chm_fn([base], "replace", [view], {"old": _chx_v(word("")), "new": _chx_v(word("."))},
+                        layout=f"{label}:{vl}:kw")
+            if nd >= 1 and size > 0:
+                # A chararray in a position other than the text: the result follows the text's class.
+                chars = _chx_vals([word(" ")], spec)
+                old = _chx_vals([word("a")], spec)
+                _chm_fn([base, chars], "strip", [_chx_arr(0), _chx_cha(1)], layout=f"{label}:chararray_chars")
+                _chm_fn([base, old], "replace", [_chx_arr(0), _chx_cha(1), _chx_v(word("z"))],
+                        layout=f"{label}:chararray_old")
+    # StringDType text (a StringDType or str argument; a bytes one has no loop) and a chararray with StringDType
+    # arguments (NumPy's finalize error: the result is not text a chararray holds).
+    t_text = {"T": enc(CHM_T)}
+    t_chars = {"T": enc([" a"])}
+    for name in strips:
+        _chm_fn([t_text], name, [_chx_arr(0)], layout="T")
+        _chm_fn([t_text, t_chars], name, [_chx_arr(0), _chx_arr(1)], layout="T:T_chars")
+        _chm_fn([t_text], name, [_chx_arr(0), _chx_v(" a")], layout="T:str_chars")
+        _chm_fn([t_text], name, [_chx_arr(0), _chx_v(b" ")], layout="T:bytes_chars")
+        _chm_member([_chx_pool("<U4", "c1", 2), t_chars], name, [_chx_arr(1)], layout="U:T_chars")
+    _chm_fn([t_text], "replace", [_chx_arr(0), _chx_v(" "), _chx_v("__")], layout="T")
+    _chm_fn([t_text], "replace", [_chx_arr(0), _chx_v("-"), _chx_v(""), _chx_v(1)], layout="T:count")
+    _chm_fn([t_text, t_chars], "replace", [_chx_arr(0), _chx_arr(1), _chx_v("+")], layout="T:T_old")
+    _chm_member([_chx_pool("<U4", "c1", 2), t_chars], "replace", [_chx_arr(1), _chx_v("q")], layout="U:T_old")
+    _chm_member([_chx_pool("<U4", "c1", 2), t_chars], "replace", [_chx_v("a"), _chx_arr(1)], layout="U:T_new")
+    # Wide U elements (44 units, past the 64-byte lane cap: the chunked chars strip): stripped runs inside one 8-unit chunk,
+    # across chunk boundaries and over the whole text, a set holding a non-ASCII space or NUL, an empty element.
+    wide = _chx_vals(["aaaaaaaaaaaaaaaaaaaa middle ||||||||||||||||", "|a|a|a|a|a|a|a|a|a|a|a", "no strip here at all, none",
+                      "", "a| \u3000a|" * 4 + "x" + " |a" * 7, "\u3000" * 17 + "q" + "\u3000" * 20, "| a" * 14 + "|"],
+                     "<U44")
+    for name in strips:
+        _chm_fn([wide], name, [_chx_arr(0)], layout="wide:default")
+        for chars, cl in [("a|", "a_bar"), ("a| ", "a_bar_space"), ("|", "bar"), ("\u3000 a|", "wide_space"),
+                          ("xyz", "absent"), ("\x00a|", "nul_set"), ("a| \u3000mxqiddle,nostrph", "many")]:
+            _chm_fn([wide], name, [_chx_arr(0), _chx_v(chars)], layout=f"wide:{cl}")
+            _chm_member([wide], name, [_chx_v(chars)], layout=f"wide:{cl}")
+    # Python values as the text: a str, bytes, lists, numbers (no loop for the strips; replace casts a number to text).
+    for value, vl in [("  ab cd ", "str"), (b" ab cd  ", "bytes"), (["ab cd ", " x y"], "list"),
+                      ([b"a-b ", b" c"], "bytes_list"), ([["a b ", "c"], [" d", "e f"]], "nested"), (5, "int"),
+                      (5.5, "float")]:
+        isb = isinstance(value, bytes) or (isinstance(value, list) and isinstance(value[0], bytes))
+        sp, us = (b" ", b"_") if isb else (" ", "_")
+        for name in strips:
+            _chm_fn([], name, [_chx_v(value)], layout=f"value:{vl}")
+        _chm_fn([], "replace", [_chx_v(value), _chx_v(sp), _chx_v(us)], layout=f"value:{vl}")
+    # Broadcasting: a column of texts against a row of sets / counts, and a shape mismatch.
+    col = _chx_vals([["ab cd "], [" x-y z"], ["q"]], "<U6")
+    for name in strips:
+        _chm_fn([col], name, [_chx_arr(0), _chx_v([" ", "a "])], layout="broadcast")
+        _chm_fn([col], name, [_chx_arr(0), _chx_v([[" ", "-"], ["y", "z"]])], layout="broadcast:mismatch")
+    _chm_fn([col], "replace", [_chx_cha(0), _chx_v(" "), _chx_v("."), _chx_v([0, 1])], layout="broadcast:chararray")
+    _chm_fn([col], "replace", [_chx_arr(0), _chx_v([" ", "x"]), _chx_v(".")], layout="broadcast")
+    _chm_fn([col], "replace", [_chx_arr(0), _chx_v([[" ", "-"], ["y", "z"]]), _chx_v(".")], layout="broadcast:mismatch")
+
+
+def _chm_tcopy():
+    """NumPy's trivial-loop copy of a chararray INPUT beside a StringDType argument (C5's third batch, for every function
+    of the section with a second text input): the search functions, the strips with a set, replace and the pads with a
+    fill resolve a StringDType loop, and ``check_for_trivial_loop`` copies a 0-d or 1-d input of at most
+    ``np.getbufsize()`` elements into ``StringDType()`` AS ITS CLASS, which a chararray's ``__array_finalize__`` refuses
+    ("Can only create a chararray from string data."). An input of more dimensions is not copied: it refuses the trivial
+    loop, no later input is copied, and the function computes a plain StringDType / int64 / bool array (a rule-2
+    member's plain result is the excused NotSupportedException; a pad member converts it with np.char.asarray, an S
+    chararray). A 1-d chararray past 8,192 elements takes the same branch; the unit tests pin that length with
+    np.setbufsize instead of an 8,193-element operand per case.
+
+    Every text position: the chararray as the text (members and functions, over the layouts), as the set / sub / old /
+    new / fill beside a StringDType text, after a 2-d text or a 2-d int32 width that refuses the trivial loop first, and
+    an S chararray (no loop for bytes beside StringDType: NumPy's TypeError comes before any copy)."""
+    t1 = {"T": enc(["a"])}
+    tf = {"T": enc([" "])}
+    for layout in ["c1", "c2", "t3", "z0", "e1", "one", "bc", "s1", "col", "r2"]:
+        cha = _chx_pool("<U4", layout, 5)
+        label = f"tcopy:{layout}"
+        for name in ["strip", "lstrip", "rstrip"]:
+            _chm_member([cha, t1], name, [_chx_arr(1)], layout=label)
+        _chm_member([cha, t1], "replace", [_chx_arr(1), _chx_v("q")], layout=f"{label}:T_old")
+        _chm_member([cha, t1], "replace", [_chx_v("a"), _chx_arr(1)], layout=f"{label}:T_new")
+        for name in ["find", "rfind", "count", "startswith", "endswith", "index", "rindex"]:
+            _chm_member([cha, t1], name, [_chx_arr(1)], layout=label)
+        for name in ["center", "ljust", "rjust"]:
+            _chm_member([cha, tf], name, [_chx_v(9), _chx_arr(1)], layout=label)
+        # The functions with the chararray as the text: the same copy, and NumPy's plain results past it.
+        _chm_fn([cha, t1], "strip", [_chx_cha(0), _chx_arr(1)], layout=label)
+        _chm_fn([cha, t1], "find", [_chx_cha(0), _chx_arr(1)], layout=label)
+        _chm_fn([cha, t1], "endswith", [_chx_cha(0), _chx_arr(1)], layout=label)
+        _chm_fn([cha, t1], "replace", [_chx_cha(0), _chx_arr(1), _chx_v("x")], layout=label)
+        _chm_fn([cha, tf], "center", [_chx_cha(0), _chx_v(9), _chx_arr(1)], layout=label)
+    # A non-ASCII StringDType fill: the pad member's np.char.asarray encodes the result as ASCII bytes (2-d: computed).
+    _chm_member([_chx_pool("<U4", "c2", 5), {"T": enc(["\xe9"])}], "center", [_chx_v(9), _chx_arr(1)],
+                layout="tcopy:c2:nonascii_fill")
+    # The chararray in another text position, beside a StringDType text: one element (1-d: copied) or a 2-d one.
+    t_text = {"T": enc(CHM_T)}
+    for shape_label, wrap in [("1d", lambda v: [v]), ("2d", lambda v: [[v]])]:
+        sub = _chx_vals(wrap("a"), "<U4")
+        fill = _chx_vals(wrap(" "), "<U4")
+        label = f"tcopy:second:{shape_label}"
+        for name in ["find", "count", "startswith", "rindex"]:
+            _chm_fn([t_text, sub], name, [_chx_arr(0), _chx_cha(1)], layout=label)
+        for name in ["strip", "rstrip"]:
+            _chm_fn([t_text, sub], name, [_chx_arr(0), _chx_cha(1)], layout=label)
+        _chm_fn([t_text, sub], "replace", [_chx_arr(0), _chx_cha(1), _chx_v("x")], layout=f"{label}:old")
+        _chm_fn([t_text, sub], "replace", [_chx_arr(0), _chx_v("a"), _chx_cha(1)], layout=f"{label}:new")
+        for name in ["center", "ljust", "rjust"]:
+            _chm_fn([t_text, fill], name, [_chx_arr(0), _chx_v(9), _chx_cha(1)], layout=label)
+    # The order of the inputs: a 2-d int32 width (cast to int64, so not trivially iterable) refuses the trivial loop
+    # BEFORE the fill, so a 1-d chararray fill is not copied; a 1-d width is copied and the fill after it is refused.
+    fill1 = _chx_vals([" "], "<U4")
+    for wl, width in [("1d", _chx_vals([9], "int32")), ("2d", _chx_vals([[9]], "int32"))]:
+        _chm_fn([t_text, width, fill1], "center", [_chx_arr(0), _chx_arr(1), _chx_cha(2)], layout=f"tcopy:width{wl}")
+    # A plain U text first: a short one is copied (plain) and the chararray old after it is refused; a 2-d one refuses
+    # the trivial loop first, and the replace computes a plain StringDType array.
+    t_new = {"T": enc(["Q"])}
+    old1 = _chx_vals(["a"], "<U4")
+    for ul, text in [("short", _chx_vals(["ab", "ba"], "<U4")), ("2d", _chx_vals([["ab", "ba"]], "<U4"))]:
+        _chm_fn([text, old1, t_new], "replace", [_chx_arr(0), _chx_cha(1), _chx_arr(2)], layout=f"tcopy:U_{ul}:old")
+        _chm_fn([text, old1, t_new], "replace", [_chx_arr(0), _chx_arr(2), _chx_cha(1)], layout=f"tcopy:U_{ul}:new")
+    # An S chararray beside a StringDType argument: no loop (the dispatcher's TypeError before any copy).
+    s_cha = _chx_pool("|S4", "c1", 5)
+    for name in ["strip", "find", "startswith"]:
+        _chm_member([s_cha, t1], name, [_chx_arr(1)], layout="tcopy:S")
+    _chm_member([s_cha, t1], "replace", [_chx_arr(1), _chx_v(b"q")], layout="tcopy:S")
+    _chm_member([s_cha, tf], "center", [_chx_v(9), _chx_arr(1)], layout="tcopy:S")
+
+
 def gen_strcharmeth():
     """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
-    C5): partition / rpartition, the padding functions, str_len and the search functions."""
+    C5): partition / rpartition, the padding functions, str_len, the search functions, the strips and replace, and
+    NumPy's trivial-loop copy of a chararray beside a StringDType argument."""
     _chm_transform()
     _chm_search()
+    _chm_strip()
+    _chm_tcopy()
     _chx_flush()
 
 # ----------------------------------------------------------------------------------------------------------------------

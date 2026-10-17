@@ -24,7 +24,9 @@ namespace NumSharp
             /// <exception cref="TypeError">No loop for the operand classes (NumPy's no-loop text); two different
             ///     <c>StringDType</c> NA objects.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+            ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
+            ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             /// <remarks>
             ///     Whitespace is the class's: ASCII whitespace for <c>S</c>, Python's <c>str.isspace</c> for <c>U</c> /
             ///     <c>StringDType</c>. NumPy's trailing scan also strips NUL characters, its leading scan does not
@@ -33,7 +35,7 @@ namespace NumSharp
             /// </remarks>
             public static NDArray strip(NDArray a, NDArray chars = null)
                 => NDCharArrayBoundary.Sees(a, chars)
-                    ? NDCharArrayBoundary.Wrapped((a, chars), static s => strip(s.a, s.chars))
+                    ? NDCharArrayBoundary.WrappedUfunc((a, chars), static s => strip(s.a, s.chars), a, chars, null)
                     : Strip("_strip", NDTextElements.BothStrip, a, chars);
 
             /// <summary>
@@ -46,10 +48,12 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+            ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
+            ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray lstrip(NDArray a, NDArray chars = null)
                 => NDCharArrayBoundary.Sees(a, chars)
-                    ? NDCharArrayBoundary.Wrapped((a, chars), static s => lstrip(s.a, s.chars))
+                    ? NDCharArrayBoundary.WrappedUfunc((a, chars), static s => lstrip(s.a, s.chars), a, chars, null)
                     : Strip("_lstrip", NDTextElements.LeftStrip, a, chars);
 
             /// <summary>
@@ -62,10 +66,12 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
             /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray operand beside a
+            ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
+            ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray rstrip(NDArray a, NDArray chars = null)
                 => NDCharArrayBoundary.Sees(a, chars)
-                    ? NDCharArrayBoundary.Wrapped((a, chars), static s => rstrip(s.a, s.chars))
+                    ? NDCharArrayBoundary.WrappedUfunc((a, chars), static s => rstrip(s.a, s.chars), a, chars, null)
                     : Strip("_rstrip", NDTextElements.RightStrip, a, chars);
 
             /// <summary>
@@ -116,13 +122,22 @@ namespace NumSharp
             ///     builds a <c>'U6.0'</c> descriptor: <c>data type 'U6.0' not understood</c>).</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An empty broadcast (<c>zero-size array to reduction operation maximum which has
-            ///     no identity</c>); a <c>StringDType</c> NA its rule refuses.</exception>
+            ///     no identity</c>); a <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> or
+            ///     <paramref name="fillchar"/> beside a <c>StringDType</c> one that NumPy's trivial loop copies into
+            ///     <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a
+            ///     chararray from string data.</c>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
             /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray center(NDArray a, NDArray width, NDArray fillchar = null)
             {
                 if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, width, fillchar), static s => center(s.a, s.width, s.fillchar));
+                    return NDCharArrayBoundary.WrappedUfunc((a, width, fillchar),
+                                                            static s => center(s.a, s.width, s.fillchar), a, fillchar, null);
+                // A chararray fill beside a plain a: NumPy's result stays plain (its out= is made from a, and a StringDType
+                // result is no chararray), but the trivial loop still copies the fill into StringDType() as a chararray.
+                if (NDCharArrayBoundary.Sees(fillchar))
+                    return NDCharArrayBoundary.PlainUfunc((a, width, fillchar),
+                                                          static s => center(s.a, s.width, s.fillchar), a, fillchar, null);
                 return Justify("_center", NDTextElements.Center, a, width, fillchar);
             }
 
@@ -137,13 +152,20 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="width"/> is null.</exception>
             /// <exception cref="TypeError">See <see cref="center"/>.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses.</exception>
+            /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses; the trivial-loop
+            ///     copy of a chararray operand (see <see cref="center"/>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
             /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray ljust(NDArray a, NDArray width, NDArray fillchar = null)
             {
                 if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, width, fillchar), static s => ljust(s.a, s.width, s.fillchar));
+                    return NDCharArrayBoundary.WrappedUfunc((a, width, fillchar),
+                                                            static s => ljust(s.a, s.width, s.fillchar), a, fillchar, null);
+                // A chararray fill beside a plain a: NumPy's result stays plain (its out= is made from a, and a StringDType
+                // result is no chararray), but the trivial loop still copies the fill into StringDType() as a chararray.
+                if (NDCharArrayBoundary.Sees(fillchar))
+                    return NDCharArrayBoundary.PlainUfunc((a, width, fillchar),
+                                                          static s => ljust(s.a, s.width, s.fillchar), a, fillchar, null);
                 return Justify("_ljust", NDTextElements.Left, a, width, fillchar);
             }
 
@@ -158,13 +180,20 @@ namespace NumSharp
             /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="width"/> is null.</exception>
             /// <exception cref="TypeError">See <see cref="center"/>.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses.</exception>
+            /// <exception cref="ValueError">An empty broadcast; a <c>StringDType</c> NA its rule refuses; the trivial-loop
+            ///     copy of a chararray operand (see <see cref="center"/>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII fill for an <c>S</c> operand.</exception>
             /// <exception cref="OverflowException">A <c>StringDType</c> result past <c>sys.maxsize</c> bytes.</exception>
             public static NDArray rjust(NDArray a, NDArray width, NDArray fillchar = null)
             {
                 if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, width, fillchar), static s => rjust(s.a, s.width, s.fillchar));
+                    return NDCharArrayBoundary.WrappedUfunc((a, width, fillchar),
+                                                            static s => rjust(s.a, s.width, s.fillchar), a, fillchar, null);
+                // A chararray fill beside a plain a: NumPy's result stays plain (its out= is made from a, and a StringDType
+                // result is no chararray), but the trivial loop still copies the fill into StringDType() as a chararray.
+                if (NDCharArrayBoundary.Sees(fillchar))
+                    return NDCharArrayBoundary.PlainUfunc((a, width, fillchar),
+                                                          static s => rjust(s.a, s.width, s.fillchar), a, fillchar, null);
                 return Justify("_rjust", NDTextElements.Right, a, width, fillchar);
             }
 
@@ -321,12 +350,21 @@ namespace NumSharp
             ///     two different <c>StringDType</c> NA objects.</exception>
             /// <exception cref="IncorrectShapeException">A statement's operands do not broadcast.</exception>
             /// <exception cref="ValueError">An empty broadcast; a numeric operand cast to text; a <c>StringDType</c> NA its
-            ///     rule refuses.</exception>
+            ///     rule refuses; a chararray text operand beside a <c>StringDType</c> one that NumPy's trivial loop
+            ///     copies into <c>StringDType()</c> (<c>Can only create a chararray from string data.</c>).</exception>
             /// <exception cref="UnicodeEncodeError">A non-ASCII <paramref name="old"/> / <paramref name="new"/> cast to <c>S</c>.</exception>
             public static NDArray replace(NDArray a, NDArray old, NDArray @new, NDArray count = null)
             {
                 if (NDCharArrayBoundary.Sees(a))
-                    return NDCharArrayBoundary.Wrapped((a, old, @new, count), static s => replace(s.a, s.old, s.@new, s.count));
+                    return NDCharArrayBoundary.WrappedUfunc((a, old, @new, count),
+                                                            static s => replace(s.a, s.old, s.@new, s.count), a, old, @new,
+                                                            null);
+                // A chararray old / new beside a plain a: NumPy's result stays plain (its out= is made from a, and a
+                // StringDType result is no chararray), but the trivial loop still copies a chararray old / new into
+                // StringDType() as a chararray.
+                if (NDCharArrayBoundary.Sees(old, @new))
+                    return NDCharArrayBoundary.PlainUfunc((a, old, @new, count),
+                                                          static s => replace(s.a, s.old, s.@new, s.count), a, old, @new);
                 RequireOperand(a, nameof(a));
                 // The chararray rule belongs to the public call above: the public functions this body calls compute plain
                 // (a chararray in another position must not reach their rules from inside the library).
@@ -341,9 +379,11 @@ namespace NumSharp
                     if (!c.typecode.IsInteger())
                         throw new TypeError($"unsupported type {c.dtype} for operand 'count'");
                     arr = NDStringMethods.AsAnyArray(a);
-                    // old_dtype = getattr(old, 'dtype', None): a Python str / int has none
-                    bool oldHasDtype = !(old.WasPythonStr || old.WasPythonLiteral);
-                    bool newHasDtype = !(@new.WasPythonStr || @new.WasPythonLiteral);
+                    // old_dtype = getattr(old, 'dtype', None): a Python str / bytes / int has none (bytes reach here through
+                    // numpy.char's text rule, NDArray.WasPythonBytes), and neither has a chararray element (c[i] is
+                    // chararray.__getitem__'s Python str / bytes, NumSharp's read-only scalar stand-in).
+                    bool oldHasDtype = !HasNoDtype(old);
+                    bool newHasDtype = !HasNoDtype(@new);
                     o = NDStringMethods.AsAnyArray(old);
                     n = NDStringMethods.AsAnyArray(@new);
                     if (np.result_type(arr, o, n).@char == 'T')
@@ -358,6 +398,18 @@ namespace NumSharp
                     NDStringMethods.DisposeIfTemp(n, @new);
                 }
             }
+
+            /// <summary>
+            ///     Whether <c>getattr(x, 'dtype', None)</c> is None in NumPy for the argument <paramref name="x"/> stands for:
+            ///     a C# string / <c>byte[]</c> / number (NumPy's Python <c>str</c> / <c>bytes</c> / <c>int</c> / <c>float</c>,
+            ///     marked on the array the conversion made) or a chararray element stand-in (<c>c[i]</c>, which
+            ///     <c>chararray.__getitem__</c> returns as a Python <c>str</c> / <c>bytes</c>). <c>replace</c> casts such an
+            ///     <c>old</c> / <c>new</c> to the text's dtype; an array keeps its own.
+            /// </summary>
+            /// <param name="x">The <c>old</c> / <c>new</c> argument.</param>
+            /// <returns>True when NumPy sees no dtype on it.</returns>
+            private static bool HasNoDtype(NDArray x)
+                => x.WasPythonStr || x.WasPythonBytes || x.WasPythonLiteral || x is NDCharArray { IsScalarStandIn: true };
 
             /// <summary>
             ///     NumPy's <c>np.strings.partition(a, sep)</c>: each element split around the FIRST occurrence of

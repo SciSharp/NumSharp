@@ -417,7 +417,9 @@ namespace NumSharp.Backends.Strings
         /// <returns>A fresh <c>StringDType</c> result.</returns>
         /// <exception cref="TypeError">No loop (an <c>S</c> operand); two different NA objects.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">An NA the loop's rule refuses.</exception>
+        /// <exception cref="ValueError">An NA the loop's rule refuses; a chararray <paramref name="a"/> or
+        ///     <paramref name="fillchar"/> of the user's call that NumPy's trivial loop copies into <c>StringDType()</c>
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
         /// <exception cref="OverflowException">A padded size past <c>sys.maxsize</c>.</exception>
         /// <exception cref="OutOfMemoryException">A padded size no string can hold (NumPy's MemoryError).</exception>
         internal static NDArray Pad(string ufunc, int pos, NDArray a, NDArray width, NDArray fillchar)
@@ -429,6 +431,12 @@ namespace NumSharp.Backends.Strings
             try
             {
                 w64 = NDStringMethods.LoopInt64(ufunc, 1, width, 0);
+                // NumPy's trivial-loop copy, in input order: a chararray a or fillchar of the user's call is copied into
+                // StringDType() (the finalize error) unless an earlier input refused the trivial loop — the width counts, so
+                // an int32 width array longer than np.getbufsize() leaves a chararray fill uncopied.
+                if (NDCharArrayBoundary.TrivialLoopCopyError(a, LoopDescr(a), width, w64.dtype, fillchar, LoopDescr(fillchar))
+                    is { } refused)
+                    throw refused;
                 var dims = NDTextLoop.BroadcastDims(a, w64, fillchar);
                 t1 = Promote(a);
                 t3 = Promote(fillchar);
@@ -507,7 +515,8 @@ namespace NumSharp.Backends.Strings
         /// <returns>A fresh <c>StringDType</c> result.</returns>
         /// <exception cref="TypeError">No loop (an <c>S</c> operand); two different NA objects.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">An NA the loop refuses.</exception>
+        /// <exception cref="ValueError">An NA the loop refuses; a chararray text input of the user's call that NumPy's
+        ///     trivial loop copies into <c>StringDType()</c> (<c>Can only create a chararray from string data.</c>).</exception>
         internal static NDArray Replace(NDArray a, NDArray old, NDArray @new, NDArray count)
         {
             if (!IsTextT(a) || !IsTextT(old) || !IsTextT(@new))
@@ -522,6 +531,11 @@ namespace NumSharp.Backends.Strings
             try
             {
                 c64 = NDStringMethods.LoopInt64("_replace", 3, count, -1);
+                // NumPy's trivial-loop copy of the three text inputs, in order (a, old, new): a chararray among them is copied
+                // into StringDType() as its class and refused, unless an earlier long input refused the trivial loop.
+                if (NDCharArrayBoundary.TrivialLoopCopyError(a, LoopDescr(a), old, LoopDescr(old), @new, LoopDescr(@new))
+                    is { } refused)
+                    throw refused;
                 var dims = NDTextLoop.BroadcastDims(a, old, @new, c64);
                 t1 = Promote(a);
                 t2 = Promote(old);
@@ -647,6 +661,22 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">Two different NA objects: <c>Cannot find a compatible null string value for null
         ///     strings 'nan' and 'None'</c>.</exception>
         internal static void CheckPairNA(NDArray a, NDArray b) => CheckCompatibleNA(LoopDescr(a), LoopDescr(b), out _, out _);
+
+        /// <summary>
+        ///     NumPy's trivial-loop copy of a two-text <c>StringDType</c> loop (find family, startswith / endswith, the chars
+        ///     strips): a short <c>U</c> input is copied into the loop's <c>StringDType()</c> as its own class, so a chararray
+        ///     of the user's call is refused by the finalize rule (<see cref="NDCharArrayBoundary.TrivialLoopCopyError(NDArray,
+        ///     DType, NDArray, DType, NDArray)"/>). Run it after the input casts were validated, before the broadcast.
+        /// </summary>
+        /// <param name="a">The first text input (<c>T</c> or <c>U</c>).</param>
+        /// <param name="b">The second text input.</param>
+        /// <exception cref="ValueError">A marked chararray input of at most <c>np.getbufsize()</c> elements, 0-d or 1-d
+        ///     (<c>Can only create a chararray from string data.</c>).</exception>
+        internal static void TrivialLoopCopy(NDArray a, NDArray b)
+        {
+            if (NDCharArrayBoundary.TrivialLoopCopyError(a, LoopDescr(a), b, LoopDescr(b), null) is { } refused)
+                throw refused;
+        }
 
         /// <summary>The descriptor a <c>StringDType</c> loop sees for an operand: its own, or <c>StringDType()</c> for a <c>U</c>
         ///     operand (the promoters' cast).</summary>

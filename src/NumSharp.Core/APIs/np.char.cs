@@ -340,8 +340,9 @@ namespace NumSharp
                 case null:
                     throw new ArgumentNullException(name);
                 case byte[] bytes:
-                    // Python bytes: np.asanyarray(b'ab') is the 0-d |S2 (b'' is |S1).
-                    return NDArray.Scalar(bytes);
+                    // Python bytes: np.asanyarray(b'ab') is the 0-d |S2 (b'' is |S1), marked as a value without a dtype
+                    // (np.strings.replace casts such an old / new to the text's dtype; an S ARRAY keeps its own).
+                    return NDArray.PythonBytesLiteral(bytes);
                 case IEnumerable<byte[]> values:
                     // A list of bytes: an S array as wide as its longest value.
                     return NDStringArrays.FromManaged(values as byte[][] ?? values.ToArray(), s_bytesRequest, 0, 'C');

@@ -83,6 +83,18 @@ namespace NumSharp.Tests.Strings
                 case "endswith":
                     result = c.endswith(arg(0, "suffix"), arg(1, "start"), arg(2, "end"));
                     return true;
+                case "strip":
+                    result = c.strip(arg(0, "chars"));
+                    return true;
+                case "lstrip":
+                    result = c.lstrip(arg(0, "chars"));
+                    return true;
+                case "rstrip":
+                    result = c.rstrip(arg(0, "chars"));
+                    return true;
+                case "replace":
+                    result = c.replace(arg(0, "old"), arg(1, "new"), arg(2, "count"));
+                    return true;
             }
             result = null;
             return false;
@@ -119,6 +131,10 @@ namespace NumSharp.Tests.Strings
                 "char.rindex" => np.@char.rindex(arg(0, "a"), arg(1, "sub"), arg(2, "start"), arg(3, "end")),
                 "char.startswith" => np.@char.startswith(arg(0, "a"), arg(1, "prefix"), arg(2, "start"), arg(3, "end")),
                 "char.endswith" => np.@char.endswith(arg(0, "a"), arg(1, "suffix"), arg(2, "start"), arg(3, "end")),
+                "char.strip" => np.@char.strip(arg(0, "a"), arg(1, "chars")),
+                "char.lstrip" => np.@char.lstrip(arg(0, "a"), arg(1, "chars")),
+                "char.rstrip" => np.@char.rstrip(arg(0, "a"), arg(1, "chars")),
+                "char.replace" => np.@char.replace(arg(0, "a"), arg(1, "old"), arg(2, "new"), arg(3, "count")),
                 var f => throw new InvalidOperationException($"the chararray behavior sections have no function '{f}'"),
             };
         }

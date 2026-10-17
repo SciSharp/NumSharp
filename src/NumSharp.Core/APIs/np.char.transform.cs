@@ -2,11 +2,13 @@ using System;
 using NumSharp.Backends.Strings;
 
 // =============================================================================
-// np.char.transform.cs — numpy.char's partition wrappers and the padding functions it re-exports from numpy.strings
+// np.char.transform.cs — numpy.char's partition wrappers and the padding, strip and replace functions it re-exports
+// from numpy.strings
 // =============================================================================
 //
-// numpy/_core/defchararray.py (NumPy 2.4.2) imports center, ljust, rjust, zfill and expandtabs from numpy.strings, so
-// np.char.center IS np.strings.center (the same function object). numpy.char defines its own partition and rpartition:
+// numpy/_core/defchararray.py (NumPy 2.4.2) imports center, ljust, rjust, zfill, expandtabs, strip, lstrip, rstrip and
+// replace from numpy.strings, so np.char.center IS np.strings.center (the same function object). numpy.char defines its
+// own partition and rpartition:
 //
 //     def partition(a, sep):  return np.stack(strings_partition(a, sep), axis=-1)
 //     def rpartition(a, sep): return np.stack(strings_rpartition(a, sep), axis=-1)
@@ -206,6 +208,104 @@ namespace NumSharp
         [NDScoped]
         public NDArray expandtabs(object a, object tabsize = null)
             => np.strings.expandtabs(TextOperand(a, nameof(a)), OptionalOperand(tabsize));
+
+        // =============================================================================================================
+        // strip / lstrip / rstrip / replace (numpy.strings' functions, re-exported)
+        // =============================================================================================================
+
+        /// <summary>
+        ///     NumPy's <c>np.char.strip(a, chars=None)</c>, which IS <see cref="np.strings.strip"/>: each element without its
+        ///     leading and trailing characters found in <paramref name="chars"/> (whitespace for null), keeping
+        ///     <paramref name="a"/>'s dtype.
+        /// </summary>
+        /// <param name="a">The strings: an <c>S</c> / <c>U</c> / <c>StringDType</c> array or a text array_like (see the class
+        ///     remarks).</param>
+        /// <param name="chars">The characters to remove, as a set, broadcast: <paramref name="a"/>'s class (a <c>U</c> set
+        ///     with a <c>StringDType</c> <paramref name="a"/>); null is NumPy's <c>None</c>, which strips whitespace — ASCII
+        ///     whitespace for <c>S</c>, Python's <c>str.isspace</c> for <c>U</c> / <c>StringDType</c>.</param>
+        /// <returns>A fresh array of <paramref name="a"/>'s dtype and the broadcast shape; a chararray <paramref name="a"/>
+        ///     gives a chararray view of it (NumPy's <c>chararray.__array_wrap__</c>).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError">No loop for the operand classes (a <c>bytes</c> set beside <c>U</c>, a number:
+        ///     NumPy's no-loop text, naming <c>_strip_chars</c> or <c>_strip_whitespace</c>); two different
+        ///     <c>StringDType</c> NA objects.</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> whose
+        ///     result is not text a chararray holds (<c>Can only create a chararray from string data.</c>, a
+        ///     <c>StringDType</c> set).</exception>
+        /// <remarks>NumPy's trailing scan also strips NUL characters, its leading scan does not (<c>strip(' \0ab')</c> is
+        ///     <c>'\0ab'</c>).</remarks>
+        [NDScoped]
+        public NDArray strip(object a, object chars = null)
+            => np.strings.strip(TextOperand(a, nameof(a)), OptionalOperand(chars));
+
+        /// <summary>
+        ///     NumPy's <c>np.char.lstrip(a, chars=None)</c>, which IS <see cref="np.strings.lstrip"/>: each element without
+        ///     its LEADING characters found in <paramref name="chars"/> (whitespace for null).
+        /// </summary>
+        /// <param name="a">The strings: an <c>S</c> / <c>U</c> / <c>StringDType</c> array or a text array_like.</param>
+        /// <param name="chars">The characters to remove, as a set, broadcast (see <see cref="strip"/>); null strips
+        ///     whitespace.</param>
+        /// <returns>A fresh array of <paramref name="a"/>'s dtype (a chararray view of it for a chararray
+        ///     <paramref name="a"/>).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> whose
+        ///     result is not text a chararray holds.</exception>
+        [NDScoped]
+        public NDArray lstrip(object a, object chars = null)
+            => np.strings.lstrip(TextOperand(a, nameof(a)), OptionalOperand(chars));
+
+        /// <summary>
+        ///     NumPy's <c>np.char.rstrip(a, chars=None)</c>, which IS <see cref="np.strings.rstrip"/>: each element without
+        ///     its TRAILING characters found in <paramref name="chars"/> (whitespace for null).
+        /// </summary>
+        /// <param name="a">The strings: an <c>S</c> / <c>U</c> / <c>StringDType</c> array or a text array_like.</param>
+        /// <param name="chars">The characters to remove, as a set, broadcast (see <see cref="strip"/>); null strips
+        ///     whitespace.</param>
+        /// <returns>A fresh array of <paramref name="a"/>'s dtype (a chararray view of it for a chararray
+        ///     <paramref name="a"/>).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError">No loop for the operand classes; two different <c>StringDType</c> NA objects.</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray <paramref name="a"/> whose
+        ///     result is not text a chararray holds.</exception>
+        [NDScoped]
+        public NDArray rstrip(object a, object chars = null)
+            => np.strings.rstrip(TextOperand(a, nameof(a)), OptionalOperand(chars));
+
+        /// <summary>
+        ///     NumPy's <c>np.char.replace(a, old, new, count=-1)</c>, which IS <see cref="np.strings.replace"/>: each element
+        ///     with its occurrences of <paramref name="old"/> replaced by <paramref name="new"/>, left to right, at most
+        ///     <paramref name="count"/> of them (a negative count replaces all; an empty <paramref name="old"/> inserts
+        ///     <paramref name="new"/> between every character and at both ends).
+        /// </summary>
+        /// <param name="a">The strings: an <c>S</c> / <c>U</c> / <c>StringDType</c> array or a text array_like.</param>
+        /// <param name="old">The searched strings, broadcast. A C# <c>string</c> (NumPy's Python <c>str</c>, which has no
+        ///     dtype) or <c>byte[]</c> is cast to <paramref name="a"/>'s dtype first, truncated to its width; an array keeps
+        ///     its own dtype.</param>
+        /// <param name="new">The replacements, broadcast (the rule of <paramref name="old"/>).</param>
+        /// <param name="count">The most replacements per element: an integer array or literal, broadcast; null is NumPy's
+        ///     default -1 (NumPy's explicit <c>None</c> raises <c>unsupported type object for operand 'count'</c>, which no
+        ///     C# argument can express).</param>
+        /// <returns>A fresh array: for <c>S</c> / <c>U</c> <paramref name="a"/>'s class at the widest result width, laid out
+        ///     like <paramref name="a"/>; <c>StringDType</c> for <c>StringDType</c>. A chararray <paramref name="a"/> gives a
+        ///     chararray view of it.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, <paramref name="old"/> or <paramref name="new"/>
+        ///     is null.</exception>
+        /// <exception cref="TypeError"><paramref name="count"/> is not an integer array (<c>unsupported type float64 for
+        ///     operand 'count'</c>); no common dtype or no loop for the classes; a uint64 count (NumPy's float descriptor);
+        ///     two different <c>StringDType</c> NA objects.</exception>
+        /// <exception cref="IncorrectShapeException">A statement's operands do not broadcast.</exception>
+        /// <exception cref="ValueError">An empty broadcast; a number cast to text; a <c>StringDType</c> NA its rule refuses;
+        ///     a chararray <paramref name="a"/> whose result is not text a chararray holds.</exception>
+        /// <exception cref="UnicodeEncodeError">A non-ASCII <paramref name="old"/> / <paramref name="new"/> cast to
+        ///     <c>S</c>.</exception>
+        [NDScoped]
+        public NDArray replace(object a, object old, object @new, object count = null)
+            => np.strings.replace(TextOperand(a, nameof(a)), TextOperand(old, nameof(old)), TextOperand(@new, nameof(@new)),
+                                  OptionalOperand(count));
 
         // =============================================================================================================
         // Shared pieces

@@ -1090,6 +1090,8 @@ namespace NumSharp.Tests.Strings
         ///       0-d index (VF01, a writeable 0-d array where NumPy returns a NumPy scalar), <c>np.broadcast_arrays</c> of a
         ///       read-only broadcast chararray (VF17, a writeable result), and a function of an element stand-in (read-only,
         ///       where NumPy's <c>str</c> becomes a fresh writeable array).</description></item>
+        ///       <item><description>section strcharmeth: <c>np.char.strip</c> / <c>lstrip</c> / <c>rstrip</c> of a 0-d text
+        ///       (VF01: a writeable 0-d array where NumPy's ufunc returns an <c>np.str_</c> / <c>np.bytes_</c>).</description></item>
         ///     </list>
         ///     <c>np.argwhere</c> / <c>np.flatnonzero</c> (reached by an empty string array, whose index searches run the
         ///     numeric path on a bool stand-in) and <c>np.unravel_index</c> (section M's bool index array) were excused here
@@ -1131,6 +1133,13 @@ namespace NumSharp.Tests.Strings
                 // np.broadcast_arrays forces its results writeable, a read-only (broadcast) operand's too (VF17).
                 if (chfn.GetString() == "broadcast_arrays" && c.Layout.Contains(":bc"))
                     return "VF17: np.broadcast_arrays makes a read-only broadcast operand's result writeable";
+                // Section strcharmeth: numpy.char's strips of a 0-d text (a plain 0-d array, a Python str / bytes) end in
+                // the ufunc's PyArray_Return, a NumPy scalar (np.str_ / np.bytes_); NumSharp returns a writeable 0-d
+                // array — VF01's class. The value is still compared.
+                if (chfn.GetString() is "char.strip" or "char.lstrip" or "char.rstrip" && c.Error is null
+                    && c.Expected.ValueKind == JsonValueKind.Object && c.Expected.TryGetProperty("kind", out var stripKind)
+                    && stripKind.GetString() == "element")
+                    return "VF01: numpy.char's strip of a 0-d text is a writeable 0-d array where NumPy returns a NumPy scalar";
             }
             // Section strcharfn: a function of an element STAND-IN (NumPy's Python str). NumPy converts the str into a fresh,
             // writeable array; NumSharp's stand-in is read-only, so a view of it (np.atleast_2d(c[0])) is read-only too.
@@ -1224,21 +1233,33 @@ namespace NumSharp.Tests.Strings
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> ExcusedRefusals = new();
 
         /// <summary>
-        ///     The one refusal divergence: <c>chararray + StringDType</c> (or the reverse) where NumPy computes — a 2-D or
-        ///     longer chararray that NumPy's trivial loop does not copy. NumPy's <c>chararray.__add__</c> then returns a PLAIN
-        ///     StringDType array, which the <see cref="NDCharArray"/> result of NumSharp's <c>+</c> operator cannot hold:
-        ///     NumSharp raises <see cref="NotSupportedException"/> naming <c>np.add</c> (documented on the operator).
+        ///     The one refusal divergence, in two places: a <see cref="NDCharArray"/>-typed answer where NumPy returns a
+        ///     PLAIN StringDType array — a StringDType argument beside a chararray NumPy's trivial loop does not copy (2-d and
+        ///     up here; a 1-d one past <c>np.getbufsize()</c> elements):
+        ///     <list type="bullet">
+        ///       <item><description><c>chararray + StringDType</c> (or the reverse): NumPy's <c>chararray.__add__</c>
+        ///       returns the plain array; NumSharp's <c>+</c> raises <see cref="NotSupportedException"/> naming
+        ///       <c>np.add</c> (documented on the operator).</description></item>
+        ///       <item><description>section strcharmeth's rule-2 members <c>strip</c> / <c>lstrip</c> / <c>rstrip</c> /
+        ///       <c>replace</c> with a StringDType set / old / new: NumPy's member returns the function's plain array;
+        ///       NumSharp's member raises <see cref="NotSupportedException"/> naming the <c>numpy.char</c> function, which
+        ///       returns it (documented on the members).</description></item>
+        ///     </list>
         /// </summary>
         /// <param name="c">The case.</param>
         /// <returns>The reason, or null when NumSharp must answer.</returns>
         private static string RefusalExcuse(StringOracleCorpus.Case c)
         {
-            if (c.Op != "cha_op" || c.Params is null || c.Params["sym"].GetString() != "+")
-                return null;
-            if (c.Expected.ValueKind != JsonValueKind.Object || !c.Expected.TryGetProperty("class", out var cls)
+            if (c.Params is null || c.Expected.ValueKind != JsonValueKind.Object || !c.Expected.TryGetProperty("class", out var cls)
                 || cls.GetString() != "ndarray")
                 return null;
-            return "chararray + StringDType: NumPy's plain StringDType result does not fit the operator's NDCharArray type";
+            if (c.Op == "cha_op" && c.Params["sym"].GetString() == "+")
+                return "chararray + StringDType: NumPy's plain StringDType result does not fit the operator's NDCharArray type";
+            if (c.Op == "cha_call" && c.Params.TryGetValue("name", out var name)
+                && name.GetString() is "strip" or "lstrip" or "rstrip" or "replace")
+                return $"chararray.{name.GetString()} with a StringDType argument: NumPy's plain StringDType result does not fit "
+                       + "the member's NDCharArray type";
+            return null;
         }
 
         /// <summary>

@@ -72,6 +72,20 @@ namespace NumSharp
         internal bool WasPythonStr { get; private set; }
 
         /// <summary>
+        ///     True for the 0-d <c>S</c> array that <c>numpy.char</c>'s text rule makes of a C# <c>byte[]</c>
+        ///     (<see cref="CharModule.TextOperand"/>): a Python <c>bytes</c> object in that module's boundary map.
+        /// </summary>
+        /// <remarks>
+        ///     A Python <c>bytes</c> object has no <c>dtype</c> attribute, and <c>np.strings.replace</c> reads that attribute
+        ///     (<c>getattr(old, 'dtype', None)</c>): an <c>old</c> / <c>new</c> without one is cast to the text's dtype
+        ///     first, so <c>np.char.array(['ab']).replace(b'a', 'b')</c> replaces in <c>U</c> text where an <c>S</c> ARRAY
+        ///     argument meets NumPy's no-loop TypeError. The other <c>np.strings</c> functions cast their text arguments
+        ///     whatever they are and do not read the mark. Only <see cref="PythonBytesLiteral"/> sets it, and like the other
+        ///     marks it belongs to this one object.
+        /// </remarks>
+        internal bool WasPythonBytes { get; private set; }
+
+        /// <summary>
         ///     True for the 0-d bool array that a C# <c>bool</c> becomes through the implicit conversion operator: a Python
         ///     <c>bool</c> in the boundary map.
         /// </summary>
@@ -195,6 +209,20 @@ namespace NumSharp
             var nd = Backends.Strings.NDStringArrays.FromScalar(value, null);
             nd.WasPythonStr = true;
             nd.PythonStrText = value;
+            return nd;
+        }
+
+        /// <summary>
+        ///     Creates the 0-d <c>S</c> array of a Python <c>bytes</c> value (NumPy's <c>np.asanyarray(b'ab')</c>:
+        ///     <c>|S2</c>, and <c>|S1</c> for <c>b''</c>), marked <see cref="WasPythonBytes"/>. <c>numpy.char</c>'s text
+        ///     rule calls it for a C# <c>byte[]</c>.
+        /// </summary>
+        /// <param name="value">The bytes (not null).</param>
+        /// <returns>A new 0-d <c>S</c> array holding <paramref name="value"/>.</returns>
+        internal static NDArray PythonBytesLiteral(byte[] value)
+        {
+            var nd = Scalar(value);
+            nd.WasPythonBytes = true;
             return nd;
         }
 

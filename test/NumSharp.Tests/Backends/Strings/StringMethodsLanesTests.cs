@@ -328,6 +328,123 @@ namespace NumSharp.Tests.Backends.Strings
             }
         }
 
+        /// <summary>The set units the wide chars strip tests are built from: letters, a space, a bar, a non-ASCII space, NUL.</summary>
+        private static readonly uint[] WideSetPool = { 'a', ' ', '|', 0x3000, 0 };
+
+        /// <summary>
+        ///     A <c>U</c> element of <paramref name="units"/> units for the wide chars strip: a text of a random length whose
+        ///     first and last runs (each of a random length, the whole text included) are units of <paramref name="set"/> and
+        ///     whose middle comes from the pool, then trailing NULs. A set holding NUL makes NULs inside the stripped runs.
+        /// </summary>
+        /// <param name="rng">The generator.</param>
+        /// <param name="p">The element.</param>
+        /// <param name="units">Its width in units.</param>
+        /// <param name="set">The set units.</param>
+        private static void FillWideStrip(System.Random rng, uint* p, int units, uint[] set)
+        {
+            int len = rng.Next(units + 1);
+            int lead = rng.Next(len + 1);
+            int trail = rng.Next(len - lead + 1);
+            for (int i = 0; i < units; i++)
+                p[i] = i >= len ? 0u
+                       : i < lead || i >= len - trail ? set[rng.Next(set.Length)]
+                       : UPool[rng.Next(UPool.Length)];
+        }
+
+        /// <summary>A strip set of 1 to 5 units from <see cref="WideSetPool"/>, in an element with 0 to 2 trailing NUL units.</summary>
+        /// <param name="rng">The generator.</param>
+        /// <param name="set">Receives the set units.</param>
+        /// <returns>The set element's bytes.</returns>
+        private static byte[] WideSet(System.Random rng, out uint[] set)
+        {
+            set = new uint[1 + rng.Next(5)];
+            var bytes = new byte[(set.Length + rng.Next(3)) * 4];
+            for (int i = 0; i < set.Length; i++)
+            {
+                set[i] = WideSetPool[rng.Next(WideSetPool.Length)];
+                BitConverter.TryWriteBytes(bytes.AsSpan(i * 4), set[i]);
+            }
+            return bytes;
+        }
+
+        /// <summary>
+        ///     The wide chars strip (<see cref="NDTextElements.StripCharsWide{TUnit}"/>: a <c>U</c> element of 17 to 64 units,
+        ///     past the select helpers' 64 bytes) writes the scalar body's output element byte for byte, zero fill included,
+        ///     for every width and strip type: stripped runs of every length from each end (inside one chunk, across chunk
+        ///     boundaries, the whole text), a set holding NUL (NULs inside the stripped runs and among the trailing NULs the
+        ///     text's length excludes), a set element with trailing NULs.
+        /// </summary>
+        [TestMethod]
+        public void StripCharsWide_EqualsScalar_EveryWideWidth()
+        {
+            RequireLanes();
+            var rng = new System.Random(3031);
+            for (int units = 17; units <= NDTextElements.LaneUnits; units++)
+            {
+                int w = units * 4;
+                var src = new byte[w];
+                for (int trial = 0; trial < 60; trial++)
+                {
+                    var chars = WideSet(rng, out var set);
+                    fixed (byte* pf = src)
+                    fixed (byte* cf = chars)
+                    {
+                        FillWideStrip(rng, (uint*)pf, units, set);
+                        // Fixed locals cannot be captured by a lambda; copies of the pointers can.
+                        byte* p = pf, cc = cf;
+                        int cw = chars.Length;
+                        for (int t = 0; t < 3; t++)
+                        {
+                            int type = t;
+                            Compare(w, d => NDTextElements.StripCharsScalar<uint>(p, w, cc, cw, d, type),
+                                    d => NDTextElements.StripCharsWide<uint>(p, w, cc, cw, d, type),
+                                    $"wide strip chars {Hex(chars)} type {type} w={w} src={Hex(src)}");
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The wide chars strip over elements that end at (or start right after) an inaccessible page, for every wide
+        ///     width: its chunk reads stay inside <c>[src, src + width)</c> (an out-of-element read ends the test host), and
+        ///     its output equals the scalar body's.
+        /// </summary>
+        [TestMethod]
+        public void StripCharsWide_StaysInsideItsElements()
+        {
+            RequireLanes();
+            if (!FencedMemory.IsSupported)
+                Assert.Inconclusive("FencedMemory needs Windows (reserved pages).");
+            var rng = new System.Random(7031);
+            using var inFence = new FencedMemory(pages: 1);
+            using var setFence = new FencedMemory(pages: 1);
+            using var outFence = new FencedMemory(pages: 1);
+            var scratch = new byte[NDTextElements.LaneUnits * 4];
+            for (int units = 17; units <= NDTextElements.LaneUnits; units++)
+            {
+                int w = units * 4;
+                foreach (bool atEnd in new[] { true, false })
+                {
+                    for (int trial = 0; trial < 8; trial++)
+                    {
+                        var chars = WideSet(rng, out var set);
+                        byte* p = inFence.Place(w, atEnd);
+                        FillWideStrip(rng, (uint*)p, units, set);
+                        byte* s = setFence.Place(chars.Length, atEnd);
+                        chars.AsSpan().CopyTo(new Span<byte>(s, chars.Length));
+                        int sw = chars.Length;
+                        byte* d = outFence.Place(w, atEnd);
+                        for (int t = 0; t < 3; t++)
+                        {
+                            NDTextElements.StripCharsWide<uint>(p, w, s, sw, d, t);
+                            AssertSame(w, d, scratch, x => NDTextElements.StripCharsScalar<uint>(p, w, s, sw, x, t), "wide strip chars");
+                        }
+                    }
+                }
+            }
+        }
+
         /// <summary>
         ///     center / ljust / rjust and zfill: the lane bodies write the scalar bodies' output element, for every input width
         ///     up to 64 bytes and output widths from the input's up to 64 bytes (an output wider than the result included).

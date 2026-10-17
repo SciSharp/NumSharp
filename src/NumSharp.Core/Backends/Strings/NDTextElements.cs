@@ -674,7 +674,9 @@ namespace NumSharp.Backends.Strings
         ///     nonzero non-space unit), while the leading loop stops at one: <c>strip(' \0ab')</c> is <c>'\0ab'</c> and
         ///     <c>strip('ab\0 ')</c> is <c>'ab'</c> (probed 2.4.2). Whitespace is the element class's
         ///     (<see cref="IsSpace{TUnit}"/>). Elements of at most 64 bytes on AVX2 hosts take the lane masks and one gather
-        ///     (<see cref="StripWhitespaceLanes{TUnit}"/>), the rest the unit loops (<see cref="StripWhitespaceScalar{TUnit}"/>).
+        ///     (<see cref="StripWhitespaceLanes{TUnit}"/>), the rest the unit loops (<see cref="StripWhitespaceScalar{TUnit}"/>):
+        ///     a wider element's loops stop at the first kept unit from each end, where whole-element masks would test every
+        ///     unit against NumPy's 29 whitespace code points (measured 1.5x slower on 1K <c>U27</c> elements).
         /// </remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void StripWhitespace<TUnit>(byte* src, int width, byte* dst, int type) where TUnit : unmanaged
@@ -761,16 +763,26 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The output element.</param>
         /// <param name="type">The strip type.</param>
         /// <remarks>Elements of at most 64 bytes with a set of at most <see cref="StripCharsLaneSet"/> units take the lane
-        ///     masks (<see cref="StripCharsLanes{TUnit}"/>: one equality mask per set unit, OR-ed), the rest the unit loops
-        ///     (<see cref="StripCharsScalar{TUnit}"/>).</remarks>
+        ///     masks (<see cref="StripCharsLanes{TUnit}"/>: one equality mask per set unit, OR-ed); wider elements the masks
+        ///     still describe (a <c>U</c> element of 17 to 64 units) scan 32-byte chunks from each end
+        ///     (<see cref="StripCharsWide{TUnit}"/>); the rest the unit loops (<see cref="StripCharsScalar{TUnit}"/>).</remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static void StripChars<TUnit>(byte* src, int width, byte* chars, int charsWidth, byte* dst, int type)
             where TUnit : unmanaged, IEquatable<TUnit>
         {
-            if (SelectsFit(width) && Units<TUnit>(chars, charsWidth) <= StripCharsLaneSet)
-                StripCharsLanes<TUnit>(src, width, chars, charsWidth, dst, type);
-            else
-                StripCharsScalar<TUnit>(src, width, chars, charsWidth, dst, type);
+            if (MasksFit<TUnit>(width))
+            {
+                int setUnits = Units<TUnit>(chars, charsWidth);
+                if (setUnits <= StripCharsLaneSet)
+                {
+                    if (SelectsFit(width))
+                        StripCharsLanes<TUnit>(src, width, chars, charsWidth, dst, type);
+                    else
+                        StripCharsWideSet<TUnit>(src, width, chars, setUnits, dst, type);
+                    return;
+                }
+            }
+            StripCharsScalar<TUnit>(src, width, chars, charsWidth, dst, type);
         }
 
         /// <summary>The largest strip set (units) <see cref="StripChars{TUnit}"/> tests lane by lane: each set unit costs one
@@ -812,6 +824,127 @@ namespace NumSharp.Backends.Strings
             }
             LoadElement(src, width, out var lo, out var hi);
             CopyLanes<TUnit>(lo, hi, width, start, stop - start, dst, width);
+        }
+
+        /// <summary>
+        ///     <see cref="StripChars{TUnit}"/> for an element wider than the select helpers hold (more than 64 bytes) that the
+        ///     lane masks still describe (a <c>U</c> element of 17 to 64 units), with a set of at most
+        ///     <see cref="StripCharsLaneSet"/> units: the length by the lane masks, then 32-byte chunks tested against every
+        ///     set unit at once, from the front until a chunk holds a unit outside the set and from the back the same way,
+        ///     then one copy and the zero fill.
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes (<see cref="MasksFit{TUnit}"/> holds, above 64).</param>
+        /// <param name="chars">The strip-set element.</param>
+        /// <param name="charsWidth">Its width in bytes.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="type">The strip type.</param>
+        /// <remarks>
+        ///     Stripped runs are short in text, so one chunk from each end usually decides: the cost is two chunks per set
+        ///     unit, where whole-element masks cost every chunk per set unit and the scalar body a span search per tested
+        ///     unit (1K <c>U27</c> elements with a three-unit set: 32.7 us scalar, 20.7 us whole masks; NumPy 39 us). A
+        ///     chunk past the element's end is read as the element's last 32 bytes, so no byte outside
+        ///     <c>[src, src + width)</c> is read. The units past the text are its trailing NULs, which a set holding an
+        ///     embedded NUL would match: the masks are cut at the text's length.
+        /// </remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void StripCharsWide<TUnit>(byte* src, int width, byte* chars, int charsWidth, byte* dst, int type)
+            where TUnit : unmanaged
+            => StripCharsWideSet<TUnit>(src, width, chars, Units<TUnit>(chars, charsWidth), dst, type);
+
+        /// <summary>
+        ///     <see cref="StripCharsWide{TUnit}"/> with the set's length already known (the dispatcher measured it to choose
+        ///     this body, so it is read once per element).
+        /// </summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="src">The input element.</param>
+        /// <param name="width">The input (and output) width in bytes (<see cref="MasksFit{TUnit}"/> holds, above 64).</param>
+        /// <param name="chars">The strip-set element.</param>
+        /// <param name="setUnits">The set's length in units (its trailing NULs excluded), at most
+        ///     <see cref="StripCharsLaneSet"/>.</param>
+        /// <param name="dst">The output element.</param>
+        /// <param name="type">The strip type.</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void StripCharsWideSet<TUnit>(byte* src, int width, byte* chars, int setUnits, byte* dst, int type)
+            where TUnit : unmanaged
+        {
+            int len1 = Units<TUnit>(src, width);
+            int len2 = len1 == 0 ? 0 : setUnits;
+            int start = 0, stop = len1;
+            if (len2 != 0)
+            {
+                int lanes = 32 / sizeof(TUnit);
+                int units = width / sizeof(TUnit);
+                if (type != RightStrip)
+                {
+                    start = len1;
+                    for (int at = 0; at < len1; at += lanes)
+                    {
+                        // The chunk [from, from + lanes) lies inside the element; past its end it is the last 32 bytes.
+                        int from = Math.Min(at, units - lanes);
+                        ulong inSet = (ulong)ChunkSetLanes<TUnit>(src + from * sizeof(TUnit), chars, len2) << from;
+                        ulong kept = ~inSet & RangeLanes(at, Math.Min(at + lanes, len1) - 1);
+                        if (kept != 0)
+                        {
+                            start = BitOperations.TrailingZeroCount(kept);
+                            break;
+                        }
+                    }
+                }
+                if (type != LeftStrip)
+                {
+                    stop = start;
+                    for (int end = len1; end > start; end -= lanes)
+                    {
+                        // The chunk ending at `end` (the element's first 32 bytes when fewer units are left).
+                        int from = Math.Max(end - lanes, 0);
+                        ulong inSet = (ulong)ChunkSetLanes<TUnit>(src + from * sizeof(TUnit), chars, len2) << from;
+                        ulong kept = ~inSet & RangeLanes(Math.Max(from, start), end - 1);
+                        if (kept != 0)
+                        {
+                            stop = 64 - BitOperations.LeadingZeroCount(kept);
+                            break;
+                        }
+                    }
+                }
+            }
+            ClearWide(dst, width);
+            int bytes = (stop - start) * sizeof(TUnit);
+            if (bytes > 0)
+                Buffer.MemoryCopy(src + start * sizeof(TUnit), dst, bytes, bytes);
+        }
+
+        /// <summary>
+        ///     Zero-fills an output element of 32 bytes or more with 32-byte stores: whole chunks, then one chunk ending at
+        ///     the element's end (overlapping the last whole one). With a constant width (the IL shell's) the stores are
+        ///     straight-line, where a span clear of a variable tail branches on its length.
+        /// </summary>
+        /// <param name="dst">The output element.</param>
+        /// <param name="width">Its width in bytes (at least 32).</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ClearWide(byte* dst, int width)
+        {
+            for (int at = 0; at + 32 <= width; at += 32)
+                Vector256<byte>.Zero.Store(dst + at);
+            if ((width & 31) != 0)
+                Vector256<byte>.Zero.Store(dst + width - 32);
+        }
+
+        /// <summary>The units of one 32-byte chunk that occur in a strip set: the OR of one equality mask per set unit.</summary>
+        /// <typeparam name="TUnit"><see cref="byte"/> for <c>S</c>, <see cref="uint"/> for <c>U</c>.</typeparam>
+        /// <param name="chunk">The chunk's first byte (32 readable bytes).</param>
+        /// <param name="chars">The strip-set element.</param>
+        /// <param name="setUnits">The set's length in units (at least one).</param>
+        /// <returns>One bit per unit of the chunk (8 for <c>U</c>, 32 for <c>S</c>).</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static uint ChunkSetLanes<TUnit>(byte* chunk, byte* chars, int setUnits) where TUnit : unmanaged
+        {
+            var v = Vector256.Load(chunk);
+            uint m = 0;
+            for (int j = 0; j < setUnits; j++)
+                m |= Predicate<TUnit>(v, MaskEqual, UnitAt<TUnit>(chars, j));
+            return m;
         }
 
         /// <summary><see cref="StripChars{TUnit}"/> by NumPy's unit loops (any width or set; the hosts without AVX2).</summary>

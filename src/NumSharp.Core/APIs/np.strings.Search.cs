@@ -138,11 +138,14 @@ namespace NumSharp
             /// <exception cref="OverflowException">A start / end literal past int64 (<c>Python int too large to convert to C
             ///     long</c>).</exception>
             /// <exception cref="IncorrectShapeException">The four operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
+            ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
+            ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray find(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.Wrapped((a, sub, start, end), static s => find(s.a, s.sub, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
+                                                            static s => find(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("find", TextMethodOp.Find, a, sub, start, end);
@@ -161,11 +164,14 @@ namespace NumSharp
             /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
+            ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
+            ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray rfind(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.Wrapped((a, sub, start, end), static s => rfind(s.a, s.sub, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
+                                                            static s => rfind(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("rfind", TextMethodOp.RFind, a, sub, start, end);
@@ -185,11 +191,14 @@ namespace NumSharp
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An element without a match (<c>substring not found</c>); a <c>StringDType</c> NA
-            ///     whose NA object is not a string.</exception>
+            ///     whose NA object is not a string; a chararray operand beside a
+            ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
+            ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray index(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.Wrapped((a, sub, start, end), static s => index(s.a, s.sub, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
+                                                            static s => index(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("index", TextMethodOp.Find, a, sub, start, end);
@@ -209,11 +218,14 @@ namespace NumSharp
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">An element without a match; a <c>StringDType</c> NA whose NA object is not a
-            ///     string.</exception>
+            ///     string; a chararray operand beside a
+            ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
+            ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray rindex(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.Wrapped((a, sub, start, end), static s => rindex(s.a, s.sub, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
+                                                            static s => rindex(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("rindex", TextMethodOp.RFind, a, sub, start, end);
@@ -233,11 +245,14 @@ namespace NumSharp
             /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is not a string; a chararray operand
+            ///     beside a <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d
+            ///     with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray count(NDArray a, NDArray sub, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, sub))
-                    return NDCharArrayBoundary.Wrapped((a, sub, start, end), static s => count(s.a, s.sub, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, sub, start, end),
+                                                            static s => count(s.a, s.sub, s.start, s.end), a, sub, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(sub, nameof(sub));
                 return NDStringMethods.FindLike("count", TextMethodOp.Count, a, sub, start, end);
@@ -257,11 +272,14 @@ namespace NumSharp
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
             /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like (a
-            ///     NaN-like NA is False).</exception>
+            ///     NaN-like NA is False); a chararray operand beside a
+            ///     <c>StringDType</c> one that NumPy's trivial loop copies into <c>StringDType()</c> (0-d, or 1-d with at most
+            ///     <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string data.</c>).</exception>
             public static NDArray startswith(NDArray a, NDArray prefix, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, prefix))
-                    return NDCharArrayBoundary.Wrapped((a, prefix, start, end), static s => startswith(s.a, s.prefix, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, prefix, start, end),
+                                                            static s => startswith(s.a, s.prefix, s.start, s.end), a, prefix, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(prefix, nameof(prefix));
                 return NDStringMethods.FindLike("startswith", TextMethodOp.StartsWith, a, prefix, start, end);
@@ -280,11 +298,15 @@ namespace NumSharp
             /// <exception cref="ArgumentException">A start / end that cannot reach int64 by a same_kind cast.</exception>
             /// <exception cref="OverflowException">A start / end literal past int64.</exception>
             /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like.</exception>
+            /// <exception cref="ValueError">A <c>StringDType</c> NA whose NA object is neither a string nor NaN-like; a
+            ///     chararray operand beside a <c>StringDType</c> one that NumPy's trivial loop copies into
+            ///     <c>StringDType()</c> (0-d, or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a
+            ///     chararray from string data.</c>).</exception>
             public static NDArray endswith(NDArray a, NDArray suffix, NDArray start = null, NDArray end = null)
             {
                 if (NDCharArrayBoundary.Sees(a, suffix))
-                    return NDCharArrayBoundary.Wrapped((a, suffix, start, end), static s => endswith(s.a, s.suffix, s.start, s.end));
+                    return NDCharArrayBoundary.WrappedUfunc((a, suffix, start, end),
+                                                            static s => endswith(s.a, s.suffix, s.start, s.end), a, suffix, null);
                 RequireOperand(a, nameof(a));
                 RequireOperand(suffix, nameof(suffix));
                 return NDStringMethods.FindLike("endswith", TextMethodOp.EndsWith, a, suffix, start, end);

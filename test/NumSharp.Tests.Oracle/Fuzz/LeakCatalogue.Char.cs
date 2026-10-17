@@ -607,6 +607,86 @@ namespace NumSharp.Tests.Fuzz
             AddCharArraySearch(l, "NDCharArray.rindex", (c, sub, start, end) => c.rindex(sub, start, end));
             AddCharArraySearch(l, "NDCharArray.startswith", (c, prefix, start, end) => c.startswith(prefix, start, end));
             AddCharArraySearch(l, "NDCharArray.endswith", (c, suffix, start, end) => c.endswith(suffix, start, end));
+            // The strips and replace (numpy.strings' own) and their chararray members (rule 2: the function's chararray view;
+            // a plain StringDType result is refused by the member, which releases it).
+            AddCharStrip(l, "np.char.strip", (a, chars) => np.@char.strip(a, chars));
+            AddCharStrip(l, "np.char.lstrip", (a, chars) => np.@char.lstrip(a, chars));
+            AddCharStrip(l, "np.char.rstrip", (a, chars) => np.@char.rstrip(a, chars));
+            AddCharArrayStrip(l, "NDCharArray.strip", (c, chars) => c.strip(chars));
+            AddCharArrayStrip(l, "NDCharArray.lstrip", (c, chars) => c.lstrip(chars));
+            AddCharArrayStrip(l, "NDCharArray.rstrip", (c, chars) => c.rstrip(chars));
+            E(l, "np.char.replace", "U / S / StringDType, a chararray input (a view) and a chararray old beside a plain text (plain), old and count arrays, a Python bytes old (the cast); a StringDType old beside a short (ValueError) and a 2-d chararray (a plain StringDType result); a float count (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "a b", "bab" });
+                using var s = np.array(new object[] { new byte[] { 97, 98 } });
+                using var t = np.array(new[] { "xy", "yx" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "ab ", "b a" });
+                using var flat = np.@char.array(new[] { "ab", "ba", "a ", " b" });
+                using var c2 = flat.reshape(2, 2);
+                using var olds = np.array(new[] { "a", "b" });
+                using var counts = np.array(new long[] { 1, -1 });
+                using var told = np.array(new[] { "a" }, np.dtypes.StringDType());
+                using var cold = np.@char.array(new[] { "a" });
+                using var bytes = np.@char.replace(s, new byte[] { 97 }, new byte[] { 65, 65 });
+                using var vstring = np.@char.replace(t, "x", "__", 1);
+                using var chars = np.@char.replace(c, " ", "_");
+                using var charOld = np.@char.replace(u, cold, "x");
+                using var byOlds = np.@char.replace(u, olds, "Z", counts);
+                using var bytesOld = np.@char.replace(u, new byte[] { 98 }, "q");
+                using var plainT = np.@char.replace(c2, told, "q");
+                try
+                {
+                    np.@char.replace(c, told, "q");
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    np.@char.replace(u, "a", "b", 1.5);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.replace(u, " ", "");
+            });
+            E(l, "NDCharArray.replace", "U and S receivers, a count, old and count arrays, an element stand-in and Python bytes as old (the cast); a StringDType old beside a short (ValueError) and a 2-d receiver (NotSupportedException, the plain result released); a float count (TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "a b", "bab" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 98 }, new byte[] { 98, 98 } });
+                using var flat = np.@char.array(new[] { "ab", "ba", "a ", " b" });
+                using var c2 = (NDCharArray)flat.reshape(2, 2);
+                using var olds = np.array(new[] { "a", "b" });
+                using var counts = np.array(new long[] { 1, -1 });
+                using var told = np.array(new[] { "a" }, np.dtypes.StringDType());
+                using var element = c[1];
+                using var bytes = s.replace(new byte[] { 98 }, new byte[] { 65 }, 1);
+                using var byOlds = c.replace(olds, "Z", counts);
+                using var byElement = c.replace(element, "Q");
+                using var bytesOld = c.replace(new byte[] { 98 }, "q");
+                try
+                {
+                    c.replace(told, "q");
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    c2.replace(told, "q");
+                }
+                catch (NotSupportedException)
+                {
+                }
+                try
+                {
+                    c.replace("a", "b", 1.5);
+                }
+                catch (TypeError)
+                {
+                }
+                return c.replace(" ", "");
+            });
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
             // Python scalar, an object list holding None), the element errors (whose piece store and readers must be
@@ -771,22 +851,44 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="pad">The function: text, width, fill (null for the default).</param>
         private static void AddCharPad(List<LeakCase> l, string api, Func<object, object, object, NDArray> pad)
         {
-            E(l, api, "U / S / StringDType, a chararray input, a width array and a fill; a long fill and a float width (TypeError)", f =>
+            E(l, api, "U / S / StringDType, a chararray input, a width array and a fill, a StringDType fill beside a 2-d chararray and a chararray fill beside U; a long fill and a float width (TypeError), the trivial-loop copy of a short chararray (ValueError)", f =>
             {
                 using var u = np.array(new[] { "ab", "cde" });
                 using var s = np.array(new object[] { new byte[] { 97, 98 } });
                 using var t = np.array(new[] { "xy", "z" }, np.dtypes.StringDType());
                 using var c = np.@char.array(new[] { "p", "qr" });
                 using var widths = np.array(new long[] { 4, 6 });
+                using var flat = np.@char.array(new[] { "ab", "c", "d", "ef" });
+                using var c2 = flat.reshape(2, 2);
+                using var tfill = np.array(new[] { "*" }, np.dtypes.StringDType());
+                using var cfill = np.@char.array(new[] { "-" });
                 using var bytes = pad(s, 5, new byte[] { 42 });
                 using var vstring = pad(t, 6, "*");
                 using var chars = pad(c, 5, null);
                 using var byWidths = pad(u, widths, "-");
+                // A StringDType fill beside a 2-d chararray: NumPy's trivial loop does not copy it, a plain StringDType
+                // result; a chararray fill beside a plain U text computes plain (the marks of PlainUfunc).
+                using var plainT = pad(c2, 5, tfill);
+                using var charFill = pad(u, 6, cfill);
                 try
                 {
                     pad(u, 5, "ab");
                 }
                 catch (TypeError)
+                {
+                }
+                try
+                {
+                    pad(c, 5, tfill);
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    pad(t, 6, cfill);
+                }
+                catch (ValueError)
                 {
                 }
                 try
@@ -809,18 +911,30 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="pad">The member: receiver, width, fill (null for the default).</param>
         private static void AddCharArrayPad(List<LeakCase> l, string api, Func<NDCharArray, object, object, NDCharArray> pad)
         {
-            E(l, api, "U (a copy) and S (a view), a width array and a fill; a float width (TypeError)", f =>
+            E(l, api, "U (a copy) and S (a view), a width array and a fill, a StringDType fill beside a 2-d receiver (an S view); a float width (TypeError), a short receiver's trivial-loop copy (ValueError)", f =>
             {
                 using var c = np.@char.array(new[] { "ab", "c" });
                 using var s = np.@char.array(new object[] { new byte[] { 97 }, new byte[] { 98, 99 } });
                 using var widths = np.array(new long[] { 3, 5 });
+                using var flat = np.@char.array(new[] { "ab", "c", "d", "ef" });
+                using var c2 = (NDCharArray)flat.reshape(2, 2);
+                using var tfill = np.array(new[] { "*" }, np.dtypes.StringDType());
                 using var bytes = pad(s, 4, new byte[] { 42 });
                 using var byWidths = pad(c, widths, "-");
+                // A StringDType fill beside a 2-d receiver: the plain StringDType result through np.char.asarray (an S view).
+                using var asBytes = pad(c2, 5, tfill);
                 try
                 {
                     pad(c, 2.5, null);
                 }
                 catch (TypeError)
+                {
+                }
+                try
+                {
+                    pad(c, 5, tfill);
+                }
+                catch (ValueError)
                 {
                 }
                 return pad(c, 6, null);
@@ -839,7 +953,7 @@ namespace NumSharp.Tests.Fuzz
         /// <param name="search">The function: text, substring, start, end (null for NumPy's defaults).</param>
         private static void AddCharSearch(List<LeakCase> l, string api, Func<object, object, object, object, NDArray> search)
         {
-            E(l, api, "U / S / StringDType, a chararray input, substring and start arrays, a range; a bytes substring beside U (TypeError) and a float start (the cast error)", f =>
+            E(l, api, "U / S / StringDType, a chararray input, substring and start arrays, a range, a StringDType substring beside a 2-d chararray; a bytes substring beside U (TypeError), a float start (the cast error), a short chararray's trivial-loop copy (ValueError)", f =>
             {
                 using var u = np.array(new[] { "ab ab", "abba" });
                 using var s = np.array(new object[] { new byte[] { 97, 98 } });
@@ -847,11 +961,22 @@ namespace NumSharp.Tests.Fuzz
                 using var c = np.@char.array(new[] { "b  ", "a b" });
                 using var subs = np.array(new[] { "a", "b" });
                 using var starts = np.array(new long[] { 1, 0 });
+                using var flat = np.@char.array(new[] { "ab", "ba", "a ", " a" });
+                using var c2 = flat.reshape(2, 2);
+                using var tsub = np.array(new[] { "a" }, np.dtypes.StringDType());
                 using var bytes = search(s, new byte[] { 98 }, null, null);
                 using var vstring = search(t, "y", null, null);
                 using var chars = search(c, " ", null, null);
                 using var bySubs = search(u, subs, starts, null);
                 using var ranged = search(u, "b", 1, -1);
+                using var plain2d = search(c2, tsub, null, null);
+                try
+                {
+                    search(c, tsub, null, null);
+                }
+                catch (ValueError)
+                {
+                }
                 try
                 {
                     search(u, new byte[] { 98 }, null, null);
@@ -897,6 +1022,100 @@ namespace NumSharp.Tests.Fuzz
                 {
                 }
                 return search(c, "b", null, null);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of numpy.char's strip functions (<c>strip</c>, <c>lstrip</c>, <c>rstrip</c>, numpy.strings'
+        ///     own): the U, S and StringDType routes, whitespace and a set, a chararray input (a chararray view of the
+        ///     result), a chararray set beside a plain text (a view too), a set array, a StringDType set beside a 2-d
+        ///     chararray (a plain StringDType result), and the refusals (a short chararray's trivial-loop copy: ValueError; a
+        ///     bytes set beside U: TypeError).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The function's inventory id.</param>
+        /// <param name="strip">The function: text, set (null for whitespace).</param>
+        private static void AddCharStrip(List<LeakCase> l, string api, Func<object, object, NDArray> strip)
+        {
+            E(l, api, "U / S / StringDType, whitespace and a set, a chararray input and set, a set array, a StringDType set beside a 2-d chararray; a short chararray's trivial-loop copy (ValueError) and a bytes set beside U (TypeError)", f =>
+            {
+                using var u = np.array(new[] { " ab ", "ba " });
+                using var s = np.array(new object[] { new byte[] { 32, 97, 98 } });
+                using var t = np.array(new[] { " xy", "yz " }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "b  ", " a b" });
+                using var flat = np.@char.array(new[] { "ab", "ba", "a ", " b" });
+                using var c2 = flat.reshape(2, 2);
+                using var sets = np.array(new[] { "a ", "b" });
+                using var tset = np.array(new[] { "a" }, np.dtypes.StringDType());
+                using var cset = np.@char.array(new[] { "a" });
+                using var bytes = strip(s, null);
+                using var bytesSet = strip(s, new byte[] { 97 });
+                using var vstring = strip(t, "y");
+                using var chars = strip(c, null);
+                using var charSet = strip(u, cset);
+                using var bySets = strip(u, sets);
+                using var plainT = strip(c2, tset);
+                try
+                {
+                    strip(c, tset);
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    strip(u, new byte[] { 98 });
+                }
+                catch (TypeError)
+                {
+                }
+                return strip(u, " a");
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of chararray's strip members (rule 2: the function's chararray view): U and S receivers,
+        ///     whitespace and a set, a set array, and the refusals — a StringDType set beside a short receiver (the
+        ///     trivial-loop copy: ValueError) and beside a 2-d one (NotSupportedException: the member releases NumPy's plain
+        ///     StringDType result), a str set beside S (TypeError).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The member's inventory id.</param>
+        /// <param name="strip">The member: receiver, set (null for whitespace).</param>
+        private static void AddCharArrayStrip(List<LeakCase> l, string api, Func<NDCharArray, object, NDCharArray> strip)
+        {
+            E(l, api, "U and S receivers, whitespace and a set, a set array; a StringDType set beside a short (ValueError) and a 2-d receiver (NotSupportedException); a str set beside S (TypeError)", f =>
+            {
+                using var c = np.@char.array(new[] { " ab ", "ba " });
+                using var s = np.@char.array(new object[] { new byte[] { 32, 97 }, new byte[] { 98, 32 } });
+                using var flat = np.@char.array(new[] { "ab", "ba", "a ", " b" });
+                using var c2 = (NDCharArray)flat.reshape(2, 2);
+                using var sets = np.array(new[] { "a ", "b" });
+                using var tset = np.array(new[] { "a" }, np.dtypes.StringDType());
+                using var bytes = strip(s, new byte[] { 32 });
+                using var bySets = strip(c, sets);
+                try
+                {
+                    strip(c, tset);
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    strip(c2, tset);
+                }
+                catch (NotSupportedException)
+                {
+                }
+                try
+                {
+                    strip(s, "a");
+                }
+                catch (TypeError)
+                {
+                }
+                return strip(c, null);
             });
         }
     }

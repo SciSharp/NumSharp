@@ -467,7 +467,9 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="OverflowException">A start / end literal past int64.</exception>
         /// <exception cref="IncorrectShapeException">The four operands do not broadcast.</exception>
         /// <exception cref="ValueError"><c>index</c> / <c>rindex</c> found no match; a <c>StringDType</c> NA its rule
-        ///     refuses.</exception>
+        ///     refuses; a chararray input of the user's call that NumPy's trivial loop copies into <c>StringDType()</c> (0-d,
+        ///     or 1-d with at most <c>np.getbufsize()</c> elements: <c>Can only create a chararray from string
+        ///     data.</c>).</exception>
         internal static NDArray FindLike(string ufunc, TextMethodOp op, NDArray a, NDArray sub, NDArray start, NDArray end)
         {
             var loop = ResolvePair(a, sub);
@@ -481,6 +483,11 @@ namespace NumSharp.Backends.Strings
             {
                 s64 = LoopInt64(ufunc, 2, start, 0);
                 e64 = LoopInt64(ufunc, 3, end, Max);
+                // NumPy's trivial-loop copy runs after the input casts were validated and before the broadcast: a short
+                // chararray input of the user's call cast to StringDType() is refused (start / end come after the two text
+                // inputs, so they cannot stop it).
+                if (loop == TextLoop.VString)
+                    NDVStringMethods.TrivialLoopCopy(a, sub);
                 var dims = NDTextLoop.BroadcastDims(a, sub, s64, e64);
                 if (loop == TextLoop.VString)
                     return NDVStringMethods.FindLike(ufunc, op, a, sub, s64, e64, dims);
@@ -568,14 +575,21 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">No loop for the pair (an <c>S</c> array with a <c>str</c> set, a number, …); two
         ///     <c>StringDType</c> operands with different NA objects.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> NA its rule refuses; a chararray input of the user's call that
+        ///     NumPy's trivial loop copies into <c>StringDType()</c> (<c>Can only create a chararray from string
+        ///     data.</c>).</exception>
         internal static NDArray StripChars(string ufunc, int type, NDArray a, NDArray chars)
         {
             var loop = ResolvePair(a, chars);
             if (loop == TextLoop.None)
                 throw NoLoop(ufunc, a, chars);
             if (loop == TextLoop.VString)
+            {
                 NDVStringMethods.CheckPairNA(a, chars);
+                // NumPy's trivial-loop copy (after resolve_descriptors, before the broadcast): a short chararray input
+                // cast to StringDType() is refused by the finalize rule.
+                NDVStringMethods.TrivialLoopCopy(a, chars);
+            }
             var dims = NDTextLoop.BroadcastDims(a, chars);
             if (loop == TextLoop.VString)
                 return NDVStringMethods.StripChars(ufunc, type, a, chars, dims);

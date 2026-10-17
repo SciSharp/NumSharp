@@ -395,7 +395,8 @@ namespace NumSharp
 
         /// <summary>
         ///     <see cref="Wrapped{TState}"/> for a ufunc call: also marks the chararray INPUTS of this call, so the string
-        ///     ufunc guard can apply NumPy's trivial-loop copy to exactly these objects (<see cref="TrivialLoopCopyError"/>).
+        ///     ufunc guard can apply NumPy's trivial-loop copy to exactly these objects
+        ///     (<see cref="TrivialLoopCopyError(NDArray, DType, NDArray, DType, NDArray)"/>).
         /// </summary>
         /// <typeparam name="TState">The packed arguments.</typeparam>
         /// <param name="state">The arguments.</param>
@@ -414,19 +415,167 @@ namespace NumSharp
         ///     The first guard that reads the marks consumes them.
         /// </remarks>
         internal static NDArray WrappedUfunc<TState>(TState state, Func<TState, NDArray> call, NDArray x1, NDArray x2, NDArray @out)
+            => WrappedUfunc(state, call, x1, x2, null, @out);
+
+        /// <summary>
+        ///     <see cref="WrappedUfunc{TState}(TState, Func{TState, NDArray}, NDArray, NDArray, NDArray)"/> for a call whose
+        ///     ufunc has three TEXT inputs a chararray can sit in (<c>np.strings.replace</c>: <c>a</c>, <c>old</c>,
+        ///     <c>new</c>).
+        /// </summary>
+        /// <typeparam name="TState">The packed arguments.</typeparam>
+        /// <param name="state">The arguments.</param>
+        /// <param name="call">Calls the public function again (plain-array semantics). Pass a <c>static</c> lambda.</param>
+        /// <param name="x1">The first text input.</param>
+        /// <param name="x2">The second text input, or <c>null</c>.</param>
+        /// <param name="x3">The third text input, or <c>null</c>.</param>
+        /// <param name="out">The <c>out=</c> argument, or <c>null</c>.</param>
+        /// <returns>What <see cref="Wrapped{TState}"/> returns.</returns>
+        /// <exception cref="ValueError">The guard found a short chararray input its loop casts to <c>StringDType</c>.</exception>
+        /// <exception cref="Exception">Whatever <paramref name="call"/> throws; the depth and the marks are restored first.</exception>
+        internal static NDArray WrappedUfunc<TState>(TState state, Func<TState, NDArray> call, NDArray x1, NDArray x2, NDArray x3,
+                                                     NDArray @out)
         {
-            NDArray saved0 = t_ufuncInput0, saved1 = t_ufuncInput1;
-            t_ufuncInput0 = IsCharArray(x1) ? x1 : null;
-            t_ufuncInput1 = IsCharArray(x2) ? x2 : null;
+            var marks = MarkUfuncInputs(x1, x2, x3);
             try
             {
                 return Wrapped(state, call, @out);
             }
             finally
             {
-                t_ufuncInput0 = saved0;
-                t_ufuncInput1 = saved1;
+                marks.Restore();
             }
+        }
+
+        /// <summary>
+        ///     The rule of a call whose result NumPy never hands back as a chararray although a chararray is one of its ufunc's
+        ///     inputs: <c>np.strings.replace</c> / <c>center</c> / <c>ljust</c> / <c>rjust</c> with a chararray only in
+        ///     <c>old</c>, <c>new</c> or <c>fillchar</c> (the fixed-width path passes an <c>out=</c> made from the PLAIN
+        ///     <c>a</c>, so <c>__array_wrap__</c> keeps it plain, and the <c>StringDType</c> path's result is no text a
+        ///     chararray holds). The plain result, computed with the chararray inputs marked for NumPy's trivial-loop copy
+        ///     (<see cref="TrivialLoopCopyError(NDArray, DType, NDArray, DType, NDArray, DType)"/>).
+        /// </summary>
+        /// <typeparam name="TState">The packed arguments.</typeparam>
+        /// <param name="state">The arguments.</param>
+        /// <param name="call">Calls the public function again (plain-array semantics). Pass a <c>static</c> lambda.</param>
+        /// <param name="x1">The first text input.</param>
+        /// <param name="x2">The second text input, or <c>null</c>.</param>
+        /// <param name="x3">The third text input, or <c>null</c>.</param>
+        /// <returns>The plain result of <paramref name="call"/>.</returns>
+        /// <exception cref="ValueError">The guard found a short chararray input its loop casts to <c>StringDType</c>
+        ///     (<c>np.char.replace(u, chararray_old, stringdtype_new)</c> with at most <c>np.getbufsize()</c> elements).</exception>
+        /// <exception cref="Exception">Whatever <paramref name="call"/> throws; the depth and the marks are restored first.</exception>
+        internal static NDArray PlainUfunc<TState>(TState state, Func<TState, NDArray> call, NDArray x1, NDArray x2, NDArray x3)
+        {
+            var marks = MarkUfuncInputs(x1, x2, x3);
+            var region = NDMatrixBoundary.Inside();
+            try
+            {
+                return call(state);
+            }
+            finally
+            {
+                region.Dispose();
+                marks.Restore();
+            }
+        }
+
+        /// <summary>
+        ///     Opens a region of plain-array semantics for a MEMBER that computes its function's result itself (the pad members
+        ///     of <see cref="NDCharArray"/> take NumPy's <c>asarray</c> of it) and marks the chararray inputs of the user's call:
+        ///     NumPy's member calls the function with the chararray as a ufunc input, so the trivial-loop copy applies to it.
+        /// </summary>
+        /// <param name="x1">The first text input (the receiver).</param>
+        /// <param name="x2">The second text input, or <c>null</c> (a C# string or number is never a chararray).</param>
+        /// <param name="x3">The third text input, or <c>null</c>.</param>
+        /// <returns>The region; dispose it (<c>using</c>) when the computation is done.</returns>
+        internal static UfuncRegion InsideUfunc(NDArray x1, NDArray x2 = null, NDArray x3 = null)
+            => new UfuncRegion(MarkUfuncInputs(x1, x2, x3), NDMatrixBoundary.Inside());
+
+        /// <summary>
+        ///     A region opened by <see cref="InsideUfunc"/>: plain-array semantics and the ufunc input marks, both restored by
+        ///     <see cref="Dispose"/>.
+        /// </summary>
+        internal readonly ref struct UfuncRegion
+        {
+            /// <summary>The marks this region replaced.</summary>
+            private readonly UfuncInputMarks _marks;
+
+            /// <summary>The plain-semantics region.</summary>
+            private readonly NDMatrixBoundary.PlainRegion _region;
+
+            /// <summary>Creates the region.</summary>
+            /// <param name="marks">The marks to restore.</param>
+            /// <param name="region">The plain-semantics region to close.</param>
+            internal UfuncRegion(UfuncInputMarks marks, NDMatrixBoundary.PlainRegion region)
+            {
+                _marks = marks;
+                _region = region;
+            }
+
+            /// <summary>Closes the region, then restores the marks (the reverse of the order they were set in).</summary>
+            public void Dispose()
+            {
+                _region.Dispose();
+                _marks.Restore();
+            }
+        }
+
+        /// <summary>
+        ///     Sets the ufunc input marks to the chararray objects among <paramref name="x1"/> .. <paramref name="x3"/> (a
+        ///     plain array, a scalar stand-in or null leaves its mark empty) and returns the marks they replace.
+        /// </summary>
+        /// <param name="x1">The first text input.</param>
+        /// <param name="x2">The second text input, or <c>null</c>.</param>
+        /// <param name="x3">The third text input, or <c>null</c>.</param>
+        /// <returns>The previous marks, for <see cref="UfuncInputMarks.Restore"/>.</returns>
+        /// <remarks>The marks are per thread and a nested rule saves and restores them, so a ufunc the computation calls on
+        ///     other operands never sees another call's marks as its own.</remarks>
+        private static UfuncInputMarks MarkUfuncInputs(NDArray x1, NDArray x2, NDArray x3)
+        {
+            var saved = new UfuncInputMarks(t_ufuncInput0, t_ufuncInput1, t_ufuncInput2);
+            t_ufuncInput0 = IsCharArray(x1) ? x1 : null;
+            t_ufuncInput1 = IsCharArray(x2) ? x2 : null;
+            t_ufuncInput2 = IsCharArray(x3) ? x3 : null;
+            return saved;
+        }
+
+        /// <summary>The ufunc input marks one rule replaced, put back by <see cref="Restore"/>.</summary>
+        internal readonly struct UfuncInputMarks
+        {
+            /// <summary>The saved first mark.</summary>
+            private readonly NDArray _mark0;
+
+            /// <summary>The saved second mark.</summary>
+            private readonly NDArray _mark1;
+
+            /// <summary>The saved third mark.</summary>
+            private readonly NDArray _mark2;
+
+            /// <summary>Records the marks.</summary>
+            /// <param name="mark0">The first mark.</param>
+            /// <param name="mark1">The second mark.</param>
+            /// <param name="mark2">The third mark.</param>
+            internal UfuncInputMarks(NDArray mark0, NDArray mark1, NDArray mark2)
+            {
+                _mark0 = mark0;
+                _mark1 = mark1;
+                _mark2 = mark2;
+            }
+
+            /// <summary>Puts the recorded marks back (the rule's <c>finally</c>).</summary>
+            internal void Restore()
+            {
+                t_ufuncInput0 = _mark0;
+                t_ufuncInput1 = _mark1;
+                t_ufuncInput2 = _mark2;
+            }
+
+            /// <summary>Whether <paramref name="op"/> is one of the recorded chararray inputs (by object identity: a copy or
+            ///     an alias of a marked chararray is not the user's operand).</summary>
+            /// <param name="op">An input of the guarded call.</param>
+            /// <returns>True for a marked input.</returns>
+            internal bool Holds(NDArray op)
+                => ReferenceEquals(op, _mark0) || ReferenceEquals(op, _mark1) || ReferenceEquals(op, _mark2);
         }
 
         /// <summary>
@@ -687,11 +836,16 @@ namespace NumSharp
 
         #region NumPy's trivial-loop copy (check_for_trivial_loop)
 
-        /// <summary>The first chararray input of the ufunc call <see cref="WrappedUfunc{TState}"/> is running, or null.</summary>
+        /// <summary>The first chararray input of the ufunc call a rule is running (<see cref="WrappedUfunc{TState}(TState,
+        ///     Func{TState, NDArray}, NDArray, NDArray, NDArray)"/>, <see cref="PlainUfunc{TState}"/>,
+        ///     <see cref="InsideUfunc"/>), or null.</summary>
         [ThreadStatic] private static NDArray t_ufuncInput0;
 
         /// <summary>The second chararray input of that call, or null.</summary>
         [ThreadStatic] private static NDArray t_ufuncInput1;
+
+        /// <summary>The third chararray input of that call (<c>np.strings.replace</c>'s <c>new</c>), or null.</summary>
+        [ThreadStatic] private static NDArray t_ufuncInput2;
 
         /// <summary>
         ///     NumPy's <c>check_for_trivial_loop</c> for a ufunc call over a chararray (ufunc_object.c): without a
@@ -713,35 +867,82 @@ namespace NumSharp
         /// <remarks>
         ///     Run it where NumPy runs the copy: after the loop was resolved and its output cast into <c>out=</c> checked, before
         ///     the broadcast (so <c>np.logical_and(c, empty)</c> raises the finalize error, not the broadcast's). It only reads
-        ///     the inputs <see cref="WrappedUfunc{TState}"/> marked, and consumes the marks.
+        ///     the inputs a rule marked (<see cref="WrappedUfunc{TState}(TState, Func{TState, NDArray}, NDArray, NDArray, NDArray)"/>,
+        ///     <see cref="PlainUfunc{TState}"/>, <see cref="InsideUfunc"/>), and consumes the marks.
         /// </remarks>
         internal static ValueError TrivialLoopCopyError(NDArray x1, DType loop1, NDArray x2, DType loop2, NDArray where)
         {
-            NDArray mark0 = t_ufuncInput0, mark1 = t_ufuncInput1;
-            if (mark0 is null && mark1 is null)
+            if (!TakeMarks(out var marks))
                 return null;
-            // The marks belong to the call's own guard: a nested ufunc of the computation must not read them.
-            t_ufuncInput0 = t_ufuncInput1 = null;
             // _wheremask_converter: only the Python object True is "no mask" (obj == Py_True); np.array(True) is a mask.
             if (where is not null && !(where.WasPythonBool && where.GetAtIndex<bool>(0)))
                 return null;
             long bufsize = np.getbufsize();
-            if (CopyStep(x1, loop1, mark0, mark1, bufsize, out bool stop) is { } first)
+            if (CopyStep(x1, loop1, marks, bufsize, out bool stop) is { } first)
                 return first;
             if (stop || x2 is null)
                 return null;
-            return CopyStep(x2, loop2, mark0, mark1, bufsize, out _);
+            return CopyStep(x2, loop2, marks, bufsize, out _);
         }
 
-        /// <summary>One input of <see cref="TrivialLoopCopyError"/>: copied, refused, or not concerned.</summary>
+        /// <summary>
+        ///     <see cref="TrivialLoopCopyError(NDArray, DType, NDArray, DType, NDArray)"/> for a ufunc of three leading inputs
+        ///     and no <c>where=</c> (numpy.strings' internal ufuncs: <c>_center(a, width, fillchar)</c>,
+        ///     <c>_replace(a, old, new, count)</c>): the inputs are checked IN ORDER, so a middle input that refuses the trivial
+        ///     loop (an int32 <c>width</c> array longer than <c>np.getbufsize()</c>, cast to int64) leaves a chararray after
+        ///     it uncopied.
+        /// </summary>
+        /// <param name="x1">The first input.</param>
+        /// <param name="loop1">The loop's descriptor for <paramref name="x1"/>.</param>
+        /// <param name="x2">The second input.</param>
+        /// <param name="loop2">The loop's descriptor for <paramref name="x2"/>.</param>
+        /// <param name="x3">The third input.</param>
+        /// <param name="loop3">The loop's descriptor for <paramref name="x3"/>.</param>
+        /// <returns>The finalize error, or null when the call goes on.</returns>
+        /// <remarks>
+        ///     Inputs after the third need no check: they are numbers (<c>count</c>), never a chararray, and nothing follows
+        ///     them that a refusal could protect. Run it at the same point as the two-input form; it consumes the marks.
+        /// </remarks>
+        internal static ValueError TrivialLoopCopyError(NDArray x1, DType loop1, NDArray x2, DType loop2, NDArray x3, DType loop3)
+        {
+            if (!TakeMarks(out var marks))
+                return null;
+            long bufsize = np.getbufsize();
+            if (CopyStep(x1, loop1, marks, bufsize, out bool stop) is { } first)
+                return first;
+            if (stop)
+                return null;
+            if (CopyStep(x2, loop2, marks, bufsize, out stop) is { } second)
+                return second;
+            if (stop)
+                return null;
+            return CopyStep(x3, loop3, marks, bufsize, out _);
+        }
+
+        /// <summary>
+        ///     Reads and CLEARS the ufunc input marks: they belong to the call's own guard, and a nested ufunc of the
+        ///     computation must not read them (the rule that set them restores the outer values when it returns).
+        /// </summary>
+        /// <param name="marks">The marks the guard compares its inputs with.</param>
+        /// <returns>False when no input is marked (the call has no chararray input, or a guard already consumed them).</returns>
+        private static bool TakeMarks(out UfuncInputMarks marks)
+        {
+            marks = new UfuncInputMarks(t_ufuncInput0, t_ufuncInput1, t_ufuncInput2);
+            if (t_ufuncInput0 is null && t_ufuncInput1 is null && t_ufuncInput2 is null)
+                return false;
+            t_ufuncInput0 = t_ufuncInput1 = t_ufuncInput2 = null;
+            return true;
+        }
+
+        /// <summary>One input of <see cref="TrivialLoopCopyError(NDArray, DType, NDArray, DType, NDArray)"/>: copied,
+        ///     refused, or not concerned.</summary>
         /// <param name="op">The input.</param>
         /// <param name="loop">Its loop descriptor.</param>
-        /// <param name="mark0">The first marked chararray input.</param>
-        /// <param name="mark1">The second marked chararray input.</param>
+        /// <param name="marks">The marked chararray inputs of the call.</param>
         /// <param name="bufsize">NumPy's buffer size.</param>
         /// <param name="stop">Set when the input refuses the trivial loop (no later input is copied).</param>
         /// <returns>The finalize error when the copied input is a marked chararray and the loop dtype is not string data.</returns>
-        private static ValueError CopyStep(NDArray op, DType loop, NDArray mark0, NDArray mark1, long bufsize, out bool stop)
+        private static ValueError CopyStep(NDArray op, DType loop, in UfuncInputMarks marks, long bufsize, out bool stop)
         {
             stop = false;
             // A cast between two different descriptors is never a view here (text to bool, text to StringDType), so it
@@ -753,7 +954,7 @@ namespace NumSharp
             if (op.ndim == 0 || op.ndim == 1 && op.size <= bufsize)
             {
                 // The copy is made as the input's class: a chararray copy into a non-string loop dtype is refused.
-                if (cast && (ReferenceEquals(op, mark0) || ReferenceEquals(op, mark1)) && !NDCharArray.AcceptsDType(loop))
+                if (cast && marks.Holds(op) && !NDCharArray.AcceptsDType(loop))
                     return FinalizeError();
                 return null;
             }
