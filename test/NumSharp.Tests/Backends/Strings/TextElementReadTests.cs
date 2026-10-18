@@ -168,9 +168,11 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     An element read against an inaccessible page reads nothing outside it: elements of every width whose text
-        ///     fills the whole width (no zero to stop a search early), placed so that their last unit is the last accessible
-        ///     one and so that their first unit is the first accessible one.
+        ///     An element read against an inaccessible page reads nothing outside it: elements of every width placed so that
+        ///     their last unit is the last accessible one and so that their first unit is the first accessible one, holding a
+        ///     text that fills the whole width (no zero to stop a search early) and short texts around the 8- and 16-unit steps
+        ///     (the narrowing's overlapping last step must start inside the text: at the region's start, one unit before the
+        ///     element faults).
         /// </summary>
         [TestMethod]
         public void ReadUcs4_ReadsOnlyItsElement()
@@ -180,14 +182,17 @@ namespace NumSharp.Tests.Backends.Strings
             using var fence = new FencedMemory(pages: 1);
             var rng = new System.Random(911);
             foreach (int w in Widths)
-                foreach (bool atEnd in new[] { true, false })
-                    foreach (bool astral in new[] { false, true })
-                    {
-                        uint[] units = Units(rng, w, w, astral);
-                        uint* p = (uint*)fence.Place(w * 4L, atEnd);
-                        units.AsSpan().CopyTo(new Span<uint>(p, w));
-                        NDStringCodec.ReadUcs4(p, w).Should().Be(ReferenceUcs4(units), $"width {w}, at end {atEnd}");
-                    }
+                foreach (int len in new[] { w, 0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33 })
+                    foreach (bool atEnd in new[] { true, false })
+                        foreach (bool astral in new[] { false, true })
+                        {
+                            if (len > w)
+                                continue;
+                            uint[] units = Units(rng, w, len, astral);
+                            uint* p = (uint*)fence.Place(w * 4L, atEnd);
+                            units.AsSpan().CopyTo(new Span<uint>(p, w));
+                            NDStringCodec.ReadUcs4(p, w).Should().Be(ReferenceUcs4(units), $"width {w}, length {len}, at end {atEnd}");
+                        }
         }
 
         /// <summary>
