@@ -415,8 +415,9 @@ ASCII whitespace (NumPy's `rstrip=True` loop: one `Rstrip` flag of the text comp
 `ILKernelGenerator.Text.Strip.cs`: a bit-mask body for ≤ 64 code units, managed helpers beyond), `add` (= `np.add`) and
 `multiply` (`np.strings.multiply`, a TypeError re-raised as `ValueError("Can only multiply by integers")`). Array arguments
 are `object` (C-D6: a `string` is `str`, a `byte[]` is `bytes`, a `byte[][]` a list of bytes); an `S` / `U` pair answers
-NumPy's `NotImplemented` as `null`; a `StringDType` operand is `comparison of non-string arrays`. Oracle section
-`strchar` (2,790 cases).
+NumPy's `NotImplemented` as `null`; a `StringDType` operand is `comparison of non-string arrays`; `compare_chararrays`'
+`cmp` is one `object` parameter (NumPy's `s#`: a `string` or `byte[]`, anything else `a bytes-like object is required,
+not 'int'`). Oracle section `strchar` (2,802 cases).
 **`chararray` as data (phase 2, 2026-10-16): `NDCharArray : NDArray`** (`Char/NDCharArray{,.Strip,.Indexing,.Methods}.cs`,
 `APIs/np.char.array.cs`). `np.@char.chararray(shape, itemsize, unicode, buffer, offset, strides, order)` (a `string` buffer
 FILLS, `ReadOnlyMemory<byte>` is Python's read-only `bytes`, `byte[]` a writable `bytearray`, an `NDArray` is borrowed);
@@ -511,16 +512,28 @@ slice notation (`r["0"]`) a 0-d list array that STANDS FOR NumPy's Python list (
 items, `np.asarray(list)`; `==` / `!=` then run NDArray's operators, whose no-loop pair is NumPy's all-False constant);
 the `long[]` / `int[]` indexer a NEW 1-D piece array (NumPy: the list itself, which `item()` gives — `[Misaligned]`).
 A NumPy result holding a non-list object (an int identity, `imag`'s zeros) is `NotSupportedException`; `dtype` / `data`
-need an object dtype (absent by design), `ctypes` / `dump` / `dumps` exist on no NumSharp array. Oracle section
-`strcharlist` (12,450 cases, strict), unit tests `ListArrayMembersTests` / `ListArrayComputeTests`. Speed (`63f363f2`): the
+need an object dtype (absent by design), `ctypes` / `dump` / `dumps` exist on no NumSharp array. Every member is ONE
+NumPy signature with all its parameters (the one-signature review, 2026-10-19): `dtype=` of `sum` / `prod` / `cumsum` /
+`cumprod` / `trace` / `mean` / `var` / `std` / `clip` (NumPy's ufunc dtype checks — `_get_dtype`'s two texts, the C
+methods' type number —, then the object loop's conversion error per class), `out=` of `cumsum` / `cumprod` (both
+`PyUFunc_Accumulate` routes' texts; NumPy 2.4.2 segfaults on a 0-d out, NumSharp raises the wrong-size text,
+`[Misaligned]`), `trace`, `conj` (NumPy's out is positional only) and `mean` / `var` / `std` (ndarray outs, `_mean` /
+`_var`'s statements: the object sum cast into out, then the division), `where=` of `clip` and of `mean` in a `dtype=` loop
+(the masked sum over each output's count), `mean=` of `var` / `std`, `view(dtype, type)` (`[Optional]` parameters, so an
+omitted argument and an explicit null are told apart), `reshape(shape, order, copy)` (`copy=False` is
+`_reshape_with_copy_arg`'s view rule), `tofile(fid, sep, format)` (a stream, a path or a `FileInfo`). A `dtype=` loop
+whose NumPy result is not a list (the bool loop's `np.True_`, an empty sum's number) is `NotSupportedException` naming the
+composition `np.sum(lists.astype(dtype), ...)` in that dtype. Oracle section `strcharlist` (15,471 cases, strict), unit tests
+`ListArrayMembersTests` / `ListArrayComputeTests` / `ListArraySignatureTests`. Speed (`63f363f2`): the
 members that read many lists go through `ListPointers` (raw pointers into a heap; never held across an append), the
 builders create their heap once at the counted size (`NDListHeap.Reserved`, whose appends THROW past the reservation —
 the pool's size-bucket slack hid an under-sized heap completely, no crash and right values), and a member that selects
 lists (`max` / `min` / `clip`) shares the array's heap; 81 benchmark cells run 1.9–460× NumPy.
 `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's
 own `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` (`ObjectDType(n)`:
-NumPy cannot finish `np.char.join(' ', np.char.split(a))`). In the object path a C# `null` IS Python's None (an object
-array), where the rest of the module raises `ArgumentNullException`. Oracle section `strcharobj` (3,625 cases, strict,
+NumPy cannot finish `np.char.join(' ', np.char.split(a))`); over an EMPTY one NumPy returns an empty object array, which
+the one `join(object sep, object seq)` (an `NDArray` result) cannot hold: `NotSupportedException`. In the object path a C# `null` IS Python's None (an object
+array), where the rest of the module raises `ArgumentNullException`. Oracle section `strcharobj` (3,623 cases, strict,
 expectation kind `lists`), unit tests `CharObjectPathTests` (16). Performance (99 cells, default tiered runtime): NPY/NS
 geomean 12.6×, min 4.6×.
 
@@ -2730,6 +2743,12 @@ bit** (`Backends/Default/Math/Reduction/Default.Reduction.Add{,.Exact,.Identity}
   reduced axis not the innermost, `IsSequentialWideningAxisSum`), else casts in blocks of `CastLoopBlockElements` (128K)
   along the outermost kept axis; a FLAT integer / bool cast loop (order-free: modular addition, OR) casts and sums in
   blocks along the outermost axis in memory (`np.sum(f64, dtype=int32)` at 10M: 6.8 → 4.5 ms, NumPy 7.0 ms).
+- **`out=` of another dtype** (the engine's `ReduceAdd(..., out)`; 2026-10-19): the sum is computed in the loop dtype and
+  cast into `out` (`DeliverReduction`). Every route used to write the LOOP dtype's bytes into out's buffer as they were
+  (an int64 sum read back as float64 denormals, a float64 sum written past a float32 out's end) or unbox the loop's value
+  as out's type, and the flat float engine boxed every value as a `Complex` (a switch expression's best common type), so
+  even an out of the loop's own dtype threw. Residual: past one buffer fill NumPy carries the partial sum through out's
+  dtype between fills; this route rounds into out once. Gate `Math/np.sum.OutDtype.Test.cs`.
 - **The flat engine** (`NumPyAddReduce`; float16 / float32 / float64 / complex128 loops, the input already the loop
   dtype or cast into it). NpyIter's call schedule: axes sorted by |stride| and coalesced signed
   (`NumPyMinMaxReduce.FlatIteratorAxes`), then `npyiter_find_buffering_setup`'s cost model (`FlatBufferingDim`; a cast

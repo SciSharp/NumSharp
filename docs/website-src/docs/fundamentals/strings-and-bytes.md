@@ -489,7 +489,7 @@ Measured against NumPy 2.4.2 on the same machine (pinned to two cores, fresh inp
 `np.@char` is NumPy's `numpy.char` module. `char` is a C# keyword, so NumPy's `np.char.equal(a, b)` is `np.@char.equal(a, b)`. It exposes the string operations above, except `slice`, with these additional conventions:
 
 - `equal`, `not_equal`, `less`, `less_equal`, `greater` and `greater_equal` compare two text arrays of one class after they remove the trailing NULs and ASCII whitespace (`' '`, `'\t'`, `'\n'`, `'\v'`, `'\f'`, `'\r'`) of each string. Other whitespace (`'\xa0'`, U+3000) and leading spaces stay.
-- `compare_chararrays(a1, a2, cmp, rstrip)` runs the comparison `cmp` (`"=="`, `"!="`, `"<"`, `"<="`, `">"` or `">="`, as a `string` or a `byte[]`), with the strip when `rstrip` is `true`.
+- `compare_chararrays(a1, a2, cmp, rstrip)` runs the comparison `cmp` (`"=="`, `"!="`, `"<"`, `"<="`, `">"` or `">="`, as a `string` or a `byte[]`), with the strip when `rstrip` is `true`. Any other `cmp` raises NumPy's `TypeError` (`a bytes-like object is required, not 'int'`).
 - `add` is `np.add`.
 - `multiply` is `np.strings.multiply`, but a count that is not an integer gives NumPy's `ValueError("Can only multiply by integers")`.
 - `partition` and `rpartition` return one array with a last axis of length 3, rather than three arrays.
@@ -639,7 +639,7 @@ np.@char.join("-", np.@char.split(words));                    // TypeError, as i
 
 The result has the class of `seq`: `U` or `S` as wide as the longest result, or `StringDType()`. An `S` sequence joins only when its strings are empty, because Python iterates `bytes` as numbers.
 
-NumPy 2.4.2 cannot join the lists that `split` returns: it joins every list and then raises `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` NumSharp raises the same error.
+NumPy 2.4.2 cannot join the lists that `split` returns: it joins every list and then raises `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` NumSharp raises the same error. Over an empty `NDListArray` NumPy returns an empty object array, which has no `NDArray` form: NumSharp raises `NotSupportedException`.
 
 The errors are NumPy's, in NumPy's order. The first element that fails stops the call:
 
@@ -652,7 +652,18 @@ np.@char.split(np.array(new long[] { 1 }));  // TypeError: string operation on n
 
 In these four functions a C# `null` is Python's `None`: `np.@char.split(null)` raises NumPy's `TypeError`, and `new object[] { " ", null }` as a separator splits the second element at whitespace. The chararray members `c.split()`, `c.rsplit()`, `c.splitlines()` and `c.join(seq)` call the same functions on the chararray's elements with their trailing whitespace.
 
-Differences from NumPy: `w[i, j]` returns a new array of the pieces, where NumPy returns the Python list (`w.item(i, j)` returns the list), and an `NDListArray` has only the members listed above.
+An `NDListArray` has the ndarray members of NumPy's object array, each with NumPy's parameters: the structural ones (`T`, `reshape`, `ravel`, `copy`, `view`, `take`, `repeat`, `diagonal`, `squeeze`, ...) and the ones that compare, sort, reduce, compute and assign lists with Python's list rules (`==`, `<`, `sort`, `argsort`, `searchsorted`, `max`, `sum`, `cumsum`, `mean`, `var`, `clip`, `+`, `*`, `put`, `fill`, ...).
+
+```csharp
+w.sum();                                          // ['a', 'b', 'c', 'lead', 'trail']: the lists concatenated
+w.cumsum(@out: np.@char.split(np.array(new[] { "x", "y", "z" })));   // into a list array of the same shape
+w.reshape(new Shape(1, 3), 'C', copy: false);     // a view, or NumPy's ValueError when none exists
+w.mean(dtype: np.@bool, where: np.array(new[] { true, false, true }));   // True: the masked truths over the count
+```
+
+A `dtype=` whose NumPy result is not a list raises `NotSupportedException`: `w.sum(dtype: np.@bool)` is NumPy's `np.True_`, which `np.sum(w.astype(np.@bool), np.@bool)` computes.
+
+Differences from NumPy: `w[i, j]` returns a new array of the pieces, where NumPy returns the Python list (`w.item(i, j)` returns the list).
 
 Measured against NumPy 2.4.2 (pinned to two cores, 1,000 to 1,000,000 strings): 4.6 to 48 times as fast, 12.6 times on average.
 
@@ -1133,7 +1144,7 @@ A `U` to `S` cast encodes ASCII only, as NumPy does. Keep non-ASCII text in a `U
 | `np.@char.add` / `np.@char.multiply` | `np.add` / `np.strings.multiply`; a count that is not an integer is `ValueError("Can only multiply by integers")` |
 | `np.@char.chararray` / `np.@char.array` / `np.@char.asarray` | NumPy's `chararray` (`NDCharArray`): element access and iteration remove trailing whitespace, views and copies stay chararrays, text data only; the comparison operators strip (also with a plain array on the left), `+` and `*` return chararrays, and the `np.*` functions keep, wrap or drop the class as NumPy's do |
 | `np.@char.split` / `rsplit` / `splitlines` | Python's `str` / `bytes` methods per element; the result is an `NDListArray`, NumPy's object array of lists |
-| `np.@char.join` | The characters of each string joined by its separator; the result has the class of `seq`; over an `NDListArray`, NumPy 2.4.2's `TypeError` |
+| `np.@char.join` | The characters of each string joined by its separator; the result has the class of `seq`; over an `NDListArray`, NumPy 2.4.2's `TypeError` (over an empty one, `NotSupportedException`: NumPy's empty object array) |
 | `np.argmax` / `np.argmin` / `np.searchsorted` / `np.digitize` | NumPy's results: the first extreme element, NumPy's exact search over unsorted haystacks |
 | `np.unique` / `np.unique_values` / `np.unique_counts` / `np.unique_inverse` / `np.unique_all` | NumPy's results for every flag and axis; `unique_values` (and `sorted: false`) sorted where NumPy keeps its hash order |
 | `np.isin` / `np.intersect1d` / `np.union1d` / `np.setdiff1d` / `np.setxor1d` / `np.lexsort` / `np.sort_complex` | NumPy's results: numbers beside text written as text, bytes decoded as ASCII where NumPy joins the operands |

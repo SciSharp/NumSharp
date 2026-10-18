@@ -1109,6 +1109,41 @@ C-D1 decision and C3 for C-D3.
     1K / 100K / 1M, on P2.6's codec as of `d314dd81`; every result's digest identical): 20.2–130×, geomean 57.1×; the
     slowest cell is `decode` of `S` at 1M.
   - **C5 is complete.** Open: C6 (the coverage mapping `char.chararray` → `NumSharp.NDCharArray`).
+- **2026-10-19 — the one-signature review of numpy.char's new surfaces** (`9440d498`; the owner's request: "Kindly review
+  all new methods to have identical api to numpy and preferably a single overload and add missing ones like out/where").
+  - **One NumPy signature per member.** `NDListArray`: `sum` / `prod` (`axis, dtype, out, keepdims, initial, where`),
+    `cumsum` / `cumprod` (`axis, dtype, out`), `trace` (`offset, axis1, axis2, dtype, out`), `clip` (`min, max, out, dtype,
+    where`), `mean` (`axis, dtype, out, keepdims, where`), `var` / `std` (`axis, dtype, out, ddof, keepdims, where, mean`),
+    `take` / `repeat` / `put` / `partition` / `argpartition` over one `NDArray` parameter (a C# integer converts), one
+    `searchsorted(object v, ...)`, one `item(params long[])`, `view([dtype][, type])` as two `[Optional]` objects (an
+    omitted argument and an explicit null are told apart), `reshape(shape, order, copy)` and `tofile(fid, sep, format)` (a
+    stream, a path or a `FileInfo`). `np.@char.compare_chararrays(a1, a2, object cmp, rstrip)` and
+    `np.@char.join(object sep, object seq)`. `NDCharArray.take` / `compress` gain `out=` (a chararray out keeps the class, a
+    plain one binds NDArray's member and gets a plain result), `transpose(params int[] axes)`, one `repeat` /
+    `argpartition` / `join`. Two forms stay two because C# cannot write NumPy's: `reshape` / `resize`'s `params long[]`
+    beside the `(Shape, ...)` form (no keyword-only parameter after `params`).
+  - **The new parameters are NumPy's statements.** `dtype=`: `_get_dtype`'s two texts for a ufunc method (`sum` / `prod` /
+    `mean` / `var` / `std` / `clip`), the type number for the C methods (`cumsum` / `cumprod` / `trace`, where `'U3'` gives
+    the no-loop text), then the object loop's conversion error per class; a loop NumPy completes (the bool loop's
+    `np.True_`, an empty array's number) is `NotSupportedException` naming `np.sum(lists.astype(dtype), ...)`. `out=` of
+    `cumsum` / `cumprod`: `PyUFunc_Accumulate`'s plain loop (its zero-size shortcuts, `provided out is the wrong size for
+    the accumulation.`) and its outer iterator (the op_axes and remapped-shape texts); NumPy 2.4.2 segfaults on a 0-d out,
+    NumSharp raises the size text (`[Misaligned]`). `out=` of `mean` / `var` / `std`: `_mean` / `_var`'s object sum cast
+    into the out, then `true_divide(out, rcount, casting='unsafe')`. `where=` of `mean` in a `dtype=` loop: the masked sum
+    divided by each output's count. `clip`'s `where=` and `out=`: the masked-off elements of an out keep its lists; a new
+    result with masked-off elements (NumPy's `None`) is `NotSupportedException`.
+  - **Found on the way, fixed.** `TensorEngine.ReduceAdd(..., out)` with an out of another dtype wrote the loop dtype's
+    bytes into the out, and a flat float sum boxed its value as a `Complex` (a switch expression's best common type), so an
+    out of its own dtype threw; `AxisPartition.ExtractKthValues` left its int64 conversion of a `kth` array to the
+    finalizer.
+  - **Gates.** Oracle `strcharlist` 12,450 → 15,471 cases (7,072 NumPy errors, zero excuses; its `sig:` cases cover each
+    new parameter, its error order against the others and the identity of an out=), `strchar` 2,802 (an int, a float and a
+    bool `cmp`), `strchararray` 11,827 (`transpose(*axes)`, `take` / `compress` into `out=`), `strcharobj` 3,623 (join's
+    two empty object results are not cases). The generator gains the argument specs `self` (the receiver, an overlapping
+    out), `ro` (read-only) and `pytype` (a Python class), and drops a NumPy result that is an ndarray subclass, an object
+    array from a statistic, or a non-list result of a list member. Unit tests `ListArraySignatureTests` (3) and
+    `np_sum_out_dtype_tests` (2): a mutation run that puts back each old behavior fails all five. The leak catalogue's
+    `join` and `sum` entries run the refusals, its `argpartition` entry disposes its own kth.
 
 ---
 
