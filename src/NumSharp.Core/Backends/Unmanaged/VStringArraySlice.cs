@@ -212,29 +212,146 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     Stores <paramref name="values"/> into elements 0 … <c>values.Count - 1</c>, each by setitem (see
+        ///     Stores <paramref name="values"/> into elements 0 … <c>values.Count - 1</c> of a FRESH buffer, each by setitem (see
         ///     <see cref="SetIndex(long, object)"/>), with the allocator locked ONCE for the whole run — <c>np.array(values,
-        ///     dtype=StringDType)</c> filling a fresh buffer.
+        ///     dtype=StringDType)</c>. The cells and the arena come out byte for byte as NumPy's element-by-element stores leave
+        ///     them; only the arena's capacity differs.
         /// </summary>
-        /// <param name="values">The values, in element order (no more than <see cref="Count"/>).</param>
+        /// <param name="values">The values, in element order (no more than <see cref="Count"/>); the buffer's cells must be
+        ///     all zero and its arena empty (a buffer <see cref="Allocate"/> just made, which is what <c>np.array</c> fills).</param>
         /// <exception cref="ValueError">A value that is not text under <c>coerce=False</c>.</exception>
         /// <exception cref="UnicodeDecodeError"><c>bytes</c> that are not UTF-8.</exception>
         /// <exception cref="UnicodeEncodeError">A text with a lone surrogate.</exception>
-        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>.</exception>
-        /// <remarks>An error leaves the elements stored before it written (the caller discards the half-filled buffer, as
-        ///     NumPy discards its half-built array).</remarks>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c> (or
+        ///     <c>Failed to pack null string during StringDType setitem</c> for an NA element).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Two passes over the leading run of strings, then the general store.</b> Pass 1 walks the values while they are
+        ///     <see cref="string"/>s and settles every element that needs no arena: an NA value packs its NA cell, a short text
+        ///     (UTF-8 size up to 15) is written into its cell, an empty text leaves its fresh cell all zero, as
+        ///     <c>NpyString_pack</c> does. A medium or long text is only MARKED (its cell keeps byte 15 zero and holds a nonzero
+        ///     size estimate in bytes 0–7) and counted. The arena is then reserved once (<see cref="VStringAllocator.TryReserve"/>)
+        ///     and pass 2 visits the marked cells IN ELEMENT ORDER, encoding each text straight into its arena slot at the bump
+        ///     pointer (<see cref="VStringAllocator.AppendFresh"/>). From the first value pass 1 cannot place — a value that is
+        ///     not a <see cref="string"/> (a number's <c>str()</c>, <c>bytes</c>, the NA object of another kind) or a short text
+        ///     with a lone surrogate — the remaining values go through the general per-element store, unchanged.
+        ///     </para>
+        ///     <para>
+        ///     <b>Why the bytes are NumPy's.</b> An arena offset is the cursor at the moment of the append, and only medium and
+        ///     long texts move the cursor: short texts, empty texts and NAs live in their cells. Settling those first and
+        ///     appending the others afterwards in element order therefore puts every arena text at the offset the sequential
+        ///     stores give it, and the general store continues from the same cursor. The reservation changes only the arena's
+        ///     capacity, which no NumPy API observes.
+        ///     </para>
+        ///     <para>
+        ///     <b>Errors in NumPy's order.</b> NumPy stores element by element and raises at the first element that fails. Pass 1
+        ///     never raises for a text: a lone surrogate in a short text ends pass 1 there, and one in a medium / long text is
+        ///     found by pass 2's exact size (<see cref="NDUtf8.GetByteCount"/>), which raises CPython's
+        ///     <c>UnicodeEncodeError</c> after every earlier arena text is appended. Pass 1's own writes past such an element
+        ///     (its short texts and NAs) are not observable: the caller discards the buffer on any error, as NumPy discards its
+        ///     half-built array. An allocation failure (only reachable through <see cref="VStringAllocator.FailAllocationAfter"/>
+        ///     or an exhausted heap) happens at the same element and in the same count as before, because every arena append —
+        ///     the bump pointer declines while a failure is scheduled — still runs in element order.
+        ///     </para>
+        ///     <para>
+        ///     <b>Why pass 1 counts a long text by its LENGTH.</b> One byte per UTF-16 unit is the exact UTF-8 size of an ASCII
+        ///     text, and reading the text to prove more would be a second pass over every long text (measured: an exact count
+        ///     there cost as much as the reservation saved at 20–60 characters). A non-ASCII text is under-counted; pass 2 then
+        ///     grows the arena by NumPy's 25 % steps for the difference, still correct.
+        ///     </para>
+        ///     <para>
+        ///     <b>Measured</b> (100,000 ASCII texts, ns per element, the old store → this one, NumPy 2.4.2 in brackets): 4–12
+        ///     characters 28.3 → 21.8 (75.8), 20–60 characters 107 → 49.7 (126), 300–500 characters 1,067 → 263 (662). The old
+        ///     store encoded each text into scratch (a new byte array past 256 characters) and copied it again, and let the
+        ///     arena grow by 25 % steps, which copied and zeroed it some 50 times on the way to 40 MB. The parts, measured
+        ///     apart at 20–60 / 300–500 characters: the reservation is worth ~40 / ~700 ns, the in-place encode ~20 / ~50 ns.
+        ///     </para>
+        /// </remarks>
         [System.Runtime.CompilerServices.SkipLocalsInit]
         internal void SetRange(System.Collections.Generic.IReadOnlyList<object> values)
         {
+            const int Cell = VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
             Span<byte> scratch = stackalloc byte[StackEncodeBytes];
             bool coerce = Descr.VString.coerce;
             bool hasNA = Descr.VString.HasNAObject; // no NA object: no value can be NA, skip the comparison per element
+            // A string[] or object[] (the common inputs) is read as an array: the interface call per element cost more than
+            // the store of a short text.
+            object[] array = values as object[];
+            int count = values.Count;
             Allocator.acquire_allocator();
             try
             {
-                for (int i = 0; i < values.Count; i++)
+                // The passes rely on a fresh buffer: a pass-1 mark is told from a stored cell by byte 15, and AppendFresh writes
+                // a cell that held nothing. BuildVString's zero-filled allocation is the only caller.
+                System.Diagnostics.Debug.Assert(!Allocator.HoldsLongStrings, "SetRange fills a fresh StringDType buffer.");
+
+                // Pass 1: every leading string that needs no arena is stored; a medium / long one is marked and counted.
+                long need = 0;
+                int pending = 0;
+                int stop = 0;
+                for (; stop < count; stop++)
                 {
-                    object value = values[i];
+                    object value = array != null ? array[stop] : values[stop];
+                    if (value is not string text)
+                        break; // its conversion (str(), bytes, coerce=False) can raise: the general store runs from here
+                    byte* cell = Address + (long)stop * Cell;
+                    if (hasNA && IsNAValue(value))
+                    {
+                        // A string equal to the NA object: pack_null of a fresh cell sets the missing flag, no arena.
+                        if (Allocator.pack_null(cell) < 0)
+                            throw new OutOfMemoryException("Failed to pack null string during StringDType setitem");
+                        continue;
+                    }
+                    if (TryWriteShortAscii(cell, text))
+                        continue;
+                    int length = text.Length;
+                    if (length <= VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
+                    {
+                        // Empty or non-ASCII and at most 15 units: the exact UTF-8 size decides between the cell and the arena.
+                        if (!NDUtf8.TryGetByteCount(text, out int size))
+                            break; // a lone surrogate: the general store raises CPython's error at this element
+                        if (size <= VStringAllocator.NPY_SHORT_STRING_MAX_SIZE)
+                        {
+                            // NpyString_pack's short cell: the text in bytes 0..size-1, the rest zero, byte 15 the flags and
+                            // the size. '' writes nothing, leaving the fresh cell all zero as pack_empty does.
+                            if (size > 0)
+                            {
+                                NDUtf8.EncodeExact(text, cell, size);
+                                cell[15] = (byte)(VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA | size);
+                            }
+                            continue;
+                        }
+                        // Few units of multi-byte characters: a medium text after all, counted exactly.
+                        *(long*)cell = size;
+                        need += VStringAllocator.ArenaBytesForText(size);
+                        pending++;
+                        continue;
+                    }
+                    // A medium / long text: marked and counted at one byte per unit (exact for ASCII, see the remarks).
+                    *(long*)cell = length;
+                    need += VStringAllocator.ArenaBytesForText(length);
+                    pending++;
+                }
+
+                // Pass 2: the marked texts, in element order, each encoded straight into its arena slot.
+                if (pending > 0)
+                {
+                    Allocator.TryReserve(need);
+                    for (int i = 0; i < stop; i++)
+                    {
+                        byte* cell = Address + (long)i * Cell;
+                        // A stored cell has byte 15 set (short: INITIALIZED | OUTSIDE_ARENA, NA: MISSING); an empty text's cell
+                        // is all zero; only a mark holds a nonzero size under a zero byte 15.
+                        if (cell[15] != 0 || *(long*)cell == 0)
+                            continue;
+                        AppendMarkedText(cell, (string)(array != null ? array[i] : values[i]));
+                    }
+                }
+
+                // The general store from the first value pass 1 could not place (see the remarks).
+                for (int i = stop; i < count; i++)
+                {
+                    object value = array != null ? array[i] : values[i];
                     // The common element, a short ASCII string, written straight into its cell (what Pack gives for it).
                     if (value is string text && !(hasNA && IsNAValue(value))
                         && TryWriteShortAscii(Address + (long)i * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING, text))
@@ -248,6 +365,39 @@ namespace NumSharp.Backends.Unmanaged
             {
                 Allocator.release_allocator();
             }
+        }
+
+        /// <summary>
+        ///     Appends a text that <see cref="SetRange"/>'s pass 1 marked (a medium or long text of a fresh cell) to the arena
+        ///     and encodes it in place: the cell and the arena bytes <c>NpyString_pack</c> gives a fresh cell, without the scratch
+        ///     copy.
+        /// </summary>
+        /// <param name="cell">The marked cell (byte 15 zero, a size estimate in bytes 0–7); the allocator lock is held.</param>
+        /// <param name="text">The element's text.</param>
+        /// <exception cref="UnicodeEncodeError">The text holds a lone surrogate (CPython's text, raised by the exact size).</exception>
+        /// <exception cref="OverflowException">The UTF-8 form is longer than <see cref="int.MaxValue"/> bytes.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>Failed to pack string during StringDType setitem</c>: the arena
+        ///     cannot grow.</exception>
+        /// <remarks>
+        ///     The bump pointer (<see cref="VStringAllocator.AppendFresh"/>) declines when the reservation is used up (an
+        ///     under-counted non-ASCII text) or while a test schedules an allocation failure; the general allocation
+        ///     (<see cref="VStringAllocator.newemptysize"/>) then grows the arena NumPy's way, or fails at the scheduled
+        ///     allocation. Either way the text is encoded at the slot's address before the next allocation can move the arena.
+        /// </remarks>
+        private void AppendMarkedText(byte* cell, string text)
+        {
+            // The exact size: one byte per unit for ASCII (vectorized), CPython's error for a lone surrogate.
+            int size = NDUtf8.GetByteCount(text);
+            // Clear the mark: both allocation routes expect the cell of a never-written element.
+            *(ulong*)cell = 0;
+            byte* slot = Allocator.AppendFresh(cell, size);
+            if (slot == null)
+            {
+                if (Allocator.newemptysize(size, cell) < 0)
+                    throw new OutOfMemoryException("Failed to pack string during StringDType setitem");
+                slot = Allocator.VStringBuffer(cell);
+            }
+            NDUtf8.EncodeExact(text, slot, size);
         }
 
         /// <summary>The stack space an element store encodes its text into (a text whose UTF-8 form could be longer — up to

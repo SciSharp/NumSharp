@@ -122,6 +122,22 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     <c>np.array(values, StringDType())</c> stores its medium / long texts in a second pass at the arena's bump pointer;
+        ///     an allocation that fails part-way (the bump pointer declines while a failure is scheduled, and the general
+        ///     allocation fails at the scheduled count) raises setitem's text and releases the half-built array — after short
+        ///     texts, mid-run, and for a long text after a non-text value (the general store's path).
+        /// </summary>
+        [TestMethod]
+        public void Array_FailsCleanlyPartWay()
+        {
+            string[] texts = { "a", Medium('b'), "c", Medium('d'), new string('e', 400), Medium('f') };
+            AssertFailsCleanly(() => np.array(texts, T), "Failed to pack string during StringDType setitem");
+            AssertFailsCleanly(() => np.array(texts, T), "Failed to pack string during StringDType setitem", successes: 2);
+            object[] mixed = { Medium('a'), 7L, new string('g', 400) };
+            AssertFailsCleanly(() => np.array(mixed, T), "Failed to pack string during StringDType setitem", successes: 1);
+        }
+
+        /// <summary>
         ///     The gathers duplicate every picked string into a fresh buffer; a failure part-way through releases that buffer
         ///     at once (its clear loop frees the strings already duplicated): a fancy index, <c>np.take</c>, <c>np.resize</c>
         ///     (a view of a fresh buffer), <c>np.where</c> (several sources), <c>tobytes</c> of a non-contiguous array, a

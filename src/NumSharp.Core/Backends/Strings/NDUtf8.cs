@@ -103,6 +103,80 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     The UTF-8 byte length of a C# string, or <see langword="false"/> where <see cref="GetByteCount"/> would raise (a
+        ///     lone surrogate, or a UTF-8 form past <see cref="int.MaxValue"/> bytes). A bulk store probes with it to decide
+        ///     where a text goes (its cell or the arena) BEFORE the store that raises CPython's error reaches that element.
+        /// </summary>
+        /// <param name="s">The text.</param>
+        /// <param name="count">Receives the number of UTF-8 bytes; 0 when the method returns <see langword="false"/>.</param>
+        /// <returns><see langword="true"/> with the exact size; <see langword="false"/> for a text the strict encoder refuses.</returns>
+        /// <remarks>
+        ///     Never throws, on purpose: the caller hands a refused text to the ordinary store (<see cref="GetByteCount"/> /
+        ///     <see cref="Encode(ReadOnlySpan{char}, Span{byte})"/>), which raises CPython's <c>UnicodeEncodeError</c> with the
+        ///     position counted the way CPython counts it, after every earlier element is stored — NumPy's element order of
+        ///     errors. The counting loop is <see cref="GetByteCount"/>'s, kept separate so that method stays as it is.
+        /// </remarks>
+        public static bool TryGetByteCount(ReadOnlySpan<char> s, out int count)
+        {
+            // Pure ASCII (the common case) is one byte per unit; the vectorized check settles it.
+            if (Ascii.IsValid(s))
+            {
+                count = s.Length;
+                return true;
+            }
+            long total = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c < 0x80)
+                    total += 1;
+                else if (c < 0x800)
+                    total += 2;
+                else if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+                {
+                    total += 4;
+                    i++;
+                }
+                else if (char.IsSurrogate(c))
+                {
+                    // A lone surrogate has no UTF-8 form: the strict store raises for it.
+                    count = 0;
+                    return false;
+                }
+                else
+                    total += 3;
+            }
+            if (total > int.MaxValue)
+            {
+                // Longer than a span can address: GetByteCount's OverflowException belongs to the ordinary store.
+                count = 0;
+                return false;
+            }
+            count = (int)total;
+            return true;
+        }
+
+        /// <summary>
+        ///     Encodes a text whose exact UTF-8 size the caller has already computed (<see cref="GetByteCount"/> /
+        ///     <see cref="TryGetByteCount"/>) into exactly <paramref name="size"/> bytes at <paramref name="dst"/>: the in-place
+        ///     write of a <c>StringDType</c> fill, straight into a cell or an arena slot instead of a scratch copy that is then
+        ///     copied again.
+        /// </summary>
+        /// <param name="s">The text; it holds no lone surrogate (its size was computed).</param>
+        /// <param name="dst">The destination: <paramref name="size"/> writable bytes.</param>
+        /// <param name="size">The exact UTF-8 size of <paramref name="s"/>.</param>
+        /// <exception cref="InvalidOperationException">The text did not encode to exactly <paramref name="size"/> bytes: a
+        ///     caller broke the contract above (the size was not computed from this text). A bulk store never reaches it, and
+        ///     it guards the cell from holding a size that disagrees with its bytes.</exception>
+        public static unsafe void EncodeExact(ReadOnlySpan<char> s, byte* dst, int size)
+        {
+            var status = Utf8.FromUtf16(s, new Span<byte>(dst, size), out _, out int written, replaceInvalidSequences: false);
+            if (status != OperationStatus.Done || written != size)
+                throw new InvalidOperationException(
+                    $"A text did not encode to its computed UTF-8 size of {size} bytes ({status}, {written} bytes written).");
+        }
+
+        /// <summary>
         ///     Decodes UTF-8 bytes this library wrote itself (a <c>StringDType</c> cell's payload) into a C# string — no
         ///     validation, because a cell only ever holds text that was encoded strictly.
         /// </summary>
