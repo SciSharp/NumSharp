@@ -23,7 +23,7 @@
 
 ---
 
-## 0. Where phase 2 stands (2026-10-17, after P2.2 over `T`, the validation soak, the quantile family's `weights=` and `q` precision, P2.5, and P2.6's predicates, case maps and `translate`)
+## 0. Where phase 2 stands (2026-10-18, after P2.2 over `T`, the validation soak, the quantile family's `weights=` and `q` precision, P2.5, and P2.6's predicates, case maps, `translate` and `mod`)
 
 Commit hashes in this plan: the branch was rebased onto journey4 on 2026-10-12, so the hashes of §0's first edition and
 of the 2026-10-09 state-log entries are the OLD ones; `git log -1 --format=%B a8d7f17c | grep -- '->'` translates them
@@ -44,10 +44,10 @@ lock-free cast table `07903e85`; NumPy's member names in the DTypes folder, `8de
 | P2.2 sorting, searching, set routines | Milestone A done (2026-10-15, `9771aa9c`, state log): `np.sort` / `np.argsort` / `ndarray.sort` / `np.partition` / `np.argpartition` over `S` / `U` with NumPy's `kind` / `order` / `stable`, NumPy's order of equal strings included (its introsort replayed); oracle section `strsort` (4,998 cases, zero excuses). Milestone B done (2026-10-15, `a9ec801a`, state log): `np.argmax` / `np.argmin` / `np.nanargmax` / `np.nanargmin` and the methods (axis, keepdims, `out=`), `np.searchsorted` / `ndarray.searchsorted` (NumPy's exact path over unsorted haystacks), `np.digitize`, and the bin search of `np.histogram2d` / `np.histogramdd`; oracle section `strsearch` (7,142 cases, zero excuses). Milestone C done (2026-10-16, `0b0a31ac`, state log): `np.unique` with every flag, axis and keyword and its Array-API forms, `np.isin`, the four set routines, `np.lexsort`, `np.sort_complex`, `np.histogram` / `histogram_bin_edges`, the methods of `np.quantile` / `np.percentile` that pick an element; oracle section `strsets` (7,299 cases, strict but for the `unique_values` order excuse). Every `S` / `U` computation of the stage is done. The `T` part done (2026-10-16, `287c3e2e`, state log): the sorts, partitions and `np.lexsort`, `np.searchsorted` / `np.digitize`, `np.unique` and its Array-API forms, `np.isin`, the four set routines, `np.sort_complex`, `np.histogram`, `np.median`, the quantile family with its nan forms, and numpy.ma's `sort` / `argsort` / `median` / `unique` over `T`, with NumPy's ordering of missing values; oracle section `tsort` (12,515 cases, 5,209 of them NumPy errors, zero excuses). The stage is done. |
 | Validation (soak) | Done (2026-10-16, `b57c3e8b`, state log): a randomized NumPy 2.4.2 soak of every family phase 2 computes (`test/oracle/soak_strings_oracle.py`, replayed by `StringOracleTests.StringSoak` from the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names). 77,824 cases over 10 seeds match, after the fixes it found: `NpyString_cmp` is strncmp (a NUL both texts share ends the comparison: `'a\0c' == 'a\0b'`), `np.searchsorted`'s promoted descriptor, `where=` into an out of another dtype, the masked reduction's layout, `_remove_nan_1d`'s order in the nan forms, `np.array_equal` / `np.array_equiv` over `T`, numeric `np.isin`'s empty views, numpy.ma's `filled()` and set-routine errors, and the quantile family's 2-d `q` and `np.nanquantile`'s integer take. The quantile family's `weights=` keyword, the completeness gap the soak listed, is done (2026-10-16, `467f0729`, state log; section `qfamily`), and so is its index arithmetic in `q`'s dtype (float16 / float32 / integer `q` arrays) with the `out=` routes and the nan forms' result objects (2026-10-17, `7a761f74`, state log; section `qprec`). |
 | P2.5 `np.strings`: length, search, strip, pad, replace, partition, slice | Done (2026-10-17, `5dc14393` and `5127e47c`, state log): `str_len`, `find` / `rfind` / `index` / `rindex` / `count`, `startswith` / `endswith`, `strip` / `lstrip` / `rstrip`, `center` / `ljust` / `rjust`, `zfill`, `expandtabs`, `replace`, `partition` / `rpartition`, `slice` and the six comparison names over `S` / `U` / `T` — `np.strings` has 28 of NumPy's 46 names — and `chararray.partition(sep)`; oracle sections `strfn` (10,964 cases) and `tfn` (7,900), 5,280 of them NumPy errors, zero excuses. NPY/NS over 237 benchmark cells (1K / 100K / 1M, 13 data kinds, 7 layouts): geomean 3.64×, min 1.65×. |
-| P2.6 `np.strings`: properties, case maps, `translate`, `mod`, `encode`, `decode` | Milestone 1 done (2026-10-17, `8bbc0f79`, state log): the nine predicates `isalpha` / `isdigit` / `isspace` / `isalnum` / `islower` / `isupper` / `istitle` / `isdecimal` / `isnumeric` as NumPy's ufuncs (`out=` / `where=` / `dtype=`) over `S` (ASCII rules; no `S` loop for the last two), `U` and `T` (NumPy's NA rule), on P2.A's Unicode tables and sticky escalation — `np.strings` has 37 of NumPy's 46 names; oracle sections `strprop` (4,937 cases) and `tprop` (1,512), 782 of them NumPy errors, zero excuses. NPY/NS over 64 benchmark cells (100K elements, 11 data kinds): geomean 7.50×, min 3.99×. Milestone 2 done (2026-10-17, `9d8d1a7b`, state log): the case maps `upper` / `lower` / `swapcase` / `capitalize` / `title` as NumPy's `_vec_string` (the `bytes` methods for `S`, CPython 3.12's full mappings and final sigma for `U` and `T`, an `S` / `U` result cut to the width, NumPy's SystemError for a `U` unit past U+10FFFF, NumPy's NA rule for `T`) — `np.strings` has 42 of NumPy's 46 names; oracle sections `strcase` (2,100 cases) and `tcase` (955), 210 of them NumPy errors, zero excuses. NPY/NS over 55 benchmark cells (100K elements, 11 data kinds): geomean 37.6×, min 4.50×. Milestone 3's first half done (2026-10-17, `5bbd65c2`, mutation-pass pins `2ada5757`, state log): `translate` as NumPy's `_vec_string` (`bytes.translate`'s 256-byte table and delete set for `S`, `str.translate`'s mappings for `U` and `T` — `deletechars` ignored for `U`, refused by `T` —, NumPy's NA rule, an array of tables walked per element) — `np.strings` has 43 of NumPy's 46 names; oracle sections `strtrans` (927 cases) and `ttrans` (1,258), 396 of them NumPy errors, zero excuses. NPY/NS over 84 benchmark cells (8 data sets × tables × 100K / 1K / strided): geomean 52.8×, min 10.8×. Left: `mod`, `encode`, `decode`. |
+| P2.6 `np.strings`: properties, case maps, `translate`, `mod`, `encode`, `decode` | Milestone 1 done (2026-10-17, `8bbc0f79`, state log): the nine predicates `isalpha` / `isdigit` / `isspace` / `isalnum` / `islower` / `isupper` / `istitle` / `isdecimal` / `isnumeric` as NumPy's ufuncs (`out=` / `where=` / `dtype=`) over `S` (ASCII rules; no `S` loop for the last two), `U` and `T` (NumPy's NA rule), on P2.A's Unicode tables and sticky escalation — `np.strings` has 37 of NumPy's 46 names; oracle sections `strprop` (4,937 cases) and `tprop` (1,512), 782 of them NumPy errors, zero excuses. NPY/NS over 64 benchmark cells (100K elements, 11 data kinds): geomean 7.50×, min 3.99×. Milestone 2 done (2026-10-17, `9d8d1a7b`, state log): the case maps `upper` / `lower` / `swapcase` / `capitalize` / `title` as NumPy's `_vec_string` (the `bytes` methods for `S`, CPython 3.12's full mappings and final sigma for `U` and `T`, an `S` / `U` result cut to the width, NumPy's SystemError for a `U` unit past U+10FFFF, NumPy's NA rule for `T`) — `np.strings` has 42 of NumPy's 46 names; oracle sections `strcase` (2,100 cases) and `tcase` (955), 210 of them NumPy errors, zero excuses. NPY/NS over 55 benchmark cells (100K elements, 11 data kinds): geomean 37.6×, min 4.50×. Milestone 3's first half done (2026-10-17, `5bbd65c2`, mutation-pass pins `2ada5757`, state log): `translate` as NumPy's `_vec_string` (`bytes.translate`'s 256-byte table and delete set for `S`, `str.translate`'s mappings for `U` and `T` — `deletechars` ignored for `U`, refused by `T` —, NumPy's NA rule, an array of tables walked per element) — `np.strings` has 43 of NumPy's 46 names; oracle sections `strtrans` (927 cases) and `ttrans` (1,258), 396 of them NumPy errors, zero excuses. NPY/NS over 84 benchmark cells (8 data sets × tables × 100K / 1K / strided): geomean 52.8×, min 10.8×. Milestone 3's second half done (2026-10-18, `4d780c2b`, mutation-pass pins `64349416`, state log): `mod` as NumPy's `_vec_string(a, object, '__mod__', (values,))` with CPython 3.12's `%` per element (its parse, argument and mapping rules, NumPy's scalar conversions) and NumPy's result building (`U` / `S` as wide as the longest result, a fresh default `StringDType` whose invalid code point raises after the walk) — `np.strings` has 44 of NumPy's 46 names; oracle sections `strmod` (1,825 cases) and `tmod` (704), 819 of them NumPy errors, zero excuses. NPY/NS over 48 benchmark cells (24 calls × 1K / 100K): geomean 20.5×, min 10.7×. Left: `encode`, `decode`. |
 | P2.4 casts between text and numbers | Moved to phase 1 by the owner (2026-10-10) and done there (P1.1 for `S` / `U`, P1.6 for `T`). The parse-fed numerics, the random bounds and seeds, numpy.ma's number fills and the bool → text cast all compute now. |
 | Deferral sites | 7 call sites left, all `NDStringUfuncs.NextPhase`, all the fixed-width ones of P2.7: P2.5 (`5dc14393`) removed `chararray.partition(sep)`'s (the STRING partition, `np.char.partition`, which numpy.char phase 3 `d343a5bc` routes there). P2.2 over `T` (`287c3e2e`) had removed the last four `NextPhaseVString` sites — `NDArray.unique` over `T`, `np.median`'s reduction answer, the sorts' and searches' loop answer, their shape-decided guard (`VStringStandIn`, now an internal error) — and `NextPhaseVString` itself. P2.T had removed five `T` sites, P2.2 milestone C the 19 fixed-width sites of `unique`, `isin`, the set routines, `lexsort`, `sort_complex`, `np.histogram`, the reduction guard's default and the discontinuous quantiles. `NDStringCasting.TextConversion` and `NDStringCopy.MixedKinds` have no caller since P1.1. Appendix A maps every site to a stage. |
-| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 56 sections, 214,120 cases since numpy.char's `strcharmeth` (`ffa74606`, `6d06fa3c`, `66b68e96`, `b1328a4f`, `4c9e90a5`), P2.6's `strtrans` / `ttrans` (`5bbd65c2`, `2ada5757`), P2.6's `strcase` / `tcase` (`9d8d1a7b`) and `strprop` / `tprop` (`8bbc0f79`), P2.5's `strfn` / `tfn` (`5dc14393`), the quantile family's `qprec` (`7a761f74`) and `qfamily` (`467f0729`), numpy.char phase 4's `strcharobj` and P2.2 over `T`'s `tsort`). Every case is strict: P2.5 made the last 22 deferred ones strict (`chararray.partition(sep)`, section `strcharops`), and `StringOracleTests.DeferralCeilings` is empty. Appendix B lists the deferred cases each stage turned strict. |
+| The gate | The string oracle (`test/oracle/gen_strings_oracle.py` → `NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`, 58 sections, 216,649 cases since P2.6's `strmod` / `tmod` (`4d780c2b`, `64349416`), numpy.char's `strcharmeth` (`ffa74606`, `6d06fa3c`, `66b68e96`, `b1328a4f`, `4c9e90a5`), P2.6's `strtrans` / `ttrans` (`5bbd65c2`, `2ada5757`), P2.6's `strcase` / `tcase` (`9d8d1a7b`) and `strprop` / `tprop` (`8bbc0f79`), P2.5's `strfn` / `tfn` (`5dc14393`), the quantile family's `qprec` (`7a761f74`) and `qfamily` (`467f0729`), numpy.char phase 4's `strcharobj` and P2.2 over `T`'s `tsort`). Every case is strict: P2.5 made the last 22 deferred ones strict (`chararray.partition(sep)`, section `strcharops`), and `StringOracleTests.DeferralCeilings` is empty. Appendix B lists the deferred cases each stage turned strict. |
 | Iteration and machinery | `np.nditer` and `NDIter` carry string operands with NumPy's descriptors (`4d5b9f26`) and, since P1.7g (`97a168bf`), NumPy's own buffering: element sizes, string buffers, casts between every string dtype and the numbers, `T` buffers with their own allocators. This is the iteration base of every phase-2 kernel. |
 | Refusals and shape-decided answers | Where NumPy has no string loop, NumSharp raises NumPy's type and text, after NumPy's earlier checks in NumPy's order (`Backends/Strings/NDStringUfuncs{,.Precedence,.ShapeDecided,.VString}.cs`); empty inputs, lines of one element and pairs the `==` operator cannot compare are answered from the shape. These stay. |
 
@@ -654,7 +654,7 @@ flowchart LR
 | P2.T | `StringDType` computes: the six comparisons and their operators, the truth readers, `add` / `multiply` / `maximum` / `minimum`, `np.sum` / `np.cumsum` / `np.max` / `np.min` / `argmax` / `argmin`, numpy.ma over `T` | P2.A's `T` shell | 432 deferred `tma` cases, 8 deferral sites | medium | sections `tcomp`, `tarith`, `treduce`; `tma` strict |
 | P2.2 | `sort`, `argsort`, `lexsort`, `partition`, `argpartition`, `argmax` / `argmin` / `nanargmax` / `nanargmin`, `searchsorted`, `unique` and its Array-API forms, `isin`, the set routines, `digitize`, the histograms, the discontinuous quantiles, `sort_complex`: `S` / `U` first, then `T` | `S` / `U`: nothing new (the prefix keys of D3, `RadixSort`, `AxisSort` and P2.1's compare exist); `T`: P2.T | 537 + 5 deferred cases, 27 deferral sites | large | the deferred cases strict; a sorting section over every layout and NA kind |
 | P2.5 (done, `5dc14393`, `5127e47c`) | 20 `np.strings` functions over `S` / `U` / `T` (`str_len`, `find`, `rfind`, `index`, `rindex`, `count`, `startswith`, `endswith`, `strip` / `lstrip` / `rstrip`, `replace`, `expandtabs`, `center` / `ljust` / `rjust`, `zfill`, `partition` / `rpartition`, `slice`) and the six comparison names (NumPy's `np.strings.equal` IS `np.equal`) | P2.A's driver, width classes and `T` shell | new public API: `np.strings` goes from 2 of NumPy's 46 names (`add`, `multiply`) to 28 | large | new zero-excuse sections |
-| P2.6 (the predicates done, `8bbc0f79`; the case maps, `9d8d1a7b`; `translate`, `5bbd65c2`) | 18 functions over `S` / `U` / `T`: the nine predicates, `upper` / `lower` / `swapcase` / `capitalize` / `title`, `translate`, `mod`, `encode`, `decode` | P2.A's tables and escalation; the `%` engine (`PercentFormat`) and CPython's codecs (`PythonCodecs`, strict errors) exist since `f5f3e634` | `np.strings` complete (46 of 46) | large (the two engines shrink it) | new zero-excuse sections |
+| P2.6 (the predicates done, `8bbc0f79`; the case maps, `9d8d1a7b`; `translate`, `5bbd65c2`; `mod`, `4d780c2b`) | 18 functions over `S` / `U` / `T`: the nine predicates, `upper` / `lower` / `swapcase` / `capitalize` / `title`, `translate`, `mod`, `encode`, `decode` | P2.A's tables and escalation; the `%` engine (`PercentFormat`) and CPython's codecs (`PythonCodecs`, strict errors) exist since `f5f3e634` | `np.strings` complete (46 of 46) | large (the two engines shrink it) | new zero-excuse sections |
 | P2.7 | numpy.ma's remaining statements (`median`, masked sort keys), `np.pad`'s `linear_ramp` over text, `np.evaluate`'s refusal message; the docs, `benchmark/strings`, the release notes | every stage above | the last 7 deferral sites; zero deferred cases | medium | the whole string oracle strict |
 
 **Parallel tracks.** Once P2.A exists, P2.T, P2.5 and P2.6 are independent of one another; P2.2's `S` / `U` part needs
@@ -828,7 +828,18 @@ What §2.5 found missing in the drivers, built once for every family:
   `S32` with a delete set (15.7–19.1×: the compaction's per-byte dependency), `T8` ASCII text under a non-ASCII table at
   1K (17.2×) and `T8` non-ASCII text under an expanding table (18.0–18.8×) or non-ASCII mappings (10.8–12.4×), which the
   serial UTF-8 decode bounds at about 9 ns per character (state log).
-- Left: milestone 3's second half (`mod`), milestone 4 (`encode` / `decode` with the `errors=` handlers).
+- **Milestone 3's second half, `mod`, done (2026-10-18, `4d780c2b`, mutation-pass pins `64349416`, state log).** NPY/NS
+  (48 cells: 24 calls × 1K and 100K elements, ns per element on both sides): `U` integer conversions (`%d`, `%5d`,
+  `%+08d`, `id_%04d`, `%x`) 21.4–37.0×, `%s` / `%r` of integers 22.8–31.3×, `%.2f` / `%10.4f` / `%.3e` of floats
+  15.0–27.7×, `%g` 10.7–13.8×, `%s` / `%r` of floats 11.2–16.7×, `<%s>` / `%-10s|` of texts 20.2–39.7×, a format array
+  that changes per element 10.9–11.1×; `S` `%d` 26.4–31.1×, `%.2f` 13.0–20.3×, `<%s>` 13.3–19.4×; `StringDType` `%d`
+  17.5–19.3×, `%.2f` 12.8–16.1×, `<%s>` 21.2–24.2×; geomean 20.5×, min 10.7× (4.3× / 1.7× before the fast paths). 21
+  cells are under the ≥ 20× target: the float conversions at 100K (Ryu's and the exact rounding's data-dependent digit
+  counts mispredict on random data; the 1K arrays repeat and train the predictor: `%.2f` 27.2× at 1K, 15.0× at 100K),
+  `%g` (its trailing zeros stripped through a body buffer), the per-element format array (the element path), and the
+  `S` / `StringDType` cells, where NumPy's own cost is lower (`S`: 360–540 ns per element) or each element is packed
+  into its cell (state log).
+- Left: milestone 4 (`encode` / `decode` with the `errors=` handlers).
 - `isalpha`, `isdigit`, `isspace`, `isalnum`, `islower`, `isupper`, `istitle`, `isdecimal`, `isnumeric` (`S`: ASCII
   rules; no `S` loop for the last two); `upper`, `lower`, `swapcase`, `capitalize`, `title` (CPython's full mappings, the
   final sigma, the cut to the input width; NumPy's SystemError for `U` units above `0x10FFFF`); `translate`; `mod`
@@ -903,6 +914,95 @@ dependencies land; C0 waits for the owner's decision C-D1, C3 for C-D3.
 
 ## 7. State log
 
+- **2026-10-18 — P2.6 milestone 3, second half: `mod` over `S` / `U` / `T`** (`4d780c2b`; mutation-pass pins `64349416`).
+  1. **The function.** NumPy's `_to_bytes_or_str_array(_vec_string(a, np.object_, '__mod__', (values,)), a)`:
+     `bytes.__mod__` for `S`, `str.__mod__` for `U` and `T`, per element in C order over the broadcast of `a` and
+     `np.asarray(values)` (NumPy's multi-iterator shape-mismatch text), the first element that raises ending the call; not
+     a ufunc. The results become an empty array of `a`'s own dtype when there is no element, a `U` / `S` array as wide as
+     the longest result (at least 1; trailing NULs count for the width, an element does not keep them), or for `T` a FRESH
+     default `StringDType` (the NA object dropped) whose element holding a surrogate or a unit past U+10FFFF raises
+     "Invalid unicode code point found" AFTER every element was formatted, so a later formatting error wins. CPython's `%`
+     (`PyUnicode_Format`, `_PyBytes_FormatEx`): a tuple gives its items one per spec, any other value is the one argument,
+     a mapping (an object with a subscript slot that is not a tuple or str; for bytes not bytes either — NumPy's numeric
+     scalars, `np.bool`, dicts, lists, ndarrays) also feeds `%(key)` specs and silences the left-over check, and a key
+     lookup's own error is the answer ("invalid index to scalar variable.", a dict's KeyError with the key's repr). The
+     parse runs as it formats: `'%s %y' % 5` is "not enough arguments for format string", `'%y %s' % 5` "unsupported format
+     character 'y' (0x79) at index 1"; widths and precisions are checked against `PY_SSIZE_T_MAX` / `INT_MAX`. The
+     conversions are NumPy's scalars meeting CPython's: `%r` of a float64 is `np.float64(1.5)`, `%d` truncates a float
+     (NaN: "cannot convert float NaN to integer"), `%x` refuses floats and `np.bool`, `%c` takes a code point or a
+     one-character str ("%c requires int or char"); bytes formatting writes a scalar's raw buffer for `%s` / `%b`, reads
+     `'i'` as `'d'`, and turns any float() failure into "float argument required, not str". A one-unit `U` element past
+     U+10FFFF is CPython's SystemError at the scalar; a longer one keeps the unit (CPython caps a longer str's maximum).
+  2. **The compiled format and the walk** (`Backends/Strings/NDStringMod.cs`, `NDCharObjectPath.Mod.cs`). `ModFormat` is
+     CPython 3.12's parse of one format element, recorded once per DISTINCT element as unit ranges (no text, so one
+     compiled format serves every equal element; a spec that ends in a parse error is the last step and raises at
+     CPython's point). One C-order NDIter walk reads both operands with the object path's readers (NumPy's scalars per
+     element), finds each element's format through a 16-entry cache, and runs CPython's argument machinery with
+     PrintfFormatter's NumPy-scalar / Python-object conversions for every format the fast paths do not take. The result is
+     built as the walk goes: a `U` / `S` result chooses its width from the first 64 elements, writes every later element
+     into its row, re-lays the rows out for a longer element (to the exact length four times, then by half again) and
+     narrows them once at the end (masked `Vector256` row copies that never reach past the result's last row); a `T`
+     result packs each element into its cell as it is formatted, recording an invalid code point for after the walk.
+  3. **The fast paths** (`NDCharObjectPath.ModFast.cs`), for a format of exactly one positional spec (`ModFormat.FastSpec`:
+     no `%(key)`, no `*`) — `np.strings.mod`'s common call. Such a format consumes a non-tuple value whole, so CPython's
+     argument state cannot raise. The CHUNK path takes a chunk whose format does not move over number or plain-text
+     values: the literal runs are rendered once, each element is read from its typed pointer, and once the rows exist each
+     field is written STRAIGHT INTO ITS ROW (no arena, no copy) while its longest possible length fits; an element it
+     cannot write (NaN under `%d`, digits outside FloatDigits' range) is formatted by the general routine in its place, so
+     C order and the first error hold. The ELEMENT path serves the same formats element by element (a format array that
+     changes per element). Specialized: integers `d i u x X o s r a e E f F g G`, floats `d i u` (truncated within 2^63),
+     `s r a` (Ryu's shortest digits in the value's own precision), `e E f F` written straight into the row, `g` through a
+     body buffer, and `%s` of texts (`%b` too for `S`); signs and paddings are chosen without a branch on the sign.
+  4. **FloatDigits and a parity fix** (`Backends/Printing/FloatDigits.cs`). Ryu (Ulf Adams, PLDI 2018; a port of ulfjack/ryu
+     `d2s.c` / `f2s.c`, `f2d` with float16's field widths for `Half`) gives the shortest digits that read back, the closest
+     on a tie — CPython's repr; its 5^q tables are generated from `BigInteger` at type initialization. `TryFixed` /
+     `TryScientific` round the EXACT binary value half to even through one 64×64 → 128-bit multiply and a shift (a carry
+     moves `%e`'s exponent). The float → text casts, NumPy's scalar str / repr (`NDTextFormat.FormatFloatAscii`) and array
+     printing (`Dragon4.ExtractShortest`) now take Ryu's digits too, which fixes the two doubles the .NET 10 runtime gets
+     wrong: 10.0.1's `"R"` writes 16 digits for 2^-25 and 2^-958 that read back as the neighbouring double, where NumPy (and
+     .NET 8) print 17 (`2.9802322387695312e-08`); every power of two, every float16 and 2,000,000 random doubles were
+     compared on both runtimes and no other value differs.
+  5. **Measured on the way.** (a) .NET's formatter costs 139 ns for `"F2"`, 101 ns for `"E3"` and 152 ns for `"R"`, against
+     8.6 ns for a long's digits: through it a float conversion capped `mod` at 4–7× NumPy; FloatDigits takes 10–25 ns.
+     (b) The general route (CPython's argument state, a .NET string per conversion) runs 63–450 ns per element against
+     NumPy's 360–1,280; the fast paths took the geomean from 4.3× to 20.5×. (c) Copying each element from the arena into
+     its row (17.0× geomean) lost to writing it into the row directly (19.1×), and the last points came from branch-free
+     signs and rounding. (d) The 100K float cells trail the 1K ones (15–18× against 23–28×): the 1K arrays repeat, so the
+     predictor learns the digit counts; random 100K data mispredicts them.
+  6. **Found on the way** (their own commits). (a) `np.evaluate` keyed a literal's kernel by .NET's `"R"` text, which is
+     not injective — every NaN prints alike, .NET 10 prints 2^-25 and its neighbour alike, a complex literal was printed in
+     the current culture — so a tree could run another literal's kernel, a silent wrong result; the key now holds the bits
+     (`3beb3d28`). (b) The .NET 8 runtime's tier-0 code boxes a `Half` loaded through a pointer with a read past its two
+     bytes: `PercentFormatTests.Writers_OfAFencedBuffer_ReadOnlyItsElements` crashed the net8.0 test host whenever it ran
+     alone (a float16 at the end of a fenced page); the boxing getters now build the `Half` from its bits (`33af4546`).
+  7. **Gates.** Oracle sections `strmod` (1,825 cases, `S` / `U`) and `tmod` (704, `T`), 819 of them NumPy errors, zero
+     excuses: every layout kind with number values; every NumPy value dtype × every conversion; the flag / width /
+     precision matrix of the integer, float, non-finite and text conversions; mappings and the argument-count rules per
+     value kind; CPython's parse errors in their order; units past U+10FFFF and lone surrogates; result widths; every NA
+     kind and the `U` round trip of a `T` result; long results past the 64-element row sample (growing widths, every
+     value class, a format per element, a 2-D broadcast, every float width, uint64 past int64, late element errors); 400
+     random cases. `StringModTests` (9): the fast paths against the general route
+     (`NDCharObjectPath.ModFastPathsDisabled`, a per-thread hook) over every specialized dtype's special values — the
+     whole array and each value alone — × 50 formats × `U` / `S` / `T` formats, large arrays in every layout, the row
+     storage at every width 1–70 and held to a reference that needs neither route (a long element late, increasing
+     lengths, a long element in the last rows), the first error in C order in large arrays, NumPy-probed pins (numbers,
+     texts at precision 0, a `T` result's trailing NULs, Python lists and tuples). `FloatDigitsTests` (7): the shortest
+     digits by their definition against exact `BigInteger` references (every float16, every power of two plus 50,000
+     random float32 and 10,000 random float64), `TryFixed` / `TryScientific` against exact half-even references, the
+     digit writers. The leak catalogue lists `np.strings.mod`. The full unit and oracle suites pass on both frameworks,
+     and the string and printing unit tests and the whole string oracle under `DOTNET_EnableAVX2=0`,
+     `DOTNET_EnableHWIntrinsic=0` and `NUMSHARP_DEBUG_GUARD_PAGES=1`. A mutation pass of 32 planted defects
+     (FloatDigits' roundings, Ryu and the digit writers; the fast paths' fields; the row storage, the packing, the
+     format cache and `FastSpec`; float16 printing; the Python sequences) killed 27 at first; of the five survivors four
+     were test gaps — a value hidden behind an earlier raising element (2^63 under `%d` after a NaN), a long element in
+     the last rows, a C# list of numbers, a tuple of ints — pinned in `64349416` and killed on the rerun; the fifth,
+     `TryScaleRounded`'s overflow guard, is equivalent (no double reaches it). Five defects only the oracle caught at
+     first now fail a unit test too.
+  8. **Perf** (NPY/NS, ns per element, two pinned P-cores, best of rounds, NumPy's own arrays loaded from `.npy`, NumPy
+     re-measured back to back; 48 cells, every result's digest equal to NumPy's): geomean 20.5×, min 10.7×, max 39.7×, no
+     cell under 1.5×. §4's milestone-3 bullet lists the calls and the cells under the ≥ 20× target.
+  9. **Left in P2.6**: milestone 4 (`encode` / `decode` with the `errors=` handlers). `np.char.mod` and `chararray.__mod__`
+     belong to the `numpy.char` plan's C5.
 - **2026-10-17 — P2.6 milestone 3, first half: `translate` over `S` / `U` / `T`** (`5bbd65c2`; mutation-pass pins
   `2ada5757`). The third of P2.6's four milestones is `translate` and `mod`; this is `translate`.
   1. **The function.** NumPy's `_vec_string(a, a.dtype, 'translate', args)` with `args = (table,)` for `U` —
@@ -1966,7 +2066,7 @@ NumPy's cost is ns per element at 100K for `U8` / `S8` / `T8` (§2.5); NPY/NS is
 | `replace` | Python sizing + C loop: 95–107 / 106 / 118–121 | the fused count + size pass; segment copies (a permute and a whole store per match); the `count` limit applied in the fill pass | P2.5 | m: 9.9; built: 2.6 / 3.4 / 2.5 (`'a'` → `'xy'`) — segment copies by span calls, not register permutes |
 | `expandtabs` | Python sizing + C loop: 118 / 71 / 197 | tab-free elements copied whole (one vector test); elements with tabs walked per unit (the column state) | P2.5 | p: ≥ 5; built: an element without a line break is one gather with the tab runs blended in (a loop over its tabs, not its units), 4.0 / 2.9 / 2.6 |
 | `partition`, `rpartition` | Python sizing + C loop: 101 / 96 / 85–88 | the `find` kernel, then three masked-load copies; `S` / `U`: three arrays where NumPy returns structured-field views (`[Misaligned]` layout) | P2.5 | p: ≥ 5; built: 4.7 / 5.3 / 2.1 |
-| `mod` | `_vec_string`: 579–836 | `PercentFormat` (CPython's `%`, `f5f3e634`) per element: the format compiled once per distinct format element, run into a scratch row; the longest result sizes the output (two passes) | P2.6 | p: ≥ 20 |
+| `mod` | `_vec_string`: 579–836 | `PercentFormat` (CPython's `%`, `f5f3e634`) per element: the format compiled once per distinct format element, run into a scratch row; the longest result sizes the output (two passes). Built: CPython 3.12's parse compiled once per distinct format element (`ModFormat`), CPython's argument machinery and PrintfFormatter's NumPy-scalar / Python-object conversions per element; a one-spec format takes the chunk path (literal runs rendered once, each field written straight into its result row: integers by two-digit tables, floats by FloatDigits' Ryu digits and exact half-even rounding) or the element path; `U` / `S` rows laid out from the first 64 elements, re-laid out for a longer element, narrowed once (one pass, no second pass over the elements); `T` packed per element | P2.6 (`4d780c2b`) | p: ≥ 20; built: `U` integers 21.4–37.0, floats 10.7–27.7, texts 20.2–39.7, per-element formats 10.9–11.1; `S` 13.0–31.1; `T` 12.8–24.2 |
 | `encode`, `decode` | `_vec_string`: 634–703 / 516 / 500 | an ASCII fast path (ASCII text is its own UTF-8, Latin-1 and ASCII: narrow / widen); CPython's codecs (`PythonCodecs`, `f5f3e634`) otherwise, with the `errors=` handlers past `strict` added by P2.6 | P2.6 | p: ≥ 30 |
 | `==` `!=` `<` `<=` `>` `>=` over `T` | C loop: 10.7–11.1 | two cells per vector, the per-pair scalar path, the NA rules (D12) | P2.T | m: 7.2 (`==`), 4.2 (`<`) |
 | `astype(bool)`, `nonzero`, `any` / `all`, `logical_*`, `isnan` over `T` | C loops: `astype(bool)` 1.6, `nonzero` 5.6, `isnan` 2.5 (`T8`) | the size / flag byte tests, two cells per vector | P2.T | p: ≥ 3 |
