@@ -182,7 +182,33 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="utf8">Valid UTF-8.</param>
         /// <returns>The text.</returns>
-        public static string DecodeTrusted(ReadOnlySpan<byte> utf8) => utf8.IsEmpty ? string.Empty : Encoding.UTF8.GetString(utf8);
+        /// <remarks>
+        ///     An ASCII text (the common case, and every byte of it one char) is widened straight into a new string by the
+        ///     BCL's vector ASCII routines; any other text takes <see cref="Encoding.UTF8"/>, whose decoder first counts the
+        ///     chars and then transcodes. Over 100K <c>StringDType</c> elements of 20–60 ASCII bytes the read went 61 → 46 ns per
+        ///     element (a fresh string each); the ASCII test stops at the first non-ASCII byte, so a non-ASCII text pays a
+        ///     partial scan.
+        /// </remarks>
+        public static unsafe string DecodeTrusted(ReadOnlySpan<byte> utf8)
+        {
+            if (utf8.IsEmpty)
+                return string.Empty;
+            if (!Ascii.IsValid(utf8))
+                return Encoding.UTF8.GetString(utf8);
+            // string.Create cannot capture a span: the bytes travel as a pointer, pinned for the call (a no-op pin over the
+            // native memory a cell's text lives in).
+            fixed (byte* p = utf8)
+                return string.Create(utf8.Length, (IntPtr)p, s_widenAscii);
+        }
+
+        /// <summary>The cached delegate of <see cref="WidenAscii"/> (one allocation for the process, not one per text).</summary>
+        private static readonly SpanAction<char, IntPtr> s_widenAscii = WidenAscii;
+
+        /// <summary>Fills a new string with the ASCII bytes at <paramref name="state"/>, one char per byte.</summary>
+        /// <param name="dst">The string's chars; its length is the number of bytes.</param>
+        /// <param name="state">The first byte (a <c>byte*</c>); every byte is below 0x80 (the caller has checked).</param>
+        private static unsafe void WidenAscii(Span<char> dst, IntPtr state)
+            => Ascii.ToUtf16(new ReadOnlySpan<byte>((byte*)state, dst.Length), dst, out _);
 
         /// <summary>
         ///     Decodes external bytes (a Python <c>bytes</c> value, an <c>S</c> element) as strict UTF-8 — Python's

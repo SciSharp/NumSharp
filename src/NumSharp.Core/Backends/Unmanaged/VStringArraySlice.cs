@@ -181,6 +181,49 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
+        ///     The values of the strided run <c>start + i * stride</c> (see <see cref="IArraySlice.GetItems"/>): what
+        ///     <see cref="GetIndex(long)"/> returns for each element — the text as a <see cref="string"/>, the descriptor's
+        ///     <c>na_object</c> for an NA cell (<c>''</c> when it has none) — under ONE hold of the allocator's lock.
+        /// </summary>
+        /// <param name="start">The first element.</param>
+        /// <param name="stride">The step in elements (0 repeats an element, negative walks back).</param>
+        /// <param name="destination">Receives the values.</param>
+        /// <exception cref="OutOfMemoryException"><c>Failed to load string in StringDType getitem</c> (a corrupt cell), or a
+        ///     text too long for a .NET string, at the first such element (the slots before it are filled).</exception>
+        /// <remarks>
+        ///     NumPy's <c>stringdtype_getitem</c> acquires and releases the allocator for every element; the lock exists so
+        ///     that no store moves the arena or frees a heap text while a read follows a cell's pointer, and holding it for the
+        ///     whole run guards the same reads (another thread's store into this buffer waits for the run). The arena base is
+        ///     therefore read once, and each cell is unpacked by <see cref="NDVStringCells.Load"/> (NumPy's
+        ///     <c>NpyString_load</c> with the base given), as the comparison kernels do.
+        /// </remarks>
+        public void GetItems(long start, long stride, Span<object> destination)
+        {
+            if (destination.IsEmpty)
+                return;
+            // The NA reading is a property of the descriptor, the same for every cell of the run.
+            object na = HasNAObject ? Descr.VString.na_object : string.Empty;
+            byte* cell = Address + start * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            long step = stride * VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            Allocator.acquire_allocator();
+            try
+            {
+                byte* arena = Allocator.ArenaBase;
+                for (int i = 0; i < destination.Length; i++, cell += step)
+                {
+                    int isNull = NDVStringCells.Load(cell, arena, out byte* buf, out long size);
+                    if (isNull < 0)
+                        throw new OutOfMemoryException("Failed to load string in StringDType getitem");
+                    destination[i] = isNull == 1 ? na : Decode(buf, size);
+                }
+            }
+            finally
+            {
+                Allocator.release_allocator();
+            }
+        }
+
+        /// <summary>
         ///     Stores <paramref name="value"/> into element <paramref name="index"/> (<c>stringdtype_setitem</c>): the
         ///     descriptor's NA object (by NumPy's <c>na_eq_cmp</c>) packs an NA cell; any other value is converted by
         ///     <see cref="AsPyString"/>, encoded as strict UTF-8 and packed.

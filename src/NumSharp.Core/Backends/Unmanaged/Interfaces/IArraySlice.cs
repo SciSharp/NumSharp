@@ -12,6 +12,38 @@ namespace NumSharp.Backends.Unmanaged
 
         object GetIndex(long index);
 
+        /// <summary>
+        ///     Reads a strided run of elements as their C# values — the run form of <see cref="GetIndex(long)"/>: element
+        ///     <c>start + i * stride</c> into <c>destination[i]</c> for every <c>i</c> of <paramref name="destination"/>.
+        ///     <c>ndarray.tolist()</c> reads each innermost row of its nested lists with one call.
+        /// </summary>
+        /// <param name="start">The first element, as an index into this slice (what <see cref="GetIndex(long)"/> takes).</param>
+        /// <param name="stride">The step between consecutive elements, in elements: 0 reads one element repeatedly (a
+        ///     broadcast axis), a negative step walks backwards (a reversed view).</param>
+        /// <param name="destination">Receives the values; its length is the number of elements read.</param>
+        /// <exception cref="SystemError">A <c>U</c> element holds a unit above <c>U+10FFFF</c> (CPython's <c>invalid maximum
+        ///     character passed to PyUnicode_New</c>). Raised at the first such element: the slots before it are filled, the
+        ///     rest are not.</exception>
+        /// <exception cref="OutOfMemoryException">A <c>StringDType</c> element whose cell is corrupt (NumPy's <c>Failed to
+        ///     load string in StringDType getitem</c>) or whose text is too long for a .NET string; raised as above.</exception>
+        /// <remarks>
+        ///     Every implementation gives exactly what <see cref="GetIndex(long)"/> gives for each element — the same boxed
+        ///     type, the same text, a fresh object per element, the same exception at the same element (a slice outside the
+        ///     library raises what its own <see cref="GetIndex(long)"/> raises) — and reads nothing outside the run's
+        ///     elements. The caller
+        ///     guarantees that every element of the run is inside the slice; nothing here checks it (an index outside reads
+        ///     other memory, as <see cref="GetIndex(long)"/> would). This default calls <see cref="GetIndex(long)"/> per
+        ///     element; the library's slices read the run in one pass: a numeric slice boxes straight from its memory, a
+        ///     fixed-width string slice decodes each element without the per-call dispatch, and a <c>StringDType</c> slice
+        ///     takes its allocator's lock once for the run instead of once per element (NumPy's <c>getitem</c> locks per
+        ///     element; the lock guards the same reads).
+        /// </remarks>
+        void GetItems(long start, long stride, Span<object> destination)
+        {
+            for (int i = 0; i < destination.Length; i++)
+                destination[i] = GetIndex(start + i * stride);
+        }
+
         void SetIndex<T>(long index, T value) where T : unmanaged;
 
         void SetIndex(long index, object value);
