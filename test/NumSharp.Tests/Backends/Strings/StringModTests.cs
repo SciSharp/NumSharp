@@ -175,8 +175,14 @@ namespace NumSharp.Tests.Backends.Strings
 
         /// <summary>
         ///     Every one-argument format over every specialized dtype's special values, through a <c>U</c>, an <c>S</c> and a
-        ///     <c>StringDType</c> format: the fast paths give the general route's result (or its error) exactly.
+        ///     <c>StringDType</c> format: the fast paths give the general route's result (or its error) exactly — over the
+        ///     whole array (the chunk path) and over each value alone (a one-element view at its offset).
         /// </summary>
+        /// <remarks>
+        ///     The whole array stops at its first element that raises (NaN under <c>%d</c>, a negative code point under
+        ///     <c>%c</c>), which hides every later value from the comparison: the mutation pass found 2^63 under <c>%d</c>
+        ///     (the truncation's range check) reached only one value at a time.
+        /// </remarks>
         [TestMethod]
         public void FastPaths_MatchTheGeneralRoute_EveryFormatAndDtype()
         {
@@ -185,11 +191,18 @@ namespace NumSharp.Tests.Backends.Strings
                 using var values = Specials(tc);
                 foreach (var f in Formats)
                 {
+                    using var sf = S(f);
+                    using var tf = T(f);
                     SameAsGeneral(f, values, $"U '{f}' over {tc}");
-                    using (var s = S(f))
-                        SameAsGeneral(s, values, $"S '{f}' over {tc}");
-                    using (var t = T(f))
-                        SameAsGeneral(t, values, $"T '{f}' over {tc}");
+                    SameAsGeneral(sf, values, $"S '{f}' over {tc}");
+                    SameAsGeneral(tf, values, $"T '{f}' over {tc}");
+                    for (int i = 0; i < values.size; i++)
+                    {
+                        using var one = values[$"{i}:{i + 1}"];
+                        SameAsGeneral(f, one, $"U '{f}' over {tc}[{i}]");
+                        SameAsGeneral(sf, one, $"S '{f}' over {tc}[{i}]");
+                        SameAsGeneral(tf, one, $"T '{f}' over {tc}[{i}]");
+                    }
                 }
             }
         }
@@ -283,6 +296,8 @@ namespace NumSharp.Tests.Backends.Strings
                 r.dtype.Should().Be(np.dtype("U9"));
                 Strings(r)[70].Should().Be("123456789");
                 Strings(r)[0].Should().Be("1");
+                // Every row: the re-layout keeps the rows written before it (the row just before the long element too).
+                AssertDecimalRows(r, late, "", "");
             }
             // Probed: 10**0 .. 10**18 five times over: '<1000000000000000000>' sets the width, U21.
             var growing = Enumerable.Range(0, 5).SelectMany(_ => Enumerable.Range(0, 19).Select(k => (long)System.Math.Pow(10, k))).ToArray();
@@ -291,10 +306,29 @@ namespace NumSharp.Tests.Backends.Strings
                 r.dtype.Should().Be(np.dtype("U21"));
                 Strings(r)[^1].Should().Be("<1000000000000000000>");
             }
-            // Strictly increasing lengths past the sample: re-layouts every few elements, then the narrowing.
+            // Strictly increasing lengths past the sample: re-layouts every few elements, then the narrowing. Both routes
+            // share the row storage, so the rows are also held to their own text (str(int) is '%d' % int) and width.
             var increasing = Enumerable.Range(0, 400).Select(i => i < 64 ? 1L : (long)System.Math.Pow(10, System.Math.Min(18, (i - 64) / 18))).ToArray();
             SameAsGeneral("%d", np.array(increasing), "increasing lengths");
             SameAsGeneral(S("%d"), np.array(increasing), "S increasing lengths");
+            using (var r = np.strings.mod("[%d]", np.array(increasing)))
+                AssertDecimalRows(r, increasing, "[", "]");
+            using (var sd = S("%d"))
+            using (var r = np.strings.mod(sd, np.array(increasing)))
+                AssertDecimalRows(r, increasing, "", "");
+            // A long element in the LAST rows (the rows whose room the direct writes must not assume: a write that ran past
+            // the row would run past the result; NUMSHARP_DEBUG_GUARD_PAGES=1 turns that into a crash).
+            foreach (int n in new[] { 65, 100, 257 })
+            foreach (int back in new[] { 1, 2, 3 })
+            {
+                var tail = Enumerable.Repeat(7L, n).ToArray();
+                tail[n - back] = 1_000_000_000_000_000_000L;
+                using (var r = np.strings.mod("%d", np.array(tail)))
+                    AssertDecimalRows(r, tail, "", "");
+                using (var sd = S("%d"))
+                using (var r = np.strings.mod(sd, np.array(tail)))
+                    AssertDecimalRows(r, tail, "", "");
+            }
             // Every row width from 1 to 70 code points / bytes, with 200 elements (the last rows take the exact copy).
             for (int width = 1; width <= 70; width++)
             {
@@ -307,6 +341,25 @@ namespace NumSharp.Tests.Backends.Strings
                 string g = "%-" + width + "d|";
                 SameAsGeneral(g, np.array(vals.Select(v => v * 1000003L).ToArray()), $"U left width {width}");
             }
+        }
+
+        /// <summary>
+        ///     Holds a <c>U</c> / <c>S</c> result of a <c>%d</c> format over integers to its own text — each element
+        ///     <paramref name="prefix"/> + the integer's decimal text + <paramref name="suffix"/> (CPython's <c>'%d' % i</c> is
+        ///     <c>str(i)</c>) — and its width (the longest element), a reference that needs neither route.
+        /// </summary>
+        /// <param name="r">The result.</param>
+        /// <param name="values">The integers it formatted.</param>
+        /// <param name="prefix">The format's text before the spec.</param>
+        /// <param name="suffix">The format's text after the spec.</param>
+        private static void AssertDecimalRows(NDArray r, long[] values, string prefix, string suffix)
+        {
+            var want = values.Select(v => prefix + v.ToString(System.Globalization.CultureInfo.InvariantCulture) + suffix).ToArray();
+            int width = want.Max(w => w.Length);
+            bool bytes = r.dtype.kind == 'S';
+            r.dtype.Should().Be(np.dtype((bytes ? "S" : "U") + width));
+            var got = bytes ? Bytes(r) : Strings(r).Cast<string>().ToArray();
+            got.Should().Equal(want);
         }
 
         // =============================================================================================================
@@ -428,6 +481,72 @@ namespace NumSharp.Tests.Backends.Strings
                 np.arange(12));
             cycle.dtype.Should().Be(np.dtype("U7"));
             Strings(cycle).Should().Equal("0", "    1", "2     |", "+3", "4", "    5", "6     |", "+7", "8", "    9", "10    |", "+11");
+        }
+
+        /// <summary>
+        ///     Probed outputs (NumPy 2.4.2) of text conversions: precision 0 keeps no character (<c>'%.0s|'</c> is <c>'|'</c>,
+        ///     padded by the width), for <c>U</c>, <c>S</c> and <c>StringDType</c> formats and for a number's str / repr; a
+        ///     <c>StringDType</c> format array whose elements differ but share a length; and a <c>StringDType</c> result
+        ///     drops its trailing NULs (NumPy builds it through a <c>U</c> array: <c>'%s' % 'a\0'</c> is <c>'a'</c>, an inner
+        ///     NUL stays), while the same text inside a format's literal run keeps them only when they are not trailing.
+        /// </summary>
+        [TestMethod]
+        public void Texts_MatchNumPy()
+        {
+            Strings(np.strings.mod("%.0s|", np.array(new[] { "abc", "" }))).Should().Equal("|", "|");
+            using (var r = np.strings.mod("%5.0s|", np.array(new[] { "abc" })))
+            {
+                r.dtype.Should().Be(np.dtype("U6"));
+                Strings(r).Should().Equal("     |");
+            }
+            using (var f = S("%.0s|"))
+                Bytes(np.strings.mod(f, np.array(new object[] { Encoding.ASCII.GetBytes("abc") }, np.dtype("S3")))).Should().Equal("|");
+            using (var f = T("%.0s|"))
+                Strings(np.strings.mod(f, np.array(new[] { "abc" }))).Should().Equal("|");
+            // A number's str / repr cut to precision 0 too (the fast paths' ASCII text field).
+            Strings(np.strings.mod("%.0s|", np.array(new[] { 42L, -7L }))).Should().Equal("|", "|");
+            Strings(np.strings.mod("%.0r|", np.array(new[] { 1.5 }))).Should().Equal("|");
+            using (var r = np.strings.mod("%5.0s|", np.array(new[] { 1.5 })))
+            {
+                r.dtype.Should().Be(np.dtype("U6"));
+                Strings(r).Should().Equal("     |");
+            }
+            // StringDType formats of one length that differ per element: each element's format is decoded into the same
+            // scratch, so the format cache must compare the text, not the address.
+            using (var fmts = np.array(new[] { "%d", "%x", "%o", "%X" }, np.dtypes.StringDType()))
+                Strings(np.strings.mod(fmts, np.array(new[] { 255L, 255L, 255L, 255L }))).Should().Equal("255", "ff", "377", "FF");
+            using var nul = np.array(new[] { "a\0", "a\0b\0\0", "\0", "q" }, np.dtypes.StringDType());
+            using (var f = T("%s"))
+            using (var r = np.strings.mod(f, nul))
+                Strings(r).Should().Equal("a", "a\0b", "", "q");
+            using (var f = T("<%s>"))
+            using (var r = np.strings.mod(f, nul))
+                Strings(r).Should().Equal("<a\0>", "<a\0b\0\0>", "<\0>", "<q>");
+        }
+
+        /// <summary>
+        ///     Values given as Python sequences (probed: NumPy 2.4.2): a C# list of numbers is NumPy's list (<c>[1, 2]</c> is an
+        ///     int64 array, whatever the C# element type), a tuple is a sequence too (one value per format element), and a list
+        ///     of bools is NumPy's bool array.
+        /// </summary>
+        [TestMethod]
+        public void PythonSequences_MatchNumPy()
+        {
+            using (var r = np.strings.mod("%r", new System.Collections.Generic.List<int> { 1, 2 }))
+            {
+                r.dtype.Should().Be(np.dtype("U11"));
+                Strings(r).Should().Equal("np.int64(1)", "np.int64(2)");
+            }
+            using (var fmts = np.array(new[] { "%s", "%s" }))
+                Strings(np.strings.mod(fmts, (1, 2))).Should().Equal("1", "2");
+            // A tuple of C# ints is a tuple of Python ints: int64, not the C# int32 (%r shows the dtype).
+            Strings(np.strings.mod("%r", (1, 2))).Should().Equal("np.int64(1)", "np.int64(2)");
+            using (var r = np.strings.mod("%r", ((1, 2), (3, 4))))
+            {
+                r.shape.Should().Equal(2L, 2L);
+                Strings(r).Should().Equal("np.int64(1)", "np.int64(2)", "np.int64(3)", "np.int64(4)");
+            }
+            Strings(np.strings.mod("%r", new System.Collections.Generic.List<bool> { true, false })).Should().Equal("np.True_", "np.False_");
         }
 
         /// <summary>
