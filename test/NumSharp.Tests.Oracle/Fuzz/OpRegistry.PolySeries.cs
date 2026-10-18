@@ -473,6 +473,10 @@ namespace NumSharp.Tests.Fuzz
                         "weight" => a.CalcFacet(m.chebweight(a.Get("x"))),
                         "pts1" => a.CalcFacet(m.chebpts1(a.Get("npts"))),
                         "pts2" => a.CalcFacet(m.chebpts2(a.Get("npts"))),
+                        // The callable is a menu name (OpRegistry.PolyInterp.cs); deg and args decode in that order, the
+                        // generator's encode order.
+                        "interpolate" => a.CalcFacet(m.chebinterpolate(ChebInterpolateFunc(a.Raw("func").GetString()),
+                                                                       a.Get("deg"), a.Opt("args"))),
                         _ => throw new NotSupportedException($"chebyshev op '{fn}' is not registered in OpRegistry"),
                     };
                 }

@@ -1079,6 +1079,13 @@ a unit below, that document wins.
 
 ### U9 — Chebyshev sampling and interpolation (3 names)
 
+> **DELIVERED (2026-10-18).** `chebpts1` / `chebpts2` with U8's Chebyshev points (see U8). **`chebinterpolate`**:
+> `Polynomial/Package/NDPolyInterpolate.cs`, a composition of chebpts1, U5's chebvander, np.dot and two in-place
+> np.divide calls, one signature `chebinterpolate(Func<NDArray, object[], object> func, object deg, object args = null)`;
+> oracle tiers `polyinterp.jsonl` / `polyinterp_parity.jsonl` (1,113 cases, 0 excused; the values host-pinned on np.dot's
+> OpenBLAS products), benchmark geomean 7.20× (27 cells, all bit-exact); routes and findings:
+> [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md) §3.5.
+
 - **Scope:** `chebpts1`, `chebpts2`, `chebinterpolate`. `Chebyshev.interpolate` is in U10.
 - **Backend:**
   - `chebpts1`: `sin` of a scaled `arange`;

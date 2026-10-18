@@ -375,6 +375,33 @@ w = (w + w[::-1]) / 2;  x = (x - x[::-1]) / 2;  w *= 2.0 / w.sum()
 
 ### 3.5 `chebinterpolate(func, deg, args=())` — U9
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyInterpolate.cs` + the facade member, the
+> composition recommended below, with ONE signature (the owner's one-overload rule, which settled §8's question):
+> `chebinterpolate(Func<NDArray, object[], object> func, object deg, object args = null)` — func receives the points
+> and the unpacked args and returns anything np.dot accepts. Oracle tiers `polyinterp.jsonl` (83 portable error /
+> flags cases) and `polyinterp_parity.jsonl` (1,030 value cases, host-pinned like `polygauss_parity`: np.dot's gemv /
+> gemm / ddot through the OpenBLAS backend at one thread), zero excuses; the callables are a menu of 32 named functions
+> both sides implement. Unit tests `test/NumSharp.Tests/Polynomial/PolynomialInterpolateTests.cs` (12; 17 of 18 planted
+> defects caught, the survivor equivalent: a bool deg reaches the same TypeError through the default branch);
+> benchmark `benchmark/polynomial/polyinterp_results.md` (27 cells, all bit-exact, geomean 7.20×, min 3.20×: the
+> complex result at degree 5). What the delivery found:
+> - **`deg + 1` wraps in deg's dtype**: `np.asarray(deg) + 1` is a ufunc add on a 0-d array, so np.uint8(255),
+>   np.int8(127), np.uint16(65535) (a C# char), 2**63 − 1 (int64) and 2**64 − 1 (uint64) ask chebpts1 for 0 or fewer
+>   points (`npts must be >= 1`), and 2**63 (np.asarray's uint64) lands in chebpts1's 2**63 band: the points come back
+>   EMPTY, func is called with them, and chebvander then raises `Maximum allowed dimension exceeded`.
+> - **`*args` is Python's unpacking**: a tuple, a list, an ndarray (its first-axis items), a str (its characters), a
+>   dict (its keys); a 0-d array is its iterator's `iteration over a 0-d array` and any other object CPython 3.12's
+>   `Value after * must be an iterable, not {type}` — both raised BEFORE a None func's `'NoneType' object is not
+>   callable` (the unpacking precedes the call). C# null is NumPy's default `()` (an explicit None is not expressible).
+> - **The complex divisions are CDOUBLE_divide**: `c[1:] /= 0.5*order` multiplies by the reciprocal of the real
+>   divisor (Smith's branch), which differs from a plain division in ~30% of components; the house np.divide is that
+>   loop, and so is NumPy's scalar path for a 1-D `c[0] /= order` (scalarmath calls the ufunc loop).
+> - **Without the backend** the managed np.dot differs in the last bits on most coefficients from degree ~15 (within
+>   0.6 × 2**-52 × max|c| at degree 100, 3.4 at degree 500); the unit tests hold it to 8 × 2**-52 × max|c|.
+> - **Ownership**: the points handed to func and every array func creates are intermediates of the call, reclaimed when
+>   it returns (`[NDScoped]`); `NDScope.Detach` keeps one. A numpy.matrix result is computed plain (NumPy returns a
+>   matrix; the package computes plain), pinned `[Misaligned]`.
+
 **NumPy 2.4.2.**
 ```python
 deg = np.asarray(deg)
@@ -493,7 +520,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 11 | `hermegauss` | hermite_e | **composition + `_normed_hermite_e_n` as a U3 step-table program** | array-statement loop (1.38×) | host-pinned | est. as hermgauss |
 | 12 | `chebpts1` | chebyshev | **DELIVERED** — one emitted fill, MIRRORED (the antisymmetric ramp and the odd C-runtime sin: half the sin calls, the same bytes) | arange + fused `Sin` (1.27× at 1K) | host-libm (sin) | 2.26–4.83×; geomean 3.99 |
 | 13 | `chebpts2` | chebyshev | **DELIVERED** — one emitted fill (`cos(k·s + (-π))`, endpoint `cos(0)`) | `np.cos(np.linspace(...))` (1.8× at 1K, one pass more) | host-libm (cos) | 1.15× (10K, cos floor) – 11.9×; geomean 3.92 |
-| 14 | `chebinterpolate` | chebyshev | **composition** (`chebpts1` → delegate → `chebvander` → `np.dot` → 2 in-place divides) | a fused DCT (breaks gemv parity) | host-pinned (gemv) | 4.8–12.7× |
+| 14 | `chebinterpolate` | chebyshev | **DELIVERED** — composition (`chebpts1` → delegate → `chebvander` → `np.dot` → 2 in-place divides) | a fused DCT (breaks gemv parity) | host-pinned (gemv / gemm / ddot) | 3.20× (complex, degree 5) – 16.2×; geomean 7.20 |
 | 15 | `polyfit` | polynomial | **composition of `_fit`** + fused streaming norm + C-ordered scaling, `lstsq` via backend | a fit kernel (LAPACK-bound) | host-pinned (gelsd) | 1.41× (n=1000 d=10; ceiling ~1.77×) |
 | 16 | `chebfit` | chebyshev | as `polyfit` | as `polyfit` | host-pinned | 1.51–2.6× |
 | 17 | `legfit` | legendre | as `polyfit` | as `polyfit` | host-pinned | as chebfit |
@@ -577,7 +604,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | weights | `chebweight`/`legweight` portable; `lagweight`/`hermweight`/`hermeweight` host-libm (`RunHostLibmCorpus`) | every dtype incl. bool/int8/uint8 wrap-arounds, Python-scalar kinds, list/tuple TypeErrors, the huge-Python-int TypeError |
 | `chebpts1`/`chebpts2`/`chebgauss` | **DELIVERED**: `polypts.jsonl` (362, portable: errors, empty results, flags, Char) + `polypts_host.jsonl` (347, host-libm values) | the `int()`/`_as_int` argument matrix of §3.3, np.arange's 2**63 band |
 | `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); leg / lag **DELIVERED**: `polygauss.jsonl` (122 portable errors) + `polygauss_parity.jsonl` (160) | degrees 1…257; the `operator.index` / list-repeat argument matrix; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) still to come |
-| `chebinterpolate` | host-pinned (gemv) | (n,) and (n, k) results, every dtype the delegate returns, `args` |
+| `chebinterpolate` | **DELIVERED**: `polyinterp.jsonl` (83 portable errors / flags) + `polyinterp_parity.jsonl` (1,030 values, host-pinned) | (n,), (n, k) and (2, n, 3) results, scalar results, every dtype the delegate returns, lists / tuples, `args`, the deg kinds and their wrap-around |
 | fits | host-pinned (gelsd) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |
 | classes | portable (fit/roots inherit their tiers) | `test_classes.py` × 6, `test_symbol.py`, `convert`/`cast` bytes (the series-object Clenshaw) |
 | printing | portable | `test_printing.py`; `format_float` over print options |
@@ -585,7 +612,9 @@ Measured proxies (the unit functions the members call; the class adds an object 
 ## 8. Open questions for the owner
 
 - **`chebinterpolate`'s delegate shape.** `Func<NDArray, NDArray>` plus an `object[] args` overload, as the main plan
-  proposes, or `Func<NDArray, object[], NDArray>` only?
+  proposes, or `Func<NDArray, object[], NDArray>` only? **Settled (2026-10-18) by the one-overload rule**: one signature,
+  `Func<NDArray, object[], object>` (func's result is anything np.dot accepts, as in Python) with `object args = null`
+  (any Python iterable).
 - **F2.** Fix the F-result broadcast binary path library-wide (it also affects any `x.T op v`), or only spell the fit's
   scaling in C order?
 - **The float16 weights.** Decided at delivery: the eager route (the `np.var` precedent). Its speed is the house

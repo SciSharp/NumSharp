@@ -6033,6 +6033,46 @@ SHA-256-checked): geomean 5.45×** — leggauss 1.63–9.9×, laggauss 2.1–18.
   `leggauss(100)`); each is one U3 kernel call here. From degree ~100 both sides wait on the same `syevd`
   (eigvalsh(100) 370 µs on both), so the ratio falls toward 1.6–2× at degree 500.
 
+### Polynomial package — Chebyshev interpolation (U9)
+`chebinterpolate` (1 name)
+
+Plans `docs/plans/numpy-polynomial.md` (U9) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.5 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2** wherever np.dot is (with the OpenBLAS backend at one thread): oracle tiers
+`polyinterp.jsonl` (83 portable error / flags cases) and `polyinterp_parity.jsonl` (1,030 value cases, host-pinned like
+`polygauss_parity`, its BLAS identity in `polyinterp_parity.host.jsonl`), 0 excused; the callables are a menu of 32
+named functions both sides implement (`gen_oracle.py`'s `_PI_FUNCS`, `OpRegistry.PolyInterp.cs`). Unit tests
+`Polynomial/PolynomialInterpolateTests.cs` (12). **Perf (NPY/NS, `benchmark/polynomial/polyinterp_*`, 27 cells, every one
+SHA-256-checked): geomean 7.20×, min 3.20×** — vector results 3.25–16.2×, matrix results 4.5–11.1×, complex 3.2–7.6×.
+
+- **Signature**: ONE overload (the one-signature rule): `chebinterpolate(Func<NDArray, object[], object> func, object deg,
+  object args = null)`. func receives the points (chebpts1's new float64 array of `deg + 1` elements) and the unpacked
+  args, and returns anything np.dot accepts — an NDArray of any dtype (a 2-D `(deg + 1, k)` array interpolates k
+  functions; an N-D one contracts its second-to-last axis), a Python list / tuple, a typed C# array, or a scalar (np.dot
+  of a 0-d operand is a product: the result is then the `(deg + 1, deg + 1)` matrix). null args is NumPy's `()`.
+- **Engine** (`Polynomial/Package/NDPolyInterpolate.cs`): NumPy's statements composed from bit-exact engines —
+  chebpts1 (unit 2's emitted fill), U5's chebvander (its m.T is the vander's C-contiguous buffer, as in NumPy), np.dot
+  (the OpenBLAS backend's port of cblas_matrixproduct: gemv / gemm / the N-D dotfunc), then `c[0] /= order` and
+  `c[1:] /= 0.5*order` as in-place np.divide on views (complex: CDOUBLE_divide, a multiplication by the reciprocal of
+  the real divisor, which NumPy's scalar `c[0]` path also calls).
+- **Arguments**: deg is `np.asarray(deg)`: a 0-d integer array is required (a C# integer / BigInteger is a Python int —
+  int64, uint64 from 2**63, an OBJECT array past 2**64 —, a char is np.uint16), else `deg must be an int` (after np.asarray's
+  inhomogeneous ValueError for a ragged list). `deg + 1` WRAPS in deg's dtype (a ufunc add on a 0-d array): np.uint8(255),
+  np.int8(127), char 65535, 2**63 − 1 and 2**64 − 1 give chebpts1's `npts must be >= 1`; 2**63 lands in chebpts1's 2**63
+  band, so func is called with an EMPTY array and chebvander raises `Maximum allowed dimension exceeded`. args is Python's
+  `*args`: a tuple, a list, an NDArray (first-axis items), a str (one-character strs), a dict (keys); a 0-d array is
+  `iteration over a 0-d array`, anything else `Value after * must be an iterable, not {type}` (CPython 3.12) — raised
+  before a null func's `'NoneType' object is not callable`.
+- **Ownership** (`[NDScoped]`): the points handed to func and every array func creates are reclaimed when the call
+  returns; `NDScope.Detach` keeps one inside func. A func result created before the call stays the caller's.
+- **Not reproduced**: a func result NumPy computes with as Python objects (None, a dict, a list holding None or a Python
+  int past uint64) is NotSupportedException; a numpy.matrix result is computed plain (NumPy returns a matrix), pinned
+  `[Misaligned]`.
+- **Without the backend** np.dot is the managed product: the same coefficients to rounding (from degree ~15 most differ
+  in the last bits, within 0.6 × 2**-52 × max|c| at degree 100 and 3.4 at degree 500).
+- **Where the time goes**: NumPy's Python statements at low degrees (chebvander's row loop, np.dot's conversion, the
+  divisions); at high degrees the (deg + 1)**2 matrix on both sides (NumPy writes it with a ufunc call per row, NumSharp
+  with one kernel; the product reads it), so the ratio peaks at ~16× around degree 100–200 and falls to 8× at 1000.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 

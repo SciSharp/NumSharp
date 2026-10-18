@@ -43,7 +43,7 @@ One optional companion package ships for the first time, co-versioned with **Num
   - [Advanced usage](https://scisharp.github.io/NumSharp/docs/advanced/index.html) - extending NumSharp, native code & backends, under the hood.
 
 ### ✨ New APIs & Modules
-- `np.polynomial` - the `numpy.polynomial` package for all six bases (`polynomial`, `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus `polyutils`: 182 of its 193 functions, bit-exact with NumPy 2.4.2 against generated oracles (143,968 cases, 0 excused); `{p}` below is `poly` / `cheb` / `leg` / `lag` / `herm` / `herme` - `57545200`, `38ed8da7`, `ac8608d9`, `38526155`, `e2ff9477`, `0c02740c` (+ `0896cbf8`, `d494e83d`).
+- `np.polynomial` - the `numpy.polynomial` package for all six bases (`polynomial`, `chebyshev`, `legendre`, `laguerre`, `hermite`, `hermite_e`) plus `polyutils`: 183 of its 193 functions, bit-exact with NumPy 2.4.2 against generated oracles (145,081 cases, 0 excused); `{p}` below is `poly` / `cheb` / `leg` / `lag` / `herm` / `herme` - `57545200`, `38ed8da7`, `ac8608d9`, `38526155`, `e2ff9477`, `0c02740c` (+ `0896cbf8`, `d494e83d`).
   - `{p}val`, `{p}val2d`, `{p}val3d`, `{p}grid2d`, `{p}grid3d`, `{p}valnd` - evaluation.
   - `{p}add`, `{p}sub`, `{p}mulx`, `{p}mul`, `{p}div`, `{p}pow`, `{p}fromroots` - series arithmetic.
   - `{p}der`, `{p}int` - calculus, with every `m` / `k` / `lbnd` / `scl` / `axis` form.
@@ -52,10 +52,11 @@ One optional companion package ships for the first time, co-versioned with **Num
   - `chebweight`, `legweight`, `lagweight`, `hermweight`, `hermeweight` - the weight functions, with NumPy's Python-scalar arithmetic and `x**2` as `np.square`.
   - `chebpts1`, `chebpts2`, `chebgauss` - Chebyshev points of both kinds and Gauss-Chebyshev quadrature, with `int()` / `operator.index` argument rules and np.arange's size errors.
   - `leggauss`, `laggauss` - Gauss-Legendre and Gauss-Laguerre quadrature (the eigenvalues compute through the OpenBLAS backend's `eigvalsh`).
+  - `chebinterpolate` - interpolation at the Chebyshev points of the first kind, with NumPy's `deg` rules and Python's `*args` unpacking (the product is the OpenBLAS backend's when it is referenced, NumPy's bits; the managed one otherwise).
   - `{p}trim`, `{p}line`, `{p}domain`, `{p}zero`, `{p}one`, `{p}x`, the five `X2poly` / `poly2X` pairs - helpers, module constants and basis conversions.
   - `as_series`, `trimseq`, `trimcoef`, `getdomain`, `mapparms`, `mapdomain` - `polyutils`.
-  - Speed - x1.78-x37.8 NumPy's speed by benchmark geomean per family (evaluation x7.5, additive x8.5, calculus x7.6, series algebra x37.8, Vandermonde x10.2, roots x4.65, weights x1.78: their `exp` is the C runtime's on both sides, Chebyshev points x3.37, Gauss-Legendre / Gauss-Laguerre x5.45).
-  - Still to come: fitting, Gauss quadrature, `chebpts` / `chebinterpolate`, `polyvalfromroots`, `format_float` and the six series classes.
+  - Speed - x1.78-x37.8 NumPy's speed by benchmark geomean per family (evaluation x7.5, additive x8.5, calculus x7.6, series algebra x37.8, Vandermonde x10.2, roots x4.65, weights x1.78: their `exp` is the C runtime's on both sides, Chebyshev points x3.37, Gauss-Legendre / Gauss-Laguerre x5.45, Chebyshev interpolation x7.20).
+  - Still to come: fitting, Gauss-Hermite quadrature, `polyvalfromroots`, `format_float` and the six series classes.
 - `np.matrix` - NumPy's `numpy.matrix` as the type `NDMatrix` (80 of its 83 members), held to NumPy 2.4.2's values, class and shape by two generated oracles (26,761 and 4,645 cases) - `201e9c7b`, `51bd91f8` (+ `daa58824`).
   - `np.matrix`, `np.asmatrix`, `np.bmat` - construction from arrays, sequences and `"1 2; 3 4"` literals.
   - `T`, `H`, `I`, `A`, `A1` - the transposes, the inverse and the plain-array views.

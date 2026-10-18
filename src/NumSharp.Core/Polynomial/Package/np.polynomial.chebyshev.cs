@@ -1,3 +1,4 @@
+using System;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp
@@ -745,5 +746,71 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public (NDArray x, NDArray w) chebgauss(object deg) => NDPolyChebPoints.Gauss(deg);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Interpolation (plan U9): chebinterpolate
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     Interpolates <paramref name="func"/> at the <c>deg + 1</c> Chebyshev points of the first kind
+        ///     (<see cref="chebpts1"/>) on [-1, 1]: the Chebyshev series of degree <paramref name="deg"/> through those points,
+        ///     which tends to the minimax approximation of a continuous function as the degree grows. Computed as NumPy 2.4.2
+        ///     writes it — <c>c = np.dot(chebvander(x, deg).T, func(x, *args))</c>, then <c>c[0] /= deg + 1</c> and
+        ///     <c>c[1:] /= 0.5*(deg + 1)</c>, the discrete orthogonality of the Chebyshev polynomials at those points — so the
+        ///     coefficients are NumPy's bit for bit wherever np.dot is (with <c>NumSharp.Interop.OpenBLAS</c> referenced, the
+        ///     OpenBLAS products NumPy calls; without it the managed product, within a few ULP).
+        /// </summary>
+        /// <param name="func">
+        ///     The function to approximate, called ONCE as <c>func(x, args)</c>: <c>x</c> is the points (a new float64 array
+        ///     of <c>deg + 1</c> elements in increasing order) and <c>args</c> the unpacked <paramref name="args"/> (empty
+        ///     when there are none) — NumPy's <c>func(x, *args)</c>. It returns anything <c>np.dot</c> accepts: an
+        ///     <see cref="NDArray"/> of the values at the points (any dtype; a 2-D <c>(deg + 1, k)</c> array interpolates k
+        ///     functions at once, and an N-D one contracts its second-to-last axis), a Python list or tuple of them, a typed C#
+        ///     array, or a scalar (np.dot of a 0-d operand is a product, so the result is then the matrix
+        ///     <c>chebvander(x, deg).T * y</c> with row 0 divided by <c>deg + 1</c> and the rest by <c>0.5*(deg + 1)</c>).
+        /// </param>
+        /// <param name="deg">
+        ///     The degree of the interpolating series: a non-negative integer — a C# integer or
+        ///     <see cref="System.Numerics.BigInteger"/>, a <c>char</c> (np.uint16), or a 0-d integer <see cref="NDArray"/>
+        ///     (NumPy's <c>np.asarray(deg)</c> of an integer kind). A bool, a float (even <c>3.0</c>), a list (even
+        ///     <c>[3]</c>) or a sized array is refused. <c>deg + 1</c> is computed in deg's dtype and wraps there, as in NumPy:
+        ///     a 0-d uint8 array holding 255 asks chebpts1 for 0 points.
+        /// </param>
+        /// <param name="args">
+        ///     Extra arguments for <paramref name="func"/>, unpacked as Python's <c>*args</c>: an <c>object[]</c>, a tuple, any
+        ///     other enumerable, an <see cref="NDArray"/> (its first-axis items), a string (its characters as one-character
+        ///     strings) or a dictionary (its keys); null (the default) is NumPy's <c>()</c>.
+        /// </param>
+        /// <returns>
+        ///     The coefficients, low degree first: a new array of np.dot's dtype (float64, or complex128 for a complex result),
+        ///     of shape <c>(deg + 1,)</c> for a vector result, <c>(deg + 1,) + y.shape[:-2] + y.shape[-1:]</c> for an N-D one and
+        ///     <c>(deg + 1, deg + 1)</c> for a scalar one.
+        /// </returns>
+        /// <exception cref="TypeError"><c>deg must be an int</c>; args that cannot be unpacked (<c>Value after * must be an
+        ///     iterable, not …</c>, or <c>iteration over a 0-d array</c>); a null <paramref name="func"/> (<c>'NoneType' object is
+        ///     not callable</c>, raised after args are unpacked, as in Python).</exception>
+        /// <exception cref="ValueError"><c>expected deg &gt;= 0</c>; <c>npts must be &gt;= 1</c> from chebpts1 when <c>deg + 1</c>
+        ///     wrapped (a 0-d integer array at its dtype's maximum, or 2**63 - 1); a degree too large to allocate
+        ///     (<c>array is too big; …</c>, <c>Maximum allowed dimension exceeded</c>); a ragged sequence (np.asarray's
+        ///     inhomogeneous-shape text).</exception>
+        /// <exception cref="System.ArgumentException">np.dot's <c>shapes … not aligned: …</c> — a result whose length is not
+        ///     <c>deg + 1</c> (NumPy's ValueError, with NumPy's text).</exception>
+        /// <exception cref="System.NotSupportedException">A result NumPy turns into an OBJECT array (null, or a list holding null
+        ///     or a Python int past uint64): NumPy then computes the product with Python objects, a dtype NumSharp does not
+        ///     have.</exception>
+        /// <exception cref="System.OutOfMemoryException">A degree whose matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <remarks>
+        ///     <para><b>Ownership.</b> The points handed to <paramref name="func"/> and every array it creates are intermediates
+        ///     of this call and are reclaimed when it returns (<see cref="NDScoped"/>): to keep one, call
+        ///     <see cref="NDScope.Detach(NDArray)"/> on it inside <paramref name="func"/>. An array func returns that was created
+        ///     before the call stays the caller's.</para>
+        ///     <para>Exceptions <paramref name="func"/> throws propagate unchanged.</para>
+        ///     <para>A <c>numpy.matrix</c> result is computed as a plain array (NumPy returns a matrix): the numpy.polynomial
+        ///     package computes plain.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebinterpolate.html</para>
+        /// </remarks>
+        [NDScoped]
+        public NDArray chebinterpolate(Func<NDArray, object[], object> func, object deg, object args = null)
+            => NDPolyInterpolate.ChebInterpolate(func, deg, args);
     }
 }

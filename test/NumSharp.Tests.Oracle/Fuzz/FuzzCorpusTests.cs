@@ -909,6 +909,45 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>
+        ///     numpy.polynomial's <c>chebinterpolate</c> (plan U9), PORTABLE: deg's kinds (<c>np.asarray(deg)</c> must be a
+        ///     0-d integer array; <c>deg + 1</c> wraps in deg's dtype), Python's <c>*args</c> unpacking TypeErrors, a None
+        ///     func, func results np.dot refuses, and the results' flags — none of which depends on the product's bits.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A case differs from NumPy's recorded outcome.</exception>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyinterp() => RunCorpus("polyinterp.jsonl");
+
+        /// <summary>
+        ///     <c>chebinterpolate</c>'s values, HOST-PINNED like <see cref="PolygaussParity"/> (threads = 1): every value is
+        ///     <c>np.dot(chebvander(x, deg).T, func(x))</c> — gemv / gemm / ddot through NumSharp.Interop.OpenBLAS, the
+        ///     scipy-openblas NumPy itself calls (the managed product is within a few ULP) — so the tier runs only on a host
+        ///     that loads the pinned library, and is Inconclusive, never red, elsewhere.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A case differs from NumPy's recorded outcome.</exception>
+        /// <exception cref="AssertInconclusiveException">The pinned OpenBLAS cannot be loaded on this host.</exception>
+        /// <remarks>Enables and disables the process-global OpenBLAS engine, so it must not overlap other tiers.</remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]
+        public void PolyinterpParity()
+        {
+            var pin = MatmulParityPin.Load("polyinterp_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polyinterp_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
         // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
         // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
         // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
@@ -1221,6 +1260,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyweight.jsonl"] = 1800,   // numpy.polynomial weight functions (U8): {p}weight x 5 bases, sections A-H of gen_polyweight — 1,860 at delivery
             ["polygauss.jsonl"] = 110,   // numpy.polynomial leggauss / laggauss argument errors (U8), portable — 122 at delivery
             ["polygauss_parity.jsonl"] = 150,   // their eigvalsh-based values and flags, host-pinned (threads = 1) — 160 at delivery
+            ["polyinterp.jsonl"] = 75,   // numpy.polynomial chebinterpolate's errors and flags (U9), portable — 83 at delivery
+            ["polyinterp_parity.jsonl"] = 980,   // its np.dot-based values, host-pinned (threads = 1) — 1,030 at delivery
             ["polypts.jsonl"] = 340,   // numpy.polynomial Chebyshev points / Gauss-Chebyshev quadrature (U8): errors, empties, flags, Char — 362 at delivery
             ["polypts_host.jsonl"] = 320,   // their sin / cos values, host-pinned — 347 at delivery
             ["polyweight_host.jsonl"] = 1200,   // the exp-based weights' C-runtime loops (float64 / float16 / complex128), host-pinned — 1,235 at delivery

@@ -21070,6 +21070,216 @@ def gen_polygauss():
 
 
 # ---------------------------------------------------------------------------
+# T-polyinterp — numpy.polynomial's chebinterpolate (plan U9, numpy-polynomial-remaining-compute.md §3.5):
+# c = np.dot(chebvander(x, deg).T, func(x, *args)) over the Chebyshev points of the first kind x = chebpts1(deg + 1),
+# then c[0] /= deg + 1 and c[1:] /= 0.5*(deg + 1). The callable is a NAME from a menu both sides implement (_PI_FUNCS
+# here, OpRegistry.ChebInterpolateFuncs there), each computing the same values from the points:
+#   (A) every menu function over the degrees 0..33, 50, 64 and 100 (the values: 1-D, 2-D and 3-D results; every result
+#       dtype np.dot promotes — float32 / float16 / integers / bool to float64, complex to complex128 —; Python lists,
+#       tuples and scalars; strided and reversed views);
+#   (B) deg's kinds: np.asarray(deg) must be a 0-d integer array — Python ints, np.uint16 (NumSharp's char) and 0-d
+#       integer arrays of every width compute; bools, floats, strs, None, complexes, np.float16, sequences and sized
+#       arrays are "deg must be an int"; a ragged sequence is np.asarray's ValueError; `deg + 1` wraps in deg's dtype
+#       (np.uint8(255), np.int8(127), 2**63 - 1, np.uint64(2**64 - 1)), and 2**63 lands in chebpts1's 2**63 band (an
+#       empty x, then chebvander's "Maximum allowed dimension exceeded");
+#   (C) args: a tuple, a list, an ndarray (its first-axis items), and Python's unpacking TypeErrors — a 0-d array
+#       ("iteration over a 0-d array"), a Python int / float, an np.uint16 / np.float16 ("Value after * must be an
+#       iterable, not ..."); a None func ("'NoneType' object is not callable", after args are unpacked);
+#   (D) func results np.dot refuses: the wrong length / orientation ("shapes ... not aligned"), a ragged list;
+#   (E) the results' C / F / OWNDATA flags.
+# HOST SPLIT. Every value comes out of np.dot, whose bits are the OpenBLAS kernels' (gemv for a vector result, gemm for a
+# matrix one, ddot for an N-D one) and depend on the build, its DYNAMIC_ARCH kernel and the thread count; the menu's sin /
+# cos / exp are the C runtime's as well: values go to polyinterp_parity.jsonl (+ the BLAS identity in
+# polyinterp_parity.host.jsonl), replayed only with that library at one thread. Errors and flags are portable.
+# Not recorded: Python's arity TypeErrors (a function of the wrong arity has no C# twin), func results NumPy computes with
+# as Python objects (None, dict), deg values NumPy refuses with MemoryError (machine-dependent), and args=None (C# null is
+# NumPy's default ()).
+POLY_INTERP_OP = "chebyshev.chebinterpolate"
+
+# name -> the callable of the menu (None: a None func). The C# twins live in OpRegistry.ChebInterpolateFuncs.
+_PI_FUNCS = {
+    "tanh_half": lambda x: np.tanh(x) + 0.5,
+    "sin": lambda x: np.sin(x),
+    "exp": lambda x: np.exp(x),
+    "cubic": lambda x: x * x * x - 2.0 * x + 1.0,
+    "abs": lambda x: np.abs(x),
+    "expi": lambda x: np.exp(1j * x),
+    "stack2": lambda x: np.stack([np.sin(x), np.cos(x)], axis=1),
+    "stack2f": lambda x: np.asfortranarray(np.stack([np.sin(x), np.cos(x)], axis=1)),
+    "cube3d": lambda x: np.sin(x)[None, :, None] * np.ones((2, 1, 3)),
+    "list": lambda x: [float(v) for v in np.sin(x)],
+    "tuple": lambda x: tuple(float(v) for v in np.sin(x)),
+    "pyfloat": lambda x: 2.0,
+    "pyint": lambda x: 2,
+    "pycomplex": lambda x: 1 + 2j,
+    "negzero": lambda x: np.full(x.shape, -0.0),
+    "zerod": lambda x: np.array(3.0),
+    "f32": lambda x: np.sin(x).astype(np.float32),
+    "f16": lambda x: np.sin(x).astype(np.float16),
+    "i64": lambda x: (x * 10).astype(np.int64),
+    "i8": lambda x: (x * 10).astype(np.int8),
+    "u64": lambda x: (np.abs(x) * 10).astype(np.uint64),
+    "u16": lambda x: (np.abs(x) * 10).astype(np.uint16),
+    "bool": lambda x: x > 0,
+    "strided": lambda x: np.repeat(np.sin(x), 2)[::2],
+    "reversed": lambda x: np.sin(x)[::-1].copy()[::-1],
+    "x": lambda x: x,
+    "wronglen": lambda x: np.ones(len(x) + 1),
+    "wrong2d": lambda x: np.stack([np.sin(x), np.cos(x)], axis=0),
+    "ragged": lambda x: [[1.0]] + [[1.0, 2.0]] * (len(x) - 1),
+    "sin_ab": lambda x, a, b: np.sin(a * x) + b,
+    "scale_a": lambda x, a: a * x,
+    "none": None,
+}
+# The menu functions that compute from the points alone (sections A and D).
+_PI_VALUE_FUNCS = ("tanh_half", "sin", "exp", "cubic", "abs", "expi", "stack2", "stack2f", "cube3d", "list", "tuple",
+                   "pyfloat", "pyint", "pycomplex", "negzero", "zerod", "f32", "f16", "i64", "i8", "u64", "u16", "bool",
+                   "strided", "reversed", "x")
+_PI_T = 2 ** 63
+
+
+def gen_polyinterp():
+    """Generates the polyinterp tiers (see the T-polyinterp header).
+
+    Returns:
+        (cases, host): the portable error / flags cases and the host-pinned (np.dot's BLAS products) value cases.
+    """
+    cases = []
+    host = []
+    counter = [0]
+    skipped = {"memory": 0}
+    A = _PSArr
+    fn = _poly_module("chebyshev").chebinterpolate
+
+    def flags(a):
+        """The [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] record of one result.
+
+        Args:
+            a: The result array.
+
+        Returns:
+            A bool array of three flags.
+        """
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(func, deg, layout, cid, args=None, facet=None):
+        """Records one call of chebinterpolate: its error, or its result's values / flags.
+
+        Args:
+            func: The menu name of the callable.
+            deg: The deg argument (a Python value, a NumPy scalar or an _PSArr).
+            layout: The case's layout label.
+            cid: The case id prefix.
+            args: The args argument (None: omitted — NumPy's default ()).
+            facet: "flags" to record the result's flags instead of its values.
+
+        Returns:
+            None.
+        """
+        operands = []
+        params = {"func": func, "deg": _ps_enc(deg, operands)}
+        if args is not None:
+            params["args"] = _ps_enc(args, operands)
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        call = (lambda: fn(_PI_FUNCS[func], _ps_py(deg))) if args is None \
+            else (lambda: fn(_PI_FUNCS[func], _ps_py(deg), _ps_py(args)))
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = call()
+        except MemoryError:
+            skipped["memory"] += 1             # the machine's limit, not NumPy's rule
+            return
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": POLY_INTERP_OP, "params": params, "operands": operands,
+                          "expected": {}, "expects_throw": True, "error": _poly_exc(e), "layout": layout,
+                          "valueclass": "error"})
+            return
+        r = np.asarray(r)
+        if facet == "flags":
+            cases.append(_case(POLY_INTERP_OP, params, operands, _arr_expected(flags(r)), layout, "polyinterp",
+                               cid=f"{cid}/{n}"))
+            return
+        host.append(_case(POLY_INTERP_OP, params, operands, _arr_expected(r), layout, "polyinterp", cid=f"{cid}/{n}"))
+
+    # (A) every value function over the degrees
+    for func in _PI_VALUE_FUNCS:
+        for d in list(range(0, 34)) + [50, 64, 100]:
+            emit(func, d, "python_int", f"{POLY_INTERP_OP}/val/{func}/{d}")
+    for d in (127, 128, 200, 255):
+        for func in ("tanh_half", "stack2", "expi"):
+            emit(func, d, "python_int", f"{POLY_INTERP_OP}/big/{func}/{d}")
+
+    # (B) deg's kinds (tanh_half)
+    for lab, v in (("m1", -1), ("m3", -3), ("true", True), ("false", False), ("3.0", 3.0), ("0.0", 0.0),
+                   ("nan", float("nan")), ("str3", "3"), ("none", None), ("3+0j", 3 + 0j),
+                   ("2p60", 2 ** 60), ("2p62", 2 ** 62), ("tm1", _PI_T - 1), ("t", _PI_T), ("2p64m1", 2 ** 64 - 1),
+                   ("2p64", 2 ** 64), ("mt", -_PI_T), ("mtm1", -_PI_T - 1), ("2p100", 2 ** 100)):
+        emit("tanh_half", v, "python_object", f"{POLY_INTERP_OP}/kind/{lab}")
+    for lab, bits in (("3", 0x4200), ("0", 0x0000), ("nan", 0x7e00)):
+        emit("tanh_half", _pw_f16(bits), "numpy_scalar", f"{POLY_INTERP_OP}/npf16/{lab}")
+    for v in (0, 1, 3, 7, 65535):
+        emit("tanh_half", np.uint16(v), "numpy_scalar", f"{POLY_INTERP_OP}/npu16/{v}")
+    for dt in ALL_DTYPES:
+        kind = np.dtype(dt).kind
+        if kind == "b":
+            vals = [True, False]
+        elif kind in "iu":
+            info = np.iinfo(dt)
+            vals = [3, 0, 1, int(info.max)] + ([-1] if kind == "i" else [])
+        elif kind == "c":
+            vals = [3 + 0j]
+        else:
+            vals = [3.0]
+        for v in vals:
+            emit("tanh_half", A(np.array(v, dtype=dt)), "scalar_0d", f"{POLY_INTERP_OP}/zerod/{dt}/{v}")
+    for lab, arr in (("1d_one", np.array([3])), ("1d_empty", np.zeros(0, np.int64)), ("2d_one", np.array([[3]])),
+                     ("1d_float", np.array([3.0]))):
+        emit("tanh_half", A(arr), "c_contiguous_nd", f"{POLY_INTERP_OP}/arr/{lab}")
+    for lab, v in (("list", [3]), ("list_empty", []), ("tuple", (3,)), ("tuple_empty", ()),
+                   ("ragged", [[1], [2, 3]])):
+        emit("tanh_half", v, "python_object", f"{POLY_INTERP_OP}/seq/{lab}")
+
+    # (C) args
+    for d in (0, 3, 8, 20):
+        emit("sin_ab", d, "python_int", f"{POLY_INTERP_OP}/args/tuple/{d}", args=(2.0, 1.0))
+        emit("sin_ab", d, "python_int", f"{POLY_INTERP_OP}/args/list/{d}", args=[0.5, -1.0])
+        emit("sin_ab", d, "python_int", f"{POLY_INTERP_OP}/args/ndarray/{d}", args=A(np.array([2.0, 1.0])))
+        emit("scale_a", d, "python_int", f"{POLY_INTERP_OP}/args/int/{d}", args=(3,))
+        emit("scale_a", d, "python_int", f"{POLY_INTERP_OP}/args/complex/{d}", args=(1j,))
+        emit("scale_a", d, "python_int", f"{POLY_INTERP_OP}/args/zerod/{d}", args=(A(np.array(1.5)),))
+    emit("scale_a", 3, "python_int", f"{POLY_INTERP_OP}/args/rows", args=A(np.array([[1.0, 2.0]])))
+    for lab, v in (("int", 5), ("float", 2.0), ("zerod", A(np.array(2.0))), ("npu16", np.uint16(3)),
+                   ("npf16", _pw_f16(0x4000)), ("true", True)):
+        emit("sin_ab", 3, "python_object", f"{POLY_INTERP_OP}/args/err/{lab}", args=v)
+    emit("none", 3, "python_object", f"{POLY_INTERP_OP}/func/none")
+    emit("none", -1, "python_object", f"{POLY_INTERP_OP}/func/none_baddeg")
+    emit("none", 3, "python_object", f"{POLY_INTERP_OP}/func/none_badargs", args=5)
+    emit("none", np.uint16(65535), "numpy_scalar", f"{POLY_INTERP_OP}/func/none_wrapdeg")
+
+    # (D) results np.dot refuses
+    for d in (0, 1, 3, 9):
+        emit("wronglen", d, "python_int", f"{POLY_INTERP_OP}/refused/wronglen/{d}")
+        emit("wrong2d", d, "python_int", f"{POLY_INTERP_OP}/refused/wrong2d/{d}")
+    for d in (2, 3, 9):
+        emit("ragged", d, "python_int", f"{POLY_INTERP_OP}/refused/ragged/{d}")
+
+    # (E) flags
+    for func, d in (("tanh_half", 0), ("tanh_half", 1), ("tanh_half", 5), ("tanh_half", 20), ("stack2", 4),
+                    ("stack2f", 4), ("cube3d", 3), ("pyfloat", 2), ("zerod", 0), ("expi", 3), ("f16", 3)):
+        emit(func, d, "python_int", f"{POLY_INTERP_OP}/flags/{func}/{d}", facet="flags")
+
+    # Char: NumSharp's uint16-like dtype computes exactly as uint16 does (the house weave) — the 0-d deg arrays.
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}  (skipped: {skipped['memory']} MemoryErrors)")
+    return cases, host
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -22514,8 +22724,18 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polygauss.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polygauss_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polygauss_parity.host.jsonl"), [blas_identity()])
+    elif mode == "polyinterp":
+        # numpy.polynomial chebinterpolate (U9): portable errors / flags + host-pinned values (np.dot's OpenBLAS
+        # products at threads = 1).
+        for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            if os.environ.get(var) != "1":
+                sys.exit(f"polyinterp needs {var}=1 set before Python starts (np.dot's bits depend on the thread count)")
+        cases, host = gen_polyinterp()
+        write_jsonl(os.path.join(corpus_dir, "polyinterp.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polyinterp_parity.jsonl"), host)
+        write_jsonl(os.path.join(corpus_dir, "polyinterp_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 
