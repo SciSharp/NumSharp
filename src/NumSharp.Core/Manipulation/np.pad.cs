@@ -950,8 +950,12 @@ namespace NumSharp
                     return (np.int64, true);
                 case NDArray nd:
                     return (nd.dtype, nd.size == 1 || nd.size == 2 && !(nd.ndim == 2 && nd.Shape.dimensions[0] == 2));
-                case string or char:
+                case string:
                     return (np.dtype("U"), true);
+                // A C# char is NumPy's np.uint16 scalar (the house boundary map), never a one-character str: over a
+                // numeric array linspace computes with its code point, over a text array the promotion refuses it.
+                case char:
+                    return (np.uint16, true);
                 case byte[]:
                     return (np.dtype("S"), true);
                 case object[,] o2:
@@ -994,8 +998,8 @@ namespace NumSharp
         ///     become their text), else any bytes a bytes array, else complex, float, int and bool in that order (bool
         ///     alone stays bool; bool with ints is int).
         /// </summary>
-        /// <param name="values">The C# values (the boundary map's Python scalars; an <see cref="NDArray"/> element counts
-        ///     as its dtype's kind).</param>
+        /// <param name="values">The C# values (the boundary map's Python scalars; a <c>char</c> is the np.uint16 scalar and
+        ///     counts as an integer; an <see cref="NDArray"/> element counts as its dtype's kind).</param>
         /// <returns>The coerced descriptor (unsized for text: only the class is read).</returns>
         private static DType CoercedEndValuesDescr(IEnumerable<object> values)
         {
@@ -1006,7 +1010,10 @@ namespace NumSharp
                 allBool &= v is bool;
                 switch (v)
                 {
-                    case string or char: anyStr = true; break;
+                    case string: anyStr = true; break;
+                    // A C# char is np.uint16 (the house boundary map): an integer that is never negative. It cannot
+                    // share the integer case below, whose Convert.ToDouble has no char conversion.
+                    case char: anyInt = true; break;
                     case byte[]: anyBytes = true; break;
                     case System.Numerics.Complex: anyComplex = true; break;
                     case float or double or decimal or Half: anyFloat = true; break;
@@ -1831,7 +1838,10 @@ namespace NumSharp
             // A text constant reaches NumPy's setitem as the NumPy scalar np.array(...) indexes out of _as_pairs (np.str_ /
             // np.bytes_), which the numeric dtype CASTS: its refusal quotes np.str_('z'), not a Python str (probed:
             // np.pad(np.zeros(3, int), 1, constant_values='z') is "invalid literal for int() with base 10: np.str_('z')").
-            if (value is string or char or byte[] && tc != NPTypeCode.String)
+            // A C# char is not text here: the house boundary map makes it NumPy's np.uint16 scalar, which the pack below
+            // int()-converts into a signed integer array (np.pad(int8, 1, constant_values=(char)300) raises "Python
+            // integer 300 out of bounds for int8") and casts into every other dtype, as the weak_scalar tier pins.
+            if (value is string or byte[] && tc != NPTypeCode.String)
             {
                 using var text = Backends.Strings.NDStringArrays.FromScalar(value, null);
                 using var cast = text.astype(DType.From(tc), true, 'K', "unsafe");
