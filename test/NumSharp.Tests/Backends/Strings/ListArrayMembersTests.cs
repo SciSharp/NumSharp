@@ -201,6 +201,38 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     <c>item(*args)</c> is NumPy's: ONE integer is a flat index in C order (negative from the end) whatever the rank,
+        ///     one integer per axis a full index, any other count NumPy's ValueError; the bounds errors name the size for a
+        ///     flat index and the axis for a full one (NumPy 2.4.2 over the (2, 3) split and a 0-d one).
+        /// </summary>
+        [TestMethod]
+        public void Item_OneIntegerIsAFlatIndex()
+        {
+            using var a = Grid();
+            Py(a.item(5)).Should().Be("['g']");
+            Py(a.item(-1)).Should().Be("['g']");
+            Py(a.item(1, 2)).Should().Be("['g']");
+            Action flat = () => a.item(6);
+            flat.Should().Throw<IndexError>().Where(e => e.Message == "index 6 is out of bounds for size 6");
+            Action below = () => a.item(-7);
+            below.Should().Throw<IndexError>().Where(e => e.Message == "index -7 is out of bounds for size 6");
+            Action axis = () => a.item(1, 5);
+            axis.Should().Throw<IndexError>().Where(e => e.Message == "index 5 is out of bounds for axis 1 with size 3");
+            Action none = () => a.item();
+            none.Should().Throw<ValueError>().Where(e => e.Message == "can only convert an array of size 1 to a Python scalar");
+            using var cube = a.reshape(1, 2, 3);
+            Action two = () => cube.item(0, 1);
+            two.Should().Throw<ValueError>().Where(e => e.Message == "incorrect number of indices for array");
+
+            using var zero = np.@char.split(np.array("p q"));
+            Py(zero.item()).Should().Be("['p', 'q']");
+            Py(zero.item(0)).Should().Be("['p', 'q']");
+            Py(zero.item(-1)).Should().Be("['p', 'q']");
+            Action past = () => zero.item(1);
+            past.Should().Throw<IndexError>().Where(e => e.Message == "index 1 is out of bounds for size 1");
+        }
+
+        /// <summary>
         ///     A result outlives the array it came from: a view and a copy hold their own references on the shared pieces, so
         ///     disposing the source leaves them readable; a disposed list array refuses every member.
         /// </summary>

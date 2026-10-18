@@ -1767,7 +1767,7 @@ namespace NumSharp.Tests.Strings
                 return;
             }
             // Section strcharlist's layout facets: the outer array's byte strides, C / F contiguity, OWNDATA, WRITEABLE, and
-            // how its base relates to the receiver (NumPy's object pointers and NumSharp's int64 ranges share one layout).
+            // how its base relates to the receiver (NumPy's object pointers and NumSharp's int64 list ids share one layout).
             if (exp.TryGetProperty("layout", out var layout))
                 CompareListLayout(layout, l, receiver, diffs);
             var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
@@ -1778,14 +1778,14 @@ namespace NumSharp.Tests.Strings
             }
             var want = exp.GetProperty("lists").EnumerateArray().ToArray();
             var wantSelf = new HashSet<long>(exp.GetProperty("strself").EnumerateArray().Select(e => e.GetInt64()));
-            // The element ranges in C order (a view's Starts / Ends are strided), read through flat copies.
-            using var starts = l.Starts.flatten();
-            using var ends = l.Ends.flatten();
-            using var self = l.SelfPiece?.flatten();
-            long* offsets = (long*)l.Offsets.Address;
+            // The elements' list ids in C order (a view's ids are strided), read through a flat copy; each list's pieces
+            // from the shared heap.
+            using var ids = l.Ids.flatten();
+            var heap = l.Heap;
+            long* offsets = heap.Offsets;
             for (long pos = 0; pos < want.Length && diffs.Count < 20; pos++)
             {
-                long first = starts.GetInt64(pos), end = ends.GetInt64(pos);
+                var (first, end) = heap.Range(ids.GetInt64(pos));
                 var pieces = want[pos].EnumerateArray().ToArray();
                 if (end - first != pieces.Length)
                 {
@@ -1802,13 +1802,16 @@ namespace NumSharp.Tests.Strings
                         continue;
                     }
                     string gotHex = bytesPiece
-                        ? Convert.ToHexString(new ReadOnlySpan<byte>((byte*)l.Units.Address + from, checked((int)(to - from)))).ToLowerInvariant()
-                        : Convert.ToHexString(new ReadOnlySpan<byte>((byte*)((uint*)l.Units.Address + from), checked((int)(to - from) * 4))).ToLowerInvariant();
+                        ? Convert.ToHexString(new ReadOnlySpan<byte>(heap.Units + from, checked((int)(to - from)))).ToLowerInvariant()
+                        : Convert.ToHexString(new ReadOnlySpan<byte>((byte*)((uint*)heap.Units + from), checked((int)(to - from) * 4))).ToLowerInvariant();
                     string wantHex = bytesPiece ? bhex.GetString() : pieces[k].GetProperty("u").GetString();
                     if (gotHex != wantHex)
                         diffs.Add($"[{pos}][{k}] piece {Shorten(gotHex)} != NumPy {Shorten(wantHex)}");
                 }
-                bool gotSelf = self is not null && self.GetBoolean(pos);
+                // NumPy's strself lists the elements holding an np.str_ piece (an element's own scalar).
+                bool gotSelf = false;
+                for (long k = first; k < end; k++)
+                    gotSelf |= heap.IsNpStr(k);
                 if (gotSelf != wantSelf.Contains(pos))
                     diffs.Add($"[{pos}] np.str_ piece {gotSelf} != NumPy {wantSelf.Contains(pos)}");
             }
@@ -1848,11 +1851,11 @@ namespace NumSharp.Tests.Strings
             // pointers) or the storage the receiver itself views (a view of a view collapses to the owner).
             string wantBase = layout.GetProperty("base").GetString();
             using var b = l.@base;
-            var owner = b?.Starts.Storage;
+            var owner = b?.Ids.Storage;
             string gotBase = b is null ? "none"
                 : receiver is null ? "unpaired"
-                : ReferenceEquals(owner, receiver.Starts.Storage) ? "recv"
-                : receiver.Starts.Storage._baseStorage is { } rb && ReferenceEquals(owner, rb) ? "recvbase"
+                : ReferenceEquals(owner, receiver.Ids.Storage) ? "recv"
+                : receiver.Ids.Storage._baseStorage is { } rb && ReferenceEquals(owner, rb) ? "recvbase"
                 : "other";
             if (gotBase != wantBase)
                 diffs.Add($"base {gotBase} != NumPy {wantBase}");

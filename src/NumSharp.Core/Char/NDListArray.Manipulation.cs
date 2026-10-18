@@ -7,20 +7,19 @@ using System;
 //
 // NumPy's object array holds one pointer per element (8 bytes on a 64-bit host), and every member below works on those
 // pointers alone: a transpose, a reshape, a take or a repeat moves the POINTERS — the Python lists are shared, never
-// copied (a copy is shallow). NDListArray holds the same structure: the pieces once (Units / Offsets) and, per element,
-// the range of its pieces (Starts / Ends, int64 arrays of the outer shape, and SelfPiece). So each member is the same
-// ndarray operation applied to the three range arrays, with the pieces shared:
+// copied (a copy is shallow). NDListArray holds the same structure: one list id per element (Ids, an int64 array of the
+// outer shape) pointing into the shared lists (NDListHeap). So each member is the same ndarray operation applied to the
+// id array, with the lists shared:
 //
-//   * the range arrays are int64 (bool for SelfPiece): 8 bytes per element like NumPy's pointers, so the operation's
-//     view / copy decision, the result's strides IN BYTES, its flags (C / F contiguous, OWNDATA, WRITEABLE: a diagonal is
-//     read-only) and every error (texts that never name a dtype) are NumPy's for the object array;
-//   * the result holds new references on the shared pieces (a view or a copy may outlive this array), and its own range
-//     arrays.
+//   * the ids are int64: 8 bytes per element like NumPy's pointers, so the operation's view / copy decision, the result's
+//     strides IN BYTES, its flags (C / F contiguous, OWNDATA, WRITEABLE: a diagonal is read-only) and every error (texts
+//     that never name a dtype) are NumPy's for the object array;
+//   * the result holds a new reference on the shared lists (a view or a copy may outlive this array) and its own ids.
 //
 // NumPy's `base`: a view's base is the array owning the pointers it views (a view of a view collapses to that owner, as
 // NumPy's does; a view of an intermediate copy — reshape in the other order — has that temporary as its base); a copy has
-// none. Here the owner is the memory the range arrays view (their storage's base), and `base` is a NEW list array over it,
-// as NDArray.base is a new array over its owner's storage: the same pointers and lists, a new object to dispose (NumPy
+// none. Here the owner is the memory the ids view (their storage's base), and `base` is a NEW list array over it, as
+// NDArray.base is a new array over its owner's storage: the same pointers and lists, a new object to dispose (NumPy
 // returns the owner object itself).
 //
 // NumPy returns the element itself where its result is one element (`a.take(1)` is the Python list): NumSharp has no
@@ -46,7 +45,7 @@ namespace NumSharp
             get
             {
                 ThrowIfDisposed();
-                return Starts.strides;
+                return Ids.strides;
             }
         }
 
@@ -62,18 +61,18 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>flags</c> of the outer array: C / F contiguity, OWNDATA (a copy owns its pointers, a view does
-        ///     not), WRITEABLE (false for a diagonal view, as in NumPy) and ALIGNED — the flags of the range arrays, which
-        ///     have the object array's layout.
+        ///     not), WRITEABLE (false for a diagonal view, as in NumPy) and ALIGNED — the flags of the id array, which has
+        ///     the object array's layout.
         /// </summary>
-        /// <remarks>The object is the flags of an internal range array: reading it is NumPy's answer; setting a flag through
-        ///     it changes that array only (an <see cref="NDListArray"/> has no element assignment for WRITEABLE to guard).</remarks>
+        /// <remarks>The object is the flags of the id array: reading it is NumPy's answer, and setting WRITEABLE through it
+        ///     (<c>flags.writeable = false</c>, or <see cref="setflags"/>) guards the element assignments as NumPy's does.</remarks>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDArrayFlags flags
         {
             get
             {
                 ThrowIfDisposed();
-                return Starts.flags;
+                return Ids.flags;
             }
         }
 
@@ -91,14 +90,12 @@ namespace NumSharp
             get
             {
                 ThrowIfDisposed();
-                // The memory the range arrays view: NumSharp collapses a view of a view to the owning storage, as NumPy
-                // collapses base, and the three ranges were made by the same operations, so they view owners of one layout.
-                var owner = Starts.Storage._baseStorage;
+                // The memory the ids view: NumSharp collapses a view of a view to the owning storage, as NumPy collapses
+                // base.
+                var owner = Ids.Storage._baseStorage;
                 if (owner is null)
                     return null;
-                return new NDListArray(Alias(Units), Alias(Offsets), new NDArray(owner),
-                    new NDArray(Ends.Storage._baseStorage ?? Ends.Storage),
-                    SelfPiece is null ? null : new NDArray(SelfPiece.Storage._baseStorage ?? SelfPiece.Storage), Kind);
+                return new NDListArray(new NDArray(owner), Heap.Share());
             }
         }
 
@@ -119,8 +116,8 @@ namespace NumSharp
         {
             ThrowIfDisposed();
             // NDArray's own check (the device text, then the stream) answers for the object array too; it returns the
-            // range array itself, which is not this method's result.
-            Starts.to_device(device, stream);
+            // id array itself, which is not this method's result.
+            Ids.to_device(device, stream);
             return this;
         }
 
@@ -216,7 +213,7 @@ namespace NumSharp
             ThrowIfDisposed();
             // PyArray_Squeeze returns its receiver when there is no length-1 axis to remove (a.squeeze() is a); an axis
             // given explicitly always has length 1 or raises, so only the all-axes form can find none.
-            if (axis is null && Array.IndexOf(Starts.Shape.dimensions, 1L) < 0)
+            if (axis is null && Array.IndexOf(Ids.Shape.dimensions, 1L) < 0)
                 return this;
             return Derive(a => a.squeeze(axis));
         }
@@ -340,52 +337,23 @@ namespace NumSharp
         // =============================================================================================================
 
         /// <summary>
-        ///     One structural operation applied to the range arrays (<see cref="Starts"/>, <see cref="Ends"/> and, when
-        ///     present, <see cref="SelfPiece"/>), giving a list array over the results that shares the pieces.
+        ///     One structural operation applied to the id array, giving a list array over the result that shares the lists.
         /// </summary>
         /// <param name="op">The operation: an NDArray member that depends only on the layout (never on the values).</param>
-        /// <returns>The new list array, owning the three results and new references on the pieces.</returns>
-        /// <exception cref="Exception">The operation's own error, raised by its first call (on <see cref="Starts"/>), before
-        ///     anything is allocated for the result.</exception>
+        /// <returns>The new list array, owning the result and a new reference on the lists.</returns>
+        /// <exception cref="Exception">The operation's own error (NumPy's for the object array), before anything is
+        ///     allocated for the result.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         private NDListArray Derive(Func<NDArray, NDArray> op)
         {
             ThrowIfDisposed();
-            NDArray starts = null, ends = null, self = null;
-            try
-            {
-                // The ranges share one layout, so the operation fails (with NumPy's error) on the first array or on none.
-                starts = op(Starts);
-                ends = op(Ends);
-                self = SelfPiece is null ? null : op(SelfPiece);
-            }
-            catch
-            {
-                starts?.Dispose();
-                ends?.Dispose();
-                self?.Dispose();
-                throw;
-            }
-            // An operation can hand back its receiver itself (NDArray.view of a view is new, but a no-op squeeze or reshape
-            // could be the same object): the list array must own arrays of its own, so such a result is aliased.
-            starts = Own(starts, Starts);
-            ends = Own(ends, Ends);
-            self = SelfPiece is null ? null : Own(self, SelfPiece);
-            return new NDListArray(Alias(Units), Alias(Offsets), starts, ends, self, Kind);
+            var ids = op(Ids);
+            // An operation can hand back its receiver itself (a no-op reshape could be the same object): the list array
+            // must own an array of its own, so such a result is aliased.
+            if (ReferenceEquals(ids, Ids))
+                ids = new NDArray(Ids.Storage.Alias()) { TensorEngine = Ids.TensorEngine };
+            return Over(ids);
         }
-
-        /// <summary>An operation's result as an array the new list array may own: a new alias when the operation returned
-        ///     its receiver.</summary>
-        /// <param name="result">The operation's result.</param>
-        /// <param name="receiver">The range array the operation ran on.</param>
-        /// <returns>The result, or a new alias of the receiver's storage.</returns>
-        private static NDArray Own(NDArray result, NDArray receiver)
-            => ReferenceEquals(result, receiver) ? Alias(receiver) : result;
-
-        /// <summary>A new array over the same storage (a counted reference: the alias keeps the memory alive).</summary>
-        /// <param name="array">The array.</param>
-        /// <returns>The alias.</returns>
-        private static NDArray Alias(NDArray array) => new NDArray(array.Storage.Alias()) { TensorEngine = array.TensorEngine };
 
         /// <summary>Refuses NumPy's <c>out=</c> of a selection member: the result would be written into another list
         ///     array's pointers, and an <see cref="NDListArray"/> has no element assignment.</summary>

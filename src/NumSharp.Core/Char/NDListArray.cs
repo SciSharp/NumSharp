@@ -13,17 +13,18 @@ using NumSharp.Backends.Strings;
 // str.split / bytes.split / splitlines returned for it (`array([list(['a', 'b']), list([])], dtype=object)`). NumSharp
 // has no object dtype, so this type holds exactly that structure — the owner's decision C-D3 (docs/plans/np-char.md):
 //
-//   * Units   — every piece's code units back to back (uint8 for bytes pieces, uint32 code points for str pieces);
-//   * Offsets — piece k is Units[Offsets[k] : Offsets[k + 1]], so a piece keeps its exact length (a piece that ends in a
-//               NUL, 'a\x00' from 'a\x00 b'.split(), keeps it; a fixed-width array of pieces could not);
-//   * Starts / Ends — int64 arrays of the OUTER shape: element e's list is pieces [Starts[e], Ends[e]). Basic indexing
-//               slices only these two (an NDListArray view shares Units and Offsets, as a NumPy view shares the lists);
-//   * SelfPiece — for str pieces of a U array: whether the element's single piece IS the element's own np.str_ scalar
-//               (CPython's split returns [self] when the separator is longer or of a wider kind than the string). Python
-//               would print that piece as np.str_('...'), and bytes.join can read it as a buffer, so the flag is kept.
+//   * Ids  — an int64 array of the OUTER shape: one list id per element, NumPy's 8-byte object pointer. Every structural
+//            member (basic indexing, transpose, reshape, take, sort, ...) is the same NumSharp operation on this one array,
+//            so a view shares the ids as a NumPy view shares the pointers, and a copy copies them (a shallow copy);
+//   * Heap — the lists (NDListHeap): each list a range of pieces, each piece its exact code units (a piece that ends in a
+//            NUL, 'a\x00' from 'a\x00 b'.split(), keeps it; a fixed-width array of pieces could not), and a flag for a piece
+//            that is an element's own np.str_ scalar (CPython's split returns [self] when the separator is longer or of a
+//            wider kind than the string; Python prints it as np.str_('...'), and bytes.join can read it as a buffer). The
+//            heap is shared by every array pointing into it and only ever appended to (an element assignment stores a new
+//            list), like the Python heap the pointers point into.
 //
-// The layout is NumPy's: the result is C-ordered over the broadcast shape (PyArray_SimpleNewFromDescr), whatever the
-// input layout, so Starts / Ends are fresh C-contiguous arrays and the pieces follow in C order.
+// The layout is NumPy's: the producer's result is C-ordered over the broadcast shape (PyArray_SimpleNewFromDescr),
+// whatever the input layout, so its ids are 0 .. n - 1 in C order and the lists follow in that order.
 // =============================================================================
 
 namespace NumSharp
@@ -31,7 +32,8 @@ namespace NumSharp
     /// <summary>
     ///     NumPy's object array of Python lists — what <c>np.char.split</c>, <c>rsplit</c> and <c>splitlines</c> return
     ///     (<c>array([list(['a', 'b']), list([])], dtype=object)</c>). NumSharp has no object dtype, so this type holds the
-    ///     array's shape and every element's list of pieces: the text of the pieces once, each piece with its exact length.
+    ///     array's elements as list ids (NumPy's object pointers) into a shared store of the lists: the text of the pieces
+    ///     once, each piece with its exact length.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -43,54 +45,70 @@ namespace NumSharp
     ///     keep it. Slice notation and <see cref="Slice"/>s give an <see cref="NDListArray"/> view.
     ///     </para>
     ///     <para>
-    ///     <b>Lifetime.</b> The arrays the type holds are NumSharp arrays: <see cref="Dispose"/> releases them at once, the
-    ///     finalizers release them otherwise. A view keeps the memory it reads alive (it counts its own references).
+    ///     <b>Lifetime.</b> The arrays the type holds are NumSharp arrays: <see cref="Dispose"/> releases them at once (the
+    ///     shared lists when the last array pointing at them is disposed), the finalizers release them otherwise. A view
+    ///     keeps the memory it reads alive (it counts its own references).
     ///     </para>
     /// </remarks>
     public sealed partial class NDListArray : IEnumerable, IDisposable
     {
-        /// <summary>Every piece's code units back to back: 1-D uint8 for bytes pieces, 1-D uint32 code points for str pieces.</summary>
-        internal NDArray Units { get; }
+        /// <summary>int64 of the outer shape: each element's list id in <see cref="Heap"/> (NumPy's object pointer).</summary>
+        internal NDArray Ids { get; }
 
-        /// <summary>1-D int64 of (piece count + 1) entries: piece k spans <c>Units[Offsets[k] : Offsets[k + 1]]</c>.</summary>
-        internal NDArray Offsets { get; }
-
-        /// <summary>int64 of the outer shape: the index of each element's first piece.</summary>
-        internal NDArray Starts { get; }
-
-        /// <summary>int64 of the outer shape: one past each element's last piece.</summary>
-        internal NDArray Ends { get; }
-
-        /// <summary>
-        ///     bool of the outer shape, or null when no element has it: the element's single piece is the element's own
-        ///     <c>np.str_</c> scalar (only for the pieces of a <c>U</c> array: <c>'ab'.split('abc')</c> is <c>[self]</c>).
-        /// </summary>
-        internal NDArray SelfPiece { get; }
+        /// <summary>The lists the ids point at (shared with every view and copy, one reference held by this array).</summary>
+        internal NDListHeap Heap { get; }
 
         /// <summary>
         ///     The class of the pieces: <c>'S'</c> (Python <c>bytes</c>, from an <c>S</c> array), <c>'U'</c> (Python
         ///     <c>str</c>, from a <c>U</c> array) or <c>'T'</c> (Python <c>str</c>, from a <c>StringDType</c> array).
         /// </summary>
-        internal char Kind { get; }
+        internal char Kind => Heap.Kind;
 
         /// <summary>Set by <see cref="Dispose"/>: every member then throws <see cref="ObjectDisposedException"/>.</summary>
         private bool _disposed;
 
-        /// <summary>Creates the list array over its parts (the caller hands its references over).</summary>
-        /// <param name="units">The pieces' code units (1-D uint8 for <c>'S'</c>, uint32 otherwise).</param>
-        /// <param name="offsets">The piece offsets (1-D int64, piece count + 1 entries).</param>
-        /// <param name="starts">The first piece of each element (int64, the outer shape).</param>
-        /// <param name="ends">One past the last piece of each element (int64, the outer shape).</param>
-        /// <param name="selfPiece">The self-piece flags (bool, the outer shape) or null.</param>
-        /// <param name="kind">The class of the pieces.</param>
-        internal NDListArray(NDArray units, NDArray offsets, NDArray starts, NDArray ends, NDArray selfPiece, char kind)
+        /// <summary>Creates the list array over its ids and lists (the caller hands over the ids and ONE heap reference).</summary>
+        /// <param name="ids">The list ids (int64, the outer shape).</param>
+        /// <param name="heap">The lists (a reference the caller took for this array: <see cref="NDListHeap.Share"/>, or a new
+        ///     heap's own).</param>
+        internal NDListArray(NDArray ids, NDListHeap heap)
         {
-            Units = units;
-            Offsets = offsets;
-            Starts = starts;
-            Ends = ends;
-            SelfPiece = selfPiece;
-            Kind = kind;
+            Ids = ids;
+            Heap = heap;
+        }
+
+        /// <summary>
+        ///     The list array of a producer that built one list per element in C order over <paramref name="outer"/>:
+        ///     element e points at list e.
+        /// </summary>
+        /// <param name="units">The pieces' code units (handed over).</param>
+        /// <param name="offsets">The piece offsets (handed over).</param>
+        /// <param name="starts">Each element's first piece, C order (handed over).</param>
+        /// <param name="ends">One past each element's last piece (handed over).</param>
+        /// <param name="selfElements">Each element's <c>[self]</c> flag (bool, C order) or null (read and disposed).</param>
+        /// <param name="kind">The class of the pieces.</param>
+        /// <param name="outer">The outer shape.</param>
+        /// <returns>The list array.</returns>
+        internal static NDListArray FromElements(NDArray units, NDArray offsets, NDArray starts, NDArray ends, NDArray selfElements,
+                                                 char kind, Shape outer)
+        {
+            var heap = NDListHeap.FromElements(kind, units, offsets, starts, ends, selfElements);
+            NDArray ids = null;
+            try
+            {
+                // Element e points at list e: the ids are 0 .. n - 1 in C order over the outer shape. The array is relabelled
+                // IN PLACE (ndarray.shape's setter), so it stays the owner of its memory, as NumPy's fresh result owns its
+                // pointers (a reshape view would report OWNDATA false and a 1-D base).
+                ids = np.arange(outer.size);
+                ids.Shape = outer.Clean();
+                return new NDListArray(ids, heap);
+            }
+            catch
+            {
+                ids?.Dispose();
+                heap.Release();
+                throw;
+            }
         }
 
         // =============================================================================================================
@@ -98,16 +116,16 @@ namespace NumSharp
         // =============================================================================================================
 
         /// <summary>NumPy's <c>shape</c> (a copy, NumPy's tuple).</summary>
-        public long[] shape => Starts.shape;
+        public long[] shape => Ids.shape;
 
         /// <summary>NumPy's <c>ndim</c>: the number of axes.</summary>
-        public int ndim => Starts.ndim;
+        public int ndim => Ids.ndim;
 
         /// <summary>NumPy's <c>size</c>: the number of elements (lists).</summary>
-        public long size => Starts.size;
+        public long size => Ids.size;
 
         /// <summary>The outer shape as a NumSharp <see cref="NumSharp.Shape"/> (dimensions only: the lists have no strides).</summary>
-        public Shape Shape => NumSharp.Shape.Adopt(Starts.shape);
+        public Shape Shape => NumSharp.Shape.Adopt(Ids.shape);
 
         // =============================================================================================================
         // Element access
@@ -149,14 +167,14 @@ namespace NumSharp
         /// <returns>The view (a 0-d one for one integer per axis).</returns>
         /// <exception cref="IndexError">An integer outside its axis.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray this[string slices] => View(Starts[slices], Ends[slices], SelfPiece?[slices]);
+        public NDListArray this[string slices] => Over(Ids[slices]);
 
         /// <summary>Basic indexing with <see cref="Slice"/>s: a view over the selected lists.</summary>
         /// <param name="slices">One slice (or index) per axis, as for an <see cref="NDArray"/>.</param>
         /// <returns>The view.</returns>
         /// <exception cref="IndexError">An integer outside its axis.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray this[params Slice[] slices] => View(Starts[slices], Ends[slices], SelfPiece?[slices]);
+        public NDListArray this[params Slice[] slices] => Over(Ids[slices]);
 
         /// <summary>
         ///     NumPy's <c>item()</c>: the list of a one-element array as a .NET list of its pieces (<see cref="string"/> for
@@ -169,18 +187,42 @@ namespace NumSharp
         /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
         public List<object> item()
         {
+            ThrowIfDisposed();
             if (size != 1)
                 throw new ValueError("can only convert an array of size 1 to a Python scalar");
-            return ListOf(FlatElement(0));
+            return Heap.ToList(FlatId(0));
         }
 
-        /// <summary>NumPy's <c>item(*args)</c>: the list of the element at a full integer index, its pieces exact.</summary>
-        /// <param name="index">One integer per axis.</param>
+        /// <summary>
+        ///     NumPy's <c>item(*args)</c>: the list of one element, its pieces exact — ONE integer is a flat index in C order
+        ///     (negative from the end), one integer per axis a full index.
+        /// </summary>
+        /// <param name="index">A flat index, or one integer per axis.</param>
         /// <returns>The list.</returns>
-        /// <exception cref="IndexError">An integer outside its axis, or not one integer per axis.</exception>
+        /// <exception cref="IndexError">An index outside the array (<c>index 6 is out of bounds for size 6</c> for a flat
+        ///     index, <c>index 5 is out of bounds for axis 1 with size 3</c> for a full one).</exception>
+        /// <exception cref="ValueError">Neither one integer nor one per axis (<c>incorrect number of indices for
+        ///     array</c>).</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
-        public List<object> item(params long[] index) => index is { Length: > 0 } ? ListOf(Element(index)) : item();
+        public List<object> item(params long[] index)
+        {
+            ThrowIfDisposed();
+            if (index is not { Length: > 0 })
+                return item();
+            // PyArray_MultiIndexGetItem for one index per axis; a single integer of a 0-d or N-d array is a flat index into
+            // the C-order sequence (array_item's `nargs == 1` branch).
+            if (index.Length == 1 && ndim != 1)
+            {
+                long n = size, i = index[0];
+                if (i < -n || i >= n)
+                    throw new IndexError($"index {i} is out of bounds for size {n}");
+                return Heap.ToList(FlatId(i < 0 ? i + n : i));
+            }
+            if (index.Length != ndim)
+                throw new ValueError("incorrect number of indices for array");
+            return Heap.ToList(Element(index));
+        }
 
         /// <summary>
         ///     NumPy's <c>tolist()</c>: nested .NET lists of the outer shape whose leaves are the element lists, each a
@@ -193,13 +235,12 @@ namespace NumSharp
         public object tolist()
         {
             ThrowIfDisposed();
-            // The flat C-order copies of the element ranges, read in the order the nesting visits them.
-            using var starts = Starts.flatten();
-            using var ends = Ends.flatten();
-            long position = 0;
+            // The flat C-order copy of the ids, read in the order the nesting visits them.
+            using var ids = Ids.flatten();
             if (ndim == 0)
-                return ListOf((starts.GetInt64(0), ends.GetInt64(0)));
-            return Nest(0, starts, ends, ref position);
+                return Heap.ToList(ids.GetInt64(0));
+            long position = 0;
+            return Nest(0, ids, ref position);
         }
 
         /// <summary>
@@ -221,7 +262,7 @@ namespace NumSharp
         /// <returns>The items of the first axis.</returns>
         private IEnumerator Iterate()
         {
-            long n = Starts.Shape.dimensions[0];
+            long n = Ids.Shape.dimensions[0];
             for (long i = 0; i < n; i++)
             {
                 if (ndim == 1)
@@ -254,51 +295,39 @@ namespace NumSharp
         public string ToString(bool repr)
         {
             ThrowIfDisposed();
-            using var starts = Starts.flatten();
-            using var ends = Ends.flatten();
-            using var self = SelfPiece?.flatten();
-            var formatter = new ListReprFormat(this, starts, ends, self);
+            using var ids = Ids.flatten();
+            if (!repr && ndim == 0)
+                return ListRepr(ids.GetInt64(0));
+            var formatter = new ListReprFormat(this, ids);
             // The layout engine walks an int64 array of the outer shape whose values are the C-order positions; the
             // formatter maps a position to its element's list repr.
             using var flatPositions = np.arange(size);
-            using var positions = ndim == 0 ? flatPositions.reshape(NumSharp.Shape.NewScalar()) : flatPositions.reshape(NumSharp.Shape.Adopt(Starts.shape));
+            using var positions = ndim == 0 ? flatPositions.reshape(NumSharp.Shape.NewScalar()) : flatPositions.reshape(NumSharp.Shape.Adopt(Ids.shape));
             var opts = PrintOptions.Current;
-            if (!repr)
-                return ndim == 0 ? StrOfList(starts.GetInt64(0), ends.GetInt64(0), self) : ArrayFormatter.ObjectArrayStr(positions, formatter, opts);
-            return ArrayFormatter.ObjectArrayRepr(positions, formatter, opts);
+            return repr ? ArrayFormatter.ObjectArrayRepr(positions, formatter, opts) : ArrayFormatter.ObjectArrayStr(positions, formatter, opts);
         }
 
-        /// <summary>Python's <c>str()</c> of a list (its repr): <c>['a', np.str_('b')]</c>.</summary>
-        /// <param name="start">The element's first piece.</param>
-        /// <param name="end">One past its last piece.</param>
-        /// <param name="self">The flat self-piece flags, or null.</param>
-        /// <returns>The text.</returns>
-        private string StrOfList(long start, long end, NDArray self)
-            => ListRepr(start, end, self is not null && self.GetBoolean(0));
-
-        /// <summary>Python's <c>repr()</c> of one element's list: <c>['a', 'b']</c>, an <c>np.str_</c> self piece as
-        ///     <c>np.str_('ab')</c>.</summary>
-        /// <param name="start">The first piece.</param>
-        /// <param name="end">One past the last piece.</param>
-        /// <param name="selfPiece">Whether the single piece is the element's own <c>np.str_</c>.</param>
+        /// <summary>Python's <c>repr()</c> of one list: <c>['a', 'b']</c>, an <c>np.str_</c> piece as
+        ///     <c>np.str_('ab')</c>, a bytes piece as <c>b'ab'</c>.</summary>
+        /// <param name="id">The list id.</param>
         /// <returns>The repr.</returns>
-        internal unsafe string ListRepr(long start, long end, bool selfPiece)
+        internal unsafe string ListRepr(long id)
         {
             var sb = new StringBuilder("[");
-            long* offsets = (long*)Offsets.Address;
+            var (start, end) = Heap.Range(id);
             for (long k = start; k < end; k++)
             {
                 if (k > start)
                     sb.Append(", ");
-                long from = offsets[k], to = offsets[k + 1];
+                byte* p = Heap.Piece(k, out long n);
                 if (Kind == 'S')
                 {
-                    sb.Append(PyRepr.Bytes(new ReadOnlySpan<byte>((byte*)Units.Address + from, checked((int)(to - from)))));
+                    sb.Append(PyRepr.Bytes(new ReadOnlySpan<byte>(p, checked((int)n))));
                     continue;
                 }
                 // A str piece prints through the code points (a unit above U+10FFFF prints as '\U00110000', as in CPython).
-                string text = PyRepr.StrCodePoints(new ReadOnlySpan<uint>((uint*)Units.Address + from, checked((int)(to - from))));
-                sb.Append(selfPiece ? "np.str_(" + text + ")" : text);
+                string text = PyRepr.StrCodePoints(new ReadOnlySpan<uint>((uint*)p, checked((int)n)));
+                sb.Append(Heap.IsNpStr(k) ? "np.str_(" + text + ")" : text);
             }
             return sb.Append(']').ToString();
         }
@@ -307,17 +336,14 @@ namespace NumSharp
         // Lifetime
         // =============================================================================================================
 
-        /// <summary>Releases the arrays this list array holds (a view releases only its own references).</summary>
+        /// <summary>Releases the ids this list array holds and its reference on the lists (a view releases only its own).</summary>
         public void Dispose()
         {
             if (_disposed)
                 return;
             _disposed = true;
-            Units.Dispose();
-            Offsets.Dispose();
-            Starts.Dispose();
-            Ends.Dispose();
-            SelfPiece?.Dispose();
+            Ids.Dispose();
+            Heap.Release();
         }
 
         /// <summary>Throws when the array was disposed.</summary>
@@ -332,34 +358,33 @@ namespace NumSharp
         // Internals
         // =============================================================================================================
 
-        /// <summary>
-        ///     A view over selected lists: new references on the shared pieces, the sliced element ranges.
-        /// </summary>
-        /// <param name="starts">The sliced <see cref="Starts"/>.</param>
-        /// <param name="ends">The sliced <see cref="Ends"/>.</param>
-        /// <param name="self">The sliced <see cref="SelfPiece"/>, or null.</param>
-        /// <returns>The view.</returns>
-        private NDListArray View(NDArray starts, NDArray ends, NDArray self)
+        /// <summary>A list array over <paramref name="ids"/> (a view or a copy of this array's ids) and this array's lists.</summary>
+        /// <param name="ids">The new ids (handed over).</param>
+        /// <returns>The list array (holding a new reference on the shared lists).</returns>
+        /// <exception cref="ObjectDisposedException">The array was disposed (the ids are disposed first).</exception>
+        private NDListArray Over(NDArray ids)
         {
-            ThrowIfDisposed();
-            // The view holds its own references on the shared pieces: a slice must outlive the array it came from.
-            return new NDListArray(new NDArray(Units.Storage.Alias()) { TensorEngine = Units.TensorEngine },
-                                   new NDArray(Offsets.Storage.Alias()) { TensorEngine = Offsets.TensorEngine },
-                                   starts, ends, self, Kind);
+            if (_disposed)
+            {
+                ids.Dispose();
+                throw new ObjectDisposedException(nameof(NDListArray));
+            }
+            // The new array holds its own reference on the lists: a slice must outlive the array it came from.
+            return new NDListArray(ids, Heap.Share());
         }
 
-        /// <summary>The piece range and self flag of the element at a full integer index.</summary>
+        /// <summary>The list id of the element at a full integer index.</summary>
         /// <param name="index">One integer per axis.</param>
-        /// <returns>(first piece, one past the last, the self-piece flag).</returns>
+        /// <returns>The id.</returns>
         /// <exception cref="IndexError">An integer outside its axis, or not one integer per axis.</exception>
-        private (long Start, long End, bool Self) Element(long[] index)
+        private long Element(long[] index)
         {
             ThrowIfDisposed();
             index ??= Array.Empty<long>();
             if (index.Length != ndim)
                 throw new IndexError($"an NDListArray element needs one integer per axis ({index.Length} given for {ndim}); " +
                                      "use slice notation, as in lists[\"0\"], for a sub-array");
-            var dims = Starts.Shape.dimensions;
+            var dims = Ids.Shape.dimensions;
             var at = new long[index.Length];
             for (int d = 0; d < index.Length; d++)
             {
@@ -369,113 +394,77 @@ namespace NumSharp
                     throw new IndexError($"index {i} is out of bounds for axis {d} with size {n}");
                 at[d] = i < 0 ? i + n : i;
             }
-            long start = Starts.GetInt64(at);
-            long end = Ends.GetInt64(at);
-            bool self = SelfPiece is not null && SelfPiece.GetBoolean(at);
-            return (start, end, self);
+            return Ids.GetInt64(at);
         }
 
-        /// <summary>The piece range and self flag of the element at a C-order position.</summary>
+        /// <summary>The list id of the element at a C-order position.</summary>
         /// <param name="position">The position (0 .. size - 1).</param>
-        /// <returns>(first piece, one past the last, the self-piece flag).</returns>
-        private (long Start, long End, bool Self) FlatElement(long position)
+        /// <returns>The id.</returns>
+        private long FlatId(long position)
         {
             ThrowIfDisposed();
-            using var starts = Starts.flatten();
-            using var ends = Ends.flatten();
-            using var self = SelfPiece?.flatten();
-            return (starts.GetInt64(position), ends.GetInt64(position), self is not null && self.GetBoolean(position));
-        }
-
-        /// <summary>One element's pieces as a .NET list (<see cref="string"/> / <c>byte[]</c>, exact).</summary>
-        /// <param name="range">The element's piece range.</param>
-        /// <returns>The list.</returns>
-        /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
-        private List<object> ListOf((long Start, long End) range) => ListOf((range.Start, range.End, false));
-
-        /// <summary>One element's pieces as a .NET list (<see cref="string"/> / <c>byte[]</c>, exact).</summary>
-        /// <param name="element">The element's piece range (the self flag does not change the values).</param>
-        /// <returns>The list.</returns>
-        /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
-        private unsafe List<object> ListOf((long Start, long End, bool Self) element)
-        {
-            var list = new List<object>(checked((int)(element.End - element.Start)));
-            long* offsets = (long*)Offsets.Address;
-            for (long k = element.Start; k < element.End; k++)
-            {
-                long from = offsets[k], to = offsets[k + 1];
-                int n = checked((int)(to - from));
-                if (Kind == 'S')
-                    list.Add(new ReadOnlySpan<byte>((byte*)Units.Address + from, n).ToArray());
-                else
-                    list.Add(NDCharObjectPath.Ucs4ToString((uint*)Units.Address + from, n));
-            }
-            return list;
+            return Ids.GetAtIndex<long>(position);
         }
 
         /// <summary>The nested lists of <see cref="tolist"/> below axis <paramref name="axis"/>.</summary>
         /// <param name="axis">The axis being expanded.</param>
-        /// <param name="starts">The flat C-order first pieces.</param>
-        /// <param name="ends">The flat C-order ends.</param>
+        /// <param name="ids">The flat C-order ids.</param>
         /// <param name="position">The next C-order position (advanced as elements are read).</param>
         /// <returns>The list for this axis.</returns>
-        private List<object> Nest(int axis, NDArray starts, NDArray ends, ref long position)
+        private List<object> Nest(int axis, NDArray ids, ref long position)
         {
-            long n = Starts.Shape.dimensions[axis];
+            long n = Ids.Shape.dimensions[axis];
             var list = new List<object>(checked((int)n));
             for (long i = 0; i < n; i++)
             {
                 if (axis == ndim - 1)
-                {
-                    list.Add(ListOf((starts.GetInt64(position), ends.GetInt64(position))));
-                    position++;
-                }
+                    list.Add(Heap.ToList(ids.GetInt64(position++)));
                 else
-                {
-                    list.Add(Nest(axis + 1, starts, ends, ref position));
-                }
+                    list.Add(Nest(axis + 1, ids, ref position));
             }
             return list;
         }
 
         /// <summary>
-        ///     One element's pieces as a new 1-D array of the input's class: <c>S</c> / <c>U</c> as wide as the longest piece
+        ///     One list's pieces as a new 1-D array of the input's class: <c>S</c> / <c>U</c> as wide as the longest piece
         ///     (at least 1), or <c>StringDType</c>.
         /// </summary>
-        /// <param name="element">The element's piece range.</param>
+        /// <param name="id">The list id.</param>
         /// <returns>The array.</returns>
         /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF (for a <c>StringDType</c> array of
         ///     the pieces, which needs .NET strings).</exception>
-        private unsafe NDArray Pieces((long Start, long End, bool Self) element)
+        private unsafe NDArray Pieces(long id)
         {
-            long count = element.End - element.Start;
-            long* offsets = (long*)Offsets.Address;
+            var (start, end) = Heap.Range(id);
+            long count = end - start;
             if (Kind == 'T')
             {
                 var texts = new string[count];
                 for (long k = 0; k < count; k++)
                 {
-                    long from = offsets[element.Start + k], to = offsets[element.Start + k + 1];
-                    texts[k] = NDCharObjectPath.Ucs4ToString((uint*)Units.Address + from, checked((int)(to - from)));
+                    uint* p = (uint*)Heap.Piece(start + k, out long n);
+                    texts[k] = NDCharObjectPath.Ucs4ToString(p, checked((int)n));
                 }
                 return np.array(texts, np.dtypes.StringDType());
             }
 
             long width = 1;
-            for (long k = element.Start; k < element.End; k++)
-                width = Math.Max(width, offsets[k + 1] - offsets[k]);
+            for (long k = start; k < end; k++)
+            {
+                Heap.Piece(k, out long n);
+                width = Math.Max(width, n);
+            }
             var descr = Kind == 'S' ? DTypeRegistry.Bytes.Descr(width) : DTypeRegistry.Str.Descr(width);
             // A fresh zeroed array: each piece is copied into the start of its element, the rest stays NUL padding.
             var result = new NDArray(descr, NumSharp.Shape.Adopt(new[] { count }), true);
-            int unit = Kind == 'S' ? 1 : 4;
+            int unit = Heap.UnitSize;
             byte* dst = (byte*)result.Address;
-            byte* src = (byte*)Units.Address;
             long itemsize = width * unit;
             for (long k = 0; k < count; k++)
             {
-                long from = offsets[element.Start + k], to = offsets[element.Start + k + 1];
-                long bytes = (to - from) * unit;
-                Buffer.MemoryCopy(src + from * unit, dst + k * itemsize, bytes, bytes);
+                byte* p = Heap.Piece(start + k, out long n);
+                long bytes = n * unit;
+                Buffer.MemoryCopy(p, dst + k * itemsize, bytes, bytes);
             }
             return result;
         }
@@ -484,42 +473,28 @@ namespace NumSharp
         ///     The element formatter NumPy's <c>_object_format</c> is for an object array of lists: <c>list(</c> + the
         ///     list's repr + <c>)</c>, keyed by the element's C-order position.
         /// </summary>
-        [NDBorrowed] // a formatter over the printed array's own buffers; ToString releases the flat copies it made
+        [NDBorrowed] // a formatter over the printed array and its flat ids, which ToString owns and releases
         private sealed class ListReprFormat : IElementFormatter
         {
             /// <summary>The list array printed.</summary>
             private readonly NDListArray _owner;
 
-            /// <summary>The flat C-order first pieces.</summary>
-            private readonly NDArray _starts;
+            /// <summary>The flat C-order ids.</summary>
+            private readonly NDArray _ids;
 
-            /// <summary>The flat C-order ends.</summary>
-            private readonly NDArray _ends;
-
-            /// <summary>The flat C-order self-piece flags, or null.</summary>
-            private readonly NDArray _self;
-
-            /// <summary>Creates the formatter over the flat element ranges.</summary>
+            /// <summary>Creates the formatter over the flat ids.</summary>
             /// <param name="owner">The list array.</param>
-            /// <param name="starts">The flat first pieces.</param>
-            /// <param name="ends">The flat ends.</param>
-            /// <param name="self">The flat self flags, or null.</param>
-            internal ListReprFormat(NDListArray owner, NDArray starts, NDArray ends, NDArray self)
+            /// <param name="ids">The flat C-order ids.</param>
+            internal ListReprFormat(NDListArray owner, NDArray ids)
             {
                 _owner = owner;
-                _starts = starts;
-                _ends = ends;
-                _self = self;
+                _ids = ids;
             }
 
             /// <summary>Formats the element at a C-order position.</summary>
             /// <param name="value">The position (a boxed int64 from the layout engine's position array).</param>
             /// <returns><c>list([...])</c>.</returns>
-            public string Format(object value)
-            {
-                long p = Convert.ToInt64(value);
-                return "list(" + _owner.ListRepr(_starts.GetInt64(p), _ends.GetInt64(p), _self is not null && _self.GetBoolean(p)) + ")";
-            }
+            public string Format(object value) => "list(" + _owner.ListRepr(_ids.GetInt64(Convert.ToInt64(value))) + ")";
         }
     }
 }

@@ -169,7 +169,7 @@ namespace NumSharp.Backends.Strings
                 if (value is IDictionary)
                     return new VecArg(NDArray.Scalar(0L), true, objects: new[] { value });
                 if (value is NDListArray lists)
-                    return new VecArg(lists.Starts, false, lists: lists);
+                    return new VecArg(lists.Ids, false, lists: lists);
                 value = AsPythonSequence(value);
                 if (value is BigInteger big)
                 {
@@ -1766,7 +1766,9 @@ namespace NumSharp.Backends.Strings
                             flags[e] = true;
                     }
                     sink.Release(out var units, out var offsets);
-                    return new NDListArray(units, offsets, starts, ends, self, kind);
+                    // The heap takes the arrays over (and reads and disposes the per-element self flags); on a failure the
+                    // catch below disposes them again, which NDArray.Dispose ignores.
+                    return NDListArray.FromElements(units, offsets, starts, ends, self, kind, outer);
                 }
                 catch
                 {
@@ -2003,7 +2005,7 @@ namespace NumSharp.Backends.Strings
                         });
                     }
                     sink.Release(out var units, out var offsets);
-                    return new NDListArray(units, offsets, starts, ends, null, kind);
+                    return NDListArray.FromElements(units, offsets, starts, ends, null, kind, outer);
                 }
                 catch
                 {
@@ -2091,10 +2093,9 @@ namespace NumSharp.Backends.Strings
             var ops = new List<NDArray> { sep.Array };
             if (seq.Lists is not null)
             {
-                ops.Add(seq.Lists.Starts);
-                ops.Add(seq.Lists.Ends);
-                if (seq.Lists.SelfPiece is not null)
-                    ops.Add(seq.Lists.SelfPiece);
+                // A list-array sequence is walked through its ids (NumPy's pointers); each element's list is read from
+                // the shared heap.
+                ops.Add(seq.Lists.Ids);
             }
             else
             {
@@ -2185,20 +2186,15 @@ namespace NumSharp.Backends.Strings
             byte* pq = (byte*)dataptrs[1];
             long sq = strides[1];
             bool lists = join.Lists is not null;
-            byte* pe = lists ? (byte*)dataptrs[2] : null;
-            long se = lists ? strides[2] : 0;
-            bool hasSelf = lists && join.Lists.SelfPiece is not null;
-            byte* pf = hasSelf ? (byte*)dataptrs[3] : null;
-            long sf = hasSelf ? strides[3] : 0;
-            for (long i = 0; i < n; i++, ps += ss, pq += sq, pe += se, pf += sf)
+            for (long i = 0; i < n; i++, ps += ss, pq += sq)
             {
                 join.Readers[0].Read(ps, out var sep);
                 long length;
                 if (lists)
                 {
-                    // An object array of lists: no scalar to make, the element IS the list.
+                    // An object array of lists: no scalar to make, the element IS the list (its id in the shared heap).
                     CheckSeparator(sep, join.StrMethod);
-                    length = MeasureListJoin(sep, join.Lists, *(long*)pq, *(long*)pe, hasSelf && *(bool*)pf, join.StrMethod);
+                    length = MeasureListJoin(sep, join.Lists, *(long*)pq, join.StrMethod);
                 }
                 else
                 {
@@ -2295,26 +2291,31 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     <c>sep.join(pieces)</c> of one element of a list array, measured: <c>str.join</c> needs str pieces (a bytes
         ///     piece is <c>expected str instance, bytes found</c>), <c>bytes.join</c> buffers (a plain str piece is
-        ///     <c>expected a bytes-like object, str found</c>; a <c>U</c> element's own <c>np.str_</c> has one).
+        ///     <c>expected a bytes-like object, str found</c>, naming its position; an element's own <c>np.str_</c> has one).
         /// </summary>
         /// <param name="sep">The separator.</param>
         /// <param name="lists">The list array.</param>
-        /// <param name="start">The element's first piece.</param>
-        /// <param name="end">One past its last piece.</param>
-        /// <param name="selfPiece">The single piece is the element's own <c>np.str_</c>.</param>
+        /// <param name="id">The element's list id.</param>
         /// <param name="strMethod">True for <c>str.join</c>.</param>
         /// <returns>The result's length.</returns>
         /// <exception cref="TypeError">An item of the wrong type.</exception>
-        private static long MeasureListJoin(in Elem sep, NDListArray lists, long start, long end, bool selfPiece, bool strMethod)
+        private static long MeasureListJoin(in Elem sep, NDListArray lists, long id, bool strMethod)
         {
+            var heap = lists.Heap;
+            var (start, end) = heap.Range(id);
             long count = end - start;
             if (count == 0)
                 return 0;
             if (strMethod && lists.Kind == 'S')
                 throw new TypeError("sequence item 0: expected str instance, bytes found");
-            if (!strMethod && lists.Kind != 'S' && !selfPiece)
-                throw new TypeError("sequence item 0: expected a bytes-like object, str found");
-            long* offsets = (long*)lists.Offsets.Storage.Address;
+            if (!strMethod && lists.Kind != 'S')
+            {
+                // bytes_join takes each item's buffer in order: the first plain str has none.
+                for (long k = start; k < end; k++)
+                    if (!heap.IsNpStr(k))
+                        throw new TypeError($"sequence item {k - start}: expected a bytes-like object, str found");
+            }
+            long* offsets = heap.Offsets;
             long sepLength = strMethod ? sep.Length : SeparatorBytes(sep);
             long total = offsets[end] - offsets[start];
             // bytes.join reads an np.str_ piece through its buffer: four bytes a code point.
@@ -2476,13 +2477,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="kind">The pieces' class (irrelevant: there are no pieces).</param>
         /// <returns>The empty list array.</returns>
         private static NDListArray EmptyLists(Shape outer, char kind)
-        {
-            var units = new NDArray(NPTypeCode.UInt32, Shape.Vector(1), true);
-            var offsets = new NDArray(NPTypeCode.Int64, Shape.Vector(1), true);
-            var starts = new NDArray(NPTypeCode.Int64, outer.Clean(), true);
-            var ends = new NDArray(NPTypeCode.Int64, outer.Clean(), true);
-            return new NDListArray(units, offsets, starts, ends, null, kind);
-        }
+            => new NDListArray(new NDArray(NPTypeCode.Int64, outer.Clean(), true), NDListHeap.Empty(kind));
 
         // =============================================================================================================
         // The walk

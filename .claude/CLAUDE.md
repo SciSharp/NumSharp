@@ -494,9 +494,12 @@ NPY/NS geomean 3.5×): the six cells under 1.5× cost the same on the plain path
 units, in CPython's order: the NumPy scalars (a ONE-unit `U` text above U+10FFFF is `SystemError: invalid maximum
 character passed to PyUnicode_New`), the descriptor check (a StringDType NA), `maxsplit`'s `__index__` / `keepends`'
 truth, the separator's type (bytes.split takes any buffer: `np.int64(5)` splits on its 8 bytes), `empty separator`, the
-pieces; the first failing element ends the call. `split` returns an `NDListArray` (NumPy's object array of lists): exact
-pieces (`Units` + `Offsets`), the element ranges (`Starts` / `Ends`) and the `[self]` flags (unicodeobject.c returns the
-element's own `np.str_` when the separator is longer or of a wider kind; the repr prints `np.str_('ab')`). Basic indexing
+pieces; the first failing element ends the call. `split` returns an `NDListArray` (NumPy's object array of lists): one
+int64 list id per element (`Ids`, NumPy's 8-byte object pointer) into a shared, append-only `NDListHeap` (`Char/NDListHeap.cs`:
+each list a range of pieces, each piece its exact units, a per-piece `np.str_` flag — unicodeobject.c returns the element's
+own `np.str_` when the separator is longer or of a wider kind; the repr prints `np.str_('ab')`). Every structural member is
+the same NDArray operation on `Ids` (a view shares the ids, a copy copies them, the lists stay shared), so strides, flags,
+base and errors are NumPy's for the object array, and a view costs one NumSharp view (0.16–0.4 µs). Basic indexing
 gives a view, a full integer index a NEW 1-D piece array (NumPy: the list itself, which `item()` gives —
 `[Misaligned]`). `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's
 own `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` (`ObjectDType(n)`:
