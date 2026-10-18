@@ -1867,7 +1867,9 @@ namespace NumSharp.Backends.Strings
             NPTypeCode.UInt32 => (object)*(uint*)v.Raw,
             NPTypeCode.Int64 => (object)*(long*)v.Raw,
             NPTypeCode.UInt64 => (object)*(ulong*)v.Raw,
-            NPTypeCode.Half => (object)*(Half*)v.Raw,
+            // From the 16-bit pattern: .NET 8's tier-0 code boxing a Half straight from a pointer reads past its two
+            // bytes (UnmanagedStorage.HalfAt).
+            NPTypeCode.Half => (object)BitConverter.UInt16BitsToHalf(*(ushort*)v.Raw),
             NPTypeCode.Single => (object)*(float*)v.Raw,
             NPTypeCode.Double => (object)*(double*)v.Raw,
             NPTypeCode.Decimal => (object)*(decimal*)v.Raw,

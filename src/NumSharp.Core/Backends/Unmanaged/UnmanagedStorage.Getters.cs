@@ -73,7 +73,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Half: return *((Half*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Half: return HalfAt((ushort*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
@@ -105,7 +105,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return *((long*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.UInt64: return *((ulong*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Char: return *((char*)Address + _shape.GetOffset(indices));
-                case NPTypeCode.Half: return *((Half*)Address + _shape.GetOffset(indices));
+                case NPTypeCode.Half: return HalfAt((ushort*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Double: return *((double*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Single: return *((float*)Address + _shape.GetOffset(indices));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.GetOffset(indices));
@@ -140,7 +140,7 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return *((long*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.UInt64: return *((ulong*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Char: return *((char*)Address + _shape.TransformOffset(index));
-                case NPTypeCode.Half: return *((Half*)Address + _shape.TransformOffset(index));
+                case NPTypeCode.Half: return HalfAt((ushort*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Double: return *((double*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Single: return *((float*)Address + _shape.TransformOffset(index));
                 case NPTypeCode.Decimal: return *((decimal*)Address + _shape.TransformOffset(index));
@@ -150,6 +150,23 @@ namespace NumSharp.Backends
                     throw new NotSupportedException();
             }
         }
+
+        /// <summary>
+        ///     The <see cref="Half"/> at <paramref name="p"/>, built from its 16-bit pattern — the form the boxing getters
+        ///     above return.
+        /// </summary>
+        /// <param name="p">The element's address.</param>
+        /// <returns>The value.</returns>
+        /// <remarks>
+        ///     Boxing a <see cref="Half"/> straight from a pointer (<c>return *(Half*)p;</c> into an <see cref="object"/>)
+        ///     makes the .NET 8 runtime's tier-0 code (the first calls of a method, before tiered compilation optimizes
+        ///     it) read past the two bytes: an element that ends where mapped memory ends — a <c>frombuffer</c> over a
+        ///     caller's page, a buffer under <c>NUMSHARP_DEBUG_GUARD_PAGES=1</c> — ended the process ("Internal CLR error",
+        ///     reproduced with <c>VirtualAlloc</c>: .NET 8.0.29 crashes, .NET 10 and optimized code read two bytes). A
+        ///     <see cref="Half"/> made from a <see cref="ushort"/> read is boxed from a register, never from the memory.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe Half HalfAt(ushort* p) => BitConverter.UInt16BitsToHalf(*p);
 
         [MethodImpl(OptimizeAndInline)]
         public unsafe T GetAtIndex<T>(long index) where T : unmanaged
