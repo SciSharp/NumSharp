@@ -287,10 +287,25 @@ costs tens of instructions per element (evaluate only the vectors the element sp
 still costs); a length a run miscounts hides when the longest element is the walk's first (general route) or sits in the
 result's last rows (exact writes) — the pin sizes the rows one byte short with the first elements and puts the long
 element inside the run; `NUMSHARP_DEBUG_GUARD_PAGES=1` bypasses the buffer pool, so a junk-filled-pool test cannot see an
-unwritten byte under it (run a mutation pass with and without guard pages). Gates: oracle `strcodec` (13,773 cases) /
-`tcodec` (2,224), zero excuses; `StringCodecTests` (13); a mutation pass of 36 defects (32 killed outright, 3 by tests
-added for them, 1 equivalent). Benchmark: 56 cells 30.7–317× NumPy, geomean 63.6× (the lowest: UTF-16 decode at 1K,
-`T` under Latin-1, cp1252).
+unwritten byte under it (run a mutation pass with and without guard pages); a C# run entered once per NDIter chunk runs
+ONCE per call over a contiguous array, so tiered compilation keeps it, and every routine it calls without inlining, on
+tier-0 code for a short program's first calls (30 calls inside a quiet 100 ms never come): the runs, the element
+routines, the row writers and the coders are `[MethodImpl(AggressiveOptimization)]`, `NDCharArray.TrimmedUnits`
+AggressiveInlining (calls 2–12 over 100K elements: a cp1252 encode 198 → 36 ns per element, a UTF-8 decode of CJK bytes
+193 → 14; the price is 2.7% of the warm speed, the profile-guided tier 1 that never comes — leaving the runs alone to
+tiering gives back 1.7% of it and loses 6.7% cold). Find what is left with `DOTNET_JitStdOutFile` +
+`DOTNET_JitDisasmSummary=1`: the Tier0 lines compiled after the first call; a growth policy that grows by half again
+can carry the rows past a fast run's width limit although no element needs it, and every later element then takes the
+per-element path (ASCII `xmlcharrefreplace` over mixed texts grew 112 → 168 bytes past the narrow run's 128 and ran
+1.37× slower than the general route): each run declares its width (`CodecRows.FastWidthLimit`) and a re-layout for an
+element that fits it stops there (validation of 2026-10-18, `d314dd81`). Gates:
+oracle `strcodec` (13,773 cases) / `tcodec` (2,224), zero excuses; `StringCodecTests` (14); a mutation pass of 36 defects
+(32 killed outright, 3 by tests added for them, 1 equivalent); a randomized soak of 7,795 NumPy cases (long arrays
+whose elements mix content kinds, so the fast runs take, refuse and resume element by element; widths around the runs'
+32-unit limit; views over long bases; argument arrays; every codec and handler) replayed with AVX2, without AVX2,
+without hardware intrinsics and under guard pages, both frameworks. Benchmark: 56 cells 30.0–244× NumPy warm,
+geomean 61.7× (the lowest: UTF-16 decode at 1K, `T` under Latin-1, cp1252); calls 2–12 of a fresh process 31.1–264×,
+geomean 68.1× (were 3.3–223×, geomean 44.0×).
 **Phase 2 validated against a randomized NumPy soak (2026-10-16, `b57c3e8b`; plan state log).** `test/oracle/soak_strings_oracle.py`
 draws fresh random cases for every family phase 2 computes (the sorts and partitions, `np.lexsort`, the searches,
 `np.unique` and its Array-API forms, `np.isin` and the set routines, `np.sort_complex`, the histograms, the quantile
