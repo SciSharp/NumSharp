@@ -44,9 +44,9 @@ batches, one family each, as their phase-2 functions compute: batch 1 (`rpartiti
 `rfind`, `index`, `rindex`, `startswith`, `endswith`, with the module's re-exports and `np.@char.str_len`; `6d06fa3c`),
 batch 3 (`strip`, `lstrip`, `rstrip`, `replace`, with the module's re-exports; `66b68e96`) and batch 4 (the nine
 predicates `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, with
-the module's re-exports; `b1328a4f`) and batch 5 (the case maps `capitalize`, `lower`, `swapcase`, `title`, `upper` and
-`translate`, with the module's re-exports; `4c9e90a5`) are done. Open: C5's `encode`, `decode` and `%`, which wait for
-the rest of P2.6.
+the module's re-exports; `b1328a4f`), batch 5 (the case maps `capitalize`, `lower`, `swapcase`, `title`, `upper` and
+`translate`, with the module's re-exports; `4c9e90a5`) and batch 6 (`np.@char.mod` and the chararray `%` operator;
+`cfd1ae6d`) are done. Open: C5's `encode` and `decode`, which wait for P2.6 milestone 4.
 
 ---
 
@@ -435,7 +435,8 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
   `ljust`, `rjust`, `zfill`, `expandtabs`) is done (2026-10-17, `ffa74606`), batch 2 (`count`, `find`, `rfind`, `index`,
   `rindex`, `startswith`, `endswith`, and the module's `str_len`) too (2026-10-17, `6d06fa3c`), batch 3 (`strip`,
   `lstrip`, `rstrip`, `replace`; 2026-10-17, `66b68e96`), batch 4 (the nine predicates; 2026-10-18, `b1328a4f`), and
-  batch 5 (the case maps and `translate`; 2026-10-18, `4c9e90a5`). `encode`, `decode` and `%` wait for P2.6.
+  batch 5 (the case maps and `translate`; 2026-10-18, `4c9e90a5`), and batch 6 (`mod` and the `%` operator; 2026-10-18,
+  `cfd1ae6d`). `encode` and `decode` wait for P2.6 milestone 4.
 
 ### C6 Completion
 
@@ -991,6 +992,42 @@ C-D1 decision and C3 for C-D3.
     1K / 100K / 1M): geomean 40.1×, min 5.31× (`title` over non-ASCII `StringDType` at 1M), none under 1.5×. NumPy's
     `_vec_string` calls the Python method once per element.
   - **Open:** `encode`, `decode` and `%` (the rest of P2.6), then C6.
+- **2026-10-18 — C5's sixth batch: `mod` and the `%` operator** (`cfd1ae6d`, mutation-pass pins `9586d4e6`; the same scope,
+  one family per batch).
+  - **Built.** `np.@char.mod` (`APIs/np.char.mod.cs`) IS `np.strings.mod` (`np.char.mod is np.strings.mod`): `np.asarray`
+    and `_vec_string(a, object, '__mod__', (values,))`, so a chararray operand gives a PLAIN result and `values` broadcasts
+    element by element. The chararray's `%` (`Char/NDCharArray.Operators.cs`, seven operator forms) is NumPy's rule 1,
+    `asarray(mod(self, x))`, over the STORED text: a `U` result an owning chararray (taken over, no copy), an `S` result a
+    chararray view. With the chararray on the RIGHT, Python's dispatch decides, because `chararray.__rmod__` returns
+    `NotImplemented`: a `str`, `bytes` or element stand-in on the left formats the chararray as ONE argument object (an
+    ndarray is a mapping, so `'%s' % c` prints its str and `'%(k)s' % c` indexes it); an ndarray on the left runs
+    `np.remainder`, whose no-loop TypeError NumPy raises; a Python number or `None` on the left raises CPython's
+    `unsupported operand type(s) for %: 'int' and 'chararray'`. A C# number literal binds the `(NDArray, NDCharArray)`
+    form through NDArray's implicit conversion, so the operator recovers the Python object from the array's marks
+    (`WasPythonLiteral`, `WasPythonBool`, `WasPythonStr`, `WasPythonBytes`, `WasNumPyScalar`).
+  - **CPython's conversions of an ndarray argument, ported for every `%` path** (`PrintfFormatter.PyObject.cs`,
+    `NDCharObjectPath.Mod.cs`): `int(a)` / `float(a)` take a 0-d array only (NumPy 2.4's `only 0-dimensional arrays can be
+    converted to Python scalars` for any other), `__index__` an integer 0-d array only (a bool array has none: `%x
+    format: an integer is required, not numpy.ndarray`), and bytes formatting's `%s` / `%b` read an ndarray's C-order
+    buffer (a `StringDType` array has none: `cannot include dtype 'numpy.dtypes.StringDType' in a buffer`). An element
+    stand-in is the Python `str` / `bytes` it stands for (a 0-d stand-in drops trailing NULs), and NumPy's type names
+    follow (`numpy.ndarray`, `chararray`, `numpy.str_`). One phase-1 assertion changed with it: `'%e' % np.array([1, 2])`
+    is NumPy's refusal, not CPython's `must be real number` (`fe377f0d`).
+  - **Gates.** Oracle section `strcharmeth` +1,849 cases (14,102 in all, 4,246 NumPy errors, with the boundary audit; the
+    earlier 12,253 cases byte-identical; no new excuse): `%` with the chararray on each side against every argument kind
+    (Python numbers, str, bytes, None, tuples, dicts, lists, ndarrays of every rank and dtype, 0-d arrays, element
+    stand-ins, chararrays), the format kinds (`%s` `%r` `%a` `%d` `%i` `%x` `%o` `%e` `%f` `%g` `%c` `%%`, mapping keys,
+    `*` widths), both classes × 14 layouts, and `np.@char.mod` over plain and chararray operands, `StringDType` and
+    broadcast values. Unit tests: `CharStringMethodsTests` (37: +8). The leak catalogue: the `%` operator and
+    `np.char.mod`. Mutation pass: 16 planted defects; the system stopped the run after the 12th for low memory (the
+    machine had 10 GB free), and all 12 that ran were killed by the oracle; the 5 the oracle alone caught are pinned by
+    unit tests now (`9586d4e6`). M13–M16 were not run.
+  - **Performance** (30 cells: `mod` with int and str values over `U` / `S` / `StringDType`, the `%` operator over `U` /
+    `S`, at 1K / 100K / 1M): geomean 9.48×, min 4.53× (`mod` of ints over `StringDType` at 1M), none under 1.5×.
+    `mod` 4.53–12.7×, the operator 7.54–15.9×. NumPy's `_vec_string` calls the Python `%` once per element. The machine
+    had other sessions' builds running: two 1M `S` cells read 2.3–5.8× slower in the first run (108 and 264 ms) than
+    alone (46.6 and 45.6 ms), and the alone runs are the ones counted.
+  - **Open:** `encode` and `decode` (P2.6 milestone 4), then C6.
 
 ---
 
@@ -1004,7 +1041,7 @@ C-D1 decision and C3 for C-D3.
 | C4 | `multiply` (phase 1, done), `partition`, `rpartition` (done, `ffa74606`) |
 | P2.3 | `add` |
 | P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith` (done, `6d06fa3c`), `lstrip`, `rstrip`, `strip`, `replace` (done, `66b68e96`), `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
-| P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower` (the case maps: done, `4c9e90a5`), `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal` (the nine predicates: done, `b1328a4f`), `mod`, `encode`, `decode`, `translate` (done, `4c9e90a5`) |
+| P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower` (the case maps: done, `4c9e90a5`), `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal` (the nine predicates: done, `b1328a4f`), `mod` (done, `cfd1ae6d`), `encode`, `decode`, `translate` (done, `4c9e90a5`) |
 
 The facade (C0) declares all 53; a row is complete when its computation lands.
 

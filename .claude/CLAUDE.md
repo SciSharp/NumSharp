@@ -493,7 +493,13 @@ predicates (`b1328a4f`, `APIs/np.char.predicates.cs`, `Char/NDCharArray.Predicat
 `.islower()` True), a 0-d array for a 0-d chararray, and `isdecimal` / `isnumeric` refuse an `S` chararray (no bytes
 loop). The case maps and `translate` (`4c9e90a5`, `APIs/np.char.case.cs`, `Char/NDCharArray.Case.cs`) ARE
 `np.strings`' functions (`np.asarray` + `_vec_string`: a plain result, a 0-d array for a Python str; `translate`'s
-`deletechars` reaches only `bytes.translate`); the members are rule 1 (`Inside()` + `AsArrayOfFresh`).
+`deletechars` reaches only `bytes.translate`); the members are rule 1 (`Inside()` + `AsArrayOfFresh`). `np.@char.mod`
+(`cfd1ae6d`) IS `np.strings.mod`, and the chararray's `%` is rule 1, `asarray(mod(self, x))`; with the chararray on the
+RIGHT, Python's dispatch decides (`__rmod__` is NotImplemented): a str / bytes / element on the left formats the
+chararray as ONE argument object, an ndarray on the left runs np.remainder's TypeError, a Python number CPython's
+`unsupported operand type(s) for %`. CPython's `%` converts an ndarray argument through NumPy's slots on every path
+(`int()` / `float()` of a 0-d array only, `__index__` of an integer 0-d array only, bytes formatting's `%s` from the C-order
+buffer), so `'%e' % np.array([1, 2])` is NumPy's `only 0-dimensional arrays can be converted to Python scalars`.
 TRAPS: (1) a function that forwards a chararray to a DIFFERENTLY named public function (partition → `np.stack`)
 computes inside `NDCharArrayBoundary.Inside()`: the audit skips only frames named like the function, and the forward would apply
 `np.stack`'s chararray rule. (2) NumPy 2.4.2's zfill of an EMPTY element reads uninitialized memory for its sign: oracle
