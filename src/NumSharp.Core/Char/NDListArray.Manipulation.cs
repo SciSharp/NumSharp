@@ -160,7 +160,9 @@ namespace NumSharp
         // Reshaping
         // =============================================================================================================
 
-        /// <summary>NumPy's <c>reshape(*shape)</c> in C order: a view when the pointers allow one, else a copy.</summary>
+        /// <summary>NumPy's <c>reshape(*shape)</c> with separate integers, NumPy's defaults <c>order='C'</c> and
+        ///     <c>copy=None</c>: a view when the pointers allow one, else a copy (see <see cref="reshape(Shape, char, bool?)"/>,
+        ///     the spelling that takes <c>order</c> and <c>copy</c>).</summary>
         /// <param name="shape">The new shape (one entry may be -1, inferred).</param>
         /// <returns>The reshaped list array.</returns>
         /// <exception cref="IncorrectShapeException">The size differs (<c>cannot reshape array of size 6 into shape
@@ -169,21 +171,76 @@ namespace NumSharp
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray reshape(params long[] shape) => Derive(a => a.reshape(shape));
 
-        /// <summary>NumPy's <c>reshape(shape)</c> in C order, the shape given as a <see cref="NumSharp.Shape"/>.</summary>
-        /// <param name="newShape">The new shape.</param>
-        /// <returns>The reshaped list array.</returns>
+        /// <summary>
+        ///     NumPy's <c>reshape(shape, /, *, order='C', copy=None)</c>: the elements read in <paramref name="order"/> and
+        ///     placed in the new shape in the same order — a view when the pointers allow one (else a view of a copy, as in
+        ///     NumPy), always a copy for <c>copy=true</c>, and NumPy's ValueError for <c>copy=false</c> when no view can be
+        ///     made.
+        /// </summary>
+        /// <param name="shape">The new shape: a <see cref="NumSharp.Shape"/>, or a C# <c>long[]</c> / <c>int[]</c> / tuple /
+        ///     integer, which convert to one (one entry may be -1, inferred).</param>
+        /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c> (F when the array is F-contiguous and not C); NumPy refuses
+        ///     <c>'K'</c>.</param>
+        /// <param name="copy">NumPy's <c>copy</c>: null (a copy only when needed), true (always a copy, in
+        ///     <paramref name="order"/>), false (never: a reshape that needs a copy raises).</param>
+        /// <returns>The reshaped list array (it shares the lists in every case: a copy copies the pointers).</returns>
         /// <exception cref="IncorrectShapeException">The size differs.</exception>
+        /// <exception cref="ValueError">An order NumPy does not take (<c>order 'K' is not permitted for reshaping</c>); more
+        ///     than one -1; <c>Unable to avoid creating a copy while reshaping.</c> for <c>copy=false</c>.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray reshape(Shape newShape) => Derive(a => a.reshape(newShape));
+        /// <remarks>
+        ///     NumPy takes the shape as one tuple OR as separate integers, then the keyword-only <c>order</c> and
+        ///     <c>copy</c>; C# has no keyword-only parameter after a <c>params</c> array, so the two spellings are two members:
+        ///     <see cref="reshape(long[])"/> for separate integers and this one for everything else.
+        /// </remarks>
+        public NDListArray reshape(Shape shape, char order = 'C', bool? copy = null)
+        {
+            ThrowIfDisposed();
+            if (copy == true)
+            {
+                // _reshape_with_copy_arg's NPY_COPY_ALWAYS: PyArray_NewCopy(array, order) — 'A' meaning F for an
+                // F-contiguous, non-C array, as np.copy reads it — then the reshape of that copy, a view of it (OWNDATA false,
+                // as in NumPy). The reshape of the copy raises NumPy's order and size errors, the same texts in the same
+                // order ('K' first, then the size), so they are not checked twice.
+                using var pointers = Ids.copy(order);
+                var viewOfCopy = pointers.reshape(shape, order);
+                return Over(viewOfCopy);
+            }
+            var ids = Ids.reshape(shape, order);
+            if (copy == false && !IsReshapeView(ids, order))
+            {
+                // NPY_COPY_NEVER: _attempt_nocopy_reshape found no view.
+                ids.Dispose();
+                throw new ValueError("Unable to avoid creating a copy while reshaping.");
+            }
+            return Over(ids);
+        }
 
-        /// <summary>NumPy's <c>reshape(shape, order=...)</c>: the elements read and placed in <paramref name="order"/>.</summary>
-        /// <param name="newShape">The new shape.</param>
-        /// <param name="order"><c>'C'</c>, <c>'F'</c> or <c>'A'</c> (F when the array is F-contiguous and not C).</param>
-        /// <returns>The reshaped list array (a view of an intermediate copy when the order needs one, as in NumPy).</returns>
-        /// <exception cref="IncorrectShapeException">The size differs.</exception>
-        /// <exception cref="ValueError">An order NumPy does not take.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray reshape(Shape newShape, char order) => Derive(a => a.reshape(newShape, order));
+        /// <summary>
+        ///     Whether a reshape of this array's pointers is the VIEW <c>_reshape_with_copy_arg</c> gives without copying: an
+        ///     array contiguous in the requested order is reshaped as a view without trying (<c>'A'</c> reads F only for an
+        ///     F-contiguous, non-C array; an empty array is contiguous in both orders), and any other needs
+        ///     <c>_attempt_nocopy_reshape</c> to have found one.
+        /// </summary>
+        /// <param name="reshaped">NumSharp's reshape of <see cref="Ids"/> (a view, or a copy where no view exists).</param>
+        /// <param name="order">The requested order (<c>'C'</c>, <c>'F'</c> or <c>'A'</c>; <c>'K'</c> already raised).</param>
+        /// <returns>True when NumPy's <c>copy=False</c> reshape succeeds.</returns>
+        /// <remarks>
+        ///     NumSharp's reshape takes NumPy's two routes, but its view is not always the same buffer OBJECT (a reshape to the
+        ///     same shape, or of an empty array, re-wraps the slice), so the copy is told apart by memory: a copy is a fresh
+        ///     allocation, whose first element is never this array's first element.
+        /// </remarks>
+        private unsafe bool IsReshapeView(NDArray reshaped, char order)
+        {
+            var s = Ids.Shape;
+            bool fOrder = order is 'F' or 'f' || (order is 'A' or 'a' && s.IsFContiguous && !s.IsContiguous);
+            if (fOrder ? s.IsFContiguous : s.IsContiguous)
+                return true;
+            // The pointers are int64 ids: an element is 8 bytes.
+            byte* first = Ids.Storage.Address + Ids.Shape.offset * sizeof(long);
+            byte* reshapedFirst = reshaped.Storage.Address + reshaped.Shape.offset * sizeof(long);
+            return first == reshapedFirst;
+        }
 
         /// <summary>NumPy's <c>ravel(order='C')</c>: the 1-D list array, a view whenever the pointers are contiguous in that
         ///     order (<c>'K'</c>: their memory order).</summary>
@@ -232,10 +289,123 @@ namespace NumSharp
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray copy(char order = 'C') => Derive(a => a.copy(order));
 
-        /// <summary>NumPy's <c>view()</c>: a new list array over the same pointers (its base is this array's owner).</summary>
+        /// <summary>
+        ///     NumPy's <c>view([dtype][, type])</c> of an object array: a new list array over the same pointers (its base is
+        ///     this array's owner). Only the object dtype keeps an array of references viewable, and only <c>ndarray</c> is a
+        ///     class a list array can be viewed as here.
+        /// </summary>
+        /// <param name="dtype">NumPy's <c>dtype</c>, omitted for none. The object dtype — <c>typeof(object)</c>,
+        ///     <c>np.object_</c>, or a NumPy spelling of it (<c>"O"</c>, <c>"|O"</c>, <c>"=O"</c>, <c>"&lt;O"</c>,
+        ///     <c>"&gt;O"</c>, <c>"O8"</c>, <c>"O4"</c>, <c>"object"</c>, <c>"object_"</c>) — is the same view; any other dtype
+        ///     (a <see cref="DType"/>, a CLR element type, an <see cref="NPTypeCode"/>, a dtype string, and null, which is
+        ///     NumPy's <c>None</c> and converts to float64) is NumPy's TypeError. An ARRAY CLASS here is the
+        ///     <paramref name="type"/> argument, as in NumPy.</param>
+        /// <param name="type">NumPy's <c>type</c>, omitted for none: the class of the result — <c>typeof(NDArray)</c> or
+        ///     <c>typeof(NDListArray)</c> (NumPy's <c>ndarray</c>) give the view; <c>typeof(NDCharArray)</c> is its finalize
+        ///     error; <c>typeof(NDMatrix)</c> and <c>typeof(NDMaskedArray)</c> would be an object matrix / masked array, which
+        ///     NumSharp has no type for. Anything else — null (NumPy's <c>None</c>) included — is not an array class.</param>
         /// <returns>The view.</returns>
+        /// <exception cref="ValueError"><c>Cannot specify output type twice.</c> (an array class as <paramref name="dtype"/>
+        ///     beside a <paramref name="type"/>); <c>Type must be a sub-type of ndarray type</c>; the class's finalize error
+        ///     (<c>Can only create a chararray from string data.</c>, <c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="TypeError"><c>Cannot change data-type for array of references.</c> for a dtype that is not the
+        ///     object dtype; <c>Cannot interpret '1' as a data type</c> for a value that names no dtype.</exception>
+        /// <exception cref="NotSupportedException">A dtype string or CLR type NumSharp cannot parse (NumPy's <c>data type
+        ///     'x' not understood</c>); a view as an object matrix, masked array or typed <c>NDArray&lt;T&gt;</c>.</exception>
+        /// <exception cref="IncorrectShapeException">A matrix view of more than two axes where one has extent 0.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray view() => Derive(static a => a.view());
+        /// <remarks>
+        ///     One member, NumPy's signature. Both parameters are <c>[Optional]</c> objects without a default constant, so an
+        ///     omitted argument arrives as <see cref="System.Reflection.Missing"/> while an explicit null stays NumPy's
+        ///     <c>None</c> — <c>a.view(None)</c> and <c>a.view(type=None)</c> raise in NumPy, where <c>a.view()</c> does not.
+        ///     The checks run in <c>array_view</c>'s order: the swap of an array class given as the dtype, the type, the
+        ///     dtype's conversion, the class's finalize (PyArray_View builds the subclass object before it assigns the dtype),
+        ///     then the dtype's refusal.
+        /// </remarks>
+        public NDListArray view([System.Runtime.InteropServices.Optional] object dtype, [System.Runtime.InteropServices.Optional] object type)
+        {
+            ThrowIfDisposed();
+            bool hasDtype = dtype is not System.Reflection.Missing;
+            bool hasType = type is not System.Reflection.Missing;
+            // array_view: a type given as the dtype is the type when it is an ndarray subclass.
+            if (hasDtype && IsArrayClass(dtype))
+            {
+                if (hasType)
+                    throw new ValueError("Cannot specify output type twice.");
+                type = dtype;
+                hasType = true;
+                hasDtype = false;
+            }
+            if (hasType && !IsArrayClass(type))
+                throw new ValueError("Type must be a sub-type of ndarray type");
+            // PyArray_DescrConverter runs before the view is made: an unknown name raises here.
+            bool refused = hasDtype && !IsObjectDescr(dtype);
+            var cls = hasType ? (Type)type : typeof(NDListArray);
+            // PyArray_View makes the subclass object first: its __array_finalize__ sees the object dtype.
+            if (cls == typeof(NDCharArray))
+                throw NDCharArrayBoundary.FinalizeError();
+            if (cls == typeof(NDMatrix) && Ids.ndim != 2)
+                _ = Ids.Shape.AsMatrix(); // matrix's finalize rule: "shape too large to be a matrix." (no view is kept)
+            // Then the dtype is assigned: _view_is_safe refuses every dtype but object for an array of references.
+            if (refused)
+                throw new TypeError(NDArray.ViewOfReferencesText);
+            if (cls != typeof(NDListArray) && cls != typeof(NDArray))
+                throw new NotSupportedException(
+                    $"NumPy's view of an object array as {cls.Name} is an object array of that class, which NumSharp has no " +
+                    "type for; view() gives the list array itself");
+            return Derive(static a => a.view());
+        }
+
+        /// <summary>
+        ///     Whether a view argument is an ARRAY CLASS (NumPy's <c>PyType_IsSubtype(type, &amp;PyArray_Type)</c>): an
+        ///     <see cref="NDArray"/> class, or one of NumSharp's array classes that stand for an ndarray subclass without
+        ///     deriving from <see cref="NDArray"/> (<see cref="NDListArray"/>, <see cref="NDMaskedArray"/>).
+        /// </summary>
+        /// <param name="value">The argument.</param>
+        /// <returns>True for an array class.</returns>
+        private static bool IsArrayClass(object value)
+            => value is Type t && (typeof(NDArray).IsAssignableFrom(t) || t == typeof(NDListArray) || t == typeof(NDMaskedArray));
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_DescrConverter</c> of a view's dtype argument, reduced to the question a list array asks:
+        ///     whether it names the object dtype. Every other dtype is converted for its error only (an unknown name raises
+        ///     before the view is refused, as in NumPy).
+        /// </summary>
+        /// <param name="dtype">The argument (null is NumPy's <c>None</c>, which converts to float64).</param>
+        /// <returns>True for the object dtype.</returns>
+        /// <exception cref="NotSupportedException">A string or CLR type NumSharp cannot parse as a dtype.</exception>
+        /// <exception cref="TypeError">A value that names no dtype (<c>Cannot interpret '1' as a data type</c>).</exception>
+        private static bool IsObjectDescr(object dtype)
+        {
+            switch (dtype)
+            {
+                case null:
+                case DType:
+                    return false;
+                case Type t when t == typeof(object):
+                    return true;
+                case Type t:
+                    _ = DType.From(t);
+                    return false;
+                case string s when s is "O" or "|O" or "=O" or "<O" or ">O" or "O8" or "O4" or "object" or "object_":
+                    // np.dtype() reads these as dtype('O') (probed against NumPy 2.4.2; "O0" and "Object" are errors).
+                    return true;
+                case string s:
+                    _ = np.dtype(s);
+                    return false;
+                case NPTypeCode c:
+                    _ = DType.From(c);
+                    return false;
+                case NDScalarType st:
+                    // np.object_ is the object dtype's scalar class; any other class names a dtype NumSharp has or refuses.
+                    if (ReferenceEquals(st, NDScalarType.Object_))
+                        return true;
+                    _ = np.dtype(st);
+                    return false;
+                default:
+                    throw new TypeError($"Cannot interpret '{dtype}' as a data type");
+            }
+        }
 
         // =============================================================================================================
         // Selection
@@ -245,7 +415,10 @@ namespace NumSharp
         ///     NumPy's <c>take(indices, axis=None, out=None, mode='raise')</c>: the lists at <paramref name="indices"/> (of the
         ///     flattened array, or along <paramref name="axis"/>), a new array of pointers to the same lists.
         /// </summary>
-        /// <param name="indices">The integer indices (any shape; NumPy's conversion and its TypeError for a float array).</param>
+        /// <param name="indices">The integer indices: an integer array of any shape (NumPy's conversion and its TypeError for
+        ///     a float array), or one C# integer (<c>lists.take(1)</c>), which converts to the 0-d array NumPy's
+        ///     <c>np.asarray(1)</c> is — the take of one index without an axis is then the element itself, a 0-d list array
+        ///     standing for NumPy's returned list (its <see cref="item(long[])"/> is the list).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="out">NumPy's <c>out=</c>: a list array of the result's shape whose elements are set to the taken
         ///     lists (returned), or null for a new array.</param>
@@ -261,33 +434,14 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">An <paramref name="out"/> of the other piece class (str and bytes) that
         ///     would receive a non-empty list.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>One overload, NumPy's signature: NumPy's <c>indices</c> is an int or an int array_like, which this
+        ///     <see cref="NDArray"/> parameter receives through NumSharp's implicit conversions.</remarks>
         public NDListArray take(NDArray indices, int? axis = null, NDListArray @out = null, string mode = "raise")
         {
             if (@out is not null)
                 return TakeInto(@out, destination => Ids.take(indices, axis, destination, mode));
             // array_take returns PyArray_Return's result: a 0-d take is the element itself, the list.
             return Derive(a => a.take(indices, axis, null, mode)).MarkStandIn();
-        }
-
-        /// <summary>NumPy's <c>take</c> with one index: a 0-d list array holding the list (NumPy returns the list itself,
-        ///     which this array's <see cref="item()"/> gives).</summary>
-        /// <param name="index">The index (of the flattened array, or along <paramref name="axis"/>).</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="out">A list array of the result's shape to store into, or null.</param>
-        /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c> or <c>"clip"</c>.</param>
-        /// <returns>The taken list (a 0-d list array without an axis; along an axis, the sub-array), or
-        ///     <paramref name="out"/>.</returns>
-        /// <exception cref="IndexError">An index out of bounds under <c>"raise"</c>.</exception>
-        /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ValueError">A mode NumPy does not take; an <paramref name="out"/> of another shape or a read-only
-        ///     one.</exception>
-        /// <exception cref="NotSupportedException">An <paramref name="out"/> of the other piece class.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray take(long index, int? axis = null, NDListArray @out = null, string mode = "raise")
-        {
-            if (@out is not null)
-                return TakeInto(@out, destination => Ids.take(index, axis, destination, mode));
-            return Derive(a => a.take(index, axis, null, mode)).MarkStandIn();
         }
 
         /// <summary>NumPy's <c>compress(condition, axis=None, out=None)</c>: the lists where <paramref name="condition"/> is
@@ -314,25 +468,19 @@ namespace NumSharp
 
         /// <summary>NumPy's <c>repeat(repeats, axis=None)</c>: every list repeated (of the flattened array, or along
         ///     <paramref name="axis"/>), the pointers copied, the lists shared.</summary>
-        /// <param name="repeats">The count for every element.</param>
+        /// <param name="repeats">The counts: one C# integer for every element (<c>lists.repeat(2)</c>, the 0-d array NumPy's
+        ///     <c>np.asarray(2)</c> is), or an integer array of one count per element along the axis (broadcast against
+        ///     it).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <returns>The repeated lists.</returns>
-        /// <exception cref="ArgumentException">A negative count: <see cref="NDArray.repeat(long, int?)"/>'s text, <c>repeats
-        ///     may not contain negative values</c> (NumPy's ValueError reads <c>negative dimensions are not allowed</c>: the
-        ///     wording divergence NDArray.repeat has for every dtype).</exception>
+        /// <exception cref="ArgumentException">A negative count: <see cref="NDArray.repeat(NDArray, int?)"/>'s text,
+        ///     <c>repeats may not contain negative values</c> (NumPy's ValueError reads <c>negative dimensions are not
+        ///     allowed</c>: the wording divergence NDArray.repeat has for every dtype); counts that do not broadcast
+        ///     (<c>operands could not be broadcast together with shape (6,) (2,)</c>, NumPy's ValueError text).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray repeat(long repeats, int? axis = null) => Derive(a => a.repeat(repeats, axis));
-
-        /// <summary>NumPy's <c>repeat(repeats, axis=None)</c> with a count per element (broadcast against the axis).</summary>
-        /// <param name="repeats">The counts.</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <returns>The repeated lists.</returns>
-        /// <exception cref="ArgumentException">A negative count (NDArray.repeat's text, see the single-count form), or counts
-        ///     that do not broadcast (<c>operands could not be broadcast together with shape (6,) (2,)</c>, NumPy's
-        ///     ValueError text).</exception>
-        /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>One overload, NumPy's signature: NumPy's <c>repeats</c> is an int or an int array_like, which this
+        ///     <see cref="NDArray"/> parameter receives through NumSharp's implicit conversions.</remarks>
         public NDListArray repeat(NDArray repeats, int? axis = null) => Derive(a => a.repeat(repeats, axis));
 
         /// <summary>NumPy's <c>diagonal(offset=0, axis1=0, axis2=1)</c>: the READ-ONLY view of the lists on a

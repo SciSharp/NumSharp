@@ -367,11 +367,24 @@ namespace NumSharp.Backends.Sorting
                     throw new TypeError("Partition index must be integer");
             }
 
-            var k64 = (kth.typecode == NPTypeCode.Int64 ? kth : kth.astype(NPTypeCode.Int64)).ravel();
-            var result = new long[k64.size];
-            for (int i = 0; i < result.Length; i++)
-                result[i] = k64.GetValue<long>(i);
-            return result;
+            // The int64 conversion (a copy unless kth already is int64) and its flat view are this method's own
+            // intermediates, both disposed here — never the caller's kth (ravel always returns a new array object, and a
+            // view's Dispose releases only its own reference). The conversion used to be left to the finalizer: one pooled
+            // buffer per call whose kth has another integer dtype (a C# int literal converts to an int32 kth).
+            var wide = kth.typecode == NPTypeCode.Int64 ? kth : kth.astype(NPTypeCode.Int64);
+            try
+            {
+                using var k64 = wide.ravel();
+                var result = new long[k64.size];
+                for (int i = 0; i < result.Length; i++)
+                    result[i] = k64.GetValue<long>(i);
+                return result;
+            }
+            finally
+            {
+                if (!ReferenceEquals(wide, kth))
+                    wide.Dispose();
+            }
         }
 
         /// <summary>

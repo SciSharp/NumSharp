@@ -26,7 +26,7 @@ namespace NumSharp.Tests.Strings
             ["flatten"] = new[] { "order" },
             ["copy"] = new[] { "order" },
             ["squeeze"] = new[] { "axis" },
-            ["view"] = new[] { "dtype" },
+            ["view"] = new[] { "dtype", "type" },
             ["take"] = new[] { "indices", "axis", "out", "mode" },
             ["compress"] = new[] { "condition", "axis", "out" },
             ["repeat"] = new[] { "repeats", "axis" },
@@ -50,10 +50,10 @@ namespace NumSharp.Tests.Strings
             ["cumsum"] = new[] { "axis", "dtype", "out" },
             ["cumprod"] = new[] { "axis", "dtype", "out" },
             ["trace"] = new[] { "offset", "axis1", "axis2", "dtype", "out" },
-            ["clip"] = new[] { "min", "max", "out" },
+            ["clip"] = new[] { "min", "max", "out", "dtype", "where" },
             ["mean"] = new[] { "axis", "dtype", "out", "keepdims", "where" },
-            ["var"] = new[] { "axis", "dtype", "out", "ddof", "keepdims", "where" },
-            ["std"] = new[] { "axis", "dtype", "out", "ddof", "keepdims", "where" },
+            ["var"] = new[] { "axis", "dtype", "out", "ddof", "keepdims", "where", "mean" },
+            ["std"] = new[] { "axis", "dtype", "out", "ddof", "keepdims", "where", "mean" },
             ["dot"] = new[] { "b", "out" },
             ["round"] = new[] { "decimals", "out" },
             ["conj"] = new[] { "out" },
@@ -63,7 +63,7 @@ namespace NumSharp.Tests.Strings
             ["resize"] = Array.Empty<string>(),
             ["byteswap"] = new[] { "inplace" },
             ["getfield"] = new[] { "dtype", "offset" },
-            ["setfield"] = new[] { "val", "dtype", "offset" },
+            ["setfield"] = new[] { "value", "dtype", "offset" },
             ["choose"] = new[] { "choices", "out", "mode" },
         };
 
@@ -87,14 +87,17 @@ namespace NumSharp.Tests.Strings
             var receiver = (NDListArray)ObjectPathValue(p["recv"], ops);
             string name = p["name"].GetString();
             object r;
+            // The values the member received, in its Python parameter order (an is_arg case asks whether the result IS
+            // one of them: the out= a member must return itself).
+            object[] passed = Array.Empty<object>();
             if (p.TryGetValue("binop", out var binop))
             {
                 bool rev = p.TryGetValue("rev", out var revJson) && revJson.GetBoolean();
-                r = ListBinop(binop.GetString(), receiver, ObjectPathValue(p["other"], ops), rev);
+                r = ListBinop(binop.GetString(), receiver, ObjectPathValue(p["other"], ops, receiver), rev);
             }
             else if (p.TryGetValue("setitem", out var index))
             {
-                var value = ObjectPathValue(p["args"][0], ops);
+                var value = ObjectPathValue(p["args"][0], ops, receiver);
                 receiver[index.GetString()] = (NDListArray)value;
                 r = receiver;
             }
@@ -102,12 +105,20 @@ namespace NumSharp.Tests.Strings
             {
                 r = p.TryGetValue("attr", out var attr) && attr.GetBoolean()
                     ? ListAttribute(receiver, name)
-                    : ListMember(receiver, name, p, ops);
+                    : ListMember(receiver, name, p, ops, out passed);
                 if (p.TryGetValue("inplace", out var inplace) && inplace.GetBoolean())
                     r = receiver;
             }
             if (p.TryGetValue("is_recv", out var isRecv) && isRecv.GetBoolean())
                 r = ReferenceEquals(r, receiver);
+            if (p.TryGetValue("is_arg", out var isArg))
+            {
+                // A positional index or a keyword name; both land in the parameter's slot.
+                int slot = isArg.ValueKind == JsonValueKind.Number
+                    ? isArg.GetInt32()
+                    : Array.IndexOf(s_listMemberParams[name], isArg.GetString());
+                r = ReferenceEquals(r, passed[slot]);
+            }
             result = r is NDListArray ? new SelfResult(r, receiver) : r;
             return true;
         }
@@ -170,18 +181,22 @@ namespace NumSharp.Tests.Strings
         /// <param name="name">The member's Python name.</param>
         /// <param name="p">The case parameters.</param>
         /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="passed">The values passed in the member's parameter slots (empty for a member that takes its
+        ///     positions as one sequence).</param>
         /// <returns>The member's result.</returns>
         /// <exception cref="InvalidOperationException">An unknown member.</exception>
-        private static object ListMember(NDListArray receiver, string name, Dictionary<string, JsonElement> p, NDArray[] ops)
+        private static object ListMember(NDListArray receiver, string name, Dictionary<string, JsonElement> p, NDArray[] ops,
+                                         out object[] passed)
         {
             // transpose(*axes) / reshape(*shape) / resize(*shape) take their positions as a sequence; the others name each
             // parameter.
             var positional = p.TryGetValue("args", out var a)
-                ? a.EnumerateArray().Select(s => ObjectPathValue(s, ops)).ToArray()
+                ? a.EnumerateArray().Select(s => ObjectPathValue(s, ops, receiver)).ToArray()
                 : Array.Empty<object>();
             // A member named by its parameters takes positional and keyword arguments in Python's positions.
             var names = s_listMemberParams[name];
-            var args = names.Length == 0 ? Array.Empty<object>() : ObjectPathArgs(p, names, ops);
+            var args = names.Length == 0 ? Array.Empty<object>() : ObjectPathArgs(p, names, ops, receiver);
+            passed = args;
             // Whether the case GAVE the parameter at position i (positionally or by keyword): an explicit None differs from
             // an omitted argument where the default is not None (argsort's axis=-1).
             bool Given(int i) => i < positional.Length
@@ -193,11 +208,17 @@ namespace NumSharp.Tests.Strings
             string Mode(object v) => (string)v ?? "raise";
             bool Flag(object v) => v is bool b && b;
             NDArray ArrayOrNull(object v) => v is null ? null : ToArray(v);
-            // A where= list is NumPy's bool mask (an empty list included, which ToArray would read as int64).
+            // A where= list is NumPy's bool mask (an empty list included, which ToArray would read as int64), of the list's
+            // own shape: [[]] is (1, 0).
             NDArray MaskOrNull(object v) => v is null ? null
-                : v is Array { Length: 0 } empty ? new NDArray(NPTypeCode.Boolean, new Shape(new long[] { 0 }), false)
-                : ToArray(v);
+                : v is Array { Length: 0 } empty
+                    ? new NDArray(NPTypeCode.Boolean, new Shape(Enumerable.Range(0, empty.Rank).Select(d => (long)empty.GetLength(d)).ToArray()), false)
+                    : ToArray(v);
             DType Dtype(object v) => v is null ? null : np.dtype((string)v);
+            // A where= Python bool is NumPy's True / False (the C# literal's conversion); anything else is a mask.
+            NDArray WhereOrNull(object v) => v is bool b ? b : MaskOrNull(v);
+            // An index / count argument: one Python int is NumPy's 0-d array (the C# literal's conversion), a list the array.
+            NDArray IndexArg(object v) => v is long i ? i : ToArray(v);
             switch (name)
             {
                 case "to_device": return receiver.to_device((string)args[0], args[1]);
@@ -208,14 +229,16 @@ namespace NumSharp.Tests.Strings
                 case "flatten": return receiver.flatten(Order(args[0]));
                 case "copy": return receiver.copy(Order(args[0]));
                 case "squeeze": return receiver.squeeze(Axis(args[0]));
-                case "view": return args[0] is null ? receiver.view() : receiver.view(Dtype(args[0]));
-                case "take":
-                    return args[0] is long index
-                        ? receiver.take(index, Axis(args[1]), (NDListArray)args[2], Mode(args[3]))
-                        : receiver.take(ToArray(args[0]), Axis(args[1]), (NDListArray)args[2], Mode(args[3]));
+                case "view":
+                    // view([dtype][, type]): an omitted argument is NumPy's "not given", an explicit None its None.
+                    if (!Given(0) && !Given(1))
+                        return receiver.view();
+                    if (!Given(1))
+                        return receiver.view(args[0]);
+                    return Given(0) ? receiver.view(args[0], args[1]) : receiver.view(type: args[1]);
+                case "take": return receiver.take(IndexArg(args[0]), Axis(args[1]), (NDListArray)args[2], Mode(args[3]));
                 case "compress": return receiver.compress(ToArray(args[0]), Axis(args[1]), (NDListArray)args[2]);
-                case "repeat":
-                    return args[0] is long count ? receiver.repeat(count, Axis(args[1])) : receiver.repeat(ToArray(args[0]), Axis(args[1]));
+                case "repeat": return receiver.repeat(IndexArg(args[0]), Axis(args[1]));
                 case "diagonal":
                     return receiver.diagonal(args[0] is null ? 0 : checked((int)(long)args[0]),
                                              args[1] is null ? 0 : checked((int)(long)args[1]),
@@ -236,32 +259,29 @@ namespace NumSharp.Tests.Strings
                     return null;
                 case "argpartition":
                     return ListPartition(receiver, args[0], AxisOr(1, -1), (string)args[2] ?? "introselect", (string)args[3], arg: true);
-                case "searchsorted":
-                    return args[0] is NDListArray needles
-                        ? receiver.searchsorted(needles, (string)args[1] ?? "left", ArrayOrNull(args[2]))
-                        : receiver.searchsorted(args[0], (string)args[1] ?? "left", ArrayOrNull(args[2]));
+                case "searchsorted": return receiver.searchsorted(args[0], (string)args[1] ?? "left", ArrayOrNull(args[2]));
                 case "argmax": return receiver.argmax(Axis(args[0]), ArrayOrNull(args[1]), Flag(args[2]));
                 case "argmin": return receiver.argmin(Axis(args[0]), ArrayOrNull(args[1]), Flag(args[2]));
                 case "max": return receiver.max(Axis(args[0]), (NDListArray)args[1], Flag(args[2]), args[3], MaskOrNull(args[4]));
                 case "min": return receiver.min(Axis(args[0]), (NDListArray)args[1], Flag(args[2]), args[3], MaskOrNull(args[4]));
                 case "sum":
-                    return args[1] is not null
-                        ? receiver.sum(Axis(args[0]), Dtype(args[1]), Flag(args[3]))
-                        : receiver.sum(Axis(args[0]), (NDListArray)args[2], Flag(args[3]), args[4], MaskOrNull(args[5]));
-                case "prod": return receiver.prod(Axis(args[0]), (NDListArray)args[2], Flag(args[3]), args[4], MaskOrNull(args[5]));
-                case "cumsum": return receiver.cumsum(Axis(args[0]), (NDListArray)args[2]);
-                case "cumprod": return receiver.cumprod(Axis(args[0]), (NDListArray)args[2]);
+                    return receiver.sum(Axis(args[0]), Dtype(args[1]), (NDListArray)args[2], Flag(args[3]), args[4], WhereOrNull(args[5]));
+                case "prod":
+                    return receiver.prod(Axis(args[0]), Dtype(args[1]), (NDListArray)args[2], Flag(args[3]), args[4], WhereOrNull(args[5]));
+                case "cumsum": return receiver.cumsum(Axis(args[0]), Dtype(args[1]), (NDListArray)args[2]);
+                case "cumprod": return receiver.cumprod(Axis(args[0]), Dtype(args[1]), (NDListArray)args[2]);
                 case "trace":
                     return receiver.trace(args[0] is null ? 0 : checked((int)(long)args[0]), args[1] is null ? 0 : checked((int)(long)args[1]),
-                                          args[2] is null ? 1 : checked((int)(long)args[2]), (NDListArray)args[4]);
-                case "clip": return receiver.clip(args[0], args[1], (NDListArray)args[2]);
-                case "mean": return receiver.mean(Axis(args[0]), Dtype(args[1]), Flag(args[3]), MaskOrNull(args[4]));
+                                          args[2] is null ? 1 : checked((int)(long)args[2]), Dtype(args[3]), (NDListArray)args[4]);
+                case "clip": return receiver.clip(args[0], args[1], (NDListArray)args[2], Dtype(args[3]), WhereOrNull(args[4]));
+                case "mean":
+                    return receiver.mean(Axis(args[0]), Dtype(args[1]), ArrayOrNull(args[2]), Flag(args[3]), WhereOrNull(args[4]));
                 case "var":
-                    return receiver.var(Axis(args[0]), Dtype(args[1]), args[3] is null ? 0 : checked((int)(long)args[3]), Flag(args[4]),
-                                        MaskOrNull(args[5]));
+                    return receiver.var(Axis(args[0]), Dtype(args[1]), ArrayOrNull(args[2]), args[3] is null ? 0 : checked((int)(long)args[3]),
+                                        Flag(args[4]), WhereOrNull(args[5]), MeanArg(args[6]));
                 case "std":
-                    return receiver.std(Axis(args[0]), Dtype(args[1]), args[3] is null ? 0 : checked((int)(long)args[3]), Flag(args[4]),
-                                        MaskOrNull(args[5]));
+                    return receiver.std(Axis(args[0]), Dtype(args[1]), ArrayOrNull(args[2]), args[3] is null ? 0 : checked((int)(long)args[3]),
+                                        Flag(args[4]), WhereOrNull(args[5]), MeanArg(args[6]));
                 case "dot": return receiver.dot(args[0] is Array list ? ToArray(list) : args[0], (NDListArray)args[1]);
                 case "round": return receiver.round(args[0] is null ? 0 : checked((int)(long)args[0]), (NDListArray)args[1]);
                 case "conj": return receiver.conj((NDListArray)args[0]);
@@ -270,7 +290,7 @@ namespace NumSharp.Tests.Strings
                     receiver.fill(args[0]);
                     return null;
                 case "put":
-                    receiver.put(ToArray(args[0]), (NDListArray)args[1], Mode(args[2]));
+                    receiver.put(IndexArg(args[0]), (NDListArray)args[1], Mode(args[2]));
                     return null;
                 case "resize":
                     ListResize(receiver, positional, p, ops);
@@ -336,10 +356,27 @@ namespace NumSharp.Tests.Strings
             long[] dims = positional.Length == 1 && positional[0] is Array seq
                 ? seq.Cast<object>().Select(x => Convert.ToInt64(x)).ToArray()
                 : positional.Select(x => (long)x).ToArray();
-            if (p.TryGetValue("kw", out var kw) && kw.TryGetProperty("order", out var order))
-                return receiver.reshape(new Shape(dims), ((string)ObjectPathValue(order, ops))[0]);
-            return receiver.reshape(dims);
+            bool hasKw = p.TryGetValue("kw", out var kw);
+            bool hasOrder = hasKw && kw.TryGetProperty("order", out _);
+            bool hasCopy = hasKw && kw.TryGetProperty("copy", out _);
+            if (!hasOrder && !hasCopy)
+                return receiver.reshape(dims);
+            char order = hasOrder ? ((string)ObjectPathValue(kw.GetProperty("order"), ops))[0] : 'C';
+            bool? copy = hasCopy ? (bool?)ObjectPathValue(kw.GetProperty("copy"), ops) : null;
+            return receiver.reshape(new Shape(dims), order, copy);
         }
+
+        /// <summary>
+        ///     var / std's <c>mean=</c> as a ported line passes it: a list array, an ndarray or a C# value is itself; the replay's
+        ///     object array of Python numbers (a decoded list) is the array NumPy's subtraction makes of it.
+        /// </summary>
+        /// <param name="value">The decoded argument (null: not given).</param>
+        /// <returns>The value to pass.</returns>
+        private static object MeanArg(object value)
+            => value is Array { Rank: >= 1 } list && list.GetType().GetElementType() == typeof(object)
+               && list.Cast<object>().All(x => x is bool or long or double)
+                ? ToArray(list)
+                : value;
 
         /// <summary>An index / condition / count argument as the array a ported line passes: an <see cref="NDArray"/> is
         ///     itself, a typed C# array converts implicitly, and the replay's object array of Python bools / ints / floats (a

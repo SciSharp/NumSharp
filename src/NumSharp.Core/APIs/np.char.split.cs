@@ -124,63 +124,34 @@ namespace NumSharp
         /// <exception cref="SystemError">A <c>U</c> separator or sequence that is one code unit above U+10FFFF, or a
         ///     <c>U</c> sequence holding such a unit (iterating it creates the character).</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="seq"/> is an <see cref="NDListArray"/> whose broadcast
-        ///     is empty: NumPy returns an empty object array, which only the <see cref="join(object, NDListArray)"/> overload
-        ///     can return.</exception>
+        /// <exception cref="NotSupportedException">NumPy's result is an empty OBJECT array, which an <see cref="NDArray"/>
+        ///     result cannot hold: an empty broadcast of an object <paramref name="seq"/> — an <see cref="NDListArray"/>
+        ///     (<see cref="split"/>'s lists) or a C# list holding null.</exception>
         /// <remarks>
-        ///     An <c>S</c> sequence joins only when empty (<c>b'-'.join(b'ab')</c> iterates ints), as in NumPy. A list of
-        ///     words is not a sequence here: <c>np.asarray(['ab', 'cd'])</c> is a string array, so each word's characters are
-        ///     joined.
+        ///     <para>One overload, NumPy's signature. An <c>S</c> sequence joins only when empty (<c>b'-'.join(b'ab')</c>
+        ///     iterates ints), as in NumPy. A list of words is not a sequence here: <c>np.asarray(['ab', 'cd'])</c> is a
+        ///     string array, so each word's characters are joined.</para>
+        ///     <para>An object <paramref name="seq"/> of lists (<see cref="split"/>'s result) is joined element by element as
+        ///     NumPy's <c>_vec_string</c> joins it — each element's list items, its TypeError for a list item of the wrong
+        ///     class — and then raises NumPy 2.4.2's own error, because <c>_to_bytes_or_str_array</c> calls
+        ///     <c>ObjectDType(n)</c>, which takes no argument: the idiom <c>np.char.join(' ', np.char.split(a))</c> raises
+        ///     in NumPy 2.4.2, and here.</para>
         /// </remarks>
         [NDAnchored]
         public NDArray join(object sep, object seq)
         {
-            if (seq is NDListArray lists)
-            {
-                var r = join(sep, lists);
-                r.Dispose();
-                throw new NotSupportedException("np.char.join over an empty object array returns an empty object array; call the " +
-                                                "join(object, NDListArray) overload for it.");
-            }
             using var separators = VecArgOfText(sep, nameof(sep));
+            // A null seq is Python's None: the object 0-d array holding None, whose element join raises "can only join an
+            // iterable". A list array's lists are converted as the object array they stand for.
             using var sequences = NDCharObjectPath.VecArg.Convert(seq, nameof(seq));
             var result = NDCharObjectPath.Join(separators, sequences, out var empty);
             if (result is null)
             {
                 empty.Dispose();
                 throw new NotSupportedException("np.char.join over an empty object array returns an empty object array, which " +
-                                                "NumSharp's NDArray result cannot hold.");
+                                                "an NDArray result cannot hold.");
             }
             return result;
-        }
-
-        /// <summary>
-        ///     <c>np.char.join(sep, seq)</c> with <paramref name="seq"/> an object array of lists (<see cref="split"/>'s
-        ///     result): each element's list joined, as NumPy's <c>_vec_string</c> joins it — and then NumPy 2.4.2's own
-        ///     error, because <c>_to_bytes_or_str_array</c> calls <c>ObjectDType(n)</c>, which takes no argument. So the
-        ///     idiom <c>np.char.join(' ', np.char.split(a))</c> raises in NumPy 2.4.2, and here.
-        /// </summary>
-        /// <param name="sep">The separators (text).</param>
-        /// <param name="seq">The lists.</param>
-        /// <returns>For an empty broadcast, NumPy's empty object array: an empty <see cref="NDListArray"/> of the broadcast
-        ///     shape. A non-empty broadcast never returns (NumPy raises).</returns>
-        /// <exception cref="TypeError"><paramref name="sep"/> is not text (null too); a null <paramref name="seq"/> is
-        ///     Python's <c>None</c> (<c>can only join an iterable</c> per element); per element, a list item of the wrong class
-        ///     (<c>sequence item 0: expected str instance, bytes found</c>, <c>sequence item 0: expected a bytes-like object,
-        ///     str found</c>) or a <c>StringDType</c> NA separator; otherwise, for a non-empty broadcast, NumPy's
-        ///     <see cref="NDCharObjectPath.ObjectDTypeText"/> after every element joined.</exception>
-        /// <exception cref="SystemError">A one-unit <c>U</c> separator above U+10FFFF.</exception>
-        /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
-        [NDAnchored]
-        public NDListArray join(object sep, NDListArray seq)
-        {
-            using var separators = VecArgOfText(sep, nameof(sep));
-            // A null seq is Python's None (C# binds a bare null here, the more specific overload): the object 0-d array
-            // holding None, whose element join raises "can only join an iterable" — or an empty object array.
-            using var lists = NDCharObjectPath.VecArg.Convert(seq, nameof(seq));
-            var result = NDCharObjectPath.Join(separators, lists, out var empty);
-            result?.Dispose();
-            return empty;
         }
 
         /// <summary>The <c>split</c> / <c>rsplit</c> body: the arguments converted in NumPy's order, then the walk.</summary>

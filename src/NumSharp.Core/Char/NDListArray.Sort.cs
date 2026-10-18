@@ -89,44 +89,31 @@ namespace NumSharp
         ///     selection function, so after NumPy's checks every line is SORTED with the default kind (each kth element is
         ///     then in its final place, as the partition promises).
         /// </summary>
-        /// <param name="kth">The index (negative from the end) whose element lands in its sorted place.</param>
-        /// <param name="axis">The axis.</param>
+        /// <param name="kth">NumPy's <c>kth</c>: one index or a sequence of them (negative from the end), whose elements land
+        ///     in their sorted places. A C# integer (<c>lists.partition(1)</c>) or integer array (<c>new long[] { 0, 2 }</c>)
+        ///     converts to the array NumPy's <c>PyArray_IntpConverter</c> reads; an integer <see cref="NDArray"/> of at most
+        ///     one dimension is taken as it is.</param>
+        /// <param name="axis">The axis (negative from the end).</param>
         /// <param name="kind">Must be <c>'introselect'</c>.</param>
-        /// <param name="order">Must be null.</param>
-        /// <exception cref="ValueError"><c>select kind must be 'introselect' (got 'x')</c>, an order, a read-only array
-        ///     (<c>partition array is read-only</c>), or a kth outside the axis (<c>kth(=5) out of bounds (4)</c>).</exception>
-        /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public void partition(long kth, int axis = -1, string kind = "introselect", string order = null)
-            => PartitionCore(new[] { kth }, axis, kind, order);
-
-        /// <summary>NumPy's in-place <c>partition</c> with several kth indices (see <see cref="partition(long, int, string, string)"/>).</summary>
-        /// <param name="kth">The indices.</param>
-        /// <param name="axis">The axis.</param>
-        /// <param name="kind">Must be <c>'introselect'</c>.</param>
-        /// <param name="order">Must be null.</param>
+        /// <param name="order">Must be null (an object array has no fields).</param>
         /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null.</exception>
-        /// <exception cref="ValueError">See <see cref="partition(long, int, string, string)"/>.</exception>
+        /// <exception cref="ValueError"><c>select kind must be 'introselect' (got 'x')</c>, an order, a kth of two or more
+        ///     dimensions (<c>object too deep for desired array</c>), a bool kth (<c>Booleans unacceptable as partition
+        ///     index</c>), a read-only array (<c>partition array is read-only</c>), or a kth outside the axis
+        ///     (<c>kth(=5) out of bounds (4)</c>) — in NumPy's order.</exception>
+        /// <exception cref="TypeError">A kth array that is not integer (<c>Partition index must be integer</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public void partition(long[] kth, int axis = -1, string kind = "introselect", string order = null)
-            => PartitionCore(kth, axis, kind, order);
-
-        /// <summary>NumPy's in-place <c>partition</c> with an array kth: NumPy's dtype rules (bool refused, a non-integer
-        ///     array a TypeError, more than one dimension refused).</summary>
-        /// <param name="kth">The kth array.</param>
-        /// <param name="axis">The axis.</param>
-        /// <param name="kind">Must be <c>'introselect'</c>.</param>
-        /// <param name="order">Must be null.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null.</exception>
-        /// <exception cref="ValueError">See <see cref="partition(long, int, string, string)"/>; <c>Booleans unacceptable as
-        ///     partition index</c>; <c>object too deep for desired array</c>.</exception>
-        /// <exception cref="TypeError"><c>Partition index must be integer</c>.</exception>
-        /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>
+        ///     One overload, NumPy's signature: NumPy's <c>kth</c> is an <c>int</c> or an int sequence, which a single
+        ///     <see cref="NDArray"/> parameter receives through NumSharp's implicit conversions (a C# literal is a Python int,
+        ///     a C# array a Python sequence), so the kth-shaped overloads this member used to have add nothing.
+        /// </remarks>
         public void partition(NDArray kth, int axis = -1, string kind = "introselect", string order = null)
         {
             ThrowIfDisposed();
+            // PyArray_Partition's argument order: the kind and the order, the kth's rank, its dtype, then the axis, the
+            // writeability and the kth's bounds (PartitionCore).
             CheckSelectKind(kind, order);
             CheckKthDepth(kth);
             PartitionCore(KthValues(kth), axis, kind, order);
@@ -137,41 +124,18 @@ namespace NumSharp
         ///     argsort of every line (an object array has no selection function); a 0-d array is ravelled to one element
         ///     first, as NumPy's argument-side axis check does.
         /// </summary>
-        /// <param name="kth">The index.</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="kind">Must be <c>'introselect'</c>.</param>
-        /// <param name="order">Must be null.</param>
-        /// <returns>The int64 indices.</returns>
-        /// <exception cref="ValueError">The kind, an order, or a kth outside the axis.</exception>
-        /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDArray argpartition(long kth, int? axis = -1, string kind = "introselect", string order = null)
-            => ArgPartitionCore(new[] { kth }, axis, kind, order);
-
-        /// <summary>NumPy's <c>argpartition</c> with several kth indices.</summary>
-        /// <param name="kth">The indices.</param>
+        /// <param name="kth">NumPy's <c>kth</c>: one index or a sequence of them (see <see cref="partition"/>).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="kind">Must be <c>'introselect'</c>.</param>
         /// <param name="order">Must be null.</param>
         /// <returns>The int64 indices.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null.</exception>
-        /// <exception cref="ValueError">The kind, an order, or a kth outside the axis.</exception>
+        /// <exception cref="ValueError">The kind, an order, a bool kth, a kth of two or more dimensions, or a kth outside the
+        ///     axis.</exception>
+        /// <exception cref="TypeError">A kth array that is not integer.</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDArray argpartition(long[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => ArgPartitionCore(kth, axis, kind, order);
-
-        /// <summary>NumPy's <c>argpartition</c> with an array kth (NumPy's dtype rules).</summary>
-        /// <param name="kth">The kth array.</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="kind">Must be <c>'introselect'</c>.</param>
-        /// <param name="order">Must be null.</param>
-        /// <returns>The int64 indices.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null.</exception>
-        /// <exception cref="ValueError">The kind, an order, a bool kth, a too-deep kth, or a kth outside the axis.</exception>
-        /// <exception cref="TypeError">A non-integer kth array.</exception>
-        /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>One overload, NumPy's signature (see <see cref="partition"/>).</remarks>
         public NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             ThrowIfDisposed();
@@ -186,30 +150,73 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>searchsorted(v, side='left', sorter=None)</c> over a 1-D array of lists sorted in Python's list
-        ///     order: for each list of <paramref name="v"/>, the index where it would be inserted (before equal lists for
+        ///     order: for each element of <paramref name="v"/>, the index where it would be inserted (before equal lists for
         ///     <c>'left'</c>, after them for <c>'right'</c>), through <paramref name="sorter"/> when given.
+        /// </summary>
+        /// <param name="v">The values to place: a list array (its lists, any shape: the result has its shape), the 0-d stand-in
+        ///     of one Python list (<c>lists["0"]</c>: NumPy's <c>np.asarray</c> makes it the array of its ITEMS), or any other
+        ///     C# value as the Python value it stands for (an <see cref="NDArray"/>, a string, a number), whose elements
+        ///     NumPy compares with the lists — CPython's TypeError for the first comparison.</param>
+        /// <param name="side"><c>"left"</c> or <c>"right"</c>.</param>
+        /// <param name="sorter">int64 indices that sort this array, or null.</param>
+        /// <returns>The int64 insertion points (zeros of the value's shape when nothing is compared: an empty haystack or an
+        ///     empty value).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="v"/> is null.</exception>
+        /// <exception cref="ValueError">An unknown side, a haystack of more than one dimension (<c>object too deep for desired
+        ///     array</c>), a sorter of another size, or a sorter index outside the array (<c>Sorter index out of
+        ///     range.</c>).</exception>
+        /// <exception cref="TypeError">A str list item compared with a bytes one; a list compared with a value that is not a
+        ///     list (<c>'&lt;' not supported between instances of 'list' and 'str'</c>); a sorter that is not 1-D
+        ///     integers.</exception>
+        /// <exception cref="ObjectDisposedException">The array or <paramref name="v"/> was disposed.</exception>
+        /// <remarks>One overload, NumPy's signature: NumPy's <c>v</c> is any array_like, so the list arrays that used to have
+        ///     an overload of their own are one case of <paramref name="v"/> (<see cref="SearchSortedLists"/>).</remarks>
+        public NDArray searchsorted(object v, string side = "left", NDArray sorter = null)
+        {
+            // A list array's lists are compared with the lists of this array; every other value is np.asarray'd by NumPy.
+            if (v is NDListArray lists)
+                return SearchSortedLists(lists, side, sorter);
+            ThrowIfDisposed();
+            if (v is null)
+                throw new ArgumentNullException(nameof(v));
+            bool right = SearchSide(side);
+            CheckHaystack(sorter);
+            NDArray keys = v as NDArray;
+            NDArray owned = keys is null ? PythonOperand(v) : null;
+            using (owned)
+            {
+                keys ??= owned;
+                SorterIndices(sorter, size);
+                if (size == 0 || keys.size == 0)
+                    return new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])keys.Shape.dimensions.Clone()), true);
+                // OBJECT_compare(list, key) runs Py_LT first, whichever side is asked for.
+                _ = right;
+                throw new TypeError($"'<' not supported between instances of 'list' and '{PyElementTypeName(keys.dtype)}'");
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="searchsorted"/> of a list array's lists: NumPy's <c>npy_binsearch</c> with <c>OBJECT_compare</c>,
+        ///     each list of <paramref name="v"/> placed among this array's sorted lists.
         /// </summary>
         /// <param name="v">The lists to place (any shape: the result has its shape).</param>
         /// <param name="side"><c>"left"</c> or <c>"right"</c>.</param>
         /// <param name="sorter">int64 indices that sort this array, or null.</param>
         /// <returns>The int64 insertion points.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="v"/> is null.</exception>
-        /// <exception cref="ValueError">An unknown side, a haystack of more than one dimension (<c>object too deep for desired
-        ///     array</c>), a sorter of another size, or a sorter index outside the array (<c>Sorter index out of
-        ///     range.</c>).</exception>
+        /// <exception cref="ValueError">An unknown side, a haystack of more than one dimension, a sorter of another size, or a
+        ///     sorter index outside the array.</exception>
         /// <exception cref="TypeError">A str list item compared with a bytes one; a sorter that is not 1-D integers.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public unsafe NDArray searchsorted(NDListArray v, string side = "left", NDArray sorter = null)
+        /// <exception cref="ObjectDisposedException">The array or <paramref name="v"/> was disposed.</exception>
+        private unsafe NDArray SearchSortedLists(NDListArray v, string side, NDArray sorter)
         {
             ThrowIfDisposed();
-            if (v is null)
-                throw new ArgumentNullException(nameof(v));
             v.ThrowIfDisposed();
             if (v.IsStandIn)
             {
-                // np.asarray(v) of a Python list: the needles are its items.
+                // np.asarray(v) of a Python list: the needles are its items (an array, which the public member compares
+                // element by element with the lists).
                 using var items = v.ItemsArray(v.FlatId(0));
-                return searchsorted((object)items, side, sorter);
+                return searchsorted(items, side, sorter);
             }
             bool right = SearchSide(side);
             CheckHaystack(sorter);
@@ -271,42 +278,6 @@ namespace NumSharp
                 throw;
             }
             return result;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>searchsorted</c> with a value that is not a list array: NumPy converts it with <c>np.asarray</c>
-        ///     and compares the array's lists with its elements, CPython's TypeError for the first comparison (none is made
-        ///     when the haystack or the value is empty: zeros of the value's shape).
-        /// </summary>
-        /// <param name="v">The value (a C# value as a Python one).</param>
-        /// <param name="side"><c>"left"</c> or <c>"right"</c>.</param>
-        /// <param name="sorter">int64 indices, or null.</param>
-        /// <returns>Zeros of the value's shape when nothing is compared.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="v"/> is null.</exception>
-        /// <exception cref="ValueError">An unknown side, a haystack of more than one dimension, a bad sorter.</exception>
-        /// <exception cref="TypeError"><c>'&lt;' not supported between instances of 'list' and 'str'</c>.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDArray searchsorted(object v, string side = "left", NDArray sorter = null)
-        {
-            if (v is NDListArray lists)
-                return searchsorted(lists, side, sorter);
-            ThrowIfDisposed();
-            if (v is null)
-                throw new ArgumentNullException(nameof(v));
-            bool right = SearchSide(side);
-            CheckHaystack(sorter);
-            NDArray keys = v as NDArray;
-            NDArray owned = keys is null ? PythonOperand(v) : null;
-            using (owned)
-            {
-                keys ??= owned;
-                SorterIndices(sorter, size);
-                if (size == 0 || keys.size == 0)
-                    return new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])keys.Shape.dimensions.Clone()), true);
-                // OBJECT_compare(list, key) runs Py_LT first.
-                _ = right;
-                throw new TypeError($"'<' not supported between instances of 'list' and '{PyElementTypeName(keys.dtype)}'");
-            }
         }
 
         // =============================================================================================================

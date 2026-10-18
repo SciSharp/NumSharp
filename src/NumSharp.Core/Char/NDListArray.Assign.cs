@@ -137,6 +137,51 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Stores a list array's lists into <paramref name="target"/> (a view of this array's ids, of the same shape) only
+        ///     where <paramref name="mask"/> is true — a masked ufunc's output: the other positions keep their lists, and only
+        ///     the selected lists are put into this array's heap.
+        /// </summary>
+        /// <param name="target">The destination ids.</param>
+        /// <param name="value">The computed lists (their ids at masked-off positions are never read).</param>
+        /// <param name="mask">A bool mask of the target's shape, or null for every position (a ufunc call without where=, or
+        ///     with Python's <c>where=True</c>).</param>
+        /// <exception cref="NotSupportedException">A selected non-empty list of the other piece class.</exception>
+        private unsafe void AssignWhere(NDArray target, NDListArray value, NDArray mask)
+        {
+            // No mask selects every position: the plain assignment (the walk below reads the mask at every element).
+            if (mask is null)
+            {
+                AssignFrom(target, value);
+                return;
+            }
+            if (ReferenceEquals(value.Heap, Heap))
+            {
+                np.copyto(target, value.Ids, where: mask);
+                return;
+            }
+            // Map only the selected lists into this heap (a masked-off one is never stored, so it is never copied: its class
+            // could even be the other one), then copy those ids under the mask.
+            using var mapped = new NDArray(NPTypeCode.Int64, value.Ids.Shape.KeepOrder(), true);
+            var memo = new Dictionary<(NDListHeap, long), long>();
+            var source = value.Heap;
+            var heap = Heap;
+            Walk(new[] { value.Ids, mask, mapped }, new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY },
+                (dataptrs, strides, n, aux) =>
+                {
+                    byte* pi = (byte*)dataptrs[0];
+                    byte* pm = (byte*)dataptrs[1];
+                    byte* po = (byte*)dataptrs[2];
+                    long si = strides[0], sm = strides[1], so = strides[2];
+                    for (long k = 0; k < n; k++, pi += si, pm += sm, po += so)
+                    {
+                        if (*pm != 0)
+                            *(long*)po = CopyList(source, *(long*)pi, heap, memo);
+                    }
+                });
+            np.copyto(target, mapped, where: mask);
+        }
+
+        /// <summary>
         ///     The ids, in THIS array's heap, of a list array's elements (same shape and layout as its ids): the array's own
         ///     ids when it shares this heap, else a new id array whose lists were appended here (each distinct list once).
         /// </summary>
@@ -226,7 +271,8 @@ namespace NumSharp
         ///     the lists of <paramref name="values"/>, cycled, stored at the flat positions (NumPy's PyArray_PutTo: a
         ///     non-contiguous array written back through its own layout).
         /// </summary>
-        /// <param name="indices">The flat indices (an integer array; NumPy casts an ndarray of indices safely).</param>
+        /// <param name="indices">The flat indices: an integer array (NumPy casts an ndarray of indices safely), or one C#
+        ///     integer (<c>lists.put(1, values)</c>), which converts to the 0-d array NumPy's <c>np.asarray(1)</c> is.</param>
         /// <param name="values">The lists (a list array of any shape, read in C order). A 0-d list array stands for one
         ///     Python list, which NumPy converts to the array of its ITEMS (NotSupportedException unless it is empty, or no
         ///     index is given).</param>
@@ -239,6 +285,8 @@ namespace NumSharp
         ///     of the other piece class.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="values"/> is null.</exception>
         /// <exception cref="ObjectDisposedException">The array or the values were disposed.</exception>
+        /// <remarks>One overload, NumPy's signature: NumPy's <c>indices</c> is an int or an int array_like, which this
+        ///     <see cref="NDArray"/> parameter receives through NumSharp's implicit conversions.</remarks>
         public void put(NDArray indices, NDListArray values, string mode = "raise")
         {
             ThrowIfDisposed();
@@ -268,21 +316,6 @@ namespace NumSharp
                 if (owned)
                     ids.Dispose();
             }
-        }
-
-        /// <summary>NumPy's <c>put</c> with one index (see <see cref="put(NDArray, NDListArray, string)"/>).</summary>
-        /// <param name="index">The flat index.</param>
-        /// <param name="values">The lists.</param>
-        /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c> or <c>"clip"</c>.</param>
-        /// <exception cref="ValueError">A bad mode; a read-only array.</exception>
-        /// <exception cref="IndexError">An index out of bounds under <c>"raise"</c>.</exception>
-        /// <exception cref="NotSupportedException">See the array form.</exception>
-        /// <exception cref="ArgumentNullException"><paramref name="values"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">The array or the values were disposed.</exception>
-        public void put(long index, NDListArray values, string mode = "raise")
-        {
-            using var indices = NDArray.Scalar(index);
-            put(indices, values, mode);
         }
 
         // =============================================================================================================
@@ -342,23 +375,6 @@ namespace NumSharp
             throw new TypeError("Cannot get/set field of an object array");
         }
 
-        /// <summary>
-        ///     NumPy's <c>view(dtype)</c> of an object array: a view as another dtype would read pointers as data, so every
-        ///     dtype NumSharp can spell (it has no object dtype) is NumPy's TypeError; <see cref="view()"/> is the plain view.
-        /// </summary>
-        /// <param name="dtype">The requested dtype.</param>
-        /// <returns>Never returns.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="dtype"/> is null.</exception>
-        /// <exception cref="TypeError"><c>Cannot change data-type for array of references.</c></exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray view(DType dtype)
-        {
-            ThrowIfDisposed();
-            if (dtype is null)
-                throw new ArgumentNullException(nameof(dtype));
-            throw new TypeError("Cannot change data-type for array of references.");
-        }
-
         /// <summary>NumPy's <c>flat</c>, as NumSharp spells it for an <see cref="NDArray"/>: the elements as a 1-D list array
         ///     in C order (a view when the layout allows, else a copy of the pointers; the lists are shared).</summary>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
@@ -403,6 +419,13 @@ namespace NumSharp
         /// <exception cref="OutOfMemoryException">A size whose product overflows (NumPy's MemoryError).</exception>
         /// <exception cref="NotSupportedException">A growing resize (NumPy's new elements are ints).</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>
+        ///     NumPy's <c>resize(*new_shape, refcheck=True)</c> takes the shape as one tuple OR as separate integers, and the
+        ///     keyword-only <c>refcheck</c> after them. C# has no keyword-only parameter after a <c>params</c> array, so the
+        ///     two spellings are two members: this one (a <see cref="Shape"/>, which a C# <c>long[]</c> or tuple converts to,
+        ///     with <paramref name="refcheck"/>) and <see cref="resize(long[])"/> (separate integers, NumPy's default
+        ///     <c>refcheck</c>).
+        /// </remarks>
         public void resize(Shape new_shape, bool refcheck = true)
         {
             ThrowIfDisposed();
@@ -414,10 +437,11 @@ namespace NumSharp
             Ids.resize(new_shape, refcheck);
         }
 
-        /// <summary>NumPy's <c>resize(*new_shape)</c> (see <see cref="resize(Shape, bool)"/>).</summary>
-        /// <param name="new_shape">The new dimensions (none: a no-op).</param>
-        /// <exception cref="IncorrectShapeException">See the primary overload.</exception>
-        /// <exception cref="OutOfMemoryException">See the primary overload.</exception>
+        /// <summary>NumPy's <c>resize(*new_shape)</c> with separate integers, NumPy's default <c>refcheck=True</c> (see
+        ///     <see cref="resize(Shape, bool)"/>, the spelling that takes <c>refcheck</c>).</summary>
+        /// <param name="new_shape">The new dimensions (none: a no-op, NumPy's <c>a.resize()</c>).</param>
+        /// <exception cref="IncorrectShapeException">See <see cref="resize(Shape, bool)"/>.</exception>
+        /// <exception cref="OutOfMemoryException">See <see cref="resize(Shape, bool)"/>.</exception>
         /// <exception cref="NotSupportedException">A growing resize.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public void resize(params long[] new_shape)
@@ -542,43 +566,68 @@ namespace NumSharp
         ///     writes each list as <c>format % (list,)</c> (<c>""</c>: its repr), the separator between elements, in C order,
         ///     as ASCII.
         /// </summary>
-        /// <param name="fid">The file name (created or truncated).</param>
+        /// <param name="fid">NumPy's <c>fid</c>: a file name — a <see cref="string"/>, a <c>byte[]</c> (Python <c>bytes</c>,
+        ///     UTF-8 as Windows' file-system encoding) or a <see cref="FileSystemInfo"/> (Python's <c>os.PathLike</c>) — which
+        ///     is created or truncated first, as NumPy opens it with <c>"wb"</c>; or an open <see cref="Stream"/> (NumPy's
+        ///     file object), written from its position and left open.</param>
         /// <param name="sep">The separator; <c>""</c> is binary mode.</param>
         /// <param name="format">CPython's <c>%</c> format applied to each list (<c>%s</c> / <c>%r</c> its repr, <c>%a</c> its
         ///     ascii(), width and precision as for a str).</param>
-        /// <exception cref="OSError"><c>cannot write object arrays to a file in binary mode</c> (an empty array too).</exception>
-        /// <exception cref="ValueError">A NUL in <paramref name="sep"/> or <paramref name="format"/>; a malformed
-        ///     format.</exception>
+        /// <exception cref="AttributeError"><paramref name="fid"/> is neither a file name nor a stream: NumPy calls its
+        ///     <c>flush()</c> first (<c>'NoneType' object has no attribute 'flush'</c> for null).</exception>
+        /// <exception cref="OSError"><c>cannot write object arrays to a file in binary mode</c> (an empty array too), after the
+        ///     file is created, as in NumPy.</exception>
+        /// <exception cref="ValueError">A NUL in <paramref name="sep"/> or <paramref name="format"/> (checked before the file
+        ///     is opened); a malformed format.</exception>
         /// <exception cref="TypeError">A conversion a list does not take (<c>%d format: a real number is required, not
         ///     list</c>), or the wrong number of conversions.</exception>
-        /// <exception cref="UnicodeEncodeError">A list whose text is not ASCII (NumPy 2.4.2 crashes the process there).</exception>
+        /// <exception cref="UnicodeEncodeError">A list whose text is not ASCII (NumPy 2.4.2 crashes the process there); a
+        ///     lone surrogate in <paramref name="sep"/> or <paramref name="format"/>.</exception>
+        /// <exception cref="IOException">The file cannot be created (.NET's exception for NumPy's OSError).</exception>
+        /// <exception cref="UnauthorizedAccessException">The name is a directory or is not writable (NumPy's
+        ///     PermissionError).</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public void tofile(string fid, string sep = "", string format = "%s")
+        /// <remarks>One overload, NumPy's signature: NumPy's <c>fid</c> is "an open file object, or a string containing a
+        ///     filename", so a name and a stream are two cases of one parameter.</remarks>
+        public void tofile(object fid, string sep = "", string format = "%s")
         {
             ThrowIfDisposed();
+            // array_tofile parses sep and format with the "s" converter before it touches the file.
             NDArray.CheckToFileArgument(sep);
             NDArray.CheckToFileArgument(format);
-            using var fs = new FileStream(fid, FileMode.Create, FileAccess.Write);
-            tofile(fs, sep, format);
+            switch (fid)
+            {
+                case Stream stream:
+                    WriteText(stream, sep, format);
+                    return;
+                case string or byte[] or FileSystemInfo:
+                    // NpyPath_PathlikeToFspath + npy_PyFile_OpenFile(file, "wb"): the file is created (or truncated) before
+                    // the binary-mode check, so a binary write leaves an empty file behind, as NumPy's does.
+                    string path = fid switch
+                    {
+                        string s => s,
+                        byte[] b => Encoding.UTF8.GetString(b),
+                        _ => ((FileSystemInfo)fid).FullName,
+                    };
+                    using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write))
+                        WriteText(fs, sep, format);
+                    return;
+                default:
+                    // npy_PyFile_Dup2 calls fid.flush() first: any other object has no such method.
+                    throw new AttributeError($"'{NDPyObject.TypeName(fid)}' object has no attribute 'flush'");
+            }
         }
 
-        /// <summary>NumPy's <c>tofile</c> into an open stream (written from its position, left open).</summary>
-        /// <param name="stream">The stream.</param>
+        /// <summary>The text-mode write of <see cref="tofile"/> into an open stream (its arguments checked by the caller).</summary>
+        /// <param name="stream">The stream (written from its position, flushed, left open).</param>
         /// <param name="sep">The separator; <c>""</c> is binary mode.</param>
-        /// <param name="format">The <c>%</c> format (see the file-name overload).</param>
-        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is null.</exception>
+        /// <param name="format">The <c>%</c> format, or <c>""</c> for each list's repr.</param>
         /// <exception cref="OSError">Binary mode.</exception>
-        /// <exception cref="ValueError">A NUL in an argument; a malformed format.</exception>
+        /// <exception cref="ValueError">A malformed format.</exception>
         /// <exception cref="TypeError">A conversion a list does not take.</exception>
         /// <exception cref="UnicodeEncodeError">A list whose text is not ASCII.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public void tofile(Stream stream, string sep = "", string format = "%s")
+        private void WriteText(Stream stream, string sep, string format)
         {
-            ThrowIfDisposed();
-            if (stream is null)
-                throw new ArgumentNullException(nameof(stream));
-            NDArray.CheckToFileArgument(sep);
-            NDArray.CheckToFileArgument(format);
             if (string.IsNullOrEmpty(sep))
                 throw new OSError("cannot write object arrays to a file in binary mode");
             if (size == 0)

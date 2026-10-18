@@ -63,7 +63,7 @@ namespace NumSharp.Tests.Strings
                     "split" => receiver.split(args[0], args[1]),
                     "rsplit" => receiver.rsplit(args[0], args[1]),
                     "splitlines" => receiver.splitlines(args[0]),
-                    "join" => args[0] is NDListArray lists ? receiver.join(lists) : receiver.join(args[0]),
+                    "join" => receiver.join(args[0]),
                     _ => throw new InvalidOperationException($"section strcharobj has no member '{member}'"),
                 };
             }
@@ -101,9 +101,7 @@ namespace NumSharp.Tests.Strings
             "split" => np.@char.split(args[0], args[1], args[2]),
             "rsplit" => np.@char.rsplit(args[0], args[1], args[2]),
             "splitlines" => np.@char.splitlines(args[0], args[1]),
-            // A list array binds the overload that can return NumPy's empty object array (join over a broadcast that
-            // holds no element).
-            "join" => args[1] is NDListArray lists ? np.@char.join(args[0], lists) : np.@char.join(args[0], args[1]),
+            "join" => np.@char.join(args[0], args[1]),
             _ => throw new InvalidOperationException($"section strcharobj has no function '{fn}'"),
         };
 
@@ -111,16 +109,19 @@ namespace NumSharp.Tests.Strings
         /// <param name="p">The case parameters.</param>
         /// <param name="names">The parameter names in order.</param>
         /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="receiver">The member call's receiver, which a <c>{"self": index}</c> spec names (null outside a list
+        ///     array's member call).</param>
         /// <returns>One value per parameter (null when not passed).</returns>
         /// <exception cref="InvalidOperationException">An unknown keyword.</exception>
-        private static object[] ObjectPathArgs(Dictionary<string, JsonElement> p, string[] names, NDArray[] ops)
+        private static object[] ObjectPathArgs(Dictionary<string, JsonElement> p, string[] names, NDArray[] ops,
+                                               NDListArray receiver = null)
         {
             var values = new object[names.Length];
             if (p.TryGetValue("args", out var args))
             {
                 int i = 0;
                 foreach (var spec in args.EnumerateArray())
-                    values[i++] = ObjectPathValue(spec, ops);
+                    values[i++] = ObjectPathValue(spec, ops, receiver);
             }
             if (p.TryGetValue("kw", out var kw))
             {
@@ -129,7 +130,7 @@ namespace NumSharp.Tests.Strings
                     int at = Array.IndexOf(names, prop.Name);
                     if (at < 0)
                         throw new InvalidOperationException($"section strcharobj has no keyword '{prop.Name}'");
-                    values[at] = ObjectPathValue(prop.Value, ops);
+                    values[at] = ObjectPathValue(prop.Value, ops, receiver);
                 }
             }
             return values;
@@ -138,13 +139,20 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     One argument spec: <c>{"op": k}</c> the operand, <c>{"cha": k}</c> its chararray view, <c>{"v": ...}</c> a
         ///     Python value (<see cref="ObjectPathPythonValue"/>), <c>{"split": [...]}</c> <c>np.@char.split</c> of those
-        ///     arguments, <c>{"view": [spec, index]}</c> a basic index of a list array, <c>{"T": spec}</c> its transpose.
+        ///     arguments, <c>{"view": [spec, index]}</c> a basic index of a list array, <c>{"T": spec}</c> its transpose,
+        ///     <c>{"self": index}</c> the member call's receiver (or that basic index of it: an out= that overlaps it),
+        ///     <c>{"ro": spec}</c> the argument made read-only (<c>setflags(write: false)</c>, NumPy's
+        ///     <c>flags.writeable = False</c>), <c>{"pytype": name}</c> the C# type a ported line passes for that Python
+        ///     class (<see cref="PythonTypeOf"/>).
         /// </summary>
         /// <param name="spec">The spec.</param>
         /// <param name="ops">The reconstructed operands.</param>
+        /// <param name="receiver">The member call's receiver, which a <c>"self"</c> spec names (null outside a list array's
+        ///     member call).</param>
         /// <returns>The C# argument.</returns>
-        /// <exception cref="InvalidOperationException">An unknown spec.</exception>
-        private static object ObjectPathValue(JsonElement spec, NDArray[] ops)
+        /// <exception cref="InvalidOperationException">An unknown spec, a <c>"self"</c> spec without a receiver, or a
+        ///     <c>"ro"</c> spec of a value that is not an array.</exception>
+        private static object ObjectPathValue(JsonElement spec, NDArray[] ops, NDListArray receiver = null)
         {
             if (spec.TryGetProperty("op", out var k))
                 return ops[k.GetInt32()];
@@ -154,15 +162,59 @@ namespace NumSharp.Tests.Strings
                 return ObjectPathPythonValue(StringOracleCorpus.Decode(v));
             if (spec.TryGetProperty("split", out var split))
             {
-                var a = split.EnumerateArray().Select(s => ObjectPathValue(s, ops)).ToArray();
+                var a = split.EnumerateArray().Select(s => ObjectPathValue(s, ops, receiver)).ToArray();
                 return np.@char.split(a[0], a.Length > 1 ? a[1] : null, a.Length > 2 ? a[2] : null);
             }
             if (spec.TryGetProperty("view", out var view))
-                return ((NDListArray)ObjectPathValue(view[0], ops))[view[1].GetString()];
+                return ((NDListArray)ObjectPathValue(view[0], ops, receiver))[view[1].GetString()];
             if (spec.TryGetProperty("T", out var transposed))
-                return ((NDListArray)ObjectPathValue(transposed, ops)).T;
+                return ((NDListArray)ObjectPathValue(transposed, ops, receiver)).T;
+            if (spec.TryGetProperty("self", out var self))
+            {
+                if (receiver is null)
+                    throw new InvalidOperationException($"a self spec outside a member call: {spec}");
+                // The receiver ITSELF for an empty index (an in-place out=), else a view of it (an overlapping out=).
+                string index = self.GetString();
+                return string.IsNullOrEmpty(index) ? receiver : receiver[index];
+            }
+            if (spec.TryGetProperty("ro", out var ro))
+            {
+                switch (ObjectPathValue(ro, ops, receiver))
+                {
+                    case NDListArray lists:
+                        lists.setflags(write: false);
+                        return lists;
+                    case NDArray array:
+                        array.setflags(write: false);
+                        return array;
+                    case var other:
+                        throw new InvalidOperationException($"a read-only spec of {other?.GetType().Name ?? "null"}");
+                }
+            }
+            if (spec.TryGetProperty("pytype", out var pytype))
+                return PythonTypeOf(pytype.GetString());
             throw new InvalidOperationException($"section strcharobj has no argument spec {spec}");
         }
+
+        /// <summary>
+        ///     The C# value a ported line passes for a Python class the generator names (<c>_COBJ_PYTYPES</c>): an ndarray class
+        ///     as the NumSharp class that stands for it, Python's <c>int</c> as <see cref="long"/> (its default dtype),
+        ///     <c>object</c> as <see cref="object"/>, and <c>np.object_</c> as <see cref="np.object_"/>.
+        /// </summary>
+        /// <param name="name">The Python class's name.</param>
+        /// <returns>The <see cref="Type"/> (or <see cref="NDScalarType"/> for <c>np.object_</c>).</returns>
+        /// <exception cref="InvalidOperationException">A name the generator does not use.</exception>
+        private static object PythonTypeOf(string name) => name switch
+        {
+            "ndarray" => typeof(NDArray),
+            "chararray" => typeof(NDCharArray),
+            "matrix" => typeof(NDMatrix),
+            "MaskedArray" => typeof(NDMaskedArray),
+            "int" => typeof(long),
+            "object" => typeof(object),
+            "object_" => np.object_,
+            _ => throw new InvalidOperationException($"no C# type for the Python class '{name}'"),
+        };
 
         /// <summary>A decoded Python value as the C# value the object path reads as it: a list as the managed array
         ///     <see cref="ManagedArray"/> builds (an object array when it holds None), every other value as itself.</summary>

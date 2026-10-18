@@ -186,7 +186,9 @@ namespace NumSharp.Tests.Fuzz
                 using (u)
                 using (lists)
                 {
-                    using var several = lists.argpartition(new long[] { 0, 2 });
+                    // The kth array is the caller's own (disposed here): the entry audits the member's intermediates only.
+                    using var pair = np.array(new long[] { 0, 2 });
+                    using var several = lists.argpartition(pair);
                     Swallow<ValueError>(() => lists.argpartition(9));
                     return lists.argpartition(1);
                 }
@@ -259,16 +261,21 @@ namespace NumSharp.Tests.Fuzz
                     return lists.min(0);
                 }
             });
-            E(l, "NDListArray.sum", "concatenations: flat, an axis, initial, dtype=bool, the where error", f =>
+            E(l, "NDListArray.sum", "concatenations: flat, an axis, initial, into a list out=; dtype=bool (no list result) and dtype=float64 (the conversion error); the where error", f =>
             {
                 var (u, lists) = Grid();
                 using (u)
                 using (lists)
                 using (var mask = np.array(new[] { true, false, true }))
+                using (var seed = np.array("q r"))
+                using (var o = np.@char.split(seed))
                 {
                     using var flat = lists.sum();
                     using var initial = lists.sum(initial: new[] { "z" });
-                    using var truth = lists.sum(null, np.dtype("bool"));
+                    _ = lists.sum(@out: o);   // the out itself (disposed with its using)
+                    // NumPy's bool loop returns np.True_, which a list array cannot hold: the refusal after NumPy's checks.
+                    Swallow<NotSupportedException>(() => lists.sum(dtype: np.dtype("bool")));
+                    Swallow<ValueError>(() => lists.sum(dtype: np.float64));
                     Swallow<ValueError>(() => lists.sum(where: mask));
                     return lists.sum(0);
                 }
@@ -293,7 +300,7 @@ namespace NumSharp.Tests.Fuzz
                 using (var o = lists.copy())
                 {
                     using var flat = lists.cumsum();
-                    _ = lists.cumsum(1, o);
+                    _ = lists.cumsum(1, @out: o);
                     return lists.cumsum(0);
                 }
             });

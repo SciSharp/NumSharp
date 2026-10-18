@@ -120,7 +120,8 @@ namespace NumSharp
         ///     NumPy's <c>chararray.argpartition(kth, axis=-1, kind='introselect', order=None)</c>: always the finalize
         ///     error, after NumPy's checks of the kind, the order, the axis and the kth bounds (skipped for an empty array).
         /// </summary>
-        /// <param name="kth">The element index to partition by.</param>
+        /// <param name="kth">NumPy's <c>kth</c>: one index (a C# integer) or a sequence of them (a C# integer array, an
+        ///     integer <see cref="NDArray"/>) to partition by.</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="kind">The selection algorithm (only <c>'introselect'</c>).</param>
         /// <param name="order">Must be null.</param>
@@ -128,38 +129,10 @@ namespace NumSharp
         /// <exception cref="ValueError">A bad kind or kth (<c>kth(=9) out of bounds (4)</c>); otherwise always
         ///     <c>Can only create a chararray from string data.</c></exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
-        public new NDArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-        {
-            base.argpartition(kth, axis, kind, order).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
-        }
-
-        /// <summary>NumPy's <c>chararray.argpartition</c> with several kth indices: the finalize error after NumPy's checks.</summary>
-        /// <param name="kth">The element indices to partition by.</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="kind">The selection algorithm.</param>
-        /// <param name="order">Must be null.</param>
-        /// <returns>Never returns.</returns>
-        /// <exception cref="ValueError">A bad kind or kth; otherwise always <c>Can only create a chararray from string
-        ///     data.</c></exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
-        public new NDArray argpartition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-        {
-            base.argpartition(kth, axis, kind, order).Dispose();
-            throw NDCharArrayBoundary.FinalizeError();
-        }
-
-        /// <summary>NumPy's <c>chararray.argpartition</c> with the kth indices as an array: the finalize error after NumPy's
-        ///     checks.</summary>
-        /// <param name="kth">The kth indices (an integer array).</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="kind">The selection algorithm.</param>
-        /// <param name="order">Must be null.</param>
-        /// <returns>Never returns.</returns>
-        /// <exception cref="ValueError">A bad kind or kth; otherwise always <c>Can only create a chararray from string
-        ///     data.</c></exception>
-        /// <exception cref="AxisError"><paramref name="axis"/> is outside the array's rank.</exception>
         /// <exception cref="TypeError">A non-integer kth array.</exception>
+        /// <remarks>One member, NumPy's signature: every <see cref="NDArray.argpartition(NDArray, int?, string, string)"/>
+        ///     call form converts to this <see cref="NDArray"/> parameter, so none of NDArray's argpartition overloads binds
+        ///     through a chararray.</remarks>
         public new NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
         {
             base.argpartition(kth, axis, kind, order).Dispose();

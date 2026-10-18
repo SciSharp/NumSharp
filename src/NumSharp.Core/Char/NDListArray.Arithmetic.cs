@@ -322,32 +322,51 @@ namespace NumSharp
             return @out ?? copy();
         }
 
-        /// <summary>NumPy's <c>conj(out=None)</c> of lists: the conjugate ufunc's object loop looks for a <c>conjugate</c>
-        ///     method a list does not have (an empty array gives an empty result).</summary>
-        /// <param name="out">A list array of the result's shape, or null.</param>
-        /// <returns>An empty result (or <paramref name="out"/>) for an empty array.</returns>
+        /// <summary>NumPy's <c>conj()</c> of lists: the conjugate ufunc's object loop looks for a <c>conjugate</c> method a
+        ///     list does not have (an empty array gives an empty result).</summary>
+        /// <param name="out">NumPy's positional <c>out</c> (see <see cref="conjugate"/>), or null.</param>
+        /// <returns>An empty result (or <paramref name="out"/>) when the loop visits no element.</returns>
         /// <exception cref="TypeError"><c>loop of ufunc does not support argument 0 of type list which has no callable
         ///     conjugate method</c>.</exception>
-        /// <exception cref="ValueError"><paramref name="out"/>'s shape differs.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>, or one the array does not broadcast to.</exception>
+        /// <exception cref="IncorrectShapeException">The array and <paramref name="out"/> do not broadcast.</exception>
+        /// <exception cref="ObjectDisposedException">The array or <paramref name="out"/> was disposed.</exception>
+        /// <remarks>One member: NumPy's <c>ndarray.conj</c> is <c>conjugate</c>'s alias (see it for <paramref name="out"/>).</remarks>
         public NDListArray conj(NDListArray @out = null) => conjugate(@out);
 
-        /// <summary>NumPy's <c>conjugate(out=None)</c> of lists (see <see cref="conj"/>).</summary>
-        /// <param name="out">A list array of the result's shape, or null.</param>
-        /// <returns>An empty result (or <paramref name="out"/>) for an empty array.</returns>
-        /// <exception cref="TypeError">The object loop's TypeError for a non-empty array.</exception>
-        /// <exception cref="ValueError"><paramref name="out"/>'s shape differs.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <summary>NumPy's <c>conjugate()</c> of lists — <c>np.conjugate(self, out)</c>: the object loop's TypeError at the
+        ///     first element it visits; an empty broadcast gives an empty result (or <paramref name="out"/> untouched).</summary>
+        /// <param name="out">NumPy's <c>out</c>, which <c>array_conjugate</c> parses positionally only (its documented
+        ///     signature has none; a keyword is NumPy's TypeError): a list array the array broadcasts to (it may be larger,
+        ///     it is never stretched), or null.</param>
+        /// <returns>An empty result (or <paramref name="out"/>) when the loop visits no element.</returns>
+        /// <exception cref="TypeError">The object loop's TypeError when it visits an element.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>, checked first);
+        ///     an <paramref name="out"/> of another shape than the broadcast (<c>non-broadcastable output operand with shape
+        ///     (1,) doesn't match the broadcast shape (0,)</c>).</exception>
+        /// <exception cref="IncorrectShapeException">The array and <paramref name="out"/> do not broadcast (<c>operands could
+        ///     not be broadcast together with shapes (4,) (3,) </c>), checked before the loop.</exception>
+        /// <exception cref="ObjectDisposedException">The array or <paramref name="out"/> was disposed.</exception>
         public NDListArray conjugate(NDListArray @out = null)
         {
             ThrowIfDisposed();
             @out?.ThrowIfDisposed();
-            if (size > 0)
-                throw new TypeError("loop of ufunc does not support argument 0 of type list which has no callable conjugate method");
-            var result = copy();
             if (@out is null)
-                return result;
-            @out.Receive(result);
+            {
+                if (size > 0)
+                    throw new TypeError("loop of ufunc does not support argument 0 of type list which has no callable conjugate method");
+                return copy();
+            }
+            // convert_ufunc_arguments: out's writeability; then the iterator over [self, out], whose output may not stretch;
+            // then the loop, which visits the broadcast's elements.
+            if (!@out.Ids.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            var dims = BroadcastAll(new List<Shape> { Ids.Shape, @out.Ids.Shape });
+            if (!@out.Ids.Shape.dimensions.AsSpan().SequenceEqual(dims))
+                throw new ValueError($"non-broadcastable output operand with shape {@out.Ids.Shape.ToPythonTuple()} doesn't match " +
+                                     $"the broadcast shape {Shape.Adopt(dims).ToPythonTuple()}");
+            if (@out.size > 0)
+                throw new TypeError("loop of ufunc does not support argument 0 of type list which has no callable conjugate method");
             return @out;
         }
 

@@ -64,24 +64,16 @@ namespace NumSharp
         ///     the SEPARATORS, each joining the characters of its <paramref name="seq"/> string. The result is a plain text
         ///     array, as NumPy's <c>np.asarray(result.tolist())</c> is.
         /// </summary>
-        /// <param name="seq">The strings, broadcast against this array.</param>
+        /// <param name="seq">The strings, broadcast against this array: text, or an object array of lists
+        ///     (<see cref="NDListArray"/>), which NumPy 2.4.2 joins and then refuses (see
+        ///     <see cref="CharModule.join(object, object)"/>).</param>
         /// <returns>The joined text (of <paramref name="seq"/>'s class).</returns>
         /// <exception cref="TypeError">See <see cref="CharModule.join(object, object)"/>.</exception>
         /// <exception cref="SystemError">A one-unit <c>U</c> separator or sequence above U+10FFFF.</exception>
         /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
-        /// <exception cref="System.NotSupportedException"><paramref name="seq"/> is an empty <see cref="NDListArray"/> passed as an
-        ///     object (call <see cref="join(NDListArray)"/>).</exception>
+        /// <exception cref="System.NotSupportedException">NumPy's result is an empty object array (an empty broadcast of an
+        ///     object <paramref name="seq"/>), which an <see cref="NDArray"/> result cannot hold.</exception>
+        /// <remarks>One overload, NumPy's signature.</remarks>
         public NDArray join(object seq) => np.@char.join(this, seq);
-
-        /// <summary>
-        ///     NumPy's <c>chararray.join(seq)</c> over an object array of lists: NumPy 2.4.2 joins every list, then raises
-        ///     (see <see cref="CharModule.join(object, NDListArray)"/>); an empty broadcast is an empty list array.
-        /// </summary>
-        /// <param name="seq">The lists.</param>
-        /// <returns>The empty list array of an empty broadcast.</returns>
-        /// <exception cref="TypeError">A list item of the wrong class, else NumPy's <c>ObjectDType</c> error for a non-empty
-        ///     broadcast.</exception>
-        /// <exception cref="IncorrectShapeException">The arguments do not broadcast.</exception>
-        public NDListArray join(NDListArray seq) => np.@char.join(this, seq);
     }
 }

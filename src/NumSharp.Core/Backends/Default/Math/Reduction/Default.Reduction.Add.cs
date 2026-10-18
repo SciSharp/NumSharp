@@ -22,7 +22,9 @@ namespace NumSharp.Backends
         /// <param name="dtype">NumPy's <c>dtype=</c>: the LOOP dtype — every element is cast to it (unsafely, element by
         /// element) before it is added, and the sum is computed and returned in it. Null selects the NEP 50 accumulator
         /// (int64 for bool and signed integers, uint64 for unsigned integers and Char, the input dtype otherwise).</param>
-        /// <param name="out">Optional output that receives the result and is returned; its shape must be the result's.</param>
+        /// <param name="out">Optional output that receives the result and is returned; its shape must be the result's. Its
+        /// dtype may differ from the loop's: the sum is then computed in the loop dtype and cast into it, as NumPy casts a
+        /// reduction's result into an out= of another dtype (see the remarks for the one residual).</param>
         /// <returns>The sum: a read-only 0-d scalar for a full reduction without keepdims, otherwise a fresh array (or
         /// <paramref name="out"/>).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range for <paramref name="arr"/>'s rank.</exception>
@@ -40,6 +42,11 @@ namespace NumSharp.Backends
         ///     <para>
         ///     The bool loop is NumPy's logical-OR add (<c>True + True</c> is <c>True</c>), i.e. <c>np.any</c>.
         ///     </para>
+        ///     <para>
+        ///     An <paramref name="out"/> of another dtype than the loop is filled by casting the loop's result into it. NumPy
+        ///     differs in one place: past one buffer fill (<c>np.getbufsize()</c> elements) its iterator carries the partial
+        ///     sum through out's dtype between fills, where this route rounds into out once.
+        ///     </para>
         /// </remarks>
         public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
         {
@@ -56,6 +63,15 @@ namespace NumSharp.Backends
             var accumulatorType = inputType.GetAccumulatingType();
             // NumPy's loop dtype: the dtype= request, else the NEP 50 accumulator.
             var loopType = typeCode ?? accumulatorType;
+
+            // An out= of another dtype than the loop: NumPy adds in the loop dtype and casts the result into out (its
+            // iterator buffers out through the loop dtype). Every route below writes the LOOP dtype's bytes into out's
+            // buffer as they are — an int64 sum read back as float64 denormals, a float64 sum written past a float32 out's
+            // end — or unboxes the loop's value as out's type (InvalidCastException), so the sum is computed without out
+            // and cast into it. Residual: past one buffer fill (np.getbufsize()) NumPy carries the partial sum through
+            // out's dtype between fills; this route rounds into out once.
+            if (@out is not null && @out.GetTypeCode != loopType)
+                return DeliverReduction(ReduceAdd(arr, axis_, keepdims, dtype, null), @out);
 
             if (shape.IsEmpty)
             {

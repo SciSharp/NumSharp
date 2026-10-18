@@ -7587,7 +7587,7 @@ def gen_strchar():
     # D. compare_chararrays: every cmp spelling (str and bytes; the six comparisons and the refused ones, a lone
     #    surrogate, None) x rstrip, then the refusals' order (a bad cmp before everything else).
     cmps = ["==", "!=", "<", "<=", ">", ">=", b"==", b"!=", b"<", b"<=", b">", b">=", "=", "=<", "<>", "", "===", "! ",
-            "é", "=é", "\ud800", "\x00", "=\x00", "==\x00", " =", "=>", b"\xff", b"", b"=", None]
+            "é", "=é", "\ud800", "\x00", "=\x00", "==\x00", " =", "=>", b"\xff", b"", b"=", None, 1, 1.5, True]
     pairs = [(_strip_operand("U3", "c2", seed=45), _strip_operand("U5", "bc", seed=46), "U3:c2,U5:bc"),
              (_strip_operand("S3", "f2", seed=47), _strip_operand("S4", "c2", seed=48), "S3:f2,S4:c2")]
     for cmp in cmps:
@@ -8333,7 +8333,9 @@ def _cha_arg_value(a):
 
     Args:
         a: ``{"dtype": s}`` (a dtype string, or ``ndarray`` / ``chararray`` / ``matrix`` for the classes),
-            ``{"type": "int" | "str"}`` (a Python type), ``{"list": [...]}`` (a list), or a JSON scalar (itself).
+            ``{"type": "int" | "str"}`` (a Python type), ``{"list": [...]}`` (a list), ``{"out": [shape, dtype, cls]}`` (an
+            out= array: ``np.zeros(shape, dtype)``, viewed as a chararray for ``cls == "chararray"``), or a JSON scalar
+            (itself).
 
     Returns:
         The Python value.
@@ -8345,6 +8347,10 @@ def _cha_arg_value(a):
             return {"int": int, "str": str}[a["type"]]
         if "list" in a:
             return a["list"]
+        if "out" in a:
+            shape, dtype, cls = a["out"]
+            out = np.zeros(shape, dtype=dtype)
+            return out.view(np.char.chararray) if cls == "chararray" else out
     return a
 
 
@@ -8794,6 +8800,21 @@ def gen_strchararray():
         for layout in ["c1", "c2", "f2", "t3", "s2", "r2", "o1", "col", "bc", "z0", "one", "e2", "e3", "d5"]:
             for name, args in CHA_MEMBERS:
                 add_cha_member(spec, layout, 3, name, args)
+            # The one-signature forms (2026-10-19): transpose(*axes) as integers and as one sequence, a repeated axis, and
+            # take / compress into an out= chararray, a plain ndarray (the base member, a plain result), an out of the
+            # wrong shape and of another width.
+            nd = _cha_operand(spec, layout, 3)[1].ndim
+            if nd >= 1:
+                add_cha_member(spec, layout, 3, "transpose", list(range(nd))[::-1])
+                add_cha_member(spec, layout, 3, "transpose", [{"list": list(range(nd))[::-1]}])
+            if nd >= 2:
+                add_cha_member(spec, layout, 3, "transpose", [0] * nd)
+            add_cha_member(spec, layout, 3, "transpose", list(range(nd + 1)))
+            for out in ([[2], spec, "chararray"], [[2], spec, "ndarray"], [[3], spec, "chararray"],
+                        [[2], f"{cls}2", "chararray"], [[1, 2], spec, "chararray"]):
+                add_cha_member(spec, layout, 3, "take", [{"list": [0, -1]}, {"kw": {"out": {"out": out}}}])
+            for out in ([[1], spec, "chararray"], [[1], spec, "ndarray"], [[2], spec, "chararray"]):
+                add_cha_member(spec, layout, 3, "compress", [{"list": [True, False]}, {"kw": {"out": {"out": out}}}])
             add_cha_member(spec, layout, 3, "astype", [{"dtype": spec}, {"kw": {"copy": False}}])
             add_cha_member(spec, layout, 3, "view", [{"dtype": f"{cls}1"}])
             add_cha_member(spec, layout, 3, "getfield", [{"dtype": f"{cls}1"}, 0])
@@ -11275,15 +11296,24 @@ def _cobj_expect(r, views):
     return expect_of(r, views)
 
 
-def _cobj_value(spec, views):
+# The Python classes a ``{"pytype": name}`` spec names (view's dtype / type arguments): the ndarray classes NumSharp has
+# a class for, and the non-array classes NumPy reads as a dtype (``int``, ``object``) or as a scalar type (``np.object_``).
+_COBJ_PYTYPES = {"ndarray": np.ndarray, "chararray": np.char.chararray, "matrix": np.matrix,
+                 "MaskedArray": np.ma.MaskedArray, "int": int, "object": object, "object_": np.object_}
+
+
+def _cobj_value(spec, views, recv=None):
     """One argument of a case as the Python value NumPy receives.
 
     Args:
         spec: ``{"op": k}`` (operand k), ``{"cha": k}`` (operand k's chararray view), ``{"v": enc}`` (a Python value),
             ``{"split": [spec, ...]}`` (``np.char.split`` of those arguments: an object array of lists), ``{"view":
             [spec, index]}`` (a basic index of an argument's object array, the index in NumSharp's slice notation),
-            ``{"T": spec}`` (the transpose of an argument's object array).
+            ``{"T": spec}`` (the transpose of an argument's object array), ``{"self": index}`` (the receiver itself for an
+            empty index, else that basic index of it: an out= that overlaps the receiver), ``{"ro": spec}`` (the
+            argument's array made read-only), ``{"pytype": name}`` (a Python class: ``_COBJ_PYTYPES``).
         views: the operand views.
+        recv: the case's receiver (a ``"self"`` spec names it), or None outside a member call.
 
     Returns:
         The value.
@@ -11298,12 +11328,21 @@ def _cobj_value(spec, views):
     if "v" in spec:
         return _cobj_dec(spec["v"])
     if "split" in spec:
-        return np.char.split(*[_cobj_value(s, views) for s in spec["split"]])
+        return np.char.split(*[_cobj_value(s, views, recv) for s in spec["split"]])
     if "view" in spec:
         target, index = spec["view"]
-        return _cobj_value(target, views)[_cobj_index(index)]
+        return _cobj_value(target, views, recv)[_cobj_index(index)]
     if "T" in spec:
-        return _cobj_value(spec["T"], views).T
+        return _cobj_value(spec["T"], views, recv).T
+    if "self" in spec:
+        assert recv is not None, "a self spec outside a member call"
+        return recv[_cobj_index(spec["self"])] if spec["self"] else recv
+    if "ro" in spec:
+        value = _cobj_value(spec["ro"], views, recv)
+        value.flags.writeable = False
+        return value
+    if "pytype" in spec:
+        return _COBJ_PYTYPES[spec["pytype"]]
     raise TypeError(f"unknown argument spec {spec!r}")
 
 
@@ -11375,7 +11414,15 @@ def add_cobj(op, params, operands=(), layout=""):
     case = {"id": cid, "op": op, "params": params, "operands": [describe(b, v) for b, v in operands], "phase": 1,
             "layout": layout}
     try:
-        case["expected"] = _cobj_expect(_cobj_call(params, views), views)
+        r = _cobj_call(params, views)
+        if "join" in (params.get("fn"), params.get("member")) and isinstance(r, np.ndarray) and r.dtype == object:
+            # NumPy 2.4.2's join over an object array that holds no list returns an empty OBJECT array; NumSharp's join
+            # returns an NDArray, which cannot hold one (a NotSupportedException naming the composition, pinned by
+            # CharObjectPathTests.Join_OverListArrays_NumPys2_4_2Failure): not a case.
+            _IDS.discard(cid)
+            _OP_COUNT[prefix] = n - 1
+            return
+        case["expected"] = _cobj_expect(r, views)
     except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
         case["error"] = err_info(e)
     CASES.append(case)
@@ -11640,12 +11687,14 @@ def _clst_base(r, recv):
     return "other"
 
 
-def _clst_expect(r, recv):
+def _clst_expect(r, recv, operands=()):
     """The expectation of a list-array member's result.
 
     Args:
         r: NumPy's result.
         recv: the receiver (an object array of lists).
+        operands: the operand views whose memory sharing an ndarray result records (the ``shares`` facet: an out=
+            operand the result must BE), or empty for none.
 
     Returns:
         An object array as ``lists`` (``_cobj_expect``) with its ``layout`` facets; a Python list — NumPy's one-index take,
@@ -11666,10 +11715,10 @@ def _clst_expect(r, recv):
         selfs = [0] if any(type(p) is np.str_ for p in r) else []
         return {"kind": "lists", "shape": [], "lists": [[_cobj_piece(p) for p in r]], "strself": selfs}
     if isinstance(r, tuple) and r and all(isinstance(x, np.ndarray) for x in r):
-        return expect_of(r, [])
+        return expect_of(r, list(operands))
     if isinstance(r, (bool, int, str, tuple)):
         return {"kind": "pyvalue", "value": enc(list(r) if isinstance(r, tuple) else r)}
-    return expect_of(r, [])
+    return expect_of(r, list(operands))
 
 
 def _clst_list_ok(el, classes):
@@ -11687,10 +11736,27 @@ def _clst_list_ok(el, classes):
     return True
 
 
+# The members whose NumSharp result is a list array (or the out list array): a NumPy result of any other kind — the
+# bool / number of a dtype= loop, a numeric array, an object array of other objects — is a NotSupportedException there.
+_CLST_LIST_RESULTS = {"sum", "prod", "cumsum", "cumprod", "trace", "max", "min", "clip", "conj", "conjugate"}
+
+
 def _clst_representable(params, r):
     """Whether NumPy's result has an NDListArray form: every element of an object array (or a list result) a list of str
     or bytes items, one class in the whole result; a plain Python int from a member whose result is a list (the identity
-    0 / 1 of an empty sum / product, an empty dot) is not."""
+    0 / 1 of an empty sum / product, an empty dot) is not, nor is any result of a list member (``_CLST_LIST_RESULTS``)
+    that is not a list or an object array, nor an ndarray subclass (``view(np.matrix)``: NumSharp has no object matrix or
+    masked array), nor an object array from mean / var / std (their NumSharp result is an NDArray)."""
+    if isinstance(r, np.ndarray) and type(r) is not np.ndarray:
+        return False
+    plain_call = not (params.get("attr") or params.get("is_recv") or params.get("is_arg") is not None
+                      or "binop" in params or "setitem" in params or params.get("inplace"))
+    name = params.get("name")
+    if plain_call and name in ("mean", "var", "std") and isinstance(r, np.ndarray) and r.dtype == object:
+        return False
+    if plain_call and name in _CLST_LIST_RESULTS and not (isinstance(r, list)
+                                                         or (isinstance(r, np.ndarray) and r.dtype == object)):
+        return False
     if isinstance(r, np.ndarray) and r.dtype == object:
         classes = set()
         return all(_clst_list_ok(el, classes) for el in r.flat) and len(classes) <= 1
@@ -11708,38 +11774,48 @@ _CLST_BINOPS = {"eq": operator.eq, "ne": operator.ne, "lt": operator.lt, "le": o
 
 def _clst_call(params, views):
     """Makes one case's call: the member ``params.name`` of the receiver (``_cobj_value(params.recv)``) with ``args`` /
-    ``kw``; an attribute (no call) when ``params.attr`` is true; ``is_recv`` reports whether the result IS the receiver.
+    ``kw``; an attribute (no call) when ``params.attr`` is true; ``is_recv`` reports whether the result IS the receiver,
+    ``is_arg`` whether it IS the argument at that position (an int) or keyword (a str).
     ``binop`` applies an operator to the receiver and ``other`` (reflected with ``rev``); ``setitem`` assigns
     ``args[0]`` at that index; ``inplace`` makes the receiver after the call the result (a member that returns None).
 
     Returns:
-        (result, receiver).
+        (result, receiver, the member's own result before ``inplace`` / ``is_recv`` / ``is_arg`` replace it).
     """
     recv = _cobj_value(params["recv"], views)
     if "binop" in params:
-        other = _cobj_value(params["other"], views)
+        other = _cobj_value(params["other"], views, recv)
         fn = _CLST_BINOPS[params["binop"]]
-        return (fn(other, recv) if params.get("rev") else fn(recv, other)), recv
+        r = fn(other, recv) if params.get("rev") else fn(recv, other)
+        return r, recv, r
     if "setitem" in params:
-        value = _cobj_value(params["args"][0], views)
+        value = _cobj_value(params["args"][0], views, recv)
         recv[_cobj_index(params["setitem"])] = value
-        return recv, recv
+        return recv, recv, recv
     attr = getattr(recv, params["name"])
+    args, kw = [], {}
     if params.get("attr"):
         r = attr
     else:
-        args = [_cobj_value(a, views) for a in params.get("args", [])]
-        kw = {name: _cobj_value(a, views) for name, a in params.get("kw", {}).items()}
+        args = [_cobj_value(a, views, recv) for a in params.get("args", [])]
+        kw = {name: _cobj_value(a, views, recv) for name, a in params.get("kw", {}).items()}
         r = attr(*args, **kw)
+    raw = r
     if params.get("inplace"):
         r = recv
     if params.get("is_recv"):
         r = r is recv
-    return r, recv
+    if params.get("is_arg") is not None:
+        # Whether the result IS the argument passed at that position (an int) or keyword (a str): an out= the member
+        # must return itself.
+        which = params["is_arg"]
+        r = r is (args[which] if isinstance(which, int) else kw[which])
+    return r, recv, raw
 
 
 def add_clst(params, operands=(), layout=""):
-    """Records one list-array member case (``_clst_call``)."""
+    """Records one list-array member case (``_clst_call``); ``params.shares`` records the sharing of an ndarray result
+    with each operand (an out= operand)."""
     views = [v for _, v in operands]
     prefix = f"{CLST}/clst/"
     n = _OP_COUNT.get(prefix, 0) + 1
@@ -11750,13 +11826,18 @@ def add_clst(params, operands=(), layout=""):
     case = {"id": cid, "op": "clst", "params": params, "operands": [describe(b, v) for b, v in operands], "phase": 1,
             "layout": layout}
     try:
-        r, recv = _clst_call(params, views)
-        if not _clst_representable(params, r):
+        r, recv, raw = _clst_call(params, views)
+        # An identity case (is_recv / is_arg) answers a bool, but NumSharp's member must still be able to return the
+        # member's own result: it is checked too.
+        own = {k: x for k, x in params.items() if k not in ("is_recv", "is_arg")}
+        if not _clst_representable(params, r) or not _clst_representable(own, raw):
             # NumPy's result has no NDListArray form (NumSharp raises NotSupportedException there): not a case.
             _IDS.discard(cid)
             _OP_COUNT[prefix] = n - 1
             return
-        case["expected"] = _clst_expect(r, recv)
+        # A case that passes an ndarray out= ("shares") records whether the result shares each operand's memory: NumPy's
+        # result IS that out.
+        case["expected"] = _clst_expect(r, recv, views if params.get("shares") else ())
     except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
         case["error"] = err_info(e)
     CASES.append(case)
@@ -11859,6 +11940,7 @@ def gen_strcharlist():
                 params["attr"] = True
             add_clst(params, [m2], layout=f"U:c2:{rl}")
     _gen_strcharlist_ops()
+    _gen_strcharlist_sig()
 
 
 # The texts of the L-B / L-C receivers: short words with repeats (ties for the sort family's order, equal lists for the
@@ -12220,6 +12302,406 @@ def _gen_strcharlist_ops():
             full = {"recv": recv, "name": params.get("name", "setitem"), "args": [], "kw": {}}
             full.update(params)
             add_clst(full, [mine, theirs], layout=f"foreign:{kind}:{al}")
+
+
+# The texts of section strcharlist's out= operands: lists of one, two and no pieces, so an out NumPy leaves untouched (a
+# zero-size accumulation, a masked-off clip) still holds lists.
+CLST_OUT_U = ["q r", "s", "", "t u v", "w", "x y"]
+# The dtype classes the dtype= cases pass: bool, integers, floats, complex, text with and without a length (a ufunc's
+# descriptor check refuses a length, a C method's type number keeps only the class), a byte-swapped float, datetime64 /
+# timedelta64 with and without a unit, StringDType (a new user DType instance) and a name NumPy does not know.
+CLST_SIG_DTYPES = ["bool", "int8", "int64", "uint8", "float16", "float32", "float64", "complex128", "U3", "U", "S", "S3",
+                   ">f8", "M8", "M8[ns]", "m8", "m8[s]", "T", "garbage"]
+
+
+def _clst_out_text(shape):
+    """A text operand of ``shape`` whose split lists stand in for an object out= array (CLST_OUT_U, cycled)."""
+    n = int(np.prod(shape)) if shape else 1
+    vals = [CLST_OUT_U[i % len(CLST_OUT_U)] for i in range(n)]
+    return plain(np.array(vals, dtype="U5").reshape(shape))
+
+
+def _clst_out_array(shape, dtype, writeable=True):
+    """A numeric (or text) ndarray out= operand of ``shape`` and ``dtype``, zero-filled; read-only when not writeable. An
+    empty one is an empty view of a 4-element buffer: NumPy's view (OWNDATA false) and the replay's rebuilt operand then
+    agree, where an operand over an empty buffer is rebuilt as an owner."""
+    if shape and int(np.prod(shape)) == 0:
+        base = np.zeros(4, dtype=dtype)
+        pair = (base, base[:0].reshape(shape))
+    else:
+        pair = plain(np.zeros(shape, dtype=dtype))
+    if not writeable:
+        pair[1].flags.writeable = False
+    return pair
+
+
+def _gen_strcharlist_sig():
+    """The parameters NDListArray's members gained in the one-signature review (2026-10-19), each against NumPy 2.4.2:
+    dtype= of sum / prod / cumsum / cumprod / trace / mean / var / std (every dtype class, flat, along an axis, with
+    keepdims), the error order of dtype= against axis= / out= / where= / initial=, out= of cumsum / cumprod (the plain
+    loop's zero-size shortcuts and size check, the outer iterator's op_axes and remapped texts, read-only, overlapping and
+    strided outs), of trace and of conj / conjugate (list outs, NumPy's positional out), and of mean / var / std (ndarray
+    outs of every dtype, with dtype= / keepdims / where=), mean= of var / std (Python numbers, 0-d and broadcast ndarrays),
+    clip's dtype= and where= (with and without out=, a broadcast mask, a non-bool mask, no bounds), view's dtype and type
+    spellings, reshape's copy=, and put with one integer index."""
+    v = _cobj_v
+    split0 = {"split": [{"op": 0}]}
+
+    def case(recv, ops, name, args=(), kw=None, label="", **extra):
+        params = {"recv": recv, "name": name, "args": list(args), "kw": kw or {}}
+        params.update(extra)
+        add_clst(params, ops, layout=f"sig:{label}:{name}")
+
+    # Receivers: a 1-D / 2-D text of non-empty and empty lists, a 0-d one holding an empty list and one holding a
+    # non-empty list (a bool loop then ORs / ANDs to different answers), a one-element array of an empty list, and the
+    # two empty shapes.
+    texts = {}
+    for layout, seed in (("c1", 0), ("c2", 1), ("z0", 2), ("z0", 0), ("one", 2), ("e1", 0), ("e2", 0)):
+        texts[f"{layout}:{seed}"] = _cobj_operand("U", CLST_U, layout, seed=seed)
+
+    # ---- A. dtype= of the reductions, accumulations and statistics: every dtype class ----
+    for label, text in texts.items():
+        nd = text[1].ndim
+        for dt in CLST_SIG_DTYPES:
+            for name in ("sum", "prod", "cumsum", "cumprod", "mean", "var", "std"):
+                case(split0, [text], name, kw={"dtype": v(dt)}, label=f"{label}:dtype:{dt}")
+            # trace takes its diagonal first: below two axes every dtype is the diagonal's error.
+            if nd >= 2 or dt in ("float64", "U3", "T"):
+                case(split0, [text], "trace", kw={"dtype": v(dt)}, label=f"{label}:dtype:{dt}")
+    c2 = texts["c2:1"]
+    e2 = texts["e2:0"]
+    for text, label in ((c2, "c2"), (e2, "e2")):
+        for dt in ("bool", "int64", "float64", "complex128", "U", "U3", "M8[ns]", "T"):
+            for name in ("sum", "prod", "mean", "var", "std"):
+                case(split0, [text], name, [v(0)], {"dtype": v(dt)}, label=f"{label}:axis0:dtype:{dt}")
+                case(split0, [text], name, [v(-1)], {"dtype": v(dt), "keepdims": v(True)}, label=f"{label}:axis-1kd:dtype:{dt}")
+            for name in ("cumsum", "cumprod"):
+                case(split0, [text], name, [v(1)], {"dtype": v(dt)}, label=f"{label}:axis1:dtype:{dt}")
+            case(split0, [text], "trace", [v(0), v(1), v(0)], {"dtype": v(dt)}, label=f"{label}:axes:dtype:{dt}")
+
+    # ---- B. The error order of dtype= against the other arguments ----
+    for label in ("c1:0", "e1:0"):
+        text = texts[label]
+        size = text[1].size
+        mask = ([True, False] * 4)[:size]
+        o0 = _clst_out_text(())
+        o2 = _clst_out_text((2,))
+        for dt in ("float64", "bool", "U3", "U", "T", "M8[ns]", "garbage"):
+            for name in ("sum", "prod"):
+                case(split0, [text], name, kw={"axis": v(5), "dtype": v(dt)}, label=f"{label}:axis5:dtype:{dt}")
+                case(split0, [text], name, kw={"dtype": v(dt), "where": v(mask)}, label=f"{label}:where:dtype:{dt}")
+                case(split0, [text], name, kw={"dtype": v(dt), "where": v([False] * size), "initial": v(["z"])},
+                     label=f"{label}:wherefalseinit:dtype:{dt}")
+                case(split0, [text], name, kw={"dtype": v(dt), "initial": v(0)}, label=f"{label}:init0:dtype:{dt}")
+                case(split0, [text], name, kw={"dtype": v(dt), "initial": v(["z"])}, label=f"{label}:initlist:dtype:{dt}")
+                case(split0, [text, o2], name, kw={"dtype": v(dt), "out": {"split": [{"op": 1}]}},
+                     label=f"{label}:outrank:dtype:{dt}")
+                case(split0, [text, o0], name, kw={"dtype": v(dt), "out": {"ro": {"split": [{"op": 1}]}}},
+                     label=f"{label}:outro:dtype:{dt}")
+                case(split0, [text, plain(np.ones(size, dtype="int64"))], name, kw={"dtype": v(dt), "where": {"op": 1}},
+                     label=f"{label}:intmask:dtype:{dt}")
+            for name in ("cumsum", "cumprod"):
+                case(split0, [text], name, kw={"axis": v(3), "dtype": v(dt)}, label=f"{label}:axis3:dtype:{dt}")
+                case(split0, [text, o2], name, kw={"dtype": v(dt), "out": {"split": [{"op": 1}]}},
+                     label=f"{label}:outwrong:dtype:{dt}")
+                case(split0, [text, o2], name, kw={"dtype": v(dt), "out": {"ro": {"split": [{"op": 1}]}}},
+                     label=f"{label}:outro:dtype:{dt}")
+            for name in ("mean", "var", "std"):
+                # _mean / _var read the axis (and subtract mean=) before umr_sum parses the dtype, where a C# call parses a
+                # dtype string at the call site: an unknown name is not a case there.
+                if dt != "garbage":
+                    case(split0, [text], name, kw={"axis": v(5), "dtype": v(dt)}, label=f"{label}:axis5:dtype:{dt}")
+                case(split0, [text, _clst_out_array((), "float64")], name, kw={"dtype": v(dt), "out": {"op": 1}},
+                     label=f"{label}:out:dtype:{dt}", shares=True)
+                case(split0, [text, _clst_out_array((), "float64", writeable=False)], name,
+                     kw={"dtype": v(dt), "out": {"op": 1}}, label=f"{label}:outro:dtype:{dt}")
+                case(split0, [text], name, kw={"dtype": v(dt), "where": v(mask)}, label=f"{label}:where:dtype:{dt}")
+            for name in ("var", "std"):
+                if dt != "garbage":
+                    case(split0, [text], name, kw={"dtype": v(dt), "mean": v(0.5)}, label=f"{label}:mean:dtype:{dt}")
+                case(split0, [text], name, kw={"dtype": v(dt), "ddof": v(1)}, label=f"{label}:ddof:dtype:{dt}")
+
+    # ---- C. cumsum / cumprod into a list out= ----
+    r = texts["c1:0"]
+    a = c2
+    e1 = texts["e1:0"]
+    z = texts["z0:0"]
+    for name in ("cumsum", "cumprod"):
+        def acc(recv_text, args, out, label, ro=False, is_arg=False, **kw):
+            ops = [recv_text]
+            if out == "self" or (isinstance(out, str) and out.startswith("self:")):
+                spec = {"self": "" if out == "self" else out[5:]}
+            elif isinstance(out, tuple) and out and out[0] == "T":
+                ops.append(_clst_out_text(out[1]))
+                spec = {"T": {"split": [{"op": 1}]}}
+            elif isinstance(out, tuple) and out and out[0] == "view":
+                ops.append(_clst_out_text(out[1]))
+                spec = {"view": [{"split": [{"op": 1}]}, out[2]]}
+            else:
+                ops.append(_clst_out_text(out))
+                spec = {"split": [{"op": 1}]}
+            if ro:
+                spec = {"ro": spec}
+            kws = {"out": spec}
+            kws.update({k: v(x) for k, x in kw.items()})
+            extra = {"is_arg": "out"} if is_arg else {}
+            case(split0, ops, name, args, kws, label=f"acc:{label}", **extra)
+
+        for out, label in (((6,), "6"), ((5,), "5"), ((0,), "0"), ((2, 3), "2x3"), ((12,), "12")):
+            acc(r, [], out, f"r:{label}")
+        acc(r, [], (6,), "r:6:is", is_arg=True)
+        acc(r, [], (6,), "r:6:ro", ro=True)
+        acc(r, [], (0,), "r:0:ro", ro=True)
+        acc(r, [v(0)], (6,), "r:axis0:6")
+        acc(r, [v(1)], (6,), "r:axis1:6")
+        acc(r, [], "self", "r:self")
+        acc(r, [], "self", "r:self:is", is_arg=True)
+        acc(r, [], "self:::-1", "r:selfrev")
+        acc(r, [], ("view", (6,), "::-1"), "r:outrev")
+        acc(r, [], ("view", (12,), "::2"), "r:outstep")
+        acc(r, [], (6,), "r:dtypef8", dtype="float64")
+        acc(r, [], (5,), "r:dtypef8:5", dtype="float64")
+        acc(r, [], (6,), "r:dtypebool", dtype="bool")
+        acc(r, [], (6,), "r:dtypeU3", dtype="U3")
+        acc(r, [], (6,), "r:dtypeU3:ro", ro=True, dtype="U3")
+        acc(r, [], (5,), "r:dtypeU:5", dtype="U")
+        for args, out, label in (([v(1)], (3, 4), "a:axis1:3x4"), ([v(0)], (3, 4), "a:axis0:3x4"),
+                                 ([v(1)], ("T", (4, 3)), "a:axis1:Tof4x3"), ([v(1)], (12,), "a:axis1:12"),
+                                 ([v(1)], (1, 3, 4), "a:axis1:1x3x4"), ([v(1)], (4, 3), "a:axis1:4x3"),
+                                 ([v(1)], (1, 4), "a:axis1:1x4"), ([v(0)], (3, 1), "a:axis0:3x1"),
+                                 ([v(1)], (3, 0), "a:axis1:3x0"), ([v(None)], (12,), "a:none:12"),
+                                 ([v(None)], (11,), "a:none:11"), ([v(None)], (0,), "a:none:0"),
+                                 ([v(1)], "self", "a:axis1:self"), ([v(0)], "self:::-1, :", "a:axis0:selfrev"),
+                                 ([v(0)], ("view", (3, 8), ":, ::2"), "a:axis0:outstep")):
+            acc(a, args, out, label)
+        acc(a, [v(1)], (3, 4), "a:axis1:3x4:is", is_arg=True)
+        acc(a, [v(1)], (3, 4), "a:axis1:ro", ro=True)
+        acc(a, [v(1)], (3, 4), "a:axis1:dtypef8", dtype="float64")
+        for args, out, label in (([], (3,), "e1:3"), ([], (0,), "e1:0"), ([], (2, 2), "e1:2x2")):
+            acc(e1, args, out, label)
+        acc(e1, [], (3,), "e1:3:is", is_arg=True)
+        acc(e1, [], (3,), "e1:3:ro", ro=True)
+        acc(e1, [], (3,), "e1:3:dtypef8", dtype="float64")
+        acc(e1, [], (0,), "e1:0:dtypebool", dtype="bool")
+        for args, out, label in (([v(0)], (2, 3), "e2:axis0:2x3"), ([v(1)], (2, 3), "e2:axis1:2x3"),
+                                 ([v(0)], (0, 3), "e2:axis0:0x3"), ([v(None)], (3,), "e2:none:3"),
+                                 ([v(1)], (0, 5), "e2:axis1:0x5")):
+            acc(e2, args, out, label)
+        for args, out, label in (([], (1,), "z:1"), ([], (2,), "z:2"), ([v(0)], (1,), "z:axis0:1"),
+                                 ([], (0,), "z:0"), ([v(None)], (1,), "z:none:1")):
+            acc(z, args, out, label)
+
+    # ---- D. trace into a list out= ----
+    c3 = _cobj_operand("U", CLST_U, "c3", seed=4)
+    o0 = _clst_out_text(())
+    case(split0, [a, o0], "trace", kw={"out": {"split": [{"op": 1}]}}, label="a:out0d")
+    case(split0, [a, o0], "trace", kw={"out": {"split": [{"op": 1}]}}, label="a:out0d:is", is_arg="out")
+    case(split0, [a, _clst_out_text((1,))], "trace", kw={"out": {"split": [{"op": 1}]}}, label="a:out1")
+    case(split0, [a, o0], "trace", kw={"out": {"ro": {"split": [{"op": 1}]}}}, label="a:out0d:ro")
+    case(split0, [a, o0], "trace", kw={"dtype": v("float64"), "out": {"split": [{"op": 1}]}}, label="a:out0d:dtypef8")
+    case(split0, [a, o0], "trace", kw={"dtype": v("U3"), "out": {"split": [{"op": 1}]}}, label="a:out0d:dtypeU3")
+    case(split0, [a, o0], "trace", [v(1)], {"out": {"split": [{"op": 1}]}}, label="a:offset1:out0d")
+    case(split0, [e2, o0], "trace", kw={"out": {"split": [{"op": 1}]}}, label="e2:out0d")
+    for out, label in (((4,), "4"), ((3,), "3"), ((1, 4), "1x4"), ((2,), "2")):
+        case(split0, [c3, _clst_out_text(out)], "trace", kw={"out": {"split": [{"op": 1}]}}, label=f"c3:out{label}")
+    case(split0, [c3, _clst_out_text((4,))], "trace", [v(0), v(2), v(1)], {"out": {"split": [{"op": 1}]}},
+         label="c3:axes21:out4")
+
+    # ---- E. conj / conjugate into a list out (NumPy's out is positional only) ----
+    for name in ("conj", "conjugate"):
+        for recv_text, out, label in ((e1, (0,), "e1:0"), (e1, (1,), "e1:1"), (e2, (0, 3), "e2:0x3"), (e2, (3,), "e2:3"),
+                                      (e2, (2, 0, 3), "e2:2x0x3"), (r, (6,), "r:6"), (r, (3,), "r:3"),
+                                      (z, (), "z:0d")):
+            case(split0, [recv_text, _clst_out_text(out)], name, [{"split": [{"op": 1}]}], label=f"{label}")
+        case(split0, [e1, _clst_out_text((0,))], name, [{"split": [{"op": 1}]}], label="e1:0:is", is_arg=0)
+        case(split0, [e1, _clst_out_text((0,))], name, [{"ro": {"split": [{"op": 1}]}}], label="e1:0:ro")
+        case(split0, [r, _clst_out_text((6,))], name, [{"ro": {"split": [{"op": 1}]}}], label="r:6:ro")
+        case(split0, [e1], name, [v(None)], label="e1:none")
+        case(split0, [r], name, [v(None)], label="r:none")
+        case(split0, [e1], name, [{"self": ""}], label="e1:self")
+
+    # ---- F. mean / var / std into an ndarray out= ----
+    out_dtypes = ["bool", "int8", "int64", "uint8", "float16", "float32", "float64", "complex128", "U3", "S3"]
+    stat_receivers = [("c1:0", None, ()), ("c2:1", 0, (4,)), ("c2:1", 1, (3,)), ("e1:0", None, ()), ("e2:0", 0, (3,)),
+                      ("e2:0", 1, (0,)), ("z0:2", None, ()), ("z0:0", None, ()), ("one:2", None, ())]
+    for label, axis, oshape in stat_receivers:
+        text = texts[label]
+        args = [] if axis is None else [v(axis)]
+        sub = f"{label}:axis{axis}"
+        for odt in out_dtypes:
+            for name in ("mean", "var", "std"):
+                case(split0, [text, _clst_out_array(oshape, odt)], name, args, {"out": {"op": 1}},
+                     label=f"{sub}:out:{odt}", shares=True)
+        for name in ("mean", "var", "std"):
+            case(split0, [text, _clst_out_array(oshape, "float64")], name, args, {"out": {"op": 1}},
+                 label=f"{sub}:out:is", is_arg="out")
+            case(split0, [text, _clst_out_array(oshape, "float64", writeable=False)], name, args, {"out": {"op": 1}},
+                 label=f"{sub}:out:ro")
+            case(split0, [text, _clst_out_array(oshape + (1,), "float64")], name, args, {"out": {"op": 1}},
+                 label=f"{sub}:out:rank")
+            kd_shape = tuple(1 if axis is None or i == axis else d for i, d in enumerate(text[1].shape))
+            case(split0, [text, _clst_out_array(kd_shape, "float64")], name, args,
+                 {"out": {"op": 1}, "keepdims": v(True)}, label=f"{sub}:out:keepdims", shares=True)
+            case(split0, [text, _clst_out_array(oshape, "float64")], name, args,
+                 {"out": {"op": 1}, "keepdims": v(True)}, label=f"{sub}:out:keepdims:wrong")
+            case(split0, [text, _clst_out_array(oshape, "float64")], name, [v(5)], {"out": {"op": 1}},
+                 label=f"{sub}:out:axis5")
+            for dt in ("float64", "bool", "int64", "float32"):
+                case(split0, [text, _clst_out_array(oshape, "float64")], name, args, {"out": {"op": 1}, "dtype": v(dt)},
+                     label=f"{sub}:out:dtype:{dt}", shares=True)
+            if text[1].ndim >= 1:
+                case(split0, [text, _clst_out_array(oshape, "float64")], name, args,
+                     {"out": {"op": 1}, "where": v(([True, False] * 4)[:text[1].shape[-1]])}, label=f"{sub}:out:where",
+                     shares=True)
+        for name in ("var", "std"):
+            case(split0, [text, _clst_out_array(oshape, "int64")], name, args, {"out": {"op": 1}, "ddof": v(1)},
+                 label=f"{sub}:out:i8:ddof1", shares=True)
+            case(split0, [text, _clst_out_array(oshape, "float32")], name, args, {"out": {"op": 1}, "ddof": v(1)},
+                 label=f"{sub}:out:f4:ddof1", shares=True)
+
+    # ---- G. var / std with mean= ----
+    means = [(v(0), "int"), (v(0.0), "float"), (v(True), "bool"), (v(1j), "complex"), (v("x"), "str"), (v(None), "none"),
+             (v([0.0]), "list")]
+    for label in ("c1:0", "e1:0", "e2:0", "z0:2", "z0:0", "c2:1"):
+        text = texts[label]
+        shape = text[1].shape
+        for name in ("var", "std"):
+            for mv, ml in means:
+                case(split0, [text], name, kw={"mean": mv}, label=f"{label}:mean:{ml}")
+            for mshape, ml in (((), "0d"), ((1,), "1"), ((5,), "5"), (shape, "same"), ((2,) + shape, "lead")):
+                case(split0, [text, _clst_out_array(mshape, "float64")], name, kw={"mean": {"op": 1}},
+                     label=f"{label}:mean:arr{ml}")
+            if len(shape) == 2:
+                for axis, mshape in ((0, (1, shape[1])), (1, (shape[0], 1)), (0, (2, shape[1]))):
+                    case(split0, [text, _clst_out_array(mshape, "float64")], name, [v(axis)], {"mean": {"op": 1}},
+                         label=f"{label}:mean:axis{axis}:{mshape}")
+                    case(split0, [text, _clst_out_array(mshape, "float64")], name, [v(axis)],
+                         {"mean": {"op": 1}, "keepdims": v(True)}, label=f"{label}:mean:axis{axis}kd:{mshape}")
+            oshape = ()
+            for odt in ("float64", "int64", "bool", "complex128", "float32"):
+                case(split0, [text, _clst_out_array(oshape, odt)], name, kw={"mean": v(0.0), "out": {"op": 1}},
+                     label=f"{label}:mean:out:{odt}", shares=True)
+            case(split0, [text, _clst_out_array(oshape, "float64")], name,
+                 kw={"mean": v(0.0), "out": {"op": 1}, "ddof": v(1)}, label=f"{label}:mean:out:ddof1", shares=True)
+            case(split0, [text, _clst_out_array(oshape, "float64")], name, kw={"mean": v(1j), "out": {"op": 1}},
+                 label=f"{label}:mean:complex:out", shares=True)
+            case(split0, [text], name, kw={"mean": v(0.0), "keepdims": v(True)}, label=f"{label}:mean:keepdims")
+            case(split0, [text], name, kw={"mean": v(0.0), "axis": v(0)}, label=f"{label}:mean:axis0")
+            case(split0, [text], name, kw={"mean": v(0.0), "axis": v(5)}, label=f"{label}:mean:axis5")
+            if len(shape) >= 1:
+                case(split0, [text], name, kw={"mean": v(0.0), "where": v(([True, False] * 4)[:shape[-1]])},
+                     label=f"{label}:mean:where")
+
+    # ---- H. clip: dtype=, where= (with and without out=), and the bounds ----
+    lo_text = plain(np.array(["a"]))
+    hi_text = plain(np.array(["b b"]))
+    lo = {"split": [{"op": 1}]}
+    hi = {"split": [{"op": 2}]}
+    for recv_text, label in ((r, "r"), (a, "a"), (e1, "e1")):
+        shape = recv_text[1].shape
+        last = shape[-1]
+        mask = ([True, False] * 4)[:last]
+        base_ops = [recv_text, lo_text, hi_text]
+        case(split0, base_ops, "clip", [lo, hi], label=f"{label}:bounds")
+        for where, wl in ((v(True), "true"), (v(False), "false"), (v(mask), "mask"), (v([[True] * last]), "row"),
+                          (v(([True] * 8)[:max(last - 1, 0)]), "short")):
+            case(split0, base_ops, "clip", [lo, hi], {"where": where}, label=f"{label}:where:{wl}")
+            case(split0, base_ops + [_clst_out_text(shape)], "clip", [lo, hi], {"where": where, "out": {"split": [{"op": 3}]}},
+                 label=f"{label}:where:{wl}:out")
+        for mdt, ml in (("int64", "int"), ("float64", "float"), ("uint8", "uint8")):
+            case(split0, base_ops + [plain(np.ones(last, dtype=mdt))], "clip", [lo, hi], {"where": {"op": 3}},
+                 label=f"{label}:where:{ml}")
+        case(split0, base_ops + [_clst_out_text(shape)], "clip", [lo, hi],
+             {"where": v(mask), "out": {"ro": {"split": [{"op": 3}]}}}, label=f"{label}:where:out:ro")
+        case(split0, base_ops + [_clst_out_text(shape)], "clip", [lo, hi],
+             {"where": v(mask), "out": {"split": [{"op": 3}]}}, label=f"{label}:where:out:is", is_arg="out")
+        case(split0, base_ops + [_clst_out_text((2,) + shape)], "clip", [lo, hi],
+             {"where": v(mask), "out": {"split": [{"op": 3}]}}, label=f"{label}:where:outlarger")
+        case(split0, base_ops + [_clst_out_text((3,))], "clip", [lo, hi],
+             {"where": v(mask), "out": {"split": [{"op": 3}]}}, label=f"{label}:where:outwrong")
+        case(split0, base_ops, "clip", [lo, hi], {"where": v(mask), "out": {"self": ""}}, label=f"{label}:where:self")
+        case(split0, base_ops + [_clst_out_text(shape)], "clip", [v(1), hi], {"where": v(mask), "out": {"split": [{"op": 3}]}},
+             label=f"{label}:intlo:where:out")
+        case(split0, base_ops + [_clst_out_text(shape)], "clip", [v(1), hi],
+             {"where": v(False), "out": {"split": [{"op": 3}]}}, label=f"{label}:intlo:wherefalse:out")
+        case(split0, base_ops + [_clst_out_text(shape)], "clip", [], {"where": v(mask), "out": {"split": [{"op": 3}]}},
+             label=f"{label}:nobounds:where:out")
+        case(split0, base_ops + [_clst_out_text(shape)], "clip", [], {"where": v(False), "out": {"split": [{"op": 3}]}},
+             label=f"{label}:nobounds:wherefalse:out")
+        for dt in ("bool", "int64", "float64", "complex128", "U3", "U", "T", "M8[ns]", "garbage"):
+            case(split0, base_ops, "clip", [lo, hi], {"dtype": v(dt)}, label=f"{label}:dtype:{dt}")
+            case(split0, base_ops + [_clst_out_text(shape)], "clip", [lo, hi],
+                 {"dtype": v(dt), "out": {"split": [{"op": 3}]}}, label=f"{label}:dtype:{dt}:out")
+            case(split0, base_ops + [plain(np.ones(last, dtype="int64"))], "clip", [lo, hi],
+                 {"dtype": v(dt), "where": {"op": 3}}, label=f"{label}:dtype:{dt}:intmask")
+            case(split0, base_ops + [_clst_out_text(shape)], "clip", [lo, hi],
+                 {"dtype": v(dt), "out": {"ro": {"split": [{"op": 3}]}}}, label=f"{label}:dtype:{dt}:outro")
+
+    # ---- I. view: dtype and type spellings ----
+    pt = lambda name: {"pytype": name}  # noqa: E731 -- a spec constructor
+    views = [([pt("ndarray")], {}, "ndarray"), ([], {"type": pt("ndarray")}, "type=ndarray"),
+             ([pt("object")], {}, "object"), ([pt("object_")], {}, "object_"), ([v(None)], {}, "None"),
+             ([], {"type": v(None)}, "type=None"), ([v(None), v(None)], {}, "None,None"), ([], {"dtype": v(None)}, "dtype=None"),
+             ([pt("ndarray"), pt("ndarray")], {}, "ndarray,ndarray"), ([pt("ndarray")], {"type": pt("matrix")}, "ndarray,type=matrix"),
+             ([pt("chararray")], {}, "chararray"), ([pt("chararray"), v(None)], {}, "chararray,None"),
+             ([], {"type": pt("chararray")}, "type=chararray"), ([pt("matrix")], {}, "matrix"), ([], {"type": pt("matrix")}, "type=matrix"),
+             ([pt("MaskedArray")], {}, "MaskedArray"), ([v("int64")], {}, "int64"), ([pt("int")], {}, "int"),
+             ([], {"type": pt("int")}, "type=int"), ([pt("object"), pt("int")], {}, "object,int"),
+             ([v("int64"), pt("matrix")], {}, "int64,matrix"), ([v("garbage")], {}, "garbage"), ([v(1)], {}, "1"),
+             ([v("O"), pt("ndarray")], {}, "O,ndarray"), ([v("O")], {"type": pt("chararray")}, "O,type=chararray")]
+    for spelling in ("O", "|O", "=O", "<O", ">O", "O8", "O4", "object", "object_", "O0", "Object"):
+        views.append(([v(spelling)], {}, f"str:{spelling}"))
+    for label in ("c1:0", "c2:1", "z0:0", "e1:0"):
+        text = texts[label]
+        for args, kw, vl in views:
+            case(split0, [text], "view", args, kw, label=f"{label}:{vl}")
+    for args, kw, vl in views[:16]:
+        case(split0, [c3], "view", args, kw, label=f"c3:{vl}")
+
+    # ---- J. reshape(copy=) ----
+    for recv, text, label in ((split0, r, "r"), (split0, a, "a"), ({"T": split0}, a, "aT"),
+                              ({"view": [split0, ":, ::2"]}, a, "astep"), (split0, e1, "e1"), (split0, z, "z")):
+        # The size, not -1: the replay spells the shape as a Shape, which takes no unknown dimension.
+        size = text[1].size // 2 if label == "astep" else text[1].size
+        for copy in (True, False, None):
+            case(recv, [text], "reshape", [v([size])], {"copy": v(copy)}, label=f"{label}:copy{copy}")
+            case(recv, [text], "reshape", [v([size])], {"order": v("F"), "copy": v(copy)}, label=f"{label}:F:copy{copy}")
+
+    # ---- L. sum / prod / max / min into a list out= (0-d, a row / column view, the receiver's own row, keepdims) ----
+    o0 = _clst_out_text(())
+    one = texts["one:2"]
+    for name in ("sum", "prod", "max", "min"):
+        for text, label in ((r, "r"), (z, "z"), (one, "one"), (e1, "e1")):
+            case(split0, [text, o0], name, kw={"out": {"split": [{"op": 1}]}}, label=f"red:{label}:out0d")
+            case(split0, [text, o0], name, kw={"out": {"split": [{"op": 1}]}}, label=f"red:{label}:out0d:is", is_arg="out")
+            case(split0, [text, o0], name, kw={"out": {"ro": {"split": [{"op": 1}]}}}, label=f"red:{label}:out0d:ro")
+        mask6 = [True, False, True, True, False, True]
+        case(split0, [r, o0], name, kw={"out": {"split": [{"op": 1}]}, "initial": v(["z"])}, label="red:r:out0d:initial")
+        case(split0, [r, o0], name, kw={"out": {"split": [{"op": 1}]}, "where": v(mask6), "initial": v(["z"])},
+             label="red:r:out0d:where")
+        case(split0, [r, o0], name, kw={"out": {"split": [{"op": 1}]}, "where": v(mask6)}, label="red:r:out0d:wherenoinit")
+        for args, kw, out, label in (([v(0)], {}, (4,), "a:axis0:out4"), ([v(1)], {}, (3,), "a:axis1:out3"),
+                                     ([v(1)], {"keepdims": v(True)}, (3, 1), "a:axis1kd:out3x1"),
+                                     ([v(0)], {}, (3,), "a:axis0:out3")):
+            kws = {"out": {"split": [{"op": 1}]}}
+            kws.update(kw)
+            case(split0, [a, _clst_out_text(out)], name, args, kws, label=f"red:{label}")
+        case(split0, [a, _clst_out_text((2, 4))], name, [v(0)], {"out": {"view": [{"split": [{"op": 1}]}, "1"]}},
+             label="red:a:axis0:outrow")
+        case(split0, [a, _clst_out_text((4, 2))], name, [v(0)], {"out": {"view": [{"split": [{"op": 1}]}, ":, 1"]}},
+             label="red:a:axis0:outcol")
+        case(split0, [a], name, [v(0)], {"out": {"self": "0"}}, label="red:a:axis0:selfrow")
+
+    # ---- K. put with one integer index ----
+    for text, label in ((r, "r"), (a, "a")):
+        nd = text[1].ndim
+        size = text[1].size
+        values = {"view": [split0, "::-1" + ", :" * (nd - 1)]}
+        case(split0, [text], "put", [v(0)], {"values": values}, label=f"{label}:0", inplace=True)
+        case(split0, [text], "put", [v(-1)], {"values": values, "mode": v("wrap")}, label=f"{label}:-1:wrap", inplace=True)
+        case(split0, [text], "put", [v(size + 3)], {"values": values}, label=f"{label}:oob")
+        case(split0, [text], "put", [v(size + 3)], {"values": values, "mode": v("clip")}, label=f"{label}:oob:clip",
+             inplace=True)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

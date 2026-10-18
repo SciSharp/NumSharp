@@ -996,16 +996,20 @@ namespace NumSharp.Backends
             return new NDArray(type, Shape.Adopt(ones), false);
         }
 
-        /// <summary>The loop-dtype value in <paramref name="slot"/>, boxed (for an <c>out=</c> element write).</summary>
+        /// <summary>The loop-dtype value in <paramref name="slot"/>, boxed as the loop dtype's own CLR type (for an
+        ///     <c>out=</c> element write, which unboxes it as out's type).</summary>
         /// <param name="slot">The value's bytes.</param>
         /// <param name="loopType">float16 / float32 / float64 / complex128.</param>
         /// <returns>The boxed value.</returns>
+        /// <remarks>Each arm is cast to <see cref="object"/>: a switch expression takes its arms' best common type, which
+        ///     for double / float / Half / Complex is <see cref="Complex"/>, so without the casts every float loop's value
+        ///     was boxed as a Complex and an out= of the loop's own dtype failed its unboxing.</remarks>
         private static unsafe object BoxLoopValue(byte* slot, NPTypeCode loopType) => loopType switch
         {
-            NPTypeCode.Double => *(double*)slot,
-            NPTypeCode.Single => *(float*)slot,
-            NPTypeCode.Half => BitConverter.UInt16BitsToHalf(*(ushort*)slot),
-            _ => *(Complex*)slot,
+            NPTypeCode.Double => (object)*(double*)slot,
+            NPTypeCode.Single => (object)*(float*)slot,
+            NPTypeCode.Half => (object)BitConverter.UInt16BitsToHalf(*(ushort*)slot),
+            _ => (object)*(Complex*)slot,
         };
     }
 }

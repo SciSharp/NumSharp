@@ -815,6 +815,42 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     <see cref="DivideByCountLikeNumPy(NDArray, long)"/> with one count per output — NumPy's <c>rcount</c> under a
+        ///     <c>where=</c> mask, which <c>_count_reduce_items</c> computes as <c>umr_sum(broadcast_to(where, arr.shape),
+        ///     axis, intp, None, keepdims)</c> —: <c>true_divide(a, rcount, out=a, casting='unsafe')</c>, the same arithmetic
+        ///     element by element (the float64 loop rounded once into <paramref name="a"/>'s dtype for a real dtype, the
+        ///     complex loop for complex, the unsafe cast of the float64 quotient for an integer or bool dtype).
+        /// </summary>
+        /// <param name="a">The sums to divide; overwritten with the quotients. Writeable.</param>
+        /// <param name="counts">The int64 counts, broadcastable to <paramref name="a"/>; a 0 gives NumPy's NaN / ±inf (and
+        ///     their unsafe casts).</param>
+        /// <remarks>Internal: <see cref="NDListArray"/>'s mean divides its masked sum in a <c>dtype=</c> loop with it.</remarks>
+        internal static void DivideByCountLikeNumPy(NDArray a, NDArray counts)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(a);   // an engine method computes plain: np.true_divide below must not apply a matrix rule
+            switch (a.GetTypeCode)
+            {
+                case NPTypeCode.Double:
+                case NPTypeCode.Complex:
+                case NPTypeCode.Decimal:
+                    np.true_divide(a, counts, @out: a);
+                    break;
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                    // The float64 loop, then a same_kind cast into the narrower float (one rounding from double).
+                    np.true_divide(a, counts, @out: a, dtype: np.float64);
+                    break;
+                default:
+                {
+                    // An integer / bool / char sum: the float64 quotients, unsafe cast back (a 0 / 0 NaN is True, INT_MIN).
+                    using var q = np.true_divide(a, counts);
+                    np.copyto(a, q, casting: "unsafe");
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
         ///     NumPy's <c>_std</c> step on the variance, in place: <c>sqrt(ret, out=ret)</c> for an array (the ufunc's own
         ///     loop: float16 via float32, float32, float64, complex <c>csqrt</c>) and <c>ret.dtype.type(sqrt(ret))</c> for a
         ///     scalar. They differ only for an integer or bool variance (an integer <c>dtype=</c>): the array form raises
@@ -828,7 +864,9 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException">An integer or bool <paramref name="ret"/> with dimensions: "Cannot cast
         /// ufunc 'sqrt' output from dtype('float64') to dtype('int32') with casting rule 'same_kind'" (the float dtype
         /// names the sqrt loop the integer width selects).</exception>
-        private static void SqrtLikeNumPy(NDArray ret, bool scalarResult)
+        /// <remarks>Internal, not private: <see cref="NDListArray"/>'s std runs the same <c>_std</c> step on the variance of
+        ///     an empty list array (its values in a <c>dtype=</c> loop or an <c>out=</c>).</remarks>
+        internal static void SqrtLikeNumPy(NDArray ret, bool scalarResult)
         {
             var rt = ret.GetTypeCode;
             if (rt == NPTypeCode.Decimal)

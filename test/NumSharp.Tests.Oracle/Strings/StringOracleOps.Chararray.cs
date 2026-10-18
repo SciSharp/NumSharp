@@ -302,7 +302,11 @@ namespace NumSharp.Tests.Strings
                 "mT" => c.mT,
                 "real" => c.real,
                 "imag" => c.imag,
-                "transpose" => c.transpose(),
+                // transpose(*axes): integers, or one sequence of them (NumPy's tuple form); none reverses.
+                "transpose" => args.Length == 0 ? c.transpose()
+                    : args[0].ValueKind == JsonValueKind.Object
+                        ? c.transpose(args[0].GetProperty("list").EnumerateArray().Select(x => x.GetInt32()).ToArray())
+                        : c.transpose(args.Select(x => x.GetInt32()).ToArray()),
                 "swapaxes" => c.swapaxes(args[0].GetInt32(), args[1].GetInt32()),
                 "reshape" => kw is JsonElement ro && ro.TryGetProperty("order", out var order)
                     ? c.reshape(new Shape(args.Select(x => x.GetInt64()).ToArray()), order.GetString()[0])
@@ -311,11 +315,9 @@ namespace NumSharp.Tests.Strings
                 "flatten" => args.Length == 0 ? c.flatten() : c.flatten(args[0].GetString()[0]),
                 "squeeze" => c.squeeze(),
                 "copy" => args.Length == 0 ? c.copy() : c.copy(args[0].GetString()[0]),
-                "take" => args[0].ValueKind == JsonValueKind.Number
-                    ? c.take(args[0].GetInt64(), axis)
-                    : c.take(RawArray(args[0].GetProperty("list")), axis),
+                "take" => CharArrayTake(c, args[0], axis, kw),
                 "repeat" => c.repeat(args[0].GetInt32(), axis),
-                "compress" => c.compress(RawArray(args[0].GetProperty("list")), axis),
+                "compress" => CharArrayCompress(c, args[0], axis, kw),
                 "diagonal" => c.diagonal(),
                 "view" => args.Length == 0 ? c.view() : MemberView(c, args[0]),
                 "astype" => kw is JsonElement ck && ck.TryGetProperty("copy", out var copy)
@@ -333,6 +335,58 @@ namespace NumSharp.Tests.Strings
                 var other => throw new InvalidOperationException($"the strchararray section has no member '{other}'"),
             };
             return new SelfResult(r, c);
+        }
+
+        /// <summary>
+        ///     <c>c.take(indices, axis=..., out=...)</c> as a ported line writes it: one integer or an index list, and an out=
+        ///     chararray (the chararray member, a chararray result) or a plain ndarray (the NDArray member, NumPy's plain out).
+        /// </summary>
+        /// <param name="c">The chararray.</param>
+        /// <param name="indices">The indices spec: a JSON integer or <c>{"list": [...]}</c>.</param>
+        /// <param name="axis">The axis keyword, or null.</param>
+        /// <param name="kw">The keywords (an <c>out</c> spec: <see cref="CharArrayOut"/>), or null.</param>
+        /// <returns>The taken array (the out itself when given).</returns>
+        private static NDArray CharArrayTake(NDCharArray c, JsonElement indices, int? axis, JsonElement? kw)
+        {
+            NDArray idx = indices.ValueKind == JsonValueKind.Number ? indices.GetInt64() : RawArray(indices.GetProperty("list"));
+            return CharArrayOut(kw) switch
+            {
+                null => c.take(idx, axis),
+                NDCharArray chars => c.take(idx, axis, chars),
+                var plain => c.take(idx, axis, plain),
+            };
+        }
+
+        /// <summary><c>c.compress(condition, axis=..., out=...)</c> as a ported line writes it (see
+        ///     <see cref="CharArrayTake"/> for the out= forms).</summary>
+        /// <param name="c">The chararray.</param>
+        /// <param name="condition">The condition spec: <c>{"list": [...]}</c>.</param>
+        /// <param name="axis">The axis keyword, or null.</param>
+        /// <param name="kw">The keywords (an <c>out</c> spec), or null.</param>
+        /// <returns>The compressed array (the out itself when given).</returns>
+        private static NDArray CharArrayCompress(NDCharArray c, JsonElement condition, int? axis, JsonElement? kw)
+        {
+            var cond = RawArray(condition.GetProperty("list"));
+            return CharArrayOut(kw) switch
+            {
+                null => c.compress(cond, axis),
+                NDCharArray chars => c.compress(cond, axis, chars),
+                var plain => c.compress(cond, axis, plain),
+            };
+        }
+
+        /// <summary>The out= array of a member case: <c>{"out": {"out": [shape, dtype, cls]}}</c> is
+        ///     <c>np.zeros(shape, dtype)</c>, viewed as an <see cref="NDCharArray"/> for <c>cls == "chararray"</c>.</summary>
+        /// <param name="kw">The keywords, or null.</param>
+        /// <returns>The out array, or null when the case passes none.</returns>
+        private static NDArray CharArrayOut(JsonElement? kw)
+        {
+            if (kw is not JsonElement k || !k.TryGetProperty("out", out var spec))
+                return null;
+            var parts = spec.GetProperty("out").EnumerateArray().ToArray();
+            var shape = new Shape(parts[0].EnumerateArray().Select(x => x.GetInt64()).ToArray());
+            var zeros = np.zeros(shape, np.dtype(parts[1].GetString()));
+            return parts[2].GetString() == "chararray" ? zeros.view(typeof(NDCharArray)) : zeros;
         }
 
         /// <summary><c>c.view(x)</c> with one argument: an array class (<c>{"dtype": "ndarray"}</c> → <c>typeof(NDArray)</c>)

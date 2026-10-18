@@ -223,15 +223,18 @@ namespace NumSharp
             [NDScoped] get => From(base.mT, this);
         }
 
-        /// <summary>The chararray with its axes permuted (NumPy's <c>c.transpose(axes)</c>); without an argument the axes
+        /// <summary>The chararray with its axes permuted (NumPy's <c>c.transpose(*axes)</c>); without an argument the axes
         ///     reversed.</summary>
-        /// <param name="premute">The permutation, or <c>null</c> to reverse the axes.</param>
+        /// <param name="axes">NumPy's <c>*axes</c>: the permutation as separate integers (<c>c.transpose(1, 0)</c>) or one
+        ///     array (NumPy's tuple), or none (or null) to reverse the axes.</param>
         /// <returns>A view.</returns>
         /// <exception cref="ArgumentException">The permutation does not match the axes.</exception>
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
+        /// <remarks>One member, NumPy's signature (<c>ndarray.transpose</c> takes no keyword). It hides
+        ///     <see cref="NDArray.transpose(int[])"/>, whose parameter is the same array.</remarks>
         [NDScoped]
-        public new NDCharArray transpose(int[] premute = null) => From(base.transpose(premute), this);
+        public new NDCharArray transpose(params int[] axes) => From(base.transpose(axes is { Length: > 0 } ? axes : null), this);
 
         /// <summary>The chararray with two axes exchanged (NumPy's <c>c.swapaxes(a, b)</c>).</summary>
         /// <param name="axis1">The first axis.</param>
@@ -339,29 +342,35 @@ namespace NumSharp
         public new NDCharArray diagonal(int offset = 0, int axis1 = 0, int axis2 = 1) => From(base.diagonal(offset, axis1, axis2), this);
 
         /// <summary>
-        ///     Elements selected by index along an axis, as a chararray (NumPy's <c>c.take(indices, axis, mode)</c>).
+        ///     Elements selected by index along an axis, as a chararray (NumPy's <c>c.take(indices, axis, out, mode)</c>).
         ///     Without an axis the chararray is read flat.
         /// </summary>
-        /// <param name="indices">The indices. A 0-d index selects one element.</param>
+        /// <param name="indices">The indices: an integer array, or one C# integer (<c>c.take(1)</c>, NumPy's 0-d index, which
+        ///     selects one element).</param>
         /// <param name="axis">The axis, or <c>null</c> to index the flattened chararray.</param>
+        /// <param name="out">NumPy's <c>out=</c>: a chararray of the result's shape that receives the elements and is
+        ///     returned, or null. A plain <see cref="NDArray"/> out binds <see cref="NDArray.take(NDArray, int?, NDArray, string)"/>
+        ///     instead and returns that array, as NumPy returns its <c>out</c> whatever its class.</param>
         /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c> or <c>"clip"</c> for an index out of bounds.</param>
-        /// <returns>A new chararray that owns its data; for a 0-d result the element as a read-only 0-d stand-in, NOT
-        ///     stripped (NumPy returns the element's NumPy scalar, which is not <c>__getitem__</c>'s stripped value).</returns>
+        /// <returns>A new chararray that owns its data (or <paramref name="out"/>); for a 0-d result the element as a
+        ///     read-only 0-d stand-in, NOT stripped (NumPy's <c>PyArray_Return</c> gives the element's NumPy scalar, which is
+        ///     not <c>__getitem__</c>'s stripped value).</returns>
         /// <exception cref="IndexError">An index is out of bounds under <c>"raise"</c>.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ArgumentException">An index array of a non-integer dtype, or an unknown mode.</exception>
-        /// <exception cref="ValueError">This chararray holds data that is not string data.</exception>
+        /// <exception cref="ValueError">This chararray holds data that is not string data; NumPy's out= errors (another shape,
+        ///     read-only).</exception>
+        /// <remarks>One overload, NumPy's signature: <paramref name="indices"/> takes NumPy's int or int array_like through
+        ///     NumSharp's implicit conversions, so the one-index overload this member used to have adds nothing.</remarks>
         [NDScoped]
-        public NDCharArray take(NDArray indices, int? axis = null, string mode = "raise")
-            => TakeResult(base.take(indices, axis, null, mode));
-
-        /// <inheritdoc cref="take(NDArray, int?, string)"/>
-        /// <param name="index">One index.</param>
-        /// <param name="axis">The axis, or <c>null</c> to index the flattened chararray.</param>
-        /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c> or <c>"clip"</c>.</param>
-        [NDScoped]
-        public NDCharArray take(long index, int? axis = null, string mode = "raise")
-            => TakeResult(base.take(index, axis, null, mode));
+        public NDCharArray take(NDArray indices, int? axis = null, NDCharArray @out = null, string mode = "raise")
+        {
+            if (@out is null)
+                return TakeResult(base.take(indices, axis, null, mode));
+            // ndarray.take(out=) writes the elements into out and returns it — its scalar for a 0-d result (PyArray_Return).
+            var written = base.take(indices, axis, @out, mode);
+            return written.ndim == 0 ? TakeResult(written) : @out;
+        }
 
         /// <summary>The chararray form of a <c>take</c> result: NumPy's <c>PyArray_Return</c> turns a 0-d result into the
         ///     element's scalar.</summary>
@@ -376,35 +385,42 @@ namespace NumSharp
         }
 
         /// <summary>The elements where <paramref name="condition"/> is true, as a chararray (NumPy's
-        ///     <c>c.compress(condition, axis)</c>); without an axis the flattened elements.</summary>
+        ///     <c>c.compress(condition, axis, out)</c>); without an axis the flattened elements.</summary>
         /// <param name="condition">A 1-d bool array.</param>
         /// <param name="axis">The axis to select along, or <c>null</c>.</param>
-        /// <returns>A new chararray that owns its data.</returns>
+        /// <param name="out">NumPy's <c>out=</c>: a chararray of the result's shape that receives the elements and is
+        ///     returned, or null. A plain <see cref="NDArray"/> out binds <see cref="NDArray.compress"/> instead and returns
+        ///     that array, as NumPy returns its <c>out</c> whatever its class.</param>
+        /// <returns>A new chararray that owns its data, or <paramref name="out"/>.</returns>
         /// <exception cref="ValueError"><paramref name="condition"/> is not 1-d, or this chararray holds data that is not
-        ///     string data.</exception>
+        ///     string data; NumPy's out= errors (compress is a take of the condition's nonzero indices: <c>output array does
+        ///     not match result of ndarray.take</c>).</exception>
         /// <exception cref="IndexError"><paramref name="condition"/> is longer than the axis.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>One member, NumPy's signature.</remarks>
         [NDScoped]
-        public NDCharArray compress(NDArray condition, int? axis = null) => From(base.compress(condition, axis, null), this);
+        public NDCharArray compress(NDArray condition, int? axis = null, NDCharArray @out = null)
+        {
+            if (@out is null)
+                return From(base.compress(condition, axis, null), this);
+            // ndarray.compress(out=) fills out and returns it (compress is never 0-d).
+            base.compress(condition, axis, @out);
+            return @out;
+        }
 
         /// <summary>Each element repeated, as a chararray (NumPy's <c>c.repeat(repeats, axis)</c>); without an axis the
         ///     flattened elements.</summary>
-        /// <param name="repeats">The repeat count per element (one value, or one per element of the axis).</param>
+        /// <param name="repeats">The repeat counts: one C# integer for every element (<c>c.repeat(2)</c>, NumPy's
+        ///     <c>np.asarray(2)</c>), or an integer array of one count per element of the axis.</param>
         /// <param name="axis">The axis to repeat along, or <c>null</c>.</param>
         /// <returns>A new chararray that owns its data.</returns>
         /// <exception cref="ValueError">A negative count, counts that do not match the axis, or this chararray holds data
         ///     that is not string data.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks>One member, NumPy's signature: every <see cref="NDArray.repeat(NDArray, int?)"/> call form converts to
+        ///     this <see cref="NDArray"/> parameter, so none of NDArray's repeat overloads binds through a chararray.</remarks>
         [NDScoped]
         public new NDCharArray repeat(NDArray repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
-
-        /// <inheritdoc cref="repeat(NDArray, int?)"/>
-        [NDScoped]
-        public new NDCharArray repeat(int repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
-
-        /// <inheritdoc cref="repeat(NDArray, int?)"/>
-        [NDScoped]
-        public new NDCharArray repeat(long repeats, int? axis = null) => From(base.repeat(repeats, axis), this);
 
         #endregion
 

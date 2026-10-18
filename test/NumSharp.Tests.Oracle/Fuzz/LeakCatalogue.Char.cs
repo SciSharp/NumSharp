@@ -1021,7 +1021,7 @@ namespace NumSharp.Tests.Fuzz
                 using var kept = np.@char.splitlines(u, keep);
                 return np.@char.splitlines(u);
             });
-            E(l, "np.char.join", "U / S / StringDType results, a separator array, the iterable error, over a list array", f =>
+            E(l, "np.char.join", "U / S / StringDType results, a separator array, the iterable error, over a list array (an empty one: no NDArray form)", f =>
             {
                 using var u = np.array(new[] { "ab", "cde" });
                 using var seps = np.array(new[] { "-", "" });
@@ -1047,7 +1047,15 @@ namespace NumSharp.Tests.Fuzz
                 }
                 using var nothing = np.zeros(new Shape(0), np.dtype("U2"));
                 using var none = np.@char.split(nothing);
-                using var emptyLists = np.@char.join("-", none);
+                // NumPy 2.4.2's answer over an empty list array is an empty OBJECT array, which an NDArray result cannot hold:
+                // the NotSupportedException comes after the broadcast, whose intermediates are audited too.
+                try
+                {
+                    np.@char.join("-", none);
+                }
+                catch (NotSupportedException)
+                {
+                }
                 return np.@char.join("-", u);
             });
             E(l, "NDCharArray.split", "unstripped elements, a separator and a limit", f =>
@@ -1067,12 +1075,19 @@ namespace NumSharp.Tests.Fuzz
                 using var lines = c.splitlines();
                 return c.splitlines(true);
             });
-            E(l, "NDCharArray.join", "the chararray as the separators, a plain result; over a list array", f =>
+            E(l, "NDCharArray.join", "the chararray as the separators, a plain result; over a list array (an empty one: no NDArray form)", f =>
             {
                 using var c = np.@char.array(new[] { "-", "+" });
                 using var nothing = np.zeros(new Shape(0, 2), np.dtype("U2"));
                 using var none = np.@char.split(nothing);
-                using var emptyLists = c.join(none);
+                // NumPy's empty object array has no NDArray form: the NotSupportedException after the broadcast.
+                try
+                {
+                    c.join(none);
+                }
+                catch (NotSupportedException)
+                {
+                }
                 return c.join(new[] { "xy", "z" });
             });
             AddListArray(l);

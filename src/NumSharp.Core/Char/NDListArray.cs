@@ -270,39 +270,32 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>item()</c>: the list of a one-element array as a .NET list of its pieces (<see cref="string"/> for
-        ///     str pieces, <c>byte[]</c> for bytes pieces), every piece exact.
+        ///     NumPy's <c>item(*args)</c>: the list of one element as a .NET list of its pieces (<see cref="string"/> for str
+        ///     pieces, <c>byte[]</c> for bytes pieces), every piece exact — no argument for the element of a one-element
+        ///     array, ONE integer for a flat index in C order (negative from the end), one integer per axis for a full index.
         /// </summary>
+        /// <param name="index">None (<c>lists.item()</c>), a flat index, or one integer per axis; a C# <c>long[]</c> is
+        ///     NumPy's index tuple (<c>a.item((1, 2))</c>).</param>
         /// <returns>The list.</returns>
-        /// <exception cref="ValueError">The array has more or fewer than one element (NumPy's <c>can only convert an array of
-        ///     size 1 to a Python scalar</c>).</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
-        public List<object> item()
-        {
-            ThrowIfDisposed();
-            if (size != 1)
-                throw new ValueError("can only convert an array of size 1 to a Python scalar");
-            return Heap.ToList(FlatId(0));
-        }
-
-        /// <summary>
-        ///     NumPy's <c>item(*args)</c>: the list of one element, its pieces exact — ONE integer is a flat index in C order
-        ///     (negative from the end), one integer per axis a full index.
-        /// </summary>
-        /// <param name="index">A flat index, or one integer per axis.</param>
-        /// <returns>The list.</returns>
+        /// <exception cref="ValueError">No argument and more or fewer than one element (NumPy's <c>can only convert an array
+        ///     of size 1 to a Python scalar</c>); neither one integer nor one per axis (<c>incorrect number of indices for
+        ///     array</c>).</exception>
         /// <exception cref="IndexError">An index outside the array (<c>index 6 is out of bounds for size 6</c> for a flat
         ///     index, <c>index 5 is out of bounds for axis 1 with size 3</c> for a full one).</exception>
-        /// <exception cref="ValueError">Neither one integer nor one per axis (<c>incorrect number of indices for
-        ///     array</c>).</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
+        /// <remarks>One member, NumPy's signature: the <c>params</c> array is NumPy's <c>*args</c>, so the no-argument form is
+        ///     this member with an empty array.</remarks>
         public List<object> item(params long[] index)
         {
             ThrowIfDisposed();
             if (index is not { Length: > 0 })
-                return item();
+            {
+                // array_item with no arguments: the one element of a size-1 array.
+                if (size != 1)
+                    throw new ValueError("can only convert an array of size 1 to a Python scalar");
+                return Heap.ToList(FlatId(0));
+            }
             // PyArray_MultiIndexGetItem for one index per axis; a single integer of a 0-d or N-d array is a flat index into
             // the C-order sequence (array_item's `nargs == 1` branch).
             if (index.Length == 1 && ndim != 1)

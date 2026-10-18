@@ -30,7 +30,7 @@ namespace NumSharp
     ///     The <c>numpy.char</c> module surface, reachable as <see cref="np.@char"/>: NumPy's legacy vectorized string
     ///     operations. Its own functions are the comparisons that strip trailing whitespace (<see cref="equal"/>,
     ///     <see cref="not_equal"/>, <see cref="less"/>, <see cref="less_equal"/>, <see cref="greater"/>,
-    ///     <see cref="greater_equal"/>, <see cref="compare_chararrays(object, object, string, bool)"/>), <see cref="multiply"/>
+    ///     <see cref="greater_equal"/>, <see cref="compare_chararrays(object, object, object, bool)"/>), <see cref="multiply"/>
     ///     (its ValueError rule), <see cref="partition"/> / <see cref="rpartition"/> (the three parts stacked on a new last
     ///     axis), the object path (<see cref="split"/>, <see cref="rsplit"/>, <see cref="splitlines"/>,
     ///     <see cref="join(object, object)"/>) and the <c>chararray</c> constructors (<see cref="chararray"/>,
@@ -195,14 +195,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="a1">The first operand (an <c>S</c> / <c>U</c> array or a text array_like; see the class remarks).</param>
         /// <param name="a2">The second operand, of the same class.</param>
-        /// <param name="cmp">The comparison as NumPy's Python <c>str</c>: <c>"=="</c>, <c>"!="</c>, <c>"&lt;"</c>,
-        ///     <c>"&lt;="</c>, <c>"&gt;"</c> or <c>"&gt;="</c> — read, as NumPy's <c>s#</c> argument does, as its UTF-8
-        ///     bytes.</param>
+        /// <param name="cmp">The comparison, as NumPy's <c>s#</c> argument reads it: a <see cref="string"/> (Python's
+        ///     <c>str</c>, read as its UTF-8 bytes) or a <c>byte[]</c> (Python's <c>bytes</c>, <c>"=="u8.ToArray()</c>), whose
+        ///     bytes must be <c>==</c>, <c>!=</c>, <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c> or <c>&gt;=</c>.</param>
         /// <param name="rstrip">True to strip each element's trailing NULs and ASCII whitespace before comparing.</param>
         /// <returns>The bool result of the broadcast shape (a 0-d array for two scalars), or null — NumPy's
         ///     <c>NotImplemented</c> — for an <c>S</c> operand against a <c>U</c> one.</returns>
-        /// <exception cref="TypeError"><paramref name="cmp"/> is null (<c>a bytes-like object is required, not
-        ///     'NoneType'</c>); or an operand is not <c>S</c> / <c>U</c> text (<c>comparison of non-string arrays</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="cmp"/> is neither text nor bytes (<c>a bytes-like object is required,
+        ///     not 'NoneType'</c> for null, the Python type's name otherwise); or an operand is not <c>S</c> / <c>U</c> text
+        ///     (<c>comparison of non-string arrays</c>).</exception>
         /// <exception cref="UnicodeEncodeError"><paramref name="cmp"/> holds a lone surrogate, which UTF-8 cannot encode
         ///     (CPython's <c>'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed</c>).</exception>
         /// <exception cref="ValueError"><paramref name="cmp"/> is not one of the six comparisons:
@@ -210,46 +211,34 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException">An operand is null.</exception>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
         /// <remarks>
-        ///     NumPy's order, all probed: <paramref name="cmp"/> is checked first (so a bad <c>cmp</c> wins over operands that
-        ///     are not text or do not broadcast), then both operands must be <c>S</c> / <c>U</c> (a NEP 55
-        ///     <c>StringDType</c> array is not), then a class mix answers <c>NotImplemented</c> (before the broadcast), then
-        ///     the broadcast.
+        ///     One overload, NumPy's signature: NumPy's <c>cmp</c> is a <c>str</c> or a read-only bytes-like object, two cases
+        ///     of one <see cref="object"/> parameter. NumPy's order, all probed: <paramref name="cmp"/> is checked first (so a
+        ///     bad <c>cmp</c> wins over operands that are not text or do not broadcast), then both operands must be
+        ///     <c>S</c> / <c>U</c> (a NEP 55 <c>StringDType</c> array is not), then a class mix answers
+        ///     <c>NotImplemented</c> (before the broadcast), then the broadcast.
         /// </remarks>
         [NDScoped]
-        public NDArray compare_chararrays(object a1, object a2, string cmp, bool rstrip)
+        public NDArray compare_chararrays(object a1, object a2, object cmp, bool rstrip)
         {
-            if (cmp is null)
-                throw new TypeError("a bytes-like object is required, not 'NoneType'");
-            // NumPy's "s#" reads a str as its UTF-8 bytes and checks their count: 'é' is two bytes and fails the first-char
-            // test, a lone surrogate fails the encoding itself.
-            int length = NDUtf8.GetByteCount(cmp);
-            if (length is < 1 or > 2)
-                throw new ValueError(CmpMessage);
-            Span<byte> bytes = stackalloc byte[2];
-            NDUtf8.Encode(cmp, bytes);
-            return CompareParsed(a1, a2, ParseCmp(bytes.Slice(0, length)), rstrip);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>np.char.compare_chararrays(a1, a2, cmp, rstrip)</c> with <paramref name="cmp"/> given as NumPy's
-        ///     Python <c>bytes</c> (<c>b'=='</c>), which its <c>s#</c> argument accepts too.
-        /// </summary>
-        /// <param name="a1">The first operand.</param>
-        /// <param name="a2">The second operand.</param>
-        /// <param name="cmp">The comparison's bytes: <c>"=="u8</c>, <c>"!="u8</c>, <c>"&lt;"u8</c>, <c>"&lt;="u8</c>,
-        ///     <c>"&gt;"u8</c> or <c>"&gt;="u8</c>.</param>
-        /// <param name="rstrip">True to strip each element's trailing NULs and ASCII whitespace before comparing.</param>
-        /// <returns>The bool result, or null (NumPy's <c>NotImplemented</c>) for an <c>S</c> / <c>U</c> pair.</returns>
-        /// <exception cref="TypeError"><paramref name="cmp"/> is null, or an operand is not <c>S</c> / <c>U</c> text.</exception>
-        /// <exception cref="ValueError"><paramref name="cmp"/> is not one of the six comparisons.</exception>
-        /// <exception cref="ArgumentNullException">An operand is null.</exception>
-        /// <exception cref="IncorrectShapeException">The operands do not broadcast.</exception>
-        [NDScoped]
-        public NDArray compare_chararrays(object a1, object a2, byte[] cmp, bool rstrip)
-        {
-            if (cmp is null)
-                throw new TypeError("a bytes-like object is required, not 'NoneType'");
-            return CompareParsed(a1, a2, ParseCmp(cmp), rstrip);
+            switch (cmp)
+            {
+                case string text:
+                {
+                    // NumPy's "s#" reads a str as its UTF-8 bytes and checks their count: 'é' is two bytes and fails the
+                    // first-char test, a lone surrogate fails the encoding itself.
+                    int length = NDUtf8.GetByteCount(text);
+                    if (length is < 1 or > 2)
+                        throw new ValueError(CmpMessage);
+                    Span<byte> bytes = stackalloc byte[2];
+                    NDUtf8.Encode(text, bytes);
+                    return CompareParsed(a1, a2, ParseCmp(bytes.Slice(0, length)), rstrip);
+                }
+                case byte[] raw:
+                    return CompareParsed(a1, a2, ParseCmp(raw), rstrip);
+                default:
+                    // "s#" takes nothing else (NumPy: None, an int, a list).
+                    throw new TypeError($"a bytes-like object is required, not '{NDPyObject.TypeName(cmp)}'");
+            }
         }
 
         // =============================================================================================================

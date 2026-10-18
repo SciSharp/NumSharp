@@ -346,7 +346,12 @@ namespace NumSharp.Tests.Backends.Strings
             prod.Should().Throw<TypeError>().WithMessage("can't multiply sequence by non-int of type 'list'");
             using (var one = r["1:2"])
             using (var p = one.prod(initial: 2)) Lists(p).Should().Be("['c', 'c']", "2 * ['c']");
-            using (var b = r.sum(null, np.dtype("bool"))) Values(b).Should().Be("True", "the OR of the lists' truths");
+            // dtype=bool: NumPy's bool loop over the lists' truths returns np.True_, a value a list array cannot hold. The one
+            // NumPy-shaped sum refuses it and names the call that gives NumPy's value (the OR of the lists' truths).
+            Action boolLoop = () => r.sum(null, np.dtype("bool"));
+            boolLoop.Should().Throw<NotSupportedException>().WithMessage("*np.sum(lists.astype(dtype), ...) in that dtype*");
+            using (var truths = r.astype(np.dtype("bool")))
+            using (var b = np.sum(truths, np.dtype("bool"))) Values(b).Should().Be("True", "the OR of the lists' truths");
             // where= without initial (get_initial_from_ufunc): a non-empty object reduction uses no identity, so the mask is
             // NumPy's refusal; an EMPTY one takes the identity, the int 0, which a list array cannot hold — no refusal (the
             // mutation pass found this split untested).

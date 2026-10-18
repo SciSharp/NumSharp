@@ -303,7 +303,8 @@ namespace NumSharp.Tests.Backends.Strings
         /// <summary>
         ///     NumPy 2.4.2 cannot finish <c>np.char.join(' ', np.char.split(a))</c>: every list joins, then
         ///     <c>_to_bytes_or_str_array</c> calls <c>ObjectDType(n)</c>, which takes no argument — NumSharp raises the same
-        ///     TypeError (after the per-element errors); an empty broadcast is an empty object array.
+        ///     TypeError (after the per-element errors). An empty broadcast is NumPy's empty OBJECT array, which the one
+        ///     NumPy-shaped join (an <see cref="NDArray"/> result) refuses.
         /// </summary>
         [TestMethod]
         public void Join_OverListArrays_NumPys2_4_2Failure()
@@ -314,9 +315,8 @@ namespace NumSharp.Tests.Backends.Strings
             new Action(() => np.@char.join(" ", bytesWords)).Should().Throw<TypeError>()
                 .WithMessage("sequence item 0: expected str instance, bytes found");
             using var none = np.@char.split(np.zeros(new Shape(0, 2), np.dtype("U2")));
-            using var empty = np.@char.join(np.array(new[] { "-", "+" }), none);
-            empty.shape.Should().Equal(0L, 2L);
-            // Through an object reference the empty result has no NDArray form.
+            new Action(() => np.@char.join(np.array(new[] { "-", "+" }), none)).Should().Throw<NotSupportedException>()
+                .WithMessage("*empty object array*");
             new Action(() => np.@char.join("-", (object)none)).Should().Throw<NotSupportedException>();
         }
 

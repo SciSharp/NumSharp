@@ -47,10 +47,8 @@ namespace NumSharp.Tests.Strings
                 {
                     var args = CharArgs(p, ops);
                     bool rstrip = (bool)args[3];
-                    // cmp is NumPy's str or bytes (or None): the facade's two overloads, a null through the str one.
-                    result = args[2] is byte[] bytes
-                        ? np.@char.compare_chararrays(args[0], args[1], bytes, rstrip)
-                        : np.@char.compare_chararrays(args[0], args[1], (string)args[2], rstrip);
+                    // cmp is any Python value (str, bytes, None, a number): the one member reads it as NumPy's "s#" argument.
+                    result = np.@char.compare_chararrays(args[0], args[1], args[2], rstrip);
                     return true;
                 }
                 case "char_add":
