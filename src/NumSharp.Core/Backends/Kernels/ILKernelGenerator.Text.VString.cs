@@ -48,6 +48,10 @@ namespace NumSharp.Backends.Kernels
         private static readonly MethodInfo s_vstringLess = typeof(NDVStringCells).GetMethod(nameof(NDVStringCells.Less), BindingFlags.NonPublic | BindingFlags.Static)
                                                            ?? throw new MissingMethodException(nameof(NDVStringCells), nameof(NDVStringCells.Less));
 
+        /// <summary><see cref="NDVStringCells.PrefetchPair"/>, the prefetching kernels' look-ahead.</summary>
+        private static readonly MethodInfo s_vstringPrefetchPair = typeof(NDVStringCells).GetMethod(nameof(NDVStringCells.PrefetchPair), BindingFlags.NonPublic | BindingFlags.Static)
+                                                                   ?? throw new MissingMethodException(nameof(NDVStringCells), nameof(NDVStringCells.PrefetchPair));
+
         /// <summary><see cref="NDVStringCells.Truth"/>, the truth body.</summary>
         private static readonly MethodInfo s_vstringTruth = typeof(NDVStringCells).GetMethod(nameof(NDVStringCells.Truth), BindingFlags.NonPublic | BindingFlags.Static)
                                                             ?? throw new MissingMethodException(nameof(NDVStringCells), nameof(NDVStringCells.Truth));
@@ -296,7 +300,10 @@ namespace NumSharp.Backends.Kernels
         /// <param name="Op">The comparison of A against B (<c>greater</c> / <c>greater_equal</c> are <c>less</c> /
         ///     <c>less_equal</c> of the swapped pair).</param>
         /// <param name="AIndex">The operand slot A is read from (0 or 1; B is the other, the bool output is slot 2).</param>
-        private readonly record struct VStringCompareKey(TextCompareOp Op, int AIndex);
+        /// <param name="Prefetch">True for the ordering form that prefetches the texts
+        ///     <see cref="NDVStringCells.TextPrefetchDistance"/> pairs ahead (long texts, enough of them that their first lines
+        ///     pass L2: <see cref="NDVStringCells.TakesPrefetchingKernel"/>).</param>
+        private readonly record struct VStringCompareKey(TextCompareOp Op, int AIndex, bool Prefetch);
 
         /// <summary>
         ///     The StringDType comparison kernel for one (operation, operand order), generated on first use and cached:
@@ -305,15 +312,21 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         /// <param name="op">The comparison of A against B.</param>
         /// <param name="aIndex">0, or 1 for the swapped pair of <c>greater</c> / <c>greater_equal</c>.</param>
+        /// <param name="prefetch">True for the prefetching form of an ordering (the caller decides with
+        ///     <see cref="NDVStringCells.TakesPrefetchingKernel"/>); both forms compute the same results.</param>
         /// <returns>The kernel, or null when dynamic code is unavailable or disabled (the caller takes its managed route).</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="aIndex"/> is not 0 or 1.</exception>
-        internal static NDInnerLoopFunc GetVStringCompareKernel(TextCompareOp op, int aIndex)
+        /// <exception cref="ArgumentException"><paramref name="prefetch"/> for an equality (<c>==</c> / <c>!=</c>), which has
+        ///     no prefetching form: it decides texts of different lengths by their cells' sizes and reads no text.</exception>
+        internal static NDInnerLoopFunc GetVStringCompareKernel(TextCompareOp op, int aIndex, bool prefetch = false)
         {
             if (aIndex is not (0 or 1))
                 throw new ArgumentOutOfRangeException(nameof(aIndex), aIndex, "A comparison reads its operands from slots 0 and 1.");
+            if (prefetch && op is not (TextCompareOp.Less or TextCompareOp.LessEqual))
+                throw new ArgumentException($"The {op} kernel has no prefetching form (an equality reads no text of a pair it decides by the sizes).", nameof(prefetch));
             if (!TextKernelsAvailable)
                 return null;
-            var key = new VStringCompareKey(op, aIndex);
+            var key = new VStringCompareKey(op, aIndex, prefetch);
             if (s_vstringCompareKernels.TryGetValue(key, out var cached))
                 return cached;
             try
@@ -357,13 +370,21 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         ///     Emits a comparison kernel: the frame (A, B, out), then the element loop whose body is one call of the inlined
-        ///     pair helper with the operation's flag as a constant (<c>!=</c> / <c>&lt;=</c>), its byte stored into out.
+        ///     pair helper with the operation's flag as a constant (<c>!=</c> / <c>&lt;=</c>), its byte stored into out. The
+        ///     prefetching form first asks for the texts of the pair <see cref="NDVStringCells.TextPrefetchDistance"/> ahead
+        ///     (<see cref="NDVStringCells.PrefetchPair"/>), while that pair is still inside the chunk.
         /// </summary>
         /// <param name="key">The kernel identity.</param>
         /// <returns>The compiled kernel.</returns>
+        /// <remarks>Why a prefetch: a pair of random texts is ordered by their first eight bytes, so an ordering of long
+        ///     texts reads one line of each text, every line a cache miss once the texts' first lines pass L2; the hardware
+        ///     prefetchers do not follow those steps (consecutive long texts start lines apart, unevenly: no constant stride
+        ///     for the stride prefetcher, no adjacent lines for the streamer). Measured (pinned) on <c>np.less</c> over
+        ///     100,000 texts of 300–500 bytes: 27.7 → 17.7 ns a pair, where NumPy's loop takes 34.0. An equality has no
+        ///     prefetching form (<see cref="NDVStringCells.TakesPrefetchingKernel"/>).</remarks>
         private static NDInnerLoopFunc GenerateVStringCompareKernel(VStringCompareKey key)
         {
-            var dm = NewTextKernelMethod($"NDVStringCompare_{key.Op}_a{key.AIndex}");
+            var dm = NewTextKernelMethod($"NDVStringCompare_{key.Op}_a{key.AIndex}{(key.Prefetch ? "_prefetch" : "")}");
             var il = dm.GetILGenerator();
             var frame = EmitTextFrame(il, new[] { key.AIndex, 1 - key.AIndex, 2 });
             bool ordering = key.Op is TextCompareOp.Less or TextCompareOp.LessEqual;
@@ -372,6 +393,28 @@ namespace NumSharp.Backends.Kernels
             int flag = key.Op is TextCompareOp.NotEqual or TextCompareOp.LessEqual ? 1 : 0;
             EmitTextElementLoop(il, frame, new[] { true, true, true }, () =>
             {
+                if (key.Prefetch)
+                {
+                    // if (i + D < count) PrefetchPair(pA + D * sA, pB + D * sB, aux): only cells of this chunk are read.
+                    var skip = il.DefineLabel();
+                    il.Emit(OpCodes.Ldloc, frame.Index);
+                    il.Emit(OpCodes.Ldc_I8, (long)NDVStringCells.TextPrefetchDistance);
+                    il.Emit(OpCodes.Add);
+                    il.Emit(OpCodes.Ldarg_2);
+                    il.Emit(OpCodes.Bge, skip);
+                    for (int k = 0; k < 2; k++)
+                    {
+                        il.Emit(OpCodes.Ldloc, frame.Pointers[k]);
+                        il.Emit(OpCodes.Ldloc, frame.Strides[k]);
+                        il.Emit(OpCodes.Ldc_I8, (long)NDVStringCells.TextPrefetchDistance);
+                        il.Emit(OpCodes.Mul);
+                        il.Emit(OpCodes.Conv_I);
+                        il.Emit(OpCodes.Add);
+                    }
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Call, s_vstringPrefetchPair);
+                    il.MarkLabel(skip);
+                }
                 il.Emit(OpCodes.Ldloc, frame.Pointers[2]);
                 il.Emit(OpCodes.Ldloc, frame.Pointers[0]);
                 il.Emit(OpCodes.Ldloc, frame.Pointers[1]);

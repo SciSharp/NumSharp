@@ -45,6 +45,15 @@ namespace NumSharp.Backends.Strings
     internal static class NDVStringComparison
     {
         /// <summary>
+        ///     Test hook: the kernel the last comparison with a non-empty result on the calling thread ran, so a test can prove
+        ///     which form (<see cref="NDVStringCells.TakesPrefetchingKernel"/>) computed its values, not only which one the
+        ///     choice named.
+        /// </summary>
+        /// <remarks>Thread-static (the test suite runs in parallel); production code never reads it.</remarks>
+        [ThreadStatic]
+        internal static NDInnerLoopFunc LastKernel;
+
+        /// <summary>
         ///     Computes <c>ufunc(x1, x2, out=out, where=where)</c> for a pair with a <c>StringDType</c> operand, after
         ///     <see cref="NDStringUfuncs.BinaryGuard"/> accepted the call.
         /// </summary>
@@ -92,7 +101,12 @@ namespace NumSharp.Backends.Strings
                 result = @out is not null && !castOut ? @out : new NDArray(NPTypeCode.Boolean, ResultShape(dims, x1, x2, where), false);
                 if (result.size != 0)
                 {
-                    var kernel = ILKernelGenerator.GetVStringCompareKernel(op, swap ? 1 : 0) ?? ManagedKernel(op, swap ? 1 : 0);
+                    // An ordering of long texts whose first lines pass L2 takes the form that prefetches the texts ahead of
+                    // the pair it compares (every such pair is a cache miss the hardware prefetchers do not predict); both
+                    // forms give the same results.
+                    bool prefetch = NDVStringCells.TakesPrefetchingKernel(op, t1.Storage.VStringSlice, t1.size, t2.Storage.VStringSlice, t2.size);
+                    var kernel = ILKernelGenerator.GetVStringCompareKernel(op, swap ? 1 : 0, prefetch) ?? ManagedKernel(op, swap ? 1 : 0);
+                    LastKernel = kernel;
                     RunLocked(kernel, t1, t2, result, where, swap, code);
                 }
                 if (!castOut)

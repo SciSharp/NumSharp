@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends.Strings
 {
@@ -615,6 +616,141 @@ namespace NumSharp.Backends.Strings
                 && wa != wb && !nulA)
                 return wa < wb ? (byte)1 : (byte)0;
             return ComparePairSlow(a, b, aux, orEqual ? TextCompareOp.LessEqual : TextCompareOp.Less);
+        }
+
+        /// <summary>
+        ///     The distance, in elements, at which a comparison kernel's prefetching form (<see cref="PrefetchPair"/>) asks for
+        ///     the texts ahead of the pair it compares: far enough that a text missing the caches arrives in time, near enough
+        ///     that the line is still in L1 when the pair is reached (an NTA line is not kept in L2) and that most of an
+        ///     iterator chunk is covered. 16 was the most even of 8 / 16 / 24 / 32 / 48 / 64 over the sizes measured: 8 is up
+        ///     to 13 % faster at 60,000 texts of 300–500 bytes and up to 17 % slower at 20,000; 32 up to 14 % faster at
+        ///     200,000 and up to 27 % slower at 60,000.
+        /// </summary>
+        internal const int TextPrefetchDistance = 16;
+
+        /// <summary>The distinct texts, both operands together, from which <see cref="PrefetchesTexts"/> asks for the
+        ///     prefetching kernel: below it the first lines of the texts fit in L2 (16,384 lines of 64 bytes are 1 MiB, half
+        ///     the 2 MiB L2 of the host measured) and a prefetch only adds instructions.</summary>
+        internal const long TextPrefetchMinTexts = 16_384;
+
+        /// <summary>The average arena bytes per cell from which <see cref="PrefetchesTexts"/> asks for the prefetching kernel:
+        ///     shorter texts share cache lines, which the hardware prefetchers already stream.</summary>
+        internal const long TextPrefetchMinTextBytes = 128;
+
+        /// <summary>
+        ///     Whether an ordering over two <c>StringDType</c> operands should take the prefetching kernel: texts that live
+        ///     outside their cells, long enough to sit on lines of their own (on average at least
+        ///     <see cref="TextPrefetchMinTextBytes"/> arena bytes a cell, over the buffers), and enough of them that their first
+        ///     lines do not stay in L2 (at least <see cref="TextPrefetchMinTexts"/> distinct texts touched).
+        /// </summary>
+        /// <param name="a">The first operand's cells (its buffer's).</param>
+        /// <param name="aSize">The first operand's element count (the view's, before broadcasting: a one-element operand
+        ///     touches one text).</param>
+        /// <param name="b">The second operand's cells (may share <paramref name="a"/>'s allocator).</param>
+        /// <param name="bSize">The second operand's element count.</param>
+        /// <returns>True for the prefetching kernel; always false where the host has no prefetch instruction (non-x86).</returns>
+        /// <remarks>
+        ///     <para>A heuristic, read without the allocators' locks: a stale value only picks the other kernel, which computes
+        ///     the same result. Two views of ONE buffer count its texts once (a view and its reverse touch the same texts).</para>
+        ///     <para>Measured on the less loop (pinned, the same pairs compared again and again, so the texts are as warm as
+        ///     they get — a cold call only gains more; ns a pair, without → with the NTA prefetch at 16): texts of 300–500
+        ///     bytes, 10,000 / 13,000 / 16,000 / 20,000 / 60,000 / 200,000 texts touched (three processes each): 5.6–5.7 →
+        ///     6.8–7.0, 5.4–6.1 → 6.9, 7.9–9.2 → 7.4–7.8, 13.9–14.7 → 8.5–9.0, 24.1–26.2 → 12.7–13.1, 30.5–33.3 → 20.7–23.2;
+        ///     texts of 128 / 200 bytes at 30,800 / 20,200 texts: 13.1–13.2 → 8.7 and 9.7–11.7 → 7.2–7.5, and of 400 bytes
+        ///     at 10,300: 5.1–5.9 → 6.8; texts of 41 bytes at 350,000: 5.8–6.1 → 7.1–7.6. So texts sharing lines and texts
+        ///     whose first lines fit in L2 keep the plain kernel.</para>
+        ///     <para>Texts of 64–127 bytes would gain from a T0 prefetch (at 230,000 texts of 65 / 97 bytes: 9.3–9.6 → 7.2–7.5
+        ///     and 13.5–13.7 → 8.4–8.9, where NTA gives 8.5–9.8 and 9.8): a second prefetching form not built.</para>
+        /// </remarks>
+        internal static bool PrefetchesTexts(VStringArraySlice a, long aSize, VStringArraySlice b, long bSize)
+        {
+            if (!Sse.IsSupported)
+                return false;
+            bool same = ReferenceEquals(a.Allocator, b.Allocator);
+            long touched = same ? System.Math.Max(aSize, bSize) : aSize + bSize;
+            if (touched < TextPrefetchMinTexts)
+                return false;
+            long arena = a.Allocator.ArenaUsed + (same ? 0 : b.Allocator.ArenaUsed);
+            long cells = a.Count + (same ? 0 : b.Count);
+            return cells > 0 && arena / cells >= TextPrefetchMinTextBytes;
+        }
+
+        /// <summary>
+        ///     Test hook for the ordering kernels' form, on the calling thread only: 0 (the default) lets
+        ///     <see cref="PrefetchesTexts"/> decide, 1 forces the prefetching kernel, 2 forces the plain one. Both forms compute
+        ///     the same results; the hook lets a test hold one against the other on inputs of any size, and lets a benchmark
+        ///     time both in one process. An equality takes the plain kernel whatever the hook says
+        ///     (<see cref="TakesPrefetchingKernel"/>).
+        /// </summary>
+        /// <remarks>Thread-static, so a test that sets it cannot change the kernel another test's thread takes (the test
+        ///     suite runs in parallel); a value other than 0, 1 or 2 reads as 0.</remarks>
+        [ThreadStatic]
+        internal static int TextPrefetchOverride;
+
+        /// <summary>
+        ///     The kernel form a comparison over two <c>StringDType</c> storages takes. Only an ordering (<c>&lt;</c>,
+        ///     <c>&lt;=</c>, and <c>&gt;</c> / <c>&gt;=</c>, which are those of the swapped pair) can take the prefetching
+        ///     kernel: <see cref="TextPrefetchOverride"/> when a test set it on this thread, else <see cref="PrefetchesTexts"/>.
+        /// </summary>
+        /// <param name="op">The comparison the kernel computes.</param>
+        /// <param name="a">The first operand's cells.</param>
+        /// <param name="aSize">The first operand's element count (see <see cref="PrefetchesTexts"/>).</param>
+        /// <param name="b">The second operand's cells.</param>
+        /// <param name="bSize">The second operand's element count.</param>
+        /// <returns>True for the prefetching kernel.</returns>
+        /// <remarks>Why not an equality: two texts of different lengths are unequal by the sizes their cells hold, so an
+        ///     equality of long random texts reads no text at all, and a prefetch only spends memory bandwidth on lines nobody
+        ///     reads. Measured (pinned, 100,000 texts of 300–500 bytes, ns a pair, plain → prefetching): <c>np.equal</c>
+        ///     5.7 → 18.2 (with a T0 prefetch, before equalities were excluded), <c>np.less</c> 27.7 → 17.7.</remarks>
+        internal static bool TakesPrefetchingKernel(TextCompareOp op, VStringArraySlice a, long aSize, VStringArraySlice b, long bSize)
+        {
+            if (op is not (TextCompareOp.Less or TextCompareOp.LessEqual))
+                return false;
+            return TextPrefetchOverride switch
+            {
+                1 => true,
+                2 => false,
+                _ => PrefetchesTexts(a, aSize, b, bSize),
+            };
+        }
+
+        /// <summary>
+        ///     Asks the cache for the first line of the texts of two cells (an arena or heap text; a short, empty, NA or
+        ///     never-written cell holds nothing outside itself): the prefetching comparison kernel's call for the pair
+        ///     <see cref="TextPrefetchDistance"/> elements ahead. The hint is NTA (<c>prefetchnta</c>): each line is read once,
+        ///     by one comparison, so it is fetched into L1 without displacing L2. Against T0 it measured within 7 % (either
+        ///     way) at 128-byte texts and up to 43 % faster at 200–400 bytes; T1 and T2 were slower than T0.
+        /// </summary>
+        /// <param name="a">Operand A's cell (inside its run: the kernel tests the distance against the chunk's count).</param>
+        /// <param name="b">Operand B's cell.</param>
+        /// <param name="aux">The call's context (the arena bases).</param>
+        /// <remarks>A prefetch never faults, but the cells it reads must be the operands' own: the kernel calls this only
+        ///     while the cell <see cref="TextPrefetchDistance"/> ahead is still inside the chunk.</remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        internal static void PrefetchPair(byte* a, byte* b, VStringPairAux* aux)
+        {
+            PrefetchText(a, aux->ArenaA);
+            PrefetchText(b, aux->ArenaB);
+        }
+
+        /// <summary>The prefetch of one cell's text (see <see cref="PrefetchPair"/>).</summary>
+        /// <param name="cell">The cell.</param>
+        /// <param name="arena">Its allocator's arena base (null when it has no arena).</param>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        private static void PrefetchText(byte* cell, byte* arena)
+        {
+            // A JIT-time constant: where the host has no prefetch instruction this whole body folds away.
+            if (!Sse.IsSupported)
+                return;
+            uint f = cell[15];
+            // Short (0x60 | size), NA (0x80) and never-written (0) cells: nothing outside the cell to fetch.
+            if ((f & VStringAllocator.NPY_STRING_FLAG_MASK) == ShortFlags || (f & VStringAllocator.NPY_STRING_MISSING) != 0 || f == 0)
+                return;
+            ulong w = Unsafe.ReadUnaligned<ulong>(cell);
+            if ((f & VStringAllocator.NPY_STRING_OUTSIDE_ARENA) != 0)
+                Sse.PrefetchNonTemporal((void*)w);
+            else if (arena != null)
+                Sse.PrefetchNonTemporal(arena + w);
         }
 
         /// <summary>
