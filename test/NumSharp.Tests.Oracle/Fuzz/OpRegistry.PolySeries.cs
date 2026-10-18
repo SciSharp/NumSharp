@@ -585,7 +585,8 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>
         ///     The tuple-valued polynomial functions: <c>as_series</c> (one slot per series — arity asserted),
         ///     <c>mapparms</c> (<c>(off, scl)</c>, each a Python / NumPy scalar recorded as a 0-d array, or an array),
-        ///     <c>chebgauss</c> / <c>leggauss</c> / <c>laggauss</c> (<c>(x, w)</c>), and the six <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by
+        ///     <c>chebgauss</c> / <c>leggauss</c> / <c>laggauss</c> / <c>hermgauss</c> / <c>hermegauss</c> (<c>(x, w)</c>), and the six
+        ///     <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by
         ///     <see cref="ApplyPolyAlgebraTuple"/>).
         /// </summary>
         /// <param name="op">The key.</param>
@@ -612,11 +613,18 @@ namespace NumSharp.Tests.Fuzz
                 }
                 case "legendre.leggauss":
                 case "laguerre.laggauss":
+                case "hermite.hermgauss":
+                case "hermite_e.hermegauss":
                 {
-                    // Gauss-Legendre / Gauss-Laguerre quadrature's (x, w): both slots, values or flags.
-                    var (x, w) = op == "legendre.leggauss"
-                        ? np.polynomial.legendre.leggauss(a.Get("deg"))
-                        : np.polynomial.laguerre.laggauss(a.Get("deg"));
+                    // Gauss-Legendre / -Laguerre / -Hermite quadrature's (x, w): both slots, values or flags.
+                    object deg = a.Get("deg");
+                    var (x, w) = op switch
+                    {
+                        "legendre.leggauss" => np.polynomial.legendre.leggauss(deg),
+                        "laguerre.laggauss" => np.polynomial.laguerre.laggauss(deg),
+                        "hermite.hermgauss" => np.polynomial.hermite.hermgauss(deg),
+                        _ => np.polynomial.hermite_e.hermegauss(deg),
+                    };
                     return new[] { a.CalcFacet(x), a.CalcFacet(w) };
                 }
                 case "polyutils.mapparms":

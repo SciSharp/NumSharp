@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 + U6 delivered, U8 / U9 all but Gauss-Hermite** — 190 of 193 names: the evaluation family (37, `polyvalfromroots` included), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) the companion / roots pair (12: `{p}companion`/`{p}roots`), the fits (6: `{p}fit`), the weights (5: `{p}weight`), the Chebyshev points and interpolation (4: `chebpts1`/`chebpts2`/`chebgauss`/`chebinterpolate`) and Gauss-Legendre / Gauss-Laguerre (2: `leggauss`/`laggauss`), all bit-exact (`polyeval.jsonl` 27,385 + `polyseries.jsonl` 19,478 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 + `polyweight.jsonl` 1,860 + `polyweight_host.jsonl` 1,235 + `polypts.jsonl` 362 + `polypts_host.jsonl` 347 + `polygauss.jsonl` 122 + `polyinterp.jsonl` 83 + `polyfit.jsonl` 324 cases; the BLAS-bound products, the LAPACK-bound roots / Gauss nodes / fits and the gemv-bound interpolation byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354 + `polygauss_parity.jsonl` 160 + `polyinterp_parity.jsonl` 1,030 + `polyfit_parity.jsonl` 1,242). Still open: `hermgauss`, `hermegauss`, `polyutils.format_float` (and, outside the 193, `set_default_printstyle` and the six classes). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 + U6 + U8 + U9 delivered** — 192 of 193 names: the evaluation family (37, `polyvalfromroots` included), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) the companion / roots pair (12: `{p}companion`/`{p}roots`), the fits (6: `{p}fit`), the weights (5: `{p}weight`), the Chebyshev points and interpolation (4: `chebpts1`/`chebpts2`/`chebgauss`/`chebinterpolate`) and the Gauss-Legendre / -Laguerre / -Hermite quadratures (4: `leggauss`/`laggauss`/`hermgauss`/`hermegauss`), all bit-exact (`polyeval.jsonl` 27,385 + `polyseries.jsonl` 19,478 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 + `polyweight.jsonl` 1,860 + `polyweight_host.jsonl` 1,235 + `polypts.jsonl` 362 + `polypts_host.jsonl` 347 + `polygauss.jsonl` 244 + `polyinterp.jsonl` 83 + `polyfit.jsonl` 324 cases; the BLAS-bound products, the LAPACK-bound roots / Gauss nodes / fits and the gemv-bound interpolation byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354 + `polygauss_parity.jsonl` 352 + `polyinterp_parity.jsonl` 1,030 + `polyfit_parity.jsonl` 1,242). Still open: `polyutils.format_float` (and, outside the 193, `set_default_printstyle` and the six classes). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -860,7 +860,7 @@ a unit below, that document wins.
 - **Closes half of #496.**
 - **Tests to port:** `TestVander` × 6.
 
-### U6 — Least-squares fit (6 names)
+### U6 — Least-squares fit (6 names) — DELIVERED 2026-10-18
 
 > **DELIVERED (2026-10-18).** `Polynomial/Package/NDPolyFit.cs` (`_fit`'s statements composed from bit-exact engines:
 > the house `+ 0.0`, U5's `{p}vander`, `np.take` for a degree list, the norm as one fused `np.evaluate` pass, the
@@ -1066,7 +1066,7 @@ a unit below, that document wins.
 - **Perf:** NumPy `chebroots` deg 20 **45 µs**, `polyroots` deg 50 **204 µs** (LAPACK-bound).
 - **Tests to port:** `TestCompanion` + the roots cases of `TestMisc` × 6.
 
-### U8 — Gauss quadrature and weights (10 names)
+### U8 — Gauss quadrature and weights (10 names) — DELIVERED 2026-10-18
 
 > **Weights DELIVERED (2026-10-18)** — the five `{p}weight` names: `Polynomial/Package/NDPolyWeight.cs`, oracle tiers
 > `polyweight.jsonl` / `polyweight_host.jsonl` (3,095 cases, 0 excused), benchmark geomean 1.78× (189 cells, all
@@ -1076,8 +1076,11 @@ a unit below, that document wins.
 > `polypts_host.jsonl` (709 cases, 0 excused), benchmark geomean 3.37× (35 cells, all bit-exact); §3.3 of the same
 > plan. **`leggauss` / `laggauss` DELIVERED (2026-10-18)**: `Polynomial/Package/NDPolyGauss.cs`, a composition of the
 > bit-exact engines around `np.linalg.eigvalsh`; oracle tiers `polygauss.jsonl` / `polygauss_parity.jsonl` (282 cases,
-> 0 excused), benchmark geomean 5.45× (22 cells, all bit-exact); §3.4 of the same plan. `hermgauss` / `hermegauss` are
-> still open.
+> 0 excused), benchmark geomean 5.45× (22 cells, all bit-exact); §3.4 of the same plan. **`hermgauss` / `hermegauss`
+> DELIVERED (2026-10-18)**: the same composition with NumPy's normalised recurrences as one Direct IL pass per node
+> (`DirectILKernelGenerator.PolyNormedHermite.cs`, NumPy's NaN operand rule: its results hold NaN from degree 372),
+> the polygauss tiers grown to 244 + 352 cases (0 excused), benchmark geomean 3.81× / 3.65× (every cell bit-exact,
+> 1.20× at degree 1000 against a syevd ceiling of 1.23×); §3.4 of the same plan.
 
 - **Scope:** `{p}gauss` and `{p}weight` for the five non-power bases.
 - **Shared backend:**
@@ -1096,7 +1099,7 @@ a unit below, that document wins.
 - **Perf:** NumPy `leggauss(50)` **478 µs**, `chebgauss(50)` **3.4 µs**.
 - **Tests to port:** `TestGauss` + the weight cases of `TestMisc` × 5.
 
-### U9 — Chebyshev sampling and interpolation (3 names)
+### U9 — Chebyshev sampling and interpolation (3 names) — DELIVERED 2026-10-18
 
 > **DELIVERED (2026-10-18).** `chebpts1` / `chebpts2` with U8's Chebyshev points (see U8). **`chebinterpolate`**:
 > `Polynomial/Package/NDPolyInterpolate.cs`, a composition of chebpts1, U5's chebvander, np.dot and two in-place

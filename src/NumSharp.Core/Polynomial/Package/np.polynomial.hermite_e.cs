@@ -655,6 +655,46 @@ namespace NumSharp
         [NDScoped]
         public NDArray hermeweight(object x) => NDPolyWeight.Weight(PolyBasis.HermiteE, x);
 
+        /// <summary>
+        ///     Gauss-HermiteE quadrature: the sample points <c>x_k</c> (the roots of <c>He_deg</c>, increasing) and weights
+        ///     <c>w_k</c>, so that <c>Σ w_k f(x_k)</c> integrates <c>f(x)·exp(-x²/2)</c> over the real line exactly for every
+        ///     polynomial <c>f</c> of degree up to <c>2*deg - 1</c>. Computed as NumPy 2.4.2 writes it: the eigenvalues of
+        ///     the (symmetric) companion matrix of <c>He_deg</c>, one Newton step on the NORMALISED HermiteE functions, the
+        ///     weights scaled against overflow, both symmetrised, and the weights normalised to sum to <c>sqrt(2*pi)</c> —
+        ///     bit-identical to NumPy.
+        /// </summary>
+        /// <param name="deg">
+        ///     The number of points: an integer under Python's <c>operator.index</c> — a C# integer,
+        ///     <see cref="System.Numerics.BigInteger"/>, <c>bool</c> or <c>char</c>, or a 0-d integer <see cref="NDArray"/>.
+        ///     A float, even an integral one, is refused. NumPy builds the series as <c>[0] * deg + [1]</c> from the argument
+        ///     itself, so a 0-d array (not a list repeat) gives the one-coefficient series [1] and the companion's ValueError.
+        /// </param>
+        /// <returns>(x, w): NumPy's tuple of two new float64 arrays of <paramref name="deg"/> elements. As in NumPy, high
+        ///     degrees are garbage: from degree ~400 some weights are NaN (the scaled <c>1 / (fm * fm)</c> overflows and the
+        ///     final scale is 0), from ~1000 some points too (the recurrence itself overflows at the outer nodes); NumPy's
+        ///     docstring vouches for degrees up to 100.</returns>
+        /// <exception cref="TypeError"><c>deg must be an integer, received {deg}</c>, with <c>deg</c> as NumPy's f-string
+        ///     formats it (<c>received 3.0</c>, <c>received True</c> for a 0-d bool array, <c>received [3]</c>).</exception>
+        /// <exception cref="ValueError"><c>deg must be a positive integer</c>; for a 0-d array <paramref name="deg"/> the
+        ///     companion's <c>Series must have maximum degree of at least 1.</c></exception>
+        /// <exception cref="System.OverflowException">A count past 2**63 - 1: CPython's <c>cannot fit 'int' into an
+        ///     index-sized integer</c> from the list repeat.</exception>
+        /// <exception cref="System.OutOfMemoryException">A count CPython's list cannot hold (2**60 - 1 or more: NumPy's empty
+        ///     MemoryError), or a companion matrix the machine cannot hold.</exception>
+        /// <exception cref="System.NotSupportedException">No LAPACK backend is installed: the eigenvalues are
+        ///     <c>np.linalg.eigvalsh</c>'s, which needs <c>NumSharp.Interop.OpenBLAS</c> (bit-identical to NumPy with the
+        ///     OpenBLAS NumPy itself loads, at one thread).</exception>
+        /// <exception cref="System.InvalidOperationException">IL generation is disabled: the recurrence is an emitted
+        ///     kernel.</exception>
+        /// <remarks>
+        ///     <para>NumPy evaluates each of its three normalised recurrences as a Python loop of six ufunc calls per degree;
+        ///     here each is one kernel pass over the points. From degree ~100 both sides are bound by the same LAPACK
+        ///     <c>syevd</c>.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.hermegauss.html</para>
+        /// </remarks>
+        [NDScoped]
+        public (NDArray x, NDArray w) hermegauss(object deg) => NDPolyGauss.HermiteGauss(PolyBasis.HermiteE, deg);
+
         // ---------------------------------------------------------------------------------------------
         //  Least-squares fit (plan U6): hermefit
         // ---------------------------------------------------------------------------------------------

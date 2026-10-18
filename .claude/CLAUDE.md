@@ -6054,10 +6054,11 @@ Traps:
 
 Plans `docs/plans/numpy-polynomial.md` (U8) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.4 (delivered
 2026-10-18). **Bit-exact with NumPy 2.4.2** (with the OpenBLAS NumPy loads, at one thread): oracle tiers
-`polygauss.jsonl` (122 portable error cases) and `polygauss_parity.jsonl` (160 value / flags cases, host-pinned like
-`polyroots_parity`, with its BLAS identity in `polygauss_parity.host.jsonl`), 0 excused. Unit tests
-`Polynomial/PolynomialGaussTests.cs` (7). **Perf (NPY/NS, `benchmark/polynomial/polygauss_*`, 22 cells, every one
-SHA-256-checked): geomean 5.45×** — leggauss 1.63–9.9×, laggauss 2.1–18.3×, the argument forms 2.3–17.5×.
+`polygauss.jsonl` (122 of its portable error cases) and `polygauss_parity.jsonl` (160 of its value / flags cases,
+host-pinned like `polyroots_parity`, with its BLAS identity in `polygauss_parity.host.jsonl`), 0 excused; the Hermite
+pair below shares both files. Unit tests `Polynomial/PolynomialGaussTests.cs` (8, shared with the Hermite pair).
+**Perf (NPY/NS, `benchmark/polynomial/polygauss_*`, every cell SHA-256-checked, with each cell's eigvalsh ceiling):**
+leggauss 1.65–10.8× (geomean 4.51), laggauss 1.92–18.1× (geomean 6.33), the argument forms 2.2–18.0×.
 
 - **Engine** (`Polynomial/Package/NDPolyGauss.cs`): NumPy's statements composed from bit-exact engines: U7's companion
   of `[0]*deg + [1]`, `np.linalg.eigvalsh` (LAPACK `syevd` through `NumSharp.Interop.OpenBLAS`), one Newton step through
@@ -6071,7 +6072,54 @@ SHA-256-checked): geomean 5.45×** — leggauss 1.63–9.9×, laggauss 2.1–18.
   list size limit (an empty MemoryError, raised before any allocation: `OutOfMemoryException("")`).
 - **Where the time goes**: NumPy's three `{p}val` calls are Python loops over the deg + 1 coefficients (about 1.2 ms of
   `leggauss(100)`); each is one U3 kernel call here. From degree ~100 both sides wait on the same `syevd`
-  (eigvalsh(100) 370 µs on both), so the ratio falls toward 1.6–2× at degree 500.
+  (eigvalsh(100) 360 µs on both), so the ratio falls toward 1.6–2× at degree 500 (ceilings 1.70 / 2.11).
+
+### Polynomial package — Gauss-Hermite quadrature (U8)
+`hermgauss`, `hermegauss` (2 names)
+
+Plans `docs/plans/numpy-polynomial.md` (U8) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.4 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2** (with the OpenBLAS NumPy loads, at one thread), NaN payloads included
+where NumPy's own results hold NaN: the `polygauss` tiers above hold 122 more portable error cases and 192 more
+host-pinned value / flags cases (degrees 1–64, around the powers of two to 257, 206–208, and the special-value
+onsets below to 1000), 0 excused. Unit tests `Polynomial/PolynomialGaussTests.cs` (8, shared) and
+`Backends/Kernels/PolyNormedHermiteKernelTests.cs` (5). **Perf (NPY/NS, `benchmark/polynomial/polygauss_*`, every cell
+SHA-256-checked): hermgauss geomean 3.81×, hermegauss 3.65×** — 1.8–10.7× to degree 200, 1.52–1.54× at degree 500,
+1.20–1.21× at degree 1000; the argument forms 1.8–10.7×.
+
+- **Engine** (`Polynomial/Package/NDPolyGauss.cs`, `HermiteGauss`): NumPy's statements in NumPy's order: `_as_int`, `c =
+  np.array([0] * deg + [1], dtype=np.float64)` (the dtype is unobservable: the companion's as_series turns an int64
+  series into float64 anyway, so the argument kinds behave exactly as leggauss's), U7's companion, eigvalsh, the
+  normalised recurrence three times (`dy`, then `df` scaled by `sqrt(2·deg)` / `sqrt(deg)`, then `fm` at the
+  Newton-corrected nodes), the in-place ufunc statements, `np.max(np.abs(fm))`, the symmetrisation of both, and
+  `w *= sqrt(pi) / w.sum()` (hermegauss `sqrt(2·pi)`; np.sum's pairwise schedule).
+- **NumPy's `_normed_hermite_n` / `_normed_hermite_e_n` is ONE IL kernel**
+  (`Backends/Kernels/Direct/DirectILKernelGenerator.PolyNormedHermite.cs`), not the U3 step-table program the plan
+  proposed: U3's float64 emitter does not pin which NaN an add / multiply keeps, and NumPy's results reach NaN. Per
+  point, NumPy's statements in NumPy's order: `c0 = (-c1)·s1` (np.negative as a sign-bit XOR), `c1 = tmp + (c1·x)·s2`,
+  the final `c0 + (c1·x)·√2` (hermegauss `c0 + c1·x`), with the ufunc NaN rule (an array-array add / multiply keeps
+  the SECOND operand's NaN) through the house emitters (`NaNOperandOrder.NumPyUfunc`). Starting every lane at `c0 =
+  +0.0`, `c1 = C` gives the bits of NumPy's scalar first steps (`0. + array` turns -0.0 into +0.0, and the NaN masks
+  are inert against finite operands). Blocks of 4 vectors per step (a step's chain is ~18 cycles: 2 vectors 194 µs, 4
+  vectors 107 µs at 500 points, 6 start to spill AVX2's registers), then at most one block of 2, single vectors and a
+  scalar tail. A second IL kernel writes NumPy's factors `sqrt((nd-1)/nd)`, `sqrt(2/nd)` (`sqrt(1/nd)`) for nd = deg … 2
+  once per call; the degree-(deg − 1) recurrence reads the same table from its second row.
+- **Where NumPy's own results turn special** (probed, identical for both functions): from degree 371 some weights are
+  0 (the final scale underflows), from 372 some are NaN (`w.sum()` overflows to inf, `inf · 0`), from 741 some nodes
+  are NaN (the recurrence overflows: `inf - inf`); hermgauss(1000) has 68 NaN nodes. The kernel's NaN payloads match.
+- **Which gates hold the NaN bits**: the oracle compares a NaN as a token, so the NaN operand order is held by the
+  raw-byte unit tests (`SpecialPoints_AreNumPysBits` presents two NaNs of opposite sign to every step add from n = 4)
+  and the benchmark's SHA-256 check. Planted defects that drop the explicit order SURVIVE: today's RyuJIT register
+  allocation already makes P the first source operand of those adds, so the bare instruction keeps NumPy's NaN;
+  controls that force the other operand's NaN are caught. The explicit `NumPyUfunc` emitters keep it that way when
+  the JIT allocates differently.
+- **Where the time goes**: NumPy's recurrence is a Python loop of deg − 1 steps, five array statements each, run three
+  times (about 2 ms of a 500-point call each); here one kernel call (106 µs at 500 points). From degree ~100 both sides
+  wait on the same `syevd` (96–98 % of NumSharp's call at 500 and 1000), so the ratio falls to the ceiling: 1.57–1.60×
+  at degree 500 and **1.23× at degree 1000 — the floor**, since a cheaper tridiagonal solver would give other bits.
+- **Vector hardware**: the recurrence kernel has a scalar path (bit-exact with AVX2 off and with hardware intrinsics
+  off), but the compositions do not run without SIMD support (`DOTNET_EnableHWIntrinsic=0`): U7's companion takes
+  its sqrt through a house unary kernel that emits vector code unconditionally — a library-wide limit, not this
+  unit's.
 
 ### Polynomial package — Chebyshev interpolation (U9)
 `chebinterpolate` (1 name)
@@ -6787,7 +6835,7 @@ non-structured subset would only re-expose `loadtxt`.
 | numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
 | numpy.polynomial Vandermonde family (U5) | `Polynomial/Package/NDPolyVander.cs` (`{p}vander`/`{p}vander2d`/`{p}vander3d` driver: NumPy's statement and error order, the in-place point sources, block sizing, the streamed-product switch, the object stack of scalars — `ObjectScalarPoints` / `MixedDtypeVander`), `NDPolyIndexArgument.cs` (`operator.index` + NumPy's `format(deg, '')` error text), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs` (`PolyVanderRoutines` recurrence tables, `PolyVanderOps` NaN-priority multiply + non-temporal stores, the load / recurrence / product / root stages). Oracle `polyvander.jsonl` via `OpRegistry.PolyVander.cs` + `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyvander_*` |
 | numpy.polynomial companion / roots (U7) | `Polynomial/Package/NDPolyAlgebra.Roots.cs` (`{p}companion`/`{p}roots`: NumPy's statements over U2's arena — as_series, the length checks, the linear root's scalarmath, the write-once zero matrix, the diagonals through `GetDiagWriteKernel`, the last-column update through the house ufunc / cast / sqrt / cumprod kernels, the rotated `np.linalg.eigvals` + in-place sort; object series: `ObjectTrimLength`, `ObjectLinearRoot`, `ObjectCompanionArithmetic`), `Backends/Unmanaged/UnmanagedMemoryBlock`1.cs` (`AllocationType.Forward`: a reinterpreting alias's ARC forwards to its owner — `ArraySlice.WrapShared`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyRoots.cs` (the int64 ramp IL kernel behind np.arange), `LinearAlgebra/linalg/np.linalg.eig.cs` (`RoundComponentsToSingle`: a float32 operand's complex result carries NumPy's complex64 values). Oracle `polyroots.jsonl` + host-pinned `polyroots_parity.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyroots_*` |
-| numpy.polynomial weights / points / quadrature / interpolation (U8, U9) | `Polynomial/Package/NDPolyWeight.cs` (the five `{p}weight` statements: fused `np.evaluate` trees, eager float16 / decimal), `Polynomial/Package/NDPolyChebPoints.cs` + `Backends/Kernels/Direct/DirectILKernelGenerator.PolyChebPoints.cs` (`chebpts1` / `chebpts2` / `chebgauss`: one emitted fill per formula, chebpts1 mirrored over the odd C-runtime sin), `Polynomial/Package/NDPolyGauss.cs` (`leggauss` / `laggauss`: U7's companion → `eigvalsh` → one Newton step through U3 / U4), `Polynomial/Package/NDPolyInterpolate.cs` (`chebinterpolate`: chebpts1 → the delegate → chebvander → `np.dot` → two in-place divides). Oracle `polyweight` / `polypts` / `polygauss` / `polyinterp` tiers (the last two with host-pinned `_parity` files) via `OpRegistry.PolySeries.cs` + `OpRegistry.PolyInterp.cs`; benchmarks `benchmark/polynomial/{polyweight,polypts,polygauss,polyinterp}_*` |
+| numpy.polynomial weights / points / quadrature / interpolation (U8, U9) | `Polynomial/Package/NDPolyWeight.cs` (the five `{p}weight` statements: fused `np.evaluate` trees, eager float16 / decimal), `Polynomial/Package/NDPolyChebPoints.cs` + `Backends/Kernels/Direct/DirectILKernelGenerator.PolyChebPoints.cs` (`chebpts1` / `chebpts2` / `chebgauss`: one emitted fill per formula, chebpts1 mirrored over the odd C-runtime sin), `Polynomial/Package/NDPolyGauss.cs` (`leggauss` / `laggauss` / `hermgauss` / `hermegauss`: U7's companion → `eigvalsh` → one Newton step through U3 / U4, or for the Hermite pair through NumPy's normalised recurrences) + `Backends/Kernels/Direct/DirectILKernelGenerator.PolyNormedHermite.cs` (`_normed_hermite_n` / `_normed_hermite_e_n` as one emitted pass per point, NumPy's NaN rule, plus the step-table kernel), `Polynomial/Package/NDPolyInterpolate.cs` (`chebinterpolate`: chebpts1 → the delegate → chebvander → `np.dot` → two in-place divides). Oracle `polyweight` / `polypts` / `polygauss` / `polyinterp` tiers (the last two with host-pinned `_parity` files) via `OpRegistry.PolySeries.cs` + `OpRegistry.PolyInterp.cs`; benchmarks `benchmark/polynomial/{polyweight,polypts,polygauss,polyinterp}_*` |
 | numpy.polynomial least-squares fits (U6) | `Polynomial/Package/NDPolyFit.cs` (`{p}fit`: `_fit`'s statements — `+ 0.0`, U5's `{p}vander`, `np.take` for a degree list, the fused norm, the C-ordered scaling over lhs, `np.linalg.lstsq`, the zeros re-expansion), `Polynomial/Package/NDPolyFitResult.cs` (the coefficient array carrying the `full=True` statistics, NumPy's tuple deconstruction). Oracle `polyfit.jsonl` + host-pinned `polyfit_parity.jsonl` via `OpRegistry.PolyFit.cs`; benchmark `benchmark/polynomial/polyfit_*` (with the per-cell lstsq ceiling) |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |

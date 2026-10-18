@@ -21265,11 +21265,16 @@ def gen_polypts():
 
 
 # ---------------------------------------------------------------------------
-# T-polygauss — numpy.polynomial's Gauss-Legendre and Gauss-Laguerre quadrature (plan U8, numpy-polynomial-remaining-
-# compute.md §3.4): leggauss(deg) / laggauss(deg) = the eigenvalues of the companion matrix of [0]*deg + [1]
-# (np.linalg.eigvalsh, LAPACK syevd), one Newton step through {p}val / {p}der, the weights scaled against overflow,
-# leggauss symmetrising both and normalising the weights to 2, laggauss normalising them to 1:
-#   (A) every degree 1..64 and the degrees around the powers of two up to 257 (the values, both slots);
+# T-polygauss — numpy.polynomial's Gauss-Legendre, Gauss-Laguerre and Gauss-Hermite quadrature (plan U8, numpy-
+# polynomial-remaining-compute.md §3.4): leggauss(deg) / laggauss(deg) / hermgauss(deg) / hermegauss(deg) = the
+# eigenvalues of the companion matrix of [0]*deg + [1] (np.linalg.eigvalsh, LAPACK syevd), one Newton step — through
+# {p}val / {p}der for Legendre and Laguerre, through the normalised recurrences _normed_hermite_n /
+# _normed_hermite_e_n for the two Hermite bases —, the weights scaled against overflow, leggauss / hermgauss /
+# hermegauss symmetrising both and normalising the weights to 2 / sqrt(pi) / sqrt(2 pi), laggauss normalising them to 1:
+#   (A) every degree 1..64 and the degrees around the powers of two up to 257 (the values, both slots); for the Hermite
+#       bases also 206-208 (where the PLAIN recurrence of hermval overflows and the normalised one keeps going) and the
+#       degrees where NumPy's own results turn special — 371 (the final scale underflows: zero weights), 372 (w.sum()
+#       overflows: NaN weights), 741 (the normalised recurrence overflows: NaN nodes) and their neighbours, to 1000;
 #   (B) the argument kinds: operator.index's Python ints / bools / floats / strs / None / complexes, np.uint16 (NumSharp's
 #       char) and np.float16 scalars, 0-d arrays of every dtype — a positive 0-d integer array is NOT a list repeat
 #       (`[0] * arr` is np.multiply), so c is [1] and the companion raises —, sized arrays, lists and tuples;
@@ -21279,8 +21284,11 @@ def gen_polypts():
 # HOST SPLIT. Every value comes out of eigvalsh, whose bits depend on the OpenBLAS build, its DYNAMIC_ARCH kernel and the
 # thread count: values and flags go to polygauss_parity.jsonl (+ the BLAS identity in polygauss_parity.host.jsonl),
 # replayed only with that library at one thread. Errors are raised before eigvalsh: portable (polygauss.jsonl).
-POLY_GAUSS_OPS = ("legendre.leggauss", "laguerre.laggauss")
+POLY_GAUSS_OPS = ("legendre.leggauss", "laguerre.laggauss", "hermite.hermgauss", "hermite_e.hermegauss")
 _PG_T = 2 ** 63
+# The Hermite bases' special-value onsets (probed on NumPy 2.4.2, threads = 1): zero weights from 371, NaN weights
+# from 372, NaN nodes from 741 — identical for hermgauss and hermegauss.
+_PG_HERM_DEGS = [206, 207, 208, 300, 369, 370, 371, 372, 373, 400, 500, 739, 740, 741, 742, 1000]
 
 
 def gen_polygauss():
@@ -21309,7 +21317,8 @@ def gen_polygauss():
         """Records one call of op on arg: its error, or both result slots (values or flags).
 
         Args:
-            op: The corpus key ("legendre.leggauss" or "laguerre.laggauss").
+            op: The corpus key ("legendre.leggauss", "laguerre.laggauss", "hermite.hermgauss" or
+                "hermite_e.hermegauss").
             arg: The deg argument (a Python value, a NumPy scalar or an _PSArr).
             layout: The case's layout label.
             cid: The case id prefix.
@@ -21342,7 +21351,8 @@ def gen_polygauss():
 
     for op in POLY_GAUSS_OPS:
         # (A) the degrees
-        for d in list(range(1, 65)) + [100, 127, 128, 129, 200, 255, 256, 257]:
+        for d in list(range(1, 65)) + [100, 127, 128, 129, 200, 255, 256, 257] + (
+                _PG_HERM_DEGS if op.startswith("hermite") else []):
             emit(op, d, "python_int", f"{op}/deg/{d}")
 
         # (B) argument kinds
@@ -23265,7 +23275,7 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polypts.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polypts_host.jsonl"), host)
     elif mode == "polygauss":
-        # numpy.polynomial Gauss-Legendre / Gauss-Laguerre quadrature (U8): portable errors + host-pinned values
+        # numpy.polynomial Gauss-Legendre / -Laguerre / -Hermite quadrature (U8): portable errors + host-pinned values
         # (LAPACK syevd at threads = 1).
         for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
             if os.environ.get(var) != "1":

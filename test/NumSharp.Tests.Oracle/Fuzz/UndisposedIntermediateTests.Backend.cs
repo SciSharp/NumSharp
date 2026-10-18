@@ -32,7 +32,8 @@ namespace NumSharp.Tests.Fuzz
         /// </summary>
         /// <remarks>
         ///     The <c>numpy.polynomial</c> entries are module-qualified corpus keys: the Gauss quadratures
-        ///     <c>legendre.leggauss</c> / <c>laguerre.laggauss</c> compute through <c>np.linalg.eigvalsh</c>, so their
+        ///     <c>legendre.leggauss</c> / <c>laguerre.laggauss</c> / <c>hermite.hermgauss</c> / <c>hermite_e.hermegauss</c>
+        ///     compute through <c>np.linalg.eigvalsh</c>, so their
         ///     portable tier (<c>polygauss.jsonl</c>) holds only argument errors and every success case is in the
         ///     host-pinned <c>polygauss_parity.jsonl</c>, which this pass replays. The six least-squares fits
         ///     (<c>polynomial.polyfit</c> … <c>hermite_e.hermefit</c>) compute through <c>np.linalg.lstsq</c> the same way
@@ -42,7 +43,7 @@ namespace NumSharp.Tests.Fuzz
         {
             "cholesky", "cond", "eig", "eigh", "eigvals", "eigvalsh", "lstsq", "matrix_rank",
             "norm", "pinv", "polyfit", "qr", "roots", "svd", "svdvals",
-            "legendre.leggauss", "laguerre.laggauss",
+            "legendre.leggauss", "laguerre.laggauss", "hermite.hermgauss", "hermite_e.hermegauss",
             "polynomial.polyfit", "chebyshev.chebfit", "legendre.legfit", "laguerre.lagfit", "hermite.hermfit",
             "hermite_e.hermefit",
         };

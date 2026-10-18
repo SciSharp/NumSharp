@@ -879,9 +879,10 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void PolyptsHost() => RunHostLibmCorpus("polypts_host.jsonl");
 
-        // numpy.polynomial's Gauss-Legendre / Gauss-Laguerre quadrature (plan U8): leggauss / laggauss's argument
-        // errors — operator.index's kinds, a 0-d integer array (`[0] * arr` is np.multiply, so the companion refuses
-        // the one-element series), CPython's list-repeat OverflowError / MemoryError — raised before eigvalsh: PORTABLE.
+        // numpy.polynomial's Gauss-Legendre / -Laguerre / -Hermite quadrature (plan U8): leggauss / laggauss /
+        // hermgauss / hermegauss's argument errors — operator.index's kinds, a 0-d integer array (`[0] * arr` is
+        // np.multiply, so the companion refuses the one-element series), CPython's list-repeat OverflowError /
+        // MemoryError — raised before eigvalsh: PORTABLE.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void Polygauss() => RunCorpus("polygauss.jsonl");
@@ -1297,8 +1298,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
             ["polyroots.jsonl"] = 8150,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-L of gen_polyroots — 6,681 at delivery, 8,195 with the wholeness sections (K: two-term OBJECT series NumPy still computes, 0-d-zero trims, edge numeric series; L: object series of three or more terms — the companion arithmetic's OverflowErrors and eigvals' isfinite TypeError)
             ["polyweight.jsonl"] = 1800,   // numpy.polynomial weight functions (U8): {p}weight x 5 bases, sections A-H of gen_polyweight — 1,860 at delivery
-            ["polygauss.jsonl"] = 110,   // numpy.polynomial leggauss / laggauss argument errors (U8), portable — 122 at delivery
-            ["polygauss_parity.jsonl"] = 150,   // their eigvalsh-based values and flags, host-pinned (threads = 1) — 160 at delivery
+            ["polygauss.jsonl"] = 220,   // numpy.polynomial {leg,lag,herm,herme}gauss argument errors (U8), portable — 122 at delivery, 244 with the Hermite bases
+            ["polygauss_parity.jsonl"] = 310,   // their eigvalsh-based values and flags, host-pinned (threads = 1) — 160 at delivery, 346 with the Hermite bases
             ["polyinterp.jsonl"] = 75,   // numpy.polynomial chebinterpolate's errors and flags (U9), portable — 83 at delivery
             ["polyinterp_parity.jsonl"] = 980,   // its np.dot-based values, host-pinned (threads = 1) — 1,030 at delivery
             ["polyfit.jsonl"] = 310,   // numpy.polynomial {p}fit x 6 argument errors (U6), portable — 324 at delivery

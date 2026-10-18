@@ -6,11 +6,12 @@ using NumSharp.Interop.OpenBLAS;
 namespace NumSharp.Tests.Polynomial
 {
     /// <summary>
-    ///     Gauss-Legendre and Gauss-Laguerre quadrature of <c>numpy.polynomial</c> (plan
-    ///     <c>docs/plans/numpy-polynomial-remaining-compute.md</c> §3.4, unit U8): <c>leggauss</c> and <c>laggauss</c>. NumPy
-    ///     2.4.2's own <c>TestGauss.test_100</c> ported; NumPy's bytes for small degrees; NumPy's error for every argument kind
-    ///     with a C# spelling (the probe scripts are quoted next to <see cref="Pins"/> and <see cref="KindErrors"/>); the
-    ///     composition against NumPy's statements written out by hand; and the missing-backend path.
+    ///     Gauss-Legendre, Gauss-Laguerre and Gauss-Hermite quadrature of <c>numpy.polynomial</c> (plan
+    ///     <c>docs/plans/numpy-polynomial-remaining-compute.md</c> §3.4, unit U8): <c>leggauss</c>, <c>laggauss</c>,
+    ///     <c>hermgauss</c> and <c>hermegauss</c>. NumPy 2.4.2's own <c>TestGauss.test_100</c> ported; NumPy's bytes for
+    ///     small degrees; NumPy's error for every argument kind with a C# spelling (the probe scripts are quoted next to
+    ///     <see cref="Pins"/> and <see cref="KindErrors"/>); the compositions against NumPy's statements written out by hand
+    ///     (the Hermite ones with NumPy's normalised recurrences as array statements); and the missing-backend path.
     /// </summary>
     /// <remarks>
     ///     Every value comes out of <c>np.linalg.eigvalsh</c>, which needs a LAPACK-capable library (the bundled
@@ -24,11 +25,13 @@ namespace NumSharp.Tests.Polynomial
     [DoNotParallelize]
     public class PolynomialGaussTests
     {
-        /// <summary>The two functions by name.</summary>
+        /// <summary>The four functions by name.</summary>
         private static readonly Dictionary<string, Func<object, (NDArray x, NDArray w)>> Functions = new()
         {
             ["leggauss"] = d => np.polynomial.legendre.leggauss(d),
             ["laggauss"] = d => np.polynomial.laguerre.laggauss(d),
+            ["hermgauss"] = d => np.polynomial.hermite.hermgauss(d),
+            ["hermegauss"] = d => np.polynomial.hermite_e.hermegauss(d),
         };
 
         /// <summary>2**63, the edge of CPython's list repeat.</summary>
@@ -52,8 +55,8 @@ namespace NumSharp.Tests.Polynomial
             ["big 2**61"] = () => BigInteger.One << 61, ["big -2**70"] = () => -(BigInteger.One << 70),
         };
 
-        // NumPy 2.4.2's bytes and error texts (scratchpad gauss_pins.py, OPENBLAS_NUM_THREADS=1):
-        //   for d in (1, 2, 3, 4, 5, 6, 12): leggauss(d) / laggauss(d), x.tobytes().hex(), w.tobytes().hex();
+        // NumPy 2.4.2's bytes and error texts (scratchpad gauss_pins.py and hg_facts.py, OPENBLAS_NUM_THREADS=1):
+        //   for d in (1, 2, 3, 4, 5, 6, 12): {leg,lag,herm,herme}gauss(d), x.tobytes().hex(), w.tobytes().hex();
         //   every "!!" outcome of gauss_facts.py's argument kinds.
         /// <summary>NumPy's float64 bytes of each function's (x, w) at small degrees.</summary>
         private static readonly (string Fn, long Deg, string X, string W)[] Pins =
@@ -72,6 +75,20 @@ namespace NumSharp.Tests.Polynomial
             ("laggauss", 5, "309d6d1a2cded03f8cdcae864c9df63f52e4e8df7ac50c4046550394de571c40cdd35a0c17482940", "44a57ed238b2e03f1d95e6ccc183d93fd6d4c2e1f670b33f3d72292d68966d3f9e3d10465481f83e"),
             ("laggauss", 6, "17bf7cce3c86cc3f4c93ddaadd05f33fbdce2fbe1ff10740cb085c3cbf19174069d68a87c8ac23401c8c25423bf72f40", "0a9a285ead5fdd3fac8ca44024b0da3f16b43eb80906bd3f3835baa72c4c853feb698b59241b313f7c4512be7726ae3e"),
             ("laggauss", 12, "9f007af5f69fbd3f3e6ca26e8493e33f0a8984d3a633f83f3fd644d285ab0640f4a428ee9b651240bb13c747cb601b40ca9cbd3d1d3e2340df74dca319032a40b284b838ea1d31401840eedbad263640cc7ef86beb7c3c40572a96ffaf8c4240", "42223ad95bf1d03fbdb0e83d352dd83f84941450143ecf3f170a5923ae27b73f960586f6b795943f27cbabe7c1d2653f2a60871652a32a3f4b6acf85f48ae13e887108bce664863e9803abefe50f173e6682892e1dee8a3d7f928765465bcd3c"),
+            ("hermgauss", 1, "0000000000000000", "6aefb491f85bfc3f"),
+            ("hermgauss", 2, "cc3b7f669ea0e6bfcc3b7f669ea0e63f", "6aefb491f85bec3f6aefb491f85bec3f"),
+            ("hermgauss", 3, "2e2109148e98f3bf00000000000000002e2109148e98f33f", "f3f4cd0bfbe7d23ff1f4cd0bfbe7f23ff3f4cd0bfbe7d23f"),
+            ("hermgauss", 4, "60f2c38f2f69fabf2c87fccfe9c9e0bf2c87fccfe9c9e03f60f2c38f2f69fa3f", "beaefd00ebd0b43f92399531dbc1e93f92399531dbc1e93fbeaefd00ebd0b43f"),
+            ("hermgauss", 5, "e76204a3552900c056994b29a0aceebf000000000000000056994b29a0acee3fe76204a355290040", "20005f689f6e943f4fcd001a0f31d93f8221e312f83fee3f4fcd001a0f31d93f20005f689f6e943f"),
+            ("hermgauss", 6, "9ff9fdfa09ce02c0cc7d5447a35ff5bf4038b03bb1e8dbbf4038b03bb1e8db3fcc7d5447a35ff53f9ff9fdfa09ce0240", "3fc250460f8e723f964c072ec81ac43fbe7aa6672a30e73fbe7aa6672a30e73f964c072ec81ac43f3fc250460f8e723f"),
+            ("hermgauss", 12, "1d4d5616281e0fc0fdd89fbe432a08c01a054e356e3c02c06fe1b5aa1b90f9bf67f5fc514854eebfe117c6aa831cd4bfe117c6aa831cd43f67f5fc514854ee3f6fe1b5aa1b90f93f1a054e356e3c0240fdd89fbe432a08401d4d5616281e0f40", "151460655bd7913ee3bbe437b479163f5bcfd99a32fe6f3fa085dda45c6caa3f6e6b5cf0e7abd03f396d41408c3ee23f396d41408c3ee23f6e6b5cf0e7abd03fa085dda45c6caa3f5bcfd99a32fe6f3fe3bbe437b479163f151460655bd7913e"),
+            ("hermegauss", 1, "0000000000000000", "0527f61f930d0440"),
+            ("hermegauss", 2, "000000000000f0bf000000000000f03f", "0527f61f930df43f0527f61f930df43f"),
+            ("hermegauss", 3, "ab4c58e87ab6fbbf0000000000000000ab4c58e87ab6fb3f", "59899d2ac4bcda3f5e899d2ac4bcfa3f59899d2ac4bcda3f"),
+            ("hermegauss", 4, "9faa985ce1ac02c0feb08cd52abee7bffeb08cd52abee73f9faa985ce1ac0240", "10c5d0633a70bd3fb41ab9798f36f23fb41ab9798f36f23f10c5d0633a70bd3f"),
+            ("hermegauss", 5, "14e4391813db06c04174c913a5b0f5bf00000000000000004174c913a5b0f53f14e4391813db0640", "742fe0b037e59c3f76ab4d602cd0e13f19a11722d063f53f76ab4d602cd0e13f742fe0b037e59c3f"),
+            ("hermegauss", 6, "deba044814980ac02d82357c103afebf105b83750fbce3bf105b83750fbce33f2d82357c103afe3fdeba044814980a40", "7437224b993d7a3fb9b4591aa66ecc3f37ce5fc38065f03f37ce5fc38065f03fb9b4591aa66ecc3f7437224b993d7a3f"),
+            ("hermegauss", 12, "6dcc5c60ec0016c0754edc83591611c000e4f26028ca09c0282f1c19621302c0042c42432d72f5bf0809e6491971dcbf0809e6491971dc3f042c42432d72f53f282f1c196213024000e4f26028ca0940754edc83591611406dcc5c60ec001640", "132c4bde373b993ea2b0d758f7c81f3f26520f25589f763f3d843c4c20afb23fe68e4106bb93d73fbc5165f126cde93fbc5165f126cde93fe68e4106bb93d73f3d843c4c20afb23f26520f25589f763fa2b0d758f7c81f3f132c4bde373b993e"),
         };
 
         /// <summary>NumPy's error per (function, argument kind of <see cref="Inputs"/>): <c>!! PythonType: message</c>
@@ -122,6 +139,50 @@ namespace NumSharp.Tests.Polynomial
             ("laggauss", "big 2**62", "!! MemoryError: "),
             ("laggauss", "big 2**61", "!! MemoryError: "),
             ("laggauss", "big -2**70", "!! ValueError: deg must be a positive integer"),
+            ("hermgauss", "int 0", "!! ValueError: deg must be a positive integer"),
+            ("hermgauss", "int -1", "!! ValueError: deg must be a positive integer"),
+            ("hermgauss", "bool false", "!! ValueError: deg must be a positive integer"),
+            ("hermgauss", "double 3.0", "!! TypeError: deg must be an integer, received 3.0"),
+            ("hermgauss", "str 3", "!! TypeError: deg must be an integer, received 3"),
+            ("hermgauss", "null", "!! TypeError: deg must be an integer, received None"),
+            ("hermgauss", "char 0", "!! ValueError: deg must be a positive integer"),
+            ("hermgauss", "nd0 int64 3", "!! ValueError: Series must have maximum degree of at least 1."),
+            ("hermgauss", "nd0 int64 0", "!! ValueError: deg must be a positive integer"),
+            ("hermgauss", "nd0 uint64 3", "!! ValueError: Series must have maximum degree of at least 1."),
+            ("hermgauss", "nd0 int8 2", "!! ValueError: Series must have maximum degree of at least 1."),
+            ("hermgauss", "nd0 bool true", "!! TypeError: deg must be an integer, received True"),
+            ("hermgauss", "nd1 [3]", "!! TypeError: deg must be an integer, received [3]"),
+            ("hermgauss", "object[] {3}", "!! TypeError: deg must be an integer, received [3]"),
+            ("hermgauss", "tuple (3,)", "!! TypeError: deg must be an integer, received (3,)"),
+            ("hermgauss", "complex 3", "!! TypeError: deg must be an integer, received (3+0j)"),
+            ("hermgauss", "half 3", "!! TypeError: deg must be an integer, received 3.0"),
+            ("hermgauss", "big 2**63", "!! OverflowError: cannot fit 'int' into an index-sized integer"),
+            ("hermgauss", "big 2**64", "!! OverflowError: cannot fit 'int' into an index-sized integer"),
+            ("hermgauss", "big 2**62", "!! MemoryError: "),
+            ("hermgauss", "big 2**61", "!! MemoryError: "),
+            ("hermgauss", "big -2**70", "!! ValueError: deg must be a positive integer"),
+            ("hermegauss", "int 0", "!! ValueError: deg must be a positive integer"),
+            ("hermegauss", "int -1", "!! ValueError: deg must be a positive integer"),
+            ("hermegauss", "bool false", "!! ValueError: deg must be a positive integer"),
+            ("hermegauss", "double 3.0", "!! TypeError: deg must be an integer, received 3.0"),
+            ("hermegauss", "str 3", "!! TypeError: deg must be an integer, received 3"),
+            ("hermegauss", "null", "!! TypeError: deg must be an integer, received None"),
+            ("hermegauss", "char 0", "!! ValueError: deg must be a positive integer"),
+            ("hermegauss", "nd0 int64 3", "!! ValueError: Series must have maximum degree of at least 1."),
+            ("hermegauss", "nd0 int64 0", "!! ValueError: deg must be a positive integer"),
+            ("hermegauss", "nd0 uint64 3", "!! ValueError: Series must have maximum degree of at least 1."),
+            ("hermegauss", "nd0 int8 2", "!! ValueError: Series must have maximum degree of at least 1."),
+            ("hermegauss", "nd0 bool true", "!! TypeError: deg must be an integer, received True"),
+            ("hermegauss", "nd1 [3]", "!! TypeError: deg must be an integer, received [3]"),
+            ("hermegauss", "object[] {3}", "!! TypeError: deg must be an integer, received [3]"),
+            ("hermegauss", "tuple (3,)", "!! TypeError: deg must be an integer, received (3,)"),
+            ("hermegauss", "complex 3", "!! TypeError: deg must be an integer, received (3+0j)"),
+            ("hermegauss", "half 3", "!! TypeError: deg must be an integer, received 3.0"),
+            ("hermegauss", "big 2**63", "!! OverflowError: cannot fit 'int' into an index-sized integer"),
+            ("hermegauss", "big 2**64", "!! OverflowError: cannot fit 'int' into an index-sized integer"),
+            ("hermegauss", "big 2**62", "!! MemoryError: "),
+            ("hermegauss", "big 2**61", "!! MemoryError: "),
+            ("hermegauss", "big -2**70", "!! ValueError: deg must be a positive integer"),
         };
 
         /// <summary>Leaves the process-global OpenBLAS engine off after every test (the LapackEigTests convention).</summary>
@@ -149,7 +210,7 @@ namespace NumSharp.Tests.Polynomial
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     leggauss / laggauss for degrees 1-6 and 12 have NumPy's float64 values (within 4 ULP; bit for bit on the pinned
+        ///     The four functions for degrees 1-6 and 12 have NumPy's float64 values (within 4 ULP; bit for bit on the pinned
         ///     host, which the oracle tier holds), shapes and dtypes.
         /// </summary>
         [TestMethod]
@@ -318,14 +379,56 @@ namespace NumSharp.Tests.Polynomial
             }
         }
 
+        /// <summary>
+        ///     hermgauss / hermegauss are NumPy's statements composed from the public functions, byte for byte on this host:
+        ///     the companion of <c>[0]*deg + [1]</c>, eigvalsh, NumPy's normalised recurrences written as NumPy writes them
+        ///     (array statements over the house ufuncs, the np.float64 scalars as 0-d arrays) for the Newton step and the
+        ///     weights, the scaling, the symmetrisation and the normalisation to <c>sqrt(pi)</c> / <c>sqrt(2 pi)</c> — over
+        ///     every degree to 80 and four degrees where NumPy's own results already hold NaN (400, 500, 700, 1000): the NaN
+        ///     payloads are compared too.
+        /// </summary>
+        [TestMethod]
+        public void HermiteResult_IsNumPysStatementsComposed()
+        {
+            RequireLapack();
+            var degrees = new List<int>();
+            for (int d = 1; d <= 80; d++)
+                degrees.Add(d);
+            degrees.AddRange(new[] { 400, 500, 700, 1000 });
+            foreach (int deg in degrees)
+            {
+                foreach (bool physicists in new[] { true, false })
+                {
+                    var c = np.zeros(new Shape(deg + 1), np.int64);
+                    c.SetAtIndex(1L, deg);
+                    NDArray m = physicists ? np.polynomial.hermite.hermcompanion(c) : np.polynomial.hermite_e.hermecompanion(c);
+                    NDArray x = np.linalg.eigvalsh(m);
+                    NDArray dy = NormedHermite(physicists, x, deg);
+                    NDArray df = NormedHermite(physicists, x, deg - 1) * NDArray.Scalar(System.Math.Sqrt(physicists ? 2.0 * deg : deg));
+                    x = x - dy / df;
+                    NDArray fm = NormedHermite(physicists, x, deg - 1);
+                    fm = fm / np.max(np.abs(fm));
+                    NDArray w = 1.0 / (fm * fm);
+                    w = (w + w["::-1"]) / 2.0;
+                    x = (x - x["::-1"]) / 2.0;
+                    w = w * NDArray.Scalar(System.Math.Sqrt(physicists ? System.Math.PI : 2 * System.Math.PI) / w.sum().GetDouble());
+                    var (gx, gw) = physicists ? np.polynomial.hermite.hermgauss(deg) : np.polynomial.hermite_e.hermegauss(deg);
+                    string label = $"{(physicists ? "hermgauss" : "hermegauss")}({deg})";
+                    Assert.AreEqual(Hex(x), Hex(gx), $"{label}.x");
+                    Assert.AreEqual(Hex(w), Hex(gw), $"{label}.w");
+                }
+            }
+        }
+
         // ---------------------------------------------------------------------------------------------
-        //  NumPy's own tests (numpy/polynomial/tests/test_legendre.py, test_laguerre.py)
+        //  NumPy's own tests (numpy/polynomial/tests/test_legendre.py, test_laguerre.py, test_hermite.py,
+        //  test_hermite_e.py)
         // ---------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     NumPy's <c>TestGauss.test_100</c> for both bases: the 100 nodes and weights make <c>{p}vander(x, 99)</c>
+        ///     NumPy's <c>TestGauss.test_100</c> for the four bases: the 100 nodes and weights make <c>{p}vander(x, 99)</c>
         ///     orthonormal after normalisation (<c>assert_almost_equal(vv, np.eye(100))</c>), and the weights integrate 1 to
-        ///     2 (Legendre) / 1 (Laguerre).
+        ///     2 (Legendre), 1 (Laguerre), <c>sqrt(pi)</c> (Hermite) and <c>sqrt(2 pi)</c> (HermiteE).
         /// </summary>
         [TestMethod]
         public void NumPysOwnTest100()
@@ -343,6 +446,44 @@ namespace NumSharp.Tests.Polynomial
                 double target = legendre ? 2.0 : 1.0;
                 Assert.IsTrue(System.Math.Abs(w.sum().GetDouble() - target) < 1.5e-7, "the weights integrate 1");
             }
+            foreach (bool physicists in new[] { true, false })
+            {
+                var (x, w) = physicists ? np.polynomial.hermite.hermgauss(100) : np.polynomial.hermite_e.hermegauss(100);
+                NDArray v = physicists ? np.polynomial.hermite.hermvander(x, 99) : np.polynomial.hermite_e.hermevander(x, 99);
+                NDArray vv = np.dot(v.T * w, v);
+                NDArray vd = 1.0 / np.sqrt(vv.diagonal());
+                vv = np.expand_dims(vd, 1) * vv * vd;
+                double maxDev = np.max(np.abs(vv - np.eye(100))).GetDouble();
+                Assert.IsTrue(maxDev < 1.5e-7, $"{(physicists ? "hermgauss" : "hermegauss")}(100): orthogonality off by {maxDev}");
+                double target = System.Math.Sqrt(physicists ? System.Math.PI : 2 * System.Math.PI);
+                Assert.IsTrue(System.Math.Abs(w.sum().GetDouble() - target) < 1.5e-7, "the weights integrate 1");
+            }
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_normed_hermite_n(x, n)</c> / <c>_normed_hermite_e_n(x, n)</c> as NumPy writes them, statement by
+        ///     statement over NumSharp's operators (the np.float64 scalars as 0-d arrays): the reference the kernel-backed
+        ///     composition is held to.
+        /// </summary>
+        /// <param name="physicists">Hermite (true) or HermiteE.</param>
+        /// <param name="x">The points.</param>
+        /// <param name="n">The degree (0 or more).</param>
+        /// <returns>The values.</returns>
+        private static NDArray NormedHermite(bool physicists, NDArray x, int n)
+        {
+            double c1Init = 1.0 / System.Math.Sqrt(System.Math.Sqrt(physicists ? System.Math.PI : 2 * System.Math.PI));
+            if (n == 0)
+                return np.full(x.Shape, c1Init, np.float64);
+            NDArray c0 = NDArray.Scalar(0.0), c1 = NDArray.Scalar(c1Init);
+            double nd = n;
+            for (int i = 0; i < n - 1; i++)
+            {
+                NDArray tmp = c0;
+                c0 = -c1 * NDArray.Scalar(System.Math.Sqrt((nd - 1.0) / nd));
+                c1 = tmp + c1 * x * NDArray.Scalar(System.Math.Sqrt((physicists ? 2.0 : 1.0) / nd));
+                nd -= 1.0;
+            }
+            return physicists ? c0 + c1 * x * NDArray.Scalar(System.Math.Sqrt(2.0)) : c0 + c1 * x;
         }
 
         // ---------------------------------------------------------------------------------------------

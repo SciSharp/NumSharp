@@ -1,6 +1,11 @@
 # numpy.polynomial — compute routes for the 28 remaining names (discovery, 2026-10-17)
 
-> **Status: discovery only, nothing implemented.** This document decides HOW each name that `numpy.polynomial` still
+> **Status (2026-10-18): 20 of the 28 names delivered** — the weights, the Chebyshev points, the four Gauss
+> quadratures, `chebinterpolate`, the six fits and `polyvalfromroots`, each with a DELIVERED note in its section; still
+> open: `format_float`, `set_default_printstyle` and the six classes. Below is the discovery of 2026-10-17 as written,
+> with the delivery notes added to its sections.
+>
+> **The discovery.** This document decides HOW each name that `numpy.polynomial` still
 > lacks in NumSharp should compute: which of the house engines carries its loops, what NumPy's statements are, which
 > alternatives were measured and rejected, where the bit-parity hazards are, and what speed is physically reachable.
 > It refines units U3 (`polyvalfromroots`), U6, U8, U9, U10 and U11 of [numpy-polynomial.md](numpy-polynomial.md),
@@ -19,7 +24,7 @@ package's own engines, a composition of existing `np.*` functions, the LAPACK ba
 | Root product | `polyvalfromroots` | U3's step-table IL engine with a third skeleton (an ascending product), NDIter-driven |
 | Weights | `chebweight` `legweight` `lagweight` `hermweight` `hermeweight` | one fused `np.evaluate` tree per weight; float16 through the eager house ufuncs |
 | Chebyshev points | `chebpts1` `chebpts2` `chebgauss` | `np.arange`/`np.linspace` + one fused or eager unary pass |
-| Gauss (eigen) | `leggauss` `laggauss` `hermgauss` `hermegauss` | facade-level composition around `eigvalsh`; the two normed-Hermite recurrences as U3 step-table programs |
+| Gauss (eigen) | `leggauss` `laggauss` `hermgauss` `hermegauss` | facade-level composition around `eigvalsh`; the two normed-Hermite recurrences as one Direct IL pass per node (delivered: U3's step tables do not pin NaN priority, and NumPy's results reach NaN) |
 | Interpolation | `chebinterpolate` | composition (`chebpts1` → delegate → `chebvander` → `np.dot`) |
 | Fits | `polyfit` `chebfit` `legfit` `lagfit` `hermfit` `hermefit` | composition of `pu._fit` around `lstsq`, with a fused streaming norm and C-ordered scaling |
 | Classes | `Polynomial` `Chebyshev` `Legendre` `Laguerre` `Hermite` `HermiteE` | an object layer over the unit entry points; no kernels; U3 step tables interpreted over a series algebra for `convert`/`cast` |
@@ -362,7 +367,37 @@ there; `chebpts2` also pays linspace's pass.
 >   same-dtype kernel (0.45 µs) with the same bytes, and both now write into the fresh buffer of the statement before.
 > - The leak audit credits the two members through its OpenBLAS pass (`BackendOnlyOpKeys` takes module-qualified
 >   polynomial keys now): every success needs `eigvalsh`.
-> - `hermgauss` / `hermegauss` are still open (unit 7, the normed recurrences as U3 programs).
+>
+> **`hermgauss` / `hermegauss` DELIVERED (2026-10-18).** `NDPolyGauss.HermiteGauss` + the two facade members, the
+> composition below with the normalised recurrences as ONE Direct IL kernel
+> (`Backends/Kernels/Direct/DirectILKernelGenerator.PolyNormedHermite.cs`) instead of the recommended U3 step-table
+> program; the polygauss tiers grew by 122 portable argument-error cases (244) and 192 host-pinned value / flags cases
+> (352), zero excuses; unit tests `PolynomialGaussTests.cs` (8, shared) and
+> `Backends/Kernels/PolyNormedHermiteKernelTests.cs` (5; 16 of 22 planted defects caught, the 6 survivors equivalent:
+> c0's NaN never reaches a result, c1·x's two NaNs are one, the degree-0 constant cancels, and three bare adds keep
+> NumPy's NaN because RyuJIT puts P first today — two controls forcing the other NaN are caught); benchmark 46 cells,
+> all bit-exact, hermgauss geomean 3.81×, hermegauss 3.65×, each cell shown against its eigvalsh ceiling. What the
+> delivery found:
+> - **NumPy's own results reach NaN, so the NaN rule decides bits**: from degree 371 some weights are 0 (the final scale
+>   underflows), from 372 some are NaN (`w.sum()` overflows, `inf · 0`), from 741 some nodes are NaN (the recurrence
+>   overflows, `inf - inf`; hermgauss(1000) has 68). U3's float64 emitter does not pin which operand's NaN an add or
+>   multiply keeps (its oracle never pairs two NaNs), so the kernel emits each statement through the house
+>   `NaNOperandOrder.NumPyUfunc` emitters (an array-array add / multiply keeps the SECOND operand's NaN) and np.negative
+>   as a sign-bit XOR; 162 probe records to degree 1000 and the 46 benchmark cells match NumPy's raw bytes, payloads
+>   included.
+> - **The steps are uniform**: NumPy's first step works on the scalars `c0 = 0.`, `c1 = C` and its second on the scalar
+>   `c0 = -C·s1`; broadcasting them into every lane gives the same bits (`0. + array` turns -0.0 into +0.0, and the NaN
+>   masks are inert against finite operands), so one loop body serves every step. One table of NumPy's factors
+>   `sqrt((nd-1)/nd)`, `sqrt(2/nd)` serves all three recurrences of a call (degree deg − 1 reads it from row 1).
+> - **The kernel is latency-bound**: a step's chain (`c1·x`, the factor, the NaN-ordered add) is ~18 cycles, so the
+>   point blocks decide the speed — 2 vectors 194 µs, 4 vectors 107 µs, 6 vectors 100 µs at 500 points (AVX2's 16
+>   registers spill); delivered: blocks of 4, then at most one block of 2, single vectors and a scalar tail.
+> - **`dtype=np.float64` in `c = np.array([0] * deg + [1], dtype=np.float64)` is unobservable**: the companion's
+>   as_series turns leggauss's int64 series into float64 anyway, so the argument kinds raise and compute exactly as
+>   leggauss's (44 error kinds probed equal).
+> - **The floor is syevd**: 96–98 % of NumSharp's call at degree 500 and 1000; the ceilings are 1.57–1.60× and 1.23×,
+>   reached at 1.52–1.54× and 1.20–1.21×. A cheaper tridiagonal solver (the companion is tridiagonal) would give other
+>   bits.
 
 **NumPy 2.4.2 (leggauss).**
 ```python
@@ -604,8 +639,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 7 | `chebgauss` | chebyshev | **DELIVERED** — one emitted fill (`cos((π·(2k+1))/(2.0·deg))`), `np.full` for w | arange + fused `Cos` (1.41× at 1K: the ramp and the 0-d parameter around a cos-bound pass) | host-libm (cos) | 1.16× (10K, cos floor) – 5.8×; geomean 3.14 |
 | 8 | `leggauss` | legendre | **DELIVERED** — composition (U7 companion → `eigvalsh` → U3/U4 → house ufuncs/reductions) | arena (not needed) | host-pinned (syevd) | 1.63× (degree 500, syevd-bound) – 9.9×; geomean 4.40 |
 | 9 | `laggauss` | laguerre | **DELIVERED** — composition (as leggauss, no symmetrisation) | — | host-pinned | 2.13× (degree 500) – 18.3×; geomean 6.54 |
-| 10 | `hermgauss` | hermite | **composition + `_normed_hermite_n` as a U3 step-table program** | array-statement loop (1.14–1.51×) | host-pinned | est. 3.8–12× |
-| 11 | `hermegauss` | hermite_e | **composition + `_normed_hermite_e_n` as a U3 step-table program** | array-statement loop (1.38×) | host-pinned | est. as hermgauss |
+| 10 | `hermgauss` | hermite | **DELIVERED** — composition + `_normed_hermite_n` as one Direct IL pass per node (NumPy's NaN rule) | array-statement loop (1.14–1.51×); a U3 step-table program (no NaN priority) | host-pinned | 1.20× (degree 1000, syevd ceiling 1.23) – 10.7×; geomean 3.81 |
+| 11 | `hermegauss` | hermite_e | **DELIVERED** — as hermgauss with `_normed_hermite_e_n` | as hermgauss | host-pinned | 1.21× (degree 1000, ceiling 1.23) – 10.4×; geomean 3.65 |
 | 12 | `chebpts1` | chebyshev | **DELIVERED** — one emitted fill, MIRRORED (the antisymmetric ramp and the odd C-runtime sin: half the sin calls, the same bytes) | arange + fused `Sin` (1.27× at 1K) | host-libm (sin) | 2.26–4.83×; geomean 3.99 |
 | 13 | `chebpts2` | chebyshev | **DELIVERED** — one emitted fill (`cos(k·s + (-π))`, endpoint `cos(0)`) | `np.cos(np.linspace(...))` (1.8× at 1K, one pass more) | host-libm (cos) | 1.15× (10K, cos floor) – 11.9×; geomean 3.92 |
 | 14 | `chebinterpolate` | chebyshev | **DELIVERED** — composition (`chebpts1` → delegate → `chebvander` → `np.dot` → 2 in-place divides) | a fused DCT (breaks gemv parity) | host-pinned (gemv / gemm / ddot) | 3.20× (complex, degree 5) – 16.2×; geomean 7.20 |
@@ -628,8 +663,9 @@ Measured proxies (the unit functions the members call; the class adds an object 
 
 1. **U3 emitter, three additions** (needed by #1, #10, #11):
    - a skeleton with an ascending index and a product accumulator (**done**, #1: `PolyEvalProgram.RootProduct`);
-   - a unary `Neg` node;
-   - programs without a coefficient term (the normed Hermite recurrences).
+   - a unary `Neg` node and programs without a coefficient term (the normed Hermite recurrences): **not needed** — #10
+     / #11 took a dedicated Direct IL kernel instead (`DirectILKernelGenerator.PolyNormedHermite.cs`), because U3's
+     float64 emitter does not pin NaN operand priority and NumPy's results reach NaN (§3.4).
 2. **The complex-form rule for `polyvalfromroots`** (#1, **done**, float16 too): LoopScalar where np.prod's inner loop
    walks roots, Simd otherwise. Decided from `Shape.NpyIterOutputShape` of the `x - r` temporary.
 3. **Dragon4 float32/float16 entry points** (#28 and the class printing).
@@ -698,7 +734,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | `polyvalfromroots` | **DELIVERED**: the `polyeval` tier (portable), section M (3,519 cases) | the dtype matrix, Python / NumPy-scalar / 0-d x, the complex AND float16 product forms (seeded full-mantissa draws, three per cell), x and r layouts with the strides facet, array_like r and x, empty r, None / str / object-root errors and results, 45-point vector lanes, special values |
 | weights | `chebweight`/`legweight` portable; `lagweight`/`hermweight`/`hermeweight` host-libm (`RunHostLibmCorpus`) | every dtype incl. bool/int8/uint8 wrap-arounds, Python-scalar kinds, list/tuple TypeErrors, the huge-Python-int TypeError |
 | `chebpts1`/`chebpts2`/`chebgauss` | **DELIVERED**: `polypts.jsonl` (362, portable: errors, empty results, flags, Char) + `polypts_host.jsonl` (347, host-libm values) | the `int()`/`_as_int` argument matrix of §3.3, np.arange's 2**63 band |
-| `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); leg / lag **DELIVERED**: `polygauss.jsonl` (122 portable errors) + `polygauss_parity.jsonl` (160) | degrees 1…257; the `operator.index` / list-repeat argument matrix; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) still to come |
+| `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); **DELIVERED**: `polygauss.jsonl` (244 portable errors) + `polygauss_parity.jsonl` (352) | degrees 1…257; the `operator.index` / list-repeat argument matrix; for the Hermite pair also 206–208 (where the plain recurrence overflows and NumPy's normed one does not) and the onsets of zero weights (371), NaN weights (372) and NaN nodes (741) to degree 1000 |
 | `chebinterpolate` | **DELIVERED**: `polyinterp.jsonl` (83 portable errors / flags) + `polyinterp_parity.jsonl` (1,030 values, host-pinned) | (n,), (n, k) and (2, n, 3) results, scalar results, every dtype the delegate returns, lists / tuples, `args`, the deg kinds and their wrap-around |
 | fits | **DELIVERED**: `polyfit.jsonl` (324 portable errors / kinds / flags) + `polyfit_parity.jsonl` (1,242 values, statistics and flags, host-pinned: gelsd at one thread) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |
 | classes | portable (fit/roots inherit their tiers) | `test_classes.py` × 6, `test_symbol.py`, `convert`/`cast` bytes (the series-object Clenshaw) |
