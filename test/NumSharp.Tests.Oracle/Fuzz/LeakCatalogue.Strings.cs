@@ -8,10 +8,12 @@ namespace NumSharp.Tests.Fuzz
     ///     Catalogue entries for the <c>numpy.strings</c> functions of strings phase 2, P2.5 (<c>str_len</c>, the find family,
     ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
     ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c> and the six comparison names) and P2.6 (the predicates
-    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>, <c>translate</c>, <c>mod</c>). The
-    ///     string oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> / <c>tprop</c> / <c>strcase</c> / <c>tcase</c> /
-    ///     <c>strtrans</c> / <c>ttrans</c> / <c>strmod</c> / <c>tmod</c> replay them through its own harness, outside the
-    ///     corpus sweep, so each is measured here.
+    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>, <c>translate</c>, <c>mod</c>,
+    ///     <c>encode</c> / <c>decode</c>). The string oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> /
+    ///     <c>tprop</c> / <c>strcase</c> / <c>tcase</c> / <c>strtrans</c> / <c>ttrans</c> / <c>strmod</c> / <c>tmod</c> /
+    ///     <c>strcodec</c> / <c>tcodec</c> replay them through its own harness, outside the corpus sweep, so each is measured
+    ///     here. An encoding / errors argument is an <c>object</c> parameter (a C# string stays a string, converted and
+    ///     disposed inside the call), so it may be written at the call.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -734,6 +736,225 @@ namespace NumSharp.Tests.Fuzz
                   {
                   }
                   return np.strings.mod(u, 4);
+              });
+            AddStringsCodec(l);
+        }
+
+        /// <summary>
+        ///     The P2.6 <c>encode</c> / <c>decode</c>: every route that holds a temporary — the walk's rows, arena, code-point
+        ///     scratch and width-estimate sink; the fast runs over <c>U</c>, <c>S</c> and <c>StringDType</c> elements (the vector
+        ///     runs and their inline handlers, the UTF-16 / UTF-32 runs, the namereplace run with its exact pre-pass and its
+        ///     cached replacements); the general route (arguments that vary per element); rows re-laid out by a late long element
+        ///     and narrowed at the end; the element errors that abandon the walk after the rows were laid out (a codec error, an
+        ///     unknown handler name at the first error, the undefined codec, a one-unit text past U+10FFFF); the argument errors
+        ///     (a non-str encoding, a NUL), an unknown codec and one NumSharp does not implement; an empty broadcast; a chararray
+        ///     operand; the method lookups that fail (an <c>S</c> operand to encode, a <c>U</c> operand to decode); a non-text
+        ///     operand's TypeError.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        private static void AddStringsCodec(List<LeakCase> l)
+        {
+            E(l, "np.strings.encode",
+              "U / T x utf-8 / ascii / latin-1 / utf-16 / utf-32 / cp1252, inline handlers, namereplace, varying encodings, re-layout, element and argument errors, unsupported codec, empty, chararray, S operand, int",
+              f =>
+              {
+                  using var u = np.array(Enumerable.Range(0, 200).Select(i => i == 150 ? "héllo wörld, a longer text" : i % 3 == 0 ? "café" : "abc").ToArray());
+                  using var t = np.array(new object[] { "abc", "héllo wörld and a text past the cell", "naïve" }, np.dtypes.StringDType());
+                  using var tNone = np.array(new object[] { "ab", null }, np.dtypes.StringDType(na_object: null));
+                  using var encodings = np.array(new[] { "utf-8", "latin-1", "utf-16" });
+                  using var three = np.array(new[] { "a", "é", "中" });
+                  using var c = np.@char.array(new[] { "ab", "é" });
+                  using var s = np.array(new object[] { new byte[] { 97 } });
+                  using var ints = np.array(new[] { 1, 2 });
+                  using var empty = np.zeros(new Shape(0, 2), np.dtype("U3"));
+                  // A one-unit element past U+10FFFF (a raw U view): CPython's SystemError at the scalar, after element 0.
+                  using var raw = np.zeros(new Shape(3), np.dtype("U1"));
+                  using (var units = raw.view(np.uint32))
+                  {
+                      units.SetUInt32('a', 0);
+                      units.SetUInt32(0x110000, 1);
+                  }
+                  using var r1 = np.strings.encode(u);
+                  using var r2 = np.strings.encode(u, "ascii", "replace");
+                  using var r3 = np.strings.encode(u, "ascii", "xmlcharrefreplace");
+                  using var r4 = np.strings.encode(u, "ascii", "namereplace");
+                  using var r5 = np.strings.encode(u, "utf-16");
+                  using var r6 = np.strings.encode(u, "utf-32-be");
+                  using var r7 = np.strings.encode(u, "cp1252", "backslashreplace");
+                  using var r8 = np.strings.encode(t, "latin-1");
+                  using var r9 = np.strings.encode(t, "ascii", "ignore");
+                  using var r10 = np.strings.encode(three, encodings);
+                  using var r11 = np.strings.encode(c, "utf-8");
+                  using var r12 = np.strings.encode(empty, "utf-8");
+                  try
+                  {
+                      // Element 0 ("café") raises right after the width estimate laid the rows out.
+                      np.strings.encode(u, "ascii");
+                  }
+                  catch (UnicodeEncodeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(u, "ascii", "no-such-handler");
+                  }
+                  catch (LookupError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(u, "no-such-codec");
+                  }
+                  catch (LookupError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(u, "utf-7");
+                  }
+                  catch (NotSupportedException)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(u, "undefined");
+                  }
+                  catch (UnicodeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(u, 5);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(u, "utf\u00008");
+                  }
+                  catch (ValueError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(raw, "utf-32");
+                  }
+                  catch (SystemError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(tNone, "utf-8");
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(s);
+                  }
+                  catch (AttributeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.encode(ints);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  return np.strings.encode(u, "utf-8");
+              });
+            E(l, "np.strings.decode",
+              "S x utf-8 / ascii / latin-1 / utf-16 / utf-32 / cp1252, inline handlers, varying encodings, re-layout, element and argument errors, unsupported codec, empty, chararray, U operand, int",
+              f =>
+              {
+                  using var s = np.array(Enumerable.Range(0, 200).Select(i => (object)(i == 150
+                      ? System.Text.Encoding.UTF8.GetBytes("héllo wörld, a long one")
+                      : i % 3 == 0 ? new byte[] { 0x63, 0x61, 0x66, 0xE9 } : new byte[] { 0x61, 0x62 })).ToArray());
+                  using var u16 = np.array(new object[] { new byte[] { 0xFF, 0xFE, 0x61, 0x00, 0x62, 0x01 }, new byte[] { 0xFE, 0xFF, 0x00, 0x63 } });
+                  using var encodings = np.array(new[] { "utf-8", "latin-1" });
+                  using var two = np.array(new object[] { new byte[] { 0xC3, 0xA9 }, new byte[] { 0xE9 } });
+                  using var c = np.@char.array(new object[] { new byte[] { 0x61 } });
+                  using var u = np.array(new[] { "abc" });
+                  using var ints = np.array(new[] { 1, 2 });
+                  using var empty = np.zeros(new Shape(2, 0), np.dtype("S3"));
+                  using var r1 = np.strings.decode(s, "latin-1");
+                  using var r2 = np.strings.decode(s, "utf-8", "replace");
+                  using var r3 = np.strings.decode(s, "utf-8", "surrogateescape");
+                  using var r4 = np.strings.decode(s, "ascii", "backslashreplace");
+                  using var r5 = np.strings.decode(s, "ascii", "ignore");
+                  using var r6 = np.strings.decode(u16, "utf-16");
+                  using var r7 = np.strings.decode(s, "cp1252", "replace");
+                  using var r8 = np.strings.decode(two, encodings);
+                  using var r9 = np.strings.decode(c);
+                  using var r10 = np.strings.decode(empty);
+                  try
+                  {
+                      // Element 0 (a cut sequence) raises right after the width estimate laid the rows out.
+                      np.strings.decode(s, "utf-8");
+                  }
+                  catch (UnicodeDecodeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(s, "utf-8", "xmlcharrefreplace");
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(s, "utf-8", "no-such-handler");
+                  }
+                  catch (LookupError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(s, "no-such-codec");
+                  }
+                  catch (LookupError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(s, "idna");
+                  }
+                  catch (NotSupportedException)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(s, "undefined");
+                  }
+                  catch (UnicodeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(s, 1.5);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(u);
+                  }
+                  catch (AttributeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.decode(ints);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  return np.strings.decode(s, "latin-1");
               });
         }
     }

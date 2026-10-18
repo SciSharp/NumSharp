@@ -665,6 +665,27 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeMod() => Run("tmod");
 
         /// <summary>
+        ///     Section strcodec (strings phase 2, P2.6): numpy.strings.encode over U and decode over S — every layout kind
+        ///     of both classes; every codec NumSharp implements (UTF-8 and utf-8-sig, UTF-16 / UTF-32 with and without a BOM,
+        ///     Latin-1, ASCII, code pages with tables and with dictionaries, EBCDIC, 'undefined') x every error handler (the
+        ///     built-ins, an unknown name, a wrong case) x every text of the pools, one element per case; the codec
+        ///     spellings; the arguments' conversion and Argument Clinic's checks in CPython's order (non-str arguments of
+        ///     every kind, NULs, surrogates, names cut at 400 bytes, unknown and non-text codecs, decode's empty-bytes
+        ///     shortcut, _clean_args); arrays of encodings and errors broadcast; empty, 0-d and Python operands; units past
+        ///     U+10FFFF; long arrays past the 64-element row sample (widths growing, late errors, the direct row paths and
+        ///     the codec route mixed); random texts x codecs x handlers. Strict.
+        /// </summary>
+        [TestMethod] public void StringCodec() => Run("strcodec");
+
+        /// <summary>
+        ///     Section tcodec (strings phase 2, P2.6): numpy.strings.encode over NEP 55 StringDType text — the layout kinds x
+        ///     every NA kind (a non-str NA object is the method descriptor's TypeError, a string NA encodes as its text);
+        ///     every codec x handler over StringDType pools; StringDType arrays as the encoding / errors arguments; the
+        ///     descriptor check before the arguments' checks; empty and 0-d operands; long arrays; decode refused. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeCodec() => Run("tcodec");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -784,7 +805,7 @@ namespace NumSharp.Tests.Strings
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
-                "ttrans", "strmod", "tmod",
+                "ttrans", "strmod", "tmod", "strcodec", "tcodec",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

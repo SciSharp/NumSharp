@@ -14907,13 +14907,281 @@ def gen_tmod():
         fn_case(S, "mod", [(fbase, fbase), vop], [_Op(0), _Op(1)], f"rand{i}:{_t_label(spec)}:{kind}")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Sections strcodec / tcodec: numpy.strings.encode / decode (strings phase 2, P2.6 milestone 4), strict
+# ----------------------------------------------------------------------------------------------------------------------
+
+# The codecs NumSharp implements, by a canonical name each (the C fast paths, the registry's Unicode and charmap modules,
+# 'undefined'), and the spellings that reach them through _Py_normalize_encoding / the alias table. The multi-byte CJK
+# codecs, utf-7, the escape codecs, idna, punycode and mbcs / oem are refused with NotSupportedException (unit-tested), so
+# they stay out of the corpus.
+CODEC_NAMES = ["utf-8", "utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be", "latin-1",
+               "ascii", "cp1252", "cp437", "cp037", "koi8_r", "mac_roman", "iso8859_15", "cp1251", "hp_roman8", "cp864",
+               "undefined"]
+CODEC_ALIASES = ["UTF8", "U8", "utf_8", "UTF-8", "  utf 8 ", "utf--8", "Latin-1", "latin1", "iso-8859-1", "iso8859_1", "8859",
+                 "L1", "cp65001", "UTF-16LE", "u16", "utf_32_be", "windows-1252", "US-ASCII", "646", "ebcdic-cp-us",
+                 "csASCII", "iso_8859_15:1998", "UTF-8-SIG"]
+# Every error-handler name: the absent one (None: strict, and the errors argument dropped), the built-ins, an unknown
+# name and a wrong case (both LookupError at the first error only).
+CODEC_HANDLERS = [None, "strict", "ignore", "replace", "backslashreplace", "xmlcharrefreplace", "namereplace",
+                  "surrogateescape", "surrogatepass", "bogus", "Strict"]
+# The texts an encode meets: ASCII (with an embedded NUL), the Latin-1 range, the BMP (code-page characters, Cyrillic,
+# CJK), the supplementary planes (an emoji, Deseret), lone surrogates (escapable U+DC80..U+DCFF runs, high / low, a pair
+# held as two code points), named and unnamed characters for namereplace (aliases in the PUA plane 15, a Hangul syllable,
+# a CJK unified / compatibility ideograph, Tangut, unassigned U+0378), and the empty str.
+CODEC_U_POOL = ["", "a", "abc", "Hello World", "x\x00y", "é", "café", "\xff\xa0", "€", "Привет", "中文字", "Ā",
+                "\U0001F600", "a\U00010400b", "aé€\U0001F600", "\ud800", "a\udc80b", "\udcff\udc80", "😀",
+                "\udfffz", "x\udc80\ud800y", "\U000F0000\U000F0001", "가", "豈\U0002F800", "\U00017000", "͸",
+                "\x80\x9f", "ß ", "€" * 12]
+# The bytes a decode meets: ASCII (an embedded NUL), valid UTF-8 of every length, every invalid UTF-8 shape (a stray
+# continuation byte, a truncated sequence, an overlong lead, an encoded surrogate, past U+10FFFF, F5..FF), UTF-16 / UTF-32
+# data (whose trailing NUL byte NumPy's np.bytes_ drops), BOMs, Latin-1 and code-page bytes, and the empty bytes.
+CODEC_S_POOL = [b"", b"a", b"abc", b"x\x00y", b"caf\xc3\xa9", b"\xe2\x82\xac", b"\xf0\x9f\x98\x80", b"\xff", b"\x80",
+                b"a\xc3", b"\xe2\x82", b"\xed\xa0\x80", b"\xc0\xaf", b"\xf4\x90\x80\x80", b"\xf0\x80\x80\x80", b"\xf5z",
+                b"\xe0\x80b", b"\xef\xbb\xbfabc", b"\xff\xfea\x00b\x00", b"\xfe\xff\x00a\x00b", b"a\x00\x00\xd8b\x00",
+                b"a\x00\x00\xdc", b"\xff\xfe\x00\x00a\x00\x00\x00", b"a\x00\x00\x00\x00\xd8\x00\x00", b"\xe9\xff", b"\x81\x8d",
+                b"\x00\x00\x11\x00", b"ab\xedcd\xa0"]
+
+
+def gen_strcodec():
+    """Section strcodec: numpy.strings.encode over U and decode over S, strict — every layout kind of both classes;
+    every codec NumSharp implements x every error handler x every text of the pools, one element per case (so each text's
+    own answer, error or result, is recorded); the codec spellings; the arguments' conversion and Argument Clinic's checks
+    in CPython's order (a non-str encoding / errors of every kind, NULs, surrogates, long names cut at 400 bytes, unknown
+    and non-text codecs, the empty-bytes shortcut of decode); _clean_args (errors without an encoding); arrays of encodings
+    and errors broadcast; empty, 0-d and Python operands; units past U+10FFFF; long arrays past the 64-element row sample
+    NumSharp lays its result out from (growing widths, fast and codec routes mixed); random texts x codecs x handlers."""
+    import random
+    S = "strcodec"
+    # A. Every layout kind x both classes, the default codec and two others.
+    for spec, name, pool in [("<U6", "encode", ["abc", "é", "", "x\x00y", "Hello", "€"]),
+                             ("<U12", "encode", ["abc", "naïve", "", "Привет", "a\U0001F600", "zz"]),
+                             ("|S6", "decode", [b"abc", b"\xc3\xa9", b"", b"x\x00y", b"Hello", b"\xe2\x82\xac"]),
+                             ("|S12", "decode", [b"abc", b"na\xc3\xafve", b"", b"\xd0\x9f", b"a\xf0\x9f\x98\x80", b"zz"])]:
+        for layout in LAYOUTS:
+            op = fn_operand(spec, layout, seed=1, pool=pool)
+            lab = f"{spec}:{layout}"
+            fn_case(S, name, [op], [_Op(0)], lab)
+            fn_case(S, name, [op], [_Op(0), "latin-1", "replace"], f"{lab}:latin1")
+            fn_case(S, name, [op], [_Op(0), "utf-16"], f"{lab}:utf16")
+    # B. Every codec x handler x text, one element per case.
+    for codec in CODEC_NAMES:
+        for handler in CODEC_HANDLERS:
+            args = [codec] if handler is None else [codec, handler]
+            for k, text in enumerate(CODEC_U_POOL):
+                op = plain(np.array([text], dtype=f"<U{max(1, len(text))}"))
+                fn_case(S, "encode", [op], [_Op(0)] + args, f"enc:{codec}:{handler}:{k}")
+            for k, data in enumerate(CODEC_S_POOL):
+                op = plain(np.array([data], dtype=f"|S{max(1, len(data))}"))
+                fn_case(S, "decode", [op], [_Op(0)] + args, f"dec:{codec}:{handler}:{k}")
+    # C. The codec spellings: each over a pool array under three handlers.
+    upool = ["abc", "é", "€", "Ā", "\ud800", ""]
+    spool = [b"abc", b"\xc3\xa9", b"\xe9", b"\xff\xfea\x00", b""]
+    for alias in CODEC_ALIASES:
+        for handler in [None, "replace", "backslashreplace"]:
+            args = [alias] if handler is None else [alias, handler]
+            fn_case(S, "encode", [plain(np.array(upool))], [_Op(0)] + args, f"alias:enc:{alias}:{handler}")
+            fn_case(S, "decode", [plain(np.array(spool))], [_Op(0)] + args, f"alias:dec:{alias}:{handler}")
+    # D. Argument Clinic's checks, in CPython's order (the a-scalar first, the encoding before the errors, the empty-bytes
+    #    shortcut of decode before the lookup), _clean_args, and the codec lookup's errors.
+    u3 = plain(np.array(["abc", "é", ""]))
+    s3 = plain(np.array([b"abc", b"\xc3\xa9", b""]))
+    se = plain(np.array([b"", b""]))
+    sx = plain(np.array([b"", b"x"]))
+    for name, op in [("encode", u3), ("decode", s3), ("decode", se), ("decode", sx)]:
+        lab = f"{name}:{op[1].dtype.str}:{op[1].size}"
+        for label, enc, err in [("bytes-enc", b"utf-8", None), ("int-enc", 5, None), ("float-enc", 1.5, None),
+                                ("bool-enc", True, None), ("bytes-err", "utf-8", b"strict"), ("int-err", "utf-8", 5),
+                                ("float-err", "utf-8", 2.5), ("bool-err", "ascii", False), ("both-bad", 5, b"x"),
+                                ("nul-enc", "utf\x008", None), ("nul-err", "utf-8", "str\x00ict"),
+                                ("nul-tail-enc", "utf-8\x00", None),
+                                ("surr-enc", "\ud800", None), ("surr-enc2", "utf\udfff\ud800-8", None),
+                                ("surr-err", "utf-8", "x\udfff"), ("unknown", "nope", None), ("empty-name", "", None),
+                                ("base64", "base64", None), ("rot13", "rot13", "strict"), ("hex", "hex", None),
+                                ("zlib", "zlib_codec", None), ("long-enc", "b" * 450, None),
+                                ("long-err", "ascii", "x" * 450), ("long-nontext", "base64" + " " * 420, None),
+                                ("long-err-utf8", "ascii", "é" * 300), ("none-enc", None, "ignore"),
+                                ("none-err", "ascii", None), ("strict-name", "ascii", "strict"),
+                                ("odd-name", "ascii", "Replace"), ("astral-enc", "a\U00010400b", None)]:
+            args = [enc] if err is None else [enc, err]
+            fn_case(S, name, [op], [_Op(0)] + args, f"{lab}:{label}")
+    # Object lists as arguments (NumPy's object arrays: a str element passes, None / numbers do not).
+    for name, op in [("encode", u3), ("decode", s3)]:
+        for label, enc in [("obj-none", ["utf-8", None, "ascii"]), ("obj-int", ["utf-8", "ascii", 5]),
+                           ("obj-ok", ["utf-8", "latin-1", "ascii"]), ("obj-big", ["utf-8", 2**70, "ascii"])]:
+            fn_case(S, name, [op], [_Op(0), enc], f"{name}:args:{label}")
+            fn_case(S, name, [op], [_Op(0), "ascii", enc], f"{name}:args:{label}:errors")
+    # E. Arrays of encodings and errors, broadcast (per-element codecs, a varying handler, 2-D, a mismatch, a ragged list).
+    fn_case(S, "encode", [plain(np.array(["a", "b", "é"])), plain(np.array(["utf-8", "utf-16", "latin-1"]))],
+                [_Op(0), _Op(1)], "arr:enc")
+    fn_case(S, "encode", [plain(np.array(["é", "€"])), plain(np.array([["replace"], ["ignore"]]))],
+                [_Op(0), "ascii", _Op(1)], "arr:err2d")
+    fn_case(S, "encode", [plain(np.array([["a"], ["bé"]])), plain(np.array(["utf-8", "latin-1"]))],
+                [_Op(0), _Op(1)], "arr:bcast2d")
+    fn_case(S, "encode", [plain(np.array(["a", "b"])), plain(np.array(["utf-8", "ascii", "latin-1"]))],
+                [_Op(0), _Op(1)], "arr:mismatch")
+    fn_case(S, "encode", [plain(np.array(["a"]))], [_Op(0), [["a", "b"], ["c"]]], "arr:ragged")
+    fn_case(S, "encode", [plain(np.array(["é", "é", "é", "é"]))],
+                [_Op(0), ["ascii", "latin-1", "ascii", "nope"], ["replace", "strict", "backslashreplace", "ignore"]],
+                "arr:mixed-later-error")
+    fn_case(S, "decode", [plain(np.array([b"a\xff", b"b\xff"]))], [_Op(0), "utf-8", ["ignore", "replace"]], "arr:dec-err")
+    fn_case(S, "decode", [plain(np.array([b"a", b"\xff"]))], [_Op(0), ["utf-8", "nope"]], "arr:dec-first-err")
+    fn_case(S, "decode", [plain(np.array([b"", b"\xff", b""]))], [_Op(0), ["nope", "latin-1", "base64"]],
+                "arr:dec-empty-skips-lookup")
+    rng = random.Random(4413)
+    for i in range(12):
+        names = [rng.choice(["utf-8", "latin-1", "ascii", "utf-16", "cp1252", "utf-32-be", "koi8_r"]) for _ in range(8)]
+        handlers = [rng.choice(["replace", "ignore", "backslashreplace", "xmlcharrefreplace", "namereplace"]) for _ in range(8)]
+        texts = [rng.choice(["abc", "é", "€", "Привет", "中", "", "a\U0001F600"]) for _ in range(8)]
+        fn_case(S, "encode", [plain(np.array(texts)), plain(np.array(names)), plain(np.array(handlers))],
+                    [_Op(0), _Op(1), _Op(2)], f"arr:rand{i}")
+    # F. Empty, 0-d and Python operands.
+    for name, spec in [("encode", "<U3"), ("decode", "|S3")]:
+        fn_case(S, name, [plain(np.zeros(0, dtype=spec))], [_Op(0)], f"{name}:empty")
+        fn_case(S, name, [plain(np.zeros((2, 0), dtype=spec))], [_Op(0), "nope", 5], f"{name}:empty2d-bad-args")
+        fn_case(S, name, [plain(np.zeros(3, dtype=spec))], [_Op(0), "utf-16"], f"{name}:all-empty-elements")
+    fn_case(S, "encode", [plain(np.zeros((0, 3), dtype="<U2")), plain(np.array(["a", "b", "c"]))], [_Op(0), _Op(1)],
+            "encode:empty-bcast")
+    fn_case(S, "encode", [plain(np.array("aé€"))], [_Op(0), "latin-1", "xmlcharrefreplace"], "encode:0d")
+    fn_case(S, "decode", [plain(np.array(b"a\xffb"))], [_Op(0), "ascii", "surrogateescape"], "decode:0d")
+    fn_case(S, "encode", [], ["abc\U0001F600", "utf-16-be"], "encode:pystr")
+    fn_case(S, "decode", [], [b"abc\xc3\xa9", "utf-8"], "decode:pybytes")
+    fn_case(S, "encode", [plain(np.array([1, 2]))], [_Op(0)], "encode:int")
+    fn_case(S, "decode", [plain(np.array([1.5]))], [_Op(0)], "decode:float")
+    fn_case(S, "encode", [plain(np.array([b"a"]))], [_Op(0), "nope"], "encode:S")
+    fn_case(S, "decode", [plain(np.array(["a"]))], [_Op(0), "nope"], "decode:U")
+    # G. U units past U+10FFFF: a one-unit element is CPython's SystemError at the scalar; a longer one carries the unit
+    #    through each codec's arithmetic (UTF-8's truncated four-byte pattern, UTF-16's "surrogates", UTF-32's value).
+    for codec, handler in [("utf-8", None), ("utf-16", None), ("utf-32-be", None), ("latin-1", "backslashreplace"),
+                           ("ascii", "xmlcharrefreplace"), ("ascii", "namereplace"), ("cp1252", "replace"),
+                           ("cp1252", "backslashreplace"), ("utf-16-le", "strict"), ("ascii", None)]:
+        args = [codec] if handler is None else [codec, handler]
+        fn_case(S, "encode", [_u_units([0x61, 0x110000, 0x62, 0xFFFFFFFF], 2)], [_Op(0)] + args,
+                    f"past:kept:{codec}:{handler}")
+        fn_case(S, "encode", [_u_units([0x110000, 0, 0x61, 0], 2)], [_Op(0)] + args, f"past:alone:{codec}:{handler}")
+        fn_case(S, "encode", [_u_units([0x61, 0x7FFFFFFF, 0x62, 0x80000000], 2)], [_Op(0)] + args,
+                    f"past:big:{codec}:{handler}")
+    # H. Long arrays: past the 64-element sample, widths growing after it (the rows re-laid out), the direct row paths
+    #    and the codec route mixed element by element.
+    lrng = random.Random(4417)
+    long_u = [("a" * min(40, k // 3)) + ("é" if k % 7 == 0 else "") + ("€" if k % 11 == 0 else "") for k in range(150)]
+    long_s = [x.encode("utf-8") for x in long_u]
+    for codec, handler in [("utf-8", None), ("ascii", "replace"), ("latin-1", "xmlcharrefreplace"), ("utf-16", None),
+                           ("utf-32-le", None), ("cp1252", "namereplace"), ("ascii", "backslashreplace"),
+                           ("utf-8-sig", None), ("koi8_r", "replace")]:
+        args = [codec] if handler is None else [codec, handler]
+        fn_case(S, "encode", [plain(np.array(long_u))], [_Op(0)] + args, f"long:enc:{codec}:{handler}")
+    for codec, handler in [("utf-8", None), ("ascii", "replace"), ("latin-1", None), ("utf-8", "surrogateescape"),
+                           ("utf-16-le", "replace"), ("cp1252", "backslashreplace"), ("ascii", "ignore")]:
+        args = [codec] if handler is None else [codec, handler]
+        fn_case(S, "decode", [plain(np.array(long_s))], [_Op(0)] + args, f"long:dec:{codec}:{handler}")
+    shrink_u = ["x" * 30 + "é"] * 70 + ["ab"] * 80
+    fn_case(S, "encode", [plain(np.array(shrink_u))], [_Op(0)], "long:enc:sample-wider")
+    late = ["a"] * 100 + ["é" * 50] + ["b"] * 30
+    fn_case(S, "encode", [plain(np.array(late))], [_Op(0)], "long:enc:late-grow")
+    fn_case(S, "decode", [plain(np.array([x.encode() for x in late]))], [_Op(0)], "long:dec:late-grow")
+    late_err = ["ok"] * 120 + ["\ud800"] + ["ok"] * 9
+    fn_case(S, "encode", [plain(np.array(late_err))], [_Op(0)], "long:enc:late-error")
+    fn_case(S, "decode", [plain(np.array([b"ok"] * 120 + [b"\xff"] + [b"ok"] * 9))], [_Op(0)], "long:dec:late-error")
+    lens = [lrng.randint(0, 24) for _ in range(200)]
+    rand_u = ["".join(lrng.choice("abcdefgh") for _ in range(n)) for n in lens]
+    rand_u[150] = rand_u[150] + "é"
+    rand_u[170] = "€" * 20
+    for codec in ["utf-8", "latin-1", "ascii", "utf-16-be"]:
+        fn_case(S, "encode", [plain(np.array(rand_u))], [_Op(0), codec, "replace"], f"long:enc:rand:{codec}")
+    rand_s = [x.encode("utf-8") for x in rand_u]
+    for codec in ["utf-8", "latin-1", "ascii", "utf-16-le"]:
+        fn_case(S, "decode", [plain(np.array(rand_s))], [_Op(0), codec, "replace"], f"long:dec:rand:{codec}")
+    # I. Random texts x codecs x handlers (seeded): code points drawn from ASCII, Latin-1, the BMP, surrogates and the
+    #    supplementary planes; bytes drawn from ASCII, continuation, lead and invalid bytes.
+    cp_ranges = [(0x20, 0x7E), (0x80, 0xFF), (0x100, 0x17F), (0x400, 0x4FF), (0x4E00, 0x4E40), (0xD800, 0xDFFF),
+                 (0xDC80, 0xDCFF), (0x1F600, 0x1F64F), (0xF0000, 0xF0010), (0xAC00, 0xAC10)]
+    for i in range(300):
+        n = rng.randint(1, 6)
+        texts = ["".join(chr(rng.randint(*rng.choice(cp_ranges))) for _ in range(rng.randint(0, 8))) for _ in range(n)]
+        width = max(1, max(len(t) for t in texts))
+        codec = rng.choice(CODEC_NAMES[:-1])
+        handler = rng.choice(CODEC_HANDLERS[1:9])
+        fn_case(S, "encode", [plain(np.array(texts, dtype=f"<U{width}"))], [_Op(0), codec, handler],
+                    f"rand:enc{i}:{codec}:{handler}")
+    byte_kinds = [range(0x20, 0x7F), range(0x80, 0xC0), range(0xC2, 0xF5), [0xC0, 0xC1, 0xF5, 0xFF, 0xED, 0xE0, 0xF0, 0xF4],
+                  [0x00]]
+    for i in range(300):
+        n = rng.randint(1, 6)
+        datas = [bytes(rng.choice(list(rng.choice(byte_kinds))) for _ in range(rng.randint(0, 10))) for _ in range(n)]
+        width = max(1, max(len(d) for d in datas))
+        codec = rng.choice(CODEC_NAMES[:-1])
+        handler = rng.choice(CODEC_HANDLERS[1:9])
+        fn_case(S, "decode", [plain(np.array(datas, dtype=f"|S{width}"))], [_Op(0), codec, handler],
+                    f"rand:dec{i}:{codec}:{handler}")
+
+
+def gen_tcodec():
+    """Section tcodec: numpy.strings.encode over NEP 55 StringDType text, strict — the layout kinds x every NA kind (an NA
+    object that is not a str is the method descriptor's TypeError at its element; a string NA encodes as its text; no NA
+    object reads as the empty str); every codec x handler over StringDType pools (cells short and long, non-ASCII,
+    supplementary-plane characters); StringDType arrays as the encoding / errors arguments (a None NA element is the clinic
+    TypeError); the descriptor check before the arguments' checks; empty and 0-d operands; long arrays; decode refused."""
+    import random
+    S = "tcodec"
+    tpool = ["abc", "é", "", "Привет", "a\U0001F600", "x" * 20, "中文", "a\x00b", "€uro", "zz"]
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        for layout in T_COMPUTE_LAYOUTS:
+            for na_every in (0, 5):
+                op = t_operand(spec, layout, seed=1, pool=tpool, na_every=na_every)
+                fn_case(S, "encode", [op], [_Op(0)], f"{lab0}:{layout}:na{na_every}")
+                fn_case(S, "encode", [op], [_Op(0), "latin-1", "replace"], f"{lab0}:{layout}:na{na_every}:latin1")
+    for codec in CODEC_NAMES:
+        for handler in CODEC_HANDLERS:
+            args = [codec] if handler is None else [codec, handler]
+            for spec in [TD, TDS]:
+                vals = np.array(t_values(spec, 10, 0, tpool, 4), dtype=spec.build())
+                fn_case(S, "encode", [(vals, vals)], [_Op(0)] + args, f"{_t_label(spec)}:{codec}:{handler}")
+            for k, text in enumerate(["é", "€", "\U0001F600", "中", "x" * 40 + "€", "Ā"]):
+                one = np.array([text], dtype=TD.build())
+                fn_case(S, "encode", [(one, one)], [_Op(0)] + args, f"T1:{codec}:{handler}:{k}")
+    # NA order: a non-str NA object before / after an element the codec refuses; with a bad encoding argument.
+    for spec in [TDN, TDNAN]:
+        for values in (["a", spec.na], [spec.na, "a"], ["é", spec.na]):
+            base = np.array(values, dtype=spec.build())
+            for label, args in [("ok", []), ("ascii", ["ascii"]), ("bad-enc", [5]), ("unknown", ["nope"])]:
+                fn_case(S, "encode", [(base, base)], [_Op(0)] + args, f"{_t_label(spec)}:naorder:{label}:{values!r}")
+    # StringDType arguments.
+    ops = plain(np.array(["a", "b", "é"]))
+    for spec, values in [(TD, ["utf-16", "ascii", "latin-1"]), (TDN, ["utf-8", None, "ascii"]),
+                         (TDS, ["utf-8", "NA", "ascii"])]:
+        arg = np.array(values, dtype=spec.build())
+        fn_case(S, "encode", [ops, (arg, arg)], [_Op(0), _Op(1)], f"Targ:{_t_label(spec)}:encoding")
+        fn_case(S, "encode", [ops, (arg, arg)], [_Op(0), "ascii", _Op(1)], f"Targ:{_t_label(spec)}:errors")
+    for spec in [TD, TDN]:
+        empty = np.zeros((0, 3), dtype=spec.build())
+        fn_case(S, "encode", [t_plain(empty)], [_Op(0), "nope"], f"{_t_label(spec)}:empty")
+    zero = np.array("aé€", dtype=TD.build())
+    fn_case(S, "encode", [t_plain(zero)], [_Op(0), "ascii", "namereplace"], "0d")
+    tb = np.array(["a"], dtype=TD.build())
+    fn_case(S, "decode", [(tb, tb)], [_Op(0)], "decode:T")
+    # Long arrays (past the 64-element row sample; cells copied straight into the rows, the codec route mixed in).
+    lrng = random.Random(4421)
+    vals = ["".join(lrng.choice("abcdefgh") for _ in range(lrng.randint(0, 30))) for _ in range(160)]
+    vals[100] = vals[100] + "€"
+    vals[140] = "é" * 40
+    for spec in [TD, TDS]:
+        arr = np.array(t_values(spec, 160, 0, vals, 0 if spec is TD else 9), dtype=spec.build())
+        for codec, handler in [("utf-8", None), ("ascii", "replace"), ("latin-1", "backslashreplace"), ("utf-16", None),
+                               ("cp1252", "xmlcharrefreplace")]:
+            args = [codec] if handler is None else [codec, handler]
+            fn_case(S, "encode", [(arr, arr)], [_Op(0)] + args, f"long:{_t_label(spec)}:{codec}:{handler}")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strcharmeth, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
-              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod]
+              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod,
+              gen_strcodec, gen_tcodec]
 
 
 def main():

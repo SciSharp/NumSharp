@@ -8,12 +8,13 @@ namespace NumSharp.Tests.Strings
     /// <summary>
     ///     The string oracle's op for sections <c>strfn</c> / <c>tfn</c> (<c>gen_strfn</c> / <c>gen_tfn</c>, strings phase 2,
     ///     P2.5), <c>strprop</c> / <c>tprop</c>, <c>strcase</c> / <c>tcase</c>, <c>strtrans</c> / <c>ttrans</c> and
-    ///     <c>strmod</c> / <c>tmod</c> (P2.6): one <c>numpy.strings</c> function per case — <c>str_len</c>, the find family,
+    ///     <c>strmod</c> / <c>tmod</c>, <c>strcodec</c> / <c>tcodec</c> (P2.6): one <c>numpy.strings</c> function per case — <c>str_len</c>, the find family,
     ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
     ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c>, the comparison names, the predicates <c>isalpha</c> …
     ///     <c>isnumeric</c>, the case maps <c>upper</c> / <c>lower</c> / <c>swapcase</c> / <c>capitalize</c> / <c>title</c>,
-    ///     <c>translate</c> and <c>mod</c> — called with the generator's positional arguments (translate's table and
-    ///     deletechars, and mod's values, as C# objects: <see cref="StringsObjectArgument"/>).
+    ///     <c>translate</c>, <c>mod</c>, <c>encode</c> and <c>decode</c> — called with the generator's positional arguments
+    ///     (translate's table and deletechars, mod's values, and encode / decode's encoding and errors, as C# objects:
+    ///     <see cref="StringsObjectArgument"/>).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -67,6 +68,16 @@ namespace NumSharp.Tests.Strings
                 object table = StringsObjectArgument(raw[1], ops);
                 object deletechars = raw.Length > 2 ? StringsObjectArgument(raw[2], ops) : null;
                 return np.strings.translate(StringsArgument(raw[0], ops), table, deletechars);
+            }
+            if (name is "encode" or "decode")
+            {
+                // encode / decode's encoding and errors are Python objects too (strs, bytes, numbers, None, lists, arrays):
+                // passed as the C# values a ported line passes; an absent argument is the null default.
+                var raw = p["args"].EnumerateArray().ToArray();
+                object encoding = raw.Length > 1 ? StringsObjectArgument(raw[1], ops) : null;
+                object errors = raw.Length > 2 ? StringsObjectArgument(raw[2], ops) : null;
+                var text = StringsArgument(raw[0], ops);
+                return name == "encode" ? np.strings.encode(text, encoding, errors) : np.strings.decode(text, encoding, errors);
             }
             if (name == "mod")
             {

@@ -519,7 +519,11 @@ namespace NumSharp.Backends.Strings
             private void StartRows()
             {
                 _rowWidth = checked((int)Math.Max(1, MaxLength));
-                _rows = new NDArray(RowDescr(_rowWidth), _resultShape, false);
+                // ForOverwrite: every row is written whole (its units, then zeros) before the result is handed out, and a walk
+                // that raises disposes the rows unread. A U result through new NDArray(...) would take NumPy's NPY_NEEDS_INIT
+                // zero fill, which above a size is fresh OS pages: every call then page-faulted while it wrote its rows and
+                // paid a VirtualFree when the result was disposed.
+                _rows = NDArray.ForOverwrite(RowDescr(_rowWidth), _resultShape);
                 _rowBase = (byte*)_rows.Storage.Address;
                 // The vector row copies load whole vectors from an element's start: room past the last sampled element.
                 Reserve(VectorRowReach);
@@ -543,7 +547,8 @@ namespace NumSharp.Backends.Strings
             {
                 long wanted = _relayouts < 4 ? length : Math.Max(length, _rowWidth + _rowWidth / 2L);
                 int width = checked((int)wanted);
-                var grown = new NDArray(RowDescr(width), _resultShape, false);
+                // The rows written so far are copied (padded) below, the later ones are written as their elements come.
+                var grown = NDArray.ForOverwrite(RowDescr(width), _resultShape);
                 CopyRows(_rowBase, _rowWidth, (byte*)grown.Storage.Address, width, Position);
                 _rows.Dispose();
                 _rows = grown;
@@ -563,7 +568,8 @@ namespace NumSharp.Backends.Strings
                 int width = checked((int)Math.Max(1, MaxLength));
                 if (width != _rowWidth)
                 {
-                    var narrow = new NDArray(RowDescr(width), _resultShape, false);
+                    // Every row is copied into it: no NUL fill.
+                    var narrow = NDArray.ForOverwrite(RowDescr(width), _resultShape);
                     CopyRows(_rowBase, _rowWidth, (byte*)narrow.Storage.Address, width, _size);
                     _rows.Dispose();
                     _rows = narrow;
