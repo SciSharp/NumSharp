@@ -812,5 +812,59 @@ namespace NumSharp
         [NDScoped]
         public NDArray chebinterpolate(Func<NDArray, object[], object> func, object deg, object args = null)
             => NDPolyInterpolate.ChebInterpolate(func, deg, args);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Least-squares fit (plan U6): chebfit
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The least-squares fit of a Chebyshev series to data: the coefficients <c>c</c> that minimise the weighted squared error
+        ///     <c>sum_j w_j**2 * |y_j - chebval(x_j, c)|**2</c>, computed as NumPy 2.4.2 writes it (<c>polyutils._fit</c>: the
+        ///     <see cref="chebvander(object, object)"/> design matrix with its columns scaled to unit norm, solved by
+        ///     <c>np.linalg.lstsq</c>), so the coefficients are NumPy's bit for bit with the OpenBLAS backend NumPy loads.
+        /// </summary>
+        /// <param name="x">
+        ///     The x-coordinates of the M sample points: anything <c>np.asarray</c> takes that is 1-D — a list, a typed C# array,
+        ///     an <see cref="NDArray"/> of any real or complex dtype (bool and integers compute in float64, float32 in float32).
+        /// </param>
+        /// <param name="y">The y-coordinates: 1-D (M,), or 2-D (M, K) to fit K data sets that share the x-coordinates (one
+        ///     per column).</param>
+        /// <param name="deg">
+        ///     The degree of the fit: an integer (every term up to it is fitted), or a 1-D array_like of integer degrees (only
+        ///     those terms are fitted; the others are zero in the result). A bool, a float or an empty list is refused.
+        /// </param>
+        /// <param name="rcond">The relative cutoff below which singular values of the scaled design matrix count as zero, or
+        ///     null for NumPy's default <c>len(x)*eps</c> of x's float dtype.</param>
+        /// <param name="full">Also return the residuals, rank, singular values and rcond of the least-squares problem (NumPy's
+        ///     <c>full=True</c>): the result then deconstructs as <c>(c, (residuals, rank, singular_values, rcond))</c>.</param>
+        /// <param name="w">Weights of the sample points (1-D, length M), multiplying each point's residual, or null. For
+        ///     Gaussian uncertainties use <c>1/sigma</c>.</param>
+        /// <returns>
+        ///     The coefficients, low degree first, as an <see cref="NDPolyFitResult"/>: an <see cref="NDArray"/> of shape
+        ///     (deg + 1,) or (deg + 1, K) in the dtype lstsq computes in (float64; float32 for float32 x and y; complex128),
+        ///     carrying the statistics when <paramref name="full"/> is true.
+        /// </returns>
+        /// <exception cref="TypeError">NumPy's argument TypeErrors (<c>deg must be an int or non-empty 1-D array of int</c>,
+        ///     <c>expected 1D vector for x</c>, <c>expected non-empty vector for x</c>, <c>expected 1D or 2D array for y</c>,
+        ///     <c>expected x and y to have same length</c>, <c>expected 1D vector for w</c>, <c>expected x and w to have same
+        ///     length</c>); a null x / y / w (Python's <c>unsupported operand type(s) for +: 'NoneType' and 'float'</c>) or a
+        ///     str one (the ufunc add's no-loop text); a float16 x (lstsq's <c>array type float16 is unsupported in
+        ///     linalg</c>); a complex or str rcond.</exception>
+        /// <exception cref="ValueError"><c>expected deg &gt;= 0</c>; np.asarray's inhomogeneous-shape text for a ragged list; a
+        ///     degree too large for the design matrix (<c>Maximum allowed dimension exceeded</c>, <c>array is too big;
+        ///     …</c>).</exception>
+        /// <exception cref="System.NotSupportedException">No LAPACK backend (<c>np.linalg.lstsq</c> needs
+        ///     <c>NumSharp.Interop.OpenBLAS</c>); an argument NumPy computes with as Python objects; an rcond array with one or
+        ///     more dimensions (NumPy broadcasts lstsq over it).</exception>
+        /// <exception cref="System.OutOfMemoryException">A design matrix the machine cannot hold (NumPy's MemoryError).</exception>
+        /// <remarks>
+        ///     <para>NumPy warns (<c>RankWarning: The fit may be poorly conditioned</c>) when the rank falls short of the number
+        ///     of fitted terms and <paramref name="full"/> is false; NumSharp emits no warnings — read <c>rank</c> with
+        ///     <c>full: true</c>.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebfit.html</para>
+        /// </remarks>
+        [NDScoped]
+        public NDPolyFitResult chebfit(object x, object y, object deg, object rcond = null, bool full = false, object w = null)
+            => NDPolyFit.Fit(PolyBasis.Chebyshev, x, y, deg, rcond, full, w);
     }
 }

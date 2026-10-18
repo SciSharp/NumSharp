@@ -21280,6 +21280,244 @@ def gen_polyinterp():
 
 
 # ---------------------------------------------------------------------------
+# T-polyfit — numpy.polynomial's least-squares fits {p}fit for the six bases (plan U6, numpy-polynomial-remaining-compute.md
+# §3.6): polyutils._fit — x / y / w through `np.asarray(...) + 0.0`, the {p}vander design matrix (its columns scaled to
+# unit norm), np.linalg.lstsq (LAPACK gelsd), the coefficients rescaled and, for a degree list, re-expanded into zeros:
+#   (A) values: every basis over sample sets of 1..200 points and degrees 0..12, under- and over-determined, rank-deficient
+#       (repeated points, zero weights), degree lists (unsorted, duplicated), 2-D y (k = 1, 2, 3 data sets), weights,
+#       rcond values (given and the len(x)*eps default), full=True's four statistics, and the dtypes — float32 x and y
+#       (a float32 fit), mixed float32 / float64, complex x / y / w, integer and bool x / y / w, Python lists;
+#   (B) the argument kinds and NumPy's error order: deg (np.asarray must be a 0-d or non-empty 1-D integer array; a
+#       negative degree; the 2**63 band of the Vandermonde), x / y / w shapes and lengths, None / str arguments (Python's
+#       and the ufunc add's TypeErrors), a float16 x (lstsq's TypeError), complex and str rcond;
+#   (C) the results' C / F / OWNDATA flags (a VIEW for a scalar degree, an owner for a degree list).
+# HOST SPLIT. Every value comes out of lstsq's gelsd (the OpenBLAS build, its DYNAMIC_ARCH kernel, one thread): values and
+# flags go to polyfit_parity.jsonl (+ the BLAS identity in polyfit_parity.host.jsonl), replayed only with that library.
+# Every error is raised before lstsq computes: portable (polyfit.jsonl).
+# Not recorded: rcond arrays with dimensions (NumPy broadcasts lstsq's gufunc over them; NumSharp refuses — unit-tested),
+# object-array arguments NumPy computes with as Python objects, and degrees NumPy refuses with MemoryError.
+POLY_FIT_OPS = ("polynomial.polyfit", "chebyshev.chebfit", "legendre.legfit", "laguerre.lagfit", "hermite.hermfit",
+                "hermite_e.hermefit")
+
+
+def gen_polyfit():
+    """Generates the polyfit tiers (see the T-polyfit header).
+
+    Returns:
+        (cases, host): the portable error / flags cases and the host-pinned (lstsq) value cases.
+    """
+    cases = []
+    host = []
+    counter = [0]
+    A = _PSArr
+    rng = np.random.default_rng(20261018)
+
+    def flags(a):
+        """The [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] record of one result.
+
+        Args:
+            a: The result array.
+
+        Returns:
+            A bool array of three flags.
+        """
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(op, x, y, deg, layout, cid, rcond=None, full=None, w=None, facet=None):
+        """Records one call of op: its error, or its result (the coefficients, or full=True's five slots).
+
+        Args:
+            op: The corpus key ("chebyshev.chebfit", ...).
+            x: The x argument (a Python value or an _PSArr).
+            y: The y argument.
+            deg: The deg argument.
+            layout: The case's layout label.
+            cid: The case id prefix.
+            rcond: The rcond argument, or None to omit it.
+            full: True / False to pass full=, None to omit it.
+            w: The w argument, or None to omit it.
+            facet: "flags" to record the coefficients' flags instead of their values.
+
+        Returns:
+            None.
+        """
+        module, name = op.split(".")
+        fn = getattr(_poly_module(module), name)
+        operands = []
+        params = {"x": _ps_enc(x, operands), "y": _ps_enc(y, operands), "deg": _ps_enc(deg, operands)}
+        kwargs = {}
+        if rcond is not None:
+            params["rcond"] = _ps_enc(rcond, operands)
+            kwargs["rcond"] = _ps_py(rcond)
+        if w is not None:
+            params["w"] = _ps_enc(w, operands)
+            kwargs["w"] = _ps_py(w)
+        if full is not None:
+            params["full"] = bool(full)
+            kwargs["full"] = bool(full)
+        if facet:
+            params["facet"] = facet
+        is_tuple = bool(full)
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = fn(_ps_py(x), _ps_py(y), _ps_py(deg), **kwargs)
+        except MemoryError:
+            return                             # the machine's limit, not NumPy's rule
+        except Exception as e:
+            # lstsq's own LinAlgError ("SVD did not converge ...") comes out of gelsd: host-pinned with the values.
+            dest = host if isinstance(e, np.linalg.LinAlgError) else cases
+            dest.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                         "expected": {"kind": "tuple"} if is_tuple else {}, "expects_throw": True,
+                         "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
+            return
+        if is_tuple:
+            c, (res, rank, s, rc) = r
+            slots = [np.asarray(c), np.asarray(res), np.asarray(rank), np.asarray(s), np.asarray(rc)]
+            if facet == "flags":
+                slots[0] = flags(slots[0])
+            expected = _tuple_expected(slots)
+        else:
+            expected = _arr_expected(flags(r) if facet == "flags" else np.asarray(r))
+        host.append(_case(op, params, operands, expected, layout, "polyfit", cid=f"{cid}/{n}"))
+
+    def lin(n):
+        """n evenly spaced points on [-1, 1].
+
+        Args:
+            n: The count.
+
+        Returns:
+            The float64 array.
+        """
+        return np.linspace(-1.0, 1.0, n)
+
+    for op in POLY_FIT_OPS:
+        # (A) values: sample sets x degrees
+        for n in (1, 2, 3, 5, 8, 11, 17, 40, 200):
+            x = lin(n)
+            y = np.cos(2.5 * x) + 0.05 * rng.standard_normal(n)
+            for d in sorted({0, 1, 2, 3, 5, 8, 12} | ({n - 1, n, n + 1} if n <= 12 else set())):
+                if d < 0:
+                    continue
+                emit(op, A(x), A(y), d, "python_int", f"{op}/val/n{n}/d{d}")
+            emit(op, A(x), A(y), 3, "python_int", f"{op}/full/n{n}", full=True)
+        for n in (7, 40):
+            x = np.sort(rng.uniform(-1, 1, n))
+            y = rng.standard_normal(n)
+            y2 = rng.standard_normal((n, 2))
+            y3 = rng.standard_normal((n, 3))
+            w = 0.25 + rng.random(n)
+            for d in (2, 4, 6):
+                emit(op, A(x), A(y), d, "python_int", f"{op}/rand/n{n}/d{d}")
+                emit(op, A(x), A(y), d, "python_int", f"{op}/w/n{n}/d{d}", w=A(w))
+                emit(op, A(x), A(y2), d, "y_2d", f"{op}/y2/n{n}/d{d}")
+                emit(op, A(x), A(y3), d, "y_2d", f"{op}/y3w/n{n}/d{d}", w=A(w), full=True)
+            emit(op, A(x), A(y[:, None]), 3, "y_2d", f"{op}/y1col/n{n}")
+            emit(op, A(x), A(np.zeros((n, 0))), 3, "y_2d", f"{op}/y0col/n{n}", full=True)
+            for lab, dl in (("sorted", [0, 2, 3]), ("unsorted", [3, 0, 2]), ("dup", [3, 1, 1]), ("one", [4]),
+                            ("high", [1, 7])):
+                emit(op, A(x), A(y), dl, "deg_list", f"{op}/list/{lab}/n{n}")
+                emit(op, A(x), A(y2), dl, "deg_list", f"{op}/listfull/{lab}/n{n}", full=True)
+            emit(op, A(x), A(y), A(np.array([1, 3], dtype=np.int8)), "deg_list", f"{op}/list/int8/n{n}")
+            emit(op, A(x), A(y), A(np.array([1, 3], dtype=np.uint64)), "deg_list", f"{op}/list/uint64/n{n}")
+            # rank deficiency: repeated points, zero weights
+            emit(op, A(np.repeat(x[:3], 3)), A(rng.standard_normal(9)), 4, "python_int", f"{op}/rankdef/n{n}", full=True)
+            wz = w.copy()
+            wz[::2] = 0.0
+            emit(op, A(x), A(y), 5, "python_int", f"{op}/wzero/n{n}", w=A(wz), full=True)
+            emit(op, A(x), A(y), 3, "python_int", f"{op}/wneg/n{n}", w=A(-w))
+            # rcond
+            for lab, rc in (("0.5", 0.5), ("1e-3", 1e-3), ("-1", -1.0), ("0", 0), ("true", True), ("nan", float("nan")),
+                            ("inf", float("inf")), ("zerod", A(np.array(0.01))), ("f16", _pw_f16(0x3800))):
+                emit(op, A(x), A(y), 6, "rcond", f"{op}/rcond/{lab}/n{n}", rcond=rc, full=True)
+            # dtypes
+            emit(op, A(x.astype(np.float32)), A(y.astype(np.float32)), 3, "dtype", f"{op}/f32/n{n}", full=True)
+            emit(op, A(x.astype(np.float32)), A(y), 3, "dtype", f"{op}/f32x_f64y/n{n}", full=True)
+            emit(op, A(x), A(y.astype(np.float32)), 3, "dtype", f"{op}/f64x_f32y/n{n}")
+            emit(op, A(x.astype(np.float32)), A(y.astype(np.float32)), 3, "dtype", f"{op}/f32w/n{n}",
+                 w=A(w.astype(np.float32)))
+            emit(op, A(x + 0j), A(y), 3, "dtype", f"{op}/cx/n{n}", full=True)
+            emit(op, A(x), A(y + 1j * rng.standard_normal(n)), 3, "dtype", f"{op}/cy/n{n}", full=True)
+            emit(op, A(x), A(y), 3, "dtype", f"{op}/cw/n{n}", w=A(w + 0.5j))
+            emit(op, A(np.arange(n)), A((10 * y).astype(np.int64)), 2, "dtype", f"{op}/int/n{n}")
+            emit(op, A(np.arange(n, dtype=np.int16)), A(y), 2, "dtype", f"{op}/int16/n{n}")
+            emit(op, A(x), A(y > 0), 2, "dtype", f"{op}/boolY/n{n}")
+            emit(op, A(x), A(y), 2, "dtype", f"{op}/intw/n{n}", w=A(np.arange(1, n + 1)))
+            emit(op, [float(v) for v in x], [float(v) for v in y], 3, "python_list", f"{op}/lists/n{n}")
+            emit(op, A(x), A(y), 3, "python_int", f"{op}/wlist/n{n}", w=[float(v) for v in w])
+            # strided / reversed views
+            xs = np.linspace(-1, 1, 2 * n)
+            ys = np.cos(xs)
+            emit(op, A(xs, xs[::2]), A(ys, ys[::2]), 3, "strided", f"{op}/strided/n{n}")
+            emit(op, A(xs, xs[::-1]), A(ys, ys[::-1]), 3, "reversed", f"{op}/reversed/n{n}")
+        # special values
+        x = lin(9)
+        emit(op, A(x), A(np.where(x > 0, np.inf, 1.0)), 2, "special", f"{op}/inf")
+        emit(op, A(x), A(np.where(x > 0, np.nan, 1.0)), 2, "special", f"{op}/nan")
+        emit(op, A(x), A(np.zeros(9)), 3, "special", f"{op}/zeros", full=True)
+        emit(op, A(x * 1e150), A(np.cos(x)), 3, "special", f"{op}/huge_x")
+        emit(op, A(np.full(9, -0.0)), A(np.cos(x)), 2, "special", f"{op}/negzero_x", full=True)
+
+        # (B) argument kinds and errors
+        x = lin(7)
+        y = np.cos(x)
+        for lab, d in (("m1", -1), ("true", True), ("3.0", 3.0), ("str", "3"), ("none", None), ("list_empty", []),
+                       ("nested", [[1, 2]]), ("ragged", [[1], [2, 3]]), ("list_neg", [-1, 2]), ("list_bool", [True]),
+                       ("list_float", [1.0, 2.0]), ("tuple", (1, 3)), ("t", 2 ** 63), ("2p64", 2 ** 64),
+                       ("2p62", 2 ** 62), ("3+0j", 3 + 0j)):
+            emit(op, A(x), A(y), d, "deg_kind", f"{op}/degkind/{lab}")
+        for lab, bits in (("2", 0x4000),):
+            emit(op, A(x), A(y), _pw_f16(bits), "deg_kind", f"{op}/degkind/npf16/{lab}")
+        for v in (2, 3):
+            emit(op, A(x), A(y), np.uint16(v), "deg_kind", f"{op}/degkind/npu16/{v}")
+        # an EMPTY integer array: only `deg.size == 0` refuses it (an empty list is float64, refused by its kind first)
+        emit(op, A(x), A(y), A(np.zeros(0, np.int64)), "deg_kind", f"{op}/degkind/empty_int64")
+        for dt in ALL_DTYPES:
+            kind = np.dtype(dt).kind
+            vals = [True] if kind == "b" else [2, -1] if kind == "i" else [2] if kind == "u" else [2.0]
+            for v in vals:
+                emit(op, A(x), A(y), A(np.array(v, dtype=dt)), "scalar_0d", f"{op}/degzerod/{dt}/{v}")
+        for lab, xv, yv in (("x2d", A(x.reshape(1, -1)), A(y)), ("x0d", A(np.array(0.5)), A(np.array([1.0]))),
+                            ("xempty", A(np.zeros(0)), A(np.zeros(0))), ("y3d", A(x), A(y.reshape(1, 1, -1))),
+                            ("y0d", A(x), A(np.array(1.0))), ("lenmismatch", A(x), A(y[:-1])),
+                            ("xnone", None, A(y)), ("ynone", A(x), None), ("xstr", ["a"] * 7, A(y)),
+                            ("ystr", A(x), "abc"), ("xf16", A(x.astype(np.float16)), A(y)),
+                            ("yf16", A(x), A(y.astype(np.float16))), ("xscalar", 0.5, A(y)),
+                            ("ragged_x", [[1.0], [2.0, 3.0]], A(y))):
+            emit(op, xv, yv, 3, "xy_kind", f"{op}/xykind/{lab}")
+        for lab, wv in (("w2d", A(np.ones((1, 7)))), ("wshort", A(np.ones(6))), ("wscalar", 2.0), ("wstr", "ab"),
+                        ("wf16_x", None)):
+            if lab == "wf16_x":
+                emit(op, A(x.astype(np.float16)), A(y), 3, "w_kind", f"{op}/wkind/{lab}", w=A(np.ones(6)))
+                continue
+            emit(op, A(x), A(y), 3, "w_kind", f"{op}/wkind/{lab}", w=wv)
+        # a Python complex is refused by its type, whatever its imaginary part (0.5+0j: the mutation pass's gap)
+        for lab, rc in (("complex", 1j), ("complex_real", 0.5 + 0j), ("str", "0.5")):
+            emit(op, A(x), A(y), 3, "rcond", f"{op}/rcondkind/{lab}", rcond=rc)
+        emit(op, A(x.astype(np.float16)), A(y), 3, "rcond", f"{op}/rcondkind/f16x_complex", rcond=1j)
+        # error order: deg before x, x before y, w after the Vandermonde
+        emit(op, A(x.reshape(1, -1)), A(y), -1, "order", f"{op}/order/deg_x")
+        emit(op, A(x.reshape(1, -1)), A(y), 3.0, "order", f"{op}/order/degtype_x")
+        emit(op, A(x), A(y.reshape(1, 1, -1)), A(np.array([[1]])), "order", f"{op}/order/deg_y")
+        emit(op, None, None, 3, "order", f"{op}/order/x_y")
+        emit(op, A(x), A(y), 2 ** 63, "order", f"{op}/order/vander_w", w=A(np.ones(6)))
+
+        # (C) flags
+        for d, full in ((3, False), (3, True), ([1, 3], False), ([1, 3], True)):
+            emit(op, A(x), A(y), d, "flags", f"{op}/flags/{d}/{full}", full=full, facet="flags")
+        emit(op, A(x), A(np.stack([y, -y], 1)), 3, "flags", f"{op}/flags/y2", facet="flags")
+
+    # Char: NumSharp's uint16-like dtype computes exactly as uint16 does (the house weave) — the 0-d deg arrays.
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}")
+    return cases, host
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -22734,8 +22972,17 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyinterp.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polyinterp_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyinterp_parity.host.jsonl"), [blas_identity()])
+    elif mode == "polyfit":
+        # numpy.polynomial least-squares fits (U6): portable errors + host-pinned values (LAPACK gelsd at threads = 1).
+        for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            if os.environ.get(var) != "1":
+                sys.exit(f"polyfit needs {var}=1 set before Python starts (lstsq's bits depend on the thread count)")
+        cases, host = gen_polyfit()
+        write_jsonl(os.path.join(corpus_dir, "polyfit.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polyfit_parity.jsonl"), host)
+        write_jsonl(os.path.join(corpus_dir, "polyfit_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

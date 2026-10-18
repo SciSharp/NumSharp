@@ -124,11 +124,18 @@ namespace NumSharp.Interop.OpenBLAS
             {
                 Linearize((T*)a.Address + sa.offset, sa.strides[0], sa.strides[1], abuf, m, n);
 
-                // B into a column-major buffer of leading dimension max(M,N) — only the M rows are the RHS.
+                // B into a column-major buffer of leading dimension max(M,N) — only the M rows are the RHS. A column that
+                // is contiguous in b (a 1-D b's single column, an F-ordered b) is one block copy; the bytes are the same.
                 for (long c = 0; c < nrhs; c++)
                 {
                     T* col = bbuf + c * ldb;
                     T* src = pb + c * bSc;
+                    if (bSr == 1)
+                    {
+                        long bytes = m * sizeof(T);
+                        Buffer.MemoryCopy(src, col, bytes, bytes);
+                        continue;
+                    }
                     for (long r = 0; r < m; r++)
                         col[r] = src[r * bSr];
                 }

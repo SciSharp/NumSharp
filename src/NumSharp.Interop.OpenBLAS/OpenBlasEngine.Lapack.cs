@@ -685,11 +685,30 @@ namespace NumSharp.Interop.OpenBLAS
         // transpose (2.5 us vs 0.2 us), which is most of a small factorisation's managed overhead. Forcing
         // immediate tier-1 matches NumPy (precompiled C, no warm-up) for the cold / few-call usage a
         // linalg op typically sees. Same rationale as NDFloatMath.Simd's AggressiveOptimization.
-        /// <summary>Copies a strided row-major matrix into a column-major buffer (LD = rows).</summary>
+        /// <summary>
+        ///     Copies a strided matrix into a column-major buffer (LD = rows) — NumPy's <c>linearize_matrix</c>. A source
+        ///     whose columns are contiguous (an F-ordered operand, or the transpose of a C-ordered one) is copied a column
+        ///     at a time as one block, as NumPy's BLAS <c>?copy</c> per column does (1.7× the element loop at 1,000 × 11);
+        ///     any other stride is gathered element by element. Either way the buffer holds the same bytes.
+        /// </summary>
+        /// <typeparam name="T">The element type (double or Complex).</typeparam>
+        /// <param name="src">The source's first element.</param>
+        /// <param name="sr">The source's row stride, in elements.</param>
+        /// <param name="sc">The source's column stride, in elements.</param>
+        /// <param name="dst">The column-major destination of <paramref name="rows"/> × <paramref name="cols"/> elements.</param>
+        /// <param name="rows">The number of rows.</param>
+        /// <param name="cols">The number of columns.</param>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void Linearize<T>(T* src, long sr, long sc, T* dst, long rows, long cols)
             where T : unmanaged
         {
+            if (sr == 1)
+            {
+                long bytes = rows * sizeof(T);
+                for (long c = 0; c < cols; c++)
+                    Buffer.MemoryCopy(src + c * sc, dst + c * rows, bytes, bytes);
+                return;
+            }
             for (long c = 0; c < cols; c++)
             {
                 T* col = dst + c * rows;

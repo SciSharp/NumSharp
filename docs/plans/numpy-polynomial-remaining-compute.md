@@ -423,6 +423,47 @@ and is bounded-ULP, so the oracle tier is host-pinned, as the main plan already 
 
 ### 3.6 The six fits — U6
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyFit.cs` + `NDPolyFitResult.cs` + one facade
+> member per basis, the composition recommended below, ONE signature per basis (the one-overload rule):
+> `{p}fit(object x, object y, object deg, object rcond = null, bool full = false, object w = null)`. The result is an
+> `NDPolyFitResult`: the coefficient array itself (an `NDArray`), which with `full: true` also carries `residuals`,
+> `rank`, `singular_values` and `rcond` and deconstructs as NumPy's `(c, [resids, rank, s, rcond])`. Oracle tiers
+> `polyfit.jsonl` (324 portable cases: NumPy's TypeErrors / ValueErrors in NumPy's order, the argument kinds, flags)
+> and `polyfit_parity.jsonl` (1,242 value / statistics / flags cases, host-pinned like `polygauss_parity`: lstsq's
+> gelsd through the OpenBLAS backend at one thread, its identity in `polyfit_parity.host.jsonl`), zero excuses. Unit
+> tests `test/NumSharp.Tests/Polynomial/PolynomialFitTests.cs` (10). Mutation pass: 17 planted defects; the first run's
+> unit tests killed 8 and the oracle 14. With the strengthened tests (`KindPins_AreNumPysBytes` and five more argument
+> kinds) and two more oracle cases (a `0.5+0j` rcond, an empty int64 degree array) the unit tests kill all 17 and the
+> oracle 16; the survivor is a str ndarray x, which the ordinary corpus cannot express (the unit tests pin it).
+> Benchmark `benchmark/polynomial/polyfit_results.md` (29 cells, all bit-exact,
+> geomean 1.96×, min 1.28×, with a per-cell lstsq ceiling). What the delivery found:
+> - **NumPy's `van[:, deg]` is a transposed view**, so `lhs = van[:, deg].T` is C-ordered and the norm's pairwise sum
+>   walks that order. NumSharp's `a[:, idx]` is C-ordered (n, k), whose `.T` is F, so a degree list takes the rows of
+>   the Vandermonde's own (lmax + 1, n) buffer instead: `np.take(van.T, sorted, axis=0)`, the same lhs.
+> - **The norm streams**: `np.evaluate(Sum(Square(lhs), axis 1))` is np.sum's add.reduce schedule over the squares
+>   with no temporary (complex: `Square(Real) + Square(Imag)`), 2.5× the eager statements at 11 × 1,000.
+> - **The scaling is written over lhs, C-ordered** (finding F2: NumPy's spelling `lhs.T / scl` takes NumSharp's
+>   F-ordered broadcast route, 3.8× slower): lhs is always a fresh array of the call (the Vandermonde buffer, the take,
+>   or the weights product), so no second (k, n) buffer is allocated (24.8 MB at n = 100,000, degree 30). The division
+>   runs at the hardware's divide throughput: 9.3 µs for 11 × 1,000 against 7.8 µs for a bare `Vector256` loop.
+> - **The OpenBLAS backend's linearize copies a contiguous column as one block** (`OpenBlasEngine.Linearize`, every
+>   LAPACK function; and lstsq's b copy): the transposed quotient lstsq receives is F-ordered, and NumPy's
+>   `linearize_matrix` copies each column with BLAS `?copy`. 2.4 vs 4.0 µs at 1,000 × 11, 6.7 vs 11.3 µs at 1,000 × 31.
+> - **`x + 0.0` is not materialized for a numeric NDArray x**: U5's Vandermonde adds 0.0 in its load stage (NumPy's
+>   vander_f repeats the add; it is idempotent), and the other statements read only x's shape and dtype.
+> - **The default rcond is NEP 50's**: `len(x)` is a Python int and eps a NumPy scalar of x's real dtype, so the
+>   product is float32 for a float32 x (`np.float32(7 * 2**-23)`); a given rcond is converted to double as lstsq's
+>   gufunc does. A Python complex is refused by its type (CPython's `float() argument must be a string or a real
+>   number, not 'complex'`, 0.5+0j included), a complex or str ARRAY by the gufunc's same_kind cast text, and an rcond
+>   array with dimensions is `NotSupportedException` (NumPy broadcasts the gufunc over it), pinned `[Misaligned]`.
+> - **An all-zero column** (x = zeros with degree ≥ 1) is left unscaled by `scl[scl == 0] = 1`: gelsd sees rank 1 and the
+>   residuals come back empty; the masked assignment runs only when `count_nonzero` finds a zero (the elements
+>   `scl == 0` selects).
+> - **gelsd decides the ratio.** It is 52% (n = 10) to 90% (complex y) of NumSharp's call, and both libraries run the same
+>   one, so the report's `ceiling` column (NumPy's call over NumSharp's lstsq alone) bounds every cell. Five of the 29 cells are under 1.5×: three where gelsd is 88–90% of NumSharp's call and the ceiling itself is 1.44–1.64× (`C/n1000_d30` 1.28×, `K/complex` 1.29×, `C/n100_d30` 1.48×), and two at 1.44× with gelsd at 77% (`B/poly`: polyvander is NumPy's cheapest Vandermonde, so NumPy's own statements cost least there; `K/y2d`, three right-hand sides).
+> - **Without the backend**: NumPy-exact validation, then `MissingBackendException` from lstsq. RankWarning is not
+>   emitted (house convention).
+
 **NumPy 2.4.2:** `{p}fit = pu._fit({p}vander, x, y, deg, rcond, full, w)`:
 1. `x = np.asarray(x) + 0.0`, `y = …`; deg is an int or a non-empty 1-D int array (sorted; `vander[:, deg]`);
    NumPy's TypeErrors for the shapes and lengths.
@@ -521,12 +562,12 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 12 | `chebpts1` | chebyshev | **DELIVERED** — one emitted fill, MIRRORED (the antisymmetric ramp and the odd C-runtime sin: half the sin calls, the same bytes) | arange + fused `Sin` (1.27× at 1K) | host-libm (sin) | 2.26–4.83×; geomean 3.99 |
 | 13 | `chebpts2` | chebyshev | **DELIVERED** — one emitted fill (`cos(k·s + (-π))`, endpoint `cos(0)`) | `np.cos(np.linspace(...))` (1.8× at 1K, one pass more) | host-libm (cos) | 1.15× (10K, cos floor) – 11.9×; geomean 3.92 |
 | 14 | `chebinterpolate` | chebyshev | **DELIVERED** — composition (`chebpts1` → delegate → `chebvander` → `np.dot` → 2 in-place divides) | a fused DCT (breaks gemv parity) | host-pinned (gemv / gemm / ddot) | 3.20× (complex, degree 5) – 16.2×; geomean 7.20 |
-| 15 | `polyfit` | polynomial | **composition of `_fit`** + fused streaming norm + C-ordered scaling, `lstsq` via backend | a fit kernel (LAPACK-bound) | host-pinned (gelsd) | 1.41× (n=1000 d=10; ceiling ~1.77×) |
-| 16 | `chebfit` | chebyshev | as `polyfit` | as `polyfit` | host-pinned | 1.51–2.6× |
-| 17 | `legfit` | legendre | as `polyfit` | as `polyfit` | host-pinned | as chebfit |
-| 18 | `lagfit` | laguerre | as `polyfit` | as `polyfit` | host-pinned | as chebfit |
-| 19 | `hermfit` | hermite | as `polyfit` | as `polyfit` | host-pinned | as chebfit |
-| 20 | `hermefit` | hermite_e | as `polyfit` | as `polyfit` | host-pinned | as chebfit |
+| 15 | `polyfit` | polynomial | **DELIVERED** — composition of `_fit` (`+ 0.0`, U5 vander, `np.take` for a degree list, fused streaming norm, C-ordered scaling over lhs, `lstsq` via backend) | a fit kernel (LAPACK-bound) | host-pinned (gelsd) | 1.44× (n=1000 d=10, gelsd 77%, ceiling 1.88) – 2.25×; geomean 1.79 |
+| 16 | `chebfit` | chebyshev | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 1.28× (n=1000 d=30, gelsd 89%, ceiling 1.44) – 3.24×; geomean 1.84 |
+| 17 | `legfit` | legendre | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 1.91–3.03× |
+| 18 | `lagfit` | laguerre | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 2.23–3.21× |
+| 19 | `hermfit` | hermite | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 1.73–2.75× |
+| 20 | `hermefit` | hermite_e | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 1.68–2.69× |
 | 21 | `Polynomial` | package, polynomial | **object layer over U1–U9**; series-algebra step-table interpretation for `convert`/`cast` | — | portable (fit/roots host-pinned) | 6–45× (proxies; fit 1.6×) |
 | 22 | `Chebyshev` | package, chebyshev | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
 | 23 | `Legendre` | package, legendre | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
@@ -605,7 +646,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | `chebpts1`/`chebpts2`/`chebgauss` | **DELIVERED**: `polypts.jsonl` (362, portable: errors, empty results, flags, Char) + `polypts_host.jsonl` (347, host-libm values) | the `int()`/`_as_int` argument matrix of §3.3, np.arange's 2**63 band |
 | `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); leg / lag **DELIVERED**: `polygauss.jsonl` (122 portable errors) + `polygauss_parity.jsonl` (160) | degrees 1…257; the `operator.index` / list-repeat argument matrix; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) still to come |
 | `chebinterpolate` | **DELIVERED**: `polyinterp.jsonl` (83 portable errors / flags) + `polyinterp_parity.jsonl` (1,030 values, host-pinned) | (n,), (n, k) and (2, n, 3) results, scalar results, every dtype the delegate returns, lists / tuples, `args`, the deg kinds and their wrap-around |
-| fits | host-pinned (gelsd) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |
+| fits | **DELIVERED**: `polyfit.jsonl` (324 portable errors / kinds / flags) + `polyfit_parity.jsonl` (1,242 values, statistics and flags, host-pinned: gelsd at one thread) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |
 | classes | portable (fit/roots inherit their tiers) | `test_classes.py` × 6, `test_symbol.py`, `convert`/`cast` bytes (the series-object Clenshaw) |
 | printing | portable | `test_printing.py`; `format_float` over print options |
 
@@ -616,7 +657,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
   `Func<NDArray, object[], object>` (func's result is anything np.dot accepts, as in Python) with `object args = null`
   (any Python iterable).
 - **F2.** Fix the F-result broadcast binary path library-wide (it also affects any `x.T op v`), or only spell the fit's
-  scaling in C order?
+  scaling in C order? The fits (2026-10-18) spell it in C order, written over lhs (§3.6); the library-wide route is
+  still open.
 - **The float16 weights.** Decided at delivery: the eager route (the `np.var` precedent). Its speed is the house
   float16 `exp`'s (lever 9), not the route's: NDExpr's float16 path measured 2–5× slower still.
 

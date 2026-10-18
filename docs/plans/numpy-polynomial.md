@@ -853,6 +853,16 @@ a unit below, that document wins.
 
 ### U6 — Least-squares fit (6 names)
 
+> **DELIVERED (2026-10-18).** `Polynomial/Package/NDPolyFit.cs` (`_fit`'s statements composed from bit-exact engines:
+> the house `+ 0.0`, U5's `{p}vander`, `np.take` for a degree list, the norm as one fused `np.evaluate` pass, the
+> scaling written over lhs in C order, `np.linalg.lstsq` through the OpenBLAS backend) + `NDPolyFitResult.cs` (the
+> coefficient array, an `NDArray`, carrying the `full=True` statistics and deconstructing as NumPy's tuple); one signature
+> per basis, `{p}fit(object x, object y, object deg, object rcond = null, bool full = false, object w = null)`. Oracle
+> tiers `polyfit.jsonl` / `polyfit_parity.jsonl` (1,566 cases, 0 excused; the values host-pinned on gelsd at one thread),
+> benchmark geomean 1.96× (29 cells, all bit-exact, each with its lstsq ceiling). R2 (the norm's pairwise order over
+> `van.T`) holds: the fused pass streams np.sum's own schedule. Routes and findings:
+> [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md) §3.6.
+
 - **Scope:** `{p}fit`. The class `.fit` is in U10.
 - **Shared backend:** `pu._fit`:
   - validation, whose texts are TypeError-heavy (Appendix C);

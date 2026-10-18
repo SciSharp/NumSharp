@@ -6073,6 +6073,56 @@ SHA-256-checked): geomean 7.20×, min 3.20×** — vector results 3.25–16.2×,
   divisions); at high degrees the (deg + 1)**2 matrix on both sides (NumPy writes it with a ufunc call per row, NumSharp
   with one kernel; the product reads it), so the ratio peaks at ~16× around degree 100–200 and falls to 8× at 1000.
 
+### Polynomial package — least-squares fits (U6)
+`polyfit`, `chebfit`, `legfit`, `lagfit`, `hermfit`, `hermefit` (6 names)
+
+Plans `docs/plans/numpy-polynomial.md` (U6) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.6 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2** (with the OpenBLAS NumPy loads, at one thread): oracle tiers `polyfit.jsonl`
+(324 portable cases: NumPy's TypeErrors / ValueErrors in NumPy's order, the argument kinds, flags) and
+`polyfit_parity.jsonl` (1,242 value / statistics / flags cases, host-pinned like `polygauss_parity`, gelsd's identity in
+`polyfit_parity.host.jsonl`), 0 excused. Unit tests `Polynomial/PolynomialFitTests.cs` (10; a mutation pass of 17
+planted defects, all killed). **Perf (NPY/NS, `benchmark/polynomial/polyfit_*`, 29 cells, every one
+SHA-256-checked): geomean 1.96×, min 1.28×** — and a per-cell lstsq ceiling (below).
+
+- **Signature**: one overload per basis, `{p}fit(object x, object y, object deg, object rcond = null, bool full = false,
+  object w = null)` → `NDPolyFitResult`, an `NDArray` that IS the coefficient array (it indexes, evaluates, takes
+  operators). With `full: true` it also carries `residuals`, `rank`, `singular_values`, `rcond` and deconstructs as NumPy's
+  `(c, [resids, rank, s, rcond])`: `var (c, (res, rank, s, rc)) = np.polynomial.chebyshev.chebfit(x, y, 3, full: true);`
+  (without full the deconstruction is a ValueError). The statistics are detached from the call's scope: whoever holds
+  the result disposes them with it.
+- **Engine** (`Polynomial/Package/NDPolyFit.cs`): `polyutils._fit`'s statements in NumPy's order, composed from
+  bit-exact engines — `np.asarray(a) + 0.0` (PolyNumber's weak Python float; skipped for a numeric NDArray x, whose
+  `+ 0.0` U5's Vandermonde kernel repeats in its load stage), U5's `{p}vander` (lhs is the Vandermonde buffer's
+  C-ordered `(k, n)` view), `np.take(van.T, sorted, axis=0)` for a degree list (NumPy's `van[:, deg]` is a transposed
+  MapIter view whose `.T` is C-ordered; NumSharp's `a[:, idx]` is C-ordered `(n, k)`), the norm as ONE fused
+  `np.evaluate(Sum(Square(lhs), axis 1))` (complex: `Square(Real) + Square(Imag)`; np.sum's pairwise schedule, no
+  squared temporary), `scl[scl == 0] = 1` only when `count_nonzero` finds a zero, the scaling `lhs / scl[:, None]`
+  written over lhs (NumPy's `lhs.T / scl` has the same quotients; its F-ordered broadcast route is 3.8× slower here,
+  plan finding F2), `np.linalg.lstsq`, `c / scl`, and the zeros re-expansion `cc[deg] = c` for a degree list (a
+  duplicate's last row wins). The OpenBLAS backend's `Linearize` (every LAPACK function) and lstsq's b copy move a
+  column that is contiguous in the source as one block, as NumPy's `linearize_matrix` does with BLAS `?copy` (lstsq
+  receives the F-ordered transpose of the quotient: 2.4 vs 4.0 µs at 1,000 × 11).
+- **Arguments**: x / y / w through np.asarray's coercion (`PolySequence`) and `+ 0.0`: None is Python's `unsupported
+  operand type(s) for +: 'NoneType' and 'float'`, a str / str list / str ndarray the ufunc add's no-loop UFuncTypeError,
+  an object list NotSupported. deg: a Python int (int64, uint64 from 2**63), a char (np.uint16), a 0-d or non-empty 1-D
+  integer array_like; anything else (a bool, a float, a list of floats, an EMPTY int array) is `deg must be an int or
+  non-empty 1-D array of int`. rcond: None → `len(x) * finfo(x.dtype).eps` (NEP 50: float32 for a float32 x); a number
+  or 0-d array is converted to double for lstsq; a Python complex is CPython's `float() argument must be a string or a
+  real number, not 'complex'` (0.5+0j too), a complex / str array lstsq's same_kind cast text, an rcond array with
+  dimensions NotSupported (NumPy broadcasts the gufunc over it), pinned `[Misaligned]`.
+- **Dtypes**: float32 x and y fit float32 (lstsq computes in double, NumPy's "lite" rule; the statistics float32 too); a
+  float16 x reaches lstsq's `array type float16 is unsupported in linalg` after the Vandermonde, as in NumPy; complex
+  points, y or w fit complex; int / bool x is float64.
+- **Ownership**: c is NumPy's object: for a scalar degree a VIEW of the quotient (OWNDATA false, `(c.T / scl).T`), for
+  a degree list an owner (`cc`).
+- **Without the backend**: NumPy-exact validation, then `MissingBackendException` from lstsq. RankWarning is not
+  emitted (house convention).
+- **Where the time goes**: lstsq's gelsd is 52% (n = 10) to 90% (complex y) of NumSharp's call, and both libraries run
+  the same one: the report's `ceiling` column (NumPy's whole call over NumSharp's lstsq alone) bounds each ratio.
+  NumSharp's own statements run 2–4× faster than NumPy's (NumPy's `_fit` overhead around lstsq at n = 1,000, degree 10 is
+  ~75 µs, NumSharp's ~30 µs; the division is at the hardware divide throughput). The five cells under 1.5× (1.28–1.48×) are gelsd-bound: three have ceilings of
+  1.44–1.64× (degree 30 at n = 100 / 1,000, a complex y), two (polyfit at degree 10, a 2-D y) spend 77% of the call in gelsd.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -6652,6 +6702,8 @@ non-structured subset would only re-expose `loadtxt`.
 | numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
 | numpy.polynomial Vandermonde family (U5) | `Polynomial/Package/NDPolyVander.cs` (`{p}vander`/`{p}vander2d`/`{p}vander3d` driver: NumPy's statement and error order, the in-place point sources, block sizing, the streamed-product switch, the object stack of scalars — `ObjectScalarPoints` / `MixedDtypeVander`), `NDPolyIndexArgument.cs` (`operator.index` + NumPy's `format(deg, '')` error text), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyVander.cs` (`PolyVanderRoutines` recurrence tables, `PolyVanderOps` NaN-priority multiply + non-temporal stores, the load / recurrence / product / root stages). Oracle `polyvander.jsonl` via `OpRegistry.PolyVander.cs` + `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyvander_*` |
 | numpy.polynomial companion / roots (U7) | `Polynomial/Package/NDPolyAlgebra.Roots.cs` (`{p}companion`/`{p}roots`: NumPy's statements over U2's arena — as_series, the length checks, the linear root's scalarmath, the write-once zero matrix, the diagonals through `GetDiagWriteKernel`, the last-column update through the house ufunc / cast / sqrt / cumprod kernels, the rotated `np.linalg.eigvals` + in-place sort; object series: `ObjectTrimLength`, `ObjectLinearRoot`, `ObjectCompanionArithmetic`), `Backends/Unmanaged/UnmanagedMemoryBlock`1.cs` (`AllocationType.Forward`: a reinterpreting alias's ARC forwards to its owner — `ArraySlice.WrapShared`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyRoots.cs` (the int64 ramp IL kernel behind np.arange), `LinearAlgebra/linalg/np.linalg.eig.cs` (`RoundComponentsToSingle`: a float32 operand's complex result carries NumPy's complex64 values). Oracle `polyroots.jsonl` + host-pinned `polyroots_parity.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polyroots_*` |
+| numpy.polynomial weights / points / quadrature / interpolation (U8, U9) | `Polynomial/Package/NDPolyWeight.cs` (the five `{p}weight` statements: fused `np.evaluate` trees, eager float16 / decimal), `Polynomial/Package/NDPolyChebPoints.cs` + `Backends/Kernels/Direct/DirectILKernelGenerator.PolyChebPoints.cs` (`chebpts1` / `chebpts2` / `chebgauss`: one emitted fill per formula, chebpts1 mirrored over the odd C-runtime sin), `Polynomial/Package/NDPolyGauss.cs` (`leggauss` / `laggauss`: U7's companion → `eigvalsh` → one Newton step through U3 / U4), `Polynomial/Package/NDPolyInterpolate.cs` (`chebinterpolate`: chebpts1 → the delegate → chebvander → `np.dot` → two in-place divides). Oracle `polyweight` / `polypts` / `polygauss` / `polyinterp` tiers (the last two with host-pinned `_parity` files) via `OpRegistry.PolySeries.cs` + `OpRegistry.PolyInterp.cs`; benchmarks `benchmark/polynomial/{polyweight,polypts,polygauss,polyinterp}_*` |
+| numpy.polynomial least-squares fits (U6) | `Polynomial/Package/NDPolyFit.cs` (`{p}fit`: `_fit`'s statements — `+ 0.0`, U5's `{p}vander`, `np.take` for a degree list, the fused norm, the C-ordered scaling over lhs, `np.linalg.lstsq`, the zeros re-expansion), `Polynomial/Package/NDPolyFitResult.cs` (the coefficient array carrying the `full=True` statistics, NumPy's tuple deconstruction). Oracle `polyfit.jsonl` + host-pinned `polyfit_parity.jsonl` via `OpRegistry.PolyFit.cs`; benchmark `benchmark/polynomial/polyfit_*` (with the per-cell lstsq ceiling) |
 | Grid / slice-expression DSL | `Creation/np.r_.cs` (`AxisConcatenator` + `RClass`), `Creation/np.c_.cs`, `Creation/np.ogrid.cs` (`OGridClass` + `OGridResult` + shared `nd_grid` helpers), `Creation/np.mgrid.cs` (`MGridClass` + `MGridResult`), `Creation/np.meshgrid.cs` (`MeshgridResult`), `Indexing/np.{ix_,s_}.cs` |
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |

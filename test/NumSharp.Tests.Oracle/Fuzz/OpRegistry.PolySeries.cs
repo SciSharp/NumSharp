@@ -422,6 +422,9 @@ namespace NumSharp.Tests.Fuzz
                 _ => throw new NotSupportedException($"polynomial module '{module}' is not registered in OpRegistry"),
             };
             string name = fn.StartsWith(prefix, StringComparison.Ordinal) ? fn.Substring(prefix.Length) : fn;
+            // The six least-squares fits share one call (OpRegistry.PolyFit.cs); a full=True fit is a tuple case.
+            if (name == "fit")
+                return a.CalcFacet(PolyFitCall(module + "." + fn, a));
             // The series algebra (U2, OpRegistry.PolyAlgebra.cs) first; the additive family / calculus below otherwise.
             if (TryApplyPolyAlgebra(module, name, a, out var algebra))
                 return algebra;
@@ -623,6 +626,9 @@ namespace NumSharp.Tests.Fuzz
                     return new[] { PolyResultArray(off), PolyResultArray(scl) };
                 }
                 default:
+                    // A full=True least-squares fit: NumPy's (c, [resids, rank, s, rcond]) as five slots.
+                    if (IsPolyFitOp(op))
+                        return PolyFitTuple(op, a);
                     // {p}div's (quo, rem) — the series algebra's one tuple (OpRegistry.PolyAlgebra.cs).
                     if (!op.StartsWith("polyutils.", StringComparison.Ordinal))
                         return ApplyPolyAlgebraTuple(op, a);
