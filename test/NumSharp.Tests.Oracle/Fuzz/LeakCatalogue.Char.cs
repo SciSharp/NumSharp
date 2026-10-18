@@ -707,6 +707,79 @@ namespace NumSharp.Tests.Fuzz
             AddCharArrayPredicate(l, "NDCharArray.isspace", c => c.isspace(), hasBytesLoop: true);
             AddCharArrayPredicate(l, "NDCharArray.istitle", c => c.istitle(), hasBytesLoop: true);
             AddCharArrayPredicate(l, "NDCharArray.isupper", c => c.isupper(), hasBytesLoop: true);
+            // The case maps and translate (numpy.strings' functions, re-exported: plain results, a chararray operand too) and
+            // their chararray members (rule 1: a U result taken over, an S result viewed).
+            AddCharCaseMap(l, "np.char.capitalize", a => np.@char.capitalize(a));
+            AddCharCaseMap(l, "np.char.lower", a => np.@char.lower(a));
+            AddCharCaseMap(l, "np.char.swapcase", a => np.@char.swapcase(a));
+            AddCharCaseMap(l, "np.char.title", a => np.@char.title(a));
+            AddCharCaseMap(l, "np.char.upper", a => np.@char.upper(a));
+            AddCharArrayCaseMap(l, "NDCharArray.capitalize", c => c.capitalize());
+            AddCharArrayCaseMap(l, "NDCharArray.lower", c => c.lower());
+            AddCharArrayCaseMap(l, "NDCharArray.swapcase", c => c.swapcase());
+            AddCharArrayCaseMap(l, "NDCharArray.title", c => c.title());
+            AddCharArrayCaseMap(l, "NDCharArray.upper", c => c.upper());
+            E(l, "np.char.translate", "U / S / StringDType, a chararray input, a str.translate dict, a 256-byte table with a delete set, a None table, a Python str; a short table (ValueError), deletechars with StringDType and a number (TypeError)", f =>
+            {
+                var table = new Dictionary<int, object> { [97] = "XY", [98] = null, [99] = 90 };
+                var bytesTable = new byte[256];
+                for (int i = 0; i < 256; i++)
+                    bytesTable[i] = (byte)(i == 97 ? 120 : i);
+                using var u = np.array(new[] { "abc", "cab " });
+                using var s = np.array(new object[] { new byte[] { 97, 98 }, new byte[] { 99 } });
+                using var t = np.array(new[] { "ab", "Cd" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "ab  ", "ca" });
+                using var bytes = np.@char.translate(s, bytesTable, new byte[] { 98 });
+                using var noTable = np.@char.translate(s, null, new byte[] { 97 });
+                using var vstring = np.@char.translate(t, table);
+                using var chars = np.@char.translate(c, table);
+                using var str = np.@char.translate("abc", table);
+                try
+                {
+                    np.@char.translate(s, new byte[255]);
+                }
+                catch (ValueError)
+                {
+                }
+                try
+                {
+                    np.@char.translate(t, table, "a");
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    np.@char.translate(5, table);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.translate(u, table);
+            });
+            E(l, "NDCharArray.translate", "U and S receivers (a U result taken over, an S result viewed), deletechars ignored for U, a delete set and a None table for S, a 0-d receiver; a short table (ValueError)", f =>
+            {
+                var table = new Dictionary<int, object> { [97] = "XY", [98] = null };
+                var bytesTable = new byte[256];
+                for (int i = 0; i < 256; i++)
+                    bytesTable[i] = (byte)(i == 97 ? 120 : i);
+                using var c = np.@char.array(new[] { "ab  ", "ca" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 98 }, new byte[] { 99 } });
+                using var one = (NDCharArray)c["0:1"];
+                using var zero = (NDCharArray)one.reshape(Shape.Scalar);
+                using var bytes = s.translate(bytesTable, new byte[] { 98 });
+                using var noTable = s.translate(null, new byte[] { 97 });
+                using var ignored = c.translate(table, "a");
+                using var scalar = zero.translate(table);
+                try
+                {
+                    s.translate(new byte[255]);
+                }
+                catch (ValueError)
+                {
+                }
+                return c.translate(table);
+            });
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
             // Python scalar, an object list holding None), the element errors (whose piece store and readers must be
@@ -1242,6 +1315,63 @@ namespace NumSharp.Tests.Fuzz
                     }
                 }
                 return predicate(c);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of numpy.char's case maps (<c>capitalize</c>, <c>lower</c>, <c>swapcase</c>, <c>title</c>,
+        ///     <c>upper</c>; numpy.strings' own): the U, S and StringDType routes, a chararray input and a 0-d one (plain
+        ///     results: NumPy's <c>np.asarray</c>), Python values (a str, bytes, a list), and a number's refusal (TypeError).
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The function's inventory id.</param>
+        /// <param name="map">The function.</param>
+        private static void AddCharCaseMap(List<LeakCase> l, string api, Func<object, NDArray> map)
+        {
+            E(l, api, "U / S / StringDType, a chararray input and a 0-d one, a Python str / bytes / list; a number (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "aBc", "ß x" });
+                using var s = np.array(new object[] { new byte[] { 97, 66 }, new byte[] { 0xe9, 99 } });
+                using var t = np.array(new[] { "xY", "ǆz" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "ab  ", "Cd e" });
+                using var one = (NDCharArray)c["0:1"];
+                using var zero = (NDCharArray)one.reshape(Shape.Scalar);
+                using var bytes = map(s);
+                using var vstring = map(t);
+                using var chars = map(c);
+                using var scalar = map(zero);
+                using var str = map("aB c");
+                using var pyBytes = map(new byte[] { 97, 66 });
+                using var list = map(new[] { "ab", "Cd" });
+                try
+                {
+                    map(5);
+                }
+                catch (TypeError)
+                {
+                }
+                return map(u);
+            });
+        }
+
+        /// <summary>
+        ///     The entry of one of chararray's case-map members (rule 1, <c>asarray(upper(self))</c>): U and S receivers (a U
+        ///     result taken over, an S result viewed) and a 0-d receiver.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        /// <param name="api">The member's inventory id.</param>
+        /// <param name="map">The member: receiver to result.</param>
+        private static void AddCharArrayCaseMap(List<LeakCase> l, string api, Func<NDCharArray, NDCharArray> map)
+        {
+            E(l, api, "U and S receivers, a 0-d receiver", f =>
+            {
+                using var c = np.@char.array(new[] { "ab  ", "Cd ß" });
+                using var s = np.@char.array(new object[] { new byte[] { 97, 66 }, new byte[] { 0xe9, 99 } });
+                using var one = (NDCharArray)c["0:1"];
+                using var zero = (NDCharArray)one.reshape(Shape.Scalar);
+                using var bytes = map(s);
+                using var scalar = map(zero);
+                return map(c);
             });
         }
     }

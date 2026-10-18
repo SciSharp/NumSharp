@@ -123,6 +123,24 @@ namespace NumSharp.Tests.Strings
                 case "isupper":
                     result = c.isupper();
                     return true;
+                case "capitalize":
+                    result = c.capitalize();
+                    return true;
+                case "lower":
+                    result = c.lower();
+                    return true;
+                case "swapcase":
+                    result = c.swapcase();
+                    return true;
+                case "title":
+                    result = c.title();
+                    return true;
+                case "upper":
+                    result = c.upper();
+                    return true;
+                case "translate":
+                    result = c.translate(arg(0, "table"), arg(1, "deletechars"));
+                    return true;
             }
             result = null;
             return false;
@@ -182,6 +200,13 @@ namespace NumSharp.Tests.Strings
                                                    (DType)arg(3, "dtype")),
                 "char.isupper" => np.@char.isupper(arg(0, "x"), (NDArray)arg(1, "out"), (NDArray)arg(2, "where"),
                                                    (DType)arg(3, "dtype")),
+                // The case maps and translate: np.asarray(a) and _vec_string, not ufuncs.
+                "char.capitalize" => np.@char.capitalize(arg(0, "a")),
+                "char.lower" => np.@char.lower(arg(0, "a")),
+                "char.swapcase" => np.@char.swapcase(arg(0, "a")),
+                "char.title" => np.@char.title(arg(0, "a")),
+                "char.upper" => np.@char.upper(arg(0, "a")),
+                "char.translate" => np.@char.translate(arg(0, "a"), arg(1, "table"), arg(2, "deletechars")),
                 var f => throw new InvalidOperationException($"the chararray behavior sections have no function '{f}'"),
             };
         }

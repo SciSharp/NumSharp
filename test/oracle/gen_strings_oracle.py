@@ -8885,7 +8885,7 @@ def _chx_dec(v):
     """The inverse of ``enc``: the Python value a JSON encoding stands for.
 
     Args:
-        v: an ``enc`` result (text and bytes as hex, None, bool, int, float, lists).
+        v: an ``enc`` result (text and bytes as hex, None, bool, int, float, lists, dicts: translate's tables).
 
     Returns:
         The value.
@@ -8896,6 +8896,9 @@ def _chx_dec(v):
     if isinstance(v, list):
         return [_chx_dec(x) for x in v]
     if isinstance(v, dict):
+        if "dict" in v:
+            # A dict in insertion order, its keys and values decoded (translate's str.translate tables).
+            return {_chx_dec(k): _chx_dec(x) for k, x in v["dict"]}
         if "u" in v:
             return bytes.fromhex(v["u"]).decode("utf-32-le", "surrogatepass")
         if "b" in v:
@@ -12138,15 +12141,98 @@ def _chm_predicates():
             _chm_fn([], name, [_chx_v(value)], layout=f"value:{vl}")
 
 
+CHM_CASE = ["capitalize", "lower", "swapcase", "title", "upper"]
+# Texts for the case maps: mixed case and titles, the full mappings that grow (U+00DF, U+FB03, U+0149, U+0130), the final
+# sigma, titlecase letters (U+01C5, U+01C6), uncased characters between cased ones, digits, an embedded NUL, trailing
+# whitespace a chararray's element access strips.
+CHM_CASE_U = ["aBc", "ab cD", "\u00df", "\ufb03x", "\u0149", "\u0391\u03a3", "\u0391\u03a3 \u0392", "\u01c5emal",
+              "\u01c6x", "they're bill's", "hello2world", "12a", "x\x00y", "", "  ", "\u0130", "Ab  ", "abc  "]
+CHM_CASE_S = [b"aBc", b"ab cD", b"\xe9a", b"they're", b"hello2world", b"12a", b"x\x00y", b"", b"  ", b"Ab  ", b"\xdfX",
+              b"MiXeD 9"]
+# translate's tables: a str.translate dict (a str value, None deletes, an int names a code point) and a bytes.translate
+# table of 256 bytes ('a' -> 'x', 'b' -> 'y'; no trailing NUL, which np.bytes_ would drop).
+CHM_TR_U = {97: "XY", 98: None, 99: 90, 0x3a3: "s"}
+CHM_TR_S = bytes(range(256)).replace(b"a", b"x").replace(b"b", b"y")
+
+
+def _chm_case():
+    """numpy.char's case maps (capitalize, lower, swapcase, title, upper) and translate, numpy.strings' functions
+    re-exported, and the chararray members of the six names (C5's fifth batch). The functions are `np.asarray(a)` and
+    _vec_string: a PLAIN result of a's dtype (a chararray operand too), 0-d for a 0-d operand or a Python str. The members
+    are NumPy's rule 1, `asarray(upper(self))`: a U result an owning chararray, an S result a chararray view."""
+    for spec in ["<U4", "|S4"]:
+        table = CHM_TR_U if spec[1] == "U" else CHM_TR_S
+        for layout in CHM_LAYOUTS:
+            cha = _chx_pool(spec, layout, 7)
+            label = f"{spec}:{layout}"
+            for name in CHM_CASE:
+                _chm_member([cha], name, [], layout=label)
+                _chm_fn([cha], name, [_chx_cha(0)], layout=f"{label}:chararray")
+                _chm_fn([cha], name, [_chx_arr(0)], layout=f"{label}:plain")
+            # ---- translate -> asarray(translate(self, table, deletechars)) ----
+            _chm_member([cha], "translate", [_chx_v(table)], layout=label)
+            _chm_member([cha], "translate", [], {"table": _chx_v(table)}, layout=f"{label}:kw")
+            _chm_fn([cha], "translate", [_chx_cha(0), _chx_v(table)], layout=f"{label}:chararray")
+            _chm_fn([cha], "translate", [_chx_arr(0), _chx_v(table)], layout=f"{label}:plain")
+            if spec[1] == "S":
+                _chm_member([cha], "translate", [_chx_v(table), _chx_v(b"cd")], layout=f"{label}:delete")
+                _chm_member([cha], "translate", [_chx_v(None), _chx_v(b"a")], layout=f"{label}:none_table")
+            else:
+                # NumPy passes deletechars to bytes.translate only: a U chararray ignores it.
+                _chm_member([cha], "translate", [_chx_v(table), _chx_v("ab")], layout=f"{label}:delete_ignored")
+    # The case texts as members and functions, as a row, a column and at a width that cuts a growing mapping.
+    for spec, texts in [("<U8", CHM_CASE_U), ("|S8", CHM_CASE_S), ("<U2", CHM_CASE_U), ("|S2", CHM_CASE_S)]:
+        recipe = _chx_vals(texts, spec)
+        col = _chx_vals([[t] for t in texts], spec)
+        for name in CHM_CASE:
+            _chm_member([recipe], name, [], layout=f"{spec}:texts")
+            _chm_member([col], name, [], layout=f"{spec}:texts:column")
+            _chm_fn([recipe], name, [_chx_cha(0)], layout=f"{spec}:texts:chararray")
+        table = CHM_TR_U if spec[1] == "U" else CHM_TR_S
+        _chm_member([recipe], "translate", [_chx_v(table)], layout=f"{spec}:texts")
+        _chm_fn([recipe], "translate", [_chx_cha(0), _chx_v(table)], layout=f"{spec}:texts:chararray")
+    # translate's table kinds and refusals over a chararray: a str table for U, None and a delete set for S, the other
+    # class's table (bytes.translate wants a bytes-like table), a 255-byte table, a deletechars str for S.
+    u_base = _chx_vals(["abc", "cab ", "\u03a3a", ""], "<U4")
+    s_base = _chx_vals([b"abc", b"cab ", b"\xe9a", b""], "|S4")
+    for member, args, kw, lab in [
+            (True, [_chx_v("zyx")], None, "U:str_table"),
+            (True, [_chx_v({97: 0x110000})], None, "U:out_of_range"),
+            (True, [_chx_v({97: 1.5})], None, "U:float_value"),
+            (True, [_chx_v(None)], None, "U:none_table"),
+            (False, [_chx_v(CHM_TR_U)], None, "S:dict_table"),
+            (False, [_chx_v(CHM_TR_S[:255])], None, "S:short_table"),
+            (False, [_chx_v(CHM_TR_S), _chx_v("bc")], None, "S:str_delete"),
+            (False, [], {"table": _chx_v(None), "deletechars": _chx_v(b"ab")}, "S:kw")]:
+        base = u_base if member else s_base
+        _chm_member([base], "translate", args, kw, layout=lab)
+        _chm_fn([base], "translate", [_chx_cha(0)] + args, kw, layout=f"{lab}:fn")
+    # StringDType text: the case maps, translate, and translate's deletechars refusal (str.translate takes one argument).
+    t_text = {"T": enc(CHM_CASE_U)}
+    for name in CHM_CASE:
+        _chm_fn([t_text], name, [_chx_arr(0)], layout="T")
+    _chm_fn([t_text], "translate", [_chx_arr(0), _chx_v(CHM_TR_U)], layout="T")
+    _chm_fn([t_text], "translate", [_chx_arr(0), _chx_v(CHM_TR_U), _chx_v("a")], layout="T:deletechars")
+    # Python values: a str, bytes, lists, an empty str, numbers (NumPy's `string operation on non-string array`).
+    for value, vl in [("aBc d", "str"), (b"aBc d", "bytes"), (["ab", "Cd e"], "list"), ([b"ab", b"Cd"], "bytes_list"),
+                      ([["a b", "C"], ["d", "E f"]], "nested"), ("", "empty_str"), (5, "int"), (5.5, "float")]:
+        for name in CHM_CASE:
+            _chm_fn([], name, [_chx_v(value)], layout=f"value:{vl}")
+        is_bytes = isinstance(value, bytes) or (isinstance(value, list) and value and isinstance(value[0], bytes))
+        _chm_fn([], "translate", [_chx_v(value), _chx_v(CHM_TR_S if is_bytes else CHM_TR_U)], layout=f"value:{vl}")
+
+
 def gen_strcharmeth():
     """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
     C5): partition / rpartition, the padding functions, str_len, the search functions, the strips and replace,
-    NumPy's trivial-loop copy of a chararray beside a StringDType argument, and the nine predicates."""
+    NumPy's trivial-loop copy of a chararray beside a StringDType argument, the nine predicates, and the case maps
+    with translate."""
     _chm_transform()
     _chm_search()
     _chm_strip()
     _chm_tcopy()
     _chm_predicates()
+    _chm_case()
     _chx_flush()
 
 # ----------------------------------------------------------------------------------------------------------------------

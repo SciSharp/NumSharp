@@ -777,5 +777,144 @@ namespace NumSharp.Tests.Backends.Strings
             shape.Should().Throw<ArgumentException>().Where(e => e.Message ==
                 "operands could not be broadcast together with shapes (8,) (3,) ");
         }
+
+        // ------------------------------------------------------------------ the case maps and translate (C5, batch 5)
+
+        /// <summary>The texts of the case-map probes: trailing whitespace, a mixed-case pair, the growing <c>'ß'</c>, the
+        ///     titlecase <c>'ǅ'</c> and digits before a letter.</summary>
+        private static readonly string[] CaseWords = { "ab  ", "Ab cD ", "ß", "ǅx", "12a" };
+
+        /// <summary>The bytes of the <c>S</c> case-map probes (Latin-1: <c>"\xe9a"</c> holds a byte past ASCII, which the
+        ///     bytes methods leave alone).</summary>
+        private static readonly byte[][] CaseBytes =
+        {
+            System.Text.Encoding.Latin1.GetBytes("ab  "), System.Text.Encoding.Latin1.GetBytes("Ab cD "),
+            System.Text.Encoding.Latin1.GetBytes("éa"), System.Text.Encoding.Latin1.GetBytes("12a"),
+        };
+
+        /// <summary>
+        ///     The case-map members are NumPy's rule 1, <c>asarray(upper(self))</c>, over the STORED text: a <c>U</c> result
+        ///     is an owning chararray (np.char.asarray copies it), an <c>S</c> one a chararray view (OWNDATA false); a 0-d
+        ///     chararray gives a 0-d chararray. The growing mapping of <c>'ß'</c> is cut to the element width only when it
+        ///     does not fit (<c>U6</c> holds <c>'SS'</c>).
+        /// </summary>
+        [TestMethod]
+        public void CaseMapMembers_ReturnRuleOneChararrays_OverTheStoredText()
+        {
+            var u = np.@char.array(CaseWords);
+            u.dtype.ToString().Should().Be("<U6");
+            void IsU(NDCharArray r, params string[] expected)
+            {
+                r.Should().BeOfType<NDCharArray>();
+                r.dtype.ToString().Should().Be("<U6");
+                r.flags.owndata.Should().BeTrue();
+                Texts(r).Should().Equal(expected);
+            }
+            IsU(u.capitalize(), "Ab  ", "Ab cd ", "Ss", "ǅx", "12a");
+            IsU(u.lower(), "ab  ", "ab cd ", "ß", "ǆx", "12a");
+            IsU(u.swapcase(), "AB  ", "aB Cd ", "SS", "ǅX", "12A");
+            IsU(u.title(), "Ab  ", "Ab Cd ", "Ss", "ǅx", "12A");
+            IsU(u.upper(), "AB  ", "AB CD ", "SS", "ǄX", "12A");
+
+            var s = np.@char.array(CaseBytes.Select(b => (object)b).ToArray());
+            void IsS(NDCharArray r, params string[] expected)
+            {
+                r.Should().BeOfType<NDCharArray>();
+                r.dtype.ToString().Should().Be("|S6");
+                r.flags.owndata.Should().BeFalse();
+                Texts(r).Should().Equal(expected);
+            }
+            IsS(s.capitalize(), "Ab  ", "Ab cd ", "éa", "12a");
+            IsS(s.lower(), "ab  ", "ab cd ", "éa", "12a");
+            IsS(s.swapcase(), "AB  ", "aB Cd ", "éA", "12A");
+            IsS(s.title(), "Ab  ", "Ab Cd ", "éA", "12A");
+            IsS(s.upper(), "AB  ", "AB CD ", "éA", "12A");
+
+            var zero = (NDCharArray)((NDCharArray)u["0:1"]).reshape(Shape.Scalar);
+            var title = zero.title();
+            title.Should().BeOfType<NDCharArray>();
+            title.ndim.Should().Be(0);
+            Texts(title).Should().Equal("Ab  ");
+        }
+
+        /// <summary>
+        ///     The case-map functions ARE numpy.strings' (<c>np.asarray(a)</c> and <c>_vec_string</c>): a chararray operand
+        ///     gives a PLAIN array, a Python <c>str</c> / <c>bytes</c> a 0-d array (not a NumPy scalar), a list an array of
+        ///     its class, <c>StringDType</c> text a <c>StringDType</c> result, and a number NumPy's TypeError.
+        /// </summary>
+        [TestMethod]
+        public void CaseMapFunctions_FollowNumPysAsarray()
+        {
+            var u = np.@char.array(CaseWords);
+            var upper = np.@char.upper(u);
+            upper.Should().NotBeOfType<NDCharArray>();
+            upper.flags.owndata.Should().BeTrue();
+            Texts(upper).Should().Equal("AB  ", "AB CD ", "SS", "ǄX", "12A");
+            var zero = (NDCharArray)((NDCharArray)u["0:1"]).reshape(Shape.Scalar);
+            var plainZero = np.@char.swapcase(zero);
+            plainZero.Should().NotBeOfType<NDCharArray>();
+            plainZero.ndim.Should().Be(0);
+
+            var str = np.@char.upper("abc");
+            str.ndim.Should().Be(0);
+            str.dtype.ToString().Should().Be("<U3");
+            Texts(str).Should().Equal("ABC");
+            var bytes = np.@char.upper(new byte[] { 97, 98, 99 });
+            bytes.dtype.ToString().Should().Be("|S3");
+            bytes.ndim.Should().Be(0);
+            // A 0-d S array's tolist() is its bytes object (Texts would enumerate the byte[] as a list).
+            ((byte[])bytes.tolist()).Should().Equal((byte)'A', (byte)'B', (byte)'C');
+            Texts(np.@char.title(new[] { "ab", "Cd" })).Should().Equal("Ab", "Cd");
+            var t = np.@char.upper(T("ab", "Cd", "ß"));
+            t.dtype.ToString().Should().Be("StringDType()");
+            Texts(t).Should().Equal("AB", "CD", "SS");
+
+            Action number = () => np.@char.lower(5);
+            number.Should().Throw<TypeError>().Where(e => e.Message == "string operation on non-string array");
+        }
+
+        /// <summary>
+        ///     <c>translate</c>: the member is <c>asarray(translate(self, table, deletechars))</c> — a <c>U</c> chararray maps
+        ///     through a str.translate dict and IGNORES <c>deletechars</c> (NumPy passes it to bytes.translate only), an
+        ///     <c>S</c> one maps through a 256-byte table and deletes; the function returns a plain array; NumPy's refusals
+        ///     verbatim (a short table, a <c>StringDType</c> operand with <c>deletechars</c>).
+        /// </summary>
+        [TestMethod]
+        public void Translate_MemberAndFunction_FollowNumPy()
+        {
+            var table = new System.Collections.Generic.Dictionary<int, int> { [97] = 120, [98] = 121 };
+            var u = np.@char.array(CaseWords);
+            var member = u.translate(table);
+            member.Should().BeOfType<NDCharArray>();
+            member.flags.owndata.Should().BeTrue();
+            Texts(member).Should().Equal("xy  ", "Ay cD ", "ß", "ǅx", "12x");
+            Texts(u.translate(table, "a")).Should().Equal("xy  ", "Ay cD ", "ß", "ǅx", "12x");
+            var function = np.@char.translate(u, table);
+            function.Should().NotBeOfType<NDCharArray>();
+            Texts(function).Should().Equal("xy  ", "Ay cD ", "ß", "ǅx", "12x");
+
+            var bytesTable = new byte[256];
+            for (int i = 0; i < 256; i++)
+                bytesTable[i] = (byte)i;
+            bytesTable['a'] = (byte)'x';
+            var s = np.@char.array(CaseBytes.Select(b => (object)b).ToArray());
+            Texts(np.@char.translate(s, bytesTable)).Should().Equal("xb  ", "Ab cD ", "éx", "12x");
+            var deleted = s.translate(bytesTable, new byte[] { 98 });
+            deleted.Should().BeOfType<NDCharArray>();
+            deleted.flags.owndata.Should().BeFalse();
+            Texts(deleted).Should().Equal("x  ", "A cD ", "éx", "12x");
+            Texts(s.translate(null, new byte[] { 97 })).Should().Equal("b  ", "Ab cD ", "é", "12");
+
+            Action shortTable = () => s.translate(bytesTable.AsSpan(0, 255).ToArray());
+            shortTable.Should().Throw<ValueError>().Where(e => e.Message == "translation table must be 256 characters long");
+            Action vstring = () => np.@char.translate(T("ab"), table, "a");
+            vstring.Should().Throw<TypeError>().Where(e => e.Message == "str.translate() takes exactly one argument (2 given)");
+
+            var zero = (NDCharArray)((NDCharArray)u["0:1"]).reshape(Shape.Scalar);
+            var mapped = zero.translate(table);
+            mapped.Should().BeOfType<NDCharArray>();
+            mapped.ndim.Should().Be(0);
+            Texts(mapped).Should().Equal("xy  ");
+        }
     }
 }
