@@ -2396,7 +2396,10 @@ namespace NumSharp.Utilities
             // Only the NaN arm differs from the BCL; finite values and infinities widen identically.
             if (IsHalfNaNBits(bits))
                 return HalfNaNBitsToSingle(bits);
-            return (float)value;
+            // The same bits as the BCL's (float)value, without its call (the JIT never inlines it): every emitted
+            // float16 -> float32 conversion lands here, so a scalar float16 chain paid one call per conversion. The
+            // infinities take the bit formula, the finite values the branch-free rescale (exact).
+            return Backends.Kernels.DirectILKernelGenerator.HalfToFloatScalarExact(bits);
         }
 
         [MethodImpl(OptimizeAndInline)]

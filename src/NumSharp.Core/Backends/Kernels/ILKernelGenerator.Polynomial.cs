@@ -10,9 +10,10 @@ using System.Numerics;
 // WHAT THIS FILE HOLDS
 // --------------------
 // The six numpy.polynomial bases evaluate their series with two recurrences: Horner for the power
-// basis (polyval) and Clenshaw for chebval/legval/lagval/hermval/hermeval. NumPy writes each one as
-// a handful of Python lines over whole arrays. Here those lines are transcribed token for token into
-// small expression trees (PolySteps.Eval) — the bases are DATA, and ONE typed IL emitter
+// basis (polyval) and Clenshaw for chebval/legval/lagval/hermval/hermeval; polyvalfromroots evaluates a
+// product of root factors, np.prod(x - r, axis=0), a third skeleton (PolySteps.Roots). NumPy writes each
+// one as a handful of Python lines over whole arrays. Here those lines are transcribed token for token
+// into small expression trees (PolySteps.Eval) — the bases are DATA, and ONE typed IL emitter
 // (ILKernelGenerator.Polynomial.Emitter.cs) turns any of them into a per-chunk Tier-3A kernel
 // (ILKernelGenerator.Polynomial.Eval.cs). There is no per-basis and no per-dtype C#.
 //
@@ -682,6 +683,20 @@ namespace NumSharp.Backends.Kernels
         public PolyExpr FinalLen1;
         /// <summary>Horner: <c>c0 = c[-1] + x*0</c> and <c>c0 = c[-i] + c0*x</c>.</summary>
         public PolyExpr HornerInit, HornerStep;
+        /// <summary>
+        ///     The root-product skeleton (<c>polyvalfromroots</c>: NumPy's <c>np.prod(x - r, axis=0)</c>) instead of Horner /
+        ///     Clenshaw: an accumulator starting at the multiply identity and multiplied by one factor per root, in ROOT
+        ///     order. <see cref="PolySym.Ck"/> reads the root <c>r[k]</c>.
+        /// </summary>
+        public bool RootProduct;
+        /// <summary>Root product: the factor <c>x - r[k]</c> (reads X, Ck — NumPy's subtract, x first).</summary>
+        public PolyExpr RootFactor;
+        /// <summary>
+        ///     Root product: the step <c>acc * factor</c> (reads C0 — the accumulator — and Tmp — the factor in the
+        ///     accumulator's dtype): NumPy's multiply.reduce takes its output as the FIRST operand and the reduced element as
+        ///     the second, which decides a complex product's bits.
+        /// </summary>
+        public PolyExpr RootStep;
         /// <summary>Whether x was folded away (the call's x is a Python scalar).</summary>
         public bool XIsWeak;
     }
@@ -794,6 +809,43 @@ namespace NumSharp.Backends.Kernels
                     prog.FinalLen1 = Subst(prog.Final, PolySym.C1, W(I0));   // len(c) == 1: c1 = 0 (a Python int)
             return p;
         }
+
+        /// <summary>
+        ///     <c>polyvalfromroots</c>' program (NumPy 2.4.2, <c>numpy/polynomial/polynomial.py</c>:
+        ///     <c>return np.prod(x - r, axis=0)</c>): the factor <c>x - r[k]</c> and the reduction's step
+        ///     <c>out = out * factor</c>, the output first.
+        /// </summary>
+        private static readonly PolyEvalProgram s_roots = new PolyEvalProgram
+        {
+            RootProduct = true,
+            RootFactor = Sub(X, Ck),
+            RootStep = Mul(C0, Tmp),
+        };
+
+        /// <summary>The strong-x (array) root-product program of <c>polyvalfromroots</c>.</summary>
+        public static PolyEvalProgram Roots => s_roots;
+
+        private static readonly ConcurrentDictionary<PyKind, PolyEvalProgram> s_rootsWeakX = new();
+
+        /// <summary>
+        ///     The root-product program for a Python-scalar x of type <paramref name="kind"/>: x becomes an x-dependent weak
+        ///     constant in the factor, typed by the root (NEP 50: <c>2.0 - float32_r</c> is float32). Cached per kind so the
+        ///     constant keeps one identity for the kernel cache and the constant pool.
+        /// </summary>
+        /// <param name="kind">Python type of x.</param>
+        /// <returns>The rewritten program (no <see cref="PolySym.X"/> leaf remains).</returns>
+        public static PolyEvalProgram RootsForWeakX(PyKind kind)
+            => s_rootsWeakX.GetOrAdd(kind, k =>
+            {
+                var xw = new PolyWeak(new PolyWeakConst("x", k, perRow: false, xDependent: true, (_, x) => x));
+                return new PolyEvalProgram
+                {
+                    RootProduct = true,
+                    RootFactor = Fold(Subst(s_roots.RootFactor, PolySym.X, xw)),
+                    RootStep = s_roots.RootStep,
+                    XIsWeak = true,
+                };
+            });
 
         private static readonly ConcurrentDictionary<(PolyBasis, PyKind), PolyEvalProgram> s_weakX = new();
 

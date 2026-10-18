@@ -352,7 +352,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">None, a str or another object NumSharp cannot read as a number (NumPy's
         ///     object arithmetic raises CPython's TypeError when it reaches it), or a decimal — NumSharp's dtype with no NumPy
         ///     analog, so no Python value an object array could hold.</exception>
-        private static PolyNumber ObjectLoopValue(object item)
+        internal static PolyNumber ObjectLoopValue(object item)
         {
             var x = PolyNumber.FromObject(item);
             if (x.IsPython)

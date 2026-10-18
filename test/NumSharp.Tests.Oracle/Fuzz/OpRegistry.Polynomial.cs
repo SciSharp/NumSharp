@@ -9,7 +9,8 @@ namespace NumSharp.Tests.Fuzz
 {
     /// <summary>
     ///     The <c>numpy.polynomial</c> half of the registry: the evaluation family of the six basis
-    ///     submodules (<c>polynomial.polyval</c> … <c>hermite_e.hermegrid3d</c>, <c>*valnd</c>). Pairs 1:1 with
+    ///     submodules (<c>polynomial.polyval</c> … <c>hermite_e.hermegrid3d</c>, <c>*valnd</c>) and
+    ///     <c>polynomial.polyvalfromroots</c>, whose roots take the coefficients' slot. Pairs 1:1 with
     ///     <c>gen_oracle.py</c>'s <c>gen_polyeval</c>.
     ///
     ///     <para>
@@ -128,6 +129,8 @@ namespace NumSharp.Tests.Fuzz
                         "polygrid2d" => m.polygrid2d(args[0], args[1], c),
                         "polygrid3d" => m.polygrid3d(args[0], args[1], args[2], c),
                         "polyvalnd" => m.polyvalnd(args, c),
+                        // The roots ride the "c" slot (the next operand, or params["c"] for a Python-typed spec).
+                        "polyvalfromroots" => m.polyvalfromroots(args[0], c, tensor),
                         _ => throw new NotSupportedException($"polynomial op '{op}' is not registered in OpRegistry"),
                     };
                 }

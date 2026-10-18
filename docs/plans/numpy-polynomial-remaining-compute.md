@@ -74,6 +74,53 @@ What each one is, and when it wins, from §9/§10 of the main plan and from this
 
 ### 3.1 `polyvalfromroots(x, r, tensor=True)` — U3
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyEval.FromRoots.cs` (NumPy's statements in
+> NumPy's order, which is its error order) + the third U3 skeleton, the ROOT PRODUCT (`PolyEvalProgram.RootProduct`,
+> `EmitPolyRootProduct`, `PolyRootForm` in `ILKernelGenerator.Polynomial.Eval.cs`) + the facade member
+> `polyvalfromroots(object x, object r, bool tensor = true)`. Oracle: section M of the `polyeval` tier (3,519 cases; the
+> tier 27,385, zero excuses). Unit tests `test/NumSharp.Tests/Polynomial/PolynomialValFromRootsTests.cs` (13). Mutation
+> pass: 17 planted defects; the oracle kills 16, the strengthened unit tests 16; the 17th (a str x treated as an ndarray)
+> is equivalent — a 0-d value cannot tell the two apart. Benchmark `benchmark/polynomial/polyvalfromroots_results.md`
+> (65 cells, all bit-exact, geomean 13.9×, min 1.17×). What the delivery changed against the recommendation below:
+> - **float16 has two product forms too**, not only complex128 (the table below had complex alone). HALF_multiply's reduce
+>   branch accumulates the whole inner-loop call in float32 and narrows ONCE (`io1 *= npy_half_to_float(in2)`); its
+>   elementwise loop narrows after every root. One call holds every root: no cast is needed, so nothing is buffered
+>   (probed up to 20,000 roots and under `np.setbufsize(1024)`: 40 / 40 the single accumulation). Measured: a Python-scalar
+>   x 2,000 / 2,000, a one-point x 500 / 500, an F-ordered r with tensor=False 1,000 / 1,000 the accumulation; seven points
+>   1,400 / 1,400 and a C-ordered r 1,000 / 1,000 the per-step narrow. The kernel key carries the form
+>   (`PolyRootForm.Slab` / `Reduce`): the reduce form's float16 accumulator is a float32 local, its complex product
+>   `PolyComplexProduct.LoopScalar` (the emitter's `reduceProduct`), and it emits scalar chains only.
+> - **The form rule is the temporary's layout, not the output count.** Reduce iff the dtype is complex128 / float16 and the
+>   roots axis is the innermost axis longer than one of `x - r` as NpyIter lays it out (`Shape.NpyIterOutputShape` over x
+>   and the reshaped r; one output element is a special case). A tensor=True call at ONE point with a C-ordered (nr, m) r
+>   is the slab form (the columns are innermost), the same r F-ordered the reduce form. C-ordered voters only (a scalar or
+>   C-contiguous x with a 1-D or C-contiguous r) skip the vote: the temporary is C.
+> - **The result layout** is `Shape.ReductionOutputShape` of that temporary. An integer r reaches the subtraction as
+>   `astype(np.double)`, a K-order copy, so a broadcast int64 r gives an F-like result where the same float64 view gives
+>   a C one (the stride-0 axis sorts innermost in the copy and abstains in the view).
+> - **Empty roots** are a fill: np.prod's identity at every point (`y.fill(1)`), after the weak x's conversion ran (a
+>   Python int past float64 still raises). 18.7 µs against NumPy's 21.8 µs at 100K points: both sides only write 800 KB of
+>   ones (NumSharp's fill alone 19.1 µs, NumPy's `np.ones(100000)` alone 18.6 µs), the one cell under 1.5×.
+> - **NumPy's object paths**, as far as NumSharp can name them: a bare None x or r is np.subtract's object loop — the
+>   broadcast check first, then CPython's `unsupported operand type(s) for -: 'NoneType' and 'float'` naming each
+>   operand's element as the object cast makes it (every float dtype 'float', every integer 'int', an integer r already
+>   float64); None meeting an empty 1-D r is np.prod's identity, the Python int 1 (a 0-d int64 array here); an object array
+>   result (None with an empty N-D r, an object sequence with an array x) is refused. A Python int past uint64 among the
+>   roots at a scalar x is computed as NumPy's object loop does, with Python numbers (`PolyNumber`), the first difference
+>   copied (a non-empty object reduction uses no identity). A str operand without an object one is np.subtract's no-loop
+>   UFuncTypeError, raised through the house string ufuncs (`NDStringUfuncs.BinaryError`), before any broadcast check, as
+>   NumPy resolves the loop first.
+> - **Found on the way, library-wide: the scalar float16 → float32 widen was a BCL call.**
+>   `DirectILKernelGenerator.HalfToFloatScalarExact` and `Converts.ToSingle(Half)` (behind `HalfArithBits`, every scalar
+>   float16 add / subtract / multiply / divide, and every emitted `EmitConvertTo(Half, Single)`) widened finite values with
+>   the BCL's `(float)Half`, a call the JIT never inlines (the JIT disassembly of the reduce-form stage showed three per
+>   root). They now run Giesen's branch-free rescale (`HalfFiniteBitsToSingle`: the exponent and mantissa shifted, times
+>   2^112, the sign OR-ed back), checked against the BCL and NumPy's NaN rule for all 65,536 patterns
+>   (`HalfScalarWidenTests`). The float16 reduce form went 14.0 → 7.6 ms (0.94 → 1.67× NumPy) and U3's
+>   `polyval` over an F-ordered float16 series (its scalar per-point part, a layout U3's benchmark never measured)
+>   24.0 → 12.5 ms (0.63 → 1.22× NumPy); the remaining cost there is the scalar narrow / NaN checks of two `HalfArithBits`
+>   per Horner step.
+
 **NumPy 2.4.2.**
 ```python
 r = np.array(r, ndmin=1, copy=None)
@@ -548,7 +595,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 
 | # | NumPy name | Module(s) | Recommended compute route | Rejected | Parity tier | Measured / expected NPY/NS |
 |---|---|---|---|---|---|---|
-| 1 | `polyvalfromroots` | polynomial | **U3 step-table IL kernel, new "root product" skeleton, NDIter-driven**; NumPy's prologue; complex form by reduction mode | composition (temp, 3–33× slower, complex inexact); `np.evaluate` Prod; NDIter REDUCE; standalone Direct IL | portable (complex via `PolyComplexProduct`) | 4.2–35.6× (proxy) |
+| 1 | `polyvalfromroots` | polynomial | **DELIVERED** — U3 step-table IL kernel, the "root product" skeleton, NDIter-driven; NumPy's prologue; complex AND float16 forms by the temporary's layout (`PolyRootForm`); an empty r a fill | composition (temp, 3–33× slower, complex inexact); `np.evaluate` Prod; NDIter REDUCE; standalone Direct IL | portable (complex via `PolyComplexProduct`, float16 via the float32 accumulator) | 1.17× (no roots: the identity fill both sides write) – 52×; geomean 13.9 |
 | 2 | `chebweight` | chebyshev | **DELIVERED** — fused `np.evaluate`; f16 / decimal eager; broadcast core; int cast-first | Direct IL | portable (sqrt exact; complex not pinned) | arrays 1.34–17.4× (geomean 2.91), Python float 0.65× |
 | 3 | `legweight` | legendre | **DELIVERED** — as chebweight | — | portable | arrays 1.39–12.8× (geomean 3.18), Python float 0.14× (result-array floor) |
 | 4 | `lagweight` | laguerre | **DELIVERED** — fused; int16/uint8 cast-first; f16 eager | — | portable f32, host-libm f64/f16/complex | f64 1.04× / 1.84× at 100K / 1M (CRT exp floor), f16 0.76× (house f16 exp); arrays geomean 1.45 |
@@ -580,11 +627,11 @@ Measured proxies (the unit functions the members call; the class adds an object 
 ## 5. Prerequisites and levers, ranked
 
 1. **U3 emitter, three additions** (needed by #1, #10, #11):
-   - a skeleton with an ascending index and a product accumulator;
+   - a skeleton with an ascending index and a product accumulator (**done**, #1: `PolyEvalProgram.RootProduct`);
    - a unary `Neg` node;
    - programs without a coefficient term (the normed Hermite recurrences).
-2. **The complex-form rule for `polyvalfromroots`** (#1): LoopScalar where np.prod's inner loop walks roots, Simd
-   otherwise. Decided from `Shape.NpyIterOutputShape` of the `x - r` temporary.
+2. **The complex-form rule for `polyvalfromroots`** (#1, **done**, float16 too): LoopScalar where np.prod's inner loop
+   walks roots, Simd otherwise. Decided from `Shape.NpyIterOutputShape` of the `x - r` temporary.
 3. **Dragon4 float32/float16 entry points** (#28 and the class printing).
 4. **U3 over a series algebra** (#21–#26: `convert`/`cast`/`identity`), reusing the U4 `PyVal1D` interpreter pattern.
 5. *Optional:* an **NDExpr index leaf** (iota / linspace ramp). No longer needed by the Chebyshev points (their own
@@ -636,12 +683,19 @@ Measured proxies (the unit functions the members call; the class adds an object 
 - **F9 — the C runtime's sin is an odd function bit for bit** (win-amd64 ucrtbase: 140M values, every chebpts1
   argument up to 5,000 points among them; glibc: 7.5M). So a computation over an exactly antisymmetric argument set
   may evaluate half of it and negate: chebpts1's fill does, 1.9–2.0× faster at 10K–1M with the same bytes.
+- **F10 — the scalar float16 → float32 widen was a BCL call** (found delivering `polyvalfromroots`). The house's
+  `HalfToFloatScalarExact` / `Converts.ToSingle(Half)` widened finite values with `(float)Half`, which the JIT never
+  inlines; every scalar float16 chain paid it per conversion (`HalfArithBits` widens both operands of every add /
+  subtract / multiply / divide). Giesen's branch-free rescale (`HalfFiniteBitsToSingle`) gives the same bits for all
+  65,536 patterns at a fraction of the cost: the float16 root product's reduce form 0.94 → 1.67× NumPy, U3's
+  `polyval` over an F-ordered float16 series 0.63 → 1.22×. What is left in those scalar chains is `HalfArithBits`'s NaN
+  checks and its scalar RTNE narrow per op — a lever for U3's scalar float16 parts, not needed by any delivered cell.
 
 ## 7. Oracle and test hooks per family
 
 | Family | Tier | Notes |
 |---|---|---|
-| `polyvalfromroots` | the `polyeval` tier (portable), new section | all layouts × dtypes × tensor; the four complex modes of §3.1; Python/NumPy-scalar x; list/tuple x; empty r; int/bool r; the ValueError; the result-layout facet |
+| `polyvalfromroots` | **DELIVERED**: the `polyeval` tier (portable), section M (3,519 cases) | the dtype matrix, Python / NumPy-scalar / 0-d x, the complex AND float16 product forms (seeded full-mantissa draws, three per cell), x and r layouts with the strides facet, array_like r and x, empty r, None / str / object-root errors and results, 45-point vector lanes, special values |
 | weights | `chebweight`/`legweight` portable; `lagweight`/`hermweight`/`hermeweight` host-libm (`RunHostLibmCorpus`) | every dtype incl. bool/int8/uint8 wrap-arounds, Python-scalar kinds, list/tuple TypeErrors, the huge-Python-int TypeError |
 | `chebpts1`/`chebpts2`/`chebgauss` | **DELIVERED**: `polypts.jsonl` (362, portable: errors, empty results, flags, Char) + `polypts_host.jsonl` (347, host-libm values) | the `int()`/`_as_int` argument matrix of §3.3, np.arange's 2**63 band |
 | `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); leg / lag **DELIVERED**: `polygauss.jsonl` (122 portable errors) + `polygauss_parity.jsonl` (160) | degrees 1…257; the `operator.index` / list-repeat argument matrix; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) still to come |

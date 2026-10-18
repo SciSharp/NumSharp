@@ -43,6 +43,8 @@ using System.Runtime.Intrinsics.X86;
 //     every length-1 axis stride 0. NpyIter (not the trivial loop) runs when the non-0-d operands
 //     differ in ndim (try_trivial_single_output_loop returns -2). For {p}val that is an N-D series
 //     at a per-point x whose result has one element (PolyUnitBroadcast, set by NDPolyEval).
+//     polyvalfromroots' np.prod(x - r, axis=0) reaches the same loop as a multiply.REDUCE whose inner
+//     loop walks the roots (the output's stride is 0): PolyRootForm.Reduce, every multiply of the kernel.
 // When the result is 0-d every value is a NumPy scalar, and an op is a ufunc only when one operand is
 // the raw 0-d x array — so the emitter, in "scalar math" mode, emits the naive product except next to
 // the x leaf. Measured against NumPy: chebval with a 0-d complex x differs from BOTH the array-x and
@@ -385,6 +387,12 @@ namespace NumSharp.Backends.Kernels
         private readonly PolyConstPool _pool;
         private readonly LocalBuilder _table, _row;
         private readonly bool _scalarMath;
+        /// <summary>
+        ///     Every complex multiply is NumPy's REDUCE-form one (<see cref="PolyComplexProduct.LoopScalar"/>): the kernel
+        ///     reproduces a multiply.reduce whose inner loop walks the reduced axis with the output's stride 0
+        ///     (<c>polyvalfromroots</c>' <see cref="PolyRootForm.Reduce"/>).
+        /// </summary>
+        private readonly bool _reduceProduct;
         private readonly Dictionary<NPTypeCode, PolyValueKind> _scalar = new(), _lane = new();
 
         /// <summary>Creates an emitter.</summary>
@@ -399,10 +407,15 @@ namespace NumSharp.Backends.Kernels
         ///     touching the x leaf are the naive product.</param>
         /// <param name="unit">NumPy's single-element broadcast (<see cref="PolyUnitBroadcast"/>): values are tagged
         ///     with their ndim, and a product of two array values whose ndims differ is NumPy's fallback loop.</param>
+        /// <param name="reduceProduct">Every complex multiply is NumPy's reduce-form one (the fallback loop
+        ///     <see cref="PolyComplexProduct.LoopScalar"/>): a multiply.reduce whose inner loop walks the reduced axis, as
+        ///     <c>polyvalfromroots</c>' <see cref="PolyRootForm.Reduce"/> kernels are. Scalar chains only (a vector kind
+        ///     always emits <c>simd_cmul</c>), so such a kernel emits no vector part.</param>
         public PolyEmitter(ILGenerator il, int u, bool vec, int lanes, PolyConstPool pool, LocalBuilder table, LocalBuilder row,
-            bool scalarMath, PolyUnitBroadcast unit)
+            bool scalarMath, PolyUnitBroadcast unit, bool reduceProduct = false)
         {
             IL = il; U = u; Vec = vec; W = vec ? lanes : 1; _pool = pool; _table = table; _row = row; _scalarMath = scalarMath;
+            _reduceProduct = reduceProduct;
             // The same representative ndims PeelCount plans with, so the planned fixpoint is the emitted one.
             (CoefNd, PointNd) = PolyTyping.UnitNds(unit);
         }
@@ -477,10 +490,12 @@ namespace NumSharp.Backends.Kernels
                     var vb = EmitAt(b.B, env, t);
                     // A ufunc (array) op in NumPy's eyes iff one operand is the raw x array; see the file header.
                     bool touchesX = b.A is PolyLeaf { S: PolySym.X } || b.B is PolyLeaf { S: PolySym.X };
-                    // The product NumPy runs (file header): scalar math when every value is a NumPy scalar; its
+                    // The product NumPy runs (file header): the reduce form's fallback loop in a reduce-form kernel
+                    // (every multiply there is the reduction's own); scalar math when every value is a NumPy scalar; its
                     // single-element NpyIter loop when BOTH operands are arrays (Nd 0 = a weak Python value, which
                     // the trivial loop accepts as 0-d) of different ndim; simd_cmul otherwise.
-                    var product = _scalarMath && !touchesX ? PolyComplexProduct.Naive
+                    var product = _reduceProduct ? PolyComplexProduct.LoopScalar
+                        : _scalarMath && !touchesX ? PolyComplexProduct.Naive
                         : va.Nd != 0 && vb.Nd != 0 && va.Nd != vb.Nd ? PolyComplexProduct.LoopScalar
                         : PolyComplexProduct.Simd;
                     return Op(b.Op, va, vb, t, product);

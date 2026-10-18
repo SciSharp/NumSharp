@@ -147,6 +147,52 @@ namespace NumSharp
         /// <remarks>https://numpy.org/devdocs/reference/generated/numpy.polynomial.polynomial.polyvalnd.html</remarks>
         public NDArray polyvalnd(object[] pts, object c) => NDPolyEval.ValNd(PolyBasis.Power, c, pts);
 
+        /// <summary>
+        ///     Evaluates the monic polynomial whose roots are <paramref name="r"/> at <paramref name="x"/>,
+        ///     <c>(x - r[0]) * (x - r[1]) * … * (x - r[n])</c>, bit-identical to NumPy 2.4.2's
+        ///     <c>np.prod(x - r, axis=0)</c> — in ONE pass, without NumPy's <c>x - r</c> temporary (nr times the result).
+        ///     Prefer it over <c>polyval(x, polyfromroots(r))</c> when the roots are known: no coefficient expansion, and each
+        ///     factor is exact before it is multiplied.
+        /// </summary>
+        /// <param name="x">
+        ///     The points. An <see cref="NDArray"/> (any layout), a typed C# array or a Python tuple / list (a ValueTuple,
+        ///     <c>object[]</c>, a jagged or <c>NDArray[]</c> array — NumPy's <c>np.asarray(x)</c>) is an array; a C# <c>bool</c>,
+        ///     integer, <see cref="System.Numerics.BigInteger"/>, <c>float</c>, <c>double</c> or
+        ///     <see cref="System.Numerics.Complex"/> is a <b>Python scalar</b>, which adopts the roots' dtype
+        ///     (<c>polyvalfromroots(2.0, float32_r)</c> is float32); <c>char</c> / <see cref="System.Half"/> / <c>decimal</c> are
+        ///     strong 0-d values. A str or null is NumPy's str / None (an error, see below).
+        /// </param>
+        /// <param name="r">The roots (anything <c>np.array</c> accepts — an <see cref="NDArray"/> of any layout, a typed C# array,
+        ///     a Python tuple / list nested to any depth, or a scalar). Axis 0 holds the roots of one polynomial; further axes
+        ///     index independent polynomials. Integer and bool roots are evaluated as float64; an empty r gives ones.</param>
+        /// <param name="tensor">When true (the default) and x is an array, every polynomial is evaluated at every point: the
+        ///     result has shape <c>r.shape[1:] + x.shape</c>. When false, x broadcasts over the polynomials (<c>r.shape[1:]</c>
+        ///     against <c>x.shape</c>), and x must have fewer dimensions than r. Irrelevant for a scalar x.</param>
+        /// <returns>The values: a fresh array of NumPy's dtype (the promotion of x and r, float64 for integer roots) and layout
+        ///     (x's memory order under tensor); a 0-d array for a scalar x with a 1-D r.</returns>
+        /// <exception cref="ValueError">A ragged tuple / list (r is converted first, so its error wins), or
+        ///     <paramref name="tensor"/> is false with <c>x.ndim &gt;= r.ndim</c>:
+        ///     <c>x.ndim must be &lt; r.ndim when tensor == False</c>.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="tensor"/> is false and the shapes do not broadcast
+        ///     (NumPy's ValueError text).</exception>
+        /// <exception cref="TypeError">A str operand (NumPy's <c>ufunc 'subtract' did not contain a loop …</c>), or None
+        ///     meeting an element (<c>unsupported operand type(s) for -: 'NoneType' and 'float'</c>).</exception>
+        /// <exception cref="System.OverflowException">A Python int x too large for the result's float dtype
+        ///     (<c>int too large to convert to float</c>).</exception>
+        /// <exception cref="System.NotSupportedException">NumPy's result would be an object array (None with an empty r of
+        ///     two or more dimensions, an object sequence such as one holding None or a Python int past uint64), or its object
+        ///     arithmetic meets an item NumSharp cannot read as a number.</exception>
+        /// <remarks>
+        ///     <para><b>Not <c>polyval</c>.</b> The roots are not coefficients: <c>polyvalfromroots(x, [1, 2])</c> is
+        ///     <c>(x - 1)(x - 2)</c>, while <c>polyval(x, [1, 2])</c> is <c>1 + 2x</c>.</para>
+        ///     <para><b>Complex and float16 results depend on the call's shape, as in NumPy.</b> When np.prod's inner loop walks the
+        ///     roots (one result element, or an F-ordered r with <c>tensor=False</c>), NumPy multiplies with its reduce loops —
+        ///     the contracted complex product, a float32 float16 accumulation rounded once — and otherwise with its elementwise
+        ///     ones (one rounding per root). Both are reproduced bit for bit.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.polyvalfromroots.html</para>
+        /// </remarks>
+        public NDArray polyvalfromroots(object x, object r, bool tensor = true) => NDPolyEval.ValFromRoots(x, r, tensor);
+
         // ---- U1: constants, line, add/sub, trim ----
 
         private static NDArray s_polydomain, s_polyzero, s_polyone, s_polyx;

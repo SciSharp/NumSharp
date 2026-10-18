@@ -17505,6 +17505,318 @@ def gen_polyeval():
                              lambda: f(*[v for _, v in ords], cview), f"layout_{cname}",
                              f"{op2}/lay/{cname}/{xname}/{facet or 'values'}", None, facet)
 
+    # (M) polyvalfromroots — numpy.polynomial.polynomial's root-product evaluation (unit 6 of
+    #     docs/plans/numpy-polynomial-remaining-compute.md). NumPy's statements: r = np.array(r, ndmin=1); an integer / bool
+    #     r becomes float64; a tuple / list x is np.asarray'd; an ndarray x reshapes r (tensor) or meets the
+    #     "x.ndim must be < r.ndim" check; then np.prod(x - r, axis=0). Beyond {p}val's NEP 50 dtypes, what decides the bits
+    #     is the PRODUCT FORM of complex128 and float16: where np.prod's inner loop walks the roots (one result element, or
+    #     the roots axis innermost in the x - r temporary NpyIter lays out) CDOUBLE_multiply runs its contracted fallback
+    #     loop and HALF_multiply accumulates in float32, narrowing once; elsewhere simd_cmul and a narrow per root. The form
+    #     cells (M3) draw seeded full-mantissa values, three per cell: the moderate dyadic values of the other cells have
+    #     exact products in every form. The strides facet pins the result's layout (the reduction output of that
+    #     temporary). Object results (None meeting an empty N-D r, a Python int past uint64 with an array x) are skipped by
+    #     emit's dtype filter: NumSharp has no object dtype. Appended after section L so every earlier id keeps its counter.
+    vfr = _poly_module("polynomial").polyvalfromroots
+    opr = "polynomial.polyvalfromroots"
+    frng = np.random.default_rng(20261018)
+
+    def form_fill(shape, dt, lim=2.0):
+        """Seeded full-mantissa values in [-lim, lim) (complex: both parts): products that round, unlike the moderate pool's."""
+        k = int(np.prod(shape)) if len(shape) else 1
+        v = frng.uniform(-lim, lim, k)
+        if np.dtype(dt).kind == "c":
+            v = v + 1j * frng.uniform(-lim, lim, k)
+        with np.errstate(all="ignore"):
+            return np.ascontiguousarray(v.astype(dt).reshape(shape))
+
+    def form_r(shape, order, dt, lim):
+        """(base, view) of roots of shape `shape`, C- or F-ordered (an F view is the transpose of a C buffer: describe()
+        serializes the base in C order)."""
+        if order == "C":
+            b = form_fill(shape, dt, lim)
+            return b, b
+        b = form_fill(shape[::-1], dt, lim)
+        return b, b.transpose(tuple(range(len(shape) - 1, -1, -1)))
+
+    r_dtypes = ["float64", "float32", "float16", "complex128", "int64", "bool", "int8", "uint16"]
+    # (M1) dtype matrix: every x dtype x the root dtypes x root counts (0: the identity; 1: one multiply by it).
+    for xs in ALL_DTYPES:
+        xv = _poly_fill(9, xs)
+        xd = describe(xv, xv)
+        for rs in r_dtypes:
+            for nr in (0, 1, 2, 5, 9):
+                rv = _poly_coef((nr,), rs)
+                emit(opr, ["a"], [xd, describe(rv, rv)], lambda: vfr(xv, rv), "c_contiguous_1d", f"{opr}/dt/{xs}/{rs}/{nr}")
+
+    # (M2) a Python-scalar x (weak: it adopts the roots' dtype; a Python int past float64 is CPython's OverflowError, one
+    #      past float16 / float32 an inf) and a 0-d array x (STRONG), against 1-D, N-D and empty roots.
+    weak_x = [0, 1, -3, 7, 2 ** 40, 2 ** 64 - 1, 2 ** 70, 10 ** 400, True, False, 0.5, -0.0, 2.25, float("inf"),
+              float("-inf"), float("nan"), 1e300, 5e-324, complex(1, 2), complex(-0.5, 0.25), complex(float("inf"), 1.0)]
+    for wv in weak_x:
+        for rs in ("float64", "float32", "float16", "complex128", "int64"):
+            for rshape in ((1,), (3,), (6,), (4, 3), (0,), (0, 2)):
+                rv = _poly_coef(rshape, rs)
+                emit(opr, [_weak_spec(wv)], [describe(rv, rv)], lambda: vfr(wv, rv), "weak_scalar",
+                     f"{opr}/weak/{type(wv).__name__}/{rs}/{rshape}")
+    for xs in ("float64", "float32", "float16", "complex128", "int32", "bool", "uint16"):
+        x0 = np.array(_poly_fill(1, xs, seed=2)[0])
+        for rs in ("float64", "float32", "float16", "complex128"):
+            for rshape in ((1,), (2,), (5,), (3, 2), (0,)):
+                rv = _poly_coef(rshape, rs, seed=4)
+                for tensor in (True, False):
+                    emit(opr, ["a"], [describe(x0, x0), describe(rv, rv)], lambda: vfr(x0, rv, tensor=tensor), "scalar_0d",
+                         f"{opr}/x0d/{xs}/{rs}/{rshape}/{tensor}", None if tensor else {"tensor": False})
+
+    # (M3) the product forms: complex128 and float16 (x and r of one dtype), float32 / float64 as controls. Each cell is a
+    #      reduce or a slab reduction by NumPy's iteration, never by the values (the comment says which).
+    form_cells = [
+        ("weak", (5,), "C", True),           # a 0-d result: reduce
+        ("0d", (5,), "C", True),             # a 0-d x: reduce
+        ((1,), (5,), "C", True),             # one output element: reduce
+        ((1, 1), (5,), "C", True),
+        ((7,), (5,), "C", True),             # many points, the roots axis outermost: slab
+        ((2, 3), (4,), "C", True),
+        ((1,), (5, 3), "F", True),           # an F r at one point: the roots axis innermost, three outputs: reduce
+        ((1,), (5, 3), "C", True),           # the same r C-ordered: slab
+        ((3,), (5, 4), "F", True),           # x's axis innermost (no operand votes it against r's): slab
+        ((4,), (6, 4), "F", False),          # tensor=False, an F r: the roots axis innermost: reduce
+        ((4,), (6, 4), "C", False),          # a C r: slab
+        ((1,), (6, 4), "F", False),          # x broadcast along r's columns, an F r: reduce
+        ((2, 4), (6, 2, 4), "F", False),     # a 3-D F r: reduce
+        ((2, 4), (6, 2, 4), "C", False),     # a 3-D C r: slab
+        ("weak", (5, 3), "F", True),         # a scalar x over an F r: reduce
+        ("weak", (5, 3), "C", True),         # ... a C r: slab
+        ("0d", (5, 1), "C", True),           # one output through a unit column: reduce
+    ]
+    for xshape, rshape, rorder, tensor in form_cells:
+        for ts in ("complex128", "float16", "float32", "float64"):
+            # float16 keeps the product finite: up to 9 factors of |x - r| < 2.4
+            lim = 1.2 if ts == "float16" else 2.0
+            for nr in (rshape[0], 9):
+                rsh = (nr,) + rshape[1:]
+                for draw in range(3):
+                    rb, rvw = form_r(rsh, rorder, ts, lim)
+                    extra = None if tensor else {"tensor": False}
+                    if xshape == "weak":
+                        wv = complex(*frng.uniform(-lim, lim, 2)) if ts == "complex128" else float(frng.uniform(-lim, lim))
+                        emit(opr, [_weak_spec(wv)], [describe(rb, rvw)], lambda: vfr(wv, rvw, tensor=tensor), "form_weak",
+                             f"{opr}/form/weak/{rsh}/{rorder}/{tensor}/{ts}/{draw}", extra)
+                    else:
+                        xv = form_fill(() if xshape == "0d" else xshape, ts, lim)
+                        emit(opr, ["a"], [describe(xv, xv), describe(rb, rvw)], lambda: vfr(xv, rvw, tensor=tensor),
+                             "form_0d" if xshape == "0d" else "form_arr", f"{opr}/form/{xshape}/{rsh}/{rorder}/{tensor}/{ts}/{draw}",
+                             extra)
+
+    # (M4) x memory layouts (the catalog) with 1-D roots: the result keeps x's NpyIter order (the strides facet); the
+    #      values twin pins that no layout path changes a value.
+    for ln in sorted(LAYOUTS):
+        for xs, rs in (("float64", "float64"), ("float32", "float32"), ("float16", "float16"), ("complex128", "float64"),
+                       ("int32", "float64")):
+            base, view = LAYOUTS[ln](np.dtype(xs))
+            base[...] = _poly_fill(base.size, xs).reshape(base.shape)
+            rv = _poly_coef((4,), rs, seed=7)
+            for facet in (None, "strides"):
+                emit(opr, ["a"], [describe(base, view), describe(rv, rv)], lambda: vfr(view, rv), ln,
+                     f"{opr}/lay/{ln}/{xs}/{rs}/{facet or 'values'}", None, facet)
+
+    # (M5) root memory layouts — C, F, permuted, inner-transposed, reversed, stepped, broadcast columns, a broadcast roots
+    #      axis, a reversed / stepped 1-D r; an integer r is copied by astype's 'K' order first — against a scalar x
+    #      (Python and 0-d), a 1-D x, an F 2-D x, a one-point x and a column x, tensor True and False: NpyIter's layout of
+    #      x - r decides the result's strides and, for complex128, the product form.
+    def root_layout(name, dt):
+        if name == "r1d":
+            b = _poly_coef((4,), dt, seed=70)
+            return b, b
+        if name == "r1d_rev":
+            b = _poly_coef((8,), dt, seed=71)
+            return b, b[::-1]
+        if name == "r1d_step":
+            b = _poly_coef((8,), dt, seed=72)
+            return b, b[::2]
+        if name == "nd_c":
+            b = _poly_coef((4, 2, 3), dt, seed=73)
+            return b, b
+        if name == "nd_f":
+            b = _poly_coef((3, 2, 4), dt, seed=74)
+            return b, b.transpose(2, 1, 0)
+        if name == "nd_perm":
+            b = _poly_coef((2, 3, 4), dt, seed=75)
+            return b, b.transpose(2, 0, 1)
+        if name == "nd_inner":
+            b = _poly_coef((3, 4), dt, seed=76)
+            return b, b.T
+        if name == "nd_rev":
+            b = _poly_coef((4, 2, 3), dt, seed=77)
+            return b, b[:, ::-1, :]
+        if name == "nd_step":
+            b = _poly_coef((4, 2, 6), dt, seed=78)
+            return b, b[:, :, ::2]
+        if name == "nd_bcast":
+            b = _poly_coef((4, 1, 3), dt, seed=79)
+            return b, np.broadcast_to(b, (4, 2, 3))
+        b = _poly_coef((1, 2, 3), dt, seed=80)             # nd_bcast_roots: the roots axis itself is stride 0
+        return b, np.broadcast_to(b, (4, 2, 3))
+
+    def roots_x(name):
+        if name == "x1d":
+            b = _poly_fill(3, "float64", seed=81)
+            return b, b
+        if name == "x2d_f":
+            b = _poly_coef((3, 2), "float64", seed=82)
+            return b, b.T
+        if name == "x_one":
+            b = _poly_fill(1, "float64", seed=83)
+            return b, b
+        b = _poly_coef((2, 1), "float64", seed=84)         # x_col
+        return b, b
+
+    for rname in ("r1d", "r1d_rev", "r1d_step", "nd_c", "nd_f", "nd_perm", "nd_inner", "nd_rev", "nd_step", "nd_bcast",
+                  "nd_bcast_roots"):
+        for rs in ("float64", "complex128", "float16", "int64"):
+            rb, rvw = root_layout(rname, rs)
+            for xname in ("weak", "x0d", "x1d", "x2d_f", "x_one", "x_col"):
+                for tensor in (True, False):
+                    if xname in ("weak", "x0d") and not tensor:
+                        continue   # tensor does nothing for a scalar x
+                    extra = None if tensor else {"tensor": False}
+                    for facet in (None, "strides"):
+                        if xname == "weak":
+                            emit(opr, [_weak_spec(0.75)], [describe(rb, rvw)], lambda: vfr(0.75, rvw), f"layout_{rname}",
+                                 f"{opr}/rlay/{rname}/{rs}/weak/{facet or 'values'}", None, facet)
+                            continue
+                        if xname == "x0d":
+                            xb = xv = np.array(0.75)
+                        else:
+                            xb, xv = roots_x(xname)
+                        emit(opr, ["a"], [describe(xb, xv), describe(rb, rvw)], lambda: vfr(xv, rvw, tensor=tensor),
+                             f"layout_{rname}", f"{opr}/rlay/{rname}/{rs}/{xname}/{tensor}/{facet or 'values'}", extra, facet)
+
+    # (M6) array_like arguments: r converted FIRST (a ragged r's error wins over a ragged x), a tuple / list x np.asarray'd
+    #      (an ndarray then: the tensor reshape and the ndim check apply), NumPy scalar items, empty sequences, and Python
+    #      ints past uint64 among the roots (NumPy's object array; a scalar x keeps the result a Python number).
+    r_forms = [("list", [1, 2.5, -0.5]), ("tuple", (1, 2.5, -0.5)), ("int_list", [1, 2, 3]), ("bool_list", [True, False, True]),
+               ("complex_list", [1, 2j, 0.5]), ("nested", [[1, 2], [3, 4], [0.5, -1]]), ("nested_tuple", ((1, 2), (3, 4))),
+               ("f16_items", [A(np.array(1.0, np.float16)), A(np.array(0.5, np.float16))]),
+               ("f16_py_mix", [A(np.array(1.0, np.float16)), 2.0]),
+               ("scalar_int", 3), ("scalar_float", 2.5), ("scalar_bool", True), ("scalar_complex", 1.5j),
+               ("empty", []), ("ragged", [[1], [1, 2]]), ("u64", [2 ** 64 - 1, 1]), ("big", [2 ** 70]),
+               ("big_mix", [2 ** 70, 1.0]), ("big_neg_mix", [-(2 ** 70), 0.5, 1.5j]), ("big_scalar", 2 ** 70)]
+    x_forms = [("weak", 0.5), ("weak_int", 2), ("weak_bool", True), ("weak_complex", 0.5 - 1j),
+               ("arr", A(_poly_fill(3, "float64", seed=40))), ("list_x", [0.5, -1.5]), ("tuple_x", (1, 2)),
+               ("nested_x", [[0.5, 1.0], [2.0, 3.0]]), ("empty_x", []), ("ragged_x", [[[1], [1, 2]]]),
+               ("f32_arr", A(_poly_fill(3, "float32", seed=41))), ("f16_0d", A(np.array(0.5, np.float16)))]
+    for rname, rform in r_forms:
+        for xname, xform in x_forms:
+            for tensor in (True, False):
+                if not tensor and xname in ("weak", "weak_int", "weak_bool", "weak_complex", "f16_0d"):
+                    continue   # tensor does nothing for a scalar x
+                kops = []
+                xspec = _ps_enc(xform, kops)
+                extra = {"c": _ps_enc(rform, kops)}
+                if not tensor:
+                    extra["tensor"] = False
+                emit(opr, [xspec], kops, lambda: vfr(_ps_py(xform), _ps_py(rform), tensor=tensor), "array_like_r",
+                     f"{opr}/argr/{rname}/{xname}/{tensor}", extra=extra)
+
+    # (M7) NumPy's errors in its order, and the bare None / str operands: CPython's object-loop TypeError naming each
+    #      operand's element as the object cast makes it ('float' for every float dtype, 'int' for every integer), NumPy's
+    #      no-loop UFuncTypeError for a str (resolved before any broadcast), and np.prod's identity — the Python int 1 —
+    #      where a bare None meets an empty 1-D r.
+    err_cases = [
+        ("ndim_1d", A(_poly_fill(3, "float64")), A(_poly_coef((4,), "float64")), False),
+        ("ndim_2d", A(_poly_coef((2, 3), "float64")), A(_poly_coef((4, 3), "float64")), False),
+        ("bcast", A(_poly_fill(3, "float64")), A(_poly_coef((4, 5), "float64")), False),
+        ("bcast_ok", A(_poly_fill(5, "float64")), A(_poly_coef((4, 5), "float64")), False),
+        ("x_none", None, A(_poly_coef((3,), "float64")), True),
+        ("x_none_f32", None, A(_poly_coef((3,), "float32")), True),
+        ("x_none_f16", None, A(_poly_coef((3,), "float16")), True),
+        ("x_none_c", None, A(_poly_coef((3,), "complex128")), True),
+        ("x_none_int", None, [1, 2], True),
+        ("x_none_2d", None, A(_poly_coef((2, 2), "float64")), True),
+        ("x_none_empty", None, [], True),
+        ("x_none_empty_arr", None, A(np.zeros((0,))), True),
+        ("x_none_tensor_false", None, [1.0, 2.0], False),
+        ("x_none_r0d", None, 2.0, True),
+        ("r_none", 1.0, None, True),
+        ("r_none_int", 3, None, True),
+        ("r_none_bool", True, None, True),
+        ("r_none_complex", 1j, None, True),
+        ("r_none_arr", A(_poly_fill(3, "float64")), None, True),
+        ("r_none_arr_i", A(_poly_fill(3, "int64")), None, True),
+        ("r_none_arr_u16", A(_poly_fill(3, "uint16")), None, True),
+        ("r_none_arr_b", A(_poly_fill(3, "bool")), None, True),
+        ("r_none_arr_f16", A(_poly_fill(3, "float16")), None, True),
+        ("r_none_arr_c", A(_poly_fill(3, "complex128")), None, True),
+        ("r_none_x0d", A(np.array(2.5)), None, True),
+        ("r_none_x0d_f16", A(np.array(2.5, np.float16)), None, True),
+        ("r_none_tensor_false", A(_poly_fill(3, "float64")), None, False),
+        ("r_none_x0d_false", A(np.array(2.5)), None, False),
+        ("r_none_list_x", [1.0, 2.0], None, True),
+        ("both_none", None, None, True),
+        ("x_str", "ab", [1.0, 2.0], True),
+        ("r_str", 1.0, "ab", True),
+        ("x_int_r_str", 1, "ab", True),
+        ("x_bool_r_str", True, "ab", True),
+        ("x_complex_r_str", 1j, "ab", True),
+        ("x_f32_r_str", A(np.ones(2, np.float32)), "ab", True),
+        ("x_str_r_f16", "ab", A(np.ones(2, np.float16)), True),
+        ("x_str_r_int", "ab", [1, 2], True),
+        ("x_str_r_str", "ab", "cd", True),
+        ("x_strlist", ["a", "b"], [1.0], True),
+        ("r_strlist_mix", 1.0, ["a", 1.0], True),
+        ("x_none_r_str", None, "ab", True),
+        ("x_str_r_none", "ab", None, True),
+        ("x_strlist_ndim", ["a", "b"], [1.0], False),
+        ("x_strlist_bcast", ["a", "b", "c"], A(_poly_coef((4, 5), "float64")), False),
+        ("x_big", 10 ** 400, [1.0], True),
+        ("x_big_f16", 10 ** 400, A(np.ones(1, np.float16)), True),
+        ("x_big_empty", 10 ** 400, [], True),
+    ]
+    for ename, xform, rform, tensor in err_cases:
+        kops = []
+        xspec = _ps_enc(xform, kops)
+        extra = {"c": _ps_enc(rform, kops)}
+        if not tensor:
+            extra["tensor"] = False
+        emit(opr, [xspec], kops, lambda: vfr(_ps_py(xform), _ps_py(rform), tensor=tensor), "errors", f"{opr}/err/{ename}",
+             extra=extra)
+
+    # (M8) vector lanes: 45 points (the U-chain stage, the 1-chain vector stage and the scalar tail at every lane width) for
+    #      every x dtype x every inexact root dtype — 1-D roots (one series for every point) and one series per point
+    #      (tensor=False) — and the per-point series through a column-strided view (the scalar per-point part).
+    for xs in ALL_DTYPES:
+        xv = _poly_fill(45, xs, seed=41)
+        xd = describe(xv, xv)
+        for rs in ("float16", "float32", "float64", "complex128"):
+            rv = _poly_coef((6,), rs, seed=42)
+            emit(opr, ["a"], [xd, describe(rv, rv)], lambda: vfr(xv, rv), "c_contiguous_1d", f"{opr}/vl/{xs}/{rs}/1d")
+            rp = _poly_coef((6, 45), rs, seed=43)
+            emit(opr, ["a"], [xd, describe(rp, rp)], lambda: vfr(xv, rp, tensor=False), "nd_c_bcast", f"{opr}/vl/{xs}/{rs}/pp",
+                 {"tensor": False})
+    for xs, rs in (("float64", "float64"), ("complex128", "float16"), ("int8", "float32"), ("float16", "complex128"),
+                   ("bool", "float16")):
+        xv = _poly_fill(45, xs, seed=41)
+        rbase = _poly_coef((6, 90), rs, seed=44)
+        rview = rbase[:, ::2]
+        emit(opr, ["a"], [describe(xv, xv), describe(rbase, rview)], lambda: vfr(xv, rview, tensor=False), "nd_c_strided",
+             f"{opr}/vl/{xs}/{rs}/ppstrided", {"tensor": False})
+
+    # (M9) special values: NaN / inf / -0.0 among the roots and the points (x - r of two infinities is NaN, -0.0 - 0.0 is
+    #      -0.0), and integer extremes as roots (float64 after the conversion).
+    rspecial = np.array([1.0, float("nan"), -0.0, float("inf"), 2.0, -float("inf"), 0.5], np.float64)
+    for xs in ("float64", "float32", "float16", "complex128"):
+        with np.errstate(all="ignore"):
+            xv = np.array([0.0, -0.0, 1.0, float("nan"), float("inf"), -float("inf"), 2.5], np.float64).astype(xs)
+        for nr in (1, 2, 3, 7):
+            rv = np.ascontiguousarray(rspecial[:nr])
+            emit(opr, ["a"], [describe(xv, xv), describe(rv, rv)], lambda: vfr(xv, rv), "c_contiguous_1d",
+                 f"{opr}/spec/{xs}/{nr}")
+    for rs in ("int64", "uint64", "int8", "uint8", "int32"):
+        info = np.iinfo(rs)
+        rv = np.array([info.min, info.max, 0, 1, info.max - 1], rs)
+        xv = _poly_fill(5, "float64")
+        emit(opr, ["a"], [describe(xv, xv), describe(rv, rv)], lambda: vfr(xv, rv), "c_contiguous_1d", f"{opr}/iext/{rs}")
+
     # Char: NumSharp's uint16-like dtype has no NumPy analog; the uint16 x cells of the dtype matrix
     # are the bytes-exact oracle for it (the house char weave).
     cases += _relabel_dtype([c for c in cases if any(t in (c.get("id") or "") for t in ("/dt/uint16/", "/vl/uint16/", "/vlx/uint16/"))],

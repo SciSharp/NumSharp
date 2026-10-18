@@ -141,12 +141,13 @@ namespace NumSharp.Backends.Kernels
         /// <param name="prog">The program.</param><param name="tx">x dtype (unused when x is weak).</param>
         /// <param name="tc">Coefficient dtype.</param>
         /// <param name="unit">Single-element broadcast mode (<see cref="PolyUnitBroadcast.None"/>: dtypes only).</param>
-        /// <returns>The peel count (0 for Horner, whose state is typed once by its init line).</returns>
+        /// <returns>The peel count (0 for Horner, whose state is typed once by its init line, and for the root product,
+        ///     whose factors are all <c>x - r[k]</c> of one dtype from the first root on).</returns>
         /// <exception cref="InvalidOperationException">The state never settles (cannot happen: promotion only widens,
         ///     and an ndim only grows to the deeper of the two sides).</exception>
         public static int PeelCount(PolyEvalProgram prog, NPTypeCode tx, NPTypeCode tc, PolyUnitBroadcast unit = PolyUnitBroadcast.None)
         {
-            if (prog.Horner) return 0;
+            if (prog.Horner || prog.RootProduct) return 0;
             NPTypeCode tx2 = X2Type(prog, tx);
             var (dc, dx) = UnitNds(unit);
             NPTypeCode t0 = tc, t1 = tc;
@@ -176,13 +177,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        ///     The kernel class for a coefficient count: Horner has one; Clenshaw distinguishes NumPy's
-        ///     <c>len(c) == 1</c> and <c>== 2</c> branches, the counts whose steps are all peeled, and
-        ///     "peeled steps + loop" — <c>min(nc, P + 3)</c>.
+        ///     The kernel class for a coefficient count: Horner and the root product have one (the root count, empty
+        ///     included, only sets the loop's trip count); Clenshaw distinguishes NumPy's <c>len(c) == 1</c> and
+        ///     <c>== 2</c> branches, the counts whose steps are all peeled, and "peeled steps + loop" — <c>min(nc, P + 3)</c>.
         /// </summary>
-        /// <param name="prog">The program.</param><param name="nc">Coefficient count (≥ 1).</param><param name="peel">Peel count.</param>
+        /// <param name="prog">The program.</param><param name="nc">Coefficient count (≥ 1; a root count may be 0).</param><param name="peel">Peel count.</param>
         /// <returns>The class.</returns>
-        public static int Class(PolyEvalProgram prog, long nc, int peel) => prog.Horner ? 1 : (int)Math.Min(nc, peel + 3L);
+        public static int Class(PolyEvalProgram prog, long nc, int peel) => prog.Horner || prog.RootProduct ? 1 : (int)Math.Min(nc, peel + 3L);
 
         /// <summary>The dtype a kernel class returns — NumPy's result dtype for that coefficient count.</summary>
         /// <param name="prog">The program.</param><param name="tx">x dtype (unused when x is weak).</param>
@@ -192,6 +193,8 @@ namespace NumSharp.Backends.Kernels
         public static NPTypeCode ResultType(PolyEvalProgram prog, NPTypeCode tx, NPTypeCode tc, int cls, int peel)
         {
             if (prog.Horner) return TypeOf(prog.HornerInit, s => s == PolySym.X ? tx : tc).Value;
+            // np.prod keeps the factor's dtype (x - r is inexact: an integer series is float64 before it).
+            if (prog.RootProduct) return TypeOf(prog.RootFactor, s => s == PolySym.X ? tx : tc).Value;
             NPTypeCode tx2 = X2Type(prog, tx);
             Func<PolySym, NPTypeCode> Env(NPTypeCode a, NPTypeCode b) => s => s switch
             {

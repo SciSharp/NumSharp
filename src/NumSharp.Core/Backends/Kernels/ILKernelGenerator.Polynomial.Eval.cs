@@ -91,6 +91,36 @@ namespace NumSharp.Backends.Kernels
     }
 
     /// <summary>
+    ///     Which of NumPy's two multiply.reduce loops <c>polyvalfromroots</c>' <c>np.prod(x - r, axis=0)</c> runs — decided
+    ///     by the reduction's iteration, never by the values. Only complex128 and float16 products differ between them (a
+    ///     float32 / float64 / decimal product is one rounding per step on both), so the driver sets
+    ///     <see cref="Reduce"/> only for those dtypes.
+    /// </summary>
+    /// <remarks>
+    ///     <para>NumPy's reduction iterator sorts the axes of the <c>x - r</c> temporary by its strides (the allocated output
+    ///     cannot vote). When the roots axis is the innermost non-unit axis, or the result has one element, the inner
+    ///     loop walks the roots with the output's stride 0 — <c>IS_BINARY_REDUCE</c>: <c>CDOUBLE_multiply</c> jumps to its
+    ///     MSVC-contracted fallback loop, and <c>HALF_multiply</c> accumulates the whole call in float32 and narrows ONCE
+    ///     (<c>io1 *= npy_half_to_float(in2)</c>; one call holds every root of one output). Otherwise the inner loop walks
+    ///     the outputs and each root is one elementwise <c>out = out * t[k]</c>: <c>simd_cmul</c>, and a float16 narrow per
+    ///     step.</para>
+    ///     <para>Measured against NumPy 2.4.2: float16 at a Python-scalar x (2,000 / 2,000 the float32 accumulation), at a
+    ///     one-point x (500 / 500), tensor=False with an F-ordered 2-D r (1,000 / 1,000); at seven points (1,400 / 1,400)
+    ///     and a C-ordered r (1,000 / 1,000) the per-step narrow.</para>
+    /// </remarks>
+    internal enum PolyRootForm : byte
+    {
+        /// <summary>Not a root product (<c>{p}val</c>'s Horner / Clenshaw).</summary>
+        None,
+        /// <summary>The inner loop walks the outputs: one elementwise multiply per root (<c>simd_cmul</c>; a float16
+        ///     product narrowed every step).</summary>
+        Slab,
+        /// <summary>The inner loop walks the roots (the output's stride 0): the complex fallback loop, a float16 product
+        ///     accumulated in float32 and narrowed once.</summary>
+        Reduce,
+    }
+
+    /// <summary>
     ///     The identity of one compiled evaluation kernel. <see cref="Cls"/> is the coefficient-count class
     ///     (<see cref="PolyTyping.Class"/>): every count at or above <c>peel + 3</c> shares one kernel.
     /// </summary>
@@ -103,8 +133,10 @@ namespace NumSharp.Backends.Kernels
     /// <param name="CoefOperand">The coefficients are an N-D operand (else 1-D, in aux).</param>
     /// <param name="ScalarMath">0-d result: NumPy runs every op as scalar math (the naive complex product).</param>
     /// <param name="Unit">NumPy's single-element broadcast (the fallback complex product where operand ndims differ).</param>
+    /// <param name="Root"><c>polyvalfromroots</c>' root product and its reduction loop (<see cref="PolyRootForm.None"/>
+    ///     for <c>{p}val</c>); the "coefficients" are then the roots.</param>
     internal readonly record struct PolyEvalKey(PolyBasis Basis, PolyXMode XMode, NPTypeCode Tx, PyKind WeakKind,
-        NPTypeCode Tc, int Cls, bool CoefOperand, bool ScalarMath, PolyUnitBroadcast Unit);
+        NPTypeCode Tc, int Cls, bool CoefOperand, bool ScalarMath, PolyUnitBroadcast Unit, PolyRootForm Root);
 
     /// <summary>A compiled evaluation kernel plus what its caller needs to run it.</summary>
     internal sealed class PolyEvalKernel
@@ -128,13 +160,17 @@ namespace NumSharp.Backends.Kernels
         private static readonly ConcurrentDictionary<PolyEvalKey, Lazy<PolyEvalKernel>> s_polyEval = new();
 
         /// <summary>
-        ///     The evaluation program a call runs: the basis's own table for an array x, the Python-folded one
-        ///     for a scalar x.
+        ///     The evaluation program a call runs: the basis's own table (or <c>polyvalfromroots</c>' root product) for an
+        ///     array x, the Python-folded one for a scalar x.
         /// </summary>
         /// <param name="basis">The basis.</param><param name="xMode">How x arrives.</param>
-        /// <param name="weakKind">Python type of a weak x.</param><returns>The program.</returns>
-        internal static PolyEvalProgram PolyProgram(PolyBasis basis, PolyXMode xMode, PyKind weakKind)
-            => xMode == PolyXMode.Weak ? PolySteps.RewriteForWeakX(basis, weakKind) : PolySteps.Eval(basis);
+        /// <param name="weakKind">Python type of a weak x.</param>
+        /// <param name="root">The root product's reduction form, or <see cref="PolyRootForm.None"/> for <c>{p}val</c>.</param>
+        /// <returns>The program.</returns>
+        internal static PolyEvalProgram PolyProgram(PolyBasis basis, PolyXMode xMode, PyKind weakKind, PolyRootForm root = PolyRootForm.None)
+            => root != PolyRootForm.None
+                ? (xMode == PolyXMode.Weak ? PolySteps.RootsForWeakX(weakKind) : PolySteps.Roots)
+                : xMode == PolyXMode.Weak ? PolySteps.RewriteForWeakX(basis, weakKind) : PolySteps.Eval(basis);
 
         /// <summary>The peel count of a (basis, x, coefficient dtype, broadcast mode) combination, computed once.</summary>
         /// <param name="basis">The basis.</param><param name="xMode">How x arrives.</param>
@@ -160,20 +196,27 @@ namespace NumSharp.Backends.Kernels
         /// <param name="coefOperand">N-D coefficients (operand form) instead of 1-D (aux form).</param>
         /// <param name="scalarMath">The result is 0-d (NumPy's scalar-math complex product).</param>
         /// <param name="unit">NumPy's single-element broadcast mode (<see cref="PolyUnitBroadcast"/>; None almost always).</param>
+        /// <param name="root"><c>polyvalfromroots</c>: the root product and NumPy's reduction loop for it (the
+        ///     "coefficients" are the roots, <paramref name="nc"/> their count, 0 allowed); <see cref="PolyRootForm.None"/>
+        ///     for <c>{p}val</c>.</param>
         /// <returns>The kernel.</returns>
         /// <exception cref="PlatformNotSupportedException">The runtime cannot emit dynamic code (NativeAOT).</exception>
         /// <exception cref="ArgumentException"><paramref name="unit"/> is set for a call that is not an N-D series at
-        ///     a per-point x — a caller bug (only that form can be a single-element NpyIter broadcast).</exception>
+        ///     a per-point x — a caller bug (only that form can be a single-element NpyIter broadcast); or a root product
+        ///     asked for scalar math or a single-element broadcast (its products are always np.prod's reduction loops).</exception>
         internal static PolyEvalKernel GetPolyEvalKernel(PolyBasis basis, PolyXMode xMode, NPTypeCode tx, PyKind weakKind,
-            NPTypeCode tc, long nc, bool coefOperand, bool scalarMath, PolyUnitBroadcast unit)
+            NPTypeCode tc, long nc, bool coefOperand, bool scalarMath, PolyUnitBroadcast unit, PolyRootForm root = PolyRootForm.None)
         {
             if (unit != PolyUnitBroadcast.None && !(coefOperand && xMode == PolyXMode.PerPoint))
                 throw new ArgumentException("a single-element broadcast needs an N-D series at a per-point x", nameof(unit));
+            if (root != PolyRootForm.None && (scalarMath || unit != PolyUnitBroadcast.None))
+                throw new ArgumentException("a root product runs np.prod's reduction loops: no scalar math, no single-element broadcast", nameof(root));
             if (xMode == PolyXMode.Weak) tx = NPTypeCode.Empty; else weakKind = PyKind.Int;
-            var prog = PolyProgram(basis, xMode, weakKind);
-            int peel = PolyPeel(basis, xMode, tx, weakKind, tc, unit);
+            var prog = PolyProgram(basis, xMode, weakKind, root);
+            // The root product needs no peel: every factor is x - r[k] in one dtype from the first root on.
+            int peel = root != PolyRootForm.None ? 0 : PolyPeel(basis, xMode, tx, weakKind, tc, unit);
             int cls = PolyTyping.Class(prog, nc, peel);
-            var key = new PolyEvalKey(basis, xMode, tx, weakKind, tc, cls, coefOperand, scalarMath, unit);
+            var key = new PolyEvalKey(basis, xMode, tx, weakKind, tc, cls, coefOperand, scalarMath, unit, root);
             return s_polyEval.GetOrAdd(key, k => new Lazy<PolyEvalKernel>(() => CompilePolyEval(k, prog, peel))).Value;
         }
 
@@ -257,10 +300,16 @@ namespace NumSharp.Backends.Kernels
             // A 0-d result (ScalarMath) and a single-element broadcast (Unit) are one point: no vector part could
             // run, so none is emitted — which is also what keeps their non-simd products off the vector kinds.
             bool onePoint = key.ScalarMath || key.Unit != PolyUnitBroadcast.None;
-            bool vecB = allowVector && !onePoint && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: false, tl);
-            bool vecL = allowVector && !onePoint && key.CoefOperand && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: true, tl);
+            // A reduce-form root product keeps its fallback complex product and its float32 float16 accumulator on scalar
+            // chains (a vector kind emits simd_cmul). Its many-point calls read the roots at a stride (the roots axis is
+            // the innermost of the temporary, so one point's roots are never adjacent to the next point's) — the vector
+            // gate would refuse those chunks anyway.
+            bool reduceForm = key.Root == PolyRootForm.Reduce;
+            bool vecB = allowVector && !onePoint && !reduceForm && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: false, tl);
+            bool vecL = allowVector && !onePoint && !reduceForm && key.CoefOperand && PolyLanes.VectorBlockOk(key.Tx, xPerPoint, key.Tc, perLaneCoef: true, tl);
             string name = $"NDPolyEval_{key.Basis}_{key.XMode}_{key.Tx}_{key.WeakKind}_{key.Tc}_c{key.Cls}_{(key.CoefOperand ? "op" : "aux")}"
-                          + $"{(key.ScalarMath ? "_s" : "")}{(key.Unit != PolyUnitBroadcast.None ? "_u" + key.Unit : "")}";
+                          + $"{(key.ScalarMath ? "_s" : "")}{(key.Unit != PolyUnitBroadcast.None ? "_u" + key.Unit : "")}"
+                          + $"{(key.Root != PolyRootForm.None ? "_roots" + key.Root : "")}";
 
             PolyEvalCtx Ctx() => new PolyEvalCtx { Key = key, Prog = prog, Tl = tl, P = peel, Pool = pool, Preconv = preconv };
             DynamicMethod Part(PolyPart part)
@@ -505,7 +554,8 @@ namespace NumSharp.Backends.Kernels
         private static void EmitPolyEvalBlock(ILGenerator il, PolyEvalCtx ctx, bool vec, bool bcast, int U, Label exit)
         {
             var key = ctx.Key;
-            var em = new PolyEmitter(il, U, vec, PolyLanes.LoopLanes(ctx.Tl), ctx.Pool, ctx.Table, ctx.Row, key.ScalarMath, key.Unit);
+            var em = new PolyEmitter(il, U, vec, PolyLanes.LoopLanes(ctx.Tl), ctx.Pool, ctx.Table, ctx.Row, key.ScalarMath, key.Unit,
+                reduceProduct: key.Root == PolyRootForm.Reduce);
             int W = em.W;
             int szC = DirectILKernelGenerator.GetTypeSize(key.Tc), szL = DirectILKernelGenerator.GetTypeSize(ctx.Tl);
             var top = il.DefineLabel();
@@ -551,7 +601,9 @@ namespace NumSharp.Backends.Kernels
             // The steady loop's coefficient source: the pre-converted copy when there is one (1-D form only).
             var ccLoop = ctx.Preconv ? new PolyCoefCtx { Broadcast = true, Cp = ctx.CpL, Tc = ctx.Tl } : cc;
             var loopStride = ctx.Preconv ? ctx.KStrideL : ctx.KStride;
-            var y = ctx.Prog.Horner ? EmitPolyHorner(em, ctx, cc, ccLoop, loopStride, env) : EmitPolyClenshaw(em, ctx, cc, ccLoop, loopStride, env);
+            var y = ctx.Prog.RootProduct ? EmitPolyRootProduct(em, ctx, ccLoop, loopStride, env)
+                  : ctx.Prog.Horner ? EmitPolyHorner(em, ctx, cc, ccLoop, loopStride, env)
+                  : EmitPolyClenshaw(em, ctx, cc, ccLoop, loopStride, env);
             if (y.T != ctx.Tl) throw new InvalidOperationException($"planned {ctx.Tl}, emitted {y.T}");
             if (y.Shared) { var yl = em.Fresh(ctx.Tl, false); em.CopyTo(y, yl); y = yl; }   // result independent of the points
             for (int u = 0; u < U; u++)
@@ -738,6 +790,62 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, top);
             il.MarkLabel(done);
             return s0;
+        }
+
+        /// <summary>
+        ///     The root product for one block — NumPy's <c>polyvalfromroots</c>, <c>np.prod(x - r, axis=0)</c>: the accumulator
+        ///     starts at the multiply identity (NumPy's reduction assigns it before its loop) and is multiplied by
+        ///     <c>x - r[k]</c> for every root in order, the accumulator first. No peel: every factor has the loop dtype from the
+        ///     first root on.
+        /// </summary>
+        /// <param name="em">Emitter.</param><param name="ctx">Kernel facts.</param>
+        /// <param name="ccLoop">The roots' context (pre-converted to the loop dtype when the driver passes a copy).</param>
+        /// <param name="loopStride">Byte stride between consecutive roots.</param>
+        /// <param name="env">Bound x.</param>
+        /// <returns>The product, in the loop dtype.</returns>
+        /// <exception cref="InvalidOperationException">A factor is not of the loop dtype, or a step changed the accumulator's
+        ///     dtype (a typing bug).</exception>
+        /// <remarks>
+        ///     <para>In the <see cref="PolyRootForm.Reduce"/> form a float16 product is NumPy's <c>HALF_multiply</c> reduce
+        ///     branch: each factor converted exactly to float32, the running product rounded to float32, one narrow at the end
+        ///     (one inner-loop call holds every root of an output, so there is no narrow between). The complex fallback product
+        ///     of that form comes from the emitter (<c>reduceProduct</c>).</para>
+        ///     <para>The identity multiply is emitted, not skipped: for complex it is not exact — <c>(1+0j)*(re + inf j)</c> has
+        ///     a NaN real part (<c>0*inf</c>), and a <c>-0.0</c> real part can come back <c>+0.0</c> — and NumPy runs it.</para>
+        ///     <para>An empty r runs the loop zero times: the identity, NumPy's <c>np.prod</c> of an empty axis.</para>
+        /// </remarks>
+        private static PolyValue EmitPolyRootProduct(PolyEmitter em, PolyEvalCtx ctx, PolyCoefCtx ccLoop, LocalBuilder loopStride, PolyEnv env)
+        {
+            var il = em.IL; var prog = ctx.Prog;
+            NPTypeCode t = ctx.Tl;
+            NPTypeCode accT = ctx.Key.Root == PolyRootForm.Reduce && t == NPTypeCode.Half ? NPTypeCode.Single : t;
+            // acc = 1: the multiply identity (a Python int materialized in the accumulator's dtype), carried per point.
+            var one = em.EmitAt(PolySteps.W(PolySteps.I1), env, accT);
+            var acc = em.Fresh(accT, false);
+            em.CopyTo(one, acc);
+            var kOff = il.DeclareLocal(typeof(long));
+            var k = il.DeclareLocal(typeof(long));
+            var top = il.DefineLabel(); var done = il.DefineLabel();
+            il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, k);
+            il.Emit(OpCodes.Ldc_I8, 0L); il.Emit(OpCodes.Stloc, kOff);
+            il.MarkLabel(top);
+            il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldloc, ctx.Nc); il.Emit(OpCodes.Bge, done);
+            env.Ck = PolyLoadCoef(em, ccLoop, kOff);
+            // The factor x - r[k], in NumPy's subtract dtype (the loop dtype); then into the accumulator's dtype (exact: the
+            // float16 reduce form widens to float32, every other form is a no-op).
+            var f = em.Emit(prog.RootFactor, env);
+            if (f.T != t) throw new InvalidOperationException($"root factor typed {f.T}, planned {t}");
+            env.C0 = acc;
+            env.Tmp = em.Convert(f, accT);
+            var n = em.Emit(prog.RootStep, env);
+            if (n.T != acc.T) throw new InvalidOperationException("root product step changed the accumulator's dtype");
+            em.CopyTo(n, acc);
+            il.Emit(OpCodes.Ldloc, k); il.Emit(OpCodes.Ldc_I8, 1L); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, k);
+            il.Emit(OpCodes.Ldloc, kOff); il.Emit(OpCodes.Ldloc, loopStride); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, kOff);
+            il.Emit(OpCodes.Br, top);
+            il.MarkLabel(done);
+            // HALF_multiply's one narrow (round to nearest even) in the float16 reduce form; the accumulator itself otherwise.
+            return em.Convert(acc, t);
         }
     }
 }

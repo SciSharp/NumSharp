@@ -27,7 +27,7 @@ namespace NumSharp
     ///             (<c>c[-1]</c> for polyval, <c>c[-2]</c> for the Clenshaw bases).</item>
     ///     </list>
     /// </remarks>
-    internal static unsafe class NDPolyEval
+    internal static unsafe partial class NDPolyEval
     {
         /// <summary>
         ///     <c>{p}val(x, c, tensor)</c> with an array_like <paramref name="c"/>: NumPy's <c>np.array(c, ndmin=1)</c> of

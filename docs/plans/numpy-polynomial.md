@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 delivered** — 172 of 193 names: the evaluation family (36, `polyvalfromroots` open), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) and the companion / roots pair (12: `{p}companion`/`{p}roots`), all bit-exact (`polyeval.jsonl` 19,216 + `polyseries.jsonl` 18,698 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 cases; the BLAS-bound products and the LAPACK-bound roots byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 + U6 delivered, U8 / U9 all but Gauss-Hermite** — 190 of 193 names: the evaluation family (37, `polyvalfromroots` included), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) the companion / roots pair (12: `{p}companion`/`{p}roots`), the fits (6: `{p}fit`), the weights (5: `{p}weight`), the Chebyshev points and interpolation (4: `chebpts1`/`chebpts2`/`chebgauss`/`chebinterpolate`) and Gauss-Legendre / Gauss-Laguerre (2: `leggauss`/`laggauss`), all bit-exact (`polyeval.jsonl` 27,385 + `polyseries.jsonl` 19,478 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 + `polyweight.jsonl` 1,860 + `polyweight_host.jsonl` 1,235 + `polypts.jsonl` 362 + `polypts_host.jsonl` 347 + `polygauss.jsonl` 122 + `polyinterp.jsonl` 83 + `polyfit.jsonl` 324 cases; the BLAS-bound products, the LAPACK-bound roots / Gauss nodes / fits and the gemv-bound interpolation byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354 + `polygauss_parity.jsonl` 160 + `polyinterp_parity.jsonl` 1,030 + `polyfit_parity.jsonl` 1,242). Still open: `hermgauss`, `hermegauss`, `polyutils.format_float` (and, outside the 193, `set_default_printstyle` and the six classes). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -512,12 +512,21 @@ a unit below, that document wins.
 - **Tests to port:** `TestArithmetic` (mul/div/pow/mulx) and `TestMisc` (fromroots/2poly) × 6.
   `test_polynomial.TestFraction` (Fraction object arrays) → `[Misaligned]` (no object dtype).
 
-### U3 — Evaluation (37 names) — DELIVERED 2026-09-25 (36 of 37; `polyvalfromroots` open)
+### U3 — Evaluation (37 names) — DELIVERED 2026-09-25 (36 of 37); `polyvalfromroots` DELIVERED 2026-10-18
+
+> **`polyvalfromroots` DELIVERED (2026-10-18).** `Polynomial/Package/NDPolyEval.FromRoots.cs` + the engine's third
+> skeleton, the ROOT PRODUCT (`PolyEvalProgram.RootProduct`, `EmitPolyRootProduct`): per point the multiply identity
+> times `x - r[k]` for every root in order, one pass, no `x - r` temporary. NumPy's `np.prod` runs one of TWO loops by
+> its iteration (the roots axis innermost in the temporary NpyIter lays out, or not), and complex128 AND float16 differ
+> between them (the contracted fallback product / a float32 accumulation narrowed once): `PolyRootForm` keys the kernel
+> on it. Oracle: section M of `polyeval.jsonl` (3,519 cases, 0 excused); benchmark geomean 13.9× (65 cells, all
+> bit-exact, min 1.17×: no roots, the identity fill both sides write). Routes and findings (the float16 forms, the
+> object paths, the scalar float16 widen fixed library-wide):
+> [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md) §3.1.
 
 - **Scope delivered:** `{p}val`, `{p}val2d`, `{p}val3d`, `{p}grid2d`, `{p}grid3d` and `{p}valnd` (devdocs)
   for all six bases, under the new facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,
-  hermite_e}` (instance-property modules, §2). **Still open:** `polyvalfromroots` (`np.prod(x - r, axis=0)`,
-  an axis-0 reduction whose order NumSharp's `prod` must match).
+  hermite_e}` (instance-property modules, §2), and `polyvalfromroots` (2026-10-18, above).
 - **Engine as built (D12, §10.1):** Tier-3A per-chunk IL kernels driven by `NDIterRef.ForEach`
   (`src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Polynomial*.cs`, driver
   `src/NumSharp.Core/Polynomial/Package/NDPolyEval.cs`):

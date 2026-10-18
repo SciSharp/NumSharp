@@ -107,14 +107,35 @@ namespace NumSharp.Backends.Kernels
             var nanv = Avx2.Or(Avx2.Or(sign, Vector256.Create(0x7f800000)), Avx2.ShiftLeftLogical(mant, 13));
             return Avx2.BlendVariable(giesen.AsInt32(), nanv, isInfNan).AsSingle();
         }
-        // Scalar widen matching the SIMD path (finite via BCL; inf/nan via the bit formula).
+        // Scalar widen matching the SIMD path (finite via the scalar Giesen rescale; inf/nan via the bit formula).
         [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         internal static float HalfToFloatScalarExact(ushort h)
         {
             if ((h & 0x7fff) > 0x7bff)
                 return BitConverter.UInt32BitsToSingle(((uint)(h & 0x8000) << 16) | 0x7f800000u | ((uint)(h & 0x3ff) << 13));
-            return (float)BitConverter.UInt16BitsToHalf(h);
+            // Not (float)BitConverter.UInt16BitsToHalf(h): the BCL conversion is a CALL the JIT does not inline, and in a
+            // scalar float16 chain it was most of each step (the polynomial kernels' scalar parts: 3 calls per root-product
+            // step, 13.9 of 14 ns; measured 2026-10-18). Exact for every finite value, so the same bits.
+            return HalfFiniteBitsToSingle(h);
         }
+
+        /// <summary>
+        ///     float16 bits → float32 for a FINITE value (zero, subnormal or normal), exactly and without a branch: Giesen's
+        ///     rescale — the exponent and mantissa shifted into float position, then multiplied by 2^112, a power-of-two scale
+        ///     that is exact and also renormalizes a subnormal (its float encoding is a float subnormal of the same digits) —
+        ///     and the sign OR-ed back. The scalar twin of <see cref="HalfBitsToFloat"/>'s lanes, and far cheaper than the
+        ///     BCL's <c>(float)Half</c>, a call the JIT never inlines.
+        /// </summary>
+        /// <param name="h">The float16 bit pattern; its exponent field must not be all ones.</param>
+        /// <returns>The value as float32 (-0.0 keeps its sign).</returns>
+        /// <remarks>An infinity or NaN pattern yields a large FINITE float (the exponent is rescaled like any other):
+        ///     callers branch on <c>(h &amp; 0x7fff) &gt; 0x7bff</c> first, as <see cref="HalfToFloatScalarExact"/> does. The
+        ///     subnormal path needs gradual underflow on the multiply's input — .NET never sets the DAZ flag.</remarks>
+        [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
+        internal static float HalfFiniteBitsToSingle(ushort h)
+            => BitConverter.Int32BitsToSingle(
+                BitConverter.SingleToInt32Bits(BitConverter.Int32BitsToSingle((h & 0x7fff) << 13) * BitConverter.Int32BitsToSingle((254 - 15) << 23))
+                | ((h & 0x8000) << 16));
         [System.Runtime.CompilerServices.MethodImpl(OptimizeAndInline)]
         private static unsafe long BulkHalfToFloat(ushort* p, float* dst, long count)
         {

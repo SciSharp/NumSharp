@@ -5198,7 +5198,7 @@ class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `
 + `Fourier/PocketFFT*.cs` (+ `*.Single.cs`); issues **#114** / **#569**.
 
 ### Polynomial package (`np.polynomial.*`) — evaluation family (U3)
-`polyval`/`chebval`/`legval`/`lagval`/`hermval`/`hermeval` and their `*val2d`, `*val3d`, `*grid2d`, `*grid3d`, `*valnd` twins (36 names; `polyvalfromroots` open)
+`polyval`/`chebval`/`legval`/`lagval`/`hermval`/`hermeval` and their `*val2d`, `*val3d`, `*grid2d`, `*grid3d`, `*valnd` twins (36 names; `polyvalfromroots`, the 37th, has its own section below)
 
 The `numpy.polynomial` PACKAGE (not the legacy `np.polyval` family) — facade `np.polynomial.{polynomial,
 chebyshev,legendre,laguerre,hermite,hermite_e}` (instance-property modules, since a nested static class
@@ -5209,7 +5209,7 @@ errors). Kernels `Backends/Kernels/ILKernelGenerator.Polynomial{,.Typing,.Emitte
 Tier-3A per-chunk IL over `NDIterRef.ForEach`, emitted by ONE typed emitter from per-basis STEP TABLES
 (NumPy's source-order expression trees, never re-associated, each node typed by NEP 50) — so no per-basis and
 no per-dtype C#. **Bit-exact with NumPy 2.4.2** on every dtype pair and layout, result LAYOUT included (oracle tier
-`polyeval.jsonl`, 23,866 cases, 0 excused — 4,650 of them from the 2026-10-01 review, section L: a "strides" facet over
+`polyeval.jsonl`, 23,866 cases for these 36 names (27,385 with `polyvalfromroots`' section M), 0 excused — 4,650 of them from the 2026-10-01 review, section L: a "strides" facet over
 every x × series layout, see the traps; 2,610 from the 2026-09-29 wholeness pass: section J, a Python-sequence x (tuples,
 nested lists, empty, ragged, NumPy-scalar items — coerced by `PolySequence`, see U4) and a Python int x past int64 (a C#
 `BigInteger`, weak: CPython int arithmetic on the x-only terms, inf / OverflowError past float64); section K, an
@@ -6138,6 +6138,51 @@ SHA-256-checked): geomean 1.96×, min 1.28×** — and a per-cell lstsq ceiling 
   ~75 µs, NumSharp's ~30 µs; the division is at the hardware divide throughput). The five cells under 1.5× (1.28–1.48×) are gelsd-bound: three have ceilings of
   1.44–1.64× (degree 30 at n = 100 / 1,000, a complex y), two (polyfit at degree 10, a 2-D y) spend 77% of the call in gelsd.
 
+### Polynomial package — `polyvalfromroots` (U3's root product)
+`polyvalfromroots` (1 name)
+
+Plans `docs/plans/numpy-polynomial.md` (U3) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.1 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2**: section M of the `polyeval.jsonl` tier (3,519 cases; the tier 27,385, 0
+excused). Unit tests `Polynomial/PolynomialValFromRootsTests.cs` (13; a mutation pass of 17 planted defects, 16 killed by
+the unit tests and 16 by the oracle, the 17th equivalent). **Perf (NPY/NS, `benchmark/polynomial/polyvalfromroots_*`, 65
+cells, every one SHA-256-checked): geomean 13.9×, min 1.17×** — float64 at 100K points 36–43×, 1M 21–52×, every dtype
+pair at 100K 3.3× (float16) – 44×, x layouts 20–41×, N-D roots 10–46×, a scalar x 3.1–4.8×.
+
+- **Signature**: `np.polynomial.polynomial.polyvalfromroots(object x, object r, bool tensor = true)`; x and r take every
+  argument kind of the evaluation family (NDArray, typed C# array, tuple / list, Python or NumPy scalar), plus a str and
+  None (NumPy's errors, below).
+- **Engine**: `Polynomial/Package/NDPolyEval.FromRoots.cs` runs NumPy's statements in order (`np.array(r, ndmin=1)`, an
+  integer / bool r as float64, a tuple / list x `np.asarray`'d, the tensor reshape or `x.ndim must be < r.ndim when tensor
+  == False`, then `np.prod(x - r, axis=0)`) over U3's third skeleton, the ROOT PRODUCT (`PolyEvalProgram.RootProduct`,
+  `EmitPolyRootProduct`): per point `acc = 1`, then `acc *= x - r[k]` for k = 0, 1, … — the roots read once, the value
+  written once, no `x - r` temporary (NumPy allocates nr times the result). U3's operand forms (a 1-D r in auxdata, an
+  N-D r as the `r[0]` operand read at a stride), lane kinds, weak-x constant pool and NEP 50 typing serve it unchanged.
+- **The product form follows NumPy's iteration, for complex128 AND float16** (`PolyRootForm` in the kernel key): when the
+  roots axis is the innermost axis longer than one of the `x - r` temporary as NpyIter lays it out
+  (`Shape.NpyIterOutputShape` over x and the reshaped r — one result element, an F-ordered r under tensor=False, a scalar x
+  over F-ordered columns), np.prod's inner loop walks the roots with the output's stride 0: CDOUBLE_multiply's
+  MSVC-contracted fallback product (`PolyComplexProduct.LoopScalar`) and HALF_multiply's float32 accumulation narrowed
+  ONCE. Otherwise simd_cmul and a narrow per root. The reduce form runs scalar chains (its products are not the vector
+  kinds'). One inner-loop call holds every root: nothing is cast, so nothing is buffered (probed to 20,000 roots under
+  every `np.setbufsize`).
+- **Result layout**: `Shape.ReductionOutputShape` of that temporary — x's memory order under tensor (an F x gives an F
+  result), the columns' order for a scalar x. An integer r is NumPy's `astype(np.double)` K-order copy: a broadcast int64 r
+  is laid out like that copy, not like the view (the stride-0 axis sorts innermost).
+- **Empty roots** fill np.prod's identity (`y.fill(1)`) after the weak x's conversion (a Python int past float64 still
+  raises `int too large to convert to float`). That cell is the floor (1.17×): both libraries only write the ones.
+- **NumPy's object and str paths**: a bare None (x or r) is np.subtract's object loop — the broadcast check, then CPython's
+  `unsupported operand type(s) for -: 'NoneType' and 'float'`, each operand's element named as the object cast makes it
+  ('float' for every float dtype, 'int' for every integer, 'str' for a str array; an integer r is float64 by then); None
+  with an empty 1-D r is the Python int 1 (a 0-d int64 array); a Python int past uint64 among the roots at a scalar x is
+  computed with Python numbers (`PolyNumber`, the first difference copied: a non-empty object reduction has no identity);
+  an object-array result is `NotSupportedException`. A str operand is np.subtract's no-loop TypeError
+  (`NDStringUfuncs.BinaryError`), raised before any broadcast check, as NumPy resolves the loop first.
+- **Found on the way, library-wide**: the scalar float16 → float32 widen (`DirectILKernelGenerator.HalfToFloatScalarExact`,
+  `Converts.ToSingle(Half)`, so `HalfArithBits` and every `EmitConvertTo(Half, Single)`) called the BCL's `(float)Half`,
+  which the JIT never inlines. Giesen's branch-free rescale (`HalfFiniteBitsToSingle`) gives the same bits for all 65,536
+  patterns (`Backends/Kernels/HalfScalarWidenTests.cs`): the float16 reduce form 0.94 → 1.67× NumPy, U3's `polyval` over an
+  F-ordered float16 series 0.63 → 1.22×.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 
@@ -6711,7 +6756,7 @@ non-structured subset would only re-expose `loadtxt`.
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (class + `_assert_*`/`_commonType` ports) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs`; `Exceptions/LinAlgError.cs` |
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
 | Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
-| numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
+| numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `NDPolyEval.FromRoots.cs` (`polyvalfromroots`: NumPy's statements, the product-form rule, the object / str paths), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables incl. the root product + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels, `PolyRootForm`). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
 | numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |
 | numpy.polynomial series algebra (U2) | `Polynomial/Package/NDPolyAlgebra.cs` (engine: `PolySer`, the pooled per-thread `PolyArena`, the entry points, the shared statements — as_series, `{p}mulx`, `np.convolve`, `_div`/`_pow`/`_fromroots`), `NDPolyAlgebra.Bases.cs` (the recurrence products, polydiv / chebdiv, the ten conversions), `NDPolyPowerArgument.cs` (`int(pow)` / `power != pow` / `power > maxpower` for the object-typed `{p}pow` overloads), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyAlgebra.cs` (house-kernel / mulx slot fronts + the fused chebmulx IL kernel), `Math/NDArray.SlidingDot{,.Long}.cs` (`SlidingCorrelateInto`, NumPy's per-dtype dotfunc models, the blocked long products). Oracle `polyalgebra.jsonl` + host-pinned `polyalgebra_parity.jsonl` via `OpRegistry.PolyAlgebra.cs`; benchmark `benchmark/polynomial/polyalg_*` |
