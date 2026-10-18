@@ -465,7 +465,9 @@ dtype-less `old` / `new` (a string, a `byte[]`, a number, a chararray element st
 predicates (`b1328a4f`, `APIs/np.char.predicates.cs`, `Char/NDCharArray.Predicates.cs`) ARE `np.strings`' ufuncs, with
 `out=` / `where=` / `dtype=`; the members are rule 4 over the STORED text (`np.char.array(['ab  ']).isalpha()` is False,
 `.islower()` True), a 0-d array for a 0-d chararray, and `isdecimal` / `isnumeric` refuse an `S` chararray (no bytes
-loop).
+loop). The case maps and `translate` (`4c9e90a5`, `APIs/np.char.case.cs`, `Char/NDCharArray.Case.cs`) ARE
+`np.strings`' functions (`np.asarray` + `_vec_string`: a plain result, a 0-d array for a Python str; `translate`'s
+`deletechars` reaches only `bytes.translate`); the members are rule 1 (`Inside()` + `AsArrayOfFresh`).
 TRAPS: (1) a function that forwards a chararray to a DIFFERENTLY named public function (partition → `np.stack`)
 computes inside `NDCharArrayBoundary.Inside()`: the audit skips only frames named like the function, and the forward would apply
 `np.stack`'s chararray rule. (2) NumPy 2.4.2's zfill of an EMPTY element reads uninitialized memory for its sign: oracle

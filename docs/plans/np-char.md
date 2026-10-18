@@ -44,9 +44,9 @@ batches, one family each, as their phase-2 functions compute: batch 1 (`rpartiti
 `rfind`, `index`, `rindex`, `startswith`, `endswith`, with the module's re-exports and `np.@char.str_len`; `6d06fa3c`),
 batch 3 (`strip`, `lstrip`, `rstrip`, `replace`, with the module's re-exports; `66b68e96`) and batch 4 (the nine
 predicates `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, with
-the module's re-exports; `b1328a4f`) are done. Open: the other string methods of C5 — the five case maps compute in
-phase 2 already (P2.6 milestone 2) and `translate` since P2.6 milestone 3's first half (`5bbd65c2`); `encode`, `decode`
-and `%` wait for the rest of P2.6.
+the module's re-exports; `b1328a4f`) and batch 5 (the case maps `capitalize`, `lower`, `swapcase`, `title`, `upper` and
+`translate`, with the module's re-exports; `4c9e90a5`) are done. Open: C5's `encode`, `decode` and `%`, which wait for
+the rest of P2.6.
 
 ---
 
@@ -434,7 +434,8 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
 - In batches of one family each, with the module's re-exports of the same names: batch 1 (`rpartition`, `center`,
   `ljust`, `rjust`, `zfill`, `expandtabs`) is done (2026-10-17, `ffa74606`), batch 2 (`count`, `find`, `rfind`, `index`,
   `rindex`, `startswith`, `endswith`, and the module's `str_len`) too (2026-10-17, `6d06fa3c`), batch 3 (`strip`,
-  `lstrip`, `rstrip`, `replace`; 2026-10-17, `66b68e96`), and batch 4 (the nine predicates; 2026-10-18, `b1328a4f`).
+  `lstrip`, `rstrip`, `replace`; 2026-10-17, `66b68e96`), batch 4 (the nine predicates; 2026-10-18, `b1328a4f`), and
+  batch 5 (the case maps and `translate`; 2026-10-18, `4c9e90a5`). `encode`, `decode` and `%` wait for P2.6.
 
 ### C6 Completion
 
@@ -448,9 +449,10 @@ units above `U+10FFFF`), benchmark rows at 1K / 100K / 1M across layouts, and it
   exact, 14 alias) and their signatures are compared. The 24 named members still missing are C5's open batches
   (`capitalize`, `lower`, `upper`, `swapcase`, `title`, the `is*` predicates, `strip` / `lstrip` / `rstrip`, `replace`,
   `translate`, `encode`, `decode`) and three ndarray members NumSharp has nowhere (`ctypes`, `dump`, `dumps`); the rest
-  are Python protocols. Batches 3 and 4 have since added `strip` / `lstrip` / `rstrip` / `replace` and the nine
-  predicates (`66b68e96`, `b1328a4f`), which leaves 11 of the 24 by that count. The `chararray.*` member keys of
-  `oracle_map.json` are still open: the credited rows read oracle-unverified.
+  are Python protocols. Batches 3, 4 and 5 have since added `strip` / `lstrip` / `rstrip` / `replace`, the nine
+  predicates, the five case maps and `translate` (`66b68e96`, `b1328a4f`, `4c9e90a5`), which leaves 5 of the 24 by that
+  count (`encode`, `decode`, `ctypes`, `dump`, `dumps`). The `chararray.*` member keys of `oracle_map.json` are still
+  open: the credited rows read oracle-unverified.
 
 ### Order
 
@@ -962,6 +964,33 @@ C-D1 decision and C3 for C-D3.
     `islower` / `isupper` read to the end, reversed and F-ordered views, `out=`): geomean 4.71×, min 2.52× (`isspace`
     over `StringDType` at 1M), none under 1.5×.
   - **Open:** the case maps and `translate` (batch 5); `encode`, `decode` and `%` wait for the rest of P2.6.
+- **2026-10-18 — C5's fifth batch: the case maps and `translate`** (`4c9e90a5`; the same scope, one family per batch).
+  - **Built.** `np.@char.capitalize` / `lower` / `swapcase` / `title` / `upper` / `translate` (`APIs/np.char.case.cs`)
+    and the chararray members of the six names (`Char/NDCharArray.Case.cs`). NumPy's module functions ARE `np.strings`'
+    (`np.char.upper is np.strings.upper`): `np.asarray(a)` and `_vec_string`, not ufuncs, so a chararray operand gives a
+    PLAIN result (OWNDATA true) and a 0-d chararray or a Python str a 0-d array (not a NumPy scalar). `translate` passes
+    `deletechars` to `bytes.translate` only: a `U` operand ignores it, a `StringDType` one refuses it
+    (`str.translate() takes exactly one argument (2 given)`). The members are NumPy's rule 1, `asarray(upper(self))`,
+    over the STORED text: they compute the plain result inside the boundary (the function's own Plain rule would
+    otherwise apply) and give it the final form with `AsArrayOfFresh` (a `U` result taken over, no copy; an `S` result
+    viewed, OWNDATA false).
+  - **No `np.strings` change.** P2.6 milestones 2 (`9d8d1a7b`) and 3 (`5bbd65c2`) compute them. The generator's worker
+    decoder (`_chx_dec`) learned dicts, `translate`'s tables (a dict argument failed in the generator itself).
+  - **Gates.** Oracle section `strcharmeth` +713 cases (12,253 in all, 3,490 NumPy errors, with the boundary audit; the
+    earlier 11,540 cases byte-identical; no new excuse): the members over both classes × 14 layouts (`translate` with a
+    keyword table, a delete set and a None table for `S`, an ignored `deletechars` for `U`), the functions over plain
+    and chararray operands, case texts (the growing mappings of U+00DF / U+FB03 / U+0149 / U+0130, the final sigma, the
+    titlecase U+01C5 / U+01C6, words split by uncased characters, digits, an embedded NUL, trailing whitespace) as a
+    row, a column and at a width that cuts a growing mapping (`U2` / `S2`), `translate`'s table kinds and refusals,
+    `StringDType`, Python values. Unit tests: `CharStringMethodsTests` (29: +3). The leak catalogue: 12 entries (698 in
+    all). 8 planted bugs: 7 killed (the oracle 6, the unit tests 6, the leak catalogue 2), and one equivalent: a
+    member's function computed outside `NDCharArrayBoundary.Inside()` gets the same plain result from `np.strings`'
+    Plain rule.
+  - **Performance** (204 cells: the 5 case maps and `translate` over `U` / `S` / `StringDType`, ASCII and non-ASCII
+    words, the members over `U` / `S`, `upper` over a chararray, a delete set for `S`, reversed and F-ordered views, at
+    1K / 100K / 1M): geomean 40.1×, min 5.31× (`title` over non-ASCII `StringDType` at 1M), none under 1.5×. NumPy's
+    `_vec_string` calls the Python method once per element.
+  - **Open:** `encode`, `decode` and `%` (the rest of P2.6), then C6.
 
 ---
 
@@ -975,7 +1004,7 @@ C-D1 decision and C3 for C-D3.
 | C4 | `multiply` (phase 1, done), `partition`, `rpartition` (done, `ffa74606`) |
 | P2.3 | `add` |
 | P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith` (done, `6d06fa3c`), `lstrip`, `rstrip`, `strip`, `replace` (done, `66b68e96`), `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
-| P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower`, `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal` (the nine predicates: done, `b1328a4f`), `mod`, `encode`, `decode`, `translate` |
+| P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower` (the case maps: done, `4c9e90a5`), `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal` (the nine predicates: done, `b1328a4f`), `mod`, `encode`, `decode`, `translate` (done, `4c9e90a5`) |
 
 The facade (C0) declares all 53; a row is complete when its computation lands.
 
@@ -983,7 +1012,7 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 
 | Group | Members | NumPy's result | Lands with |
 |---|---|---|---|
-| String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 (`center`, `expandtabs`, `ljust`, `partition`, `rjust`, `rpartition`, `zfill`: done, `ffa74606`) |
+| String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 (`center`, `expandtabs`, `ljust`, `partition`, `rjust`, `rpartition`, `zfill`: done, `ffa74606`; `capitalize`, `lower`, `swapcase`, `title`, `translate`, `upper`: done, `4c9e90a5`) |
 | String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 (done, `66b68e96`) |
 | String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done) |
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 (`count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`: done, `6d06fa3c`; the nine predicates: done, `b1328a4f`) |
