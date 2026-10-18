@@ -48,27 +48,27 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `np` | 366 | 46 | 108 | 45 | 150 | 6 | 11 | 18 | 0 | 23 | 2 | 1 | 22 | 109 | 0 | 18 | 10 | 8 | 47 |
 | `ndarray` | 57 | 9 | 1 | 5 | 24 | 1 | 4 | 7 | 0 | 4 | 0 | 0 | 10 | 22 | 0 | 83 | 45 | 15 | 3 |
-| `np.char` | 23 | 0 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 0 | 1 | 0 | 0 | 30 |
+| `np.char` | 53 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 1 | 0 | 0 | 0 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `np.fft` | 18 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 0 | 0 | 0 | 0 | 0 |
 | `np.linalg` | 31 | 0 | 0 | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 27 | 0 | 0 | 0 | 0 | 1 |
 | `np.ma` | 211 | 130 | 3 | 31 | 10 | 0 | 0 | 8 | 0 | 1 | 0 | 0 | 17 | 69 | 0 | 4 | 0 | 0 | 6 |
-| `np.polynomial` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `np.polynomial.chebyshev` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 0 | 1 | 0 | 0 | 7 |
-| `np.polynomial.hermite` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 0 | 1 | 0 | 0 | 4 |
-| `np.polynomial.hermite_e` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 0 | 1 | 0 | 0 | 4 |
-| `np.polynomial.laguerre` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 0 | 1 | 0 | 0 | 4 |
-| `np.polynomial.legendre` | 23 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 20 | 0 | 1 | 0 | 0 | 4 |
-| `np.polynomial.polynomial` | 21 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 18 | 0 | 1 | 0 | 0 | 3 |
-| `np.polynomial.polyutils` | 6 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 1 |
+| `np.polynomial` | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
+| `np.polynomial.chebyshev` | 30 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.hermite` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.hermite_e` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.laguerre` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.legendre` | 27 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 24 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.polynomial` | 24 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 21 | 0 | 1 | 0 | 0 | 0 |
+| `np.polynomial.polyutils` | 7 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `np.random` | 61 | 0 | 0 | 1 | 55 | 0 | 1 | 1 | 0 | 2 | 11 | 33 | 0 | 5 | 0 | 3 | 2 | 0 | 1 |
 | `np.random.Generator` | 45 | 0 | 0 | 0 | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 38 | 0 | 5 | 0 | 1 | 0 | 0 | 0 |
-| `np.strings` | 42 | 0 | 17 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 23 | 0 | 0 | 0 | 0 | 4 |
+| `np.strings` | 46 | 0 | 17 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 0 | 0 | 0 | 0 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 2 | 2 | 0 | 1 | 2 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 3 |
 | `np.matrix` | 53 | 10 | 1 | 0 | 19 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 13 | 21 | 0 | 4 | 0 | 0 | 0 |
-| `np.char.chararray` | 32 | 3 | 1 | 2 | 12 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 1 | 17 | 0 | 4 | 0 | 0 | 28 |
+| `np.char.chararray` | 60 | 1 | 1 | 1 | 8 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 51 | 0 | 4 | 0 | 0 | 0 |
 | `np.ma.MaskedArray` | 59 | 30 | 0 | 1 | 2 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 13 | 25 | 0 | 2 | 1 | 0 | 17 |
 | `np.dtype` | 4 | 1 | 0 | 0 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 5 | 3 | 2 | 0 |
 | `np.nditer` | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 3 | 0 | 0 | 0 |
@@ -88,7 +88,7 @@ lists what failed, with the compiler's reason.
 | `np.random.PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | 1191 | 234 | 132 | 90 | 360 | 10 | 17 | 45 | 0 | 31 | 19 | 73 | 77 | 508 | 0 | 168 | 63 | 26 | 192 |
+| **total** | 1287 | 232 | 142 | 89 | 354 | 10 | 17 | 44 | 0 | 31 | 19 | 73 | 77 | 602 | 0 | 168 | 63 | 26 | 96 |
 
 *no mark*: no M (● or ◦), X, O, T, B, L or Q: the name matches NumPy in every respect the table checks.
 
@@ -650,32 +650,62 @@ lists what failed, with the compiler's reason.
 
 ## `np.char`
 
-### Names NumPy has (23)
+### Names NumPy has (53)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `add` | ◦ |  |  |  |  |  |  | `add(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `array` |  |  |  |  |  |  |  | `array(obj, itemsize=None, copy=True, unicode=None, order=None)` |  |  |  |  |
 | `asarray` |  |  |  |  |  |  |  | `asarray(obj, itemsize=None, unicode=None, order=None)` |  |  |  |  |
+| `capitalize` |  |  |  |  |  |  |  | `capitalize(a)` |  |  |  |  |
 | `center` |  |  |  |  |  |  |  | `center(a, width, fillchar=' ')` |  |  |  |  |
 | `chararray` |  |  |  |  |  |  |  | `chararray(shape, itemsize=1, unicode=False, buffer=None, offset=0, strides=None, order='C')` |  |  |  |  |
-| `compare_chararrays` |  |  | 2 |  |  |  |  | `compare_chararrays(a1, a2, cmp, rstrip)` |  |  |  |  |
+| `compare_chararrays` |  |  |  |  |  |  |  | `compare_chararrays(a1, a2, cmp, rstrip)` |  |  |  |  |
+| `count` |  |  |  |  |  |  |  | `count(a, sub, start=0, end=None)` |  |  |  |  |
+| `decode` |  |  |  |  |  |  |  | `decode(a, encoding=None, errors=None)` |  |  |  |  |
+| `encode` |  |  |  |  |  |  |  | `encode(a, encoding=None, errors=None)` |  |  |  |  |
+| `endswith` |  |  |  |  |  |  |  | `endswith(a, suffix, start=0, end=None)` |  |  |  |  |
 | `equal` |  |  |  |  |  |  |  | `equal(x1, x2)` |  |  |  |  |
 | `expandtabs` |  |  |  |  |  |  |  | `expandtabs(a, tabsize=8)` |  |  |  |  |
+| `find` |  |  |  |  |  |  |  | `find(a, sub, start=0, end=None)` |  |  |  |  |
 | `greater` |  |  |  |  |  |  |  | `greater(x1, x2)` |  |  |  |  |
 | `greater_equal` |  |  |  |  |  |  |  | `greater_equal(x1, x2)` |  |  |  |  |
-| `join` |  |  | 2 |  |  |  |  | `join(sep, seq)` |  |  |  |  |
+| `index` |  |  |  |  |  |  |  | `index(a, sub, start=0, end=None)` |  |  |  |  |
+| `isalnum` | ◦ |  |  |  |  |  |  | `isalnum(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `isalpha` | ◦ |  |  |  |  |  |  | `isalpha(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `isdecimal` | ◦ |  |  |  |  |  |  | `isdecimal(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `isdigit` | ◦ |  |  |  |  |  |  | `isdigit(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `islower` | ◦ |  |  |  |  |  |  | `islower(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `isnumeric` | ◦ |  |  |  |  |  |  | `isnumeric(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `isspace` | ◦ |  |  |  |  |  |  | `isspace(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `istitle` | ◦ |  |  |  |  |  |  | `istitle(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `isupper` | ◦ |  |  |  |  |  |  | `isupper(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `join` |  |  |  |  |  |  |  | `join(sep, seq)` |  |  |  |  |
 | `less` |  |  |  |  |  |  |  | `less(x1, x2)` |  |  |  |  |
 | `less_equal` |  |  |  |  |  |  |  | `less_equal(x1, x2)` |  |  |  |  |
 | `ljust` |  |  |  |  |  |  |  | `ljust(a, width, fillchar=' ')` |  |  |  |  |
+| `lower` |  |  |  |  |  |  |  | `lower(a)` |  |  |  |  |
+| `lstrip` |  |  |  |  |  |  |  | `lstrip(a, chars=None)` |  |  |  |  |
+| `mod` |  |  |  |  |  |  |  | `mod(a, values)` |  |  |  |  |
 | `multiply` |  |  |  |  |  |  |  | `multiply(a, i)` |  |  |  |  |
 | `not_equal` |  |  |  |  |  |  |  | `not_equal(x1, x2)` |  |  |  |  |
 | `partition` |  |  |  |  |  |  |  | `partition(a, sep)` |  |  |  |  |
+| `replace` |  |  |  |  |  |  |  | `replace(a, old, new, count=-1)` |  |  |  |  |
+| `rfind` |  |  |  |  |  |  |  | `rfind(a, sub, start=0, end=None)` |  |  |  |  |
+| `rindex` |  |  |  |  |  |  |  | `rindex(a, sub, start=0, end=None)` |  |  |  |  |
 | `rjust` |  |  |  |  |  |  |  | `rjust(a, width, fillchar=' ')` |  |  |  |  |
 | `rpartition` |  |  |  |  |  |  |  | `rpartition(a, sep)` |  |  |  |  |
 | `rsplit` |  |  |  |  |  |  |  | `rsplit(a, sep=None, maxsplit=None)` |  |  |  |  |
+| `rstrip` |  |  |  |  |  |  |  | `rstrip(a, chars=None)` |  |  |  |  |
 | `split` |  |  |  |  |  |  |  | `split(a, sep=None, maxsplit=None)` |  |  |  |  |
 | `splitlines` |  |  |  |  |  |  |  | `splitlines(a, keepends=None)` |  |  |  |  |
+| `startswith` |  |  |  |  |  |  |  | `startswith(a, prefix, start=0, end=None)` |  |  |  |  |
+| `str_len` | ◦ |  |  |  |  |  |  | `str_len(x, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
+| `strip` |  |  |  |  |  |  |  | `strip(a, chars=None)` |  |  |  |  |
+| `swapcase` |  |  |  |  |  |  |  | `swapcase(a)` |  |  |  |  |
+| `title` |  |  |  |  |  |  |  | `title(a)` |  |  |  |  |
+| `translate` |  |  |  |  |  |  |  | `translate(a, table, deletechars=None)` |  |  |  |  |
+| `upper` |  |  |  |  |  |  |  | `upper(a)` |  |  |  |  |
 | `zfill` |  |  |  |  |  |  |  | `zfill(a, width)` |  |  |  |  |
 
 ### Names NumPy does not have (1)
@@ -683,10 +713,6 @@ lists what failed, with the compiler's reason.
 | name | O | T | NPTypeCode / Type |
 |---|---|---|---|
 | `ToString` |  |  |  |
-
-### NumPy names NumSharp lacks (30)
-
-`capitalize` (in `np.strings`), `count` (in `np.ma`, `np.strings`, `np.ma.MaskedArray`), `decode`, `encode`, `endswith` (in `np.strings`), `find` (in `np.strings`), `index` (in `np.strings`, `np.nditer`, `np.broadcast`, `np.flatiter`), `isalnum` (in `np.strings`), `isalpha` (in `np.strings`), `isdecimal` (in `np.strings`), `isdigit` (in `np.strings`), `islower` (in `np.strings`), `isnumeric` (in `np.strings`), `isspace` (in `np.strings`), `istitle` (in `np.strings`), `isupper` (in `np.strings`), `lower` (in `np.strings`), `lstrip` (in `np.strings`), `mod` (in `np`, `np.ma`), `replace` (in `np.strings`), `rfind` (in `np.strings`), `rindex` (in `np.strings`), `rstrip` (in `np.strings`), `startswith` (in `np.strings`), `str_len` (in `np.strings`), `strip` (in `np.strings`), `swapcase` (in `np.strings`), `title` (in `np.strings`), `translate`, `upper` (in `np.strings`)
 
 ## `np.dtypes`
 
@@ -1016,29 +1042,43 @@ lists what failed, with the compiler's reason.
 
 ## `np.polynomial`
 
-### NumPy names NumSharp lacks (7)
-
-`Chebyshev`, `Hermite`, `HermiteE`, `Laguerre`, `Legendre`, `Polynomial`, `set_default_printstyle`
-
-## `np.polynomial.chebyshev`
-
-### Names NumPy has (23)
+### Names NumPy has (7)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `Chebyshev` |  |  |  |  |  |  |  | `Chebyshev(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
+| `Hermite` |  |  |  |  |  |  |  | `Hermite(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
+| `HermiteE` |  |  |  |  |  |  |  | `HermiteE(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
+| `Laguerre` |  |  |  |  |  |  |  | `Laguerre(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
+| `Legendre` |  |  |  |  |  |  |  | `Legendre(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
+| `Polynomial` |  |  |  |  |  |  |  | `Polynomial(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
+| `set_default_printstyle` |  |  |  |  |  |  |  | `set_default_printstyle(style)` |  |  |  |  |
+
+## `np.polynomial.chebyshev`
+
+### Names NumPy has (30)
+
+| name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `Chebyshev` |  |  |  |  |  |  |  | `Chebyshev(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
 | `cheb2poly` |  |  |  |  |  |  |  | `cheb2poly(c)` |  |  |  |  |
 | `chebadd` |  |  |  |  |  |  |  | `chebadd(c1, c2)` |  |  |  |  |
 | `chebcompanion` |  |  |  |  |  |  |  | `chebcompanion(c)` |  |  |  |  |
 | `chebder` |  |  |  |  |  |  |  | `chebder(c, m=1, scl=1, axis=0)` |  |  |  |  |
 | `chebdiv` |  |  |  |  |  |  |  | `chebdiv(c1, c2)` |  |  |  |  |
+| `chebfit` |  |  |  |  |  |  |  | `chebfit(x, y, deg, rcond=None, full=False, w=None)` |  |  |  |  |
 | `chebfromroots` |  |  |  |  |  |  |  | `chebfromroots(roots)` |  |  |  |  |
+| `chebgauss` |  |  |  |  |  |  |  | `chebgauss(deg)` |  |  |  |  |
 | `chebgrid2d` |  |  |  |  |  |  |  | `chebgrid2d(x, y, c)` |  |  |  |  |
 | `chebgrid3d` |  |  |  |  |  |  |  | `chebgrid3d(x, y, z, c)` |  |  |  |  |
 | `chebint` |  |  |  |  |  |  |  | `chebint(c, m=1, k=[], lbnd=0, scl=1, axis=0)` |  |  |  |  |
+| `chebinterpolate` |  |  |  |  |  |  |  | `chebinterpolate(func, deg, args=())` |  |  |  |  |
 | `chebline` |  |  |  |  |  |  |  | `chebline(off, scl)` |  |  |  |  |
 | `chebmul` |  |  |  |  |  |  |  | `chebmul(c1, c2)` |  |  |  |  |
 | `chebmulx` |  |  |  |  |  |  |  | `chebmulx(c)` |  |  |  |  |
 | `chebpow` |  |  | 4 |  |  |  |  | `chebpow(c, pow, maxpower=16)` |  |  |  |  |
+| `chebpts1` |  |  |  |  |  |  |  | `chebpts1(npts)` |  |  |  |  |
+| `chebpts2` |  |  |  |  |  |  |  | `chebpts2(npts)` |  |  |  |  |
 | `chebroots` |  |  |  |  |  |  |  | `chebroots(c)` |  |  |  |  |
 | `chebsub` |  |  |  |  |  |  |  | `chebsub(c1, c2)` |  |  |  |  |
 | `chebtrim` |  |  | 2 |  |  |  |  | `chebtrim(c, tol=0)` |  |  |  |  |
@@ -1048,6 +1088,7 @@ lists what failed, with the compiler's reason.
 | `chebvander` |  |  | 2 |  |  |  |  | `chebvander(x, deg)` |  |  |  |  |
 | `chebvander2d` |  |  |  |  |  |  |  | `chebvander2d(x, y, deg)` |  |  |  |  |
 | `chebvander3d` |  |  |  |  |  |  |  | `chebvander3d(x, y, z, deg)` |  |  |  |  |
+| `chebweight` |  |  |  |  |  |  |  | `chebweight(x)` |  |  |  |  |
 | `poly2cheb` |  |  |  |  |  |  |  | `poly2cheb(pol)` |  |  |  |  |
 
 ### Names NumPy does not have (1)
@@ -1056,22 +1097,21 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|
 | `chebvalnd` |  |  |  |
 
-### NumPy names NumSharp lacks (7)
-
-`Chebyshev`, `chebfit`, `chebgauss`, `chebinterpolate`, `chebpts1`, `chebpts2`, `chebweight`
-
 ## `np.polynomial.hermite`
 
-### Names NumPy has (23)
+### Names NumPy has (27)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `Hermite` |  |  |  |  |  |  |  | `Hermite(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
 | `herm2poly` |  |  |  |  |  |  |  | `herm2poly(c)` |  |  |  |  |
 | `hermadd` |  |  |  |  |  |  |  | `hermadd(c1, c2)` |  |  |  |  |
 | `hermcompanion` |  |  |  |  |  |  |  | `hermcompanion(c)` |  |  |  |  |
 | `hermder` |  |  |  |  |  |  |  | `hermder(c, m=1, scl=1, axis=0)` |  |  |  |  |
 | `hermdiv` |  |  |  |  |  |  |  | `hermdiv(c1, c2)` |  |  |  |  |
+| `hermfit` |  |  |  |  |  |  |  | `hermfit(x, y, deg, rcond=None, full=False, w=None)` |  |  |  |  |
 | `hermfromroots` |  |  |  |  |  |  |  | `hermfromroots(roots)` |  |  |  |  |
+| `hermgauss` |  |  |  |  |  |  |  | `hermgauss(deg)` |  |  |  |  |
 | `hermgrid2d` |  |  |  |  |  |  |  | `hermgrid2d(x, y, c)` |  |  |  |  |
 | `hermgrid3d` |  |  |  |  |  |  |  | `hermgrid3d(x, y, z, c)` |  |  |  |  |
 | `hermint` |  |  |  |  |  |  |  | `hermint(c, m=1, k=[], lbnd=0, scl=1, axis=0)` |  |  |  |  |
@@ -1088,6 +1128,7 @@ lists what failed, with the compiler's reason.
 | `hermvander` |  |  | 2 |  |  |  |  | `hermvander(x, deg)` |  |  |  |  |
 | `hermvander2d` |  |  |  |  |  |  |  | `hermvander2d(x, y, deg)` |  |  |  |  |
 | `hermvander3d` |  |  |  |  |  |  |  | `hermvander3d(x, y, z, deg)` |  |  |  |  |
+| `hermweight` |  |  |  |  |  |  |  | `hermweight(x)` |  |  |  |  |
 | `poly2herm` |  |  |  |  |  |  |  | `poly2herm(pol)` |  |  |  |  |
 
 ### Names NumPy does not have (1)
@@ -1096,22 +1137,21 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|
 | `hermvalnd` |  |  |  |
 
-### NumPy names NumSharp lacks (4)
-
-`Hermite`, `hermfit`, `hermgauss`, `hermweight`
-
 ## `np.polynomial.hermite_e`
 
-### Names NumPy has (23)
+### Names NumPy has (27)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `HermiteE` |  |  |  |  |  |  |  | `HermiteE(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
 | `herme2poly` |  |  |  |  |  |  |  | `herme2poly(c)` |  |  |  |  |
 | `hermeadd` |  |  |  |  |  |  |  | `hermeadd(c1, c2)` |  |  |  |  |
 | `hermecompanion` |  |  |  |  |  |  |  | `hermecompanion(c)` |  |  |  |  |
 | `hermeder` |  |  |  |  |  |  |  | `hermeder(c, m=1, scl=1, axis=0)` |  |  |  |  |
 | `hermediv` |  |  |  |  |  |  |  | `hermediv(c1, c2)` |  |  |  |  |
+| `hermefit` |  |  |  |  |  |  |  | `hermefit(x, y, deg, rcond=None, full=False, w=None)` |  |  |  |  |
 | `hermefromroots` |  |  |  |  |  |  |  | `hermefromroots(roots)` |  |  |  |  |
+| `hermegauss` |  |  |  |  |  |  |  | `hermegauss(deg)` |  |  |  |  |
 | `hermegrid2d` |  |  |  |  |  |  |  | `hermegrid2d(x, y, c)` |  |  |  |  |
 | `hermegrid3d` |  |  |  |  |  |  |  | `hermegrid3d(x, y, z, c)` |  |  |  |  |
 | `hermeint` |  |  |  |  |  |  |  | `hermeint(c, m=1, k=[], lbnd=0, scl=1, axis=0)` |  |  |  |  |
@@ -1128,6 +1168,7 @@ lists what failed, with the compiler's reason.
 | `hermevander` |  |  | 2 |  |  |  |  | `hermevander(x, deg)` |  |  |  |  |
 | `hermevander2d` |  |  |  |  |  |  |  | `hermevander2d(x, y, deg)` |  |  |  |  |
 | `hermevander3d` |  |  |  |  |  |  |  | `hermevander3d(x, y, z, deg)` |  |  |  |  |
+| `hermeweight` |  |  |  |  |  |  |  | `hermeweight(x)` |  |  |  |  |
 | `poly2herme` |  |  |  |  |  |  |  | `poly2herme(pol)` |  |  |  |  |
 
 ### Names NumPy does not have (1)
@@ -1136,22 +1177,21 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|
 | `hermevalnd` |  |  |  |
 
-### NumPy names NumSharp lacks (4)
-
-`HermiteE`, `hermefit`, `hermegauss`, `hermeweight`
-
 ## `np.polynomial.laguerre`
 
-### Names NumPy has (23)
+### Names NumPy has (27)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `Laguerre` |  |  |  |  |  |  |  | `Laguerre(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
 | `lag2poly` |  |  |  |  |  |  |  | `lag2poly(c)` |  |  |  |  |
 | `lagadd` |  |  |  |  |  |  |  | `lagadd(c1, c2)` |  |  |  |  |
 | `lagcompanion` |  |  |  |  |  |  |  | `lagcompanion(c)` |  |  |  |  |
 | `lagder` |  |  |  |  |  |  |  | `lagder(c, m=1, scl=1, axis=0)` |  |  |  |  |
 | `lagdiv` |  |  |  |  |  |  |  | `lagdiv(c1, c2)` |  |  |  |  |
+| `lagfit` |  |  |  |  |  |  |  | `lagfit(x, y, deg, rcond=None, full=False, w=None)` |  |  |  |  |
 | `lagfromroots` |  |  |  |  |  |  |  | `lagfromroots(roots)` |  |  |  |  |
+| `laggauss` |  |  |  |  |  |  |  | `laggauss(deg)` |  |  |  |  |
 | `laggrid2d` |  |  |  |  |  |  |  | `laggrid2d(x, y, c)` |  |  |  |  |
 | `laggrid3d` |  |  |  |  |  |  |  | `laggrid3d(x, y, z, c)` |  |  |  |  |
 | `lagint` |  |  |  |  |  |  |  | `lagint(c, m=1, k=[], lbnd=0, scl=1, axis=0)` |  |  |  |  |
@@ -1168,6 +1208,7 @@ lists what failed, with the compiler's reason.
 | `lagvander` |  |  | 2 |  |  |  |  | `lagvander(x, deg)` |  |  |  |  |
 | `lagvander2d` |  |  |  |  |  |  |  | `lagvander2d(x, y, deg)` |  |  |  |  |
 | `lagvander3d` |  |  |  |  |  |  |  | `lagvander3d(x, y, z, deg)` |  |  |  |  |
+| `lagweight` |  |  |  |  |  |  |  | `lagweight(x)` |  |  |  |  |
 | `poly2lag` |  |  |  |  |  |  |  | `poly2lag(pol)` |  |  |  |  |
 
 ### Names NumPy does not have (1)
@@ -1176,22 +1217,21 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|
 | `lagvalnd` |  |  |  |
 
-### NumPy names NumSharp lacks (4)
-
-`Laguerre`, `lagfit`, `laggauss`, `lagweight`
-
 ## `np.polynomial.legendre`
 
-### Names NumPy has (23)
+### Names NumPy has (27)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `Legendre` |  |  |  |  |  |  |  | `Legendre(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
 | `leg2poly` |  |  |  |  |  |  |  | `leg2poly(c)` |  |  |  |  |
 | `legadd` |  |  |  |  |  |  |  | `legadd(c1, c2)` |  |  |  |  |
 | `legcompanion` |  |  |  |  |  |  |  | `legcompanion(c)` |  |  |  |  |
 | `legder` |  |  |  |  |  |  |  | `legder(c, m=1, scl=1, axis=0)` |  |  |  |  |
 | `legdiv` |  |  |  |  |  |  |  | `legdiv(c1, c2)` |  |  |  |  |
+| `legfit` |  |  |  |  |  |  |  | `legfit(x, y, deg, rcond=None, full=False, w=None)` |  |  |  |  |
 | `legfromroots` |  |  |  |  |  |  |  | `legfromroots(roots)` |  |  |  |  |
+| `leggauss` |  |  |  |  |  |  |  | `leggauss(deg)` |  |  |  |  |
 | `leggrid2d` |  |  |  |  |  |  |  | `leggrid2d(x, y, c)` |  |  |  |  |
 | `leggrid3d` |  |  |  |  |  |  |  | `leggrid3d(x, y, z, c)` |  |  |  |  |
 | `legint` |  |  |  |  |  |  |  | `legint(c, m=1, k=[], lbnd=0, scl=1, axis=0)` |  |  |  |  |
@@ -1208,6 +1248,7 @@ lists what failed, with the compiler's reason.
 | `legvander` |  |  | 2 |  |  |  |  | `legvander(x, deg)` |  |  |  |  |
 | `legvander2d` |  |  |  |  |  |  |  | `legvander2d(x, y, deg)` |  |  |  |  |
 | `legvander3d` |  |  |  |  |  |  |  | `legvander3d(x, y, z, deg)` |  |  |  |  |
+| `legweight` |  |  |  |  |  |  |  | `legweight(x)` |  |  |  |  |
 | `poly2leg` |  |  |  |  |  |  |  | `poly2leg(pol)` |  |  |  |  |
 
 ### Names NumPy does not have (1)
@@ -1216,20 +1257,18 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|
 | `legvalnd` |  |  |  |
 
-### NumPy names NumSharp lacks (4)
-
-`Legendre`, `legfit`, `leggauss`, `legweight`
-
 ## `np.polynomial.polynomial`
 
-### Names NumPy has (21)
+### Names NumPy has (24)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `Polynomial` |  |  |  |  |  |  |  | `Polynomial(coef, domain=None, window=None, symbol='x')` |  |  |  |  |
 | `polyadd` |  |  |  |  |  |  |  | `polyadd(c1, c2)` |  |  |  |  |
 | `polycompanion` |  |  |  |  |  |  |  | `polycompanion(c)` |  |  |  |  |
 | `polyder` |  |  |  |  |  |  |  | `polyder(c, m=1, scl=1, axis=0)` |  |  |  |  |
 | `polydiv` |  |  |  |  |  |  |  | `polydiv(c1, c2)` |  |  |  |  |
+| `polyfit` |  |  |  |  |  |  |  | `polyfit(x, y, deg, rcond=None, full=False, w=None)` |  |  |  |  |
 | `polyfromroots` |  |  |  |  |  |  |  | `polyfromroots(roots)` |  |  |  |  |
 | `polygrid2d` |  |  |  |  |  |  |  | `polygrid2d(x, y, c)` |  |  |  |  |
 | `polygrid3d` |  |  |  |  |  |  |  | `polygrid3d(x, y, z, c)` |  |  |  |  |
@@ -1244,6 +1283,7 @@ lists what failed, with the compiler's reason.
 | `polyval` |  |  |  |  |  |  |  | `polyval(x, c, tensor=True)` |  |  |  |  |
 | `polyval2d` |  |  |  |  |  |  |  | `polyval2d(x, y, c)` |  |  |  |  |
 | `polyval3d` |  |  |  |  |  |  |  | `polyval3d(x, y, z, c)` |  |  |  |  |
+| `polyvalfromroots` |  |  |  |  |  |  |  | `polyvalfromroots(x, r, tensor=True)` |  |  |  |  |
 | `polyvander` |  |  | 2 |  |  |  |  | `polyvander(x, deg)` |  |  |  |  |
 | `polyvander2d` |  |  |  |  |  |  |  | `polyvander2d(x, y, deg)` |  |  |  |  |
 | `polyvander3d` |  |  |  |  |  |  |  | `polyvander3d(x, y, z, deg)` |  |  |  |  |
@@ -1254,26 +1294,19 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|
 | `polyvalnd` |  |  |  |
 
-### NumPy names NumSharp lacks (3)
-
-`Polynomial`, `polyfit` (in `np`, `np.ma`), `polyvalfromroots`
-
 ## `np.polynomial.polyutils`
 
-### Names NumPy has (6)
+### Names NumPy has (7)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `as_series` |  |  |  |  |  |  |  | `as_series(alist, trim=True)` |  |  |  |  |
+| `format_float` |  |  |  |  |  |  |  | `format_float(x, parens=False)` |  |  |  |  |
 | `getdomain` |  |  |  |  |  |  |  | `getdomain(x)` |  |  |  |  |
 | `mapdomain` |  |  | 10 |  |  |  |  | `mapdomain(x, old, new)` |  |  |  |  |
 | `mapparms` |  |  | 4 |  |  |  |  | `mapparms(old, new)` |  |  |  |  |
 | `trimcoef` |  |  | 2 |  |  |  |  | `trimcoef(c, tol=0)` |  |  |  |  |
 | `trimseq` |  |  | 3 |  |  |  |  | `trimseq(seq)` |  |  |  |  |
-
-### NumPy names NumSharp lacks (1)
-
-`format_float`
 
 ## `np.random`
 
@@ -1415,7 +1448,7 @@ lists what failed, with the compiler's reason.
 
 ## `np.strings`
 
-### Names NumPy has (42)
+### Names NumPy has (46)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1423,6 +1456,8 @@ lists what failed, with the compiler's reason.
 | `capitalize` |  |  |  |  |  |  |  | `capitalize(a)` |  |  |  |  |
 | `center` |  |  |  |  |  |  |  | `center(a, width, fillchar=' ')` |  |  |  |  |
 | `count` |  |  |  |  |  |  |  | `count(a, sub, start=0, end=None)` |  |  |  |  |
+| `decode` |  |  |  |  |  |  |  | `decode(a, encoding=None, errors=None)` |  |  |  |  |
+| `encode` |  |  |  |  |  |  |  | `encode(a, encoding=None, errors=None)` |  |  |  |  |
 | `endswith` |  |  |  |  |  |  |  | `endswith(a, suffix, start=0, end=None)` |  |  |  |  |
 | `equal` | ◦ |  |  |  |  |  |  | `equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `expandtabs` |  |  |  |  |  |  |  | `expandtabs(a, tabsize=8)` |  |  |  |  |
@@ -1444,6 +1479,7 @@ lists what failed, with the compiler's reason.
 | `ljust` |  |  |  |  |  |  |  | `ljust(a, width, fillchar=' ')` |  |  |  |  |
 | `lower` |  |  |  |  |  |  |  | `lower(a)` |  |  |  |  |
 | `lstrip` |  |  |  |  |  |  |  | `lstrip(a, chars=None)` |  |  |  |  |
+| `mod` |  |  |  |  |  |  |  | `mod(a, values)` |  |  |  |  |
 | `multiply` |  |  | 2 |  |  |  |  | `multiply(a, i)` |  |  |  |  |
 | `not_equal` | ◦ |  |  |  |  |  |  | `not_equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True, signature=None)` | excluded: `casting`, `order`, `subok`, `signature` |  |  |  |
 | `partition` |  |  |  |  |  |  |  | `partition(a, sep)` |  |  |  |  |
@@ -1459,12 +1495,9 @@ lists what failed, with the compiler's reason.
 | `strip` |  |  |  |  |  |  |  | `strip(a, chars=None)` |  |  |  |  |
 | `swapcase` |  |  |  |  |  |  |  | `swapcase(a)` |  |  |  |  |
 | `title` |  |  |  |  |  |  |  | `title(a)` |  |  |  |  |
+| `translate` |  |  |  |  |  |  |  | `translate(a, table, deletechars=None)` |  |  |  |  |
 | `upper` |  |  |  |  |  |  |  | `upper(a)` |  |  |  |  |
 | `zfill` |  |  |  |  |  |  |  | `zfill(a, width)` |  |  |  |  |
-
-### NumPy names NumSharp lacks (4)
-
-`decode`, `encode`, `mod` (in `np`, `np.ma`), `translate`
 
 ## `ndarray (NDArray<T>)`
 
@@ -1558,7 +1591,7 @@ lists what failed, with the compiler's reason.
 
 ## `np.char.chararray`
 
-### Names NumPy has (32)
+### Names NumPy has (60)
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1566,32 +1599,60 @@ lists what failed, with the compiler's reason.
 | `__iter__` |  |  |  |  |  |  |  | `chararray.__iter__()` |  |  |  |  |
 | `argmax` |  |  | 3 |  |  |  |  | `chararray.argmax(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
 | `argmin` |  |  | 3 |  |  |  |  | `chararray.argmin(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
-| `argpartition` |  |  | 3 |  |  |  |  | `chararray.argpartition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
+| `argpartition` |  |  |  |  |  |  |  | `chararray.argpartition(kth, axis=-1, kind='introselect', order=None)` |  |  |  |  |
 | `astype` | ◦ |  | 2 |  | ● |  |  | `chararray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | excluded: `subok` |  |  | `order` alone: no overload takes 2 arguments<br>`casting` alone: no overload takes 2 arguments<br>positionally up to `order`: no overload fits; the closest one wants `bool` for argument 2 — `ca.astype(np.float64, 'K')` |
 | `byteswap` |  |  |  |  |  |  |  | `chararray.byteswap(inplace=False)` |  |  |  |  |
+| `capitalize` |  |  |  |  |  |  |  | `chararray.capitalize()` |  |  |  |  |
 | `center` |  |  |  |  |  |  |  | `chararray.center(width, fillchar=' ')` |  |  |  |  |
-| `compress` | ● |  |  |  |  |  |  | `chararray.compress(condition, axis=None, out=None)` | `out` |  |  |  |
+| `compress` |  |  |  |  |  |  |  | `chararray.compress(condition, axis=None, out=None)` |  |  |  |  |
 | `copy` |  |  |  |  |  |  |  | `chararray.copy(order='C')` |  |  |  |  |
+| `count` |  |  |  |  |  |  |  | `chararray.count(sub, start=0, end=None)` |  |  |  |  |
+| `decode` |  |  |  |  |  |  |  | `chararray.decode(encoding=None, errors=None)` |  |  |  |  |
 | `diagonal` |  |  |  |  |  |  |  | `chararray.diagonal(offset=0, axis1=0, axis2=1)` |  |  |  |  |
+| `encode` |  |  |  |  |  |  |  | `chararray.encode(encoding=None, errors=None)` |  |  |  |  |
+| `endswith` |  |  |  |  |  |  |  | `chararray.endswith(suffix, start=0, end=None)` |  |  |  |  |
 | `expandtabs` |  |  |  |  |  |  |  | `chararray.expandtabs(tabsize=8)` |  |  |  |  |
+| `find` |  |  |  |  |  |  |  | `chararray.find(sub, start=0, end=None)` |  |  |  |  |
 | `flatten` |  |  |  |  |  |  |  | `chararray.flatten(order='C')` |  |  |  |  |
 | `getfield` |  |  |  |  |  |  |  | `chararray.getfield(dtype, offset=0)` |  |  |  |  |
-| `join` |  |  | 2 |  |  |  |  | `chararray.join(seq)` |  |  |  |  |
+| `index` |  |  |  |  |  |  |  | `chararray.index(sub, start=0, end=None)` |  |  |  |  |
+| `isalnum` |  |  |  |  |  |  |  | `chararray.isalnum()` |  |  |  |  |
+| `isalpha` |  |  |  |  |  |  |  | `chararray.isalpha()` |  |  |  |  |
+| `isdecimal` |  |  |  |  |  |  |  | `chararray.isdecimal()` |  |  |  |  |
+| `isdigit` |  |  |  |  |  |  |  | `chararray.isdigit()` |  |  |  |  |
+| `islower` |  |  |  |  |  |  |  | `chararray.islower()` |  |  |  |  |
+| `isnumeric` |  |  |  |  |  |  |  | `chararray.isnumeric()` |  |  |  |  |
+| `isspace` |  |  |  |  |  |  |  | `chararray.isspace()` |  |  |  |  |
+| `istitle` |  |  |  |  |  |  |  | `chararray.istitle()` |  |  |  |  |
+| `isupper` |  |  |  |  |  |  |  | `chararray.isupper()` |  |  |  |  |
+| `join` |  |  |  |  |  |  |  | `chararray.join(seq)` |  |  |  |  |
 | `ljust` |  |  |  |  |  |  |  | `chararray.ljust(width, fillchar=' ')` |  |  |  |  |
+| `lower` |  |  |  |  |  |  |  | `chararray.lower()` |  |  |  |  |
+| `lstrip` |  |  |  |  |  |  |  | `chararray.lstrip(chars=None)` |  |  |  |  |
 | `partition` |  | ● | 4 |  |  |  |  | `chararray.partition(sep)` |  | `axis`, `kind`, `kth`, `order` |  |  |
 | `ravel` |  |  | 2 |  |  |  |  | `chararray.ravel(order='C')` |  |  |  |  |
-| `repeat` |  |  | 3 |  |  |  |  | `chararray.repeat(repeats, axis=None)` |  |  |  |  |
+| `repeat` |  |  |  |  |  |  |  | `chararray.repeat(repeats, axis=None)` |  |  |  |  |
+| `replace` |  |  |  |  |  |  |  | `chararray.replace(old, new, count=None)` |  |  |  |  |
 | `reshape` | ● |  | 6 |  |  |  |  | `chararray.reshape(shape, /, *, order='C', copy=None)` | `copy` |  |  |  |
+| `rfind` |  |  |  |  |  |  |  | `chararray.rfind(sub, start=0, end=None)` |  |  |  |  |
+| `rindex` |  |  |  |  |  |  |  | `chararray.rindex(sub, start=0, end=None)` |  |  |  |  |
 | `rjust` |  |  |  |  |  |  |  | `chararray.rjust(width, fillchar=' ')` |  |  |  |  |
 | `rpartition` |  |  |  |  |  |  |  | `chararray.rpartition(sep)` |  |  |  |  |
 | `rsplit` |  |  |  |  |  |  |  | `chararray.rsplit(sep=None, maxsplit=None)` |  |  |  |  |
+| `rstrip` |  |  |  |  |  |  |  | `chararray.rstrip(chars=None)` |  |  |  |  |
 | `split` |  |  |  |  |  |  |  | `chararray.split(sep=None, maxsplit=None)` |  |  |  |  |
 | `splitlines` |  |  |  |  |  |  |  | `chararray.splitlines(keepends=None)` |  |  |  |  |
 | `squeeze` |  |  |  |  |  |  | ● | `chararray.squeeze(axis=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 1 |
+| `startswith` |  |  |  |  |  |  |  | `chararray.startswith(prefix, start=0, end=None)` |  |  |  |  |
+| `strip` |  |  |  |  |  |  |  | `chararray.strip(chars=None)` |  |  |  |  |
 | `swapaxes` |  |  |  |  |  |  |  | `chararray.swapaxes(axis1, axis2, /)` |  |  |  |  |
-| `take` | ● | ● | 2 |  |  |  |  | `chararray.take(indices, axis=None, out=None, mode='raise')` | `out` | `index` |  |  |
+| `swapcase` |  |  |  |  |  |  |  | `chararray.swapcase()` |  |  |  |  |
+| `take` |  |  |  |  |  |  |  | `chararray.take(indices, axis=None, out=None, mode='raise')` |  |  |  |  |
+| `title` |  |  |  |  |  |  |  | `chararray.title()` |  |  |  |  |
 | `to_device` |  |  |  |  |  |  |  | `chararray.to_device(device, /, *, stream=None)` |  |  |  |  |
-| `transpose` |  |  |  |  | ● |  |  | `chararray.transpose(*axes)` |  |  |  | several `*axes` values: no overload takes 2 arguments — `ca.transpose(1, 1)` |
+| `translate` |  |  |  |  |  |  |  | `chararray.translate(table, deletechars=None)` |  |  |  |  |
+| `transpose` |  |  |  |  |  |  |  | `chararray.transpose(*axes)` |  |  |  |  |
+| `upper` |  |  |  |  |  |  |  | `chararray.upper()` |  |  |  |  |
 | `view` |  |  | 3 | ● |  |  |  | `chararray.view(dtype=<optional>, type=<optional>)` |  |  | `Type type` |  |
 | `zfill` |  |  |  |  |  |  |  | `chararray.zfill(width)` |  |  |  |  |
 
@@ -1603,10 +1664,6 @@ lists what failed, with the compiler's reason.
 | `Equals` |  |  |  |
 | `GetEnumerator` |  |  |  |
 | `GetHashCode` |  |  |  |
-
-### NumPy names NumSharp lacks (28)
-
-`capitalize` (in `np.strings`), `count` (in `np.ma`, `np.strings`, `np.ma.MaskedArray`), `decode`, `encode`, `endswith` (in `np.strings`), `find` (in `np.strings`), `index` (in `np.strings`, `np.nditer`, `np.broadcast`, `np.flatiter`), `isalnum` (in `np.strings`), `isalpha` (in `np.strings`), `isdecimal` (in `np.strings`), `isdigit` (in `np.strings`), `islower` (in `np.strings`), `isnumeric` (in `np.strings`), `isspace` (in `np.strings`), `istitle` (in `np.strings`), `isupper` (in `np.strings`), `lower` (in `np.strings`), `lstrip` (in `np.strings`), `replace` (in `np.strings`), `rfind` (in `np.strings`), `rindex` (in `np.strings`), `rstrip` (in `np.strings`), `startswith` (in `np.strings`), `strip` (in `np.strings`), `swapcase` (in `np.strings`), `title` (in `np.strings`), `translate`, `upper` (in `np.strings`)
 
 ## `np.ma.MaskedArray`
 

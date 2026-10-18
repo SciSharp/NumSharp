@@ -71,7 +71,11 @@ namespace NumSharp.Backends
             // and cast into it. Residual: past one buffer fill (np.getbufsize()) NumPy carries the partial sum through
             // out's dtype between fills; this route rounds into out once.
             if (@out is not null && @out.GetTypeCode != loopType)
+            {
+#pragma warning disable NDW012 // not a leak: DeliverReduction copies the sum into out and disposes it
                 return DeliverReduction(ReduceAdd(arr, axis_, keepdims, dtype, null), @out);
+#pragma warning restore NDW012
+            }
 
             if (shape.IsEmpty)
             {

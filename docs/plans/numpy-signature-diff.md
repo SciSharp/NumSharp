@@ -29,27 +29,27 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `np` | 384 | 885 | 366 | 112 | 150 | 62 | 27 | 30 | 6 | 18 | 3 | 13 | 20 | 2 | 6 | 13 | 100 | 0 | 18 | 47 |
 | `ndarray` | 140 | 272 | 57 | 27 | 24 | 15 | 6 | 8 | 1 | 2 | 2 | 5 | 9 | 0 | 1 | 0 | 0 | 0 | 83 | 3 |
-| `np.char` | 24 | 26 | 23 | 16 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 1 | 0 | 1 | 30 |
+| `np.char` | 54 | 54 | 53 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 11 | 0 | 1 | 0 |
 | `np.dtypes` | 1 | 2 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 9 | 9 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.fft` | 18 | 24 | 18 | 10 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `np.linalg` | 31 | 35 | 31 | 26 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 1 |
 | `np.ma` | 215 | 227 | 211 | 70 | 10 | 134 | 128 | 107 | 0 | 29 | 0 | 20 | 5 | 0 | 3 | 1 | 3 | 0 | 4 | 6 |
-| `np.polynomial` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `np.polynomial.chebyshev` | 24 | 29 | 23 | 18 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 7 |
-| `np.polynomial.hermite` | 24 | 29 | 23 | 18 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 4 |
-| `np.polynomial.hermite_e` | 24 | 29 | 23 | 18 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 4 |
-| `np.polynomial.laguerre` | 24 | 29 | 23 | 18 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 4 |
-| `np.polynomial.legendre` | 24 | 29 | 23 | 18 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 4 |
-| `np.polynomial.polynomial` | 22 | 27 | 21 | 16 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 3 |
-| `np.polynomial.polyutils` | 6 | 21 | 6 | 2 | 4 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `np.polynomial` | 7 | 7 | 7 | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `np.polynomial.chebyshev` | 31 | 36 | 30 | 24 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 3 | 0 | 0 | 1 | 0 |
+| `np.polynomial.hermite` | 28 | 33 | 27 | 22 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
+| `np.polynomial.hermite_e` | 28 | 33 | 27 | 22 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
+| `np.polynomial.laguerre` | 28 | 33 | 27 | 22 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
+| `np.polynomial.legendre` | 28 | 33 | 27 | 22 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
+| `np.polynomial.polynomial` | 25 | 30 | 24 | 19 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
+| `np.polynomial.polyutils` | 7 | 22 | 7 | 3 | 4 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random` | 64 | 236 | 61 | 6 | 55 | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 14 | 0 | 0 | 1 | 0 | 0 | 3 | 1 |
 | `np.random.Generator` | 46 | 85 | 45 | 9 | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
-| `np.strings` | 42 | 49 | 42 | 11 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 12 | 17 | 0 | 0 | 4 |
+| `np.strings` | 46 | 53 | 46 | 15 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 12 | 17 | 0 | 0 | 0 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 5 | 21 | 2 | 0 | 2 | 2 | 0 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 |
 | `np.matrix` | 57 | 84 | 53 | 22 | 19 | 17 | 12 | 10 | 0 | 0 | 0 | 3 | 7 | 0 | 1 | 0 | 0 | 0 | 4 | 0 |
-| `np.char.chararray` | 36 | 61 | 32 | 14 | 12 | 7 | 2 | 3 | 0 | 0 | 0 | 2 | 4 | 0 | 1 | 4 | 0 | 0 | 4 | 28 |
+| `np.char.chararray` | 64 | 83 | 60 | 41 | 8 | 4 | 0 | 1 | 0 | 0 | 0 | 1 | 4 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
 | `np.ma.MaskedArray` | 61 | 64 | 59 | 27 | 2 | 31 | 30 | 30 | 0 | 2 | 0 | 18 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 17 |
 | `np.dtype` | 9 | 19 | 4 | 2 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `np.nditer` | 11 | 11 | 8 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
@@ -69,7 +69,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 3 | 11 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 12 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 8 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | 1359 | 2414 | 1191 | 489 | 360 | 300 | 207 | 193 | 8 | 54 | 5 | 61 | 74 | 2 | 13 | 54 | 121 | 0 | 168 | 192 |
+| **total** | 1455 | 2502 | 1287 | 567 | 354 | 297 | 205 | 191 | 8 | 54 | 5 | 60 | 74 | 2 | 12 | 70 | 131 | 0 | 168 | 96 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -1631,45 +1631,34 @@ PascalCase: `AsEnumerable`, `AsGeneric`, `AsOrMakeGeneric`, `AsString`, `AsStrin
 
 ## `np.char`
 
-### Only null defaults (4)
+### Only null defaults (12)
 
 | name | NumPy | closest C# overload | null defaults |
 |---|---|---|---|
 | `center` | `center(a, width, fillchar=' ')` | `NDArray center(object a, object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
+| `count` | `count(a, sub, start=0, end=None)` | `NDArray count(object a, object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
+| `endswith` | `endswith(a, suffix, start=0, end=None)` | `NDArray endswith(object a, object suffix, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 | `expandtabs` | `expandtabs(a, tabsize=8)` | `NDArray expandtabs(object a, object tabsize = null)` | **null default**: `tabsize: 8 vs null` |
+| `find` | `find(a, sub, start=0, end=None)` | `NDArray find(object a, object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
+| `index` | `index(a, sub, start=0, end=None)` | `NDArray index(object a, object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 | `ljust` | `ljust(a, width, fillchar=' ')` | `NDArray ljust(object a, object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
+| `replace` | `replace(a, old, new, count=-1)` | `NDArray replace(object a, object old, object new, object count = null)` | **null default**: `count: -1 vs null` |
+| `rfind` | `rfind(a, sub, start=0, end=None)` | `NDArray rfind(object a, object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
+| `rindex` | `rindex(a, sub, start=0, end=None)` | `NDArray rindex(object a, object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 | `rjust` | `rjust(a, width, fillchar=' ')` | `NDArray rjust(object a, object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
+| `startswith` | `startswith(a, prefix, start=0, end=None)` | `NDArray startswith(object a, object prefix, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 
-### Only policy-excluded parameters (1)
+### Only policy-excluded parameters (11)
 
-- lacking `casting, order, subok, signature`: `add`
+- lacking `casting, order, subok, signature`: `add`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `str_len`
 
-### More than one overload (2; NumPy has one signature each)
+### Identical to NumPy (30)
 
-- `compare_chararrays`: NumPy `compare_chararrays(a1, a2, cmp, rstrip)`
-
-  ```csharp
-  NDArray compare_chararrays(object a1, object a2, string cmp, bool rstrip)
-  NDArray compare_chararrays(object a1, object a2, byte[] cmp, bool rstrip)
-  ```
-- `join`: NumPy `join(sep, seq)`
-
-  ```csharp
-  NDArray join(object sep, object seq)
-  NDListArray join(object sep, NDListArray seq)
-  ```
-
-### Identical to NumPy (16)
-
-`array`, `asarray`, `chararray`, `equal`, `greater`, `greater_equal`, `less`, `less_equal`, `multiply`, `not_equal`, `partition`, `rpartition`, `rsplit`, `split`, `splitlines`, `zfill`
+`array`, `asarray`, `capitalize`, `chararray`, `compare_chararrays`, `decode`, `encode`, `equal`, `greater`, `greater_equal`, `join`, `less`, `less_equal`, `lower`, `lstrip`, `mod`, `multiply`, `not_equal`, `partition`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `strip`, `swapcase`, `title`, `translate`, `upper`, `zfill`
 
 ### NumSharp-only names (0 NumPy-style, 1 PascalCase C# members)
 
 PascalCase: `ToString`
-
-### NumPy public names that `np.char` lacks (30)
-
-`capitalize`, `count`, `decode`, `encode`, `endswith`, `find`, `index`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `lower`, `lstrip`, `mod`, `replace`, `rfind`, `rindex`, `rstrip`, `startswith`, `str_len`, `strip`, `swapcase`, `title`, `translate`, `upper`
 
 ## `np.dtypes`
 
@@ -2017,7 +2006,7 @@ PascalCase: `ToString`
 
 ## `np.polynomial`
 
-### NumPy public names that `np.polynomial` lacks (7)
+### Identical to NumPy (7)
 
 `Chebyshev`, `Hermite`, `HermiteE`, `Laguerre`, `Legendre`, `Polynomial`, `set_default_printstyle`
 
@@ -2029,12 +2018,13 @@ PascalCase: `ToString`
 |---|---|---|---|
 | `chebtrim` | `chebtrim(c, tol=0)` | `NDArray chebtrim(object c, object tol)`<br>(+1 more overloads, below) | **C# requires**: `tol` |
 
-### Only null defaults (2)
+### Only null defaults (3)
 
 | name | NumPy | closest C# overload | null defaults |
 |---|---|---|---|
 | `chebder` | `chebder(c, m=1, scl=1, axis=0)` | `NDArray chebder(object c, int m = 1, object scl = null, int axis = 0)` | **null default**: `scl: 1 vs null` |
 | `chebint` | `chebint(c, m=1, k=[], lbnd=0, scl=1, axis=0)` | `NDArray chebint(object c, int m = 1, object k = null, object lbnd = null, object scl = null, int axis = 0)` | **null default**: `k: [] vs null`, `lbnd: 0 vs null`, `scl: 1 vs null` |
+| `chebinterpolate` | `chebinterpolate(func, deg, args=())` | `NDArray chebinterpolate(Func<NDArray, object[], object> func, object deg, object args = null)` | **null default**: `args: () vs null` |
 
 ### More than one overload (3; NumPy has one signature each)
 
@@ -2059,17 +2049,13 @@ PascalCase: `ToString`
   NDArray chebvander(object x, object deg)
   ```
 
-### Identical to NumPy (18)
+### Identical to NumPy (24)
 
-`cheb2poly`, `chebadd`, `chebcompanion`, `chebdiv`, `chebfromroots`, `chebgrid2d`, `chebgrid3d`, `chebline`, `chebmul`, `chebmulx`, `chebroots`, `chebsub`, `chebval`, `chebval2d`, `chebval3d`, `chebvander2d`, `chebvander3d`, `poly2cheb`
+`Chebyshev`, `cheb2poly`, `chebadd`, `chebcompanion`, `chebdiv`, `chebfit`, `chebfromroots`, `chebgauss`, `chebgrid2d`, `chebgrid3d`, `chebline`, `chebmul`, `chebmulx`, `chebpts1`, `chebpts2`, `chebroots`, `chebsub`, `chebval`, `chebval2d`, `chebval3d`, `chebvander2d`, `chebvander3d`, `chebweight`, `poly2cheb`
 
 ### NumSharp-only names (1 NumPy-style, 0 PascalCase C# members)
 
 `chebvalnd`
-
-### NumPy public names that `np.polynomial.chebyshev` lacks (7)
-
-`Chebyshev`, `chebfit`, `chebgauss`, `chebinterpolate`, `chebpts1`, `chebpts2`, `chebweight`
 
 ## `np.polynomial.hermite`
 
@@ -2109,17 +2095,13 @@ PascalCase: `ToString`
   NDArray hermvander(object x, object deg)
   ```
 
-### Identical to NumPy (18)
+### Identical to NumPy (22)
 
-`herm2poly`, `hermadd`, `hermcompanion`, `hermdiv`, `hermfromroots`, `hermgrid2d`, `hermgrid3d`, `hermline`, `hermmul`, `hermmulx`, `hermroots`, `hermsub`, `hermval`, `hermval2d`, `hermval3d`, `hermvander2d`, `hermvander3d`, `poly2herm`
+`Hermite`, `herm2poly`, `hermadd`, `hermcompanion`, `hermdiv`, `hermfit`, `hermfromroots`, `hermgauss`, `hermgrid2d`, `hermgrid3d`, `hermline`, `hermmul`, `hermmulx`, `hermroots`, `hermsub`, `hermval`, `hermval2d`, `hermval3d`, `hermvander2d`, `hermvander3d`, `hermweight`, `poly2herm`
 
 ### NumSharp-only names (1 NumPy-style, 0 PascalCase C# members)
 
 `hermvalnd`
-
-### NumPy public names that `np.polynomial.hermite` lacks (4)
-
-`Hermite`, `hermfit`, `hermgauss`, `hermweight`
 
 ## `np.polynomial.hermite_e`
 
@@ -2159,17 +2141,13 @@ PascalCase: `ToString`
   NDArray hermevander(object x, object deg)
   ```
 
-### Identical to NumPy (18)
+### Identical to NumPy (22)
 
-`herme2poly`, `hermeadd`, `hermecompanion`, `hermediv`, `hermefromroots`, `hermegrid2d`, `hermegrid3d`, `hermeline`, `hermemul`, `hermemulx`, `hermeroots`, `hermesub`, `hermeval`, `hermeval2d`, `hermeval3d`, `hermevander2d`, `hermevander3d`, `poly2herme`
+`HermiteE`, `herme2poly`, `hermeadd`, `hermecompanion`, `hermediv`, `hermefit`, `hermefromroots`, `hermegauss`, `hermegrid2d`, `hermegrid3d`, `hermeline`, `hermemul`, `hermemulx`, `hermeroots`, `hermesub`, `hermeval`, `hermeval2d`, `hermeval3d`, `hermevander2d`, `hermevander3d`, `hermeweight`, `poly2herme`
 
 ### NumSharp-only names (1 NumPy-style, 0 PascalCase C# members)
 
 `hermevalnd`
-
-### NumPy public names that `np.polynomial.hermite_e` lacks (4)
-
-`HermiteE`, `hermefit`, `hermegauss`, `hermeweight`
 
 ## `np.polynomial.laguerre`
 
@@ -2209,17 +2187,13 @@ PascalCase: `ToString`
   NDArray lagvander(object x, object deg)
   ```
 
-### Identical to NumPy (18)
+### Identical to NumPy (22)
 
-`lag2poly`, `lagadd`, `lagcompanion`, `lagdiv`, `lagfromroots`, `laggrid2d`, `laggrid3d`, `lagline`, `lagmul`, `lagmulx`, `lagroots`, `lagsub`, `lagval`, `lagval2d`, `lagval3d`, `lagvander2d`, `lagvander3d`, `poly2lag`
+`Laguerre`, `lag2poly`, `lagadd`, `lagcompanion`, `lagdiv`, `lagfit`, `lagfromroots`, `laggauss`, `laggrid2d`, `laggrid3d`, `lagline`, `lagmul`, `lagmulx`, `lagroots`, `lagsub`, `lagval`, `lagval2d`, `lagval3d`, `lagvander2d`, `lagvander3d`, `lagweight`, `poly2lag`
 
 ### NumSharp-only names (1 NumPy-style, 0 PascalCase C# members)
 
 `lagvalnd`
-
-### NumPy public names that `np.polynomial.laguerre` lacks (4)
-
-`Laguerre`, `lagfit`, `laggauss`, `lagweight`
 
 ## `np.polynomial.legendre`
 
@@ -2259,17 +2233,13 @@ PascalCase: `ToString`
   NDArray legvander(object x, object deg)
   ```
 
-### Identical to NumPy (18)
+### Identical to NumPy (22)
 
-`leg2poly`, `legadd`, `legcompanion`, `legdiv`, `legfromroots`, `leggrid2d`, `leggrid3d`, `legline`, `legmul`, `legmulx`, `legroots`, `legsub`, `legval`, `legval2d`, `legval3d`, `legvander2d`, `legvander3d`, `poly2leg`
+`Legendre`, `leg2poly`, `legadd`, `legcompanion`, `legdiv`, `legfit`, `legfromroots`, `leggauss`, `leggrid2d`, `leggrid3d`, `legline`, `legmul`, `legmulx`, `legroots`, `legsub`, `legval`, `legval2d`, `legval3d`, `legvander2d`, `legvander3d`, `legweight`, `poly2leg`
 
 ### NumSharp-only names (1 NumPy-style, 0 PascalCase C# members)
 
 `legvalnd`
-
-### NumPy public names that `np.polynomial.legendre` lacks (4)
-
-`Legendre`, `legfit`, `leggauss`, `legweight`
 
 ## `np.polynomial.polynomial`
 
@@ -2309,17 +2279,13 @@ PascalCase: `ToString`
   NDArray polyvander(object x, object deg)
   ```
 
-### Identical to NumPy (16)
+### Identical to NumPy (19)
 
-`polyadd`, `polycompanion`, `polydiv`, `polyfromroots`, `polygrid2d`, `polygrid3d`, `polyline`, `polymul`, `polymulx`, `polyroots`, `polysub`, `polyval`, `polyval2d`, `polyval3d`, `polyvander2d`, `polyvander3d`
+`Polynomial`, `polyadd`, `polycompanion`, `polydiv`, `polyfit`, `polyfromroots`, `polygrid2d`, `polygrid3d`, `polyline`, `polymul`, `polymulx`, `polyroots`, `polysub`, `polyval`, `polyval2d`, `polyval3d`, `polyvalfromroots`, `polyvander2d`, `polyvander3d`
 
 ### NumSharp-only names (1 NumPy-style, 0 PascalCase C# members)
 
 `polyvalnd`
-
-### NumPy public names that `np.polynomial.polynomial` lacks (3)
-
-`Polynomial`, `polyfit`, `polyvalfromroots`
 
 ## `np.polynomial.polyutils`
 
@@ -2367,13 +2333,9 @@ PascalCase: `ToString`
   object trimseq(object seq)
   ```
 
-### Identical to NumPy (2)
+### Identical to NumPy (3)
 
-`as_series`, `getdomain`
-
-### NumPy public names that `np.polynomial.polyutils` lacks (1)
-
-`format_float`
+`as_series`, `format_float`, `getdomain`
 
 ## `np.random`
 
@@ -3150,13 +3112,9 @@ PascalCase: `ToString`
   NDArray slice(NDArray a, NDArray start, NDArray stop, NDArray step)
   ```
 
-### Identical to NumPy (11)
+### Identical to NumPy (15)
 
-`capitalize`, `lower`, `lstrip`, `partition`, `rpartition`, `rstrip`, `strip`, `swapcase`, `title`, `upper`, `zfill`
-
-### NumPy public names that `np.strings` lacks (4)
-
-`decode`, `encode`, `mod`, `translate`
+`capitalize`, `decode`, `encode`, `lower`, `lstrip`, `mod`, `partition`, `rpartition`, `rstrip`, `strip`, `swapcase`, `title`, `translate`, `upper`, `zfill`
 
 ## `np.typing`
 
@@ -3363,28 +3321,32 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
 
 ## `np.char.chararray`
 
-### Signature differences (7)
+### Signature differences (4)
 
 | name | NumPy | closest C# overload | differences |
 |---|---|---|---|
 | `astype` | `chararray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)` | `NDCharArray astype(DType dtype, bool copy, char order, string casting = "unsafe")`<br>(+1 more overloads, below) | **slot**: `order: NumPy #1, C# #2`, `casting: NumPy #2, C# #3`, `copy: NumPy #4, C# #1`<br>**C# requires**: `order`, `copy`<br>**policy**: `subok` |
-| `compress` | `chararray.compress(condition, axis=None, out=None)` | `NDCharArray compress(NDArray condition, int? axis = null)` | **missing**: `out` |
 | `ravel` | `chararray.ravel(order='C')` | `NDCharArray ravel(char order)`<br>(+1 more overloads, below) | **C# requires**: `order` |
 | `reshape` | `chararray.reshape(shape, /, *, order='C', copy=None)` | `NDCharArray reshape(Shape newShape, char order)`<br>(+5 more overloads, below) | **missing**: `copy`<br>**C# requires**: `order` |
-| `take` | `chararray.take(indices, axis=None, out=None, mode='raise')` | `NDCharArray take(NDArray indices, int? axis = null, string mode = "raise")`<br>(+1 more overloads, below) | **missing**: `out`<br>**slot**: `mode: NumPy #3, C# #2` |
-| `transpose` | `chararray.transpose(*axes)` | `NDCharArray transpose(int[] premute = null)` | **varargs**: `*axes as int[] premute (no params array)` |
 | `view` | `chararray.view(dtype=<optional>, type=<optional>)` | `NDArray view(DType dtype, Type type)`<br>(+2 more overloads, below) | **C# requires**: `dtype`, `type` |
 
-### Only null defaults (4)
+### Only null defaults (11)
 
 | name | NumPy | closest C# overload | null defaults |
 |---|---|---|---|
 | `center` | `chararray.center(width, fillchar=' ')` | `NDCharArray center(object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
+| `count` | `chararray.count(sub, start=0, end=None)` | `NDArray count(object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
+| `endswith` | `chararray.endswith(suffix, start=0, end=None)` | `NDArray endswith(object suffix, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 | `expandtabs` | `chararray.expandtabs(tabsize=8)` | `NDCharArray expandtabs(object tabsize = null)` | **null default**: `tabsize: 8 vs null` |
+| `find` | `chararray.find(sub, start=0, end=None)` | `NDArray find(object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
+| `index` | `chararray.index(sub, start=0, end=None)` | `NDArray index(object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 | `ljust` | `chararray.ljust(width, fillchar=' ')` | `NDCharArray ljust(object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
+| `rfind` | `chararray.rfind(sub, start=0, end=None)` | `NDArray rfind(object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
+| `rindex` | `chararray.rindex(sub, start=0, end=None)` | `NDArray rindex(object sub, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 | `rjust` | `chararray.rjust(width, fillchar=' ')` | `NDCharArray rjust(object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
+| `startswith` | `chararray.startswith(prefix, start=0, end=None)` | `NDArray startswith(object prefix, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 
-### More than one overload (12; NumPy has one signature each)
+### More than one overload (8; NumPy has one signature each)
 
 - `__getitem__`: NumPy `chararray.__getitem__(obj)`
 
@@ -3408,24 +3370,11 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDArray argmin(int axis, bool keepdims = false)
   NDArray argmin(int? axis = null, NDArray out = null, bool keepdims = false)
   ```
-- `argpartition`: NumPy `chararray.argpartition(kth, axis=-1, kind='introselect', order=None)`
-
-  ```csharp
-  NDArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-  NDArray argpartition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-  NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-  ```
 - `astype`: NumPy `chararray.astype(dtype, order='K', casting='unsafe', subok=True, copy=True)`
 
   ```csharp
   NDCharArray astype(DType dtype, bool copy = true)
   NDCharArray astype(DType dtype, bool copy, char order, string casting = "unsafe")
-  ```
-- `join`: NumPy `chararray.join(seq)`
-
-  ```csharp
-  NDArray join(object seq)
-  NDListArray join(NDListArray seq)
   ```
 - `partition`: NumPy `chararray.partition(sep)`
 
@@ -3441,13 +3390,6 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDCharArray ravel()
   NDCharArray ravel(char order)
   ```
-- `repeat`: NumPy `chararray.repeat(repeats, axis=None)`
-
-  ```csharp
-  NDCharArray repeat(NDArray repeats, int? axis = null)
-  NDCharArray repeat(int repeats, int? axis = null)
-  NDCharArray repeat(long repeats, int? axis = null)
-  ```
 - `reshape`: NumPy `chararray.reshape(shape, /, *, order='C', copy=None)`
 
   ```csharp
@@ -3458,12 +3400,6 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDCharArray reshape(params long[] shape)
   NDCharArray reshape(ReadOnlySpan<long> shape)
   ```
-- `take`: NumPy `chararray.take(indices, axis=None, out=None, mode='raise')`
-
-  ```csharp
-  NDCharArray take(NDArray indices, int? axis = null, string mode = "raise")
-  NDCharArray take(long index, int? axis = null, string mode = "raise")
-  ```
 - `view`: NumPy `chararray.view(dtype=<optional>, type=<optional>)`
 
   ```csharp
@@ -3472,17 +3408,13 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDArray view(DType dtype, Type type)
   ```
 
-### Identical to NumPy (14)
+### Identical to NumPy (41)
 
-`__iter__`, `byteswap`, `copy`, `diagonal`, `flatten`, `getfield`, `rpartition`, `rsplit`, `split`, `splitlines`, `squeeze`, `swapaxes`, `to_device`, `zfill`
+`__iter__`, `argpartition`, `byteswap`, `capitalize`, `compress`, `copy`, `decode`, `diagonal`, `encode`, `flatten`, `getfield`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `join`, `lower`, `lstrip`, `repeat`, `replace`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `squeeze`, `strip`, `swapaxes`, `swapcase`, `take`, `title`, `to_device`, `translate`, `transpose`, `upper`, `zfill`
 
 ### NumSharp-only names (0 NumPy-style, 4 PascalCase C# members)
 
 PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
-
-### NumPy public names that `np.char.chararray` lacks (28)
-
-`capitalize`, `count`, `decode`, `encode`, `endswith`, `find`, `index`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `lower`, `lstrip`, `replace`, `rfind`, `rindex`, `rstrip`, `startswith`, `strip`, `swapcase`, `title`, `translate`, `upper`
 
 ## `np.ma.MaskedArray`
 
