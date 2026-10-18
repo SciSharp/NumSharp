@@ -1303,22 +1303,45 @@ namespace NumSharp.Backends.Iteration
             }
         }
 
+        /// <summary>
+        ///     Appends the literal's part of the kernel key: its kind and its exact value, so two literals that differ in
+        ///     either compile to distinct kernels (2 and 2.0 type differently; 2m and 2 emit differently at a Decimal target).
+        /// </summary>
+        /// <param name="sb">The key being built.</param>
+        /// <remarks>
+        ///     The kernel cache is keyed by this text, and the kernel bakes the literal into its IL, so the text must be
+        ///     INJECTIVE over the values the IL can tell apart: a float is written as its 64 bits (hex), as the structural
+        ///     cache compares it (<see cref="StructureEquals"/>). Text from .NET's formatter is not injective, and a collision
+        ///     hands a tree another literal's kernel — a wrong result, silently: <c>ToString("R")</c> prints every NaN alike,
+        ///     on the .NET 10 runtime (10.0.1) prints 2^-25 and the double below it as the same 16 digits, and without an
+        ///     invariant culture prints <c>Complex(1.5, 2)</c> and <c>Complex(1, 5.2)</c> alike under a comma decimal separator
+        ///     ("1,5,2"). A decimal's invariant text is exact and keeps its scale (1.0m and 1.00m, which emit different
+        ///     constants, stay apart); an integer's digits are exact in every culture.
+        /// </remarks>
         public override void AppendSignature(StringBuilder sb)
         {
-            // Kind + exact value: two literals that differ in either compile to distinct kernels
-            // (2 and 2.0 type differently; 2m and 2 emit differently at a Decimal target).
             sb.Append("Const").Append((int)_kind).Append('[');
             switch (_kind)
             {
                 case NDExprLiteralKind.UInt64: sb.Append(_u); break;
-                case NDExprLiteralKind.Complex: sb.Append(_c.Real.ToString("R")).Append(',').Append(_c.Imaginary.ToString("R")); break;
+                case NDExprLiteralKind.Complex:
+                    AppendBits(sb, _c.Real);
+                    sb.Append(',');
+                    AppendBits(sb, _c.Imaginary);
+                    break;
                 case NDExprLiteralKind.Decimal: sb.Append(_m.ToString(System.Globalization.CultureInfo.InvariantCulture)); break;
                 case NDExprLiteralKind.Float:
-                case NDExprLiteralKind.Half: sb.Append(_f.ToString("R", System.Globalization.CultureInfo.InvariantCulture)); break;
+                case NDExprLiteralKind.Half: AppendBits(sb, _f); break;
                 default: sb.Append(_i); break;
             }
             sb.Append(']');
         }
+
+        /// <summary>Appends a double's 64 bits as 16 hex digits: the exact, culture-free key text of a float literal.</summary>
+        /// <param name="sb">The key being built.</param>
+        /// <param name="value">The value (every NaN payload and both zeros keep their own text).</param>
+        private static void AppendBits(StringBuilder sb, double value)
+            => sb.Append(BitConverter.DoubleToInt64Bits(value).ToString("X16", System.Globalization.CultureInfo.InvariantCulture));
     }
 
     // =========================================================================

@@ -191,19 +191,26 @@ namespace NumSharp.IO
             }
         }
 
+        /// <summary>
+        ///     Appends Python's <c>repr()</c> of a float: <c>nan</c> / <c>inf</c> / <c>-inf</c>, else the shortest digits that
+        ///     read back, positional from 1e-4 up to 1e16 (with <c>.0</c> on an integral value) and <c>d.ddde±XX</c> outside —
+        ///     NumPy's <c>str()</c> of a float64, which <see cref="NumSharp.Backends.Strings.NDTextFormat.FormatFloat"/> writes.
+        /// </summary>
+        /// <param name="d">The value.</param>
+        /// <param name="sb">The text being built.</param>
+        /// <remarks>
+        ///     .NET's <c>"R"</c> is not Python's repr: it writes <c>1E+16</c> where Python writes <c>1e+16</c>, and on the .NET
+        ///     10 runtime (10.0.1) 16 digits for 2^-25 and 2^-958 that read back as the neighbouring double.
+        /// </remarks>
         private static void ReprDouble(double d, StringBuilder sb)
         {
             if (double.IsNaN(d)) { sb.Append("nan"); return; }
             if (double.IsPositiveInfinity(d)) { sb.Append("inf"); return; }
             if (double.IsNegativeInfinity(d)) { sb.Append("-inf"); return; }
 
-            // "R" is shortest-round-trip, which is what Python's float repr produces. Python always
-            // shows a decimal point or exponent so the value reads as a float; .NET does not.
-            string s = d.ToString("R", CultureInfo.InvariantCulture);
-            if (s.IndexOf('.') < 0 && s.IndexOf('e') < 0 && s.IndexOf('E') < 0 &&
-                s.IndexOf("Inf", StringComparison.Ordinal) < 0 && s.IndexOf("NaN", StringComparison.Ordinal) < 0)
-                s += ".0";
-            sb.Append(s);
+            Span<char> buf = stackalloc char[NumSharp.Backends.Strings.NDTextFormat.MaxTextLength];
+            int n = NumSharp.Backends.Strings.NDTextFormat.FormatFloat(d, NumSharp.Backends.Printing.FloatKind.Double, buf);
+            sb.Append(buf.Slice(0, n));
         }
 
         private struct Parser

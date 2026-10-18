@@ -229,9 +229,8 @@ namespace NumSharp.Backends.Iteration
         {
             h.Add(NDExprNodeTag.Const, (long)_kind);
             // The value by BITS: a literal is baked into the kernel's IL, so 2 and 2.0 (different kinds),
-            // 0.0 and -0.0, or two NaN payloads are different programs. Bit identity is stricter than
-            // the kernel key's "R" formatting (which prints every NaN alike) — a stricter key can only
-            // split entries, never pair a tree with a foreign kernel.
+            // 0.0 and -0.0, or two NaN payloads are different programs. The kernel key writes the same bits
+            // (ConstNode.AppendSignature), so a program can never be handed another literal's kernel.
             switch (_kind)
             {
                 case NDExprLiteralKind.UInt64: h.Add(_u); break;
