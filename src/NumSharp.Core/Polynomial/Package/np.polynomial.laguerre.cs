@@ -655,5 +655,33 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.lagweight.html</remarks>
         [NDScoped]
         public NDArray lagweight(object x) => NDPolyWeight.Weight(PolyBasis.Laguerre, x);
+
+        /// <summary>
+        ///     Gauss-Laguerre quadrature: the sample points <c>x_k</c> (the roots of <c>L_deg</c>, increasing, all positive) and
+        ///     weights <c>w_k</c>, so that <c>Σ w_k f(x_k)</c> integrates <c>f(x)·exp(-x)</c> over [0, inf) exactly for every
+        ///     polynomial of degree up to <c>2*deg - 1</c>. Computed as NumPy 2.4.2 writes it: the eigenvalues of the
+        ///     (symmetric) companion matrix of <c>L_deg</c>, one Newton step, the weights scaled against overflow and normalised
+        ///     to sum to 1 — bit-identical to NumPy.
+        /// </summary>
+        /// <param name="deg">
+        ///     The number of points: an integer under Python's <c>operator.index</c> (see <c>leggauss</c>; a 0-d array gives
+        ///     the companion's ValueError, as in NumPy).
+        /// </param>
+        /// <returns>(x, w): NumPy's tuple of two new float64 arrays of <paramref name="deg"/> elements.</returns>
+        /// <exception cref="TypeError"><c>deg must be an integer, received {deg}</c>.</exception>
+        /// <exception cref="ValueError"><c>deg must be a positive integer</c>; for a 0-d array <paramref name="deg"/> the
+        ///     companion's <c>Series must have maximum degree of at least 1.</c></exception>
+        /// <exception cref="System.OverflowException">A count past 2**63 - 1 (CPython's list repeat).</exception>
+        /// <exception cref="System.OutOfMemoryException">A count CPython's list cannot hold, or a companion matrix the
+        ///     machine cannot hold.</exception>
+        /// <exception cref="System.NotSupportedException">No LAPACK backend is installed (<c>np.linalg.eigvalsh</c> needs
+        ///     <c>NumSharp.Interop.OpenBLAS</c>).</exception>
+        /// <remarks>
+        ///     <para>Unlike <c>leggauss</c> there is no symmetrisation (the Laguerre nodes are not symmetric). From degree
+        ///     ~100 both sides are bound by the same LAPACK <c>syevd</c>.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.laggauss.html</para>
+        /// </remarks>
+        [NDScoped]
+        public (NDArray x, NDArray w) laggauss(object deg) => NDPolyGauss.Gauss(PolyBasis.Laguerre, deg);
     }
 }

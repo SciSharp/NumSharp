@@ -20953,6 +20953,123 @@ def gen_polypts():
 
 
 # ---------------------------------------------------------------------------
+# T-polygauss — numpy.polynomial's Gauss-Legendre and Gauss-Laguerre quadrature (plan U8, numpy-polynomial-remaining-
+# compute.md §3.4): leggauss(deg) / laggauss(deg) = the eigenvalues of the companion matrix of [0]*deg + [1]
+# (np.linalg.eigvalsh, LAPACK syevd), one Newton step through {p}val / {p}der, the weights scaled against overflow,
+# leggauss symmetrising both and normalising the weights to 2, laggauss normalising them to 1:
+#   (A) every degree 1..64 and the degrees around the powers of two up to 257 (the values, both slots);
+#   (B) the argument kinds: operator.index's Python ints / bools / floats / strs / None / complexes, np.uint16 (NumSharp's
+#       char) and np.float16 scalars, 0-d arrays of every dtype — a positive 0-d integer array is NOT a list repeat
+#       (`[0] * arr` is np.multiply), so c is [1] and the companion raises —, sized arrays, lists and tuples;
+#   (C) the list-repeat edges: CPython's OverflowError past 2**63 - 1, its MemoryError at or past 2**60 - 1 (raised by
+#       list_new_prealloc before any allocation, so it does not depend on the machine);
+#   (D) the results' C / F / OWNDATA flags.
+# HOST SPLIT. Every value comes out of eigvalsh, whose bits depend on the OpenBLAS build, its DYNAMIC_ARCH kernel and the
+# thread count: values and flags go to polygauss_parity.jsonl (+ the BLAS identity in polygauss_parity.host.jsonl),
+# replayed only with that library at one thread. Errors are raised before eigvalsh: portable (polygauss.jsonl).
+POLY_GAUSS_OPS = ("legendre.leggauss", "laguerre.laggauss")
+_PG_T = 2 ** 63
+
+
+def gen_polygauss():
+    """Generates the polygauss tiers (see the T-polygauss header).
+
+    Returns:
+        (cases, host): the portable error cases and the host-pinned (eigvalsh) value / flags cases.
+    """
+    cases = []
+    host = []
+    counter = [0]
+    A = _PSArr
+
+    def flags(a):
+        """The [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] record of one result.
+
+        Args:
+            a: The result array.
+
+        Returns:
+            A bool array of three flags.
+        """
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(op, arg, layout, cid, facet=None):
+        """Records one call of op on arg: its error, or both result slots (values or flags).
+
+        Args:
+            op: The corpus key ("legendre.leggauss" or "laguerre.laggauss").
+            arg: The deg argument (a Python value, a NumPy scalar or an _PSArr).
+            layout: The case's layout label.
+            cid: The case id prefix.
+            facet: "flags" to record the results' flags instead of their values.
+
+        Returns:
+            None.
+        """
+        module, name = op.split(".")
+        fn = getattr(_poly_module(module), name)
+        operands = []
+        params = {"deg": _ps_enc(arg, operands)}
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = fn(_ps_py(arg))
+        except Exception as e:  # MemoryError included: CPython's list size check is deterministic (see the header)
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                          "expected": {"kind": "tuple"}, "expects_throw": True, "error": _poly_exc(e),
+                          "layout": layout, "valueclass": "error"})
+            return
+        slots = [np.asarray(s) for s in r]
+        if facet == "flags":
+            slots = [flags(s) for s in slots]
+        host.append(_case(op, params, operands, _tuple_expected(slots), layout, "polygauss", cid=f"{cid}/{n}"))
+
+    for op in POLY_GAUSS_OPS:
+        # (A) the degrees
+        for d in list(range(1, 65)) + [100, 127, 128, 129, 200, 255, 256, 257]:
+            emit(op, d, "python_int", f"{op}/deg/{d}")
+
+        # (B) argument kinds
+        for lab, v in (("0", 0), ("m1", -1), ("m2p70", -(2 ** 70)), ("true", True), ("false", False), ("3.0", 3.0),
+                       ("3.5", 3.5), ("nan", float("nan")), ("str3", "3"), ("none", None), ("3+0j", 3 + 0j)):
+            emit(op, v, "python_object", f"{op}/kind/{lab}")
+        for lab, bits in (("3", 0x4200), ("1", 0x3c00), ("nan", 0x7e00)):
+            emit(op, _pw_f16(bits), "numpy_scalar", f"{op}/npf16/{lab}")
+        for v in (0, 1, 3, 7):
+            emit(op, np.uint16(v), "numpy_scalar", f"{op}/npu16/{v}")
+        for dt in ALL_DTYPES:
+            kind = np.dtype(dt).kind
+            vals = [True, False] if kind == "b" else [3, 0, 1] if kind in "iu" else [3.0]
+            for v in vals:
+                emit(op, A(np.array(v, dtype=dt)), "scalar_0d", f"{op}/zerod/{dt}/{v}")
+        for lab, arr in (("1d_one", np.array([3])), ("1d_empty", np.zeros(0, np.int64)), ("2d_one", np.array([[3]]))):
+            emit(op, A(arr), "c_contiguous_nd", f"{op}/arr/{lab}")
+        for lab, v in (("list", [3]), ("list_empty", []), ("tuple", (3,)), ("tuple_empty", ())):
+            emit(op, v, "python_object", f"{op}/seq/{lab}")
+
+        # (C) the list-repeat edges
+        for lab, v in (("2p60m2", 2 ** 60 - 2), ("2p60m1", 2 ** 60 - 1), ("2p60", 2 ** 60), ("2p62", 2 ** 62),
+                       ("tm1", _PG_T - 1), ("t", _PG_T), ("2p64", 2 ** 64), ("2p100", 2 ** 100)):
+            if lab == "2p60m2":
+                continue                       # malloc of 8 * (2**60 - 2) bytes: machine-dependent, not recorded
+            emit(op, v, "python_int", f"{op}/edge/{lab}")
+
+        # (D) flags of the results
+        for d in (1, 2, 5, 64):
+            emit(op, d, "python_int", f"{op}/flags/{d}", facet="flags")
+
+    # Char: NumSharp's uint16-like dtype computes exactly as uint16 does (the house weave) — the 0-d arrays.
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}")
+    return cases, host
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -22387,8 +22504,18 @@ def main():
         cases, host = gen_polypts()
         write_jsonl(os.path.join(corpus_dir, "polypts.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polypts_host.jsonl"), host)
+    elif mode == "polygauss":
+        # numpy.polynomial Gauss-Legendre / Gauss-Laguerre quadrature (U8): portable errors + host-pinned values
+        # (LAPACK syevd at threads = 1).
+        for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            if os.environ.get(var) != "1":
+                sys.exit(f"polygauss needs {var}=1 set before Python starts (eigvalsh's bits depend on the thread count)")
+        cases, host = gen_polygauss()
+        write_jsonl(os.path.join(corpus_dir, "polygauss.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polygauss_parity.jsonl"), host)
+        write_jsonl(os.path.join(corpus_dir, "polygauss_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

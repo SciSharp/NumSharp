@@ -30,10 +30,17 @@ namespace NumSharp.Tests.Fuzz
         ///     sweep; this backend pass must measure each of them, and <see cref="LeakSurfaceCoverageTests"/>
         ///     accepts their inventory members as covered by THIS pass.
         /// </summary>
+        /// <remarks>
+        ///     The <c>numpy.polynomial</c> entries are module-qualified corpus keys: the Gauss quadratures
+        ///     <c>legendre.leggauss</c> / <c>laguerre.laggauss</c> compute through <c>np.linalg.eigvalsh</c>, so their
+        ///     portable tier (<c>polygauss.jsonl</c>) holds only argument errors and every success case is in the
+        ///     host-pinned <c>polygauss_parity.jsonl</c>, which this pass replays.
+        /// </remarks>
         internal static readonly HashSet<string> BackendOnlyOpKeys = new(StringComparer.Ordinal)
         {
             "cholesky", "cond", "eig", "eigh", "eigvals", "eigvalsh", "lstsq", "matrix_rank",
             "norm", "pinv", "polyfit", "qr", "roots", "svd", "svdvals",
+            "legendre.leggauss", "laguerre.laggauss",
         };
 
         /// <summary>

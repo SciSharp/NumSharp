@@ -372,9 +372,10 @@ namespace NumSharp.Tests.Fuzz
             foreach (var name in RandomOpKeys.Keys)
                 if (!ids.Contains("np.random." + name))
                     stale.Add($"RandomOpKeys entry '{name}' names no np.random member");
+            // A module-qualified key ("legendre.leggauss") is a numpy.polynomial submodule's member, "np.polynomial." + key.
             foreach (var op in UndisposedIntermediateTests.BackendOnlyOpKeys)
-                if (!LinalgOpKeys.ContainsValue(op) && !ids.Contains("np." + op))
-                    stale.Add($"BackendOnlyOpKeys entry '{op}' maps to no np / np.linalg member");
+                if (!LinalgOpKeys.ContainsValue(op) && !ids.Contains("np." + op) && !ids.Contains("np.polynomial." + op))
+                    stale.Add($"BackendOnlyOpKeys entry '{op}' maps to no np / np.linalg / np.polynomial member");
 
             // Operator enumeration must track the owners: an object owner that gains an operator (or a
             // conversion) outside OperatorOwners would be invisible to this gate, not merely uncovered.
@@ -471,7 +472,13 @@ namespace NumSharp.Tests.Fuzz
                 case "np.polynomial.hermite":
                 case "np.polynomial.hermite_e":
                 case "np.polynomial.polyutils":
-                    return Has(m.Owner.Substring("np.polynomial.".Length) + "." + m.Name) ? "corpus: polynomial" : null;
+                {
+                    string key = m.Owner.Substring("np.polynomial.".Length) + "." + m.Name;
+                    if (Has(key))
+                        return "corpus: polynomial";
+                    // A function whose every success needs LAPACK (the Gauss quadratures' eigvalsh): the backend pass.
+                    return UndisposedIntermediateTests.BackendOnlyOpKeys.Contains(key) ? ev.BackendRoute(key) : null;
+                }
                 case "np.fft":
                     return Has(m.Name) ? "corpus: fft" : null;
                 case "np.linalg":

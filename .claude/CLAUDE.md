@@ -5982,6 +5982,30 @@ Traps:
 - **A benchmark report must skip its own summary lines**: the runner prints per-section summaries after the cells, and a
   section key such as `A` makes a summary line parse as a cell unless the label must contain a `/`.
 
+### Polynomial package — Gauss-Legendre and Gauss-Laguerre quadrature (U8)
+`leggauss`, `laggauss` (2 names)
+
+Plans `docs/plans/numpy-polynomial.md` (U8) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.4 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2** (with the OpenBLAS NumPy loads, at one thread): oracle tiers
+`polygauss.jsonl` (122 portable error cases) and `polygauss_parity.jsonl` (160 value / flags cases, host-pinned like
+`polyroots_parity`, with its BLAS identity in `polygauss_parity.host.jsonl`), 0 excused. Unit tests
+`Polynomial/PolynomialGaussTests.cs` (7). **Perf (NPY/NS, `benchmark/polynomial/polygauss_*`, 22 cells, every one
+SHA-256-checked): geomean 5.45×** — leggauss 1.63–9.9×, laggauss 2.1–18.3×, the argument forms 2.3–17.5×.
+
+- **Engine** (`Polynomial/Package/NDPolyGauss.cs`): NumPy's statements composed from bit-exact engines: U7's companion
+  of `[0]*deg + [1]`, `np.linalg.eigvalsh` (LAPACK `syevd` through `NumSharp.Interop.OpenBLAS`), one Newton step through
+  U3's `{p}val` and U4's `{p}der`, the weights scaled by their largest magnitude (`np.max`, NumPy's schedule), leggauss
+  symmetrising both and normalising the weights to 2, laggauss normalising them to 1 (`np.sum`, NumPy's pairwise
+  add.reduce). Without a LAPACK backend a valid degree raises `MissingBackendException` from eigvalsh.
+- **`c = np.array([0] * deg + [1])` uses `deg` itself**, so NumPy's sequence rules apply: a Python int, a bool (`[0] *
+  True` is one zero) or an np.uint16 (a C# char) repeats the list; a 0-d integer ARRAY does not (`[0] * arr` is
+  `np.multiply`), so c is `[1]` and the companion raises `Series must have maximum degree of at least 1.`; a count past
+  2^63 − 1 is CPython's `OverflowError: cannot fit 'int' into an index-sized integer`, and one of 2^60 − 1 or more its
+  list size limit (an empty MemoryError, raised before any allocation: `OutOfMemoryException("")`).
+- **Where the time goes**: NumPy's three `{p}val` calls are Python loops over the deg + 1 coefficients (about 1.2 ms of
+  `leggauss(100)`); each is one U3 kernel call here. From degree ~100 both sides wait on the same `syevd`
+  (eigvalsh(100) 370 µs on both), so the ratio falls toward 1.6–2× at degree 500.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 

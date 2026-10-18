@@ -879,6 +879,36 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void PolyptsHost() => RunHostLibmCorpus("polypts_host.jsonl");
 
+        // numpy.polynomial's Gauss-Legendre / Gauss-Laguerre quadrature (plan U8): leggauss / laggauss's argument
+        // errors — operator.index's kinds, a 0-d integer array (`[0] * arr` is np.multiply, so the companion refuses
+        // the one-element series), CPython's list-repeat OverflowError / MemoryError — raised before eigvalsh: PORTABLE.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polygauss() => RunCorpus("polygauss.jsonl");
+
+        // Their values and flags: every one comes out of np.linalg.eigvalsh (LAPACK syevd through
+        // NumSharp.Interop.OpenBLAS, the scipy-openblas NumPy itself loads), so the tier is HOST-PINNED like
+        // PolyrootsParity (threads = 1): Inconclusive, never red, on a host that cannot load the pinned library.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]   // Enables/Disables the process-global OpenBLAS engine; must not overlap other tiers.
+        public void PolygaussParity()
+        {
+            var pin = MatmulParityPin.Load("polygauss_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polygauss_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
         // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
         // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
         // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
@@ -1189,6 +1219,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
             ["polyroots.jsonl"] = 8150,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-L of gen_polyroots — 6,681 at delivery, 8,195 with the wholeness sections (K: two-term OBJECT series NumPy still computes, 0-d-zero trims, edge numeric series; L: object series of three or more terms — the companion arithmetic's OverflowErrors and eigvals' isfinite TypeError)
             ["polyweight.jsonl"] = 1800,   // numpy.polynomial weight functions (U8): {p}weight x 5 bases, sections A-H of gen_polyweight — 1,860 at delivery
+            ["polygauss.jsonl"] = 110,   // numpy.polynomial leggauss / laggauss argument errors (U8), portable — 122 at delivery
+            ["polygauss_parity.jsonl"] = 150,   // their eigvalsh-based values and flags, host-pinned (threads = 1) — 160 at delivery
             ["polypts.jsonl"] = 340,   // numpy.polynomial Chebyshev points / Gauss-Chebyshev quadrature (U8): errors, empties, flags, Char — 362 at delivery
             ["polypts_host.jsonl"] = 320,   // their sin / cos values, host-pinned — 347 at delivery
             ["polyweight_host.jsonl"] = 1200,   // the exp-based weights' C-runtime loops (float64 / float16 / complex128), host-pinned — 1,235 at delivery

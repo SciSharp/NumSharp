@@ -578,7 +578,7 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>
         ///     The tuple-valued polynomial functions: <c>as_series</c> (one slot per series — arity asserted),
         ///     <c>mapparms</c> (<c>(off, scl)</c>, each a Python / NumPy scalar recorded as a 0-d array, or an array),
-        ///     <c>chebgauss</c> (<c>(x, w)</c>), and the six <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by
+        ///     <c>chebgauss</c> / <c>leggauss</c> / <c>laggauss</c> (<c>(x, w)</c>), and the six <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by
         ///     <see cref="ApplyPolyAlgebraTuple"/>).
         /// </summary>
         /// <param name="op">The key.</param>
@@ -601,6 +601,15 @@ namespace NumSharp.Tests.Fuzz
                 {
                     // Gauss-Chebyshev quadrature's (x, w): both slots, values or (a "facet": "flags" case) flags.
                     var (x, w) = np.polynomial.chebyshev.chebgauss(a.Get("deg"));
+                    return new[] { a.CalcFacet(x), a.CalcFacet(w) };
+                }
+                case "legendre.leggauss":
+                case "laguerre.laggauss":
+                {
+                    // Gauss-Legendre / Gauss-Laguerre quadrature's (x, w): both slots, values or flags.
+                    var (x, w) = op == "legendre.leggauss"
+                        ? np.polynomial.legendre.leggauss(a.Get("deg"))
+                        : np.polynomial.laguerre.laggauss(a.Get("deg"));
                     return new[] { a.CalcFacet(x), a.CalcFacet(w) };
                 }
                 case "polyutils.mapparms":

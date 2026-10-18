@@ -1055,7 +1055,10 @@ a unit below, that document wins.
 > §3.2. **Chebyshev points DELIVERED (2026-10-18)** — `chebpts1`, `chebpts2`, `chebgauss`:
 > `Polynomial/Package/NDPolyChebPoints.cs` + one emitted fill per formula, oracle tiers `polypts.jsonl` /
 > `polypts_host.jsonl` (709 cases, 0 excused), benchmark geomean 3.37× (35 cells, all bit-exact); §3.3 of the same
-> plan. `leggauss`, `laggauss`, `hermgauss`, `hermegauss` are still open.
+> plan. **`leggauss` / `laggauss` DELIVERED (2026-10-18)**: `Polynomial/Package/NDPolyGauss.cs`, a composition of the
+> bit-exact engines around `np.linalg.eigvalsh`; oracle tiers `polygauss.jsonl` / `polygauss_parity.jsonl` (282 cases,
+> 0 excused), benchmark geomean 5.45× (22 cells, all bit-exact); §3.4 of the same plan. `hermgauss` / `hermegauss` are
+> still open.
 
 - **Scope:** `{p}gauss` and `{p}weight` for the five non-power bases.
 - **Shared backend:**

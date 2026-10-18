@@ -649,5 +649,38 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.legweight.html</remarks>
         [NDScoped]
         public NDArray legweight(object x) => NDPolyWeight.Weight(PolyBasis.Legendre, x);
+
+        /// <summary>
+        ///     Gauss-Legendre quadrature: the sample points <c>x_k</c> (the roots of <c>P_deg</c>, increasing) and weights
+        ///     <c>w_k</c>, so that <c>Σ w_k f(x_k)</c> integrates <c>f</c> over [-1, 1] exactly for every polynomial of degree
+        ///     up to <c>2*deg - 1</c>. Computed as NumPy 2.4.2 writes it: the eigenvalues of the (symmetric) companion matrix
+        ///     of <c>P_deg</c>, one Newton step, the weights scaled against overflow, both symmetrised, and the weights
+        ///     normalised to sum to 2 — bit-identical to NumPy.
+        /// </summary>
+        /// <param name="deg">
+        ///     The number of points: an integer under Python's <c>operator.index</c> — a C# integer,
+        ///     <see cref="System.Numerics.BigInteger"/>, <c>bool</c> or <c>char</c>, or a 0-d integer <see cref="NDArray"/>.
+        ///     A float, even an integral one, is refused. NumPy builds the series as <c>[0] * deg + [1]</c> from the argument
+        ///     itself, so a 0-d array (not a list repeat) gives the one-coefficient series [1] and the companion's ValueError.
+        /// </param>
+        /// <returns>(x, w): NumPy's tuple of two new float64 arrays of <paramref name="deg"/> elements.</returns>
+        /// <exception cref="TypeError"><c>deg must be an integer, received {deg}</c>, with <c>deg</c> as NumPy's f-string
+        ///     formats it (<c>received 3.0</c>, <c>received True</c> for a 0-d bool array, <c>received [3]</c>).</exception>
+        /// <exception cref="ValueError"><c>deg must be a positive integer</c>; for a 0-d array <paramref name="deg"/> the
+        ///     companion's <c>Series must have maximum degree of at least 1.</c></exception>
+        /// <exception cref="System.OverflowException">A count past 2**63 - 1: CPython's <c>cannot fit 'int' into an
+        ///     index-sized integer</c> from the list repeat.</exception>
+        /// <exception cref="System.OutOfMemoryException">A count CPython's list cannot hold (2**60 - 1 or more: NumPy's empty
+        ///     MemoryError), or a companion matrix the machine cannot hold.</exception>
+        /// <exception cref="System.NotSupportedException">No LAPACK backend is installed: the eigenvalues are
+        ///     <c>np.linalg.eigvalsh</c>'s, which needs <c>NumSharp.Interop.OpenBLAS</c> (bit-identical to NumPy with the
+        ///     OpenBLAS NumPy itself loads, at one thread).</exception>
+        /// <remarks>
+        ///     <para>NumPy's time goes into its three <c>legval</c> calls, Python loops over the <c>deg + 1</c> coefficients;
+        ///     here each is one kernel call. From degree ~100 both sides are bound by the same LAPACK <c>syevd</c>.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.leggauss.html</para>
+        /// </remarks>
+        [NDScoped]
+        public (NDArray x, NDArray w) leggauss(object deg) => NDPolyGauss.Gauss(PolyBasis.Legendre, deg);
     }
 }

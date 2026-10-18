@@ -298,6 +298,25 @@ there; `chebpts2` also pays linspace's pass.
 
 ### 3.4 `leggauss`, `laggauss`, `hermgauss`, `hermegauss` — U8
 
+> **`leggauss` / `laggauss` DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyGauss.cs` + the two
+> facade members, the composition recommended below; oracle tiers `polygauss.jsonl` (122 portable argument-error cases)
+> and `polygauss_parity.jsonl` (160 value / flags cases, host-pinned like `polyroots_parity`), zero excuses; unit tests
+> `test/NumSharp.Tests/Polynomial/PolynomialGaussTests.cs` (7; 11 of 11 planted defects caught); 54 argument kinds and
+> 98 value digests (degrees 1–256) probed equal to NumPy's; benchmark `benchmark/polynomial/polygauss_results.md` (22
+> cells, all bit-exact, geomean 5.45×, min 1.63× at degree 500, where both sides spend ~98% of the call in `syevd`).
+> What the delivery found:
+> - **`c = np.array([0] * deg + [1])` uses `deg` itself**: a bool and an np.uint16 (C# char) repeat the list like an
+>   int, a positive 0-d integer ARRAY is `np.multiply` (`[0] * arr` is `[0]`, then `+ [1]` is `[1]`), so the
+>   companion raises `Series must have maximum degree of at least 1.`; past 2^63 − 1 CPython's list repeat raises
+>   `OverflowError: cannot fit 'int' into an index-sized integer`, and from 2^60 − 1 its list size limit an EMPTY
+>   MemoryError before anything is allocated.
+> - **Two ufunc calls were cheaper with a float64 scalar**: `1 / (fm * df)` and `(w + w[::-1]) / 2` divide by a weak
+>   Python int; an int64 0-d operand took the mixed-dtype kernel (1.3 µs each at degree 5), a float64 one the
+>   same-dtype kernel (0.45 µs) with the same bytes, and both now write into the fresh buffer of the statement before.
+> - The leak audit credits the two members through its OpenBLAS pass (`BackendOnlyOpKeys` takes module-qualified
+>   polynomial keys now): every success needs `eigvalsh`.
+> - `hermgauss` / `hermegauss` are still open (unit 7, the normed recurrences as U3 programs).
+
 **NumPy 2.4.2 (leggauss).**
 ```python
 ideg = pu._as_int(deg, 'deg');  if ideg <= 0: raise ValueError('deg must be a positive integer')
@@ -468,8 +487,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 5 | `hermweight` | hermite | **DELIVERED** — fused with `Square` (NumPy's `x**2`); int / bool cast-first; f16 eager | `Power(x, 2)` (pow: slower, not NumPy's op) | as lagweight | f64 0.98× / 1.98× at 100K / 1M, f16 0.76×; arrays geomean 1.51 |
 | 6 | `hermeweight` | hermite_e | **DELIVERED** — as hermweight | `Power(x, 2)` | as lagweight | f64 0.92× / 1.87× at 100K / 1M; arrays geomean 1.54 |
 | 7 | `chebgauss` | chebyshev | **DELIVERED** — one emitted fill (`cos((π·(2k+1))/(2.0·deg))`), `np.full` for w | arange + fused `Cos` (1.41× at 1K: the ramp and the 0-d parameter around a cos-bound pass) | host-libm (cos) | 1.16× (10K, cos floor) – 5.8×; geomean 3.14 |
-| 8 | `leggauss` | legendre | **composition** (U7 companion → `eigvalsh` → U3/U4 → house ufuncs/reductions) | arena (not needed) | host-pinned (syevd) | 4.3–10.2× |
-| 9 | `laggauss` | laguerre | **composition** (as leggauss, no symmetrisation) | — | host-pinned | 18.9× (deg 20) |
+| 8 | `leggauss` | legendre | **DELIVERED** — composition (U7 companion → `eigvalsh` → U3/U4 → house ufuncs/reductions) | arena (not needed) | host-pinned (syevd) | 1.63× (degree 500, syevd-bound) – 9.9×; geomean 4.40 |
+| 9 | `laggauss` | laguerre | **DELIVERED** — composition (as leggauss, no symmetrisation) | — | host-pinned | 2.13× (degree 500) – 18.3×; geomean 6.54 |
 | 10 | `hermgauss` | hermite | **composition + `_normed_hermite_n` as a U3 step-table program** | array-statement loop (1.14–1.51×) | host-pinned | est. 3.8–12× |
 | 11 | `hermegauss` | hermite_e | **composition + `_normed_hermite_e_n` as a U3 step-table program** | array-statement loop (1.38×) | host-pinned | est. as hermgauss |
 | 12 | `chebpts1` | chebyshev | **DELIVERED** — one emitted fill, MIRRORED (the antisymmetric ramp and the odd C-runtime sin: half the sin calls, the same bytes) | arange + fused `Sin` (1.27× at 1K) | host-libm (sin) | 2.26–4.83×; geomean 3.99 |
@@ -557,7 +576,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | `polyvalfromroots` | the `polyeval` tier (portable), new section | all layouts × dtypes × tensor; the four complex modes of §3.1; Python/NumPy-scalar x; list/tuple x; empty r; int/bool r; the ValueError; the result-layout facet |
 | weights | `chebweight`/`legweight` portable; `lagweight`/`hermweight`/`hermeweight` host-libm (`RunHostLibmCorpus`) | every dtype incl. bool/int8/uint8 wrap-arounds, Python-scalar kinds, list/tuple TypeErrors, the huge-Python-int TypeError |
 | `chebpts1`/`chebpts2`/`chebgauss` | **DELIVERED**: `polypts.jsonl` (362, portable: errors, empty results, flags, Char) + `polypts_host.jsonl` (347, host-libm values) | the `int()`/`_as_int` argument matrix of §3.3, np.arange's 2**63 band |
-| `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread) | degrees 1…200; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) |
+| `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); leg / lag **DELIVERED**: `polygauss.jsonl` (122 portable errors) + `polygauss_parity.jsonl` (160) | degrees 1…257; the `operator.index` / list-repeat argument matrix; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) still to come |
 | `chebinterpolate` | host-pinned (gemv) | (n,) and (n, k) results, every dtype the delegate returns, `args` |
 | fits | host-pinned (gelsd) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |
 | classes | portable (fit/roots inherit their tiers) | `test_classes.py` × 6, `test_symbol.py`, `convert`/`cast` bytes (the series-object Clenshaw) |
