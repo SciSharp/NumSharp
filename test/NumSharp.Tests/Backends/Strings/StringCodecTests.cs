@@ -480,6 +480,72 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     The rows never grow past the fast run's width limit for an element that fits it. The fifth re-layout grows by
+        ///     half again, which from 100 bytes is 150: past the narrow run's 128, so every later element of the call would take
+        ///     the run's per-element exact-write path (ASCII <c>xmlcharrefreplace</c> over mixed texts ran 1.4 times slower
+        ///     than the general route that way). The growth stops at 128 instead; an element past the limit still grows the
+        ///     rows by half again, and without a fast run the policy is unchanged. Then the same growth through
+        ///     <c>np.strings.encode</c>: texts of CJK characters and lone surrogates whose lengths climb past the fifth
+        ///     re-layout and finally past the limit, under the handlers the narrow run writes, against the general route.
+        /// </summary>
+        [TestMethod]
+        public void Relayouts_StopAtTheFastRunsWidthLimit()
+        {
+            using (var rows = new NDCharObjectPath.CodecRows(1, 16, new Shape(16)))
+            {
+                rows.FastWidthLimit = 128;
+                rows.StartRowsEarly(60);
+                // The first four re-layouts grow to the exact length.
+                foreach (int length in new[] { 70, 80, 90, 100 })
+                    StoreRow(rows, length);
+                Assert.AreEqual(100, rows.RowWidth);
+                // The fifth would grow by half again, to 150: it stops at the run's 128.
+                StoreRow(rows, 110);
+                Assert.AreEqual(128, rows.RowWidth);
+                // An element of up to 128 bytes fits without a re-layout; one past the limit grows the rows by half again.
+                StoreRow(rows, 128);
+                Assert.AreEqual(128, rows.RowWidth);
+                StoreRow(rows, 140);
+                Assert.AreEqual(192, rows.RowWidth);
+            }
+
+            using (var rows = new NDCharObjectPath.CodecRows(1, 16, new Shape(16)))
+            {
+                // No fast run declared its limit: the fifth re-layout grows by half again.
+                rows.StartRowsEarly(60);
+                foreach (int length in new[] { 70, 80, 90, 100, 110 })
+                    StoreRow(rows, length);
+                Assert.AreEqual(150, rows.RowWidth);
+            }
+
+            // 400 elements: one character each for the 64-element estimate, then one more every 20 elements up to 16 (128
+            // bytes of XML references, 96 of backslash escapes), the last five 17 characters (past the 128-byte limit).
+            const int count = 400;
+            var u = new uint[count][];
+            for (int i = 0; i < count; i++)
+            {
+                int len = i >= count - 5 ? 17 : System.Math.Min(16, 1 + System.Math.Max(0, i - 64) / 20);
+                u[i] = Enumerable.Range(0, len)
+                    .Select(j => j % 7 == 3 ? 0xDC80u + (uint)((i + j) % 128) : 0x4E00u + (uint)((i + j) % 64)).ToArray();
+            }
+            using var a = RawU(u, 20);
+            foreach (string codec in new[] { "ascii", "latin-1" })
+                foreach (string errors in new[] { "xmlcharrefreplace", "backslashreplace", "replace", "ignore" })
+                    SameAsGeneral(() => np.strings.encode(a, codec, errors), $"width cap {codec} {errors}");
+        }
+
+        /// <summary>Codes one element of <paramref name="length"/> bytes into the rows: appended to the arena, then stored.</summary>
+        /// <param name="rows">The rows.</param>
+        /// <param name="length">The element's length in bytes.</param>
+        private static void StoreRow(NDCharObjectPath.CodecRows rows, int length)
+        {
+            var element = new byte[length];
+            element.AsSpan().Fill((byte)'a');
+            rows.Arena.PutBytes(element);
+            rows.StoreRow(length);
+        }
+
+        /// <summary>
         ///     Encoding and errors arguments that vary per element (arrays broadcast against a): the fast runs need arguments
         ///     that stay put inside a chunk, so they step aside — the results still match the general route's.
         /// </summary>

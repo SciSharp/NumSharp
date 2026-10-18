@@ -86,6 +86,13 @@ namespace NumSharp
         /// <param name="chars">The element width in code units.</param>
         /// <param name="unicode">True for <c>U</c>, false for <c>S</c>.</param>
         /// <returns>The length of the NumPy scalar's value in code units.</returns>
+        /// <remarks>
+        ///     Aggressively inlined because np.strings.encode / decode call it once per element from fully optimized runs,
+        ///     which decline to inline a method with a loop on their own: the call then reached a tier-0 copy of this method
+        ///     for a short-lived process's first calls (a cp1252 encode of 100K accented words: 58 ns per element on calls
+        ///     2-12, 37 once tier 1 is reached).
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static unsafe int TrimmedUnits(byte* element, int chars, bool unicode)
         {
             int n = chars;

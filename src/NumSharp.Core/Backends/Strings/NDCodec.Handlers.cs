@@ -20,6 +20,9 @@ using NumSharp.IO;
 //     the end of the bad range: surrogateescape takes at most four bytes, surrogatepass one surrogate).
 // The error objects are Python's Unicode{En,De}codeError over the WHOLE input of the call (an encode's str, a decode's bytes
 // — for utf-8-sig the bytes after its BOM), so the texts read their character / byte at the error's start.
+// The coders, their run loops and the error paths are [MethodImpl(AggressiveOptimization)] and the byte writers
+// AggressiveInlining: each runs per element, and tiering would keep a short-lived process's first calls on tier-0
+// code (see NDCharObjectPath.CodecFast.cs's header).
 // =============================================================================
 
 namespace NumSharp.Backends.Strings
@@ -99,6 +102,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>Appends bytes (a byte output).</summary>
         /// <param name="src">The bytes.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void PutBytes(ReadOnlySpan<byte> src)
         {
             Reserve(src.Length);
@@ -117,6 +121,7 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>Appends ASCII bytes as code points (a code-point output: a decode handler's replacement).</summary>
         /// <param name="ascii">The bytes.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void PutAsciiPoints(ReadOnlySpan<byte> ascii)
         {
             Reserve(ascii.Length);
@@ -220,6 +225,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="LookupError">An unknown handler name.</exception>
         /// <exception cref="UnicodeEncodeError"><c>strict</c>; <c>surrogatepass</c> for a codec that is not UTF-8 / 16 / 32 or a
         ///     non-surrogate in the range; <c>surrogateescape</c> for a character outside U+DC80..U+DCFF.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static ReadOnlySpan<byte> CallEncodeHandler(NDCodecErrors errors, string encoding, string reason, uint* s, long n,
             long start, long end, out bool isBytes, out long newpos)
         {
@@ -374,6 +380,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="r">The destination.</param>
         /// <param name="w">Where to write.</param>
         /// <returns>The position after the form.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int WriteBackslash(uint ch, Span<byte> r, int w)
         {
             r[w++] = (byte)'\\';
@@ -410,6 +417,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="start">The first character.</param>
         /// <param name="end">One past the last.</param>
         /// <param name="sink">The byte output.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void PutBackslashReplace(uint* s, long start, long end, NDCodecSink sink)
         {
             sink.Reserve((end - start) * 10);
@@ -429,6 +437,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="start">The first character.</param>
         /// <param name="end">One past the last.</param>
         /// <param name="sink">The byte output.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void PutXmlCharRefReplace(uint* s, long start, long end, NDCodecSink sink)
         {
             // "&#" + at most 11 characters of a C int ("-2147483648") + ";".
@@ -449,6 +458,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="v">The value.</param>
         /// <param name="p">The destination.</param>
         /// <param name="w">The write position, advanced past the text.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void FormatCInt(int v, byte* p, ref int w)
         {
             if (v == 0)
@@ -497,6 +507,7 @@ namespace NumSharp.Backends.Strings
         ///     a codec that is not UTF-8 / 16 / 32); <c>surrogateescape</c> at an ASCII byte.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c>: <c>don't know how to handle
         ///     UnicodeDecodeError in error callback</c>.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static long CallDecodeHandler(NDCodecErrors errors, string encoding, string reason, byte* s, long size, long start,
             long end, NDCodecSink sink)
         {

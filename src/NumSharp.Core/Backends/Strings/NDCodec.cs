@@ -198,6 +198,7 @@ namespace NumSharp.Backends.Strings
         ///     (its first 400 UTF-8 bytes, a cut character read as U+FFFD).</exception>
         internal NDGenericHandler Generic
         {
+            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             get
             {
                 int memo = Volatile.Read(ref _generic);

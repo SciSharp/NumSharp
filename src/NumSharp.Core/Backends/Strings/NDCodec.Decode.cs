@@ -1,5 +1,6 @@
 using System;
 using NumSharp.IO;
+using System.Runtime.CompilerServices;
 
 // =============================================================================
 // NDCodec.Decode.cs — CPython 3.12's decoders into code points, error handling included (strings phase 2, P2.6 milestone 4)
@@ -26,6 +27,9 @@ using NumSharp.IO;
 //   charmap  charmap_decode_string: a byte whose table entry is U+FFFE is one error ("character maps to <undefined>",
 //            codec name 'charmap'). Generic.
 // Positions count bytes of the decoded input (for utf-8-sig, of the input after its BOM).
+// The coders, their run loops and the error paths are [MethodImpl(AggressiveOptimization)] and the byte writers
+// AggressiveInlining: each runs per element, and tiering would keep a short-lived process's first calls on tier-0
+// code (see NDCharObjectPath.CodecFast.cs's header).
 // =============================================================================
 
 namespace NumSharp.Backends.Strings
@@ -45,6 +49,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeError">The <c>undefined</c> codec over non-empty bytes.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first error.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c> at the first error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal void Decode(byte* s, long size, NDCodecErrors errors, NDCodecSink sink)
         {
             if (size == 0)
@@ -109,6 +114,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeDecodeError">An invalid sequence under <c>strict</c>, or a handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first error.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c> at the first error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void DecodeUtf8(byte* s, long size, NDCodecErrors errors, NDCodecSink sink)
         {
             // At most one code point per byte without errors; a handler reserves its own room and the rest is reserved again.
@@ -169,6 +175,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="sink">The code-point output (room for one code point per remaining byte is reserved).</param>
         /// <returns>0 at the end or a sequence the input ends inside; 1 an invalid start byte; 2 / 3 / 4 an invalid
         ///     continuation byte at that position of the sequence.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static int Utf8Run(byte* s, ref long pos, long end, NDCodecSink sink)
         {
             uint* p = (uint*)sink.Data + sink.Count;
@@ -318,6 +325,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeDecodeError">A byte >= 0x80 under <c>strict</c>, or a handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first such byte.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c> at the first such byte.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void DecodeAscii(byte* s, long size, NDCodecErrors errors, NDCodecSink sink)
         {
             sink.Reserve(size);
@@ -361,6 +369,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeDecodeError">An invalid unit under <c>strict</c>, or a handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first error.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c> at the first error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void DecodeUtf16(byte* s, long size, int byteorder, NDCodecErrors errors, NDCodecSink sink)
         {
             long q = 0;
@@ -436,6 +445,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="sink">The code-point output (room for one code point per two remaining bytes is reserved).</param>
         /// <returns>0 when fewer than two bytes remain; 1 a high surrogate the input ends after; 2 a low surrogate first;
         ///     3 a high surrogate not followed by a low one.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static int Utf16Run(byte* s, ref long q, long size, bool little, NDCodecSink sink)
         {
             uint* p = (uint*)sink.Data + sink.Count;
@@ -486,6 +496,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeDecodeError">An invalid unit under <c>strict</c>, or a handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first error.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c> at the first error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void DecodeUtf32(byte* s, long size, int byteorder, NDCodecErrors errors, NDCodecSink sink)
         {
             long q = 0;
@@ -559,6 +570,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeDecodeError">An undefined byte under <c>strict</c>, or a handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first undefined byte.</exception>
         /// <exception cref="TypeError"><c>xmlcharrefreplace</c> / <c>namereplace</c> at the first undefined byte.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal void DecodeCharmap(byte* s, long size, NDCodecErrors errors, NDCodecSink sink)
         {
             sink.Reserve(size);

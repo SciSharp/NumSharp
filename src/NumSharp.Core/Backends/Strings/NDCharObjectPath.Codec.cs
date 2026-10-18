@@ -42,6 +42,10 @@ using NumSharp.IO;
 //   points are all below 0x80 (Latin-1: 0x100) is narrowed (its bytes ARE its encoding), an S element under UTF-8 /
 //   ASCII whose bytes are all ASCII (Latin-1: any) is widened, and a StringDType element under UTF-8 is copied (its cell
 //   holds UTF-8 already); any other element runs the codec into the arena and is copied into its row.
+//   The chunk loop (CodecRun), the element routines and the rows' copies are [MethodImpl(AggressiveOptimization)], for
+//   the reason NDCharObjectPath.CodecFast.cs's header gives: a routine entered once per chunk runs once per call over a
+//   contiguous array, and tiering would keep it, and every routine it calls without inlining, on tier-0 code for a
+//   short-lived process's first calls.
 // =============================================================================
 
 namespace NumSharp.Backends.Strings
@@ -304,6 +308,7 @@ namespace NumSharp.Backends.Strings
             /// </summary>
             /// <param name="pa">The element.</param>
             /// <returns>The length, or 0.</returns>
+            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             private long EstimateLength(byte* pa)
             {
                 var sink = EstimateSink;
@@ -571,9 +576,10 @@ namespace NumSharp.Backends.Strings
         ///     The codecs append to <see cref="Arena"/>; <see cref="StoreRow"/> moves the element just coded into its row and
         ///     empties the arena. A fast path writes an element straight into its row (<see cref="RowBase"/>,
         ///     <see cref="RowWidth"/>) and commits it with <see cref="CommitDirect"/>. Owns the arena and the result until
-        ///     <see cref="FinishRows"/> hands it out.
+        ///     <see cref="FinishRows"/> hands it out. Internal rather than private so that a unit test can drive the growth
+        ///     policy directly (<see cref="FastWidthLimit"/>: the width only changes the speed, which no result shows).
         /// </remarks>
-        private sealed class CodecRows : IDisposable
+        internal sealed class CodecRows : IDisposable
         {
             /// <summary>The number of first elements kept in the arena to choose the width.</summary>
             internal const int RowSample = 64;
@@ -604,6 +610,19 @@ namespace NumSharp.Backends.Strings
 
             /// <summary>How many times the rows were re-laid out (the first few grow to the exact length, later ones by half again).</summary>
             private int _relayouts;
+
+            /// <summary>
+            ///     The widest row, in units, that the call's fast run writes; each run sets it when it starts (0 before any run
+            ///     has, or for a run that writes any width). <see cref="GrowRows"/> never grows the rows past it for an element
+            ///     no wider than it.
+            /// </summary>
+            /// <remarks>
+            ///     Rows wider than the run's limit send every later element of the call down the run's per-element exact-write
+            ///     path, which codes an element holding an error through the codec. Growing by half again from about 112 bytes
+            ///     carried ASCII <c>xmlcharrefreplace</c> rows to 168, past the narrow run's 128, although no element was longer
+            ///     than 114: 97% of the elements of 100K CJK texts then took the exact-write path.
+            /// </remarks>
+            internal int FastWidthLimit;
 
             /// <summary>The next element's C-order position.</summary>
             internal long Position;
@@ -641,6 +660,7 @@ namespace NumSharp.Backends.Strings
             /// </summary>
             /// <param name="length">The element's length in units.</param>
             /// <exception cref="OutOfMemoryException">The result cannot be allocated.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             internal void StoreRow(long length)
             {
                 if (length > MaxLength)
@@ -735,13 +755,19 @@ namespace NumSharp.Backends.Strings
 
             /// <summary>
             ///     Re-lays the rows written so far out at a larger width (zero-padded): the exact length for the first few
-            ///     re-layouts, at least half again afterwards (so increasing lengths cost O(log width) passes).
+            ///     re-layouts, at least half again afterwards (so increasing lengths cost O(log width) passes), but never past
+            ///     <see cref="FastWidthLimit"/> for an element no wider than it.
             /// </summary>
             /// <param name="length">The new element's length.</param>
             /// <exception cref="OutOfMemoryException">The result cannot be allocated.</exception>
             private void GrowRows(long length)
             {
                 long wanted = _relayouts < 4 ? length : Math.Max(length, _rowWidth + _rowWidth / 2L);
+                // Capped at the fast run's limit when the element fits it: every later element no wider than the limit then
+                // fits too, so the cap costs at most one more re-layout, while rows past the limit would take the slow path
+                // for the rest of the call (see FastWidthLimit).
+                if (length <= FastWidthLimit && wanted > FastWidthLimit)
+                    wanted = FastWidthLimit;
                 int width = checked((int)wanted);
                 // The rows written so far are copied (padded) below, the later ones are written as their elements come.
                 var grown = NDArray.ForOverwrite(RowDescr(width), _resultShape);
@@ -787,6 +813,7 @@ namespace NumSharp.Backends.Strings
             /// <param name="src">The element's units (the arena has <see cref="VectorRowReach"/> units of room past them).</param>
             /// <param name="length">Their number (at most the width).</param>
             /// <param name="row">The row.</param>
+            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             private void CopyRow(byte* src, long length, long row)
             {
                 int width = _rowWidth;
@@ -836,6 +863,7 @@ namespace NumSharp.Backends.Strings
             /// <param name="dst">The destination rows.</param>
             /// <param name="dstWidth">Their width in units.</param>
             /// <param name="rows">The number of rows.</param>
+            [MethodImpl(MethodImplOptions.AggressiveOptimization)]
             private void CopyRows(byte* src, int srcWidth, byte* dst, int dstWidth, long rows)
             {
                 long keep = Math.Min(srcWidth, dstWidth) * (long)_unit;
@@ -891,6 +919,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="strides">Their byte strides.</param>
         /// <param name="n">The number of elements in the chunk.</param>
         /// <param name="w">The call's state.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void CodecRun(void** dataptrs, long* strides, long n, CodecWalk w)
         {
             byte* pa = (byte*)dataptrs[0];
@@ -957,6 +986,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="pr">The errors element (null without one).</param>
         /// <exception cref="Exception">Whatever <see cref="CodecWalk.ReadArgs"/>, <see cref="CodecWalk.CheckArgs"/>,
         ///     <see cref="CodecWalk.EnsureCodec"/> or the codec raises.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void EncodeUnicodeElement(CodecWalk w, byte* pa, byte* pe, byte* pr)
         {
             uint* units = (uint*)pa;
@@ -1013,6 +1043,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError"><c>descriptor 'encode' for 'str' objects doesn't apply to a 'NoneType' object</c>.</exception>
         /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
         /// <exception cref="Exception">Whatever the arguments or the codec raise.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void EncodeVStringElement(CodecWalk w, byte* pa, byte* pe, byte* pr)
         {
             var reader = w.AReader;
@@ -1074,6 +1105,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="pe">The encoding element (null without one).</param>
         /// <param name="pr">The errors element (null without one).</param>
         /// <exception cref="Exception">Whatever the arguments or the codec raise.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void DecodeBytesElement(CodecWalk w, byte* pa, byte* pe, byte* pr)
         {
             int n = NDCharArray.TrimmedUnits(pa, w.AReader.Chars, false);
@@ -1135,6 +1167,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The row (at least <paramref name="n"/> bytes).</param>
         /// <param name="limit">The exclusive limit, a power of two (an OR of the units below it stays below it).</param>
         /// <returns>True when every code point is below the limit.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static bool NarrowIfBelow(uint* src, int n, byte* dst, uint limit)
         {
             int i = 0;
@@ -1174,6 +1207,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="dst">The row (at least <paramref name="n"/> code points).</param>
         /// <param name="latin1">True for Latin-1 (every byte decodes to its value).</param>
         /// <returns>True when the written code points are the decoding.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static bool WidenIfAscii(byte* src, int n, uint* dst, bool latin1)
         {
             int i = 0;
@@ -1204,6 +1238,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="src">The UTF-8 bytes.</param>
         /// <param name="size">Their number.</param>
         /// <param name="points">The output.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void AppendUtf8Points(byte* src, long size, NDCodecSink points)
         {
             points.Reserve(size);

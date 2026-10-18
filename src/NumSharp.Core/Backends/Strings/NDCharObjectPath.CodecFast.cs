@@ -78,6 +78,20 @@ using NumSharp.IO;
 //                                    with a surrogate or a truncated unit).
 // Row stores of whole vectors spill into the following rows, which C order writes later; the last rows of the result take
 // the outer loop's exact writes instead, so nothing is written past the result's end.
+//
+// Every run and outer loop here is [MethodImpl(AggressiveOptimization)]: each is entered once per walk chunk, so over a
+// contiguous array it is called once per np.strings call, and the JIT's tiering would leave it on tier-0 / on-stack-
+// replacement code for the first 30 calls, with its AggressiveInlining helpers compiled as separate tier-0 methods
+// (measured in a fresh process: UTF-8 decode of 100K accented words 33 ns per element for calls 2-12, 11 ns once tier 1
+// is reached). Fully optimized at the first call, the way an emitted DynamicMethod is. The routines a run calls once per
+// element carry the attribute too (or AggressiveInlining, where a FullOpts caller would not inline them on its own, such
+// as NDCharArray.TrimmedUnits): an un-inlined call reaches a tier-0 copy until 30 calls fall in a quiet 100 ms, which in
+// a short program never happens (a cp1252 encode of 100K accented words: 198 ns per element on calls 2-12 with no
+// attribute anywhere, 36 with them).
+// The price, measured over the benchmark's 56 cells: tier 1 never recompiles these routines with profile data, so the
+// warm steady state is 2.7% slower in geomean (at most 9% at 100K elements, 16% at 1K). Leaving only the runs to tiering
+// (their loops get on-stack-replacement code shaped by profile data inside the first call) gives back 1.7% of that but
+// makes calls 2-12 6.7% slower in geomean (the S decodes up to 55%), so every level keeps the attribute.
 // =============================================================================
 
 namespace NumSharp.Backends.Strings
@@ -94,6 +108,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left in the chunk.</param>
         /// <returns>The number of elements coded (0 .. <paramref name="count"/>).</returns>
         /// <exception cref="Exception">Whatever the codec raises for an element (the error the general route raises).</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastRun(CodecWalk w, byte* pa, long sa, long count)
         {
             var kind = w.Codec.Kind;
@@ -128,6 +143,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="units">The element's code points.</param>
         /// <param name="n">Its trimmed length.</param>
         /// <exception cref="Exception">The codec's error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void EncodeThroughArena(CodecWalk w, uint* units, int n)
         {
             var arena = w.Rows.Arena;
@@ -141,6 +157,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="bytes">The element's bytes.</param>
         /// <param name="n">Its trimmed length (at least 1).</param>
         /// <exception cref="Exception">The codec's error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void DecodeThroughArena(CodecWalk w, byte* bytes, int n)
         {
             var arena = w.Rows.Arena;
@@ -200,6 +217,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded.</returns>
         /// <exception cref="Exception">The codec's error for an element it codes through the arena.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastEncodeNarrow(CodecWalk w, byte* pa, long sa, long count)
         {
             var rows = w.Rows;
@@ -213,6 +231,10 @@ namespace NumSharp.Backends.Strings
             int handler = utf8 ? HandlerNone : RunHandlerOf(w.Errors.Inline);
             int chars = w.AReader.Chars;
             bool vector = Avx2.IsSupported && chars <= 32;
+            // The rows' re-layouts stay within the inner run's 128 bytes while the elements fit them
+            // (CodecRows.FastWidthLimit): rows past it would send every later element down the exact path.
+            if (vector)
+                rows.FastWidthLimit = 128;
             // The narrowed bytes of an element the run writes with handler replacements: 32 bytes, then zeros (a run of
             // encodable characters is moved by a 32-byte copy from any of them).
             byte* nb = stackalloc byte[64];
@@ -284,6 +306,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="maxLenRef">The longest element so far; raised by the elements written.</param>
         /// <param name="refusal">Why the run stopped before the chunk's end (<see cref="RunExact"/> / <see cref="RunCodec"/>).</param>
         /// <returns>The number of elements written.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long EncodeNarrowRun(byte* pa, long sa, long count, int chars, byte* rowBase, int width, long vectorLimit,
             bool utf8, uint limit, int handler, byte* nb, ref long posRef, ref long maxLenRef, out int refusal)
         {
@@ -563,6 +586,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="limit">The one-byte limit: 0x80, Latin-1 0x100.</param>
         /// <returns>The number of elements coded.</returns>
         /// <exception cref="Exception">The codec's error for an element it codes through the arena.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastEncodeNameReplace(CodecWalk w, byte* pa, long sa, long count, uint limit)
         {
             var rows = w.Rows;
@@ -671,6 +695,7 @@ namespace NumSharp.Backends.Strings
         ///     written later in C order, so nothing partial survives. The pre-pass's lengths (the memoized name lengths) are the
         ///     replacements' lengths, which is what keeps every element inside its row here, as in the outer loop.
         /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long EncodeNameRun(byte* pa, long sa, long count, int chars, byte* rowBase, int width, long vectorLimit,
             uint limit, byte[][] cache, byte* nb, ref long posRef, ref long maxLenRef)
         {
@@ -845,6 +870,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The longest element's length in bytes (0 when every element is empty). A one-unit text past U+10FFFF is
         ///     skipped: the walk raises CPython's SystemError there, in C order.</returns>
         /// <exception cref="System.IO.InvalidDataException">The embedded name table is corrupt (a build defect).</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static long NameReplacedWidest(byte* pa, long sa, long count, int chars, uint limit)
         {
             long widest = 0;
@@ -946,6 +972,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="n">Their number.</param>
         /// <param name="limit">The one-byte limit.</param>
         /// <returns>The length in bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long NameReplacedLength(uint* units, int n, uint limit)
         {
             long len = 0;
@@ -1253,6 +1280,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="limit">The one-byte limit (0x80, Latin-1 0x100).</param>
         /// <returns>False for a one-unit element past U+10FFFF (left to the general route), else true (coded).</returns>
         /// <exception cref="Exception">The codec's error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static bool EncodeNarrowElement(CodecWalk w, byte* pa, bool utf8, uint limit)
         {
             var rows = w.Rows;
@@ -1416,6 +1444,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="n">Their number.</param>
         /// <param name="dst">The destination (room for the UTF-8).</param>
         /// <returns>The number of bytes written.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static int WriteUtf8(uint* units, int n, byte* dst)
         {
             int c = 0;
@@ -1462,6 +1491,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded.</returns>
         /// <exception cref="Exception">The codec's error for an element it codes through the arena.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastEncodeWide(CodecWalk w, byte* pa, long sa, long count)
         {
             var rows = w.Rows;
@@ -1475,6 +1505,10 @@ namespace NumSharp.Backends.Strings
             // than that (an error handler widened the rows) would keep a tail the stores never zero: those rows take the codec.
             int stored = bomBytes + (utf16 ? 32 * ((vectors + 1) >> 1) : 32 * vectors);
             bool vector = Avx2.IsSupported && chars <= 32;
+            // The rows' re-layouts stay within the bytes the stores cover while the elements fit them
+            // (CodecRows.FastWidthLimit): rows past it would send every later element down the exact path.
+            if (vector)
+                rows.FastWidthLimit = stored;
             // The stores' reach is fixed for the call, so the vector-store limit changes only with the rows' width.
             int limitWidth = -1;
             long vectorLimit = 0;
@@ -1528,6 +1562,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="posRef">The next row; advanced past the elements written.</param>
         /// <param name="maxLenRef">The longest element so far; raised by the elements written.</param>
         /// <returns>The number of elements written.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long EncodeWideRun(byte* pa, long sa, long count, int chars, byte* rowBase, int width, long vectorLimit,
             bool utf16, int byteorder, ref long posRef, ref long maxLenRef)
         {
@@ -1642,6 +1677,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded.</returns>
         /// <exception cref="Exception">The codec's error for an element.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastEncodeUnicode(CodecWalk w, byte* pa, long sa, long count)
         {
             int chars = w.AReader.Chars;
@@ -1672,6 +1708,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded.</returns>
         /// <exception cref="Exception">The codec's error for an element.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastEncodeVString(CodecWalk w, byte* pa, long sa, long count)
         {
             var rows = w.Rows;
@@ -1680,6 +1717,10 @@ namespace NumSharp.Backends.Strings
             bool latin1 = kind == PythonCodecKind.Latin1;
             bool asciiCopies = kind is PythonCodecKind.Ascii or PythonCodecKind.Latin1;
             bool vector = Avx2.IsSupported && (utf8 || asciiCopies);
+            // The rows' re-layouts stay within the inner run's 32 bytes while the elements fit them
+            // (CodecRows.FastWidthLimit): rows past it would send every later element down the exact path.
+            if (vector)
+                rows.FastWidthLimit = 32;
             // A cell's bytes for the Latin-1 decode, which reads a 16-bit word at any of them: 32 bytes, then zeros.
             byte* tmp = stackalloc byte[64];
             Vector256<byte>.Zero.Store(tmp + 32);
@@ -1734,6 +1775,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="posRef">The next row; advanced past the elements written.</param>
         /// <param name="maxLenRef">The longest element so far; raised by the elements written.</param>
         /// <returns>The number of elements written.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long EncodeVStringRun(byte* pa, long sa, long count, byte* rowBase, int width, long vectorLimit, bool utf8,
             bool latin1, byte* tmp, ref long posRef, ref long maxLenRef)
         {
@@ -1793,6 +1835,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="asciiCopies">True for ASCII and Latin-1 (an ASCII text is its own encoding).</param>
         /// <returns>False for an NA cell (left to the general route), else true (coded).</returns>
         /// <exception cref="Exception">The codec's error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static bool EncodeVStringElement(CodecWalk w, byte* pa, bool utf8, bool latin1, bool asciiCopies)
         {
             var rows = w.Rows;
@@ -1890,6 +1933,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="width">The row's width in bytes.</param>
         /// <returns>The number of bytes written, or -1 for a code point past U+00FF or a text longer than the row (the row then
         ///     holds part of the text, which the caller's codec route overwrites).</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static int Utf8CellToLatin1(byte* src, long size, byte* dst, int width)
         {
             int m = 0;
@@ -1987,6 +2031,7 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="chars">The element width in bytes (1..32).</param>
         /// <returns>The mask.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<byte> LowLanes(int chars)
         {
             // The lane numbers 0..31 (Vector256<T>.Indices is .NET 9+; this file builds for net8.0 too).
@@ -2023,6 +2068,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded (all of them, unless the codec raises).</returns>
         /// <exception cref="Exception">The codec's error for an element it codes through the arena.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastDecodeWiden(CodecWalk w, byte* pa, long sa, long count)
         {
             var rows = w.Rows;
@@ -2034,6 +2080,10 @@ namespace NumSharp.Backends.Strings
                 or NDErrorHandler.SurrogateEscape ? RunHandlerOf(w.Errors.Inline) : HandlerNone;
             int chars = w.AReader.Chars;
             bool vector = Avx2.IsSupported && chars <= 32;
+            // The rows' re-layouts stay within the inner run's 32 code points while the elements fit them
+            // (CodecRows.FastWidthLimit): rows past it would send every later element down the exact path.
+            if (vector)
+                rows.FastWidthLimit = 32;
             // The element's bytes for the UTF-8 decode, which reads a 32-bit word at any of them: 32 bytes, then zeros.
             byte* buf = stackalloc byte[64];
             Vector256<byte>.Zero.Store(buf + 32);
@@ -2104,6 +2154,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="maxLenRef">The longest element so far; raised by the elements written.</param>
         /// <param name="refusal">Why the run stopped before the chunk's end (<see cref="RunExact"/> / <see cref="RunCodec"/>).</param>
         /// <returns>The number of elements written.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long DecodeWidenRun(byte* pa, long sa, long count, int chars, byte* loadEnd, uint* rowBase, int width,
             long vectorLimit, bool latin1, bool utf8, int handler, byte* buf, ref long posRef, ref long maxLenRef, out int refusal)
         {
@@ -2204,7 +2255,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="stores">The vectors covering the row.</param>
         /// <returns>The number of code points written; -1 when the bytes are not valid UTF-8, -2 when they decode to more code
         ///     points than the row holds (the row is then untouched).</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static int DecodeUtf8Vector(Vector256<byte> v, uint high, int n, byte* buf, uint* row, int width, int stores)
         {
             uint geC0 = Vector256.GreaterThanOrEqual(v, Vector256.Create((byte)0xC0)).ExtractMostSignificantBits();
@@ -2448,6 +2499,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="latin1">True for Latin-1.</param>
         /// <param name="utf8">True for UTF-8.</param>
         /// <exception cref="Exception">The codec's error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static void DecodeWidenElement(CodecWalk w, byte* pa, bool latin1, bool utf8)
         {
             var rows = w.Rows;
@@ -2490,6 +2542,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="size">Their number.</param>
         /// <param name="dst">The destination (room for one code point per byte).</param>
         /// <returns>The number of code points, or -1 for invalid UTF-8.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static int DecodeUtf8Valid(byte* s, int size, uint* dst)
         {
             int i = 0, n = 0;
@@ -2554,6 +2607,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded (all of them, unless the codec raises).</returns>
         /// <exception cref="Exception">The codec's error for an element it codes through the arena.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastDecodeWide(CodecWalk w, byte* pa, long sa, long count)
         {
             var rows = w.Rows;
@@ -2562,6 +2616,10 @@ namespace NumSharp.Backends.Strings
             int byteorder = w.Codec.ByteOrder;
             int chars = w.AReader.Chars;
             bool vector = Avx2.IsSupported && chars <= 32;
+            // The rows' re-layouts stay within the inner run's 32 code points while the elements fit them
+            // (CodecRows.FastWidthLimit): rows past it would send every later element down the exact path.
+            if (vector)
+                rows.FastWidthLimit = 32;
             // The element's bytes, then zeros: the units are loaded from it after the BOM (a 32-byte load from byte 2 or 4).
             byte* buf = stackalloc byte[64];
             Vector256<byte>.Zero.Store(buf + 32);
@@ -2621,6 +2679,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="posRef">The next row; advanced past the elements written.</param>
         /// <param name="maxLenRef">The longest element so far; raised by the elements written.</param>
         /// <returns>The number of elements written.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long DecodeWideRun(byte* pa, long sa, long count, int chars, byte* loadEnd, uint* rowBase, int width,
             long vectorLimit, bool utf16, int byteorder, byte* buf, ref long posRef, ref long maxLenRef)
         {
@@ -2721,6 +2780,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="count">The number of elements left.</param>
         /// <returns>The number of elements coded (all of them, unless the codec raises).</returns>
         /// <exception cref="Exception">The codec's error for an element.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long FastDecodeBytes(CodecWalk w, byte* pa, long sa, long count)
         {
             var rows = w.Rows;

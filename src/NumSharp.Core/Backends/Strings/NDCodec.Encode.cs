@@ -1,5 +1,6 @@
 using System;
 using NumSharp.IO;
+using System.Runtime.CompilerServices;
 
 // =============================================================================
 // NDCodec.Encode.cs — CPython 3.12's encoders over code points, error handling included (strings phase 2, P2.6 milestone 4)
@@ -23,6 +24,9 @@ using NumSharp.IO;
 //             (codec name 'charmap', "character maps to <undefined>"); strict / replace / ignore / xmlcharrefreplace inline,
 //             every other handler generic; the replacement's characters ('?', the xmlcharref text, a generic str) are
 //             themselves encoded through the table, and an unmapped one raises the ORIGINAL error.
+// The coders, their run loops and the error paths are [MethodImpl(AggressiveOptimization)] and the byte writers
+// AggressiveInlining: each runs per element, and tiering would keep a short-lived process's first calls on tier-0
+// code (see NDCharObjectPath.CodecFast.cs's header).
 // =============================================================================
 
 namespace NumSharp.Backends.Strings
@@ -50,6 +54,7 @@ namespace NumSharp.Backends.Strings
         ///     re-raises.</exception>
         /// <exception cref="UnicodeError">The <c>undefined</c> codec (every encode, the empty str included).</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first error.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal void Encode(uint* s, long n, NDCodecErrors errors, NDCodecSink sink)
         {
             switch (Kind)
@@ -102,6 +107,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">A surrogate under <c>strict</c> (the run of consecutive surrogates), or a
         ///     handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first surrogate.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void EncodeUtf8(uint* s, long n, NDCodecErrors errors, NDCodecSink sink)
         {
             // Four bytes per code point is the most any character writes; a handler reserves its own room, and the room
@@ -220,6 +226,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The position to resume at.</returns>
         /// <exception cref="UnicodeEncodeError">The handler re-raises, or its str is not ASCII.</exception>
         /// <exception cref="LookupError">An unknown handler name.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long Utf8Generic(NDCodecErrors errors, uint* s, long n, long start, long end, NDCodecSink sink)
         {
             var rep = CallEncodeHandler(errors, "utf-8", SurrogatesText, s, n, start, end, out bool isBytes, out long newpos);
@@ -243,6 +250,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">A character at or past the limit under <c>strict</c> (the run of them), or a
         ///     handler that re-raises.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first such character.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void EncodeUcs1(uint* s, long n, uint limit, string encoding, string reason, NDCodecErrors errors,
             NDCodecSink sink)
         {
@@ -329,6 +337,7 @@ namespace NumSharp.Backends.Strings
         /// <returns>The position to resume at.</returns>
         /// <exception cref="UnicodeEncodeError">The handler re-raises, or its str does not fit the codec.</exception>
         /// <exception cref="LookupError">An unknown handler name.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static long Ucs1Generic(NDCodecErrors errors, uint* s, long n, long start, long end, uint limit, string encoding,
             string reason, NDCodecSink sink)
         {
@@ -352,6 +361,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">A surrogate under <c>strict</c>, a handler that re-raises, or a replacement that
         ///     does not fill whole units.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first surrogate.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void EncodeUtf16(uint* s, long n, int byteorder, NDCodecErrors errors, NDCodecSink sink)
         {
             string encoding = byteorder < 0 ? "utf-16-le" : byteorder > 0 ? "utf-16-be" : "utf-16";
@@ -414,6 +424,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="c">The write position, advanced by two.</param>
         /// <param name="unit">The unit.</param>
         /// <param name="big">True for big-endian.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Write16(byte* d, ref long c, uint unit, bool big)
         {
             if (big)
@@ -432,6 +443,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="sink">The output.</param>
         /// <param name="unit">The unit.</param>
         /// <param name="big">True for big-endian.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Put16(NDCodecSink sink, uint unit, bool big)
         {
             sink.Reserve(2);
@@ -452,6 +464,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">A surrogate under <c>strict</c>, a handler that re-raises, or a replacement that
         ///     does not fill whole units.</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first surrogate.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal static void EncodeUtf32(uint* s, long n, int byteorder, NDCodecErrors errors, NDCodecSink sink)
         {
             string encoding = byteorder < 0 ? "utf-32-le" : byteorder > 0 ? "utf-32-be" : "utf-32";
@@ -500,6 +513,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="c">The write position, advanced by four.</param>
         /// <param name="unit">The unit.</param>
         /// <param name="big">True for big-endian.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Write32(byte* d, ref long c, uint unit, bool big)
         {
             if (big)
@@ -522,6 +536,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="sink">The output.</param>
         /// <param name="unit">The unit.</param>
         /// <param name="big">True for big-endian.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Put32(NDCodecSink sink, uint unit, bool big)
         {
             sink.Reserve(4);
@@ -541,6 +556,7 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="UnicodeEncodeError">An unencodable character under <c>strict</c> (the run of them), a handler that
         ///     re-raises, or a replacement character the table cannot encode (the original error).</exception>
         /// <exception cref="LookupError">An unknown handler name, at the first unencodable character.</exception>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         internal void EncodeCharmap(uint* s, long n, NDCodecErrors errors, NDCodecSink sink)
         {
             const string encoding = "charmap";
