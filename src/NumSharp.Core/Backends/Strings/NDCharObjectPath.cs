@@ -140,8 +140,9 @@ namespace NumSharp.Backends.Strings
             ///     (<see cref="CharModule.TextOperand"/>), with a C# Python literal at NumPy's default dtype (a Python int is
             ///     int64, or uint64 past int64; a float float64; a complex complex128; an int past uint64 an object element)
             ///     and null as Python's <c>None</c> (<c>np.asarray(None)</c>: a 0-d object array holding None), an
-            ///     <see cref="IDictionary"/> as a dict (the 0-d object array holding it), and a C# list holding a dict as an
-            ///     object array.
+            ///     <see cref="IDictionary"/> as a dict (the 0-d object array holding it), a C# list holding a dict as an
+            ///     object array, and a tuple — or a generic list of Python numbers — as the sequence it is to NumPy
+            ///     (<see cref="AsPythonSequence"/>: <c>np.asarray((1, 2))</c> is the int64 array <c>[1, 2]</c>).
             /// </summary>
             /// <param name="value">The argument (null is Python's <c>None</c>).</param>
             /// <param name="name">The parameter name (for the conversion's messages).</param>
@@ -157,6 +158,7 @@ namespace NumSharp.Backends.Strings
                     return new VecArg(NDArray.Scalar(0L), true, objects: new[] { value });
                 if (value is NDListArray lists)
                     return new VecArg(lists.Starts, false, lists: lists);
+                value = AsPythonSequence(value);
                 if (value is BigInteger big)
                 {
                     // A Python int of any size (numpy.char's array conversion has no BigInteger form): np.asarray gives
@@ -195,6 +197,75 @@ namespace NumSharp.Backends.Strings
                     return new VecArg(normalized, true);
                 }
                 return new VecArg(nd, owned);
+            }
+
+            /// <summary>
+            ///     A tuple, an array holding tuples, or a generic list of Python numbers read as the Python sequence it stands
+            ///     for: an <c>object[]</c> of its items (every tuple at any depth of a one-dimensional array as a nested
+            ///     <c>object[]</c>), so the array rules of <see cref="Convert"/> see it as they see a C# array of the same
+            ///     items — a list of ints is int64 (NumPy's <c>np.asarray([1, 2])</c>), not the C# element type's int32; a list
+            ///     of pairs is two-dimensional; a tuple next to a None is NumPy's ragged-shape error. Any other value is
+            ///     returned unchanged.
+            /// </summary>
+            /// <param name="value">The argument.</param>
+            /// <returns>The <c>object[]</c> of a tuple, of an array holding tuples or of a generic list of numbers, else
+            ///     <paramref name="value"/>.</returns>
+            /// <remarks>
+            ///     A tuple is always a sequence to NumPy's array coercion (<c>np.asarray([(1, 2), (3, 4)])</c> is a 2x2 int64
+            ///     array; one tuple per element needs an object array, which no C# value spells), and NumSharp's array
+            ///     conversion takes no value tuple, so this is the only reading a tuple gets. A generic list is converted only
+            ///     when every item is a C# number or bool — the items whose dtype NumPy's discovery decides differently from
+            ///     the C# element type; a list of strings, of bytes or of containers keeps the conversion it has always had.
+            /// </remarks>
+            private static object AsPythonSequence(object value)
+            {
+                switch (value)
+                {
+                    case ITuple tuple:
+                    {
+                        var items = new object[tuple.Length];
+                        for (int i = 0; i < items.Length; i++)
+                            items[i] = AsPythonSequence(tuple[i]);
+                        return items;
+                    }
+                    case System.Array array when array.Rank == 1 && array is not byte[] && HoldsTuple(array):
+                    {
+                        var items = new object[array.Length];
+                        int k = 0;
+                        foreach (var item in array)
+                            items[k++] = AsPythonSequence(item);
+                        return items;
+                    }
+                    case IList list when value is not System.Array && list.Count > 0:
+                    {
+                        foreach (var item in list)
+                        {
+                            if (item is not (bool or sbyte or byte or short or ushort or int or uint or long or ulong
+                                    or float or double or Complex or BigInteger))
+                                return value;
+                        }
+                        var items = new object[list.Count];
+                        list.CopyTo(items, 0);
+                        return items;
+                    }
+                    default:
+                        return value;
+                }
+            }
+
+            /// <summary>Whether a one-dimensional array holds a tuple, directly or inside a nested one-dimensional array.</summary>
+            /// <param name="array">The array.</param>
+            /// <returns>True when a tuple is found.</returns>
+            private static bool HoldsTuple(System.Array array)
+            {
+                foreach (var item in array)
+                {
+                    if (item is ITuple)
+                        return true;
+                    if (item is System.Array inner && inner.Rank == 1 && inner is not byte[] && HoldsTuple(inner))
+                        return true;
+                }
+                return false;
             }
 
             /// <summary>

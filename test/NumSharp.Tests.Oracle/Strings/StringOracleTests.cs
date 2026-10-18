@@ -643,6 +643,28 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeTranslate() => Run("ttrans");
 
         /// <summary>
+        ///     Section strmod (strings phase 2, P2.6): numpy.strings.mod over S / U formats — every layout kind with number
+        ///     values; every NumPy value dtype x every conversion (NumPy's scalar meets CPython's %: np.float64 repr, %d
+        ///     truncating, %x refusing floats and np.bool, %s over S writing a scalar's raw buffer); the flag / width /
+        ///     precision matrix; mappings (dicts with str / bytes keys and values of every kind, NumPy scalars' IndexError,
+        ///     the mapping and argument-count rules per value kind); CPython's parse errors in their order; units past
+        ///     U+10FFFF; result widths (trailing NULs, empty, 0-d, broadcast); long results past the 64-element sample
+        ///     NumSharp lays its result rows out from (widths growing after it, every value class, a format per element, a
+        ///     2-D broadcast, a late element error); Python operands; random formats. Strict.
+        /// </summary>
+        [TestMethod] public void StringMod() => Run("strmod");
+
+        /// <summary>
+        ///     Section tmod (strings phase 2, P2.6): numpy.strings.mod over NEP 55 StringDType formats — the layout kinds x
+        ///     every NA kind (a non-str NA is str.__mod__'s descriptor TypeError, a string NA formats as its text) with number
+        ///     values; StringDType values and their NA objects; the fresh default result descriptor and its U round trip
+        ///     (trailing NULs dropped, an invalid code point refused after every element was formatted); empty operands
+        ///     keeping their descriptor; a length sweep; long results packed cell by cell (a surrogate deferred behind 130
+        ///     elements and behind a later formatting error); random formats. Strict.
+        /// </summary>
+        [TestMethod] public void StringDTypeMod() => Run("tmod");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -762,7 +784,7 @@ namespace NumSharp.Tests.Strings
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
-                "ttrans",
+                "ttrans", "strmod", "tmod",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

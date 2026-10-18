@@ -93,14 +93,47 @@ namespace NumSharp.Backends.Printing
         ///     Significant digits (no point, no sign, leading/trailing zeros stripped) plus the
         ///     base-10 exponent of the first significant digit. value = 0 → ("0", 0).
         /// </summary>
+        /// <remarks>
+        ///     The digits come from Ryu (<see cref="FloatDigits"/>), in the value's own precision. .NET's <c>"R"</c>
+        ///     (<see cref="ShortestR"/>, kept for reference) gives the same digits for every float16 and float32 and for every
+        ///     float64 but two on the .NET 10 runtime: 10.0.1 writes 16 digits for 2^-25 and 2^-958 that read back as the
+        ///     neighbouring double (.NET 8 writes 17). NumPy prints <c>np.float64(2**-25)</c> as
+        ///     <c>2.9802322387695312e-08</c>, which Ryu matches on every runtime.
+        /// </remarks>
         internal static (string digits, int decExp, bool negative) ExtractShortest(object v, FloatKind kind)
         {
-            string s = ShortestR(v, kind);
-            bool negative = s.Length > 0 && s[0] == '-';
-            if (negative)
-                s = s.Substring(1);
-
-            return ParseDecimal(s, negative);
+            ulong mantissa;
+            int exponent;
+            bool negative;
+            switch (kind)
+            {
+                case FloatKind.Half:
+                {
+                    var h = (Half)v;
+                    negative = Half.IsNegative(h);
+                    mantissa = FloatDigits.Shortest(h, out exponent);
+                    break;
+                }
+                case FloatKind.Single:
+                {
+                    float f = (float)v;
+                    negative = float.IsNegative(f);
+                    mantissa = FloatDigits.Shortest(f, out exponent);
+                    break;
+                }
+                default:
+                {
+                    double d = (double)v;
+                    negative = double.IsNegative(d);
+                    mantissa = FloatDigits.Shortest(d, out exponent);
+                    break;
+                }
+            }
+            if (mantissa == 0)
+                return ("0", 0, negative);
+            // No leading or trailing zeros by Shortest's contract: the exponent of the first digit follows from the count.
+            string digits = mantissa.ToString(CI);
+            return (digits, exponent + digits.Length - 1, negative);
         }
 
         /// <summary>

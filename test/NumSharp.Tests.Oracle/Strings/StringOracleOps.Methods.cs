@@ -7,13 +7,13 @@ namespace NumSharp.Tests.Strings
 {
     /// <summary>
     ///     The string oracle's op for sections <c>strfn</c> / <c>tfn</c> (<c>gen_strfn</c> / <c>gen_tfn</c>, strings phase 2,
-    ///     P2.5), <c>strprop</c> / <c>tprop</c>, <c>strcase</c> / <c>tcase</c> and <c>strtrans</c> / <c>ttrans</c> (P2.6): one
-    ///     <c>numpy.strings</c> function per case — <c>str_len</c>, the find family, <c>startswith</c> / <c>endswith</c>, the
-    ///     strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>, <c>partition</c> / <c>rpartition</c>,
-    ///     <c>slice</c>, the comparison names, the predicates <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> /
-    ///     <c>lower</c> / <c>swapcase</c> / <c>capitalize</c> / <c>title</c> and <c>translate</c> — called with the
-    ///     generator's positional arguments (translate's table and deletechars as C# objects:
-    ///     <see cref="StringsObjectArgument"/>).
+    ///     P2.5), <c>strprop</c> / <c>tprop</c>, <c>strcase</c> / <c>tcase</c>, <c>strtrans</c> / <c>ttrans</c> and
+    ///     <c>strmod</c> / <c>tmod</c> (P2.6): one <c>numpy.strings</c> function per case — <c>str_len</c>, the find family,
+    ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
+    ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c>, the comparison names, the predicates <c>isalpha</c> …
+    ///     <c>isnumeric</c>, the case maps <c>upper</c> / <c>lower</c> / <c>swapcase</c> / <c>capitalize</c> / <c>title</c>,
+    ///     <c>translate</c> and <c>mod</c> — called with the generator's positional arguments (translate's table and
+    ///     deletechars, and mod's values, as C# objects: <see cref="StringsObjectArgument"/>).
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -67,6 +67,13 @@ namespace NumSharp.Tests.Strings
                 object table = StringsObjectArgument(raw[1], ops);
                 object deletechars = raw.Length > 2 ? StringsObjectArgument(raw[2], ops) : null;
                 return np.strings.translate(StringsArgument(raw[0], ops), table, deletechars);
+            }
+            if (name == "mod")
+            {
+                // mod's values are a Python object too (numbers, strs, bytes, None, dicts, lists, arrays): passed as the C#
+                // value a ported line passes.
+                var raw = p["args"].EnumerateArray().ToArray();
+                return np.strings.mod(StringsArgument(raw[0], ops), StringsObjectArgument(raw[1], ops));
             }
             var args = p["args"].EnumerateArray().Select(e => StringsArgument(e, ops)).ToArray();
             NDArray A(int i) => i < args.Length ? args[i] : null;
@@ -148,7 +155,7 @@ namespace NumSharp.Tests.Strings
         }
 
         /// <summary>
-        ///     One argument of an <c>object</c> parameter (translate's <c>table</c> / <c>deletechars</c>) as a ported line
+        ///     One argument of an <c>object</c> parameter (translate's <c>table</c> / <c>deletechars</c>, mod's <c>values</c>) as a ported line
         ///     passes it: an operand as itself, a <c>np.str_</c> as <c>NDArray.Scalar(string)</c>, and a Python value as the
         ///     C# value standing in for it — a str as a <see cref="string"/>, bytes as a <c>byte[]</c> (Python bytes; NumPy's
         ///     <c>np.asarray</c> makes the same 0-d <c>S</c> array of them), an int as a <see cref="long"/> or a

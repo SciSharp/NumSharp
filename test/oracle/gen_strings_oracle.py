@@ -14405,13 +14405,372 @@ def _u_units(units, width):
     return plain(np.frombuffer(np.array(units, dtype="<u4").tobytes(), dtype=f"<U{width}").copy())
 
 
+# numpy.strings.mod's format pools. MOD_NUM_FORMATS succeed for every Python int / float value (so a layout case over them
+# never ends at an element error): decimal, str / repr, fixed and general floats, flags, a literal-only format (a NumPy
+# scalar is a mapping, so no "not all arguments converted"), %% and a length modifier.
+MOD_NUM_FORMATS = ["%d", "%s", "%r", "%5.1f|", "v=%g", "%e", "%+d", "%-6s|", "%%%d", "abc", "", "%ld", "%.3s", "[%10.2E]"]
+# The value dtypes the per-dtype matrix crosses with every conversion (NumPy's scalar of each element meets %).
+MOD_VALUE_ARRAYS = [
+    ("i1", [-128, 0, 5, 127]), ("u1", [0, 65, 255]), ("i2", [-32768, 7, 32767]), ("u2", [0, 66, 65535]),
+    ("i4", [-(2**31), 9, 2**31 - 1]), ("u4", [0, 67, 2**32 - 1]), ("i8", [-(2**63), -1, 0, 68, 2**63 - 1]),
+    ("u8", [0, 69, 2**63, 2**64 - 1]), ("f2", [0.1, -0.0, 65504.0, 6e-08, float("inf"), float("nan")]),
+    ("f4", [0.1, 1e16, 1e-05, 123456789.0, -2.5, float("-inf")]),
+    ("f8", [0.1, -0.0, 1e16, 1e-05, 0.30000000000000004, 123456789012345680.0, 5e-324, float("nan")]),
+    ("c16", [1 + 2j, -0.0 + 1e300j, complex(float("nan"), float("inf")), 3 + 0j]), ("?", [True, False]),
+    ("<U4", ["", "a", "é中", "\U00010400x"]), ("|S3", [b"", b"a", b"\xff\x00x"]),
+]
+MOD_CONVERSIONS = ["%s", "%r", "%a", "%d", "%i", "%x", "%X", "%o", "%c", "%e", "%f", "%g", "%G", "%5s|", "%-8.3s|", "%u",
+                   "%b", "%#x"]
+
+
+def _mod_flag_formats(convs, flags=("", "-", "+", " ", "0", "#", "-0", "+0", "- ", "#0", "-#", "+#"),
+                      widths=("", "1", "7"), precs=("", ".0", ".3")):
+    """Every flag x width x precision combination of the given conversion characters, as one format list.
+
+    :param convs: the conversion characters.
+    :param flags: the flag strings.
+    :param widths: the width strings.
+    :param precs: the precision strings.
+    :returns: the formats.
+    """
+    return [f"%{fl}{w}{p}{c}|" for c in convs for fl in flags for w in widths for p in precs]
+
+
+def gen_strmod():
+    """Section strmod: numpy.strings.mod over S / U formats, strict — every layout kind of both classes over formats that
+    succeed for numbers; every NumPy value dtype x every conversion (NumPy's scalar meets %: np.float64 repr, %d truncating,
+    %x refusing floats and np.bool, %s over S writing a scalar's raw buffer); the flag / width / precision matrix of the
+    integer, float and text conversions; mappings (dicts with str / bytes keys and values of every kind, NumPy scalars'
+    IndexError, the format-requires-a-mapping and not-all-arguments rules per value kind); CPython's parse errors in their
+    order; units past U+10FFFF; result widths (trailing NULs, empty, 0-d, broadcast); long results past the 64-element sample
+    NumSharp lays its result rows out from (section L); Python operands; random formats."""
+    import random
+    S = "strmod"
+    # A. Every layout kind x both classes x number values (Python int, float, a broadcast int array).
+    for spec in ["<U8", "<U16", "|S8", "|S16"]:
+        t = _fn_t(spec)
+        pool = [t(f) for f in MOD_NUM_FORMATS]
+        for layout in LAYOUTS:
+            op = fn_operand(spec, layout, seed=1, pool=pool)
+            lab = f"{spec}:{layout}"
+            fn_case(S, "mod", [op], [_Op(0), 42], f"{lab}:int")
+            fn_case(S, "mod", [op], [_Op(0), -3.75], f"{lab}:float")
+            fn_case(S, "mod", [op, plain(np.array([7, -8, 900], dtype="i8"))], [_Op(0), _Op(1)], f"{lab}:arr")
+    # B. Every value dtype x every conversion, both classes (one format per case: its first failing element is the case's
+    #    error, so every conversion's own answer is recorded).
+    for cls in ["U", "S"]:
+        for fmt in MOD_CONVERSIONS:
+            f = fmt.encode("latin-1") if cls == "S" else fmt
+            fop = plain(np.array([f]))
+            for dt, vals in MOD_VALUE_ARRAYS:
+                vop = plain(np.array(vals, dtype=dt))
+                fn_case(S, "mod", [fop, vop], [_Op(0), _Op(1)], f"{cls}:{fmt}:{dt}")
+            tvals = np.array(["", "ab", "é", "a\x00"], dtype=TD.build())
+            fn_case(S, "mod", [fop, (tvals, tvals)], [_Op(0), _Op(1)], f"{cls}:{fmt}:T")
+            for label, value in [("pyint", 65), ("pybig", 2**70), ("pyneg", -(2**63) - 1), ("pyfloat", 2.5),
+                                 ("pybool", True), ("pystr", "z"), ("pybytes", b"q"), ("none", None)]:
+                fn_case(S, "mod", [fop], [_Op(0), value], f"{cls}:{fmt}:{label}")
+    # C. The flag / width / precision matrix: one case per (class, value) over every combination's format.
+    int_formats = _mod_flag_formats("dixXoeEfFgGsra")
+    float_formats = _mod_flag_formats("deEfFgGsra")
+    nonfinite_formats = _mod_flag_formats("eEfFgGsr")
+    text_formats = _mod_flag_formats("sra")
+    for cls in ["U", "S"]:
+        t = (lambda s: s.encode("latin-1")) if cls == "S" else (lambda s: s)
+        for value in [0, 42, -42, 2**40, -(2**63), 2**64 - 1]:
+            fn_case(S, "mod", [plain(np.array([t(f) for f in int_formats]))], [_Op(0), value], f"{cls}:flags:int{value}")
+        for value in [0.0, -0.0, 3.14159, -1234.5678, 1e20, 1e-07, 0.5, 2.5]:
+            fn_case(S, "mod", [plain(np.array([t(f) for f in float_formats]))], [_Op(0), value], f"{cls}:flags:float{value}")
+        for value in [float("inf"), float("-inf"), float("nan")]:
+            fn_case(S, "mod", [plain(np.array([t(f) for f in nonfinite_formats]))], [_Op(0), value],
+                    f"{cls}:flags:{value}")
+        for value in ["", "ab", "é\U00010400z"] if cls == "U" else [b"", b"ab", b"\xe9z"]:
+            fn_case(S, "mod", [plain(np.array([t(f) for f in text_formats]))], [_Op(0), value],
+                    f"{cls}:flags:text{len(value)}")
+        cfmts = [t(f) for f in _mod_flag_formats("c", precs=("", ".2"))]
+        fn_case(S, "mod", [plain(np.array(cfmts))], [_Op(0), 65], f"{cls}:flags:c")
+    # D. Mappings: dicts (str keys for U, bytes keys for S; values of every kind), NumPy scalars, bytes / str / None.
+    udict = {"a": 1, "b": "xyz", "c": None, "d": 2.5, "e": b"q", "f": [1, 2], "g": {"h": 1}, "a(b)": 7, "": 0,
+             "big": 2**70, "t": True, "u": "é\U00010400"}
+    for fmt in ["%(a)s", "%(a)d|%(b)s|%(c)r", "%(d).1f", "%(e)s", "%(f)s", "%(g)r", "%(a(b))s", "%()d", "%(zz)s",
+                "%(a)s %s", "%s %(a)s", "%(a", "%(a)", "%(a)*d", "%(big)x", "%(t)c", "%(u)s|%(u)r|%(u)a", "%(b)c",
+                "%(a)-5d|", "abc", "%s", "%(b)5.2s|"]:
+        fn_case(S, "mod", [plain(np.array([fmt]))], [_Op(0), udict], f"U:dict:{fmt}")
+        fn_case(S, "mod", [plain(np.array([fmt.encode("utf-8")]))], [_Op(0), udict], f"S:strdict:{fmt}")
+    bdict = {b"a": 1, b"b": b"xyz", b"c": None, b"d": 2.5, b"s": "str", b"": 0}
+    for fmt in [b"%(a)d", b"%(b)s", b"%(b)r", b"%(c)r", b"%(d)f", b"%(s)s", b"%(s)r", b"%()d", b"%(zz)s", b"abc", b"%s",
+                b"%(a)c", b"%(b)b"]:
+        fn_case(S, "mod", [plain(np.array([fmt]))], [_Op(0), bdict], f"S:dict:{fmt!r}")
+    for cls in ["U", "S"]:
+        t = (lambda s: s.encode("latin-1")) if cls == "S" else (lambda s: s)
+        for label, value in [("int", 5), ("float", 1.5), ("bool", True), ("u64", np.array([5], dtype="u8")),
+                             ("str", "x"), ("bytes", b"x"), ("none", None), ("big", 2**70), ("objdict", [{"a": 1}, None]),
+                             ("f2", np.array([1.5], dtype="f2")), ("c16", np.array([1j]))]:
+            vargs = [_Op(0), _Op(1)] if isinstance(value, np.ndarray) else [_Op(0), value]
+            ops = [plain(np.array([t("abc"), t("%(a)s"), t("x%sy")]))]
+            if isinstance(value, np.ndarray):
+                ops.append(plain(value))
+            for k, f in enumerate([t("abc"), t("%(a)s"), t("%(a")]):
+                fops = [plain(np.array([f]))] + ops[1:]
+                fn_case(S, "mod", fops, vargs, f"{cls}:mapping:{label}:{k}")
+    # E. CPython's parse errors and their order (the argument taken before the conversion character is checked).
+    for fmt in ["%y", "%", "%(a", "%5", "%.", "%l", "%-", "%ld|%hd|%Ld", "%lld", "%9999999999999999999d",
+                "%.9999999999d", "%.2147483647d", "%s %s", "%s %y", "%y %s", "%s %s %y", "%*d", "%.*f", "%*", "%%|%%",
+                "%s %%", "%\x01", "%\x7f", "%(a)", "% 5d|% -5d|", "%5%", "%-%", "%0s", "%#s", "%#c"]:
+        for cls in ["U", "S"]:
+            f = fmt.encode("latin-1") if cls == "S" else fmt
+            fn_case(S, "mod", [plain(np.array([f]))], [_Op(0), 5], f"{cls}:parse:{fmt!r}")
+            fn_case(S, "mod", [plain(np.array([f]))], [_Op(0), "x"], f"{cls}:parse:{fmt!r}:str")
+    for fmt in [b"%\xff", b"%\x80", b"ab%\x00x", b"\xe9\x80%s", b"%b", b"%5b|", b"%.1b|", b"%a"]:
+        fn_case(S, "mod", [plain(np.array([fmt]))], [_Op(0), b"xy"], f"S:bytesparse:{fmt!r}")
+        fn_case(S, "mod", [plain(np.array([fmt]))], [_Op(0), 5], f"S:bytesparse:{fmt!r}:int")
+    for fmt in ["%Ā", "%\U00010400", "a\U00010400%y"]:
+        fn_case(S, "mod", [plain(np.array([fmt]))], [_Op(0), 5], f"U:parse:astral:{ascii(fmt)}")
+    # The C-order first error: formats raising different errors in several layouts.
+    for layout in ["c1", "c2", "f2", "t3", "r2", "s1", "col"]:
+        n, build = LAYOUTS[layout]
+        fmts = [["%d", "%y", "%x", "%s %s"][i % 4] for i in range(n)]
+        base = np.array(fmts, dtype="<U5") if n else np.zeros(0, dtype="<U5")
+        fn_case(S, "mod", [(base, build(base))], [_Op(0), "x"], f"errorder:{layout}")
+        fn_case(S, "mod", [(base, build(base))], [_Op(0), 2.5], f"errorder:{layout}:float")
+    # F. U units past U+10FFFF and lone surrogates in formats and values.
+    fn_case(S, "mod", [_u_units([0x25, 0x73, 0x110000, 0], 2)], [_Op(0), 5], "U:past:fmt-alone")
+    fn_case(S, "mod", [_u_units([0x25, 0x73, 0x61, 0x110000], 2)], [_Op(0), 5], "U:past:fmt-kept")
+    fn_case(S, "mod", [_u_units([0x25, 0x110000, 0x25, 0x64], 2)], [_Op(0), 5], "U:past:conversion")
+    fn_case(S, "mod", [plain(np.array(["%s", "%r", "%a", "%5s|"])), _u_units([0x61, 0x110000], 2)], [_Op(0), _Op(1)],
+            "U:past:value-kept")
+    fn_case(S, "mod", [plain(np.array(["%s"])), _u_units([0x110000, 0, 0x61, 0], 2)], [_Op(0), _Op(1)], "U:past:value-alone")
+    fn_case(S, "mod", [_u_units([0x110000, 0], 2), _u_units([0x110000, 0], 2)], [_Op(0), _Op(1)], "U:past:both")
+    fn_case(S, "mod", [plain(np.array(["%s", "%r", "%c"])), _u_units([0xD800, 0x61, 0xDC00, 0], 2)], [_Op(0), _Op(1)],
+            "U:surrogate:value")
+    fn_case(S, "mod", [_u_units([0x25, 0x73, 0xD800, 0], 2)], [_Op(0), 5], "U:surrogate:fmt")
+    fn_case(S, "mod", [plain(np.array([b"%s", b"%r"])), _u_units([0x61, 0x110000], 2)], [_Op(0), _Op(1)], "S:past:value")
+    # G. bytes formatting specifics: %c of bytes / ints, buffers of every scalar, U / StringDType values, float errors.
+    for label, value in [("u1", np.array([0, 65, 255], dtype="u1")), ("i8", np.array([65, 256, -1])),
+                         ("S", np.array([b"x", b"", b"xy"])), ("bool", np.array([True])), ("f8", np.array([1.5])),
+                         ("U", np.array(["x"]))]:
+        fn_case(S, "mod", [plain(np.array([b"%c"])), plain(value)], [_Op(0), _Op(1)], f"S:c:{label}")
+    for label, value in [("big", 2**2000), ("str", "x"), ("none", None), ("bytes", b"x"), ("bool", True), ("int", 7)]:
+        for f in [b"%f", b"%e", b"%g", b"%d", b"%x"]:
+            fn_case(S, "mod", [plain(np.array([f]))], [_Op(0), value], f"S:numconv:{f!r}:{label}")
+        fn_case(S, "mod", [plain(np.array(["%f"]))], [_Op(0), value], f"U:numconv:%f:{label}")
+    tvals = np.array(["x", "ab"], dtype=TD.build())
+    tnone = np.array(["x", None], dtype=TDN.build())
+    for f in [b"%s", b"%r", b"%a", b"%b"]:
+        fn_case(S, "mod", [plain(np.array([f])), (tvals, tvals)], [_Op(0), _Op(1)], f"S:T:{f!r}")
+        fn_case(S, "mod", [plain(np.array([f])), (tnone, tnone)], [_Op(0), _Op(1)], f"S:TN:{f!r}")
+    # H. Result widths: trailing NULs (counted by np.asarray, dropped by the element), empty, 0-d, broadcasting.
+    tnul = np.array(["a\x00", "a\x00b\x00\x00", "\x00"], dtype=TD.build())
+    for f in ["%s", "%s|", "[%r]"]:
+        fn_case(S, "mod", [plain(np.array([f])), (tnul, tnul)], [_Op(0), _Op(1)], f"U:width:nul:{f}")
+    for dt in ["i8", "i2", "u1", "f4", "c16", "?"]:
+        fn_case(S, "mod", [plain(np.array([b"%s"])), plain(np.array([5], dtype=dt))], [_Op(0), _Op(1)], f"S:width:buf:{dt}")
+    fn_case(S, "mod", [plain(np.array(["%s"])), plain(np.array(["\x00"]))], [_Op(0), _Op(1)], "U:width:empty-result")
+    fn_case(S, "mod", [plain(np.array(["ab%s"])), plain(np.array(["", "xyz"]))], [_Op(0), _Op(1)], "U:width:grow")
+    fn_case(S, "mod", [plain(np.zeros(0, dtype="<U3"))], [_Op(0), 5], "U:empty")
+    fn_case(S, "mod", [plain(np.zeros((2, 0), dtype="|S3"))], [_Op(0), 5], "S:empty2d")
+    fn_case(S, "mod", [plain(np.array(["%s"])), plain(np.zeros(0, dtype="i8"))], [_Op(0), _Op(1)], "U:empty-values")
+    fn_case(S, "mod", [plain(np.array(["%s"])), plain(np.zeros((2, 0)))], [_Op(0), _Op(1)], "U:empty-values2d")
+    fn_case(S, "mod", [plain(np.array("%d"))], [_Op(0), 5], "U:0d")
+    fn_case(S, "mod", [plain(np.array(["%d", "%s"])), plain(np.array([[1], [22], [333]]))], [_Op(0), _Op(1)], "U:bcast2d")
+    fn_case(S, "mod", [plain(np.array([[b"%d"], [b"%s"]]).T), plain(np.array([1, 22]))], [_Op(0), _Op(1)], "S:bcastT")
+    fn_case(S, "mod", [plain(np.array(["%s", "%s"]))], [_Op(0), [1, 2, 3]], "U:mismatch")
+    fn_case(S, "mod", [plain(np.array(["%s"]))], [_Op(0), [[1, 2], [3]]], "U:ragged")
+    fn_case(S, "mod", [plain(np.array(["%s"]))], [_Op(0), [1, None]], "U:objlist")
+    fn_case(S, "mod", [plain(np.array(["%r"]))], [_Op(0), [1, 2**63]], "U:list:i8u8")
+    fn_case(S, "mod", [plain(np.array(["%r"]))], [_Op(0), [2**63, 2**64 - 1]], "U:list:u8")
+    fn_case(S, "mod", [plain(np.array(["%r"]))], [_Op(0), [True, 2]], "U:list:boolint")
+    fn_case(S, "mod", [plain(np.array(["%r"]))], [_Op(0), [1, "a"]], "U:list:intstr")
+    fn_case(S, "mod", [plain(np.array(["%r"]))], [_Op(0), [b"a", "b"]], "U:list:bytesstr")
+    fn_case(S, "mod", [plain(np.array(["%r"]))], [_Op(0), [b"a", b"bc"]], "U:list:bytes")
+    fn_case(S, "mod", [plain(np.array(["%s"]))], [_Op(0), (1, 2)], "U:tuple")
+    fn_case(S, "mod", [plain(np.array(["%s", "%s"]))], [_Op(0), [(1, 2), (3, 4)]], "U:tuples2d")
+    fn_case(S, "mod", [plain(np.array(["%s"]))], [_Op(0), [(1, 2), None]], "U:tuple-none-ragged")
+    # I. Python operands, non-text operands.
+    fn_case(S, "mod", [], ["%d", 5], "pystr")
+    fn_case(S, "mod", [], [b"%d|%s", 5], "pybytes")
+    for arr in [np.array([1, 2]), np.array([1.5]), np.array([True]), np.zeros((2, 0), dtype="i4")]:
+        fn_case(S, "mod", [plain(arr)], [_Op(0), 5], f"num:{arr.dtype}")
+    fn_case(S, "mod", [plain(np.array([1]))], [_Op(0), [[1], [2, 3]]], "num:ragged-values")
+    # L. Long results, past the 64-element sample NumSharp lays its result rows out from: widths that keep growing after
+    #    the sample (the rows re-laid out, then narrowed to NumPy's width), every value class through one format (the
+    #    chunk path), a format that changes per element (the element path), a 2-D broadcast, every float width, uint64
+    #    past int64, and an element error late in the walk.
+    lrng = random.Random(2624)
+    grow = np.array([1] * 64 + [(-1) ** k * 10 ** min(18, k // 4) for k in range(66)], dtype="i8")
+    floats = np.array([lrng.uniform(-1, 1) * 10.0 ** lrng.randint(-8, 15) for _ in range(130)])
+    texts = np.array(["".join(lrng.choice("abcé中") for _ in range(min(12, k // 10))) for k in range(130)])
+    for cls in ["U", "S"]:
+        t = (lambda s: s.encode("latin-1")) if cls == "S" else (lambda s: s)
+        for f in ["%d", "<%d>", "%-12d|", "%x", "%r"]:
+            fn_case(S, "mod", [plain(np.array([t(f)])), plain(grow)], [_Op(0), _Op(1)], f"long:{cls}:int:{f}")
+        for f in ["%.2f", "%.3e", "%g", "%10.4f", "%r"] + (["%s"] if cls == "U" else []):
+            fn_case(S, "mod", [plain(np.array([t(f)])), plain(floats)], [_Op(0), _Op(1)], f"long:{cls}:float:{f}")
+        late = floats.copy()
+        late[100] = np.nan
+        fn_case(S, "mod", [plain(np.array([t("%d")])), plain(late)], [_Op(0), _Op(1)], f"long:{cls}:late-nan")
+    for f in ["%s", "[%-8s]", "%r", "%.3s"]:
+        fn_case(S, "mod", [plain(np.array([f])), plain(texts)], [_Op(0), _Op(1)], f"long:U:text:{f}")
+    stexts = np.array([x.encode("utf-8") for x in texts])
+    for f in [b"%s", b"[%-8s]", b"%.3b"]:
+        fn_case(S, "mod", [plain(np.array([f])), plain(stexts)], [_Op(0), _Op(1)], f"long:S:text:{f!r}")
+    cyc = ["%d", "%5d", "%-6d|", "%+d", "%x"]
+    fn_case(S, "mod", [plain(np.array([cyc[k % 5] for k in range(130)])), plain(grow)], [_Op(0), _Op(1)],
+            "long:U:perelement")
+    fn_case(S, "mod", [plain(np.array(["%d", "<%5x>"])), plain(grow.reshape(65, 2))], [_Op(0), _Op(1)], "long:U:rows2d")
+    for dt in ["f2", "f4"]:
+        vals = np.array([lrng.uniform(-1, 1) * 10.0 ** lrng.randint(-4, 4) for _ in range(130)], dtype=dt)
+        for f in ["%s", "%r", "%.3f", "%e"]:
+            fn_case(S, "mod", [plain(np.array([f])), plain(vals)], [_Op(0), _Op(1)], f"long:U:{dt}:{f}")
+    big = np.array([2**64 - 1 - k * 123456789012345 for k in range(130)], dtype="u8")
+    for f in ["%d", "%x", "%e", "%.3f"]:
+        fn_case(S, "mod", [plain(np.array([f])), plain(big)], [_Op(0), _Op(1)], f"long:U:u8:{f}")
+    # R. Random formats over random values and layouts (seeded): 1-3 specs of random flags / width / precision /
+    #    conversion between literal runs, against ints, floats or strs (an element error ends a case: still a case).
+    rng = random.Random(2622)
+    lits = ["", "a", "x=", " ", "é", "%%", "|", "ab cd"]
+    for i in range(240):
+        cls = rng.choice(["U", "U", "S"])
+        kind = rng.choice(["int", "float", "str"])
+        convs = {"int": "dixXoeEfgGsrac", "float": "eEfFgGsrd", "str": "sra"}[kind]
+        n = rng.choice([4, 6, 12])
+        fmts = []
+        for _ in range(n):
+            f = rng.choice(lits)
+            if rng.random() < 0.9:
+                f += "%" + "".join(rng.sample("-+ 0#", rng.randint(0, 2))) + rng.choice(["", "", "3", "12"]) + \
+                     rng.choice(["", "", ".0", ".2", ".7"]) + rng.choice(convs) + rng.choice(lits)
+            fmts.append(f)
+        if cls == "S":
+            fmts = [f.encode("utf-8") for f in fmts]
+        if kind == "int":
+            if rng.random() < 0.5:
+                # One Python int (a code point, so %c succeeds too) broadcast over every format.
+                vals = rng.randint(0, 0x10FFF)
+            else:
+                dt = rng.choice(["i8", "i4", "u2"])
+                lo = 0 if dt == "u2" else -(10**4)
+                vals = np.array([rng.randint(lo, 60000) for _ in range(n)], dtype=dt)
+        elif kind == "float":
+            vals = np.array([rng.uniform(-1e4, 1e4) for _ in range(n)], dtype=rng.choice(["f8", "f4", "f2"]))
+        else:
+            vals = np.array(["".join(rng.choice("abcé中\U00010400") for _ in range(rng.randint(0, 5))) for _ in range(n)])
+        fop = plain(np.array(fmts))
+        if isinstance(vals, np.ndarray):
+            fn_case(S, "mod", [fop, plain(vals)], [_Op(0), _Op(1)], f"rand{i}:{cls}:{kind}")
+        else:
+            fn_case(S, "mod", [fop], [_Op(0), vals], f"rand{i}:{cls}:{kind}:scalar")
+
+
+def gen_tmod():
+    """Section tmod: numpy.strings.mod over NEP 55 StringDType formats, strict — the layout kinds x every NA kind (str.__mod__
+    refuses an NA object that is not a str; a string NA is formatted as its text) with number values; StringDType values
+    and their NA objects into U and StringDType formats; the result's fresh default descriptor (the NA dropped), its U
+    round trip (trailing NULs dropped, a surrogate or a unit past U+10FFFF refused after every element was formatted, in
+    C order behind any formatting error); empty operands keeping their descriptor; a length sweep; long results (130
+    elements, packed cell by cell, a surrogate deferred behind them); random formats."""
+    import random
+    S = "tmod"
+    tpool = ["%d", "%s", "%r", "%5.1f|", "v=%g", "%e", "%+d", "%-6s|", "%%%d", "abc", "", "%.3s", "é%s中", "x" * 20 + "%d",
+             "%s\U0001F600", "Q", "NA"]
+    for spec in T_COMPUTE_SPECS:
+        lab0 = _t_label(spec)
+        for layout in T_COMPUTE_LAYOUTS:
+            for na_every in (0, 5):
+                op = t_operand(spec, layout, seed=1, pool=tpool, na_every=na_every)
+                fn_case(S, "mod", [op], [_Op(0), 42], f"{lab0}:{layout}:na{na_every}:int")
+                fn_case(S, "mod", [op], [_Op(0), -3.75], f"{lab0}:{layout}:na{na_every}:float")
+    # StringDType values (str elements and NA objects) into U, S and StringDType formats.
+    for vspec in [TD, TDN, TDNAN, TDS]:
+        vals = np.array(t_values(vspec, 6, 0, ["", "ab", "é中", "a\x00", "x" * 20, "\U0001F600"], 3), dtype=vspec.build())
+        for fspec in [TD, TDN]:
+            for f in ["%s", "%r", "%a", "%5s|", "%d", "%c", "%(a)s", "abc"]:
+                fbase = np.array([f], dtype=fspec.build())
+                fn_case(S, "mod", [(fbase, fbase), (vals, vals)], [_Op(0), _Op(1)], f"{_t_label(fspec)}<-{_t_label(vspec)}:{f}")
+        for f in ["%s", "%r", "%d"]:
+            fn_case(S, "mod", [plain(np.array([f])), (vals, vals)], [_Op(0), _Op(1)], f"U<-{_t_label(vspec)}:{f}")
+    # NA formats: a non-str NA first / later; a string NA formatted as its text; values that raise or not.
+    for spec in [TDN, TDNAN]:
+        for values in (["%d", spec.na], [spec.na, "%d"], ["", spec.na]):
+            base = np.array(values, dtype=spec.build())
+            for label, value in [("ok", 5), ("err", "x")]:
+                fn_case(S, "mod", [(base, base)], [_Op(0), value], f"{_t_label(spec)}:naorder:{label}")
+    for sentinel in ["Q", "", "%d"]:
+        spec = TSpec(sentinel)
+        base = np.array(["%d", sentinel, "x"], dtype=spec.build())
+        fn_case(S, "mod", [(base, base)], [_Op(0), 5], f"TS[{sentinel}]:sentinel")
+        empty = np.array([], dtype=spec.build())
+        fn_case(S, "mod", [(empty, empty)], [_Op(0), 5], f"TS[{sentinel}]:empty")
+    # The U round trip: surrogates and units past U+10FFFF refused after formatting, behind a formatting error.
+    base = np.array(["%c", "x"], dtype=TD.build())
+    fn_case(S, "mod", [(base, base)], [_Op(0), 0xD800], "surr:c")
+    fn_case(S, "mod", [(base, base), plain(np.array([0xD800, 5]))], [_Op(0), _Op(1)], "surr:c-arr")
+    fmt2 = np.array(["%s"], dtype=TD.build())
+    fn_case(S, "mod", [(fmt2, fmt2), _u_units([0xD800, 0x61], 2)], [_Op(0), _Op(1)], "surr:value")
+    fn_case(S, "mod", [(fmt2, fmt2), _u_units([0x61, 0x110000], 2)], [_Op(0), _Op(1)], "past:value")
+    fmt3 = np.array(["%s", "%d"], dtype=TD.build())
+    fn_case(S, "mod", [(fmt3, fmt3), _u_units([0xD800, 0x61, 0x78, 0], 2)], [_Op(0), _Op(1)], "surr:then-err")
+    tnul = np.array(["a\x00", "a\x00b\x00\x00", "\x00"], dtype=TD.build())
+    fn_case(S, "mod", [(fmt2, fmt2), (tnul, tnul)], [_Op(0), _Op(1)], "nul:stripped")
+    for spec in [TD, TDN, TDC]:
+        empty = np.zeros((0, 3), dtype=spec.build())
+        fn_case(S, "mod", [t_plain(empty)], [_Op(0), 5], f"{_t_label(spec)}:empty")
+    zero = np.array("%d", dtype=TD.build())
+    fn_case(S, "mod", [t_plain(zero)], [_Op(0), 5], "0d")
+    # The length sweep: formats and values of every length class (cell / arena texts).
+    rng = random.Random(2623)
+    for w in [0, 1, 7, 14, 15, 16, 17, 31, 64, 100]:
+        fmts = ["".join(rng.choice("abc é中\U00010400") for _ in range(w)) + "%s" for _ in range(6)]
+        vals = ["".join(rng.choice("xyz é") for _ in range(rng.randint(0, w))) for _ in range(6)]
+        fbase = np.array(fmts, dtype=TD.build())
+        vbase = np.array(vals, dtype=TD.build())
+        fn_case(S, "mod", [(fbase, fbase), (vbase, vbase)], [_Op(0), _Op(1)], f"len{w}")
+    # Long results (past NumSharp's 64-element row sample; the result packed cell by cell): growing widths, floats, texts
+    # with non-ASCII characters, and a surrogate deferred behind a later formatting error.
+    lrng = random.Random(2625)
+    grow = np.array([1] * 64 + [(-1) ** k * 10 ** min(18, k // 4) for k in range(66)], dtype="i8")
+    floats = np.array([lrng.uniform(-1, 1) * 10.0 ** lrng.randint(-8, 15) for _ in range(130)])
+    texts = np.array(["".join(lrng.choice("abcé中") for _ in range(min(12, k // 10))) for k in range(130)])
+    for f, vals, kind in [("%d", grow, "int"), ("%-12d|", grow, "int"), ("<%s>", grow, "int"), ("%.2f", floats, "float"),
+                          ("%s", floats, "float"), ("%g", floats, "float"), ("<%s>", texts, "text"), ("%r", texts, "text")]:
+        fbase = np.array([f], dtype=TD.build())
+        fn_case(S, "mod", [(fbase, fbase), plain(vals)], [_Op(0), _Op(1)], f"long:{kind}:{f}")
+    chars = np.array(["k"] * 130, dtype="<U2")
+    chars[120] = "\ud800"
+    cfmt = np.array(["%c"], dtype=TD.build())
+    fn_case(S, "mod", [(cfmt, cfmt), plain(chars)], [_Op(0), _Op(1)], "long:surr")
+    chars2 = chars.copy()
+    chars2[125] = "ab"
+    fn_case(S, "mod", [(cfmt, cfmt), plain(chars2)], [_Op(0), _Op(1)], "long:surr-then-err")
+    # Random formats over random values (seeded).
+    for i in range(160):
+        spec = rng.choice([TD, TDS, TDN, TDNAN])
+        kind = rng.choice(["int", "float", "str"])
+        convs = {"int": "dxXoeEfgGsr", "float": "eEfFgGsrd", "str": "sra"}[kind]
+        n = rng.choice([4, 6])
+        fmts = []
+        for _ in range(n):
+            f = rng.choice(["", "é", "x=", "%%", "|"]) + "%" + "".join(rng.sample("-+ 0#", rng.randint(0, 2))) + \
+                rng.choice(["", "4", "11"]) + rng.choice(["", ".1", ".5"]) + rng.choice(convs)
+            fmts.append(f)
+        fbase = np.array(t_values(spec, n, 0, fmts, rng.choice([0, 0, 3])), dtype=spec.build())
+        if kind == "int":
+            vop = plain(np.array([rng.randint(-10**5, 10**5) for _ in range(n)]))
+        elif kind == "float":
+            vop = plain(np.array([rng.uniform(-1e5, 1e5) for _ in range(n)]))
+        else:
+            vb = np.array(["".join(rng.choice("abé中") for _ in range(rng.randint(0, 6))) for _ in range(n)], dtype=TD.build())
+            vop = (vb, vb)
+        fn_case(S, "mod", [(fbase, fbase), vop], [_Op(0), _Op(1)], f"rand{i}:{_t_label(spec)}:{kind}")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strcharmeth, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
-              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans]
+              gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod]
 
 
 def main():

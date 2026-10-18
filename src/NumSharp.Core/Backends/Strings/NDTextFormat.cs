@@ -230,18 +230,67 @@ namespace NumSharp.Backends.Strings
         /// <returns>The text's length.</returns>
         internal static int FormatFloat(double value, FloatKind kind, Span<char> buf)
         {
-            if (double.IsNaN(value))
-                return Put(buf, 0, "nan");
-            if (double.IsInfinity(value))
-                return Put(buf, 0, value > 0 ? "inf" : "-inf");
+            // The ASCII core writes the text; widening it is cheaper than laying the digits out twice.
+            byte* ascii = stackalloc byte[MaxTextLength];
+            int n = FormatFloatAscii(value, kind, ascii);
+            for (int i = 0; i < n; i++)
+                buf[i] = (char)ascii[i];
+            return n;
+        }
 
-            Span<byte> digits = stackalloc byte[32];
-            int nd = ShortestDigits(value, kind, digits, out int decExp, out bool negative);
+        /// <summary>
+        ///     <see cref="FormatFloat"/>'s text as ASCII bytes: the core both the char form and <c>np.strings.mod</c>'s
+        ///     <c>%s</c> / <c>%r</c> fast path write through. The shortest digits come from Ryu as one integer and are laid
+        ///     out eight at a time (<see cref="FloatDigits.WriteDecimalBackwards(ulong, byte*)"/>), not one division per
+        ///     digit.
+        /// </summary>
+        /// <param name="value">The value, exactly representable in <paramref name="kind"/>.</param>
+        /// <param name="kind">The precision whose shortest digits and positional window apply.</param>
+        /// <param name="dst">Receives the text; room for <see cref="MaxTextLength"/> bytes.</param>
+        /// <returns>The text's length (at most 24).</returns>
+        /// <remarks>
+        ///     Ryu's digits are CPython's and NumPy's (the shortest digits that read back, the closest one on a tie). They
+        ///     used to come from .NET's <c>"R"</c> format, which gives the same digits for every float32 and float16 (both
+        ///     checked exhaustively) and for every float64 but two on the .NET 10 runtime: 10.0.1 writes 16 digits for 2^-25
+        ///     and 2^-958 that read back as the neighbouring double, where NumPy (and .NET 8) prints 17
+        ///     (<c>str(np.float64(2**-25))</c> is <c>2.9802322387695312e-08</c>; measured over every power of two, every
+        ///     float16 and 2,000,000 random doubles). Ryu is also several times faster, which the float → text casts and
+        ///     <c>np.strings.mod</c>'s <c>%s</c> / <c>%r</c> pay per element.
+        /// </remarks>
+        [SkipLocalsInit]
+        internal static int FormatFloatAscii(double value, FloatKind kind, byte* dst)
+        {
             int n = 0;
-            if (negative)
-                buf[n++] = '-';
-            if (nd == 1 && digits[0] == 0)
-                return Put(buf, n, "0.0");
+            if (double.IsNaN(value))
+                return PutAscii(dst, 0, "nan"u8);
+            if (double.IsInfinity(value))
+                return PutAscii(dst, 0, value > 0 ? "inf"u8 : "-inf"u8);
+
+            if (double.IsNegative(value))
+                dst[n++] = (byte)'-';
+            ulong mantissa;
+            int exponent;
+            switch (kind)
+            {
+                case FloatKind.Half:
+                    mantissa = FloatDigits.Shortest((Half)value, out exponent);
+                    break;
+                case FloatKind.Single:
+                    mantissa = FloatDigits.Shortest((float)value, out exponent);
+                    break;
+                default:
+                    mantissa = FloatDigits.Shortest(value, out exponent);
+                    break;
+            }
+            if (mantissa == 0)
+                return PutAscii(dst, n, "0.0"u8);
+
+            // The digits (no leading or trailing zero by Shortest's contract) and the exponent of the first one. They end at
+            // offset 24 of a 48-byte buffer: at most 17 digits, and every 16-byte copy below reads inside the buffer.
+            byte* digitBuf = stackalloc byte[48];
+            int nd = FloatDigits.WriteDecimalBackwards(mantissa, digitBuf + 24);
+            byte* digits = digitBuf + 24 - nd;
+            int decExp = exponent + nd - 1;
 
             double maxPositional = kind switch
             {
@@ -254,44 +303,87 @@ namespace NumSharp.Backends.Strings
             {
                 if (decExp >= 0)
                 {
-                    // Integer part: the first decExp + 1 digits, zero-filled when the shortest form is shorter.
+                    // The positional window keeps decExp below 16, so the integer part is at most 16 digits.
                     int intLen = decExp + 1;
-                    for (int i = 0; i < intLen; i++)
-                        buf[n++] = (char)('0' + (i < nd ? digits[i] : 0));
-                    buf[n++] = '.';
                     if (nd > intLen)
-                        for (int i = intLen; i < nd; i++)
-                            buf[n++] = (char)('0' + digits[i]);
+                    {
+                        // d…d . d…d: two runs of at most 16 digits.
+                        CopySmall(digits, dst + n, intLen);
+                        n += intLen;
+                        dst[n++] = (byte)'.';
+                        CopySmall(digits + intLen, dst + n, nd - intLen);
+                        n += nd - intLen;
+                    }
                     else
-                        buf[n++] = '0';
+                    {
+                        // An integral value: its digits, zeros to the integer part's length, then ".0".
+                        CopySmall(digits, dst + n, nd);
+                        n += nd;
+                        for (int i = nd; i < intLen; i++)
+                            dst[n++] = (byte)'0';
+                        dst[n++] = (byte)'.';
+                        dst[n++] = (byte)'0';
+                    }
                 }
                 else
                 {
-                    buf[n++] = '0';
-                    buf[n++] = '.';
+                    // 0.000d…d: at most three zeros after the point (the window starts at 1e-4).
+                    dst[n++] = (byte)'0';
+                    dst[n++] = (byte)'.';
                     for (int i = 0; i < -decExp - 1; i++)
-                        buf[n++] = '0';
-                    for (int i = 0; i < nd; i++)
-                        buf[n++] = (char)('0' + digits[i]);
+                        dst[n++] = (byte)'0';
+                    CopySmall(digits, dst + n, nd);
+                    n += nd;
                 }
                 return n;
             }
 
             // Scientific: d[.ddd]e±XX, two exponent digits at least.
-            buf[n++] = (char)('0' + digits[0]);
+            dst[n++] = digits[0];
             if (nd > 1)
             {
-                buf[n++] = '.';
-                for (int i = 1; i < nd; i++)
-                    buf[n++] = (char)('0' + digits[i]);
+                dst[n++] = (byte)'.';
+                CopySmall(digits + 1, dst + n, nd - 1);
+                n += nd - 1;
             }
-            buf[n++] = 'e';
-            buf[n++] = decExp >= 0 ? '+' : '-';
+            dst[n++] = (byte)'e';
+            dst[n++] = decExp >= 0 ? (byte)'+' : (byte)'-';
             int e = Math.Abs(decExp);
-            if (e < 10)
-                buf[n++] = '0';
-            e.TryFormat(buf.Slice(n), out int en, default, CI);
-            return n + en;
+            if (e >= 100)
+            {
+                dst[n++] = (byte)('0' + e / 100);
+                e %= 100;
+            }
+            dst[n++] = (byte)('0' + e / 10);
+            dst[n++] = (byte)('0' + e % 10);
+            return n;
+        }
+
+        /// <summary>
+        ///     Copies at most 32 bytes as one or two (overlapping) 16-byte moves: the copy may write up to 16 bytes past
+        ///     <paramref name="length"/> at <paramref name="dst"/> and read up to 16 past it at <paramref name="src"/> — the
+        ///     callers' buffers have that room, and the bytes past the text are never read back.
+        /// </summary>
+        /// <param name="src">The bytes.</param>
+        /// <param name="dst">The destination.</param>
+        /// <param name="length">The number of bytes that matter (at most 32).</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void CopySmall(byte* src, byte* dst, int length)
+        {
+            System.Runtime.Intrinsics.Vector128.Store(System.Runtime.Intrinsics.Vector128.Load(src), dst);
+            if (length > 16)
+                System.Runtime.Intrinsics.Vector128.Store(System.Runtime.Intrinsics.Vector128.Load(src + length - 16), dst + length - 16);
+        }
+
+        /// <summary>Writes an ASCII literal at <paramref name="at"/> and returns the new length.</summary>
+        /// <param name="dst">The output.</param>
+        /// <param name="at">The position to write at.</param>
+        /// <param name="text">The literal.</param>
+        /// <returns><paramref name="at"/> + the literal's length.</returns>
+        private static int PutAscii(byte* dst, int at, ReadOnlySpan<byte> text)
+        {
+            text.CopyTo(new Span<byte>(dst + at, text.Length));
+            return at + text.Length;
         }
 
         /// <summary>
@@ -344,102 +436,6 @@ namespace NumSharp.Backends.Strings
             if (n >= 2 && buf[n - 2] == '.' && buf[n - 1] == '0')
                 n -= 2;
             return n;
-        }
-
-        /// <summary>
-        ///     The shortest round-trip decimal digits of a value in its own precision (.NET's <c>"R"</c> format is the
-        ///     shortest form for <see cref="double"/>, <see cref="float"/> and <see cref="System.Half"/>), as digit VALUES
-        ///     with leading and trailing zeros removed, plus the decimal exponent of the first digit.
-        /// </summary>
-        /// <param name="value">The value (finite).</param>
-        /// <param name="kind">Its precision.</param>
-        /// <param name="digits">Receives the digit values 0..9 (zero is the single digit 0).</param>
-        /// <param name="decExp">Receives the exponent of the first digit (value = 0.d1d2... × 10^(decExp+1)).</param>
-        /// <param name="negative">Receives the sign (true for -0.0 too).</param>
-        /// <returns>The number of digits.</returns>
-        /// <remarks>The same extraction <see cref="Dragon4.ExtractShortest"/> runs on strings, kept span-based here so a
-        ///     cast of a million floats allocates nothing.</remarks>
-        private static int ShortestDigits(double value, FloatKind kind, Span<byte> digits, out int decExp, out bool negative)
-        {
-            Span<char> r = stackalloc char[40];
-            int len;
-            switch (kind)
-            {
-                case FloatKind.Half:
-                    ((Half)value).TryFormat(r, out len, "R", CI);
-                    break;
-                case FloatKind.Single:
-                    ((float)value).TryFormat(r, out len, "R", CI);
-                    break;
-                default:
-                    value.TryFormat(r, out len, "R", CI);
-                    break;
-            }
-
-            int p = 0;
-            negative = r[0] == '-';
-            if (negative)
-                p++;
-            int exp = 0;
-            int e = r.Slice(0, len).IndexOfAny('E', 'e');
-            int mantEnd = e < 0 ? len : e;
-            if (e >= 0)
-            {
-                // "R" writes E+dd / E-dd.
-                int sign = 1, q = e + 1;
-                if (r[q] == '+') q++;
-                else if (r[q] == '-') { sign = -1; q++; }
-                for (; q < len; q++)
-                    exp = exp * 10 + (r[q] - '0');
-                exp *= sign;
-            }
-
-            // Collect the mantissa digits (point removed), noting how many came before the point.
-            int raw = 0, intDigits = -1;
-            for (int i = p; i < mantEnd; i++)
-            {
-                char c = r[i];
-                if (c == '.')
-                {
-                    intDigits = raw;
-                    continue;
-                }
-                digits[raw++] = (byte)(c - '0');
-            }
-            if (intDigits < 0)
-                intDigits = raw;
-
-            int e0 = intDigits - 1 + exp;
-            int lead = 0;
-            while (lead < raw - 1 && digits[lead] == 0)
-            {
-                lead++;
-                e0--;
-            }
-            int end = raw;
-            while (end > lead + 1 && digits[end - 1] == 0)
-                end--;
-            int nd = end - lead;
-            if (lead > 0)
-                digits.Slice(lead, nd).CopyTo(digits);
-            if (nd == 1 && digits[0] == 0)
-            {
-                decExp = 0;
-                return 1;
-            }
-            decExp = e0;
-            return nd;
-        }
-
-        /// <summary>Writes a literal at <paramref name="at"/> and returns the new length.</summary>
-        /// <param name="buf">The output.</param>
-        /// <param name="at">The position to write at.</param>
-        /// <param name="s">The literal.</param>
-        /// <returns><paramref name="at"/> + the literal's length.</returns>
-        private static int Put(Span<char> buf, int at, string s)
-        {
-            s.AsSpan().CopyTo(buf.Slice(at));
-            return at + s.Length;
         }
 
         // ---------------------------------------------------------------------------------------------

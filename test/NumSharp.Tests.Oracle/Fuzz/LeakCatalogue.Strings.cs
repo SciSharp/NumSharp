@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NumSharp.Tests.Fuzz
 {
@@ -7,10 +8,10 @@ namespace NumSharp.Tests.Fuzz
     ///     Catalogue entries for the <c>numpy.strings</c> functions of strings phase 2, P2.5 (<c>str_len</c>, the find family,
     ///     <c>startswith</c> / <c>endswith</c>, the strips, the pads, <c>zfill</c>, <c>expandtabs</c>, <c>replace</c>,
     ///     <c>partition</c> / <c>rpartition</c>, <c>slice</c> and the six comparison names) and P2.6 (the predicates
-    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>, <c>translate</c>). The string
-    ///     oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> / <c>tprop</c> / <c>strcase</c> / <c>tcase</c> /
-    ///     <c>strtrans</c> / <c>ttrans</c> replay them through its own harness, outside the corpus sweep, so each is measured
-    ///     here.
+    ///     <c>isalpha</c> … <c>isnumeric</c>, the case maps <c>upper</c> … <c>title</c>, <c>translate</c>, <c>mod</c>). The
+    ///     string oracle's sections <c>strfn</c> / <c>tfn</c> / <c>strprop</c> / <c>tprop</c> / <c>strcase</c> / <c>tcase</c> /
+    ///     <c>strtrans</c> / <c>ttrans</c> / <c>strmod</c> / <c>tmod</c> replay them through its own harness, outside the
+    ///     corpus sweep, so each is measured here.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -623,6 +624,116 @@ namespace NumSharp.Tests.Fuzz
                   {
                   }
                   return np.strings.translate(u, mk);
+              });
+            AddStringsMod(l);
+        }
+
+        /// <summary>
+        ///     The P2.6 <c>mod</c>: every route that holds a temporary — <c>U</c> / <c>S</c> / <c>StringDType</c> formats over
+        ///     number, text, dict and object-list values (the walk's arena, its row storage and the converted values); the
+        ///     chunk path (one format over a whole chunk, fields written straight into the rows) and the element path; a format
+        ///     that changes per element (the compiled-format cache); a result past the 64-element row sample whose width keeps
+        ///     growing (the rows re-laid out, then narrowed); a <c>StringDType</c> result packed cell by cell (its allocator held
+        ///     across the walk); the element errors that abandon the walk, before and after the rows were laid out (a
+        ///     conversion's TypeError, NaN under <c>%d</c>, a missing key, a parse error); the <c>StringDType</c> result refused
+        ///     after formatting (its fresh array dropped); an empty broadcast; a chararray operand and a non-text operand's
+        ///     TypeError.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        private static void AddStringsMod(List<LeakCase> l)
+        {
+            E(l, "np.strings.mod",
+              "U / S / T formats x numbers / texts / dict / object list, chunk and element paths, per-element formats, growing rows, element errors, surrogate T result, empty, chararray, int",
+              f =>
+              {
+                  var dict = new Dictionary<string, object> { ["a"] = 7, ["b"] = "xyz" };
+                  // One spec per format, so each pairs with one value per element.
+                  using var u = np.array(new[] { "%d|", "x=%5.2f", "%r" });
+                  using var objFormats = np.array(new[] { "%s|", "x=%r", "%s" });
+                  using var s = np.array(new object[] { new byte[] { 37, 100 }, new byte[] { 37, 100, 33 }, new byte[] { 37, 46, 49, 102 } });
+                  using var t = np.array(new object[] { "%s", null, "héllo %d wörld and a text past the cell" }, np.dtypes.StringDType("%s"));
+                  using var none = np.array(new object[] { "%d", null }, np.dtypes.StringDType(null));
+                  using var nums = np.array(new[] { 1.5, -2.0, 3.25 });
+                  using var c = np.@char.array(new[] { "%d", "x%s" });
+                  using var ints = np.array(new[] { 1, 2 });
+                  using var wide = np.array(new[] { "%300s" });
+                  using var surr = np.array(new object[] { "%c" }, np.dtypes.StringDType());
+                  using var empty = np.zeros(new Shape(0, 3), NPTypeCode.Int64);
+                  using var keyed = np.array(new[] { "%(a)s %(b)r" });
+                  using var missing = np.array(new[] { "%(zz)s" });
+                  using var unsupported = np.array(new[] { "%y" });
+                  // 200 values whose text keeps growing past the row sample: the rows are re-laid out several times.
+                  using var growing = np.array(Enumerable.Range(0, 200).Select(i => i < 64 ? 1L : (long)System.Math.Pow(10, System.Math.Min(18, (i - 64) / 8))).ToArray());
+                  using var lateNaN = np.array(Enumerable.Range(0, 200).Select(i => i == 150 ? double.NaN : i * 1.25).ToArray());
+                  using var tlong = np.array(new object[] { "<%s>" }, np.dtypes.StringDType());
+                  using var sd = np.array(new object[] { new byte[] { 37, 100 } });
+                  // The 0-d U formats are made (and disposed) here: a C# string argument would convert to an NDArray at the
+                  // call site, a temporary of the caller's that the sweep would count against np.strings.mod.
+                  using NDArray fmtD = "%d", fmtF = "[%8.3f]";
+                  using var r1 = np.strings.mod(u, 5);
+                  using var r2 = np.strings.mod(u, nums);
+                  using var r3 = np.strings.mod(s, nums);
+                  using var r4 = np.strings.mod(t, nums);
+                  using var r5 = np.strings.mod(keyed, dict);
+                  using var r6 = np.strings.mod(objFormats, new object[] { 1, null, "x" });
+                  using var r7 = np.strings.mod(wide, "z");
+                  using var r8 = np.strings.mod(c, 3);
+                  using var r9 = np.strings.mod(u, empty);
+                  using var r10 = np.strings.mod(fmtD, growing);
+                  using var r11 = np.strings.mod(sd, growing);
+                  using var r12 = np.strings.mod(tlong, growing);
+                  using var r13 = np.strings.mod(fmtF, lateNaN);
+                  try
+                  {
+                      np.strings.mod(u, "x");
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      // NaN under %d at element 150: the rows were laid out (and re-laid out) before the error.
+                      np.strings.mod(fmtD, lateNaN);
+                  }
+                  catch (ValueError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.mod(missing, dict);
+                  }
+                  catch (KeyError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.mod(unsupported, 1);
+                  }
+                  catch (ValueError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.mod(none, 5);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.mod(surr, 0xD800);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  try
+                  {
+                      np.strings.mod(ints, 5);
+                  }
+                  catch (TypeError)
+                  {
+                  }
+                  return np.strings.mod(u, 4);
               });
         }
     }

@@ -295,14 +295,16 @@ namespace NumSharp.Tests.Strings
         /// <summary>A float as the generator writes it: a JSON number, or <c>"nan"</c> / <c>"inf"</c> / <c>"-inf"</c>
         ///     (the corpus is written without JSON's non-standard literals).</summary>
         /// <param name="f">The encoded float.</param>
-        /// <returns>The value.</returns>
+        /// <returns>The value; <c>"nan"</c> is CPython's <c>Py_NAN</c> (the POSITIVE quiet NaN <c>0x7ff8000000000000</c>, the
+        ///     bits of <c>float('nan')</c> and <c>np.nan</c>), not .NET's <see cref="double.NaN"/> (<c>0xfff8…</c>): a case
+        ///     that exposes a float's bytes — <c>b'%s' % np.nan</c> writes the buffer — sees NumPy's bits.</returns>
         /// <exception cref="FormatException">An unknown spelling.</exception>
         private static double DecodeFloat(JsonElement f)
             => f.ValueKind == JsonValueKind.Number
                 ? f.GetDouble()
                 : f.GetString() switch
                 {
-                    "nan" => double.NaN,
+                    "nan" => BitConverter.Int64BitsToDouble(0x7FF8000000000000),
                     "inf" => double.PositiveInfinity,
                     "-inf" => double.NegativeInfinity,
                     var s => throw new FormatException($"unknown float spelling '{s}'"),
