@@ -1141,8 +1141,9 @@ C-D1 decision and C3 for C-D3.
     bool `cmp`), `strchararray` 11,827 (`transpose(*axes)`, `take` / `compress` into `out=`), `strcharobj` 3,623 (join's
     two empty object results are not cases). The generator gains the argument specs `self` (the receiver, an overlapping
     out), `ro` (read-only) and `pytype` (a Python class), and drops a NumPy result that is an ndarray subclass, an object
-    array from a statistic, or a non-list result of a list member. Unit tests `ListArraySignatureTests` (3) and
-    `np_sum_out_dtype_tests` (2): a mutation run that puts back each old behavior fails all five. The leak catalogue's
+    array from a statistic, or a non-list result of a list member. Unit tests `ListArraySignatureTests` (3, and a fourth
+    for `tofile`'s fid forms in `1f87ac15`) and `np_sum_out_dtype_tests` (2): a mutation run that puts back each old
+    behavior fails all five. The leak catalogue's
     `join` and `sum` entries run the refusals, its `argpartition` entry disposes its own kth.
 
 ---
