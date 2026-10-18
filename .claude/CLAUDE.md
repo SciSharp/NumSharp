@@ -683,6 +683,29 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
     bytes (x1.03 → x1.62 NumPy) and 189 → 89 at 300–500 (x0.81 → x1.74); setitem of 100K texts over short cells 110 →
     60 / 342 → 242 ns; releasing 100K heap texts 22 → 0.12 / 79 → 18.5 ns a text.
   - **Gate:** `StringDTypeHeapPagesTests` (7 tests); 17 of 17 planted bugs killed.
+- **An ordering of long texts prefetches the texts ahead** (2026-10-18, `3a4ee154`). A pair of random texts is ordered by
+  its first eight bytes, so `<` of texts stored outside their cells reads ONE cache line of each text. Once the texts'
+  first lines pass L2, every pair is two cache misses that no hardware prefetcher predicts (consecutive texts start lines
+  apart, unevenly).
+  - **The form.** `GetVStringCompareKernel(op, aIndex, prefetch: true)` (orderings only: `<`, `<=`, and `>` / `>=` as
+    the swapped pair) emits `if (i + 16 < count) NDVStringCells.PrefetchPair(pA + 16 * sA, pB + 16 * sB, aux)` before
+    each compare: `prefetchnta` of each arena or heap text's first line, never a cell past the chunk.
+  - **The choice** (`NDVStringCells.PrefetchesTexts`): at least 128 arena bytes a cell on average over the buffers, and
+    at least 16,384 distinct texts touched (the operands' element counts; two views of one buffer count once); x86 only.
+    The crossover is the number of first lines against L2, not the arena bytes: 128-byte texts win at 3.8 MiB of arenas
+    (30,800 texts, 13.1 → 8.7 ns a pair), 400-byte texts lose at 4.0 MiB (10,300 texts, 5.1–5.9 → 6.8). Texts under 128
+    bytes share lines (41 bytes: 5.8–6.1 → 7.1–7.6).
+  - **Never an equality.** Texts of different lengths are unequal by their cells' sizes, so `==` reads no text and a
+    prefetch only wastes bandwidth (5.7 → 18.2 ns a pair, measured); `TakesPrefetchingKernel` says no and the factory
+    throws.
+  - **NTA, distance 16.** Each line is read once. NTA was within 7 % of T0 at 128 bytes and up to 43 % faster at 200–400;
+    16 was the most even distance. Not built: a T0 form for 64–127-byte texts (65 bytes: 9.3–9.6 → 7.2–7.5 ns).
+  - **Measured** (pinned A/B of the whole S / U / T matrix): `np.less` of 100,000 texts of 300–500 bytes 27.7 → 17.7 ns
+    a pair, NPY/NS 1.23 → 1.92; the other cells unchanged.
+  - **Hooks and gate.** `NDVStringCells.TextPrefetchOverride` forces a form and `NDVStringComparison.LastKernel` records
+    the kernel that ran (both `[ThreadStatic]`). `StringDTypePrefetchKernelTests` (6): both forms against each other and
+    `NpyString_cmp` over every cell kind, layout, route and operand order; fenced cells walked both ways; the kernel's IL
+    holds the look-ahead. 16 of 16 behaviour-changing mutants killed; the 2 perf-only ones survive by design.
 - The oracle carries `T` values as values, never cells (`"t"` + `"values"`, `{"na": true}`), and compares `tobytes()`
   cells with the heap pointers masked; sections `tstore` / `tcreate` / `tmove` / `tcast` (8,324 strict).
 - NumPy 2.4.2 bugs on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): `np.place`
