@@ -96,6 +96,9 @@ namespace NumSharp.Tests.Fuzz
             // NDCharArray (numpy.char.chararray): the members it declares — the stripping indexers and enumerator and every
             // ndarray member it re-declares to return a chararray. What it merely inherits is the ndarray module's.
             ("NDCharArray", typeof(NDCharArray), true),
+            // NDListArray (numpy.char's object array of lists): it holds NumSharp arrays (the pieces and the element
+            // ranges), and every member that moves the lists builds new ones.
+            ("NDListArray", typeof(NDListArray), false),
         };
 
         /// <summary>

@@ -836,5 +836,25 @@ namespace NumSharp.Tests.Manipulation
             both.GetInt64(0, 0).Should().Be(777L,
                 "ravel('F') on shape (1,N) (both C & F contig) should return a view sharing memory.");
         }
+
+        /// <summary>
+        ///     PyArray_Ravel reshapes a C-contiguous array to <c>(-1,)</c>, which skips PyArray_Newshape's same-shape shortcut,
+        ///     so the view gets fresh C strides: a one-element array with a NEGATIVE stride (C-contiguous: a single element is
+        ///     contiguous whatever its stride) ravels to stride 8, where reshape to its own shape keeps -8 (NumPy 2.4.2:
+        ///     <c>np.arange(1)[::-1].ravel().strides == (8,)</c>, <c>.reshape(1).strides == (-8,)</c>).
+        /// </summary>
+        [TestMethod]
+        public void Ravel_OneElementNegativeStride_GetsFreshCStrides()
+        {
+            var x = np.arange(1)["::-1"];
+            x.strides.Should().Equal(-8L);
+            var r = x.ravel();
+            r.strides.Should().Equal(8L);
+            r.flags.owndata.Should().BeFalse("the C-contiguous ravel is a view");
+            x.ravel('K').strides.Should().Equal(8L);
+            x.ravel('A').strides.Should().Equal(8L);
+            // reshape to the array's own shape is NumPy's plain view (PyArray_Newshape's same-shape shortcut): it keeps -8.
+            x.reshape(1).strides.Should().Equal(-8L);
+        }
     }
 }

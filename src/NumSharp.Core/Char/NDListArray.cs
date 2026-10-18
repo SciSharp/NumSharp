@@ -47,7 +47,7 @@ namespace NumSharp
     ///     finalizers release them otherwise. A view keeps the memory it reads alive (it counts its own references).
     ///     </para>
     /// </remarks>
-    public sealed class NDListArray : IEnumerable, IDisposable
+    public sealed partial class NDListArray : IEnumerable, IDisposable
     {
         /// <summary>Every piece's code units back to back: 1-D uint8 for bytes pieces, 1-D uint32 code points for str pieces.</summary>
         internal NDArray Units { get; }

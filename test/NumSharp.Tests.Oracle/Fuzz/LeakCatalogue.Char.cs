@@ -961,6 +961,307 @@ namespace NumSharp.Tests.Fuzz
                 using var emptyLists = c.join(none);
                 return c.join(new[] { "xy", "z" });
             });
+            AddListArray(l);
+        }
+
+        /// <summary>
+        ///     The entries of <see cref="NDListArray"/>, numpy.char's object array of lists (section strcharlist replays its
+        ///     members outside the sweep): element access, item / tolist / iteration / printing, and the members that move the
+        ///     lists — each a view or a copy holding its own references on the shared pieces and new range arrays, which the
+        ///     harness disposes with the result (an <see cref="IDisposable"/>), on S / U / StringDType results and their views.
+        /// </summary>
+        /// <param name="l">The entry list.</param>
+        private static void AddListArray(List<LeakCase> l)
+        {
+            // The (2, 3) split result of the unit tests and a StringDType one: a fresh pair per entry (the result arrays and
+            // their texts are released inside the entry).
+            static (NDArray Text, NDListArray Lists) Grid()
+            {
+                var u = np.array(new[,] { { "a b", "c", "x y" }, { "", "d e f", "g" } });
+                return (u, np.@char.split(u));
+            }
+            E(l, "NDListArray.Item", "an element (its piece array), slice notation and Slices (views)", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using var element = lists[1, 2];
+                    using var narrowed = lists[0, 1];
+                    using var row = lists["1"];
+                    using var reversed = lists[Slice.All, new Slice(null, null, -1)];
+                    return lists["::-1, 1:"];
+                }
+            });
+            E(l, "NDListArray.item", "the one element, an element by index; the size error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using var one = lists["0:1, 0:1"];
+                    _ = one.item();
+                    try
+                    {
+                        lists.item();
+                    }
+                    catch (ValueError)
+                    {
+                    }
+                    return lists.item(1, 1);
+                }
+            });
+            E(l, "NDListArray.tolist", "a 2-d result and a transposed view", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var t = lists.T)
+                {
+                    _ = t.tolist();
+                    return lists.tolist();
+                }
+            });
+            E(l, "NDListArray.GetEnumerator", "the rows of a 2-d result (views) and the elements of a row (piece arrays)", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    long n = 0;
+                    foreach (NDListArray rowView in lists)
+                    {
+                        using (rowView)
+                        {
+                            foreach (NDArray pieces in rowView)
+                            {
+                                pieces.Dispose();
+                                n++;
+                            }
+                        }
+                    }
+                    return Box(n);
+                }
+            });
+            E(l, "NDListArray.ToString", "str and repr of a result and of a view", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var t = lists.T)
+                    return lists.ToString() + t.ToString(true);
+            });
+            E(l, "NDListArray.Dispose", "a result, then a view that outlives it", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                {
+                    var t = lists.T;
+                    lists.Dispose();
+                    lists.Dispose();
+                    using (t)
+                        return Box(t.tolist() is not null);
+                }
+            });
+            E(l, "NDListArray.to_device", "cpu (the receiver itself), the device error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    try
+                    {
+                        lists.to_device("gpu");
+                    }
+                    catch (ArgumentException)
+                    {
+                    }
+                    return Box(ReferenceEquals(lists.to_device("cpu"), lists));
+                }
+            });
+            E(l, "NDListArray.transpose", "reversed, an explicit permutation, the repeated-axis error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using var reversed = lists.transpose();
+                    try
+                    {
+                        lists.transpose(0, 0);
+                    }
+                    catch (ValueError)
+                    {
+                    }
+                    return lists.transpose(1, 0);
+                }
+            });
+            E(l, "NDListArray.swapaxes", "two axes, the axis error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    try
+                    {
+                        lists.swapaxes(0, 2);
+                    }
+                    catch (AxisError)
+                    {
+                    }
+                    return lists.swapaxes(1, 0);
+                }
+            });
+            E(l, "NDListArray.reshape", "a view, an F-ordered reshape (a view of a copy), a Shape, the size error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using var fortran = lists.reshape(new Shape(3, 2), 'F');
+                    using var byShape = lists.reshape(new Shape(6));
+                    using var baseOfTemp = fortran.@base;
+                    try
+                    {
+                        lists.reshape(4);
+                    }
+                    catch (IncorrectShapeException)
+                    {
+                    }
+                    return lists.reshape(3, 2);
+                }
+            });
+            E(l, "NDListArray.ravel", "C (a view), F (a copy), K of a transpose (a view)", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var t = lists.T)
+                {
+                    using var fortran = lists.ravel('F');
+                    using var memory = t.ravel('K');
+                    return lists.ravel();
+                }
+            });
+            E(l, "NDListArray.flatten", "C and F copies", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using var fortran = lists.flatten('F');
+                    return lists.flatten();
+                }
+            });
+            E(l, "NDListArray.squeeze", "nothing to remove (the receiver), a length-1 axis, the size error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var lifted = lists.reshape(1, 2, 3))
+                {
+                    _ = lists.squeeze();
+                    try
+                    {
+                        lists.squeeze(0);
+                    }
+                    catch (ValueError)
+                    {
+                    }
+                    return lifted.squeeze(0);
+                }
+            });
+            E(l, "NDListArray.copy", "C and F orders of a view", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var t = lists.T)
+                {
+                    using var fortran = t.copy('F');
+                    return t.copy();
+                }
+            });
+            E(l, "NDListArray.view", "a view of a view", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var t = lists.T)
+                    return t.view();
+            });
+            E(l, "NDListArray.take", "indices, one index (a 0-d list array), along an axis, wrap, the bounds error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    // The index arrays are HELD (the file's rule): a C# array converted at the call is the caller's
+                    // temporary, which the member cannot dispose.
+                    using NDArray pair = new long[] { 0, 2 };
+                    using NDArray three = new long[] { 0, 5, 0 };
+                    using var one = lists.take(4);
+                    using var wrapped = lists.take(7, mode: "wrap");
+                    using var column = lists.take(pair, 1);
+                    try
+                    {
+                        lists.take(7);
+                    }
+                    catch (IndexError)
+                    {
+                    }
+                    return lists.take(three);
+                }
+            });
+            E(l, "NDListArray.compress", "flattened and along an axis, the past-the-end error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using NDArray prefix = new[] { true, false, true };
+                    using NDArray pastTheEnd = new long[] { 0, 0, 0, 0, 0, 0, 1 };
+                    using NDArray rows = new[] { false, true };
+                    using var flat = lists.compress(prefix);
+                    try
+                    {
+                        lists.compress(pastTheEnd);
+                    }
+                    catch (IndexError)
+                    {
+                    }
+                    return lists.compress(rows, 0);
+                }
+            });
+            E(l, "NDListArray.repeat", "a count, counts along an axis", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                {
+                    using NDArray counts = new long[] { 1, 2 };
+                    using var twice = lists.repeat(2);
+                    return lists.repeat(counts, 0);
+                }
+            });
+            E(l, "NDListArray.diagonal", "the main and an offset diagonal (read-only views), the rank error", f =>
+            {
+                var (u, lists) = Grid();
+                using (u)
+                using (lists)
+                using (var flat = lists.ravel())
+                {
+                    using var main = lists.diagonal();
+                    try
+                    {
+                        flat.diagonal();
+                    }
+                    catch (ValueError)
+                    {
+                    }
+                    return lists.diagonal(1);
+                }
+            });
         }
 
         /// <summary>

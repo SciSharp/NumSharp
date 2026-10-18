@@ -11601,6 +11601,206 @@ def gen_strcharobj():
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Section strcharlist: the ndarray members of numpy.char's object result (C-D3's NDListArray) that move the lists —
+# transposition, reshaping, copies and views, selection, and the attributes of the outer array
+# ----------------------------------------------------------------------------------------------------------------------
+#
+# The receiver is np.char.split's object array (or a basic index of it); a member's object result is compared piece by
+# piece (_cobj_expect) together with its layout: the byte strides, C / F contiguity, OWNDATA, WRITEABLE and how its base
+# relates to the receiver (NumPy's object array holds 8-byte pointers, NumSharp's list array int64 ranges of the same
+# layout, so all of it must agree).
+
+CLST = "strcharlist"
+
+
+def _clst_base(r, recv):
+    """How a result's base relates to the receiver.
+
+    Args:
+        r: the result (an object array).
+        recv: the receiver.
+
+    Returns:
+        ``recv`` (the receiver itself), ``recvbase`` (the receiver's own base: a view of a view collapses to the owner),
+        ``none`` (the result owns its pointers) or ``other`` (NumPy's intermediate copy, as for a reshape in the other order).
+    """
+    if r.base is None:
+        return "none"
+    if r.base is recv:
+        return "recv"
+    if recv.base is not None and r.base is recv.base:
+        return "recvbase"
+    return "other"
+
+
+def _clst_expect(r, recv):
+    """The expectation of a list-array member's result.
+
+    Args:
+        r: NumPy's result.
+        recv: the receiver (an object array of lists).
+
+    Returns:
+        An object array as ``lists`` (``_cobj_expect``) with its ``layout`` facets; a Python list — NumPy's one-index take,
+        which returns the element itself — as the ``lists`` of a 0-d array (NumSharp's 0-d list array stands for it); a
+        Python bool / int / str / tuple (an attribute, an identity test) as ``pyvalue``; anything else as ``expect_of``.
+    """
+    if isinstance(r, np.ndarray) and r.dtype == object:
+        d = _cobj_expect(r, [])
+        d["layout"] = {"strides": [int(s) for s in r.strides], "c": bool(r.flags.c_contiguous),
+                       "f": bool(r.flags.f_contiguous), "own": bool(r.flags.owndata), "w": bool(r.flags.writeable),
+                       "base": _clst_base(r, recv)}
+        if r.size == 0:
+            # NumPy 2.x gives every zero-size array it allocates all-zero strides, NumSharp the C strides of its shape —
+            # the library-wide open bug pinned in OpenBugs.EmptyStrides.cs, not a list-array behavior.
+            del d["layout"]["strides"]
+        return d
+    if isinstance(r, list):
+        selfs = [0] if any(type(p) is np.str_ for p in r) else []
+        return {"kind": "lists", "shape": [], "lists": [[_cobj_piece(p) for p in r]], "strself": selfs}
+    if isinstance(r, (bool, int, str, tuple)):
+        return {"kind": "pyvalue", "value": enc(list(r) if isinstance(r, tuple) else r)}
+    return expect_of(r, [])
+
+
+def _clst_call(params, views):
+    """Makes one case's call: the member ``params.name`` of the receiver (``_cobj_value(params.recv)``) with ``args`` /
+    ``kw``; an attribute (no call) when ``params.attr`` is true; ``is_recv`` reports whether the result IS the receiver.
+
+    Returns:
+        (result, receiver).
+    """
+    recv = _cobj_value(params["recv"], views)
+    attr = getattr(recv, params["name"])
+    if params.get("attr"):
+        r = attr
+    else:
+        args = [_cobj_value(a, views) for a in params.get("args", [])]
+        kw = {name: _cobj_value(a, views) for name, a in params.get("kw", {}).items()}
+        r = attr(*args, **kw)
+    if params.get("is_recv"):
+        r = r is recv
+    return r, recv
+
+
+def add_clst(params, operands=(), layout=""):
+    """Records one list-array member case (``_clst_call``)."""
+    views = [v for _, v in operands]
+    prefix = f"{CLST}/clst/"
+    n = _OP_COUNT.get(prefix, 0) + 1
+    _OP_COUNT[prefix] = n
+    cid = f"{CLST}/clst/{n}"
+    assert cid not in _IDS
+    _IDS.add(cid)
+    case = {"id": cid, "op": "clst", "params": params, "operands": [describe(b, v) for b, v in operands], "phase": 1,
+            "layout": layout}
+    try:
+        r, recv = _clst_call(params, views)
+        case["expected"] = _clst_expect(r, recv)
+    except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
+        case["error"] = err_info(e)
+    CASES.append(case)
+
+
+def gen_strcharlist():
+    """Section strcharlist: NDListArray's structural ndarray members over np.char.split results of every class (U / S /
+    StringDType) and core layout, and over views of them (a transpose, a reversed slice, a 0-d element view): T / mT /
+    transpose / swapaxes, reshape (C and F order) / ravel / flatten / squeeze, copy / view, take / compress / repeat /
+    diagonal with their arguments and errors, and the attributes strides / itemsize / nbytes / device / to_device."""
+    for kind in ("U", "S", "T"):
+        pool = COBJ_SPLIT_S if kind == "S" else COBJ_SPLIT_U
+        for li, layout in enumerate(CORE_LAYOUTS + ["c3", "d5", "one", "e1"]):
+            ops = [_cobj_operand(kind, pool, layout, seed=li)]
+            shape = ops[0][1].shape
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            receivers = [({"split": [{"op": 0}]}, "")]
+            if nd >= 1 and size > 0:
+                receivers.append(({"view": [{"split": [{"op": 0}]}, "::-1" + ", :" * (nd - 1)]}, ":rev"))
+            for recv, rl in receivers:
+                label = f"{kind}:{layout}{rl}"
+
+                def m(name, args=(), kw=None, sub="", attr=False, is_recv=False):
+                    params = {"recv": recv, "name": name, "args": list(args), "kw": kw or {}}
+                    if attr:
+                        params["attr"] = True
+                    if is_recv:
+                        params["is_recv"] = True
+                    add_clst(params, ops, layout=f"{label}{sub}")
+
+                v = _cobj_v
+                # ---- attributes ----
+                for name in ("T", "mT", "strides", "itemsize", "nbytes", "device", "shape", "ndim", "size"):
+                    # An empty array's strides are NumPy's all-zero strides of a zero-size allocation (OpenBugs.EmptyStrides).
+                    if name == "strides" and size == 0:
+                        continue
+                    m(name, attr=True)
+                m("to_device", [v("cpu")], is_recv=True)
+                m("to_device", [v("gpu")])
+                # ---- transposition ----
+                m("transpose")
+                if nd >= 2:
+                    m("transpose", list(map(v, range(nd)))[::-1], sub=":rev")
+                    m("transpose", [v(0)] * nd, sub=":repeat")
+                    m("swapaxes", [v(0), v(nd - 1)])
+                    m("swapaxes", [v(-1), v(0)], sub=":neg")
+                m("transpose", [v(nd)] + [v(i) for i in range(1, nd)] if nd else [v(0)], sub=":oob")
+                m("swapaxes", [v(0), v(nd + 1)], sub=":oob")
+                # ---- reshaping ----
+                m("reshape", [v(-1)])
+                m("reshape", [v(size), v(1)] if size else [v(0), v(1)], sub=":col")
+                m("reshape", [v(size + 1)], sub=":bad")
+                m("reshape", [v(-1), v(-1)], sub=":two_unknown")
+                if size % 2 == 0 and size:
+                    m("reshape", [v(2), v(-1)], sub=":two")
+                    m("reshape", [v([2, size // 2])], {"order": v("F")}, sub=":F")
+                for order in ("C", "F", "A", "K"):
+                    m("ravel", [v(order)], sub=f":{order}")
+                    m("flatten", [v(order)], sub=f":{order}")
+                    m("copy", [v(order)], sub=f":{order}")
+                m("squeeze", is_recv=True, sub=":is")
+                m("squeeze")
+                if nd >= 1:
+                    m("squeeze", [v(0)], sub=":axis0")
+                m("squeeze", [v(nd + 2)], sub=":oob")
+                m("view")
+                # ---- selection ----
+                if size > 0:
+                    m("take", [v(0)])
+                    m("take", [v([0, size - 1, 0])], sub=":list")
+                    m("take", [v(size + 1)], sub=":oob")
+                    m("take", [v(size + 1)], {"mode": v("wrap")}, sub=":wrap")
+                    m("take", [v(-1)], {"mode": v("clip")}, sub=":clip")
+                    m("take", [v([[0], [size - 1]])], sub=":2d")
+                    if nd >= 2:
+                        m("take", [v([1, 0])], {"axis": v(nd - 1)}, sub=":axis")
+                        m("take", [v([0])], {"axis": v(nd)}, sub=":axis_oob")
+                    m("compress", [v(([True, False] * size)[:size])])
+                    m("compress", [v([False] * size + [True])], sub=":past")
+                    m("repeat", [v(2)])
+                    m("repeat", [v(0)], sub=":zero")
+                    if nd >= 1:
+                        m("repeat", [v(list(range(shape[0])))], {"axis": v(0)}, sub=":counts")
+                    if nd >= 2:
+                        m("compress", [v([True, False, True][: shape[-1]])], {"axis": v(nd - 1)}, sub=":axis")
+                        m("diagonal")
+                        m("diagonal", [v(1)], sub=":1")
+                        m("diagonal", [v(-1)], sub=":-1")
+                        m("diagonal", [v(0), v(nd - 1), v(0)], sub=":axes")
+                m("diagonal", [v(0), v(0), v(0)], sub=":same")
+    # A view of a view (base collapses to the owner), the element view of a 0-d index, and a temporary's base.
+    m2 = _cobj_operand("U", COBJ_SPLIT_U, "c2", seed=3)
+    for recv, rl in (({"view": [{"split": [{"op": 0}]}, "1:, ::-1"]}, "view"), ({"view": [{"split": [{"op": 0}]}, "0, 1:"]}, "row")):
+        for name, args, kw in (("T", None, None), ("reshape", [-1], None), ("ravel", ["K"], None), ("copy", [], None),
+                               ("diagonal", [], None), ("take", [[0]], None), ("squeeze", [], None)):
+            params = {"recv": recv, "name": name, "args": [_cobj_v(x) for x in (args or [])],
+                      "kw": {k: _cobj_v(x) for k, x in (kw or {}).items()}}
+            if args is None:
+                params["attr"] = True
+            add_clst(params, [m2], layout=f"U:c2:{rl}")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Section strcharmeth: numpy.char's string functions (its partition / rpartition wrappers and the functions it
 # re-exports from numpy.strings) and the chararray string members over them (the numpy.char plan's C4 / C5)
 # ----------------------------------------------------------------------------------------------------------------------
@@ -15179,7 +15379,7 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
-              gen_strcharmeth, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
+              gen_strcharmeth, gen_strcharlist, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
               gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod,
               gen_strcodec, gen_tcodec]
 

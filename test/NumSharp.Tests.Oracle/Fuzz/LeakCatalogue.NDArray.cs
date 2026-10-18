@@ -194,6 +194,14 @@ namespace NumSharp.Tests.Fuzz
             E(l, "ndarray.ToMuliDimArray", "multi-dim", f => f.MT.ToMuliDimArray<double>());
             E(l, "ndarray.ToString", "str", f => f.MT.ToString());
             E(l, "ndarray.ToString", "repr", f => f.C.ToString(true));
+            // A 3-D array built and disposed inside the entry: the layout engine's row views (one per printed row, at every
+            // level) hold references on its buffer, so a view the engine leaves undisposed keeps the buffer out of the pool.
+            E(l, "ndarray.ToString", "str and repr of a fresh 3-D array, disposed after printing", f =>
+            {
+                using var flat = np.arange(24.0);
+                using var cube = flat.reshape(2, 3, 4);
+                return cube.ToString() + cube.ToString(true);
+            });
             E(l, "ndarray.tolist", "nested lists", f => f.MT.tolist());
             E(l, "ndarray.tofile", "binary path", f =>
             {

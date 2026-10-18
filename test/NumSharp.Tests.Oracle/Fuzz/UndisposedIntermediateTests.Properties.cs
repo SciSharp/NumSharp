@@ -518,6 +518,23 @@ namespace NumSharp.Tests.Fuzz
                     }),
                 },
                 "NpzFile" => new[] { new ReadTarget("load_npz(bytes)", f => Disposable(np.load_npz(f.NpzBytes))) },
+                "NDListArray" => new[]
+                {
+                    // An owning split result and a view of one: base / T / mT build new list arrays, flags reads the ranges'.
+                    new ReadTarget("split (2,3)", _ =>
+                    {
+                        var u = np.array(new[,] { { "a b", "c", "x y" }, { "", "d e f", "g" } });
+                        var lists = np.@char.split(u);
+                        return (lists, () => { lists.Dispose(); u.Dispose(); });
+                    }),
+                    new ReadTarget("transposed view of a split", _ =>
+                    {
+                        var u = np.array(new[,] { { "a b", "c", "x y" }, { "", "d e f", "g" } });
+                        var lists = np.@char.split(u);
+                        var t = lists.T;
+                        return (t, () => { t.Dispose(); lists.Dispose(); u.Dispose(); });
+                    }),
+                },
                 "NDMaskedArray" => MaskedTargets,
                 "NDMatrix" => MatrixTargets,
                 "NDCharArray" => CharArrayTargets,

@@ -364,6 +364,15 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void CharObjectPath() => Run("strcharobj");
 
         /// <summary>
+        ///     Section strcharlist (C-D3's <see cref="NDListArray"/>): the ndarray members of numpy.char's object result that
+        ///     move the lists — T / mT / transpose / swapaxes, reshape / ravel / flatten / squeeze, copy / view, take /
+        ///     compress / repeat / diagonal and the outer array's attributes — over split results of every class and core
+        ///     layout and over views of them, each object result compared piece by piece together with its byte strides,
+        ///     flags and base relation. Strict.
+        /// </summary>
+        [TestMethod] public void CharListArrayMembers() => Run("strcharlist");
+
+        /// <summary>
         ///     Section strcharmeth (the <c>numpy.char</c> plan's C4 / C5): numpy.char's string functions — its own
         ///     <c>partition</c> / <c>rpartition</c> (the three parts stacked on a new last axis) and the functions it
         ///     re-exports from numpy.strings — over plain and chararray operands of every core layout of both classes,
@@ -803,7 +812,7 @@ namespace NumSharp.Tests.Strings
                 "strdtype", "strprec", "straxis", "strcov", "strshape", "strvalid", "strsurface", "strma", "striter",
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
-                "strcharmeth", "strsets", "tcomp", "tarith",
+                "strcharmeth", "strcharlist", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
                 "ttrans", "strmod", "tmod", "strcodec", "tcodec",
             };
@@ -1021,7 +1030,7 @@ namespace NumSharp.Tests.Strings
                 if (classExcuse != null)
                     ExcusedClasses.TryAdd(c.Id, classExcuse);
                 Compare(c.Expected, result, layoutExcuse is null ? ops : null, diffs, compareLayout: layoutExcuse is null,
-                        wantClassOverride: classExcuse is null ? null : "chararray");
+                        wantClassOverride: classExcuse is null ? null : "chararray", receiver: receiver);
                 var identityExcuse = IdentityExcuse(c);
                 if (identityExcuse != null)
                     ExcusedIdentities.TryAdd(c.Id, identityExcuse);
@@ -1520,8 +1529,10 @@ namespace NumSharp.Tests.Strings
         /// <param name="compareLayout">False to compare values only (a <see cref="LayoutExcuse"/>d case).</param>
         /// <param name="wantClassOverride">The array class to require instead of the expectation's <c>class</c> (a
         ///     <see cref="ClassExcuse"/>d case), or null.</param>
+        /// <param name="receiver">The receiver a member's result came paired with (<see cref="StringOracleOps.SelfResult"/>),
+        ///     or null: a list array's <c>base</c> facet is compared against it.</param>
         private static void Compare(JsonElement exp, object result, NDArray[] ops, List<string> diffs, bool compareLayout = true,
-                                    string wantClassOverride = null)
+                                    string wantClassOverride = null, object receiver = null)
         {
             string kind = exp.GetProperty("kind").GetString();
             switch (kind)
@@ -1699,7 +1710,7 @@ namespace NumSharp.Tests.Strings
                     CompareMasked(exp, result, diffs);
                     break;
                 case "lists":
-                    CompareLists(exp, result, diffs);
+                    CompareLists(exp, result, diffs, receiver as NDListArray);
                     break;
                 case "masked_constant":
                     if (!ReferenceEquals(result, np.ma.masked))
@@ -1746,13 +1757,19 @@ namespace NumSharp.Tests.Strings
         /// <param name="exp">The <c>lists</c> expectation.</param>
         /// <param name="result">NumSharp's result.</param>
         /// <param name="diffs">Receives the divergences.</param>
-        private static unsafe void CompareLists(JsonElement exp, object result, List<string> diffs)
+        /// <param name="receiver">The member's receiver (section strcharlist), or null: the <c>layout</c> facet's <c>base</c>
+        ///     relation is read against it.</param>
+        private static unsafe void CompareLists(JsonElement exp, object result, List<string> diffs, NDListArray receiver = null)
         {
             if (result is not NDListArray l)
             {
                 diffs.Add($"expected an object array of lists (NDListArray), got {Describe(result)}");
                 return;
             }
+            // Section strcharlist's layout facets: the outer array's byte strides, C / F contiguity, OWNDATA, WRITEABLE, and
+            // how its base relates to the receiver (NumPy's object pointers and NumSharp's int64 ranges share one layout).
+            if (exp.TryGetProperty("layout", out var layout))
+                CompareListLayout(layout, l, receiver, diffs);
             var wantShape = exp.GetProperty("shape").EnumerateArray().Select(e => e.GetInt64()).ToArray();
             if (!wantShape.SequenceEqual(l.shape))
             {
@@ -1795,6 +1812,50 @@ namespace NumSharp.Tests.Strings
                 if (gotSelf != wantSelf.Contains(pos))
                     diffs.Add($"[{pos}] np.str_ piece {gotSelf} != NumPy {wantSelf.Contains(pos)}");
             }
+        }
+
+        /// <summary>
+        ///     Compares a list array's layout with NumPy's object array's: the byte strides, the C / F contiguity, OWNDATA and
+        ///     WRITEABLE flags, and the base relation — <c>recv</c> (the receiver itself), <c>recvbase</c> (the receiver's own
+        ///     base: a view of a view collapses to the owner), <c>none</c>, or <c>other</c> (NumPy's intermediate copy).
+        /// </summary>
+        /// <param name="layout">The <c>layout</c> facet.</param>
+        /// <param name="l">NumSharp's list array.</param>
+        /// <param name="receiver">The member's receiver, or null when the replay paired none.</param>
+        /// <param name="diffs">Receives the divergences.</param>
+        private static void CompareListLayout(JsonElement layout, NDListArray l, NDListArray receiver, List<string> diffs)
+        {
+            // An empty result carries no strides (NumPy's all-zero strides of a zero-size allocation: OpenBugs.EmptyStrides).
+            if (layout.TryGetProperty("strides", out var stridesJson))
+            {
+                var wantStrides = stridesJson.EnumerateArray().Select(e => e.GetInt64()).ToArray();
+                if (!wantStrides.SequenceEqual(l.strides))
+                    diffs.Add($"strides ({string.Join(",", l.strides)}) != NumPy ({string.Join(",", wantStrides)})");
+            }
+            var flags = l.flags;
+            void Flag(string name, bool got)
+            {
+                bool want = layout.GetProperty(name).GetBoolean();
+                if (want != got)
+                    diffs.Add($"flag {name} {got} != NumPy {want}");
+            }
+            Flag("c", flags.c_contiguous);
+            Flag("f", flags.f_contiguous);
+            Flag("own", flags.owndata);
+            Flag("w", flags.writeable);
+            // NumSharp's base is a new list array over the owner's pointers (as NDArray.base is a new array over its
+            // owner's storage), so the relation is read through the storage it wraps: the receiver's own (it owns its
+            // pointers) or the storage the receiver itself views (a view of a view collapses to the owner).
+            string wantBase = layout.GetProperty("base").GetString();
+            using var b = l.@base;
+            var owner = b?.Starts.Storage;
+            string gotBase = b is null ? "none"
+                : receiver is null ? "unpaired"
+                : ReferenceEquals(owner, receiver.Starts.Storage) ? "recv"
+                : receiver.Starts.Storage._baseStorage is { } rb && ReferenceEquals(owner, rb) ? "recvbase"
+                : "other";
+            if (gotBase != wantBase)
+                diffs.Add($"base {gotBase} != NumPy {wantBase}");
         }
 
         /// <summary>

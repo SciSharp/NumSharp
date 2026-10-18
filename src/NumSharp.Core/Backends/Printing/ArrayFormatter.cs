@@ -288,10 +288,17 @@ namespace NumSharp.Backends.Printing
             {
                 string lineSep = RStrip(separator) + new string('\n', axesLeft - 1);
 
+                // Every sub-array below is a VIEW this method creates (cur[i], and the mask's row in lockstep), and each
+                // view holds a counted reference on the printed array's buffer. They are disposed as soon as their text
+                // is built: an undisposed view would keep that buffer out of the pool until the finalizer runs, so a
+                // caller that prints an array it has just built (NDListArray's position array, a fresh result) and
+                // then disposes it would still not get the buffer back.
                 for (long i = 0; i < leadingItems; i++)
                 {
-                    string nested = Recurse(cur[i], formatFn, lineWidth, separator, edgeItems,
-                        summaryInsert, legacy, nextHangingIndent, nextWidth, mask?[i], display);
+                    using var row = cur[i];
+                    using var maskRow = mask?[i];
+                    string nested = Recurse(row, formatFn, lineWidth, separator, edgeItems,
+                        summaryInsert, legacy, nextHangingIndent, nextWidth, maskRow, display);
                     s.Append(hangingIndent).Append(nested).Append(lineSep);
                 }
 
@@ -300,14 +307,20 @@ namespace NumSharp.Backends.Printing
 
                 for (long i = trailingItems; i > 1; i--)
                 {
-                    string nested = Recurse(cur[aLen - i], formatFn, lineWidth, separator, edgeItems,
-                        summaryInsert, legacy, nextHangingIndent, nextWidth, mask?[aLen - i], display);
+                    using var row = cur[aLen - i];
+                    using var maskRow = mask?[aLen - i];
+                    string nested = Recurse(row, formatFn, lineWidth, separator, edgeItems,
+                        summaryInsert, legacy, nextHangingIndent, nextWidth, maskRow, display);
                     s.Append(hangingIndent).Append(nested).Append(lineSep);
                 }
 
-                string lastNested = Recurse(cur[aLen - 1], formatFn, lineWidth, separator, edgeItems,
-                    summaryInsert, legacy, nextHangingIndent, nextWidth, mask?[aLen - 1], display);
-                s.Append(hangingIndent).Append(lastNested);
+                using (var lastRow = cur[aLen - 1])
+                using (var lastMaskRow = mask?[aLen - 1])
+                {
+                    string lastNested = Recurse(lastRow, formatFn, lineWidth, separator, edgeItems,
+                        summaryInsert, legacy, nextHangingIndent, nextWidth, lastMaskRow, display);
+                    s.Append(hangingIndent).Append(lastNested);
+                }
             }
 
             // remove the hanging indent, and wrap in []
@@ -408,7 +421,13 @@ namespace NumSharp.Backends.Printing
             }
             else
             {
-                ForEachIndex(n, summarize, edge, i => Walk(cur[i], summarize, edge, outp));
+                ForEachIndex(n, summarize, edge, i =>
+                {
+                    // The row is a view holding a reference on the printed array's buffer (as in Recurse): it is
+                    // disposed once walked, so the buffer of an array printed and then disposed returns to the pool.
+                    using var row = cur[i];
+                    Walk(row, summarize, edge, outp);
+                });
             }
         }
 

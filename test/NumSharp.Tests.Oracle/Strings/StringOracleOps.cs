@@ -269,6 +269,10 @@ namespace NumSharp.Tests.Strings
             // members over them, with NDListArray results.
             if (TryInvokeCharObject(c.Op, p, ops, out var objectPath))
                 return objectPath;
+            // Section strcharlist (NDListArray's structural ndarray members: transposition, reshaping, copies, selection,
+            // the outer array's attributes) lives in its own partial.
+            if (TryInvokeCharList(c.Op, p, ops, out var listMember))
+                return listMember;
             // Section strsets (np.quantile / np.percentile with every q / axis / out form, P2.2 milestone C) lives in its own
             // partial; its unique, isin, set-routine, lexsort, sort_complex and histogram cases replay through the ops of
             // sections strshape and strsurface.

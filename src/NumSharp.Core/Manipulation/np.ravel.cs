@@ -66,8 +66,11 @@ namespace NumSharp
                     throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
             }
 
+            // PyArray_Ravel reshapes to (-1,), never to the array's own size: -1 skips PyArray_Newshape's same-shape shortcut
+            // (a plain view that keeps the strides), so the view gets fresh C strides — a one-element array with a negative
+            // or a stepped stride (np.arange(1)[::-1]) ravels to stride one element, as in NumPy.
             if (o == 'C' && s.IsContiguous)
-                return a.reshape(Shape.Vector(a.size));
+                return a.reshape(-1L);
 
             // An F-contiguous array read column-major, or an array dense in another axis order read in memory order, is
             // its buffer from the view's first element on: one 1-D view with stride one element.
