@@ -1109,7 +1109,7 @@ C-D1 decision and C3 for C-D3.
     1K / 100K / 1M, on P2.6's codec as of `d314dd81`; every result's digest identical): 20.2–130×, geomean 57.1×; the
     slowest cell is `decode` of `S` at 1M.
   - **C5 is complete.** Open: C6 (the coverage mapping `char.chararray` → `NumSharp.NDCharArray`).
-- **2026-10-19 — the one-signature review of numpy.char's new surfaces** (`9440d498`; the owner's request: "Kindly review
+- **2026-10-19 — the one-signature review of numpy.char's new surfaces** (`adada1fc`; the owner's request: "Kindly review
   all new methods to have identical api to numpy and preferably a single overload and add missing ones like out/where").
   - **One NumPy signature per member.** `NDListArray`: `sum` / `prod` (`axis, dtype, out, keepdims, initial, where`),
     `cumsum` / `cumprod` (`axis, dtype, out`), `trace` (`offset, axis1, axis2, dtype, out`), `clip` (`min, max, out, dtype,
