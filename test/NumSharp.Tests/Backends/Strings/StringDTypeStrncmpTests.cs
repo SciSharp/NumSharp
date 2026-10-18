@@ -205,5 +205,89 @@ namespace NumSharp.Tests.Backends.Strings
             np.array_equiv(A(T, "a"), np.array(new[] { "a" }, np.dtype("S1"))).Should().BeFalse();
             np.array_equiv(np.zeros(new Shape(0), T), np.zeros(new Shape(2, 0), np.int64)).Should().BeTrue();
         }
+
+        /// <summary>The byte loop <c>strncmp</c> is: the first index whose bytes differ or whose byte of A is NUL, else n.</summary>
+        /// <param name="a">The first text.</param>
+        /// <param name="b">The second text.</param>
+        /// <param name="n">The bytes to compare.</param>
+        /// <returns>The stop index.</returns>
+        private static unsafe int ReferenceStop(byte* a, byte* b, int n)
+        {
+            for (int i = 0; i < n; i++)
+                if (a[i] != b[i] || a[i] == 0)
+                    return i;
+            return n;
+        }
+
+        /// <summary>
+        ///     <see cref="NumSharp.Backends.Strings.NDVStringCells.StrncmpStop"/> (its 32- and 16-byte vector steps, the step
+        ///     moved back to end on the last byte, the 8-byte SWAR words) stops where the byte loop stops at every length 0–300:
+        ///     no stop, a difference at every position, a NUL in both texts at every position, a NUL in A alone, a difference
+        ///     next to a NUL — the SWAR zero test flags bytes above a zero byte through its borrow, so a difference ABOVE the
+        ///     first NUL must not win.
+        /// </summary>
+        [TestMethod]
+        public unsafe void StrncmpStop_EqualsTheByteLoop_AtEveryLengthAndStop()
+        {
+            var rng = new System.Random(4401);
+            var a = new byte[300];
+            var b = new byte[300];
+            fixed (byte* pa = a)
+            fixed (byte* pb = b)
+                for (int n = 0; n <= 300; n++)
+                {
+                    for (int k = 0; k < 300; k++)
+                        a[k] = b[k] = (byte)rng.Next(1, 256);
+                    NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(n, $"length {n}, no stop");
+                    for (int p = 0; p < n; p++)
+                    {
+                        byte keepA = a[p], keepB = b[p];
+                        b[p] = (byte)(a[p] ^ (1 << rng.Next(8)));
+                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, difference at {p}");
+                        a[p] = b[p] = 0;
+                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, shared NUL at {p}");
+                        b[p] = 1;
+                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, NUL in A at {p}");
+                        if (p + 1 < n)
+                        {
+                            // A NUL at p (shared) and a byte of value 1 right above it in A: the borrow flags p + 1 too.
+                            b[p] = 0;
+                            byte above = a[p + 1];
+                            a[p + 1] = 1;
+                            NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(pa, pb, n).Should().Be(ReferenceStop(pa, pb, n), $"length {n}, NUL then 1 at {p}");
+                            a[p + 1] = above;
+                        }
+                        a[p] = keepA;
+                        b[p] = keepB;
+                    }
+                }
+        }
+
+        /// <summary>
+        ///     <see cref="NumSharp.Backends.Strings.NDVStringCells.StrncmpStop"/> reads nothing outside its texts: two texts of
+        ///     every length to 300 that never stop (equal, NUL-free) placed against inaccessible pages, ending on the last
+        ///     accessible byte and starting on the first.
+        /// </summary>
+        [TestMethod]
+        public unsafe void StrncmpStop_ReadsOnlyItsTexts()
+        {
+            if (!FencedMemory.IsSupported)
+                Assert.Inconclusive("FencedMemory needs Windows (reserved pages).");
+            using var fa = new FencedMemory(pages: 1);
+            using var fb = new FencedMemory(pages: 1);
+            for (int n = 0; n <= 300; n++)
+                foreach (bool atEnd in new[] { true, false })
+                {
+                    byte* a = fa.Place(n, atEnd), b = fb.Place(n, atEnd);
+                    for (int k = 0; k < n; k++)
+                        a[k] = b[k] = (byte)('a' + k % 26);
+                    NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(a, b, n).Should().Be(n, $"length {n}, at end {atEnd}");
+                    if (n > 0)
+                    {
+                        b[n - 1] ^= 1;
+                        NumSharp.Backends.Strings.NDVStringCells.StrncmpStop(a, b, n).Should().Be(n - 1, $"length {n}, last byte differs, at end {atEnd}");
+                    }
+                }
+        }
     }
 }

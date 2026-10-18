@@ -325,37 +325,111 @@ namespace NumSharp.Backends.Strings
         /// <param name="b">The second text (at least <paramref name="n"/> readable bytes).</param>
         /// <param name="n">The bytes to compare.</param>
         /// <returns>The stop index, 0 to <paramref name="n"/>.</returns>
-        /// <remarks>32 (then 16) bytes a step where the hardware has the vectors: one compare for the difference, one for the
-        ///     NUL, their union's lowest set bit — never a load past <paramref name="n"/>; the tail byte by byte.</remarks>
+        /// <remarks>
+        ///     32 (or 16) bytes a step where the hardware has the vectors: one compare for the difference, one for the NUL,
+        ///     their union's lowest set bit. The step that would run past <paramref name="n"/> is moved back to end on byte
+        ///     <c>n - 1</c> (it OVERLAPS the step before: the bytes it repeats passed, so its lowest stop bit is the first stop
+        ///     past them); a run too short for a vector (8–15 bytes, or any length on a host without the vectors) is 8-byte
+        ///     words tested in SWAR (<see cref="WordStop"/>), the last word overlapping the same way; fewer than 8 bytes one by
+        ///     one — never a load past <paramref name="n"/>. Equal texts of 20–60 bytes spent most of their compare in the byte
+        ///     loop that finished the last 1–15 bytes before (two loads, two tests and a branch a byte).
+        /// </remarks>
         [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
         internal static int StrncmpStop(byte* a, byte* b, int n)
         {
             int i = 0;
-            if (Vector256.IsHardwareAccelerated)
+            if (Vector256.IsHardwareAccelerated && n >= 32)
             {
                 for (; i + 32 <= n; i += 32)
                 {
-                    Vector256<byte> va = Vector256.Load(a + i), vb = Vector256.Load(b + i);
-                    // A lane stops strncmp when its bytes differ or A's byte is NUL.
-                    uint stop = (~Vector256.Equals(va, vb) | Vector256.Equals(va, Vector256<byte>.Zero)).ExtractMostSignificantBits();
+                    uint stop = StopMask(Vector256.Load(a + i), Vector256.Load(b + i));
                     if (stop != 0)
                         return i + System.Numerics.BitOperations.TrailingZeroCount(stop);
                 }
+                if (i < n)
+                {
+                    uint stop = StopMask(Vector256.Load(a + n - 32), Vector256.Load(b + n - 32));
+                    if (stop != 0)
+                        return n - 32 + System.Numerics.BitOperations.TrailingZeroCount(stop);
+                }
+                return n;
             }
-            if (Vector128.IsHardwareAccelerated)
+            if (Vector128.IsHardwareAccelerated && n >= 16)
             {
                 for (; i + 16 <= n; i += 16)
                 {
-                    Vector128<byte> va = Vector128.Load(a + i), vb = Vector128.Load(b + i);
-                    uint stop = (~Vector128.Equals(va, vb) | Vector128.Equals(va, Vector128<byte>.Zero)).ExtractMostSignificantBits();
+                    uint stop = StopMask(Vector128.Load(a + i), Vector128.Load(b + i));
                     if (stop != 0)
                         return i + System.Numerics.BitOperations.TrailingZeroCount(stop);
                 }
+                if (i < n)
+                {
+                    uint stop = StopMask(Vector128.Load(a + n - 16), Vector128.Load(b + n - 16));
+                    if (stop != 0)
+                        return n - 16 + System.Numerics.BitOperations.TrailingZeroCount(stop);
+                }
+                return n;
+            }
+            if (n >= 8)
+            {
+                // 8 to 15 bytes on a vector host; any length on a host without the vectors (AVX2 / SSE switched off).
+                for (; i + 8 <= n; i += 8)
+                {
+                    int s = WordStop(Unsafe.ReadUnaligned<ulong>(a + i), Unsafe.ReadUnaligned<ulong>(b + i));
+                    if (s < 8)
+                        return i + s;
+                }
+                if (i < n)
+                {
+                    int s = WordStop(Unsafe.ReadUnaligned<ulong>(a + n - 8), Unsafe.ReadUnaligned<ulong>(b + n - 8));
+                    if (s < 8)
+                        return n - 8 + s;
+                }
+                return n;
             }
             for (; i < n; i++)
                 if (a[i] != b[i] || a[i] == 0)
                     return i;
             return n;
+        }
+
+        /// <summary>The lanes where <c>strncmp</c> stops: A's and B's bytes differ, or A's byte is NUL (one bit per lane).</summary>
+        /// <param name="va">32 bytes of A.</param>
+        /// <param name="vb">The same 32 bytes of B.</param>
+        /// <returns>The stop mask.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        private static uint StopMask(Vector256<byte> va, Vector256<byte> vb)
+            => (~Vector256.Equals(va, vb) | Vector256.Equals(va, Vector256<byte>.Zero)).ExtractMostSignificantBits();
+
+        /// <summary>The lanes where <c>strncmp</c> stops (see the 256-bit overload), for 16 bytes.</summary>
+        /// <param name="va">16 bytes of A.</param>
+        /// <param name="vb">The same 16 bytes of B.</param>
+        /// <returns>The stop mask.</returns>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        private static uint StopMask(Vector128<byte> va, Vector128<byte> vb)
+            => (~Vector128.Equals(va, vb) | Vector128.Equals(va, Vector128<byte>.Zero)).ExtractMostSignificantBits();
+
+        /// <summary>
+        ///     The first byte (0–7) of two little-endian 8-byte words where <c>strncmp</c> stops — the bytes differ, or A's byte
+        ///     is NUL — or 8 when neither happens.
+        /// </summary>
+        /// <param name="wa">Eight bytes of A.</param>
+        /// <param name="wb">The same eight bytes of B.</param>
+        /// <returns>The stop byte, or 8.</returns>
+        /// <remarks>
+        ///     SWAR: a byte of <c>wa ^ wb</c> is non-zero exactly when its high bit survives <c>((x &amp; 0x7F) + 0x7F) | x</c>
+        ///     (no carry leaves a byte), and <c>(wa - 0x01…) &amp; ~wa &amp; 0x80…</c> flags every zero byte of A — plus, through the
+        ///     borrow, possibly bytes ABOVE a zero byte, never one below it. The lowest flagged byte of the union is therefore
+        ///     exactly the first stop. The cell layout is little-endian on every supported host (the allocator refuses a
+        ///     big-endian one), so the lowest bit is the first byte.
+        /// </remarks>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        private static int WordStop(ulong wa, ulong wb)
+        {
+            const ulong ones = 0x0101_0101_0101_0101UL, highs = 0x8080_8080_8080_8080UL, lows = 0x7F7F_7F7F_7F7F_7F7FUL;
+            ulong x = wa ^ wb;
+            ulong stop = ((((x & lows) + lows) | x) | ((wa - ones) & ~wa)) & highs;
+            return stop == 0 ? 8 : System.Numerics.BitOperations.TrailingZeroCount(stop) >> 3;
         }
 
         /// <summary>
