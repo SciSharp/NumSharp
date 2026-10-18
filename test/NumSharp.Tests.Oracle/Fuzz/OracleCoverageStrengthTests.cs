@@ -171,8 +171,6 @@ namespace NumSharp.Tests.Fuzz
             ["getbufsize"] = "thread-local config getter: the axis is the buffer-size PARAM sweep (int64 result)",
             ["setbufsize"] = "thread-local config setter: the axis is the buffer-size PARAM sweep (int64 previous size)",
             ["get_printoptions"] = "config getter: the axis is the (options, key) PARAM sweep, text results",
-            ["format_float_positional"] = "float-scalar formatter: NumPy's widths float16 / float32 / float64 are its whole dtype axis",
-            ["format_float_scientific"] = "float-scalar formatter: NumPy's widths float16 / float32 / float64 are its whole dtype axis",
             // np.nditer's iteration-protocol section reads multi_index after k Python next() calls over ONE float32
             // operand; its four cases joined the gate when the strings rebase (2026-10-12) closed gap SU42, which had
             // carved all of them, and the index a step reports does not depend on the dtype.

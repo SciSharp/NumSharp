@@ -20,23 +20,23 @@ namespace NumSharp.Tests
     //   * Silent wrong values: np.cumsum / np.cumprod with dtype=complex128 over integers (SU38), np.cumsum with
     //     dtype=bool (SU39), np.finfo's float32 / float64 minexp, float32 resolution and tiny (SU12-SU14), np.nditer's K
     //     order over an F operand and a broadcast one (SU25) and after remove_multi_index (SU31), np.broadcast.iters
-    //     after a step (SU20), the float formatters' inf / nan text (SU6) and rounding carries (SU18, SU19, SU9).
+    //     after a step (SU20).
     //   * np.nditer's write-backs (the second pass): a readwrite updateifcopy operand of another dtype is refused without
     //     buffering, where NumPy iterates a copy that close() writes back (SU41); the iteration protocol publishes the
     //     element and THEN advances, where NumPy's __next__ advances on entry, so after k next() calls the cursor is one
     //     element ahead and a buffered readwrite loop loses its write into the last element of each buffer (SU42).
     //   * Crashes where NumPy computes: np.apply_along_axis over a stride-0 view at an offset (SU5), np.nditer.remove_axis
     //     under a non-C iteration order (SU30).
-    //   * Refusals NumPy makes and NumSharp does not (or the reverse), and error texts: SU1, SU2, SU4, SU8, SU10, SU11,
+    //   * Refusals NumPy makes and NumSharp does not (or the reverse), and error texts: SU1, SU2, SU4, SU10, SU11,
     //     SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40.
     //   * Reporting: np.nditer.shape's axis order (SU26), index tracking blocking coalescing (SU27), get_printoptions'
     //     missing keys (SU21), edgeitems=0 summarization (SU23), the datetime
     //     dtype.type (SU24), complex histogram edges (SU3).
     //
-    // Not reproduced here: SU7 (the float formatters take only a double — an API shape, not a defect of a call) and
-    // SU36 / SU37 (numpy.cumulative_sum / cumulative_prod do not exist in NumSharp; the inventory aliases them to
-    // np.cumsum / np.cumprod, whose own contract differs). Two pooled-buffer leaks the sweep found are pinned in the
-    // oracle's KnownEscapes (np.MemoryView.tobytes of a non-contiguous array; np.array_equiv with an empty operand).
+    // Not reproduced here: SU36 / SU37 (numpy.cumulative_sum / cumulative_prod do not exist in NumSharp; the inventory
+    // aliases them to np.cumsum / np.cumprod, whose own contract differs). Two pooled-buffer leaks the sweep found are
+    // pinned in the oracle's KnownEscapes (np.MemoryView.tobytes of a non-contiguous array; np.array_equiv with an empty
+    // operand).
     //
     // Outside NumPy's contract, found by the harness itself: NDArray.SetAtIndex<T>(T, long) checks T against the dtype
     // only with a Debug.Assert, so in Release a double written into a float32 array lands as 8 bytes over the next two
@@ -48,6 +48,14 @@ namespace NumSharp.Tests
     // opening with "FIXED"; SU4's open part (the other estimators) has a pin of its own, and the generator's rules for the
     // fixed ids are dropped. The np.array_equiv leak named above went with the comparison operators' empty-left early
     // return (the sweep gates it at zero now).
+    //
+    // FIXED 2026-10-18 by the port of NumPy's dragon4.c (Backends/Printing/Dragon4.Port.cs, unit 8 of
+    // docs/plans/numpy-polynomial-remaining-compute.md): np.format_float_positional / np.format_float_scientific give
+    // NumPy's text for every option and argument kind, so SU6-SU9 (inf / nan, a negative count, fractional=False, an x
+    // that is not a double), SU18 and SU19 (carries at the cutoff, scientific trim '-') are gone. Their pins moved to
+    // Casting/Dragon4PortTests.cs, and the generator's rules for them are dropped. The same regeneration found SU5
+    // fixed by 287c3e2e (UnmanagedStorage.GetData clamps a broadcast view's slice to its buffer); its pin below stays as
+    // a regression test, its summary opening with "FIXED".
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -134,12 +142,14 @@ namespace NumSharp.Tests
         // ----- apply_along_axis -----
 
         /// <summary>
+        ///     FIXED by 287c3e2e (UnmanagedStorage.GetData clamps a broadcast view's slice to its buffer): NumSharp gives
+        ///     NumPy's answer now, and this test pins it. Before the fix:
         ///     <c>np.apply_along_axis(np.sum, 1, np.broadcast_to(np.split(arange(4.), [3])[1], (3, 4)))</c>: the one-element
         ///     split child keeps Shape.offset 3, so the broadcast is every stride 0 at offset 3. NumPy returns
-        ///     <c>[12, 12, 12]</c>; NumSharp throws ArgumentOutOfRangeException (Parameter 'length') (gap SU5). A 0-d
+        ///     <c>[12, 12, 12]</c>; NumSharp threw ArgumentOutOfRangeException (Parameter 'length') (gap SU5). A 0-d
         ///     index (<c>buf["3"]</c>) re-seats the address instead and does not reproduce it.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU5")]
+        [TestMethod]
         public void Surface_ApplyAlongAxis_StrideZeroViewAtAnOffset_Computes()
         {
             using var buf = np.arange(4.0);
@@ -148,66 +158,6 @@ namespace NumSharp.Tests
             using var r = np.apply_along_axis(row => np.sum(row), 1, v);
 
             r.ToArray<double>().Should().Equal(new[] { 12.0, 12.0, 12.0 });
-        }
-
-        // ----- the float formatters -----
-
-        /// <summary>
-        ///     <c>format_float_positional(inf)</c>, <c>(nan)</c>, <c>format_float_scientific(-inf)</c> and
-        ///     <c>format_float_positional(inf, sign=True)</c>: NumPy prints <c>inf</c>, <c>nan</c>, <c>-inf</c>,
-        ///     <c>+inf</c>; NumSharp prints .NET's <c>Infinity.</c> / <c>NaN.</c> / <c>I.nfinitye+07</c> (gap SU6).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU6")]
-        public void Surface_FormatFloat_NonFinite_PrintsInfAndNan()
-        {
-            np.format_float_positional(double.PositiveInfinity).Should().Be("inf");
-            np.format_float_positional(double.NaN).Should().Be("nan");
-            np.format_float_scientific(double.NegativeInfinity).Should().Be("-inf");
-            np.format_float_positional(double.PositiveInfinity, sign: true).Should().Be("+inf");
-        }
-
-        /// <summary>
-        ///     <c>format_float_positional(1.5, precision=-1)</c>: NumPy raises ValueError <c>precision must be &gt;= 0</c>;
-        ///     NumSharp formats (gap SU8).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU8")]
-        public void Surface_FormatFloat_NegativePrecision_Refuses()
-        {
-            Action act = () => np.format_float_positional(1.5, precision: -1);
-
-            act.Should().Throw<Exception>().Which.Message.Should().StartWith("precision must be >= 0");
-        }
-
-        /// <summary>
-        ///     <c>format_float_positional(123456789.125, precision=3, fractional=False)</c>: precision counts significant
-        ///     digits, so NumPy prints <c>123000000.</c>; NumSharp ignores fractional (gap SU9).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU9")]
-        public void Surface_FormatFloatPositional_FractionalFalse_CountsSignificantDigits()
-        {
-            np.format_float_positional(123456789.125, precision: 3, fractional: false).Should().Be("123000000.");
-        }
-
-        /// <summary>
-        ///     <c>format_float_positional(1.99999, precision=2)</c> and <c>format_float_scientific(0.0995,
-        ///     precision=1)</c>: the cutoff carries through 9s and NumPy's Dragon4 drops the carried digits (<c>2.</c>,
-        ///     <c>1.e-01</c>); NumSharp keeps them (<c>2.00</c>, <c>1.0e-01</c>) (gap SU18).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU18")]
-        public void Surface_FormatFloat_CarryAtTheCutoff_DropsTheCarriedZeros()
-        {
-            np.format_float_positional(1.99999, precision: 2).Should().Be("2.");
-            np.format_float_scientific(0.0995, precision: 1).Should().Be("1.e-01");
-        }
-
-        /// <summary>
-        ///     <c>format_float_scientific(0.1001, precision=2, trim='-')</c>: NumPy keeps the point when the cutoff left
-        ///     only zero fraction digits (<c>1.e-01</c>); NumSharp drops it (<c>1e-01</c>) (gap SU19).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU19")]
-        public void Surface_FormatFloatScientific_TrimDash_KeepsThePointAfterZeroDigits()
-        {
-            np.format_float_scientific(0.1001, precision: 2, trim: '-').Should().Be("1.e-01");
         }
 
         // ----- ndarray.setfield -----

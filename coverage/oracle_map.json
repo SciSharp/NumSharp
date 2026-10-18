@@ -35,6 +35,7 @@
     "keys": {
       "matrix": {"ids": ["numpy.matrix"], "note": "np.matrix(data, dtype, copy): the constructor over arrays of every rank, matrices, literals and Python sequences. The catalog row of the class; the key carries no member name."},
       "angle_deg": {"ids": ["numpy.angle"], "note": "np.angle(z, deg=True)."},
+      "set_default_printstyle": {"ids": ["numpy.polynomial.set_default_printstyle"], "note": "numpy.polynomial.set_default_printstyle(style) (polyprint tier): the class flag ABCPolyBase._use_unicode after the call, over styles of every kind (the two accepted texts, near misses, Python numbers / None / lists / tuples, NumPy scalars, arrays: the truth value of their comparison with a str), or NumPy's ValueError. A key of the numpy.polynomial package itself, which no prefix rule names (polynomial.* is numpy.polynomial.polynomial)."},
       "average_returned": {"ids": ["numpy.average", "numsharp.np.average_returned"], "note": "np.average(..., returned=True); NumSharp spells the tuple-returning form average_returned."},
       "broadcast_shape": {"ids": ["numpy.broadcast", "numpy.broadcast.shape"], "note": "np.broadcast(*arrays).shape."},
       "broadcast_values": {"ids": ["numpy.broadcast"], "note": "The broadcast object's element stream."},

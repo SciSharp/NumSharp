@@ -612,6 +612,46 @@ Measured proxies (the unit functions the members call; the class adds an object 
 
 ### 3.8 Printing — U11
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyPrinting.cs` + `np.polynomial.set_default_printstyle`
+> and `np.polynomial.polyutils.format_float`, over the prerequisite this section names done in full: np.format_float_positional
+> / np.format_float_scientific are NumPy's `dragon4.c`, ported statement for statement
+> (`Backends/Printing/Dragon4.Port.cs`, `Dragon4.BigInt.cs`), taking `object x` (each float width with its own digits,
+> everything else as `PyFloat_AsDouble`) and NumPy's `string trim`. Oracle: the new portable tier `polyprint.jsonl` (6,797
+> cases, 0 excused) and the surface tier's formatter cases (4,446, with a new 3,330-case section: random bit patterns
+> under random option sets, and two systematic blocks — exact digits that end inside the precision, powers of two under
+> min_digits), zero excuses; the regeneration returned surface gaps SU6-SU9 / SU18 / SU19 (373 cases) to
+> the gate, byte for byte. Unit tests `test/NumSharp.Tests/Casting/Dragon4PortTests.cs` (11) and
+> `test/NumSharp.Tests/Polynomial/PolynomialPrintingTests.cs` (5). A mutation pass of 25 planted defects (11 in the
+> block arithmetic and its digit loop, 6 in the formatters, 2 in the argument checks, 6 in format_float /
+> set_default_printstyle) killed 23 at first. The two survivors (the margins dropped as soon as low or high held; the
+> chunk step keeping the zeros of its last chunk) are observable only on powers of two under min_digits and in
+> scientific trim '-' over exact digits that end early, which random bit patterns never reach; the surface tier gained
+> those two blocks (1,604 cases) and the unit tests two pins, and both kill both survivors since (a third unit test
+> pins positional trim '-' after all-zero fraction digits, which only the tier had caught). Benchmark
+> `benchmark/polynomial/polyprint_results.md` (320 cells, every text checked, geomean 11.45×, min 1.65×: format_float
+> 46×, the formatters 8–10×). What the delivery found:
+> - **The emulation could not be fixed in place.** `Dragon4.cs` builds digits from Ryu's shortest digits and .NET's
+>   correctly rounded "F" / "E" formats; that is exact for the array printer's options, but NumPy's loop answers
+>   differently wherever a cut carries through 9s (it leaves FEWER digits: `1.99999` at precision 2 is `'2.'`, never
+>   `'2.00'`), where fractional=False counts significant digits, where min_digits pads past a cut, and in scientific
+>   trim `'-'` (the point stays when fraction digits were generated). The scalar formatters now run NumPy's code; the
+>   array printer keeps the emulation.
+> - **BigInteger was 1.1–3× slower than NumPy's C**: immutable numbers allocate per operation (`exact60` of 0.1 4.2 µs
+>   against 1.5; 1e300 to 20 places 145 µs against 49). NumPy's own in-place BigInt, ported with 64-bit blocks, is
+>   allocation-free; two exact shortcuts NumPy's loop does not take finish it: the margins are dropped once they reach
+>   the scale (low and high stay true from there), and where the margins no longer matter 19 digits come out of ONE
+>   Knuth single-word division (1e300 to every place 21.9 µs against NumPy's 21.8 → 1.8 µs, 12×). The BigInteger loop
+>   stays as the independent reference the tests hold the block loop to.
+> - **The C# boundary of x**: a `float` is np.float32 in the formatters (its own digits: `0.1f` prints `'0.1'`, where
+>   the polynomial package's map reads a C# float as a Python float); a `char` is np.uint16 (`'3.'`), a 0-d array
+>   `float(a)` (a float16 0-d array prints float64's `'0.0999755859375'`, as in NumPy), a Python int correctly rounded.
+> - **format_float's thresholds are compared in x's own dtype** (NEP 50: the literals are weak) — a float16 never goes
+>   scientific from above (1e8 is inf in float16) — and the sign of an infinity is dropped (`infstr` is returned as is).
+> - **set_default_printstyle is Python's `==`**: a one-element text array compares by its text, an empty or larger one
+>   raises NumPy's truth-value ValueError before the "Unsupported format string" one, a char is np.uint16 (`'3'`).
+> - **SU5 had been fixed by 287c3e2e** (`UnmanagedStorage.GetData` clamps a broadcast view's slice to its buffer): the
+>   surface gap replay reported its 4 cases matching, so its rule went with the formatters'.
+
 - **`set_default_printstyle(style)`**: a process-wide flag on the base class. `'unicode'`/`'ascii'`; anything else
   raises `ValueError("Unsupported format string '<s>'. Valid options are 'ascii' and 'unicode'")`. The default is
   NumPy's `os.name != 'nt'`, i.e. `!OperatingSystem.IsWindows()`. No compute.
@@ -656,8 +696,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 24 | `Laguerre` | package, laguerre | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
 | 25 | `Hermite` | package, hermite | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
 | 26 | `HermiteE` | package, hermite_e | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
-| 27 | `set_default_printstyle` | package | **a process-wide flag** (default: ASCII on Windows) | — | portable | — |
-| 28 | `format_float` | polyutils | **Dragon4 port** + NumPy's branch; float32/float16 entry points first | — | portable | ~31× (proxy) |
+| 27 | `set_default_printstyle` | package | **DELIVERED** — a process-wide flag (default: ASCII on Windows), Python's `==` against the two texts | — | portable | 103–135× |
+| 28 | `format_float` | polyutils | **DELIVERED** — NumPy's branch over the Dragon4 PORT (np.format_float_* rewritten as NumPy's dragon4.c: object x, string trim, NumPy's in-place BigInt on 64-bit blocks + a 19-digit chunk step) | fixing the emulation in place (it cannot see NumPy's digit buffer) | portable | 12–57×; geomean 46 |
 
 ## 5. Prerequisites and levers, ranked
 

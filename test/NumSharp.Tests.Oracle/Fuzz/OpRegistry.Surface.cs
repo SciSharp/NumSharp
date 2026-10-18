@@ -250,20 +250,20 @@ namespace NumSharp.Tests.Fuzz
                         floatmode: p.TryGetValue("floatmode", out var fm) ? fm.GetString() : null,
                         suffix: p.TryGetValue("suffix", out var suf) ? suf.GetString() : "");
                 case "format_float_positional":
-                    return np.format_float_positional(ScalarAsDouble(ops[0]),
+                    return np.format_float_positional(FormatFloatArgument(p, ops),
                         precision: SurfNullableInt(p, "precision"),
                         unique: !p.TryGetValue("unique", out var u) || u.GetBoolean(),
                         fractional: !p.TryGetValue("fractional", out var fr) || fr.GetBoolean(),
-                        trim: p.TryGetValue("trim", out var tr) ? tr.GetString()[0] : 'k',
+                        trim: p.TryGetValue("trim", out var tr) ? tr.GetString() : "k",
                         sign: p.TryGetValue("sign", out var sp) && sp.GetBoolean(),
                         pad_left: SurfNullableInt(p, "pad_left"),
                         pad_right: SurfNullableInt(p, "pad_right"),
                         min_digits: SurfNullableInt(p, "min_digits"));
                 case "format_float_scientific":
-                    return np.format_float_scientific(ScalarAsDouble(ops[0]),
+                    return np.format_float_scientific(FormatFloatArgument(p, ops),
                         precision: SurfNullableInt(p, "precision"),
                         unique: !p.TryGetValue("unique", out var u2) || u2.GetBoolean(),
-                        trim: p.TryGetValue("trim", out var tr2) ? tr2.GetString()[0] : 'k',
+                        trim: p.TryGetValue("trim", out var tr2) ? tr2.GetString() : "k",
                         sign: p.TryGetValue("sign", out var sp2) && sp2.GetBoolean(),
                         pad_left: SurfNullableInt(p, "pad_left"),
                         exp_digits: SurfNullableInt(p, "exp_digits"),
@@ -757,6 +757,26 @@ namespace NumSharp.Tests.Fuzz
 
         // ---- params -----------------------------------------------------------------------------------------------
 
+        /// <summary>
+        ///     The x of a <c>format_float_positional</c> / <c>format_float_scientific</c> case, as the C# value standing for
+        ///     what NumPy was handed: the operand's element as the NumPy scalar of its width (a <see cref="Half"/> /
+        ///     <see cref="float"/> / <see cref="double"/>: NumPy's <c>PyArray_IsScalar</c> path, each width with its own
+        ///     digits); the operand ARRAY itself (params <c>as_array</c>: NumPy's <c>float(a)</c>, a float64 for every
+        ///     dtype, a TypeError for a complex or non-0-d one); or a Python int (params <c>pyint</c>, a decimal string of
+        ///     any size, as a <see cref="BigInteger"/>: correctly rounded, OverflowError past the float range).
+        /// </summary>
+        /// <param name="p">The case params.</param>
+        /// <param name="ops">The rebuilt operands (none for a Python-int case).</param>
+        /// <returns>The argument.</returns>
+        private static object FormatFloatArgument(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            if (p.TryGetValue("pyint", out var pyint))
+                return BigInteger.Parse(pyint.GetString(), CultureInfo.InvariantCulture);
+            if (p.TryGetValue("as_array", out var asArray) && asArray.GetBoolean())
+                return ops[0];
+            return ops[0].GetAtIndex(0);
+        }
+
         /// <summary>An int param.</summary>
         private static int SurfInt(IReadOnlyDictionary<string, JsonElement> p, string key) => p[key].GetInt32();
 
@@ -802,20 +822,5 @@ namespace NumSharp.Tests.Fuzz
         private static object PyNumber(JsonElement v)
             => v.TryGetInt64(out long l) ? l : v.GetDouble();
 
-        /// <summary>
-        ///     A 0-d float operand's value as the <c>double</c> NumSharp's float formatters take (their only overload).
-        ///     The widening is exact, so a float16 / float32 value reaches the formatter unchanged; NumPy formats such a
-        ///     value at its own precision, which a double-only API cannot know.
-        /// </summary>
-        /// <param name="a">The 0-d operand.</param>
-        /// <returns>Its value as a double.</returns>
-        /// <remarks><see cref="Half"/> does not implement <see cref="IConvertible"/>, hence the explicit cases.</remarks>
-        private static double ScalarAsDouble(NDArray a) => a.GetAtIndex(0) switch
-        {
-            Half h => (double)h,
-            float f => f,
-            double d => d,
-            var o => Convert.ToDouble(o, CultureInfo.InvariantCulture),
-        };
     }
 }

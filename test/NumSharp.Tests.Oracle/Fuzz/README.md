@@ -989,7 +989,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
 | `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 474 cells under 34 gap ids since the strings rebase of 2026-10-12 (VF03, VF05, VF11, VF18, VF23-VF25, VF28, VF33, VF35, VF39 and VF40 fixed; VF01, VF08, VF12, VF26 and VF32 narrowed); 705 cells under 46 gap ids before it (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VO01, VA02, VA04), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA01 searchsorted, VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod, VF39 repeat, VF40 unique + the set routines). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros) |
 | `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 75 cells under 4 gap ids since the strings rebase of 2026-10-12 fixed RL04, RL05 and RL06 (179 cells under 7 ids before), written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines), RL05 (repeat of a 0-d offset view), and the empty-operand early returns RL06 (comparison operators) and RL07 (logaddexp / logaddexp2). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros) |
-| `gen_surface_oracle._gap_of` (surface) | 600 cells under 27 gap ids since the strings rebase of 2026-10-12 fixed SU1, SU25-SU34, SU40, SU41, SU42 and SU4's 'auto' / 'fd' and SU17 (dtype.newbyteorder's explicit byte order) was fixed on 2026-10-14 (986 cells under 42 ids before), written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU1, SU2, SU4, SU8, SU10, SU11, SU15, SU16, SU22, SU28, SU29, SU32-SU35, SU40), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters, SU25 / SU31 nditer order, SU38 / SU39 cumsum / cumprod dtype=, SU6 / SU9 / SU18 / SU19 the float formatters), np.nditer's write-backs (SU41 an updateifcopy operand refused without buffering, SU42 the iteration protocol one element ahead: a buffered readwrite loop loses the last write of each buffer), crashes (SU5 apply_along_axis over a stride-0 offset view, SU30 nditer.remove_axis), reporting (SU3, SU17, SU21, SU23, SU24, SU26, SU27), the double-only float formatters (SU7) and the cumulative_* aliases (SU36 / SU37). Drawn by modelling each bug where it is not a fixed set (the float formatters on the widened double with NumSharp's Dragon4 carry and trim rules; np.nditer's C walk for an F + broadcast set via NumPy with order='C'; the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (41 public-call repros) |
+| `gen_surface_oracle._gap_of` (surface) | 223 cells under 20 gap ids since the strings rebase of 2026-10-12 fixed SU1, SU25-SU34, SU40, SU41, SU42 and SU4's 'auto' / 'fd', SU17 (dtype.newbyteorder's explicit byte order) was fixed on 2026-10-14 and the port of NumPy's dragon4.c fixed SU6-SU9, SU18 and SU19 on 2026-10-18 (SU5 found fixed by 287c3e2e the same day; 986 cells under 42 ids before), written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU2, SU4, SU10, SU11, SU15, SU16, SU22, SU35), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters, SU38 / SU39 cumsum / cumprod dtype=), reporting (SU3, SU21, SU23, SU24) and the cumulative_* aliases (SU36 / SU37). Drawn by fixed predicates and models where a bug is not a fixed set (the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (36 public-call repros, 17 of them untagged regression pins) |
 | `gen_ma_surface_oracle._gap_of` (ma_surface) | 6,987 cells under 23 gap ids since the strings rebase of 2026-10-12 fixed MS3, MS6-MS14, MS16, MS25, MS28, MS35 and MS2's column_stack / dstack / diagflat (10,123 cells under 37 ids before; the two set_fill_value / common_fill_value models went with MS12 / MS13), written to `corpus/gaps/ma_surface_gaps.jsonl`: the result FORM (MS1 an all-False result mask dropped to nomask, MS2 the _fromnxfunction wrappers' full mask, MS3 the *_like mask, MS4 a 0-d resize, MS5 apply_over_axes' plain ndarray, MS9 masked_object's kept all-False mask), silent wrong values (MS7 / MS12 / MS13 fill values never converted, MS11 / MS31 unsafe casts in putmask and the hard-masked setitem, MS14 the bool extremum fills, MS17 is_mask, MS34 corrcoef's masked-slot data, MS36 ids of a strided / reversed view, MS37 cov / corrcoef with a 1-D y under rowvar=False), crashes and refusals (MS15, MS22, MS26, MS33, MS35), NumPy's refusals and texts (MS6, MS8, MS21, MS23, MS24, MS25, MS27, MS28, MS30, MS32) and the API shape (MS10, MS16, MS18, MS19, MS20, MS29). Drawn by fixed predicates and two models (NumSharp's raw fill values for set_fill_value / common_fill_value; which ids views re-seat the storage address), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.MaSurface_KnownGaps`, `OpenBugs.MaSurface.cs` (30 public-call repros) |
 | `gen_ma_oracle.gen_ma_setops` (`ma_setops`), "tie order" | 221 cases (at generation): numpy.ma arraysetops whose NumPy answer depends on its unstable quicksort's order among equal keys that are not interchangeable (a masked slot tied with an unmasked value equal to the fill key — NaN, the dtype maximum, True for bool — or ±0 / NaN payloads among unmasked values). NumPy's own answer is host-dependent there (x86-simd-sort AVX2 vs AVX-512 networks); NumSharp's sort is stable | inherent, no pin (`ma_setops_reference.py` marks each case SENSITIVE; the generator stops on a drop that is not) |
 | `gen_random_parity` carve list | `multivariate_normal` only: byte-identical only through a LAPACK backend's `gesdd` (the managed Jacobi SVD flips a singular vector's sign). The other seven samplers (gamma shape<1, f, pareto, standard_cauchy, binomial, negative_binomial, multinomial) were uncarved 2026-09-25 — legacy-distributions.c ports — and every sampler is also covered by the `random_api` tiers | `OpenBugsRandom.RandomParity_MultivariateNormal_Seed42_ShouldMatchNumPy` (the seven former pins are ordinary tests) |
@@ -1917,6 +1917,7 @@ The op keys are the API names, so the coverage join credits the rows directly. T
 | memory | array_equiv, shares_memory, may_share_memory (10 view pairs x 5 max_work values x 5 dtypes), broadcast_shapes | |
 | apply | apply_along_axis, apply_over_axes (13 dtypes x the function menus), bmat (nested lists, strings with ldict / gdict) | operand kinds incl. a stride-0 view at an offset |
 | text | array2string (every option), format_float_positional / scientific (3 widths x 12 values x every option, and a rounding grid of carry / round-down / tie values x precision x trim), base_repr, binary_repr, typename, datetime_data | |
+| dragon4 | format_float_positional / scientific as NumPy's dragon4.c (2026-10-18, appended after every other section so the earlier ids stay): 250 random bit patterns per width under a random option set each (unique and exact digits, both cutoff modes, min_digits, every trim mode, padding, exp_digits; the option errors in NumPy's order), x as the 0-d ARRAY itself (`as_array`: NumPy's float(a), every dtype as the float64 it converts to, complex a TypeError, 1-D 'only 0-dimensional arrays ...'), x as a Python int (`pyint`: correctly rounded, OverflowError past the float range); then two systematic blocks random bit patterns never reach: exact digits that END inside the precision (`exactend`: 13 values x 6 precisions x 4 trims x both notations — only scientific trim '-' shows a kept zero, '1e+22' against '1.e+22') and powers of two under min_digits (`pow2`: the 8 float64 cases whose last digit the high margin alone decides after a forced continuation, found by simulating NumPy's loop on exact integers (`_d4_min_digits_state`), with their neighbours, and a sample of every width's powers of two) | 3,330 cases |
 | ndarray | tolist (Python repr), tofile (raw bytes and text), setfield, base, dtype, shape, device, to_device, data (the memoryview: 12 attributes) | 13 dtypes x 19 kinds incl. a 0-d view at an offset |
 | attrs | finfo / iinfo (names and spellings), dtype (21 attributes x 24 specs incl. byte orders and datetimes), ndarray.flags (14 x 6 dtypes x 21 kinds), poly1d (coeffs and aliases, order, deriv, integ, variable, r / roots on the polynomials np.roots solves without a companion matrix — eigvals needs a LAPACK backend) | |
 | objects | np.broadcast (index, iters, reset after k steps), flatiter (index, coords after k steps, copy, base), np.nditer (23 members x 9 configs x 14 operand sets, after k steps; members after k next() calls — the iteration protocol; refusals; closed and delayed iterators; close()'s write-backs for updateifcopy / buffered / buffered external-loop / plain readwrite operands, before and after close), set_printoptions / printoptions / get_printoptions, setbufsize / getbufsize, dtype.type, frompyfunc | |
@@ -1924,8 +1925,8 @@ The op keys are the API names, so the coverage join credits the rows directly. T
 
 | File | Cases | Replayed by |
 |---|---|---|
-| `surface.jsonl` | 15,868 cases over 139 op keys (15,482 until 2026-10-12, 15,866 until 2026-10-14) | `FuzzCorpusTests.Surface` (valueclass `surface`: zero registry excuses) |
-| `gaps/surface_gaps.jsonl` | 600 carved under 27 ids (986 under 42 until 2026-10-12, 602 under 28 until 2026-10-14) | `Surface_KnownGaps` (`[OpenBugs]`) |
+| `surface.jsonl` | 25,698 cases over 149 op keys (15,482 until 2026-10-12, 15,866 until 2026-10-14, 21,991 until 2026-10-18) | `FuzzCorpusTests.Surface` (valueclass `surface`: zero registry excuses) |
+| `gaps/surface_gaps.jsonl` | 223 carved under 20 ids (986 under 42 until 2026-10-12, 602 under 28 until 2026-10-14, 600 under 27 until 2026-10-18) | `Surface_KnownGaps` (`[OpenBugs]`) |
 
 **Redrawn 2026-10-12, when branch strings was rebased onto journey4:** its np.nditer work (NumPy's descriptors,
 construction checks and iteration protocol) and its axis normalization made SU1, SU25-SU34, SU40, SU41 and SU42 match
@@ -1934,6 +1935,17 @@ back into the gate, the rules are dropped, the carve is exact again. Their pins 
 untagged regression tests, and SU4's open part ('doane', 'scott', 'stone', 'rice', 'sturges', 'sqrt') has a pin of its
 own. The np.array_equiv leak below went with the comparison operators' empty-left early return. The list below is the
 one found at delivery.
+
+**Redrawn 2026-10-18, by the port of NumPy's dragon4.c** (unit 8 of `docs/plans/numpy-polynomial-remaining-compute.md`):
+np.format_float_positional / np.format_float_scientific give NumPy's text for every option and argument kind, so SU6-SU9,
+SU18 and SU19 match NumPy and their 373 cases are back in the gate (the regeneration moved exactly those, byte for
+byte); their model of the old double-only formatter is dropped, and the pins moved to `Casting/Dragon4PortTests.cs`. The
+replay of the gap file also reported SU5 matching (np.apply_along_axis over a stride-0 view at an offset: 287c3e2e's
+`ClampToBuffer` in `UnmanagedStorage.GetData`), so its rule went too and its pin is an untagged regression test. Section
+dragon4 (3,330 cases) holds the port at large (its exact-end and power-of-two blocks were added after a mutation pass:
+the two defects that survived it are visible only there); the registry hands x over as the operand's element (the NumPy
+scalar of its width), the operand ARRAY itself (`as_array`) or a `BigInteger` (`pyint`): `OpRegistry.Surface.cs`
+`FormatFloatArgument`.
 
 **What it found** (42 ids, 41 still open; the library defects reproduced through public calls in
 `NumSharp.Tests/OpenBugs.Surface.cs`, 40 tests with NumPy 2.4.2 literals):
@@ -1967,7 +1979,8 @@ one found at delivery.
 - *Reporting*: complex histogram edges (SU3), dtype.newbyteorder's repr (SU17, fixed 2026-10-14), get_printoptions' missing formatter /
   override_repr keys (SU21), edgeitems=0 summarization (SU23), the datetime dtype.type (SU24), np.nditer.shape's axis
   order (SU26), and c_index / f_index blocking coalescing (SU27).
-- *API shape*: the float formatters take only a double, so float16 / float32 values print with float64 digits (SU7);
+- *API shape*: the float formatters take only a double, so float16 / float32 values print with float64 digits (SU7,
+  fixed 2026-10-18);
   numpy.cumulative_sum / cumulative_prod do not exist and np.cumsum / np.cumprod lack include_initial and flatten N-D
   input without axis (SU36, SU37; `coverage/overrides.json` now marks both rows partial).
 - *Leaks* (the scope sweep replays the tier): np.MemoryView.tobytes / hex of a non-contiguous array never dispose their
@@ -2949,6 +2962,27 @@ the 7,923 generated cases). Unit tests (`Polynomial/PolynomialRootsTests.cs`) pi
 roots NumPy answers with an object array (`[Misaligned]`), the object series' C# spellings (BigInteger, Half, 0-d
 arrays), decimal, the backend-missing path, real roots surviving a later call (the reinterpreting-alias
 use-after-free, `ArcLifecycleTests.ReinterpretingAlias_*`), both write-once allocation paths and the ramp kernel. Design and measurements: `docs/plans/numpy-polynomial.md` (U7).
+
+### numpy.polynomial printing helpers (`polyprint` tier) — 2026-10-18
+
+`polyprint.jsonl` (`gen_oracle.py polyprint`, 6,797 cases, floor 6,500) gates plan unit U11's two functions —
+`polyutils.format_float` and `set_default_printstyle` — **exact, 0 excused** (valueclass `polyprint`, error cases
+`error`; `MisalignedRegistry` returns null for both op keys). Text results (`"kind": "text"`, error cases too, so
+`OpRegistry.Invoke` routes them to `ApplyText`):
+- **format_float** (`polyutils.format_float`, 6,768 cases): x through the polyseries encoding plus `npscalar` float32
+  (a C# float — np.float32 in the float formatters: `OpRegistry.PolySeries.cs` `PolyArgs`): Python floats, np.float32 and
+  np.float16 scalars over the scientific thresholds and their neighbours, specials, carries, random and log-random
+  values, under 18 print-option sets (precision 0-20, every floatmode, sign '+' / ' ', nanstr / infstr, suppress) with
+  parens drawn per case; Python ints / bools / complexes / strs / None / lists / tuples / np.uint16 and ndarrays of 0 to
+  2 dimensions (`str(x)`, which follows the print options for an array) under 10 option sets; and precision 20000 (a
+  unique cut is free; fixed mode overflows NumPy's buffer: RuntimeError in positional notation, a 16387-character text
+  in scientific notation). The registry runs each case inside `np.printoptions(**opts)`.
+- **set_default_printstyle** (29 cases, a bare op key with its own `coverage/oracle_map.json` entry): the two accepted
+  texts, near misses, Python numbers / None / lists / tuples, NumPy scalars and arrays (the truth value of their
+  comparison with a str). The recorded result is the class flag after the call (`"True"` / `"False"`); the generator
+  resets `ABCPolyBase._use_unicode` after every case and the registry restores `NDPolyPrinting.UseUnicode`.
+Not recorded: a text array as the style and bytes (no operand text dtype / bytes spec: unit-tested in
+`Polynomial/PolynomialPrintingTests.cs`).
 
 ### einsum (`einsum` tier)
 

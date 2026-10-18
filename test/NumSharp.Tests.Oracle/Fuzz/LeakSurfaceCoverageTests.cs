@@ -479,6 +479,10 @@ namespace NumSharp.Tests.Fuzz
                     // A function whose every success needs LAPACK (the Gauss quadratures' eigvalsh): the backend pass.
                     return UndisposedIntermediateTests.BackendOnlyOpKeys.Contains(key) ? ev.BackendRoute(key) : null;
                 }
+                // The numpy.polynomial package itself: its function set_default_printstyle is keyed bare (the polyprint
+                // tier; a "polynomial." key would name the numpy.polynomial.polynomial submodule).
+                case "np.polynomial":
+                    return Has(m.Name) ? "corpus: polynomial" : null;
                 case "np.fft":
                     return Has(m.Name) ? "corpus: fft" : null;
                 case "np.linalg":

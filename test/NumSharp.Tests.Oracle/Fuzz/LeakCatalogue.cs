@@ -529,8 +529,17 @@ namespace NumSharp.Tests.Fuzz
                     s += x;
                 return Box(s);
             });
-            E(l, "np.format_float_positional", "double", f => np.format_float_positional(3.14159, precision: 3));
-            E(l, "np.format_float_scientific", "double", f => np.format_float_scientific(314.159, precision: 3));
+            // x is an object (NumPy's any-real-number argument): a double, a float32 scalar (C# float) and a held 0-d array.
+            E(l, "np.format_float_positional", "double / float / 0-d array", f => new object[]
+            {
+                np.format_float_positional(3.14159, precision: 3), np.format_float_positional(0.1f),
+                np.format_float_positional(f.Zero, unique: false, precision: 5),
+            });
+            E(l, "np.format_float_scientific", "double / float / 0-d array", f => new object[]
+            {
+                np.format_float_scientific(314.159, precision: 3), np.format_float_scientific(0.1f),
+                np.format_float_scientific(f.Zero, unique: false, precision: 5),
+            });
             E(l, "np.frompyfunc", "Call", f => np.frompyfunc((Func<double, double>)(x => x * 2), 1, 1).Call(f.V));
             E(l, "np.get_printoptions", "read", f => np.get_printoptions());
             E(l, "np.getbufsize", "read", f => Box(np.getbufsize()));

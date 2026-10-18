@@ -21840,6 +21840,149 @@ def gen_polyfit():
 
 
 # ---------------------------------------------------------------------------
+# T-polyprint — numpy.polynomial's printing helpers (plan U11, numpy-polynomial-remaining-compute.md §3.8: unit 8):
+# polyutils.format_float(x, parens=False), the coefficient formatter of the series classes, and
+# numpy.polynomial.set_default_printstyle(style):
+#   (A) format_float over x of every kind — Python floats (the thresholds 1e8 and 10**min(0, -(precision-1)//2) and
+#       their neighbours, specials, carries, random and log-random values), the same values as np.float32 and
+#       np.float16 scalars (each printed with its own digits; the thresholds compared in its own dtype), Python ints /
+#       bools / complexes / strs / None / lists / tuples (str(x)), and ndarrays of 0 to 2 dimensions (str of the array,
+#       which follows the print options) — under every print option format_float reads (precision 0..20, floatmode
+#       fixed / unique / maxprec / maxprec_equal, sign '+' / ' ', nanstr / infstr, suppress), parens on and off; and
+#       precision 20000 (a unique cut is free; fixed mode's zeros overflow NumPy's 16384-character buffer:
+#       RuntimeError in positional notation, a 16387-character text in scientific notation, whose zero loop does not
+#       count down the buffer);
+#   (B) set_default_printstyle over styles of every kind: the two accepted texts, near misses, Python numbers / None /
+#       lists / tuples, NumPy scalars, and arrays (the truth value of their elementwise comparison with a str). The
+#       recorded result is the class flag ABCPolyBase._use_unicode after the call ("True" / "False"), or NumPy's error;
+#       the flag is reset to NumPy's default after every case.
+# Portable: Dragon4 is integer arithmetic. Not recorded: text arrays as the style (the corpus operands carry no text
+# dtype: unit-tested), bytes (the same), and np.float64 / np.longdouble scalars (a C# double is the Python float).
+_PP_FLOATS = [0.1, -0.0, 0.0, 1e8, 99999999.5, 99999999.99999999, 1e-4, 9.9999e-5, 1e-5, 1.23456789e-3,
+              123456.123456789, float("nan"), -float("nan"), float("inf"), float("-inf"), 1.999999999, 0.999999999,
+              5e-324, 1.7976931348623157e308, 1e300, 1e-300, 12345678.9, -2.5, 1.23456789123, 0.000123456, 1.999999,
+              0.0099999, 12.0, 0.3, 1 / 3, 2.675, 9.995, 0.0995, 1e-8, 1e-9, 1e-10, 1e16, 1e22, 1e23, 65504.0,
+              6.103515625e-05, 5.960464477539063e-08]
+_PP_OPTS = [{}, {"precision": 3}, {"precision": 0}, {"precision": 1}, {"precision": 2}, {"precision": 5},
+            {"precision": 16}, {"precision": 20}, {"floatmode": "fixed"}, {"floatmode": "fixed", "precision": 3},
+            {"floatmode": "fixed", "precision": 0}, {"floatmode": "unique"}, {"floatmode": "maxprec"},
+            {"floatmode": "maxprec_equal"}, {"sign": "+"}, {"sign": " "}, {"nanstr": "NaN", "infstr": "INF"},
+            {"suppress": True}, {"precision": 5, "sign": "+"}]
+
+
+def _pp_ff_spec(v, operands):
+    """The params spec of one format_float x: an np.float32 scalar as a "npscalar" float32 (a C# float), everything
+    else through _ps_enc (np.float16 as a Half, Python numbers / str / None / lists / tuples, _PSArr operands)."""
+    if isinstance(v, np.float32):
+        return {"kind": "npscalar", "dtype": "float32", "bits": "0x%08x" % int(np.array(v).view(np.uint32))}
+    return _ps_enc(v, operands)
+
+
+def gen_polyprint():
+    """Generates the polyprint tier (see the T-polyprint header).
+
+    Returns:
+        The cases.
+    """
+    from numpy.polynomial import polyutils as pu
+    import numpy.polynomial._polybase as pb
+    cases = []
+    counter = [0]
+    rng = np.random.default_rng(20261018)
+    A = _PSArr
+
+    def emit_ff(x, opts, parens, layout, cid):
+        operands = []
+        params = {"x": _pp_ff_spec(x, operands), "parens": parens}
+        if opts:
+            params["opts"] = opts
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.printoptions(**opts), np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                text = pu.format_float(_ps_py(x), parens=parens)
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": "polyutils.format_float", "params": params, "operands": operands,
+                          "expected": {"kind": "text"}, "expects_throw": True, "error": _poly_exc(e), "layout": layout,
+                          "valueclass": "error"})
+            return
+        cases.append(_case("polyutils.format_float", params, operands, {"kind": "text", "value": text}, layout,
+                           "polyprint", cid=f"{cid}/{n}"))
+
+    def emit_style(style, layout, cid):
+        operands = []
+        params = {"style": _ps_enc(style, operands)}
+        n = counter[0]
+        counter[0] += 1
+        default = pb.ABCPolyBase._use_unicode
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                np.polynomial.set_default_printstyle(_ps_py(style))
+            text = str(pb.ABCPolyBase._use_unicode)
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": "set_default_printstyle", "params": params, "operands": operands,
+                          "expected": {"kind": "text"}, "expects_throw": True, "error": _poly_exc(e), "layout": layout,
+                          "valueclass": "error"})
+            return
+        finally:
+            pb.ABCPolyBase._use_unicode = default
+        cases.append(_case("set_default_printstyle", params, operands, {"kind": "text", "value": text}, layout,
+                           "polyprint", cid=f"{cid}/{n}"))
+
+    # (A) format_float: the floats of every width under every option set, parens drawn per case (it only shows on a
+    #     scientific result, which the option sets reach for most values).
+    floats = list(_PP_FLOATS)
+    floats += [float(v) for v in rng.uniform(-1e3, 1e3, 24)] + [float(10 ** v) for v in rng.uniform(-12, 12, 24)]
+    # the scientific thresholds' neighbours for every option set's precision
+    for t in (1e8, 1e-4, 1e-2, 1e-1, 1e-3, 1e-7, 1e-9, 1.0):
+        floats += [float(np.nextafter(t, 0)), t, float(np.nextafter(t, np.inf))]
+    xs = []
+    for v in floats:
+        xs.append(("pyfloat", v))
+        with np.errstate(all="ignore"):
+            xs.append(("f32", np.float32(v)))
+            xs.append(("f16", np.float16(v)))
+    for i, opts in enumerate(_PP_OPTS):
+        for kind, x in xs:
+            parens = bool(rng.integers(2))
+            emit_ff(x, opts, parens, f"ff_{kind}", f"polyutils.format_float/opt{i}/{kind}")
+    # precision 20000: unique digits stop at the shortest; fixed digits run into NumPy's buffer
+    for opts in ({"precision": 20000}, {"floatmode": "fixed", "precision": 20000}):
+        for v in (0.1, 1e-5, 2.5e9, float("nan"), float("-inf")):
+            emit_ff(v, opts, False, "ff_buffer", f"polyutils.format_float/buffer/{opts.get('floatmode', 'maxprec')}")
+    # non-floating x: str(x) (print options matter only for arrays)
+    others = [("int", 1), ("int_neg", -7), ("int_big", 2 ** 70), ("bool", True), ("complex", 1 + 2j),
+              ("complex_real", 1.5 + 0j), ("str", "1.5"), ("str_empty", ""), ("none", None), ("list", [1.5]),
+              ("list_nested", [[0.1, 2.0]]), ("tuple", (1.5,)), ("tuple_empty", ()), ("npu16", np.uint16(3))]
+    arrays = [("arr0_f8", np.array(0.30000000000000004)), ("arr0_f4", np.array(0.1, np.float32)),
+              ("arr0_f2", np.array(0.1, np.float16)), ("arr0_i8", np.array(3)), ("arr0_b", np.array(True)),
+              ("arr0_c16", np.array(1 + 2j)), ("arr1_f8", np.array([1.5])), ("arr1_f8b", np.array([0.1, 0.2, 1e-5])),
+              ("arr2_f8", np.array([[0.1, 2.0], [1e-5, 3.25]])), ("arr1_i4", np.array([1, -2, 3], np.int32)),
+              ("arr1_c16", np.array([1 + 2j, -0.5j])), ("arr1_empty", np.zeros(0))]
+    for i, opts in enumerate(_PP_OPTS[:8] + [{"floatmode": "fixed", "precision": 3}, {"sign": "+"}]):
+        for lab, v in others:
+            emit_ff(v, opts, bool(rng.integers(2)), "ff_object", f"polyutils.format_float/obj{i}/{lab}")
+        for lab, a in arrays:
+            emit_ff(A(a), opts, bool(rng.integers(2)), "ff_array", f"polyutils.format_float/arr{i}/{lab}")
+
+    # (B) set_default_printstyle
+    styles = [("unicode", "unicode"), ("ascii", "ascii"), ("ASCII", "ASCII"), ("Unicode", "Unicode"),
+              ("empty", ""), ("space", " ascii"), ("ascii_space", "ascii "), ("utf8", "utf-8"), ("none", None),
+              ("int1", 1), ("int0", 0), ("float", 1.5), ("true", True), ("false", False), ("complex", 1j),
+              ("list", ["ascii"]), ("list_empty", []), ("tuple", ("ascii",)), ("tuple2", ("ascii", "unicode")),
+              ("npf16", np.float16(1.0)), ("npu16", np.uint16(3)), ("big", 2 ** 70),
+              ("arr0_i8", A(np.array(1))), ("arr1_f8", A(np.array([1.0]))), ("arr2_i8", A(np.array([1, 2]))),
+              ("arr_empty", A(np.zeros(0))), ("arr0_b", A(np.array(True))), ("arr0_f4", A(np.array(1.5, np.float32))),
+              ("arr0_u8", A(np.array(2, np.uint8)))]
+    for lab, s in styles:
+        emit_style(s, "style", f"set_default_printstyle/{lab}")
+    print(f"  {len(cases)} cases")
+    return cases
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -23303,8 +23446,12 @@ def main():
         write_jsonl(os.path.join(corpus_dir, "polyfit.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polyfit_parity.jsonl"), host)
         write_jsonl(os.path.join(corpus_dir, "polyfit_parity.host.jsonl"), [blas_identity()])
+    elif mode == "polyprint":
+        # numpy.polynomial's printing helpers (U11): polyutils.format_float and set_default_printstyle, portable.
+        cases = gen_polyprint()
+        write_jsonl(os.path.join(corpus_dir, "polyprint.jsonl"), cases)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | polyprint | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

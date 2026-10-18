@@ -54,7 +54,7 @@ namespace NumSharp.Backends.Printing
     ///     within precision.
     ///     </para>
     /// </remarks>
-    internal static class Dragon4
+    internal static partial class Dragon4
     {
         private static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 

@@ -292,7 +292,8 @@ namespace NumSharp.Tests.Fuzz
             // hazard — branch (1) excused ANY dtype divergence of a multi-operand op with a 0-d operand, and
             // the U1 surface makes a 0-d array a STRONG NumPy scalar on purpose, so a real promotion bug there
             // would have been reported as "documented". Returning null here keeps every polynomial divergence red.
-            if (OpRegistry.IsPolynomialOp(c.Op))
+            // The package's own function set_default_printstyle (the polyprint tier) carries no module prefix.
+            if (OpRegistry.IsPolynomialOp(c.Op) || c.Op == "set_default_printstyle")
                 return null;
 
             // sum_identity.jsonl (np.sum's identity-seeded add reduction) is held to ZERO excuses too. Its values

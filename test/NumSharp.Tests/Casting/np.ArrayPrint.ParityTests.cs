@@ -150,15 +150,15 @@ public class np_ArrayPrint_ParityTests
     #region format_float_positional / scientific
 
     [TestMethod] public void FFP_Pi_Unique() => np.format_float_positional(System.Math.PI).Should().Be("3.141592653589793");
-    [TestMethod] public void FFP_Third_Prec8() => np.format_float_positional(1.0 / 3.0, precision: 8, unique: true, trim: '.', fractional: true).Should().Be("0.33333333");
+    [TestMethod] public void FFP_Third_Prec8() => np.format_float_positional(1.0 / 3.0, precision: 8, unique: true, trim: ".", fractional: true).Should().Be("0.33333333");
     [TestMethod] public void FFP_TrimModes()
     {
-        np.format_float_positional(2.0, precision: 8, unique: true, trim: 'k').Should().Be("2.");
-        np.format_float_positional(2.0, precision: 8, unique: true, trim: '0').Should().Be("2.0");
-        np.format_float_positional(2.0, precision: 8, unique: true, trim: '-').Should().Be("2");
+        np.format_float_positional(2.0, precision: 8, unique: true, trim: "k").Should().Be("2.");
+        np.format_float_positional(2.0, precision: 8, unique: true, trim: "0").Should().Be("2.0");
+        np.format_float_positional(2.0, precision: 8, unique: true, trim: "-").Should().Be("2");
     }
-    [TestMethod] public void FFS_Big() => np.format_float_scientific(123456.789, precision: 8, unique: true, trim: '.').Should().Be("1.23456789e+05");
-    [TestMethod] public void FFS_Small() => np.format_float_scientific(1e-16, precision: 8, unique: true, trim: '.').Should().Be("1.e-16");
+    [TestMethod] public void FFS_Big() => np.format_float_scientific(123456.789, precision: 8, unique: true, trim: ".").Should().Be("1.23456789e+05");
+    [TestMethod] public void FFS_Small() => np.format_float_scientific(1e-16, precision: 8, unique: true, trim: ".").Should().Be("1.e-16");
 
     #endregion
 

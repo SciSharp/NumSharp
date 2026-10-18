@@ -879,6 +879,16 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void PolyptsHost() => RunHostLibmCorpus("polypts_host.jsonl");
 
+        // numpy.polynomial's printing helpers (plan docs/plans/numpy-polynomial-remaining-compute.md §3.8, unit U11):
+        // polyutils.format_float over x of every kind (Python floats, np.float32 / np.float16 scalars with their own
+        // digits and thresholds, Python ints / bools / complexes / strs / None / lists / tuples and ndarrays: str(x))
+        // under every print option it reads, parens on and off, and NumPy's 16384-character buffer; and
+        // set_default_printstyle over styles of every kind (the class flag after the call, or NumPy's ValueError).
+        // PORTABLE: Dragon4 is integer arithmetic.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyprint() => RunCorpus("polyprint.jsonl");
+
         // numpy.polynomial's Gauss-Legendre / -Laguerre / -Hermite quadrature (plan U8): leggauss / laggauss /
         // hermgauss / hermegauss's argument errors — operator.index's kinds, a 0-d integer array (`[0] * arr` is
         // np.multiply, so the companion refuses the one-element series), CPython's list-repeat OverflowError /
@@ -1305,6 +1315,7 @@ namespace NumSharp.Tests.Fuzz
             ["polyfit.jsonl"] = 310,   // numpy.polynomial {p}fit x 6 argument errors (U6), portable — 324 at delivery
             ["polyfit_parity.jsonl"] = 1180,   // their lstsq-based values, statistics and flags, host-pinned (threads = 1) — 1,242 at delivery
             ["polypts.jsonl"] = 340,   // numpy.polynomial Chebyshev points / Gauss-Chebyshev quadrature (U8): errors, empties, flags, Char — 362 at delivery
+            ["polyprint.jsonl"] = 6500,   // numpy.polynomial's printing helpers (U11): polyutils.format_float x kinds x print options, set_default_printstyle x style kinds — 6,797 at delivery
             ["polypts_host.jsonl"] = 320,   // their sin / cos values, host-pinned — 347 at delivery
             ["polyweight_host.jsonl"] = 1200,   // the exp-based weights' C-runtime loops (float64 / float16 / complex128), host-pinned — 1,235 at delivery
             ["polyroots_parity.jsonl"] = 1350,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery, 1,354 with section K's edge series
@@ -1345,9 +1356,11 @@ namespace NumSharp.Tests.Fuzz
             ["relayout.jsonl"] = 14000,    // 14,964 variants of the portable tiers, 19 kinds
             ["relayout_host.jsonl"] = 1600, // 1,728 variants of the host-libm tiers
             // The surface tier (gen_surface_oracle.py, 2026-10-08): the APIs the coverage inventory listed as available
-            // but unproven. Delivered count (the 600 carved gaps live in corpus/gaps/surface_gaps.jsonl; 986 at delivery,
-            // 602 after the strings rebase of 2026-10-12, SU17's 2 cases returned to the gate when it was fixed, 2026-10-14):
-            ["surface.jsonl"] = 14700,     // 15,868 cases over 139 op keys
+            // but unproven. Delivered count (the 223 carved gaps live in corpus/gaps/surface_gaps.jsonl; 986 at delivery,
+            // 602 after the strings rebase of 2026-10-12, SU17's 2 cases returned to the gate when it was fixed, 2026-10-14,
+            // and the 373 of SU6-SU9 / SU18 / SU19 when the port of NumPy's dragon4.c fixed them, 2026-10-18, with SU5's 4
+            // found fixed by 287c3e2e; the port added the dragon4 section's 3,330 cases):
+            ["surface.jsonl"] = 25000,     // 25,698 cases over 149 op keys
             // The matrix tier (gen_matrix_oracle.py, 2026-10-09): numpy.matrix as NDMatrix. Delivered count (the 172
             // carved gaps of the array library below the class live in corpus/gaps/matrix_gaps.jsonl):
             ["matrix.jsonl"] = 25400,      // 26,761 cases over 87 op keys: values, result class, memory facet, errors

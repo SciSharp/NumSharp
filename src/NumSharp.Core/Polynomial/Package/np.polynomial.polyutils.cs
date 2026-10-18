@@ -8,8 +8,8 @@ namespace NumSharp
     /// <summary>
     ///     <c>numpy.polynomial.polyutils</c> — the helpers the six basis modules are built on, reachable as
     ///     <c>np.polynomial.polyutils</c>: series normalization (<see cref="as_series"/>, <see cref="trimseq"/>,
-    ///     <see cref="trimcoef"/>) and the linear domain maps (<see cref="getdomain"/>, <see cref="mapparms"/>,
-    ///     <see cref="mapdomain"/>).
+    ///     <see cref="trimcoef"/>), the linear domain maps (<see cref="getdomain"/>, <see cref="mapparms"/>,
+    ///     <see cref="mapdomain"/>) and the coefficient formatter of the series classes (<see cref="format_float"/>).
     /// </summary>
     /// <remarks>
     ///     <para>Every function reproduces NumPy 2.4.2 bit for bit, including which ARITHMETIC runs: NumPy never
@@ -21,7 +21,8 @@ namespace NumSharp
     ///     <see cref="ValueTuple"/> a Python tuple of Python numbers (a C# <c>bool</c> / integer / <c>float</c> /
     ///     <c>double</c> / <see cref="Complex"/> is a Python number; <see cref="Half"/>, <c>char</c> and
     ///     <c>decimal</c> are NumPy scalars of their dtype).</para>
-    ///     <para><c>format_float</c> belongs to the printing unit and is not here yet.</para>
+    ///     <para><see cref="format_float"/> prints with NumPy's Dragon4, ported (the code behind
+    ///     <see cref="np.format_float_positional"/> and <see cref="np.format_float_scientific"/>).</para>
     ///     <para>https://numpy.org/doc/stable/reference/routines.polynomials.polyutils.html</para>
     /// </remarks>
     [ModuleName("np.polynomial.polyutils")]
@@ -553,6 +554,34 @@ namespace NumSharp
             object o = r.IsZeroDimArray ? PolyNumber.ScalarOf(r.Array).ToObject() : r.ToObject();
             return o is NDArray nd ? scope.Returns(nd) : o;
         }
+
+        /// <summary>
+        ///     Formats one coefficient the way the series classes print it (NumPy's
+        ///     <c>numpy.polynomial.polyutils.format_float</c>): under the current print options (<see cref="np.printoptions"/>),
+        ///     positional with the shortest digits cut at <c>precision</c> and one zero kept after the point
+        ///     (<c>'0.1'</c>, <c>'2.0'</c>, <c>'123456.12345679'</c>), scientific from 1e8 up or below
+        ///     <c>10**min(0, -(precision - 1) // 2)</c> — 1e-4 at the default precision 8 (<c>'1.0e-05'</c>).
+        /// </summary>
+        /// <param name="x">The value. A <see cref="double"/> is <c>np.float64</c> / a Python float, a <see cref="float"/>
+        ///     <c>np.float32</c> (float32's digits: <c>0.1f</c> is <c>'0.1'</c> at every precision), a <see cref="Half"/>
+        ///     <c>np.float16</c>, a <see cref="decimal"/> NumSharp's floating decimal (printed as its float64). Anything
+        ///     that is not floating prints as Python's <c>str()</c> of the object it stands for: <c>'3'</c> (a C# integer,
+        ///     or a <see cref="char"/>: <c>np.uint16</c>), <c>'True'</c>, <c>'None'</c>, <c>'(1+2j)'</c>, the text itself,
+        ///     <c>'[1.5]'</c> for a list, an array's <c>str()</c> — a 0-d array too, since NumPy's test reads
+        ///     <c>type(x)</c>, which is <c>ndarray</c> there (<c>'0.30000000000000004'</c>).</param>
+        /// <param name="parens">Wrap a scientific result in parentheses (<c>'(1.0e-05)'</c>); a positional or special
+        ///     result is never wrapped.</param>
+        /// <returns>The text: <c>nanstr</c> / <c>infstr</c> for NaN and either infinity (an infinity's sign is NOT printed,
+        ///     as in NumPy: <c>-inf</c> gives <c>'inf'</c>); with <c>floatmode='fixed'</c> exactly <c>precision</c> digits
+        ///     (<c>'0.10000000'</c>); a leading '+' with <c>sign='+'</c> (<c>sign=' '</c> changes nothing).</returns>
+        /// <exception cref="RuntimeError">Fixed mode with a precision whose zeros do not fit NumPy's 16384-character
+        ///     buffer (<c>Float formatting result too large</c>).</exception>
+        /// <remarks>
+        ///     NumPy's statements (<see cref="NDPolyPrinting.FormatFloat"/>): the thresholds are Python literals, so they
+        ///     compare in the value's own dtype (a float16 sees 1e8 as infinity); the digits are NumPy's Dragon4, ported.
+        ///     https://github.com/numpy/numpy/blob/v2.4.2/numpy/polynomial/polyutils.py
+        /// </remarks>
+        public string format_float(object x, bool parens = false) => NDPolyPrinting.FormatFloat(x, parens);
 
         /// <summary>A tolerance argument as NumPy sees it (a Python number, a NumPy scalar, an array).</summary>
         /// <param name="tol">The C# value.</param>

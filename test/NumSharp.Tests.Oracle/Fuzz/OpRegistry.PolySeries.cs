@@ -149,19 +149,73 @@ namespace NumSharp.Tests.Fuzz
                     {
                         // A NumPy scalar with a C# spelling of its own: np.float16 is Half, np.uint16 is char (the house
                         // map: NumSharp's char dtype is NumPy's uint16); the other NumPy scalar kinds have none (a C# float /
-                        // double / long IS the Python float / int).
+                        // double / long IS the Python float / int) — except for the float formatters (polyutils.format_float,
+                        // the polyprint tier), where a C# float is np.float32 and prints with float32's digits.
                         string dt = e.GetProperty("dtype").GetString();
-                        ushort bits = Convert.ToUInt16(e.GetProperty("bits").GetString().Substring(2), 16);
+                        string hex = e.GetProperty("bits").GetString().Substring(2);
                         return dt switch
                         {
-                            "float16" => BitConverter.UInt16BitsToHalf(bits),
-                            "uint16" => (char)bits,
+                            "float16" => BitConverter.UInt16BitsToHalf(Convert.ToUInt16(hex, 16)),
+                            "uint16" => (char)Convert.ToUInt16(hex, 16),
+                            "float32" => BitConverter.UInt32BitsToSingle(Convert.ToUInt32(hex, 16)),
                             _ => throw new NotSupportedException($"NumPy scalar of dtype {dt} has no C# spelling"),
                         };
                     }
                     default:
                         return PythonScalar(e);
                 }
+            }
+        }
+
+        /// <summary>
+        ///     <c>polyutils.format_float(x, parens)</c> under the case's print options (params <c>opts</c>: precision,
+        ///     floatmode, sign, nanstr, infstr, suppress — the ones format_float reads, applied through
+        ///     <c>np.printoptions</c> and restored when the call returns, as NumPy's generator ran each case inside
+        ///     <c>np.printoptions(**opts)</c>).
+        /// </summary>
+        /// <param name="p">The params: <c>x</c> (a spec), <c>parens</c>, optional <c>opts</c>.</param>
+        /// <param name="ops">The reconstructed operands (an ndarray x).</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="RuntimeError">NumPy's buffer limit (fixed mode at a huge precision).</exception>
+        internal static string PolyFormatFloat(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            var a = new PolyArgs(p, ops);
+            object x = a.Get("x");
+            bool parens = p.TryGetValue("parens", out var pr) && pr.GetBoolean();
+            if (!p.TryGetValue("opts", out var o))
+                return np.polynomial.polyutils.format_float(x, parens);
+            using (np.printoptions(
+                       precision: o.TryGetProperty("precision", out var prec) ? prec.GetInt32() : null,
+                       suppress: o.TryGetProperty("suppress", out var sup) ? sup.GetBoolean() : null,
+                       nanstr: o.TryGetProperty("nanstr", out var ns) ? ns.GetString() : null,
+                       infstr: o.TryGetProperty("infstr", out var inf) ? inf.GetString() : null,
+                       sign: o.TryGetProperty("sign", out var sg) ? sg.GetString()[0] : null,
+                       floatmode: o.TryGetProperty("floatmode", out var fm) ? fm.GetString() : null))
+                return np.polynomial.polyutils.format_float(x, parens);
+        }
+
+        /// <summary>
+        ///     <c>numpy.polynomial.set_default_printstyle(style)</c>, recorded as the class flag after the call
+        ///     (<c>"True"</c>: Unicode, <c>"False"</c>: ASCII). The flag the case found is put back either way: NumPy's
+        ///     generator reset <c>ABCPolyBase._use_unicode</c> after every case, so no case may see another's style.
+        /// </summary>
+        /// <param name="p">The params: <c>style</c> (a spec).</param>
+        /// <param name="ops">The reconstructed operands (an ndarray style).</param>
+        /// <returns>The flag's text.</returns>
+        /// <exception cref="ValueError">A refused style (NumPy's texts).</exception>
+        internal static string PolySetDefaultPrintstyle(IReadOnlyDictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            var a = new PolyArgs(p, ops);
+            object style = a.Get("style");
+            bool before = NDPolyPrinting.UseUnicode;
+            try
+            {
+                np.polynomial.set_default_printstyle(style);
+                return NDPolyPrinting.UseUnicode ? "True" : "False";
+            }
+            finally
+            {
+                np.polynomial.set_default_printstyle(before ? "unicode" : "ascii");
             }
         }
 

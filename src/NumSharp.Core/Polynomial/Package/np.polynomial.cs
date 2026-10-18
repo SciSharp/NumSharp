@@ -46,11 +46,15 @@ namespace NumSharp
     ///         one whole-array kernel per (basis, dtype, rank), returning NumPy's <c>moveaxis</c> view;</item>
     ///         <item>companion matrices and roots of every basis — <c>{p}companion</c>, <c>{p}roots</c> (roots of
     ///         degree ≥ 2 run <c>np.linalg.eigvals</c>, so they need a LAPACK backend such as
-    ///         <c>NumSharp.Interop.OpenBLAS</c>).</item>
+    ///         <c>NumSharp.Interop.OpenBLAS</c>);</item>
+    ///         <item>the weight functions <c>{p}weight</c>, the Chebyshev points and Gauss quadratures (<c>chebpts1</c>,
+    ///         <c>chebpts2</c>, <c>chebgauss</c>, <c>leggauss</c>, <c>laggauss</c>, <c>hermgauss</c>, <c>hermegauss</c>;
+    ///         the last four run <c>np.linalg.eigvalsh</c>), <c>chebinterpolate</c>, the least-squares fits
+    ///         <c>{p}fit</c> (<c>np.linalg.lstsq</c>) and <c>polyvalfromroots</c>;</item>
+    ///         <item>printing: <see cref="set_default_printstyle"/> and <see cref="PolyUtilsModule.format_float"/>.</item>
     ///     </list>
-    ///     <para>Still open: least-squares fit, Gauss quadrature and weights, Chebyshev sampling / interpolation,
-    ///     <c>polyvalfromroots</c>, the six convenience classes and printing. The kernels are emitted at run time and
-    ///     have no fallback: under NativeAOT (no dynamic code) a call that reaches one raises
+    ///     <para>Still open: the six convenience classes (<c>Polynomial</c>, <c>Chebyshev</c>, …). The kernels are emitted
+    ///     at run time and have no fallback: under NativeAOT (no dynamic code) a call that reaches one raises
     ///     <see cref="System.PlatformNotSupportedException"/>, and the evaluation, calculus, algebra, Vandermonde and
     ///     companion paths all reach one.</para>
     ///     <para>https://numpy.org/doc/stable/reference/routines.polynomials-package.html</para>
@@ -87,5 +91,25 @@ namespace NumSharp
         ///     linear domain maps; see <see cref="PolyUtilsModule"/>).
         /// </summary>
         public PolyUtilsModule polyutils { get; } = new PolyUtilsModule();
+
+        /// <summary>
+        ///     Sets how the series classes print their terms (NumPy's <c>numpy.polynomial.set_default_printstyle</c>):
+        ///     <c>"unicode"</c> writes superscripts and subscripts (<c>1.0 + 2.0·x + 3.0·x²</c>, <c>T₁(x)</c>),
+        ///     <c>"ascii"</c> plain text (<c>1.0 + 2.0 x + 3.0 x**2</c>, <c>T_1(x)</c>).
+        /// </summary>
+        /// <param name="style"><c>"unicode"</c> or <c>"ascii"</c>, case-sensitive; a one-element <c>U</c> /
+        ///     <c>StringDType</c> array holding one of them is read as its element, as NumPy's <c>==</c> reads it.</param>
+        /// <exception cref="ValueError">Any other style: <c>Unsupported format string '{str(style)}'. Valid options are
+        ///     'ascii' and 'unicode'</c> — also for a number, null (<c>'None'</c>), bytes or a list; an empty array or one of
+        ///     two or more elements raises NumPy's truth-value ValueError instead.</exception>
+        /// <remarks>
+        ///     <para>The style is ONE process-wide setting, like NumPy's class attribute <c>ABCPolyBase._use_unicode</c>
+        ///     (not scoped to a thread). NumPy's default is <c>os.name != 'nt'</c>: ASCII on Windows, Unicode elsewhere —
+        ///     NumSharp starts from the same platform rule.</para>
+        ///     <para>The series classes (plan U10) read it when they print; until they exist the setting is only
+        ///     stored.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.set_default_printstyle.html</para>
+        /// </remarks>
+        public void set_default_printstyle(object style) => NDPolyPrinting.SetDefaultPrintStyle(style);
     }
 }

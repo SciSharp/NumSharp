@@ -38,6 +38,7 @@ import builtins
 import collections
 import itertools
 import json
+import math
 import os
 import sys
 import tempfile
@@ -1515,6 +1516,11 @@ def _with_bufsize(n, fn):
 # Redrawn 2026-10-12, when branch strings was rebased onto journey4: its fixes made SU1 (axis normalization), SU25-SU34,
 # SU41 and SU42 (np.nditer's descriptors, construction checks and iteration protocol) and SU40 match NumPy, and
 # SU4 for the 'auto' / 'fd' estimators; those rules are dropped (the replay of the gap file found which).
+# Redrawn 2026-10-18: the port of NumPy's dragon4.c (unit 8 of docs/plans/numpy-polynomial-remaining-compute.md) made
+# SU6-SU9, SU18 and SU19 (np.format_float_positional / np.format_float_scientific) match NumPy; their rule and its
+# model of the old double-only formatter are dropped. SU5 (np.apply_along_axis over a stride-0 view at an offset) went
+# with them: 287c3e2e's ClampToBuffer in UnmanagedStorage.GetData fixed it, and the gap replay reported its 4 cases
+# matching.
 GAPS = {
     "SU2": "np.linalg.cross over operands that cannot broadcast raises 'operands could not be broadcast together with "
            "shapes (4,) (5,)'; NumPy's linalg.cross raises broadcast_shapes' 'shape mismatch: objects cannot be "
@@ -1524,17 +1530,6 @@ GAPS = {
     "SU4": "np.histogram of a complex128 sample with the estimators 'doane', 'scott', 'stone', 'rice', 'sturges' "
            "or 'sqrt' returns a result; NumPy raises TypeError (ufunc 'ceil' has no complex loop for the bin count; "
            "'auto' and 'fd' refuse with 'a must be an array of real numbers', as NumSharp does)",
-    "SU5": "np.apply_along_axis over a broadcast view whose every stride is 0 at a non-zero Shape offset (np.broadcast_to "
-           "of a one-element np.split child) throws ArgumentOutOfRangeException (Parameter 'length')",
-    "SU6": "np.format_float_positional / np.format_float_scientific of inf or nan print .NET text ('Infinity.', "
-           "'NaN.', 'I.nfinitye+07') or throw ArgumentOutOfRangeException; NumPy prints 'inf', 'nan', '+inf'",
-    "SU7": "np.format_float_positional / np.format_float_scientific take only a double, so a float16 / float32 value "
-           "is printed with float64's shortest digits ('0.0999755859375' for np.float16(0.1)); NumPy prints the "
-           "value's own dtype ('0.1')",
-    "SU8": "np.format_float_positional / np.format_float_scientific accept a negative precision; NumPy raises "
-           "ValueError 'precision must be >= 0'",
-    "SU9": "np.format_float_positional ignores fractional=False (precision counts SIGNIFICANT digits there: NumPy "
-           "prints 123456789.125 as '123000000.' with precision=3)",
     "SU10": "ndarray.setfield with a Python int outside the field dtype's range wraps it (-1 into a uint8 field is "
             "255); NumPy raises OverflowError 'Python integer -1 out of bounds for uint8'",
     "SU11": "np.finfo of a non-inexact dtype raises 'data type 'int32' not inexact'; NumPy's text names the scalar "
@@ -1546,12 +1541,6 @@ GAPS = {
     "SU15": "np.iinfo(bool) returns an iinfo; NumPy raises ValueError \"Invalid integer data type 'b'.\"",
     "SU16": "np.iinfo of a float / complex dtype raises \"Invalid integer data type 'float64'\"; NumPy's text names the "
             "kind character and ends with a period: \"Invalid integer data type 'f'.\"",
-    "SU18": "np.format_float_positional / np.format_float_scientific (unique=True, trim='k') keep the zeros a precision "
-            "cutoff carries into: format_float_positional(1.99999, precision=2) is '2.00' and format_float_scientific"
-            "(0.0995, precision=1) '1.0e-01'; NumPy's Dragon4 drops the carried digits ('2.', '1.e-01')",
-    "SU19": "np.format_float_scientific with trim='-' drops the decimal point when the cutoff leaves only zero "
-            "fraction digits: format_float_scientific(0.1001, precision=2, trim='-') is '1e-01'; NumPy keeps it "
-            "('1.e-01': its DptZeros mode removes the point only when no fraction digit was generated)",
     "SU20": "np.broadcast(...).iters are independent iterators that start at element 0; NumPy's share the broadcast's "
             "cursor, so after k steps of the broadcast they yield the remaining size - k elements",
     "SU21": "np.get_printoptions() lacks NumPy's 'formatter' and 'override_repr' keys (both None by default): reading "
@@ -1583,85 +1572,6 @@ def _edge0_model(a, opts):
     return "[... " + np.array2string(a[-1:])[1:]
 
 
-def _rounding_carries(fn, x, prec):
-    """Whether cutting the double ``x`` at ``prec`` digits rounds UP through a trailing 9 (1.99999 at one digit is
-    2.0): the case where NumSharp's Dragon4 keeps the carried zeros (SU18).
-
-    Parameters:
-        fn: np.format_float_positional or np.format_float_scientific (decides where the digits are counted from).
-        x: the value (a Python float).
-        prec: the precision (>= 1; a zero precision has no fraction digit to keep).
-
-    Returns:
-        True when the shortest round-trip digits are longer than the precision (so unique mode cuts them at all), the
-        correctly rounded digits are the truncated digits plus one, and the last truncated digit is 9.
-    """
-    from decimal import Decimal
-    shortest = fn(x, trim="-").lstrip("+-").partition("e")[0]
-    if len(shortest.partition(".")[2]) <= prec:
-        return False  # unique mode prints the shortest digits whole: no cutoff, nothing carried
-    s = fn(x, precision=prec, unique=False, trim="k")
-    mant, _, exp = s.lstrip("+-").partition("e")
-    d = Decimal(abs(x))
-    scientific = fn is np.format_float_scientific
-    e = d.adjusted() if scientific else 0
-    truncated = int(d.scaleb(prec - e))
-    rounded = int(mant.replace(".", "")) * (10 ** (int(exp) - e) if scientific else 1)
-    return rounded == truncated + 1 and truncated % 10 == 9
-
-
-def _ns_format_model(fn, x, p):
-    """NumSharp's formatter, modelled: NumPy's on the double ``x`` (fractional=False ignored), with NumSharp's two
-    Dragon4 differences applied.
-
-    Parameters:
-        fn: np.format_float_positional or np.format_float_scientific.
-        x: the value (a Python float — NumSharp's only overload takes a double).
-        p: the case params.
-
-    Returns:
-        (text, rule): the modelled text and the GAPS id of the difference applied ("SU18" / "SU19"), or None.
-    """
-    q = {k: v for k, v in p.items() if k != "fractional"}
-    out = fn(x, **q)
-    prec = q.get("precision")
-    if (q.get("unique", True) and prec is not None and prec >= 1 and q.get("trim", "k") == "k"
-            and _rounding_carries(fn, x, prec)):
-        return fn(x, **{**q, "unique": False}), "SU18"
-    if fn is np.format_float_scientific and q.get("trim") == "-" and ".e" in out:
-        return out.replace(".e", "e"), "SU19"
-    return out, None
-
-
-def _format_float_gap(case):
-    """The gap a format_float_positional / format_float_scientific case falls into, decided by modelling NumSharp's
-    double-only formatter (_ns_format_model) and comparing with the recorded NumPy text.
-
-    Parameters:
-        case: a format_float_* case.
-
-    Returns:
-        SU6 / SU7 / SU8 / SU9 / SU18 / SU19, or None when the model matches NumPy.
-    """
-    p = case["params"]
-    if p.get("precision") is not None and p["precision"] < 0:
-        return "SU8"
-    v = rl.rebuild(case["operands"][0])[()]
-    if not np.isfinite(v):
-        return "SU6"
-    fn = np.format_float_positional if case["op"] == "format_float_positional" else np.format_float_scientific
-    expected = case["expected"]["value"]
-    modelled, rule = _ns_format_model(fn, float(v), p)
-    if modelled == expected:
-        return None
-    as_double = {k: x for k, x in p.items() if k != "fractional"}
-    if p.get("fractional") is False and fn(float(v), **p) != fn(float(v), **as_double):
-        return "SU9"
-    if rule is not None:
-        return rule
-    return "SU7"
-
-
 def _gap_of(case):
     """The documented gap a case falls into (a GAPS id), or None when NumSharp is expected to match NumPy.
 
@@ -1691,10 +1601,6 @@ def _gap_of(case):
             return "SU4" if p["bins"] not in ("auto", "fd") else None
         if "bins_operand" not in p:
             return "SU3"
-    if op == "apply_along_axis" and ":scalar_bcast_offset:" in case["layout"]:
-        return "SU5"
-    if op in ("format_float_positional", "format_float_scientific"):
-        return _format_float_gap(case)
     if op == "ndarray.setfield" and err and err["type"] == "OverflowError":
         return "SU10"
     if op.startswith("finfo."):
@@ -2144,8 +2050,211 @@ def gen_scalar_types():
 # Main
 # =============================================================================================================
 
+# =============================================================================================================
+# S15c: the port of NumPy's dragon4.c behind format_float_positional / format_float_scientific (2026-10-18)
+# =============================================================================================================
+
+_D4_POS = {"precision": [None, None, 0, 1, 2, 3, 5, 8, 17, 30], "unique": [True, True, False],
+           "fractional": [True, True, False], "trim": ["k", ".", "0", "-"], "sign": [False, True],
+           "pad_left": [None, None, 0, 3, 10], "pad_right": [None, None, 0, 4], "min_digits": [None, None, 0, 2, 5, 20]}
+_D4_SCI = {"precision": [None, None, 0, 1, 2, 3, 5, 8, 17, 30], "unique": [True, True, False], "trim": ["k", ".", "0", "-"],
+           "sign": [False, True], "pad_left": [None, None, 0, 3, 10], "exp_digits": [None, None, 0, 3, 7],
+           "min_digits": [None, None, 0, 2, 5, 20]}
+# Python ints: exact, past 2**53 (correctly rounded), past uint64, the largest that rounds to the float maximum, and
+# past the float range (OverflowError "int too large to convert to float").
+_D4_PYINTS = [0, 1, -7, 2 ** 53 + 1, 2 ** 64, -(2 ** 70) - 1, 2 ** 1023, 2 ** 1024 - 2 ** 970 - 1, 2 ** 1024 - 2 ** 970,
+              2 ** 1024, -(2 ** 1100)]
+
+
+def _d4_options(rng, choices):
+    """One random option set over ``choices``: each option drawn from its list, NumPy's defaults left out.
+
+    Parameters:
+        rng: the generator's random state.
+        choices: option name -> candidate values (None = the option absent).
+
+    Returns:
+        The keyword arguments (JSON-serializable).
+    """
+    p = {}
+    for name, cands in choices.items():
+        c = cands[int(rng.integers(len(cands)))]
+        if c is None or (name in ("unique", "fractional") and c is True) or (name == "sign" and c is False) \
+                or (name == "trim" and c == "k"):
+            continue
+        p[name] = c
+    return p
+
+
+def gen_dragon4():
+    """format_float_positional / format_float_scientific as NumPy's dragon4.c (Backends/Printing/Dragon4.Port.cs): random
+    bit patterns of every width under random option sets — unique and exact digits, both cutoff modes, min_digits, every
+    trim mode, padding, exponent digits, and the option errors NumPy raises in its order — x given as the 0-d ARRAY
+    itself (params as_array: NumPy's float(a), so every dtype formats as the float64 it converts to, a complex one is a
+    TypeError, a 1-D one 'only 0-dimensional arrays ...'), and x given as a Python int (params pyint: correctly rounded,
+    OverflowError past the float range). Appended after every other section so the earlier case ids stay as they were."""
+    rng = np.random.default_rng(20261018)
+    fns = (("format_float_positional", np.format_float_positional, _D4_POS),
+           ("format_float_scientific", np.format_float_scientific, _D4_SCI))
+    for width, utype, nbits in (("float16", np.uint16, 16), ("float32", np.uint32, 32), ("float64", np.uint64, 64)):
+        for _ in range(250):
+            bits = int(rng.integers(0, 2 ** nbits, dtype=np.uint64))
+            xv = np.array(bits, dtype=utype).view(width)
+            for op, fn, choices in fns:
+                p = _d4_options(rng, choices)
+                emit("dragon4", op, f"{width}:{bits:#x}", [operand(xv, "c")[1]], p, "text",
+                     lambda o, p=p, fn=fn: fn(o[0][()], **p))
+    for dt in ALL13:
+        # A float element that is not exact in float16 / float32 (0.1), so the float64 conversion shows in the digits.
+        x0 = np.asarray(0.1, dtype=dt) if np.dtype(dt).kind == "f" else values((), dt, 3)
+        for op, fn, _ in fns:
+            for p, label in (({}, "default"), ({"precision": 3, "unique": False}, "exact3"), ({"trim": "-"}, "trim-")):
+                for kind, d in kinds_of(x0, ["c", "c_offset"]):
+                    emit("dragon4", op, f"array:{dt}:{kind}:{label}", [d], {"as_array": True, **p}, "text",
+                         lambda o, p=p, fn=fn: fn(o[0], **p))
+            emit("dragon4", op, f"array1d:{dt}", [operand(values((1,), dt, 3), "c")[1]], {"as_array": True}, "text",
+                 lambda o, fn=fn: fn(o[0]))
+    for v in _D4_PYINTS:
+        for op, fn, _ in fns:
+            for p, label in (({}, "default"), ({"precision": 4, "unique": False, "trim": "-"}, "exact4")):
+                emit("dragon4", op, f"pyint:{v}:{label}", [], {"pyint": str(v), **p}, "text",
+                     lambda o, v=v, p=p, fn=fn: fn(v, **p))
+    _gen_dragon4_exact_ends(fns)
+    _gen_dragon4_powers_of_two(fns)
+
+
+# Values whose exact decimal expansion ENDS inside the precisions below (a power of ten, short binary fractions, an
+# integer of 18 digits, each width's own short cases): random bit patterns almost never have one, because a double's
+# exact expansion runs to hundreds of digits.
+_D4_EXACT_ENDS = [("float64", 1e22), ("float64", 0.5), ("float64", 0.125), ("float64", 1.5), ("float64", 3.0),
+                  ("float64", 2.0 ** 60), ("float64", 2.0 ** -10), ("float64", 1e15 + 1),
+                  ("float64", 123456789012345678.0), ("float32", 16777216.0), ("float32", 0.75), ("float16", 65504.0),
+                  ("float16", 0.25)]
+# The precisions: below, at and past the 19 digits the port's chunk step produces at once.
+_D4_EXACT_END_PRECISIONS = (5, 18, 19, 20, 30, 40)
+
+
+def _gen_dragon4_exact_ends(fns):
+    """Exact digits (unique=False) of values whose expansion ends before the cutoff, at every trim: NumPy's exact loop
+    stops at the digit that leaves a zero remainder, so its digit buffer never ends in a zero, and scientific notation
+    with trim '-' keeps the point only when fraction digits were generated ('1e+22', not '1.e+22'). The port's chunk step
+    (Dragon4.BigInt.cs ChunkDigits) makes 19 digits per division and must drop the zeros of its last chunk the same way.
+
+    Parameters:
+        fns: (op key, NumPy function, option choices) per notation.
+    """
+    for width, value in _D4_EXACT_ENDS:
+        xv = np.array(value, dtype=width)
+        bits = int(xv.view({"float16": np.uint16, "float32": np.uint32, "float64": np.uint64}[width]))
+        for op, fn, _ in fns:
+            for prec in _D4_EXACT_END_PRECISIONS:
+                for trim in ("k", ".", "0", "-"):
+                    p = {"precision": prec, "unique": False}
+                    if trim != "k":
+                        p["trim"] = trim
+                    emit("dragon4", op, f"exactend:{width}:{bits:#x}:p{prec}:{trim}", [operand(xv, "c")[1]], p, "text",
+                         lambda o, p=p, fn=fn: fn(o[0][()], **p))
+
+
+# dragon4.c's digit exponent estimate multiplies by log10(2) as this C double literal.
+_D4_LOG10_2 = 0.30102999566398119521373889472449
+# (dtype, mantissa bits, exponent bias, largest exponent field) per width.
+_D4_WIDTHS = (("float16", 10, 15, 30), ("float32", 23, 127, 254), ("float64", 52, 1023, 2046))
+
+
+def _d4_min_digits_state(mantissa, exponent, mantissa_bit, min_digits, fractional):
+    """NumPy's Dragon4 unique loop (dragon4.c ``Dragon4``) on exact Python integers for a value with UNEQUAL margins (a
+    power of two above the smallest normal: the gap above it is twice the gap below), under ``min_digits`` and no
+    precision.
+
+    Parameters:
+        mantissa: the integer mantissa (2**mantissa_bit for a power of two).
+        exponent: the binary exponent of the mantissa's lowest bit.
+        mantissa_bit: the index of the mantissa's highest set bit.
+        min_digits: the min_digits request.
+        fractional: True for format_float_positional (CutoffMode_FractionLength, min_digits counts fraction digits);
+            False for scientific (CutoffMode_TotalLength over min_digits + 1 digits, as FormatScientific asks).
+
+    Returns:
+        (forced, low, high, below): whether the loop went on past a digit where low or high held (the request forced
+        it on); low and high at the last digit; whether twice the remainder is below the scale there (the rounding a
+        loop that forgot the margins would apply).
+    """
+    value, scale, margin_low = (mantissa << (exponent + 2), 4, 1 << exponent) if exponent > 0 \
+        else (mantissa << 2, 1 << (-exponent + 2), 1)
+    digit_exponent = math.ceil((mantissa_bit + exponent) * _D4_LOG10_2 - 0.69)
+    if digit_exponent > 0:
+        scale *= 10 ** digit_exponent
+    elif digit_exponent < 0:
+        value, margin_low = value * 10 ** -digit_exponent, margin_low * 10 ** -digit_exponent
+    if value >= scale:
+        digit_exponent += 1
+    else:
+        value, margin_low = value * 10, margin_low * 10
+    cutoff = min_digits if fractional else min_digits + 1
+    cutoff_min_exponent = min(digit_exponent, -cutoff if fractional else digit_exponent - cutoff)
+    even = (mantissa & 1) == 0
+    forced = False
+    while True:
+        digit_exponent -= 1
+        value %= scale
+        low = value <= margin_low if even else value < margin_low
+        high = value + 2 * margin_low >= scale if even else value + 2 * margin_low > scale
+        if (low or high) and digit_exponent <= cutoff_min_exponent:
+            return forced, low, high, 2 * value < scale
+        forced = forced or low or high
+        value, margin_low = value * 10, margin_low * 10
+
+
+def _gen_dragon4_powers_of_two(fns):
+    """Powers of two under min_digits: the only values whose LAST digit can be decided by the high margin alone after
+    the request forced the loop past the shortest digits (low false, high true, twice the remainder below the scale, so
+    NumPy rounds up where the remainder alone would round down). With equal margins that state cannot occur, so random
+    bit patterns (a power of two once in 2**52) never reach it. Found by ``_d4_min_digits_state`` over every power of two
+    of the three widths with min_digits 1-25 in both notations (8 cases, all float64 scientific at min_digits 15), each
+    emitted with its neighbours (min_digits - 1 and + 1, the other notation); then a sample of all the powers of two at
+    the min_digits around each width's shortest digit counts.
+
+    Parameters:
+        fns: (op key, NumPy function, option choices) per notation.
+    """
+    def power(width, mbits, fe):
+        """The power of two with exponent field ``fe``, as a 0-d array of ``width``, and its bits."""
+        utype = {"float16": np.uint16, "float32": np.uint32, "float64": np.uint64}[width]
+        return np.array(fe << mbits, dtype=utype).view(width), fe << mbits
+
+    def emit_power(width, mbits, fe, op, fn, min_digits, tag):
+        """One case: the power of two with exponent field ``fe`` under ``min_digits``."""
+        xv, bits = power(width, mbits, fe)
+        p = {"min_digits": min_digits}
+        emit("dragon4", op, f"pow2:{tag}:{width}:{bits:#x}:min{min_digits}", [operand(xv, "c")[1]], p, "text",
+             lambda o, p=p, fn=fn: fn(o[0][()], **p))
+
+    decisive = []
+    for width, mbits, bias, emax in _D4_WIDTHS:
+        for fe in range(2, emax + 1):
+            for min_digits in range(1, 26):
+                for fractional in (True, False):
+                    forced, low, high, below = _d4_min_digits_state(1 << mbits, fe - bias - mbits, mbits, min_digits,
+                                                                    fractional)
+                    if forced and not low and high and below:
+                        decisive.append((width, mbits, fe, fractional, min_digits))
+    for width, mbits, fe, fractional, min_digits in decisive:
+        for op, fn, _ in fns:
+            same = (op == "format_float_positional") == fractional
+            for m in ((min_digits - 1, min_digits, min_digits + 1) if same else (min_digits,)):
+                emit_power(width, mbits, fe, op, fn, m, "high" if same and m == min_digits else "near")
+    for width, mbits, bias, emax, step, requests in (("float16", 10, 15, 30, 1, (1, 3, 6)),
+                                                     ("float32", 23, 127, 254, 4, (6, 9)),
+                                                     ("float64", 52, 1023, 2046, 16, (15, 17))):
+        for fe in range(1, emax + 1, step):
+            for op, fn, _ in fns:
+                for min_digits in requests:
+                    emit_power(width, mbits, fe, op, fn, min_digits, "sample")
+
+
 SECTIONS = [gen_linalg, gen_histogram, gen_equiv_memory_shapes, gen_apply_bmat, gen_text, gen_ndarray,
-            gen_attributes, gen_objects, gen_aliases, gen_scalar_types]
+            gen_attributes, gen_objects, gen_aliases, gen_scalar_types, gen_dragon4]
 
 
 def write_jsonl(path, cases):

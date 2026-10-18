@@ -599,6 +599,9 @@ namespace NumSharp.Tests.Fuzz
                 // np.nditer's state contract between construction and close (OpRegistry.Nditer.cs).
                 case "nditer_protocol": return NditerProtocolFromCorpus(p, ops);
                 case "array_str": return np.array_str(ops[0]);
+                // numpy.polynomial's printing helpers (OpRegistry.PolySeries.cs).
+                case "polyutils.format_float": return PolyFormatFloat(p, ops);
+                case "set_default_printstyle": return PolySetDefaultPrintstyle(p, ops);
                 case "array_repr": return np.array_repr(ops[0]);
                 case "mintypecode": return np.mintypecode(p["typechars"].GetString()).ToString();
                 // einsum_path returns the contraction planner's info STRING (shape-derived, so
