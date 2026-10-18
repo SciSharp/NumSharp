@@ -1129,7 +1129,7 @@ a unit below, that document wins.
 > pickling, a floor). Routes and findings: [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md)
 > §3.7; the C# spellings below (Appendix B) and in `.claude/CLAUDE.md` ("the series classes").
 >
-> **Names (2026-10-18, `d54b11cb`).** Every member carries NumPy's name, case included (the owner's request: "Naming ND
+> **Names (2026-10-19, `d54b11cb`).** Every member carries NumPy's name, case included (the owner's request: "Naming ND
 > is acceptable but are the apis methods/props are named identical case to numpy, fix"): `p(x)` is `p.__call__(x)` (was
 > `p.Call`), and NumPy's class attributes are members of the class object `NDChebyshev.Class` (`NDPolyClass`, also
 > `p.__class__`): `.domain` / `.window` / `.maxpower` / `.basis_name` / `.__name__` / `.__module__`, replacing the

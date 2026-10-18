@@ -618,7 +618,7 @@ and is bounded-ULP, so the oracle tier is host-pinned, as the main plan already 
 > - **Pickling is the floor**: `__getstate__` copies three arrays (NumSharp's allocation floor, 0.44 µs a copy) and
 >   `__setstate__` stores three views (a series never disposes the caller's state), where NumPy assigns `__dict__`.
 >
-> **Names (2026-10-18, `d54b11cb`).** Every member carries NumPy's name, case included (the owner's request: "Naming ND
+> **Names (2026-10-19, `d54b11cb`).** Every member carries NumPy's name, case included (the owner's request: "Naming ND
 > is acceptable but are the apis methods/props are named identical case to numpy, fix"): `p(x)` is `p.__call__(x)` (was
 > `p.Call`), and NumPy's class attributes are members of the class object `NDChebyshev.Class` (`NDPolyClass`, also
 > `p.__class__`): `.domain` / `.window` / `.maxpower` / `.basis_name` / `.__name__` / `.__module__`, replacing the
