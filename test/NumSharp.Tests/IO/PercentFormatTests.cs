@@ -226,7 +226,8 @@ namespace NumSharp.Tests.IO
         /// <summary>
         ///     The one-shot entry points (<c>format % (value,)</c> compiled and run once), and the boundary map's other
         ///     Python objects: a C# <c>char</c> is a one-character <c>str</c>, every C# integer an <c>int</c>, a
-        ///     <c>float</c> / <c>decimal</c> a <c>float</c>, a list / tuple / dict / array named by their Python type.
+        ///     <c>float</c> / <c>decimal</c> a <c>float</c>, a list / tuple / dict named by their Python type, an ndarray
+        ///     refused by NumPy's own conversion slot (<c>array_float</c>) where it has one.
         /// </summary>
         [TestMethod]
         public void OneShotEntryPoints_AndTheBoundaryMap()
@@ -245,7 +246,10 @@ namespace NumSharp.Tests.IO
             Throws<PrintfArgumentException>(() => Py("%d", (1, 2)), "%d format: a real number is required, not tuple");
             Throws<PrintfArgumentException>(() => Py("%x", new System.Collections.Generic.Dictionary<int, int>()),
                 "%x format: an integer is required, not dict");
-            Throws<PrintfArgumentException>(() => Py("%e", np.array(new[] { 1, 2 })), "must be real number, not numpy.ndarray");
+            // An ndarray HAS nb_float (array_float), so PyFloat_AsDouble raises NumPy 2.4's own refusal for an array of one
+            // or more dimensions, not CPython's "must be real number" (CPython 3.12 + NumPy 2.4.2: '%e' % np.array([1, 2])).
+            Throws<PrintfArgumentException>(() => Py("%e", np.array(new[] { 1, 2 })),
+                "only 0-dimensional arrays can be converted to Python scalars");
             Throws<PrintfArgumentException>(() => Py("%d", new object()), "%d format: a real number is required, not Object");
             // NumPy scalars of the dtypes savetxt never hands over alone: a Char is a uint16, a complex128 converts its real
             // part (NumPy warns ComplexWarning).
