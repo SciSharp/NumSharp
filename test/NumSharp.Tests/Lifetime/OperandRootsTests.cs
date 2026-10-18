@@ -10,10 +10,10 @@ namespace NumSharp.Tests.Lifetime
 {
     /// <summary>
     ///     The OPERAND ROOTS of the woven NumSharp.Core, checked in its IL — the deterministic half of the fix for the lost
-    ///     GC anchors the lifetime oracle found (LT01–LT28, <c>test/NumSharp.Tests.Oracle/Fuzz/Lifetime</c>). Every method
+    ///     GC anchors the lifetime oracle found (LT01–LT29, <c>test/NumSharp.Tests.Oracle/Fuzz/Lifetime</c>). Every method
     ///     that opens an <see cref="NDScope"/> and takes an <see cref="NDArray"/> must call <see cref="NDScope.Anchor"/>
     ///     (the weaver roots its operands), every <see cref="NDAnchoredAttribute"/> method must, and so must the entry point
-    ///     of each of the 28 fixed sites.
+    ///     of each of the 29 fixed sites.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -76,12 +76,12 @@ namespace NumSharp.Tests.Lifetime
         }
 
         /// <summary>
-        ///     The entry point of each of the 28 sites the lifetime oracle found roots its operands: the method that held the
+        ///     The entry point of each of the 29 sites the lifetime oracle found roots its operands: the method that held the
         ///     operand while its kernel ran (or the scoped frame above it) now calls <see cref="NDScope.Anchor"/>.
         /// </summary>
         /// <param name="gap">The fixed gap id (for the failure message).</param>
         /// <param name="owner">The declaring type's name: <c>np</c>, <c>np.linalg</c>, <c>NDArray</c>, <c>DefaultEngine</c>,
-        ///     <c>TensorEngine</c>, <c>NDIter</c> or <c>PowerSeriesModule</c>.</param>
+        ///     <c>TensorEngine</c>, <c>NDIter</c>, <c>PowerSeriesModule</c> or <c>StringArraySlice</c>.</param>
         /// <param name="name">The method name.</param>
         /// <param name="signature">The parameter type names, comma-separated (<c>Nullable`1</c> for an <c>int?</c>).</param>
         /// <exception cref="AssertFailedException">The entry point is missing, ambiguous, or does not root its operands.</exception>
@@ -121,6 +121,13 @@ namespace NumSharp.Tests.Lifetime
         [DataRow("LT27", "NDArray", "ToMuliDimArray", "")]
         [DataRow("LT28", "np", "unique_values", "NDArray")]
         [DataRow("LT28", "np", "unique_counts", "NDArray")]
+        [DataRow("LT29", "NDArray", "tolist", "")]
+        [DataRow("LT29", "NDArray", "AsStringArray", "NDArray")]
+        [DataRow("LT29", "NDArray", "AsString", "NDArray")]
+        [DataRow("LT29", "NDArray", "GetString", "Int64[]")]
+        [DataRow("LT29", "StringArraySlice", "GetIndex", "Int64")]
+        [DataRow("LT29", "StringArraySlice", "GetItems", "Int64,Int64,Span`1")]
+        [DataRow("LT29", "StringArraySlice", "ToArray", "")]
         public void FixedSite_RootsItsOperands(string gap, string owner, string name, string signature)
         {
             var type = owner switch
@@ -132,12 +139,17 @@ namespace NumSharp.Tests.Lifetime
                 "TensorEngine" => typeof(TensorEngine),
                 "NDIter" => typeof(NDIter),
                 "PowerSeriesModule" => typeof(NDArray).Assembly.GetTypes().Single(t => t.Name == "PowerSeriesModule"),
+                "StringArraySlice" => typeof(NumSharp.Backends.Unmanaged.StringArraySlice),
                 _ => throw new AssertFailedException($"unknown owner {owner}")
             };
             var wanted = signature.Length == 0 ? Array.Empty<string>() : signature.Split(',');
             var hits = type.GetMethods(Declared)
                 .Where(m => m.Name == name && m.GetParameters().Select(p => p.ParameterType.Name).SequenceEqual(wanted))
                 .ToList();
+            // A generic twin with the same parameter list (StringArraySlice.GetIndex<T>(long), which only throws) loses to
+            // the non-generic method; a site whose entry point IS generic (NDArray.ToMuliDimArray<T>) has no such twin.
+            if (hits.Count > 1)
+                hits = hits.Where(m => !m.IsGenericMethodDefinition).ToList();
             Assert.AreEqual(1, hits.Count, $"{gap}: expected exactly one {owner}.{name}({signature}), found {hits.Count}");
             Assert.IsTrue(CalledMethods(hits[0]).Any(IsAnchor),
                 $"{gap}: {owner}.{name}({signature}) does not root its operands (no NDScope.Anchor call in its woven IL)");

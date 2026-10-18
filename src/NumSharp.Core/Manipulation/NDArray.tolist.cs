@@ -44,12 +44,20 @@ namespace NumSharp
         ///     elements of 20–60 characters a <c>tolist()</c> went 46.5 → 25.2 ns per element for <c>S</c>, 90.9 → 60.0 for
         ///     <c>U</c> and 79.1 → 46.3 for <c>StringDType</c> (NumPy 58.3 / 92.8 / 100.2), at 4–12 characters 34.0 → 23.9,
         ///     38.7 → 29.7 and 49.6 → 30.8 (NumPy 39.7 / 54.2 / 74.1). What remains is the object every element becomes: a
-        ///     text of 300–500 characters stays below NumPy (S / U / StringDType about 0.5 / 0.6 / 0.4 of its speed), because
+        ///     text of 300–500 characters stays at or below NumPy (S / U / StringDType about 0.97 / 0.83 / 0.69 of its speed,
+        ///     pinned), because
         ///     allocating 100K such .NET strings (UTF-16, two bytes a character) and keeping them alive through the gen0 /
         ///     gen1 collections that copy them costs about what NumPy's whole <c>tolist</c> costs (its compact one-byte
         ///     <c>str</c>, reference-counted, is never copied).
         ///     </para>
+        ///     <para>
+        ///     <see cref="NDAnchoredAttribute"/> (lost-anchor site LT29): each innermost row is read through a raw pointer
+        ///     while one object per element is allocated, and nothing but this array keeps the buffer alive, so the receiver
+        ///     is rooted to the end. Without it <c>a.copy().tolist()</c> left the copy reachable from nothing during the
+        ///     walk: a collection could finalize its memory block and the rest of the row read freed memory.
+        ///     </para>
         /// </remarks>
+        [NDAnchored]
         public object tolist()
         {
             // 0-d array (scalar): return the scalar value directly

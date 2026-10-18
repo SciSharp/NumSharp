@@ -66,8 +66,12 @@ namespace NumSharp
         /// <summary>
         ///     Converts the entire <see cref="NDArray"/> to a string.
         /// </summary>
-        /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
+        /// <remarks>Performs a copy due to String .net-framework limitations. <see cref="NDAnchoredAttribute"/> (lost-anchor
+        ///     site LT29): the string is allocated before the chars are copied out of the buffer, so <paramref name="arr"/> is
+        ///     rooted to the end — a temporary argument could otherwise be collected, and its buffer freed, by a collection
+        ///     that the allocation triggers.</remarks>
         [MethodImpl(Inline)]
+        [NDAnchored]
         public static string AsString(NDArray arr)
         {
             unsafe
@@ -96,7 +100,13 @@ namespace NumSharp
         ///     <para>A NEP 55 <c>StringDType</c> array is accepted too: each element is its text, an NA element the descriptor's
         ///     NA object when that is a string or <c>None</c> (null); an NA element of any other NA object (a float NaN) cannot
         ///     be a C# string and is refused — read such arrays with <see cref="tolist"/>.</para>
+        ///     <para><see cref="NDAnchoredAttribute"/> (lost-anchor site LT29): the contiguous path reads the buffer through a
+        ///     raw pointer while it allocates one string per element, so <paramref name="arr"/> is rooted to the end. Without
+        ///     it a temporary argument (<c>NDArray.AsStringArray(np.char.upper(a))</c>) was reachable from nothing during the
+        ///     loop: a collection finalized its memory block and the loop read freed memory (an access violation for a
+        ///     200 MB <c>U500</c> array, reproduced).</para>
         /// </remarks>
+        [NDAnchored]
         public static string[] AsStringArray(NDArray arr)
         {
             if (arr is null)
@@ -137,7 +147,11 @@ namespace NumSharp
         ///     <c>U</c> array's UCS-4 bytes as UTF-16 chars would return garbage), or the vector is longer than
         ///     <see cref="int.MaxValue"/> chars.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="indices"/> does not address a vector.</exception>
-        /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
+        /// <remarks>Performs a copy due to String .net-framework limitations. <see cref="NDAnchoredAttribute"/> (lost-anchor
+        ///     site LT29): the string is allocated before the vector's chars are copied, so the array is rooted to the end — a
+        ///     temporary receiver could otherwise be collected, and its buffer freed, by a collection that the allocation
+        ///     triggers.</remarks>
+        [NDAnchored]
         public string GetString(params long[] indices)
         {
             ThrowIfNotCharVector(nameof(GetString));

@@ -361,7 +361,8 @@ at entry and passed to `NDScope.Anchor` (a no-code `GC.KeepAlive`) before every 
 entry point that hands an operand's address to a kernel carries `[NDAnchored]`, which weaves the same
 roots without a scope (np.copyto, `NDIter.Copy` / `CopyAs`, `TensorEngine.Inner`,
 `DefaultEngine.ReduceAMax` / `ReduceAMin` / `MaxMinNumPy` / `All` / `Any`, `ToArray` /
-`ToJaggedArray` / `ToMuliDimArray`). That closed all 28 gaps below. A new site is fixed the same way —
+`ToJaggedArray` / `ToMuliDimArray`). That closed all 28 gaps below (LT29, found by a probe, was closed the same way on
+2026-10-18). A new site is fixed the same way —
 scope or anchor its entry point — never with a hand-placed `GC.KeepAlive` (np.nonzero, np.argwhere,
 np.flatnonzero, np.unravel_index and np.ravel_multi_index keep the ones they had before).
 
@@ -388,12 +389,12 @@ once (`RequireOptimizedBuild`, before any child starts). CI runs Release; a loca
 
 **Gate versus gaps.** `Fuzz/Lifetime/corpus/` (its own directory: the generic sweeps of
 `Fuzz/corpus/` replay every top-level file through the ordinary schema) holds `lifetime.jsonl` — the
-`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 350 calls held to ZERO divergences (8
-repetitions; about 20 s per framework). 108 of them PIN a fixed gap (`pin` = its old id, `FIXED` in the
+`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 353 calls held to ZERO divergences (8
+repetitions; about 20 s per framework). 111 of them PIN a fixed gap (`pin` = its old id, `FIXED` in the
 generator): a call that reaches a fixed site keeps every variant (each operand temporary alone, then all
 of them), so a red gate names the gap and the operand it loses again (`FIXED gaps regressed: LT07, …`).
 `Lifetime_CorpusContract` checks in-process that every op key has a C# body, that every fixed gap
-LT01–LT28 still has pinned cases, and that every OPEN gap has its own test. `lifetime_gaps.jsonl`
+LT01–LT29 still has pinned cases, and that every OPEN gap has its own test. `lifetime_gaps.jsonl`
 holds the carved cases of OPEN gaps (`GAPS`, empty since 2026-10-09); `Lifetime_KnownGaps`
 (`[OpenBugs]`) replays them at 48 repetitions and is inconclusive while none is open. The 28 fixed
 gaps, each with the method that lost the operand and what roots it now:
@@ -428,6 +429,7 @@ gaps, each with the method that lost the operand and what roots it now:
 | LT26 | `np.all` of a bool array (flat) | input — `NDIter.ReduceBool` |
 | LT27 | `NDArray.ToMuliDimArray<T>()` | the receiver |
 | LT28 | `np.unique_values` / `np.unique_counts` (integer family, complex) | the receiver — the hash path's `ExtractKeysOnly` (`np.unique` keeps it) |
+| LT29 | `ndarray.tolist()` (every dtype), `NDArray.AsStringArray` of a contiguous `U` array; also `AsString`, `GetString` and the `S` / `U` slice readers | the receiver / argument — `IArraySlice.GetItems` and `NDStringCodec.ReadUcs4` read through a raw pointer while they allocate one object per element (found by a probe on 2026-10-18: an access violation over a temporary 200 MB `U500` array, not by this gate) |
 
 **What roots them now.** The `[NDScoped]` weave of the entry point for LT01, LT02, LT05, LT06, LT12–LT17,
 LT19–LT21, LT23–LT25 and LT28 (np.take, np.put, the along-axis pair, the scans, nancumsum, searchsorted,
@@ -436,7 +438,8 @@ methods, `operator !`, the unique family); `PlaceCore` / `PutMaskCore` / `where_
 LT07), scoped helpers the public overloads delegate to; `NDArray.convolve` / `NDArray.correlate`
 (LT22); np.copyto's `[NDAnchored]` (LT08, LT09), with `NDIter.Copy` / `CopyAs` (every cast) and
 np.linalg.norm's scope; `DefaultEngine.MaxMinNumPy` / `ReduceAMax` (LT10, LT11); np.dot's scope and
-`TensorEngine.Inner` (LT18); `DefaultEngine.All` (LT26); `ToMuliDimArray` (LT27). Two deterministic
+`TensorEngine.Inner` (LT18); `DefaultEngine.All` (LT26); `ToMuliDimArray` (LT27); `[NDAnchored]` on
+`tolist`, `AsStringArray`, `AsString`, `GetString` and `StringArraySlice.GetIndex` / `GetItems` / `ToArray` (LT29). Two deterministic
 gates back the race-based one: `OperandRootsTests` (NumSharp.Tests) reads the woven IL — every method
 that opens a scope and takes an NDArray calls `NDScope.Anchor`, so does every `[NDAnchored]` method and
 the entry point of each fixed site — and `WeaverOperandRootTests` (Build.Analyzer) pins the transform.
@@ -451,7 +454,7 @@ uncarved replays (`python gen_lifetime_oracle.py --uncarved DIR [--bits 20]`, 2 
 24–160 repetitions, ~600 cases) and a code read of every site: a variant is carved when an operand the
 site loses is temporary, whether or not a given replay caught it. Rare sites can still be in the gate
 (the sharper thread found LT26 and LT27 there) — when the gate turns red on an unpinned case, it found
-one: carve it under a new gap id (LT29 next), and fix it by scoping or anchoring its entry point. Planted-bug check (2026-10-09, clean worktree, the committed corpus, 8
+one: carve it under a new gap id (LT30 next), and fix it by scoping or anchoring its entry point. Planted-bug check (2026-10-09, clean worktree, the committed corpus, 8
 repetitions): removing the `GC.KeepAlive` of np.unravel_index, np.ravel_multi_index, np.argwhere,
 np.nonzero or np.flatnonzero turns the gate red — unravel_index and ravel_multi_index throw NumPy's
 range errors on poisoned coordinates, while argwhere, nonzero (through `np.where(cond)` too) and

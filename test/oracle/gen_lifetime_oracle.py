@@ -491,6 +491,10 @@ OPS = {
     "view_int64": lambda a, p: a[0].view(np.int64).copy(),
     "nditer_sum": lambda a, p: np.float64(sum(a[0].ravel().tolist())),
     "flat_sum": lambda a, p: np.float64(sum(a[0].ravel().tolist())),
+    # text and list readers (the C# side joins its .NET strings / reads its boxed values back into bytes)
+    "tolist_str": lambda a, p: "\x1f".join(a[0].tolist()).encode("utf-8"),
+    "tolist_f64": lambda a, p: np.array(a[0].tolist(), dtype=np.float64).tobytes(),
+    "as_string_array": lambda a, p: "\x1f".join(a[0].ravel().tolist()).encode("utf-8"),
 }
 
 
@@ -806,6 +810,8 @@ def _cases():
         ("concatenate", [mod("U6", [N // 8], 1000), mod("U6", [N // 8], 991, start=5)], {}, True, False),
         ("fancy_get", [mod("U6", [N // 8], 1000), perm("int64", [N // 8], N // 8, start=5, step=7919)], {}, True, False),
         ("where3", [mod("bool", [N // 8], 3), mod("U6", [N // 8], 1000), mod("U6", [N // 8], 991, start=5)], {}, True, False),
+        ("tolist_str", [mod("U6", [N // 8], 1000)], {}, True, False),
+        ("as_string_array", [mod("U6", [N // 8], 1000)], {}, True, False),
         # ---- conversion / IO
         ("tobytes", [_F()], {}, True, False),
         ("to_array", [_F()], {}, True, False),
@@ -815,6 +821,7 @@ def _cases():
         ("view_int64", [_F()], {}, True, False),
         ("nditer_sum", [_F()], {}, True, False),
         ("flat_sum", [_F()], {}, True, False),
+        ("tolist_f64", [_F()], {}, True, False),
     ]
 
 
@@ -853,7 +860,7 @@ TARGET_OPS = {"put", "place", "putmask", "put_along_axis", "copyto", "copyto_whe
 #: later use of the operand, the operands it loses). A variant is carved when one of the operands the site loses is
 #: temporary, whether or not a given replay caught it (detection is a race; the code is not). The [OpenBugs] test named
 #: after each id in Fuzz/Lifetime/LifetimeOracleTests.cs replays its cases. Empty since 2026-10-09: every gap below was
-#: fixed. A new site gets the next id (LT29), a rule in ``_site_of`` and an [OpenBugs] test.
+#: fixed. A new site gets the next id (LT30), a rule in ``_site_of`` and an [OpenBugs] test.
 GAPS = {}
 
 #: The FIXED gaps: id -> (the site that lost its operand, what roots the operand now). The 28 sites were drawn from three
@@ -898,6 +905,10 @@ FIXED = {
     "LT27": "NDArray.ToMuliDimArray: the copy reads Storage.Address — rooted by its [NDAnchored]",
     "LT28": "np.unique_values / np.unique_counts of integer-family and complex arrays: ExtractKeysOnly copies the keys out "
             "of the receiver — rooted by their [NDScoped] weave",
+    "LT29": "ndarray.tolist() (every dtype: IArraySlice.GetItems reads each row through a raw pointer while it allocates an "
+            "object per element) and NDArray.AsStringArray of a contiguous U array (ReadUcs4 per element) — found by a probe "
+            "on 2026-10-18 (an access violation over a temporary 200 MB U500 array), not by this oracle; rooted by "
+            "[NDAnchored] on both entry points, on NDArray.AsString / GetString and on StringArraySlice's readers",
 }
 
 #: The dtypes np.unique_values and np.unique_counts send through the hash path (UniqueHashSortedInt /
@@ -937,6 +948,7 @@ def _site_of(op, tag, args, params):
         "det": ("LT21", {0}), "inv": ("LT21", {0}), "solve": ("LT21", {0, 1}),
         "correlate": ("LT22", {0, 1}), "polyder": ("LT23", {0}),
         "polyvander": ("LT24", {0}), "op_not": ("LT25", {0}), "to_multidim": ("LT27", {0}),
+        "tolist_str": ("LT29", {0}), "tolist_f64": ("LT29", {0}), "as_string_array": ("LT29", {0}),
     }
     if op in simple:
         gap, lost = simple[op]

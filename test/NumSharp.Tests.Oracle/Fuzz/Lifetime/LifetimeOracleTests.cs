@@ -32,8 +32,9 @@ namespace NumSharp.Tests.Fuzz.Lifetime
     ///     its NDArray-reaching parameters (and <c>this</c>) are copied into shadow locals at entry and passed to
     ///     <see cref="NDScope.Anchor"/> before every return. An unscoped entry point that hands an operand's address to
     ///     a kernel carries <see cref="NDAnchoredAttribute"/>, which weaves the same roots without a scope. The 28 gaps
-    ///     this tier found (LT01–LT28) were closed that way on 2026-10-09; a new site is fixed by scoping or anchoring
-    ///     its entry point, never by a hand-placed <c>GC.KeepAlive</c>.
+    ///     this tier found (LT01–LT28) were closed that way on 2026-10-09, and LT29 (the text and list readers, found by a
+    ///     probe) on 2026-10-18; a new site is fixed by scoping or anchoring its entry point, never by a hand-placed
+    ///     <c>GC.KeepAlive</c>.
     ///     </para>
     ///     <para>
     ///     <b>How it is replayed</b> (<see cref="LifetimeChild"/>): in a child process with tiered compilation off,
@@ -103,10 +104,10 @@ namespace NumSharp.Tests.Fuzz.Lifetime
 
         /// <summary>
         ///     The ids of the gaps this tier found and the weaver's operand roots fixed (<c>FIXED</c> in the generator,
-        ///     LT01–LT28). Each must keep pinned cases in the gate (<see cref="Lifetime_CorpusContract"/>): they are the
+        ///     LT01–LT29). Each must keep pinned cases in the gate (<see cref="Lifetime_CorpusContract"/>): they are the
         ///     regression pins of the fix.
         /// </summary>
-        private static readonly string[] FixedGaps = Enumerable.Range(1, 28).Select(i => $"LT{i:00}").ToArray();
+        private static readonly string[] FixedGaps = Enumerable.Range(1, 29).Select(i => $"LT{i:00}").ToArray();
 
         /// <summary>
         ///     The corpus contract, in-process (no child): both corpus files were copied to the test output (the gate not

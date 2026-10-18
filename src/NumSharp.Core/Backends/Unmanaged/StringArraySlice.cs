@@ -186,6 +186,10 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="index">The element index.</param>
         /// <returns>The value.</returns>
         /// <exception cref="SystemError">A <c>U</c> unit is above <c>U+10FFFF</c>.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/> (lost-anchor site LT29): the reader allocates the value before it copies
+        ///     the element out, and this slice is what keeps the buffer's memory block reachable once the caller's array is
+        ///     gone (<c>np.char.upper(a).item(0)</c>), so the slice is rooted to the end of the read.</remarks>
+        [NDAnchored]
         public object GetIndex(long index)
         {
             byte* p = Bytes.Address + index * ItemSize;
@@ -205,8 +209,11 @@ namespace NumSharp.Backends.Unmanaged
         /// <remarks>
         ///     The class test and the element width are read once for the run instead of once per element, and each element
         ///     goes straight to its codec reader (a <c>tolist()</c> of short <c>S</c> / <c>U</c> elements spent about as much
-        ///     on the per-element dispatch as on the decode).
+        ///     on the per-element dispatch as on the decode). <see cref="NDAnchoredAttribute"/> (lost-anchor site LT29): the
+        ///     loop reads the buffer through a raw pointer while it allocates one value per element, so the slice — what keeps
+        ///     the memory block reachable — is rooted to the end.
         /// </remarks>
+        [NDAnchored]
         public void GetItems(long start, long stride, Span<object> destination)
         {
             byte* p = Bytes.Address + start * ItemSize;
@@ -379,6 +386,9 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <returns>The values in buffer order.</returns>
         /// <exception cref="SystemError">A <c>U</c> unit is above <c>U+10FFFF</c>.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/> (lost-anchor site LT29): one value is allocated per element while the
+        ///     buffer is read, so the slice is rooted to the end of the copy.</remarks>
+        [NDAnchored]
         public Array ToArray()
         {
             if (IsUnicode)

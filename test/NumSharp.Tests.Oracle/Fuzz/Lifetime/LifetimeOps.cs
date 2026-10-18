@@ -278,7 +278,16 @@ namespace NumSharp.Tests.Fuzz.Lifetime
             ["view_int64"] = (a, c) => a[0]().view(np.int64).copy(),
             ["nditer_sum"] = (a, c) => NditerSum(a[0]()),
             ["flat_sum"] = (a, c) => FlatSum(a[0]()),
+            // ---- text and list readers (LT29; the .NET strings joined, the boxed values read back, as bytes)
+            ["tolist_str"] = (a, c) => JoinedUtf8(((List<object>)a[0]().tolist()).Cast<string>()),
+            ["tolist_f64"] = (a, c) => MemoryMarshal.AsBytes<double>(((List<object>)a[0]().tolist()).Select(o => (double)o).ToArray()).ToArray(),
+            ["as_string_array"] = (a, c) => JoinedUtf8(NDArray.AsStringArray(a[0]())),
         };
+
+        /// <summary>The UTF-8 bytes of texts joined with U+001F (the NumPy side's <c>"\x1f".join(...).encode()</c>).</summary>
+        /// <param name="texts">The texts a reader returned.</param>
+        /// <returns>The joined text's bytes.</returns>
+        private static byte[] JoinedUtf8(IEnumerable<string> texts) => System.Text.Encoding.UTF8.GetBytes(string.Join("\u001f", texts));
 
         /// <summary>
         ///     The op keys the registry implements; <c>LifetimeOracleTests.EveryCorpusOpHasABody</c> holds the corpus to
