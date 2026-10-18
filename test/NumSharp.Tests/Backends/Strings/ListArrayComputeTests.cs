@@ -126,6 +126,35 @@ namespace NumSharp.Tests.Backends.Strings
             emptyAdd.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (0,) (4,) ");
         }
 
+        /// <summary>
+        ///     A list against an ndarray: list's comparison is NotImplemented, so the ARRAY's operator runs with the list's
+        ///     items as its operand (<c>lst &lt; a</c> is <c>np.greater(a, items)</c>, <c>a &lt; lst</c> is
+        ///     <c>np.less(a, items)</c>); <c>==</c> of a pair with no loop is the operator's all-False constant, an ordering's
+        ///     no-loop error names the ufunc the reflection picks, and an empty list's float64 items do not broadcast (probed
+        ///     2.4.2; the mutation pass found this path untested).
+        /// </summary>
+        [TestMethod]
+        public void ListElement_AgainstAnNDArray_RunsTheArraysOperator()
+        {
+            using var u = np.array(new[] { "a b", "c d e", "" });
+            using var r = np.@char.split(u);
+            using var lst = r["0"];
+            using var a = np.array(new[] { "a", "c" });
+            using (var lt = lst < a) Values(lt).Should().Be("[False, True]");
+            using (var reflected = a < lst) Values(reflected).Should().Be("[False, False]");
+            using (var ge = lst >= a) Values(ge).Should().Be("[True, False]");
+            using (var eq = lst == a) Values(eq).Should().Be("[True, False]");
+            using var bytes = np.array(new object[] { new byte[] { 97 }, new byte[] { 99 } });
+            Action noLoop = () => _ = lst < bytes;
+            noLoop.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'greater' did not contain a loop with signature matching types (<class 'numpy.dtypes.BytesDType'>, " +
+                "<class 'numpy.dtypes.StrDType'>) -> None");
+            using (var never = lst == bytes) Values(never).Should().Be("[False, False]");
+            using var empty = r["2"];
+            Action shapes = () => _ = empty == a;
+            shapes.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,) (0,) ");
+        }
+
         // =============================================================================================================
         // Truth and conversions
         // =============================================================================================================
@@ -285,6 +314,21 @@ namespace NumSharp.Tests.Backends.Strings
             using (var one = r["1:2"])
             using (var p = one.prod(initial: 2)) Lists(p).Should().Be("['c', 'c']", "2 * ['c']");
             using (var b = r.sum(null, np.dtype("bool"))) Values(b).Should().Be("True", "the OR of the lists' truths");
+            // where= without initial (get_initial_from_ufunc): a non-empty object reduction uses no identity, so the mask is
+            // NumPy's refusal; an EMPTY one takes the identity, the int 0, which a list array cannot hold — no refusal (the
+            // mutation pass found this split untested).
+            using (var mask = np.array(new[] { true, false, true, true }))
+            {
+                Action masked = () => r.sum(where: mask);
+                masked.Should().Throw<ValueError>().WithMessage(
+                    "reduction operation 'add' does not have an identity, so to use a where mask one has to specify 'initial'");
+            }
+            using (var none = r["0:0"])
+            using (var noMask = np.zeros(new Shape(0L), np.@bool))
+            {
+                Action emptySum = () => none.sum(where: noMask);
+                emptySum.Should().Throw<NotSupportedException>("NumPy's empty masked sum is the identity 0, not the refusal");
+            }
         }
 
         /// <summary>cumsum / trace / clip / mean / var / std are NumPy's object statements.</summary>
@@ -467,6 +511,23 @@ namespace NumSharp.Tests.Backends.Strings
             Action grow = () => g.resize(6);
             grow.Should().Throw<NotSupportedException>("NumPy fills the new elements with the int 0");
             using (var swapped = r.byteswap()) Lists(swapped).Should().Be(Lists(r));
+            // byteswap's copy keeps an F-contiguous array F (order 'A'); a transposed C array is one (the mutation pass
+            // found this untested, as it found take into a READ-ONLY out of another heap: take's own refusal comes first).
+            using (var fresh = A())
+            using (var t = fresh.T)
+            using (var swappedT = t.byteswap())
+            {
+                swappedT.flags.f_contiguous.Should().BeTrue();
+                swappedT.flags.c_contiguous.Should().BeFalse();
+                Lists(swappedT).Should().Be(Lists(t));
+            }
+            using (var readOnly = np.@char.split(np.array(new[] { "x", "y" })))
+            using (var indices = np.array(new long[] { 3, 0 }))
+            {
+                readOnly.setflags(write: false);
+                Action intoReadOnly = () => r.take(indices, null, readOnly);
+                intoReadOnly.Should().Throw<ValueError>().WithMessage("WRITEBACKIFCOPY base is read-only");
+            }
             Action field = () => r.getfield(np.dtype("int64"));
             field.Should().Throw<TypeError>().WithMessage("Cannot get/set field of an object array");
             Action view = () => r.view(np.dtype("int64"));

@@ -953,7 +953,8 @@ namespace NumSharp.Backends.Strings
         ///     one class, or a NEP 55 <c>StringDType</c> operand with a <c>StringDType</c> or <c>U</c> one (the caller then runs
         ///     the engine's comparison, whose string guard computes it).</returns>
         /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's ValueError, raised by the same
-        ///     workaround when it allocates the result).</exception>
+        ///     workaround when it allocates the result, with the ufunc iterator's text: <c>operands could not be broadcast
+        ///     together with shapes (2,) (0,) </c>).</exception>
         /// <remarks>
         ///     <c>StringDType</c> registers <c>equal</c> / <c>not_equal</c> loops for <c>(T, T)</c>, <c>(T, U)</c> and
         ///     <c>(U, T)</c> only (probed 2.4.2): <c>T == S</c>, <c>T == 5</c> and <c>T == True</c> have no loop and take the
@@ -977,7 +978,19 @@ namespace NumSharp.Backends.Strings
             // the two operands: an F-ordered pair gives an F result. The values are a constant that needs no element of
             // either operand. The typed array is built directly: a typed wrapper made afterwards would alias it, and
             // NumPy's result owns its data.
-            var shape = Shape.ResolveReturnShape(lhs.Shape, rhs.Shape);
+            Shape shape;
+            try
+            {
+                shape = Shape.ResolveReturnShape(lhs.Shape, rhs.Shape);
+            }
+            catch (IncorrectShapeException ex)
+            {
+                // NpyIter_MultiNew's broadcast failure is the ufunc text, not np.broadcast's "shape mismatch: ..." (probed
+                // 2.4.2: np.array(['a', 'c']) == np.zeros(0) is "operands could not be broadcast together with shapes (2,)
+                // (0,) ", trailing space included).
+                throw new IncorrectShapeException(
+                    $"operands could not be broadcast together with shapes {lhs.Shape.ToPythonTuple()} {rhs.Shape.ToPythonTuple()} ", ex);
+            }
             var layout = Shape.NpyIterOutputShape((long[])shape.dimensions.Clone(), new[] { lhs.Shape, rhs.Shape });
             var result = new NumSharp.Generic.NDArray<bool>(layout, fillZeros: !notEqual);
             if (notEqual)

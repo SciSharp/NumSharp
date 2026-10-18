@@ -11281,7 +11281,8 @@ def _cobj_value(spec, views):
     Args:
         spec: ``{"op": k}`` (operand k), ``{"cha": k}`` (operand k's chararray view), ``{"v": enc}`` (a Python value),
             ``{"split": [spec, ...]}`` (``np.char.split`` of those arguments: an object array of lists), ``{"view":
-            [spec, index]}`` (a basic index of an argument's object array, the index in NumSharp's slice notation).
+            [spec, index]}`` (a basic index of an argument's object array, the index in NumSharp's slice notation),
+            ``{"T": spec}`` (the transpose of an argument's object array).
         views: the operand views.
 
     Returns:
@@ -11301,6 +11302,8 @@ def _cobj_value(spec, views):
     if "view" in spec:
         target, index = spec["view"]
         return _cobj_value(target, views)[_cobj_index(index)]
+    if "T" in spec:
+        return _cobj_value(spec["T"], views).T
     raise TypeError(f"unknown argument spec {spec!r}")
 
 
@@ -12139,6 +12142,84 @@ def _gen_strcharlist_ops():
                 m("setfield", [v(1), v("int64")])
                 m("view", [v("int64")], sub=":dtype")
                 m("choose", [v([0])], sub=":choose")
+    # A list (an element of the result: NumPy's Python list) against an ndarray: list's comparison is NotImplemented for
+    # an ndarray, so the ARRAY's operator runs with np.asarray(list) - the list's items - as its operand: `lst < a` is
+    # np.greater(a, items), `a < lst` np.less(a, items). Text arrays of the list's class compare item by item (a 0-d
+    # array, a broadcast grid), the other class and numbers are the ufunc's no-loop TypeError naming the ufunc the
+    # reflection picks, and an empty list's items are float64 (0,).
+    for kind in ("U", "S", "T"):
+        like = (lambda t: t.encode("latin-1")) if kind == "S" else (lambda t: t)
+        alien = (lambda t: t) if kind == "S" else (lambda t: t.encode("latin-1"))
+        text = _cobj_operand(kind, [like("a b"), like("c d e"), like("")], "c1")
+        split = {"split": [{"op": 0}]}
+        partners = [
+            (plain(np.array([like("a"), like("c")])), "0", "pair"),
+            (plain(np.array([like("b"), like("c"), like("e")])), "1", "triple"),
+            (plain(np.array(like("b"))), "0", "0d"),
+            (plain(np.array([[like("a"), like("z")], [like("0"), like("b")]])), "0", "grid"),
+            (plain(np.array([alien("a"), alien("c")])), "0", "alien"),
+            (plain(np.array([1, 2], dtype=np.int64)), "0", "int"),
+            (plain(np.array([like("a"), like("c")])), "2", "empty"),
+        ]
+        for other, index, pl in partners:
+            for op in ("eq", "ne", "lt", "le", "gt", "ge"):
+                for rev in (False, True):
+                    params = {"recv": {"view": [split, index]}, "name": op, "binop": op, "other": {"op": 1}}
+                    if rev:
+                        params["rev"] = True
+                    add_clst(params, [text, other], layout=f"items:{kind}:{pl}:{op}{':rev' if rev else ''}")
+    # Transposed receivers: a flat reduction visits NumPy's flat reduction order (the axes by |stride|, each in increasing
+    # logical index), which for a transposed array is its MEMORY order, not its C order; an axis reduction folds each
+    # output in increasing index; argmax / argmin and a flat cumsum read the logical C order.
+    for kind in ("U", "S", "T"):
+        pool = CLST_S if kind == "S" else CLST_U
+        for layout in ("c2", "c3"):
+            text = _cobj_operand(kind, pool, layout, seed=3)
+            nd = text[1].ndim
+            recv = {"T": {"split": [{"op": 0}]}}
+
+            def tm(name, args=(), kw=None, sub="", **extra):
+                params = {"recv": recv, "name": name, "args": list(args), "kw": kw or {}}
+                params.update(extra)
+                add_clst(params, [text], layout=f"transposed:{kind}:{layout}:{name}{sub}")
+
+            for name in ("sum", "max", "min", "argmax", "argmin", "cumsum"):
+                tm(name)
+                tm(name, [_cobj_v(0)], sub=":0")
+                tm(name, [_cobj_v(nd - 1)], sub=":last")
+            tm("sum", kw={"keepdims": _cobj_v(True)}, sub=":kd")
+            tm("sort", [_cobj_v(0)], sub=":0", inplace=True)
+            tm("argsort", [_cobj_v(None)], sub=":flat")
+            tm("byteswap")
+    # Ties between EQUAL lists of different piece objects (U only: bytes.split and a StringDType element's exact str copy
+    # the text): max / min keep the EARLIER list of a tie (npy_ObjectMax: acc >= x ? acc : x), flat and along each axis,
+    # with the [self] list first and second.
+    tie_text = plain(np.array([["b", "a"], ["b", "a"]]))
+    for seps, sl in ((plain(np.array([["xyz", "x"], ["x", "xyz"]])), "self_first"),
+                     (plain(np.array([["x", "xyz"], ["xyz", "x"]])), "plain_first")):
+        recv = {"split": [{"op": 0}, {"op": 1}]}
+        for name in ("max", "min"):
+            for args, al in (([], "flat"), ([_cobj_v(0)], "0"), ([_cobj_v(1)], "1")):
+                add_clst({"recv": recv, "name": name, "args": args, "kw": {}}, [tie_text, seps],
+                         layout=f"tie:{sl}:{name}:{al}")
+    # Assignments of lists split from ANOTHER text (another heap whose ids name other lists): a slice, an element, fill and
+    # put; each list is appended to the receiver's heap before its id is stored.
+    for kind in ("U", "S", "T"):
+        like = (lambda t: t.encode("latin-1")) if kind == "S" else (lambda t: t)
+        dt = np.dtypes.StringDType() if kind == "T" else None
+        mine = plain(np.array([like("a b"), like("c"), like("d")], dtype=dt))
+        theirs = plain(np.array([like("q r"), like("s"), like(""), like("t u v")], dtype=dt))
+        recv = {"split": [{"op": 0}]}
+        other = {"split": [{"op": 1}]}
+        for params, al in (({"setitem": "1:3", "args": [{"view": [other, "1:3"]}]}, "slice"),
+                           ({"setitem": "0", "args": [{"view": [other, "0"]}]}, "element"),
+                           ({"setitem": ":", "args": [{"view": [other, "2::-1"]}]}, "reversed"),
+                           ({"name": "fill", "args": [{"view": [other, "3"]}], "inplace": True}, "fill"),
+                           ({"name": "put", "args": [_cobj_v([2, 0])], "kw": {"values": {"view": [other, "0:2"]}},
+                             "inplace": True}, "put")):
+            full = {"recv": recv, "name": params.get("name", "setitem"), "args": [], "kw": {}}
+            full.update(params)
+            add_clst(full, [mine, theirs], layout=f"foreign:{kind}:{al}")
 
 
 # ----------------------------------------------------------------------------------------------------------------------

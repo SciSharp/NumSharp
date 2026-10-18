@@ -138,7 +138,7 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     One argument spec: <c>{"op": k}</c> the operand, <c>{"cha": k}</c> its chararray view, <c>{"v": ...}</c> a
         ///     Python value (<see cref="ObjectPathPythonValue"/>), <c>{"split": [...]}</c> <c>np.@char.split</c> of those
-        ///     arguments, <c>{"view": [spec, index]}</c> a basic index of a list array.
+        ///     arguments, <c>{"view": [spec, index]}</c> a basic index of a list array, <c>{"T": spec}</c> its transpose.
         /// </summary>
         /// <param name="spec">The spec.</param>
         /// <param name="ops">The reconstructed operands.</param>
@@ -159,6 +159,8 @@ namespace NumSharp.Tests.Strings
             }
             if (spec.TryGetProperty("view", out var view))
                 return ((NDListArray)ObjectPathValue(view[0], ops))[view[1].GetString()];
+            if (spec.TryGetProperty("T", out var transposed))
+                return ((NDListArray)ObjectPathValue(transposed, ops)).T;
             throw new InvalidOperationException($"section strcharobj has no argument spec {spec}");
         }
 

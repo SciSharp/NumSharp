@@ -710,22 +710,28 @@ namespace NumSharp
 
         /// <summary>
         ///     The comparison of a Python list's items (<c>np.asarray(list)</c>) with an ndarray, NumPy's own (NDArray's
-        ///     comparison of the two arrays), as a bool array.
+        ///     comparison operator over the two arrays), as a bool array.
         /// </summary>
         /// <param name="op">The operator as written.</param>
         /// <param name="items">The list's items.</param>
         /// <param name="array">The other operand.</param>
         /// <param name="reflected">True when the ARRAY was the left operand.</param>
         /// <returns>The bool result.</returns>
+        /// <exception cref="TypeError">An ordering with no ufunc loop for the pair (the error names the ufunc the
+        ///     reflection picks: <c>lst &lt; a</c> is <c>greater</c>).</exception>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (the ufunc's text).</exception>
         private static NDArray<bool> ItemsComparison(PyCompareOp op, NDArray items, NDArray array, bool reflected)
         {
             // list's comparison is NotImplemented for an ndarray, so the ARRAY's operator runs with the items as its
-            // operand: `lst < a` is a.__gt__(lst), np.greater(a, items) — its error names greater and (a, items).
+            // operand: `lst < a` is a.__gt__(lst), np.greater(a, items) — its error names greater and (a, items). == and !=
+            // are ndarray.__eq__ / __ne__ (array_richcompare), NOT the ufunc: a pair with no loop (str items against an int
+            // or bytes array, an empty list's float64 items against text) is all False / all True over the broadcast shape,
+            // so the operators, which carry that workaround, run here.
             var called = reflected ? op : Reflected(op);
             NDArray result = called switch
             {
-                PyCompareOp.Eq => np.equal(array, items),
-                PyCompareOp.Ne => np.not_equal(array, items),
+                PyCompareOp.Eq => array == items,
+                PyCompareOp.Ne => array != items,
                 PyCompareOp.Lt => np.less(array, items),
                 PyCompareOp.Le => np.less_equal(array, items),
                 PyCompareOp.Gt => np.greater(array, items),

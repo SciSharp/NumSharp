@@ -171,6 +171,23 @@ namespace NumSharp.Tests.Backends.Strings
             ge.Should().Throw<TypeError>().WithMessage("ufunc 'less_equal'" + types);
         }
 
+        /// <summary>
+        ///     <c>==</c> / <c>!=</c> of a text array and an operand of another class have no ufunc loop, so NumPy's operator
+        ///     answers a constant over the broadcast shape (<c>_failed_comparison_workaround</c>); its allocation reports a
+        ///     shape mismatch with the ufunc iterator's text, not <c>np.broadcast</c>'s (probed 2.4.2).
+        /// </summary>
+        [TestMethod]
+        public void Operators_AFailedComparison_BroadcastsLikeTheUfunc()
+        {
+            var u = np.array(new[] { "a", "c" });
+            (u == np.array(new long[] { 1, 2 })).ToArray<bool>().Should().Equal(false, false);
+            (u != np.array(new long[,] { { 1 }, { 2 }, { 3 } })).shape.Should().Equal(3L, 2L);
+            Action eq = () => _ = u == np.zeros(new Shape(0L), np.float64);
+            eq.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (2,) (0,) ");
+            Action ne = () => _ = np.zeros(new Shape(3L), np.int64) != u;
+            ne.Should().Throw<IncorrectShapeException>().WithMessage("operands could not be broadcast together with shapes (3,) (2,) ");
+        }
+
         // ---------------------------------------------------------------- truth values
 
         /// <summary>The truth operand: empty, NUL-only, whitespace, a leading NUL and the text 'False'.</summary>
