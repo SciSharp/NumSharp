@@ -138,8 +138,8 @@ What C# cannot express, all registered in §6:
   verbatim. The idiomatic port of `from numpy.polynomial import Polynomial` is
   `using Polynomial = NumSharp.NDPolynomial;`, after which `new Polynomial(c)` and `Polynomial.fit(x, y, 3)`
   both read like the Python.
-- **A static and an instance member with one name** (CS0102). The class-level defaults `Polynomial.domain`
-  and `Polynomial.window` therefore become `NDPolynomial.default_domain` and `NDPolynomial.default_window`;
+- **A static and an instance member with one name** (CS0102). The class attributes `Polynomial.domain`,
+  `window`, `maxpower` and `basis_name` therefore live on the class object under NumPy's names: `NDPolynomial.Class.domain`, also `p.__class__.domain` (`NDPolyClass`, one object per class);
   the per-instance `p.domain`, `p.window`, `p.coef`, `p.symbol`, `p.maxpower` and `p.basis_name` keep NumPy's
   names.
 - **Printing keeps NumPy's names.** `repr`/`str` print NumPy's class names (`Polynomial(`, `T_1`), never the
@@ -1121,13 +1121,21 @@ a unit below, that document wins.
 ### U10 — Convenience classes (6 classes + base) — DELIVERED 2026-10-18
 
 > **DELIVERED (2026-10-18).** `NDPolyBase` (abstract; `Polynomial/Package/NDPolyBase{,.Protocol,.Algebra,.Printing}.cs`) +
-> `NDPolyKind` + six sealed classes `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}` + a factory per
+> `NDPolyClass` (the class object: `NDChebyshev.Class`, `p.__class__`) + six sealed classes `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}` + a factory per
 > facade. No CRTP base (`NDPolyBase<TSelf>` was not needed): each class re-declares the covariant members and its
 > operator set typed with itself. Oracle tiers `polyclass.jsonl` (21,628) + `polyclass_parity.jsonl` (213,
-> host-pinned), zero excuses; unit tests `PolynomialClassTests.cs` (39) + `PolynomialClassPrintingTests.cs` (11);
+> host-pinned), zero excuses; unit tests `PolynomialClassTests.cs` (44) + `PolynomialClassPrintingTests.cs` (11);
 > benchmark `benchmark/polynomial/polyclass_results.md` (252 cells, all bit-exact, geomean 8.22×, 1.81× and more but
 > pickling, a floor). Routes and findings: [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md)
 > §3.7; the C# spellings below (Appendix B) and in `.claude/CLAUDE.md` ("the series classes").
+>
+> **Names (2026-10-18, `d54b11cb`).** Every member carries NumPy's name, case included (the owner's request: "Naming ND
+> is acceptable but are the apis methods/props are named identical case to numpy, fix"): `p(x)` is `p.__call__(x)` (was
+> `p.Call`), and NumPy's class attributes are members of the class object `NDChebyshev.Class` (`NDPolyClass`, also
+> `p.__class__`): `.domain` / `.window` / `.maxpower` / `.basis_name` / `.__name__` / `.__module__`, replacing the
+> `default_domain` / `default_window` / `default_maxpower` statics. Gate
+> `PolynomialClassTests.MemberNames_AreNumPys_CaseIncluded` (every public member against NumPy 2.4.2's `dir(p)`, C#
+> protocol members listed).
 
 - **Scope:** `NDPolyBase`/`NDPolyBase<TSelf>` + the six classes and their facade aliases:
   - **construction:** `as_series` (untrimmed), the two-element domain/window check, `symbol` validation (a
@@ -1246,8 +1254,8 @@ edits to the same files survive.
 | M1 | complex64 coefficients / `x` → complex128 results | NumSharp has one complex width (F1, #569) |
 | M2 | no object-dtype fallback in `as_series`: `Fraction`/mixed exotic coefficients → `ValueError("Coefficient arrays have no common type")`; Decimal handled natively | no object dtype |
 | M3 | `RankWarning` not emitted by `*fit`/`.fit` | NumSharp emits no warnings (same as legacy `polyfit`) |
-| M4 | `p(x)` → `p.Call(x)` (`p.Call(q)` for a series); `p // q` → `p.__floordiv__(q)`; `divmod(p, q)` → `p.__divmod__(q)` (a `(quo, rem)` tuple); `p ** n` → `p.__pow__(n)`; `str` / `format` → `__str__()` = `ToString()` / `__format__(spec)` = `IFormattable`; `_repr_latex_` → method; pickle → `__getstate__` / `__setstate__`; `p == arr` → `p == (object)arr`; `p + None` → `p + (object)null` | C# operator set and overload resolution (Python's `//`, `**`, `divmod` have no C# operator; NumPy's dunder names are kept) |
-| M5 | class attrs `Polynomial.domain/window` → `NDPolynomial.default_domain/default_window`; `np.polynomial.Polynomial.fit(...)` → `NDPolynomial.fit(...)` (or a `using` alias) | CS0102; a member cannot be both invocable and dotted |
+| M4 | `p(x)` → `p.__call__(x)` (`p.__call__(q)` for a series); `p // q` → `p.__floordiv__(q)`; `divmod(p, q)` → `p.__divmod__(q)` (a `(quo, rem)` tuple); `p ** n` → `p.__pow__(n)`; `str` / `format` → `__str__()` = `ToString()` / `__format__(spec)` = `IFormattable`; `_repr_latex_` → method; pickle → `__getstate__` / `__setstate__`; `p == arr` → `p == (object)arr`; `p + None` → `p + (object)null` | C# operator set and overload resolution (Python's `//`, `**`, `divmod` have no C# operator; NumPy's dunder names are kept) |
+| M5 | class attrs `Polynomial.domain/window/maxpower/basis_name` → the class object's `NDPolynomial.Class.domain/window/maxpower/basis_name` (also `p.__class__`; NumPy's names kept); `np.polynomial.Polynomial.fit(...)` → `NDPolynomial.fit(...)` (or a `using` alias) | a static cannot share a name with the instance `p.domain` (C# gives one member per name); a member cannot be both invocable and dotted |
 | ~~M6~~ | ~~module constants are read-only~~ — RETIRED in U1: the constants are writeable shared singletons exactly as NumPy's (D6) | — |
 | ~~M7~~ | ~~NumPy-strong scalar `x` (`np.float64(0.5)`) behaves weak~~ — RETIRED in U10: an unmarked 0-d NDArray is NumPy's strong scalar and a C# number the weak Python one throughout the class layer, as in U1-U9 | — |
 | ~~M8~~ | ~~`symbol` identifier validation approximates Python's `str.isidentifier`~~ — RETIRED in U10: `PyUnicodeData.IsIdentifier` is Python's rule (the XID_Start / XID_Continue tables of `tools/gen_unicode_tables.py`, NFKC) | — |
@@ -1992,8 +2000,8 @@ Unit totals: U1 54 · U2 40 · U3 37 · U4 12 · U5 18 · U6 6 · U7 12 · U8 10
 |---|---|
 | `Poly(coef, domain=None, window=None, symbol='x')` | `new NDPoly(coef, domain, window, symbol)`; `np.polynomial.Poly(...)` and `np.polynomial.<module>.Poly(...)` |
 | `p.coef / p.domain / p.window / p.symbol / p.maxpower / p.basis_name` | same-named instance properties (`coef`, `domain`, `window`, `maxpower` settable: a view stored, the replaced array released) |
-| `Poly.domain / Poly.window / Poly.maxpower` (class attributes) | `NDPoly.default_domain / default_window / default_maxpower` (M5) |
-| `p(x)` | `p.Call(x)` → NDArray; `p.Call(q)` → a series (composition) |
+| `Poly.domain / Poly.window / Poly.maxpower / Poly.basis_name` (class attributes), `Poly.__name__ / __qualname__ / __module__`, `str(Poly)`, `p.__class__` | the class object `NDPoly.Class` (an `NDPolyClass`, also `p.__class__`): `.domain / .window / .maxpower / .basis_name / .__name__ / .__qualname__ / .__module__`, `ToString()`; it converts to `Type` (`p.convert(kind: q.__class__)`) (M5) |
+| `p(x)` | `p.__call__(x)` → NDArray; `p.__call__(q)` → a series (composition) |
 | `+ - *`, `/` (numbers only), `%`, unary `-`/`+`, `==`/`!=` | C# operators on each class and on `NDPolyBase` (forward `(series, object / NDArray / object[] / Array / string)`, reflected `(NDArray / Array / object[] / IList / ITuple / string, series)`; `==` / `!=` on `NDPolyBase`) |
 | `//`, `divmod`, `**` | `__floordiv__` / `__rfloordiv__`, `__divmod__` / `__rdivmod__` → `(quo, rem)`, `__pow__(power)` (M4) |
 | `len(p)`, `iter(p)` | `__len__()`, `__iter__()` / `foreach` over the coefficients |

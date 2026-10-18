@@ -6420,9 +6420,9 @@ Plans `docs/plans/numpy-polynomial.md` (U10, U11) and `docs/plans/numpy-polynomi
 NumPy's errors, type and text) and `polyclass_parity.jsonl` (213 BLAS / LAPACK-bound cases, host-pinned like
 `polyfit_parity`: products in np.convolve's vector regime, roots of degree two and more, fit), 0 excused; the tier's
 errors are typed strictly (`FuzzCorpusTests.Kinds.PolyClassErrorMatches`: NumPy's TypeError / ValueError / ... or the
-house type of the same error). Unit tests `Polynomial/PolynomialClassTests.cs` (39: NumPy's `test_classes.py` and
-`test_symbol.py` ported for every class, plus the C# pins below) and `PolynomialClassPrintingTests.cs` (11:
-`test_printing.py`'s class part), both `[DoNotParallelize]`. A mutation pass of 18 planted defects (check order,
+house type of the same error). Unit tests `Polynomial/PolynomialClassTests.cs` (44: NumPy's `test_classes.py` and
+`test_symbol.py` ported for every class, plus the C# pins below, the class object and NumPy's member names) and
+`PolynomialClassPrintingTests.cs` (11: `test_printing.py`'s class part), both `[DoNotParallelize]`. A mutation pass of 18 planted defects (check order,
 `__rtruediv__`, a shared default, truncate's bound, NotImplemented, error texts, convert's scale, integ's lbnd offset,
 `==` without the symbol, `has_samecoef`'s length, `__getstate__`'s order, `+p`, the ascii printer, `//`, a complex power,
 the complex64 roots, fromroots' default domain, the symbol check) killed all 18. **Perf (NPY/NS,
@@ -6432,18 +6432,30 @@ section's minimum is 1.81× or more but pickling's (below).
 - **Types** (`Polynomial/Package/`): `NDPolyBase` (abstract, the port of `ABCPolyBase`: `NDPolyBase.cs` state, members,
   lifetime; `.Protocol.cs` Python's binary-operator protocol; `.Algebra.cs` convert / cast / fit / fromroots / roots /
   integ / deriv / ...; `.Printing.cs` the four printers) and six sealed classes (`NDPolynomial`, `NDChebyshev`,
-  `NDLegendre`, `NDLaguerre`, `NDHermite`, `NDHermiteE`), each a record of its basis (`NDPolyKind`: NumPy's names, the
-  class attributes, a blank factory). Every member calls the module functions of U1-U9; nothing has a loop of its own.
+  `NDLegendre`, `NDLaguerre`, `NDHermite`, `NDHermiteE`), each with its class object (`NDPolyClass`, `NDChebyshev.Class`:
+  NumPy's class attributes and names, the basis, a blank factory). Every member calls the module functions of U1-U9;
+  nothing has a loop of its own.
   NumPy's names reach them: `np.polynomial.Chebyshev(...)` and `np.polynomial.chebyshev.Chebyshev(...)` are
   `new NDChebyshev(...)`.
-- **C# spellings of NumPy's protocol**: `p(x)` is `p.Call(x)` (an array result) or `p.Call(q)` (composition, a series);
-  `//`, `divmod`, `**` are `__floordiv__` / `__rfloordiv__`, `__divmod__` / `__rdivmod__` (a `(quo, rem)` tuple),
-  `__pow__`; `len(p)` / `iter(p)` are `__len__()` and `foreach` over the coefficients; `str` / `format` / `repr` are
-  `__str__()` = `ToString()`, `__format__(spec)` = `IFormattable` (`$"{p:unicode}"`), `__repr__()`; `_repr_latex_()`;
-  `__getstate__()` / `__setstate__(dict)` (pickling's dictionary, in NumPy's `__dict__` order). The class attributes are
-  statics (`NDChebyshev.default_domain`, `default_window`, `default_maxpower`: an instance member cannot share the name),
-  the class methods too (`NDChebyshev.fit(...)`, `fromroots`, `identity`, `basis`, `cast`, `interpolate`). `Equals` is
-  NumPy's `==`; `GetHashCode` raises TypeError (`__hash__ = None`).
+- **NumPy's names, case included** (gate `PolynomialClassTests.MemberNames_AreNumPys_CaseIncluded`, against NumPy
+  2.4.2's `dir(p)`): every member NumPy names keeps NumPy's spelling. `p(x)` is `p.__call__(x)` (an array result) or
+  `p.__call__(q)` (composition, a series); `//`, `divmod`, `**` are `__floordiv__` / `__rfloordiv__`, `__divmod__` /
+  `__rdivmod__` (a `(quo, rem)` tuple), `__pow__`; `len(p)` / `iter(p)` are `__len__()` and `foreach` over the
+  coefficients; `str` / `format` / `repr` are `__str__()` = `ToString()`, `__format__(spec)` = `IFormattable`
+  (`$"{p:unicode}"`), `__repr__()`; `_repr_latex_()`; `__getstate__()` / `__setstate__(dict)` (pickling's dictionary, in
+  NumPy's `__dict__` order). The class methods are statics (`NDChebyshev.fit(...)`, `fromroots`, `identity`, `basis`,
+  `cast`, `interpolate`). The only other public names are C# protocol members: `Class`, `Dispose`, `Equals` (NumPy's
+  `==`) with `==` / `!=`, `ToString`, `GetHashCode` (raises TypeError, `__hash__ = None`), `GetEnumerator` (`foreach`),
+  `Deconstruct` (a full fit's `(series, status)`).
+- **The class object** (`Polynomial/Package/NDPolyClass.cs`, `d54b11cb`): NumPy's `Chebyshev` is `NDChebyshev.Class`,
+  also every series' `__class__` (`ReferenceEquals(p.__class__, NDChebyshev.Class)` is `p.__class__ is Chebyshev`; one
+  object per class). It holds the class attributes under NumPy's names — `NDChebyshev.Class.domain` / `window` (float64
+  `[-1, 1]`, Laguerre's `[0, 1]`), `maxpower` (100), `basis_name` (read-only: the classes are sealed) — and `__name__` /
+  `__qualname__` / `__module__` / `ToString()` (`str(cls)`, `<class 'numpy.polynomial.chebyshev.Chebyshev'>`), and it
+  converts implicitly to `Type`, so `p.convert(kind: q.__class__)` ports verbatim. Why an object: C# gives a name in a
+  type to ONE member, and a static `NDChebyshev.domain` would hide the instance `p.domain` (the `default_domain` /
+  `default_window` / `default_maxpower` statics of `8b8b0cb6` were the stand-in). **Footgun:** the class attributes are
+  process-wide; a test that assigns one is `[DoNotParallelize]` and restores it in a `finally`.
 - **The operator protocol** (`.Protocol.cs`, `PyBinary`): the left operand's forward method, NotImplemented on any
   exception of the coefficient arithmetic, the right operand's reflected method only when the types differ, then
   CPython's fallbacks — `can only concatenate list (not "Polynomial") to list`, `can't multiply sequence by non-int of
@@ -6468,8 +6480,10 @@ section's minimum is 1.81× or more but pickling's (below).
   the current array back changes nothing. `__setstate__` stores views of the state's arrays and releases what it
   replaces. The class attributes are one shared array per class (a series built without a domain reads it, NumPy's
   `p.domain is Chebyshev.domain`), holding one extra buffer reference like the module constants, so a caller's
-  `Dispose` of `p.domain` cannot free it; assigning the current class attribute back is a no-op. A derived series (an
-  operator's result, `copy`) owns copies.
+  `Dispose` of `p.domain` cannot free it; assigning `NDChebyshev.Class.domain` stores a VIEW with such a reference (NumPy
+  stores the array itself: writes into the caller's array still reach the class, its `Dispose` frees nothing the class
+  reads), never releases the array it replaces (series may still hold it), and refuses null; assigning the current
+  class attribute back is a no-op. A derived series (an operator's result, `copy`) owns copies.
 - **Printing**: NumPy's `_generate_string` (line breaking at the print options' linewidth, the term printers of both
   styles, the scaled-symbol argument of a mapped domain), `_repr_latex_` with NumPy's real `\text{}` scalars (format_float
   under the print options), `repr`'s `domain=` / `window=` / `symbol=` through the array printer.
@@ -6489,15 +6503,17 @@ section's minimum is 1.81× or more but pickling's (below).
 - **The pickling floor** (the only cells under 1.5×): `__getstate__` (0.70×) copies three arrays, as NumPy does, at the
   NDArray allocation floor (0.44 µs a copy); `__setstate__` (0.24×) stores a view per array (0.18 µs each), where NumPy's
   is one `self.__dict__ = state` assignment (0.19 µs in all).
-- **Coverage and leak gates**: `coverage/object_surfaces.py` maps the six surfaces to the ND* classes (`__call__` a
-  reviewed adapter to `Call`); `coverage/oracle_map.json` names the constructor keys (`chebyshev.Chebyshev` → the class
-  row), the `_repr_latex_` keys (the class row: an underscore name has no row) and aliases the package re-exports
+- **Coverage and leak gates**: `coverage/object_surfaces.py` maps the six surfaces to the ND* classes (every member
+  credited by its exact name — `__call__` was a reviewed adapter to `Call` until it took NumPy's name);
+  `coverage/oracle_map.json` names the constructor keys (`chebyshev.Chebyshev` → the class row), the `_repr_latex_` keys (the class row: an underscore name has no row) and aliases the package re-exports
   (`numpy.polynomial.Chebyshev`); the reflection tools report an `[Optional]` parameter without a constant
   (`trim`'s `tol`, `fromroots`' `domain`: NumPy's `0` / `[]`, which C# cannot write as an object default) as default
   kind `missing`, which signature parity reads as NumPy's default. The leak gate's object and operator owners include
-  the six classes and NDPolyBase (`LeakSurfaceCoverageTests.PolyClassKeys` maps their C# names to the tier's keys), the
-  catalogue covers `Dispose`, `GetHashCode`, NDPolyBase's own operators and the package factories, and the ownership
-  ledger watches the twelve class attributes (`Ownership/SharedArrays.cs`).
+  the six classes, NDPolyBase and the class object NDPolyClass (its attributes read on the six class objects, its
+  `ToString` and conversion catalogued); `LeakSurfaceCoverageTests.PolyClassMemberNames` maps the C# spellings to the
+  tier's keys, and a key that no longer names a live member is reported stale. The catalogue covers `Dispose`,
+  `GetHashCode`, NDPolyBase's own operators and the package factories, and the ownership ledger watches the twelve class
+  attributes (`Ownership/SharedArrays.cs`, through `NDChebyshev.Class.domain` / `window`, named in code).
 
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
@@ -7130,7 +7146,7 @@ code gives NumPy's text.
 | Array printing (NumPy parity) | `Backends/Printing/{PrintOptions,Dragon4,ElementFormatters,ArrayFormatter}.cs`, `APIs/np.array2string.cs`, `Casting/NDArray.ToString.cs` |
 | Scalar float formatters (NumPy's `dragon4.c`, ported) | `Backends/Printing/Dragon4.Port.cs` (argument kinds, the formatters, the fast path, the `BigInteger` reference loop), `Backends/Printing/Dragon4.BigInt.cs` (NumPy's BigInt on 64-bit blocks, the digit loop, the 19-digit chunk step); `np.format_float_*` in `APIs/np.array2string.cs` |
 | numpy.polynomial printing helpers (U11) | `Polynomial/Package/NDPolyPrinting.cs` (`format_float`, `set_default_printstyle`, the print-style flag); facades in `np.polynomial.cs` and `np.polynomial.polyutils.cs` |
-| numpy.polynomial series classes (U10, U11's class half) | `Polynomial/Package/NDPolyBase.cs` (state, members, lifetimes, class attributes), `NDPolyBase.Protocol.cs` (Python's binary-operator protocol: `PyBinary`, NotImplemented, CPython's fallbacks; the base operators), `NDPolyBase.Algebra.cs` (convert / cast / fit / fromroots / roots / integ / deriv / linspace), `NDPolyBase.Printing.cs` (`__str__` / `__format__` / `__repr__` / `_repr_latex_`), `NDPolyKind.cs` (a class's record), `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}.cs` (the classes: statics, covariant members, the operator set), `NDPolyEval.Scalar.cs` (`{p}val` at a NumPy scalar: the step-tree interpreter and its float64 lane); factories in every facade. Oracle `polyclass{,_parity}.jsonl` via `OpRegistry.PolyClass.cs`; benchmark `benchmark/polynomial/polyclass_*` |
+| numpy.polynomial series classes (U10, U11's class half) | `Polynomial/Package/NDPolyBase.cs` (state, members, lifetimes, class attributes), `NDPolyBase.Protocol.cs` (Python's binary-operator protocol: `PyBinary`, NotImplemented, CPython's fallbacks; the base operators), `NDPolyBase.Algebra.cs` (convert / cast / fit / fromroots / roots / integ / deriv / linspace), `NDPolyBase.Printing.cs` (`__str__` / `__format__` / `__repr__` / `_repr_latex_`), `NDPolyClass.cs` (the class object: NumPy's class attributes and names, `NDChebyshev.Class` / `p.__class__`), `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}.cs` (the classes: statics, covariant members, the operator set), `NDPolyEval.Scalar.cs` (`{p}val` at a NumPy scalar: the step-tree interpreter and its float64 lane); factories in every facade. Oracle `polyclass{,_parity}.jsonl` via `OpRegistry.PolyClass.cs`; benchmark `benchmark/polynomial/polyclass_*` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
 | Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
 | Typed iteration (nditer&lt;T&gt;/nditer_chunks&lt;T&gt;) | `APIs/np.nditer.Typed.cs` (ref-struct enumerators + `TypedIterHelpers`) |

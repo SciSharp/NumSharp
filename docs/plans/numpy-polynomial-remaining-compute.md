@@ -583,11 +583,11 @@ and is bounded-ULP, so the oracle tier is host-pinned, as the main plan already 
 ### 3.7 The six classes — U10
 
 > **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyBase{,.Protocol,.Algebra,.Printing}.cs` +
-> `NDPolyKind.cs` + the six sealed classes `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}.cs` + a factory
+> `NDPolyClass.cs` (the class object) + the six sealed classes `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}.cs` + a factory
 > per facade (`np.polynomial.Chebyshev(...)`, `np.polynomial.chebyshev.Chebyshev(...)`), the object layer recommended
 > below: every member calls U1-U9. Oracle tiers `polyclass.jsonl` (21,628 portable cases, 4,475 NumPy errors typed
 > strictly) and `polyclass_parity.jsonl` (213 BLAS / LAPACK-bound cases, host-pinned), zero excuses. Unit tests
-> `test/NumSharp.Tests/Polynomial/PolynomialClassTests.cs` (39) and `PolynomialClassPrintingTests.cs` (11). A mutation
+> `test/NumSharp.Tests/Polynomial/PolynomialClassTests.cs` (44) and `PolynomialClassPrintingTests.cs` (11). A mutation
 > pass of 18 planted defects killed all 18 (the weakest two, `+p` returning a copy and the complex64 carrier of `roots`,
 > by one case each; the tier then gained `+p is p` for every series kind and float32 complex roots in every basis).
 > Benchmark `benchmark/polynomial/polyclass_results.md` (252 cells, all bit-exact, geomean 8.22×; every section's
@@ -617,6 +617,14 @@ and is bounded-ULP, so the oracle tier is host-pinned, as the main plan already 
 >   (`MapDomainWith(xIsComplex64)`).
 > - **Pickling is the floor**: `__getstate__` copies three arrays (NumSharp's allocation floor, 0.44 µs a copy) and
 >   `__setstate__` stores three views (a series never disposes the caller's state), where NumPy assigns `__dict__`.
+>
+> **Names (2026-10-18, `d54b11cb`).** Every member carries NumPy's name, case included (the owner's request: "Naming ND
+> is acceptable but are the apis methods/props are named identical case to numpy, fix"): `p(x)` is `p.__call__(x)` (was
+> `p.Call`), and NumPy's class attributes are members of the class object `NDChebyshev.Class` (`NDPolyClass`, also
+> `p.__class__`): `.domain` / `.window` / `.maxpower` / `.basis_name` / `.__name__` / `.__module__`, replacing the
+> `default_domain` / `default_window` / `default_maxpower` statics. Gate
+> `PolynomialClassTests.MemberNames_AreNumPys_CaseIncluded` (every public member against NumPy 2.4.2's `dir(p)`, C#
+> protocol members listed).
 
 NumPy's `ABCPolyBase` holds no loops of its own. Every member binds a module function (`_add = chebadd`,
 `_val = chebval`, `_fit = chebfit`, …) or a `polyutils` helper, plus small Python logic:
