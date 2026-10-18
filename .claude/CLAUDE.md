@@ -664,6 +664,25 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   `T` 4–12 / 20–60 / 300–500 characters x2.68 → x3.49, x1.17 → x2.52, x0.62 → x2.52; `S` → `T` 20–60 / 300–500 bytes
   x2.09 → x3.86, x1.30 → x5.53. Gates: `StringDTypeFillTests` (the element-by-element store as the reference) and
   `StringDTypeFaultTests.Array_FailsCleanlyPartWay`.
+- **Heap strings are carved from pages, not `malloc`ed one by one** (2026-10-18, `b2234645`). NumPy
+  `PyMem_RawMalloc`s every text that outgrows its arena slot. That call was half of an assignment of longer texts over a
+  held array (44 ns a text of 20–60 bytes, 149 ns of 300–500).
+  - **The pages** (`VStringAllocator.HeapMalloc` / `HeapFree`). A text of at most `HeapPoolMaxBytes` (1,032) bytes is
+    a block of a page of its size class: 64 classes with block strides of 32 to 1,040 bytes. Pages are 1–64 KiB from
+    `SizeBucketedBufferPool`, warm and recycled across buffers. Each block starts with an 8-byte header naming its page;
+    each page has a free list and a bump pointer. A page whose last text is freed goes back to the pool at once, so a
+    buffer holds memory for its live texts, not its peak.
+  - **Longer texts** are C-allocator blocks of their own (a null page in the header).
+  - **What stays NumPy's.** The cells are byte for byte; only the heap address differs, and the oracle masks it anyway.
+  - **The clear loop** returns the pages whole and reads the cells only while a longer text is left.
+  - **Rules.** A cell's heap pointer is 8 bytes into a page block or a block of its own: free it only through
+    `HeapFree`, never with `NativeMemory.Free`. `ValidateHeapPages()` checks every invariant (for tests).
+  - **The spare.** The allocator keeps ONE emptied page for its next page. Without it, one element rewritten back and
+    forth between two lengths made each write a buffer-pool round trip (131 → 159 ns a write); with it 130 → 87.
+  - **Measured** (pinned): `np.copyto(dst, b)` of 100,000 texts over a held array 62.2 → 39.6 ns a text at 20–60
+    bytes (x1.03 → x1.62 NumPy) and 189 → 89 at 300–500 (x0.81 → x1.74); setitem of 100K texts over short cells 110 →
+    60 / 342 → 242 ns; releasing 100K heap texts 22 → 0.12 / 79 → 18.5 ns a text.
+  - **Gate:** `StringDTypeHeapPagesTests` (7 tests); 17 of 17 planted bugs killed.
 - The oracle carries `T` values as values, never cells (`"t"` + `"values"`, `{"na": true}`), and compares `tobytes()`
   cells with the heap pointers masked; sections `tstore` / `tcreate` / `tmove` / `tcast` (8,324 strict).
 - NumPy 2.4.2 bugs on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): `np.place`
@@ -7100,6 +7119,13 @@ direction **everywhere** — matrices, geomeans, commit messages, and the per-su
   good (np.max into a cast out measured ~100 µs per call on one CPU, 12–13 µs on two once tiered up after ~0.4 s); a run
   mixes the regimes, because a cell tiers up only when the main thread happens to block (plan api-parameter-parity
   finding 12). Pin the NumPy twin the same way.
+- **Check that the pin took: `start /affinity` launched from Git Bash does NOT pin** (measured 2026-10-18).
+  `cmd //c "start \"\" /wait /b /affinity 14 cmd /c X.cmd"` runs X, but every child gets the full mask 0xFFFFFFFF.
+  The thread then migrates to the E-cores, where a memory-bound copy runs at half speed. NumSharp's `np.copyto` cells
+  read 0.46× NumPy that way, and 1.00× pinned. Launch from PowerShell instead: `cmd /c 'start "" /wait /b /affinity 14
+  cmd /c X.cmd'`, or a wrapper that sets its own `ProcessorAffinity` (children inherit it). Read the mask a child
+  reports (`[Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity`) or `Thread.GetCurrentProcessorId()` in the
+  harness.
 - best-of-rounds (take the min), warmup excluded, correctness checked before every timed row.
 - The canonical harness is `benchmark/run_benchmark.py` — the op/dtype/N matrix plus five appended subsystems: `benchmark/nditer/` (iterator aspects), `benchmark/layout/` (reduction/copy/elementwise × memory layout × dtype), `benchmark/operand/` (1-D/scalar/mixed-operand/broadcast layouts), `benchmark/cast/` (astype src→dst matrix), `benchmark/fusion/` (np.evaluate). The `run-benchmarks.ps1` "Status Icons" table reports the *inverse* (NS/NPY, lower = better) — prefer this NPY/NS convention.
 - The op/dtype/N matrix is **BenchmarkDotNet** (`benchmark/NumSharp.Benchmark.CSharp`) timed against a **warm NumPy** process (`benchmark/NumSharp.Benchmark.Python`) across **1K / 100K / 10M × all 15 dtypes** (~615 ops/size), joined on `(op, dtype, N)`. Two methodology guards beyond `-c Release`: the **InProcessEmit** toolchain (sibling `.claude/worktrees/` checkouts hold same-named projects the out-of-process toolchain refuses to build) and a **25 ms-capped 50-iteration** job (so µs–ms array ops skip BenchmarkDotNet's nanosecond invocation ramp — without it the full matrix takes days). The NDIter subsystem reports a section that crashes all retries (the known intermittent `AccessViolation`) as **NA/IGNORED**, never a failure.
