@@ -927,6 +927,25 @@ Floors: 1K calls ~1.0–1.3× (the per-call NDArray floor), `copyto` / set-slice
 bytes at memory speed), `NDArray.AsStringArray` at 1M 0.7× (.NET's GC of 1M live strings). Design + status: `docs/plans/dtype-system.md` §5 "Stage D phase 1"; user docs
 `docs/website-src/docs/fundamentals/strings-and-bytes.md`.
 
+**`ndarray.tolist()` is NumPy's `recursive_tolist`, for every dtype** (2026-10-18, `13c6de98`): one `List<object>` per
+axis position, walked by the strides from the array's first element (`Shape.offset`), sized once
+(`CollectionsMarshal.SetCount`) and each innermost row filled through its span by ONE
+`IArraySlice.GetItems(start, stride, span)` call — where it was an `item(i)` per element (a dtype switch, a coordinate
+array per element off C order) plus a sub-array view per outer index. `GetItems` is the run form of `GetIndex(long)`:
+a default interface method (`GetIndex` per element) that the three library slices override with exactly `GetIndex`'s
+values — `ArraySlice<T>` boxes from memory (a `Half` from its 16-bit pattern: the .NET 8 tier-0 boxing hazard),
+`StringArraySlice` calls the codec per element, `VStringArraySlice` holds the allocator's lock once per run. The text
+element readers behind it (and behind `item()` / `AsStringArray`) are vector code: `NDStringCodec.ReadUcs4` (trim from
+the end, one range test for a unit past U+FFFF, a 16-unit `Vector256.Narrow` copy whose last step OVERLAPS the one before;
+an astral text keeps the counting scan and its SystemError), `ReadBytes` (vector trim), `NDUtf8.DecodeTrusted` (an
+ASCII text widened by `Ascii.ToUtf16`). Measured (100K elements, NPY/NS): `S` / `U` / `StringDType` at 4–12 characters
+1.17 / 1.40 / 1.49× → 1.66 / 1.83 / 2.40×, at 20–60 1.25 / 1.02 / 1.27× → 2.32 / 1.55 / 2.17×. **Floor:** at 300–500
+characters 0.52 / 0.58 / 0.40×: allocating 100K long .NET strings (two bytes a character) and keeping them alive
+through the gen0 / gen1 collections that copy them costs about NumPy's whole `tolist` (a compact one-byte `str`,
+reference-counted, never copied). Gates: `Backends/Strings/TextElementReadTests.cs` (a scalar reference at every width,
+the code-point bounds, fenced reads), `Manipulation/TolistWalkTests.cs` (the old walk as the reference over every storage
+and layout kind).
+
 **Perf notes:**
 - SByte / Byte / Int*/UInt* / Single / Double — full SIMD via the mixed-type kernel's `SimdFull` execution path (V128/V256/V512 detected at startup).
 - Half — **no vector f16 arithmetic or F16C in the BCL** (`Vector<Half>` throws), yet most of the f16 ufunc surface BEATS NumPy 2–60× bit-exactly via three techniques picked by "does the op need real float math?": bit-level AVX2 on raw ushort lanes (sign/negate/abs, min/max/ptp/nanmin/nanmax on every layout flat and per axis — NumPy's sequential HALF loops bit for bit, first NaN / first ±0 in NumPy's visiting order, see "Math — Reductions" —, maximum/minimum/fmax/fmin, the six comparisons, clip, floor/ceil/trunc/rint — all on the proven sign-magnitude order map `key = bits ^ (0x8000 | asr(bits,15))`, NaN keys strictly outside the finite band), SIMD widen-compute-narrow for add/sub/mul/div (Giesen f16→f32 → one f32 vector op → RTNE narrow — bit-exact incl. the MSVC operand-order NaN-payload host pin, 2.2–3.6×; on every layout since 2026-10-06: row / column broadcasts, strided and reversed views gathered in 256-element blocks, broadcast F sets walked in F order, and out= — 4–7× NumPy, where a per-element coordinate decomposition ran 0.22–0.5×, plan api-parameter-parity X4 / X15), and scalar-F16C widen-unary (`EmitUnaryHalfViaFloat`: `(Half)MathF.X((float)h)`, NumPy's npy_half model) for 16 transcendentals — conversion-bound ≈ parity, the physical ceiling. `np.power` is NumPy's HALF_power since 2026-10-06 (plan api-parameter-parity X20): the exact widen (a signalling NaN stays signalling), the CRT powf, npy_float_to_half, NO scalar-exponent fast path — `HalfPower` runs a vector widen and narrow around one MathF.Pow loop per 256-element block, 1.52–1.56× NumPy (powf is ~5 ns an element on both sides; the old double bridge differed on 7,161 of 1,114,112 base × exponent pairs). Full design, semantics contract (NaN-guarded npy_half comparators, first-NaN/first-zero folds, sNaN quieting), dispatch map and traps (portable Vector256 ushort ops don't lower — 30×; RyuJIT re-swaps commutative intrinsic operands — NaN priority must be an explicit blend; AVX2 lacks 16-bit variable shifts): **`docs/FLOAT16_DESIGN.md`**.
