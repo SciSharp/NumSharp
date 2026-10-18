@@ -432,16 +432,29 @@ namespace NumSharp
             if (Count(dims) == 0)
                 return EmptyResult(left, dims, shapes);
             NDListHeap ha = left.Heap, hb = right.Heap;
-            // One heap holds one piece class: a result made of str pieces from one side and bytes pieces from the other is a
-            // list NumSharp has no form for (every left list meets some right list once the broadcast is not empty).
-            bool aHas = HoldsPieces(left), bHas = HoldsPieces(right);
-            if ((ha.Kind == 'S') != (hb.Kind == 'S') && aHas && bHas)
-                throw new NotSupportedException(
-                    "the concatenations would hold str and bytes items together, which an NDListArray (one piece class) cannot hold");
-            var heap = NDListHeap.Empty(aHas || !bHas ? ha.Kind : hb.Kind);
+            char kind = ha.Kind;
+            if (ha.Kind != hb.Kind)
+            {
+                // One heap holds one piece class: a result made of str pieces from one side and bytes pieces from the other
+                // is a list NumSharp has no form for (every left list meets some right list once the broadcast is not
+                // empty). The truth passes run only here, where the classes (or the str kinds) differ.
+                bool aHas = HoldsPieces(left), bHas = HoldsPieces(right);
+                if ((ha.Kind == 'S') != (hb.Kind == 'S') && aHas && bHas)
+                    throw new NotSupportedException(
+                        "the concatenations would hold str and bytes items together, which an NDListArray (one piece class) cannot hold");
+                kind = aHas || !bHas ? ha.Kind : hb.Kind;
+            }
+            long count = Count(dims);
+            NDListHeap heap = null;
             var ids = new NDArray(NPTypeCode.Int64, Shape.NpyIterOutputShape(dims, shapes), false);
             try
             {
+                // Pass 1, in NumPy's ufunc order: each output's pair of lists and the result's exact size. The result heap is
+                // fresh, so output k (the k-th visited) becomes list k.
+                var la = new ListPointers(ha);
+                var lb = new ListPointers(hb);
+                var pairs = new long[checked(2 * count)];
+                long units = 0, pieces = 0, next = 0;
                 Walk(new[] { left.Ids, right.Ids, ids },
                     new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY },
                     (dataptrs, strides, n, aux) =>
@@ -450,19 +463,39 @@ namespace NumSharp
                         byte* pb = (byte*)dataptrs[1];
                         byte* po = (byte*)dataptrs[2];
                         long sa = strides[0], sb = strides[1], so = strides[2];
+                        // The chunk's running totals in locals (the closure's fields would be stored on every element).
+                        var a = la;
+                        var b = lb;
+                        long u = units, p = pieces, nx = next;
                         for (long k = 0; k < n; k++, pa += sa, pb += sb, po += so)
                         {
-                            heap.BeginList();
-                            heap.AppendListPieces(ha, *(long*)pa);
-                            heap.AppendListPieces(hb, *(long*)pb);
-                            *(long*)po = heap.EndList();
+                            long ia = *(long*)pa, ib = *(long*)pb;
+                            pairs[2 * nx] = ia;
+                            pairs[2 * nx + 1] = ib;
+                            // Checked: a broadcast can repeat a long list until the sizes pass what an array addresses
+                            // (NumPy's MemoryError), and the one exact reservation must never be under-sized.
+                            u = AddSize(u, a.UnitCount(ia) + b.UnitCount(ib));
+                            p = AddSize(p, a.Length(ia) + b.Length(ib));
+                            *(long*)po = nx++;
                         }
+                        units = u;
+                        pieces = p;
+                        next = nx;
                     });
+                // Pass 2: the heap at its exact size, then each concatenation copied in order.
+                heap = NDListHeap.Reserved(kind, units, pieces, count);
+                for (long k = 0; k < count; k++)
+                {
+                    heap.BeginList();
+                    heap.AppendReserved(la, pairs[2 * k]);
+                    heap.AppendReserved(lb, pairs[2 * k + 1]);
+                    heap.EndListReserved();
+                }
             }
             catch
             {
                 ids.Dispose();
-                heap.Release();
+                heap?.Release();
                 throw;
             }
             // A 0-d ufunc result is unwrapped to the object: the concatenated list.
@@ -620,7 +653,8 @@ namespace NumSharp
                     overflow = np.greater(counts, limit);
                 }
                 NDListHeap source = lists.Heap;
-                var heap = NDListHeap.Empty(source.Kind);
+                long count = Count(dims);
+                NDListHeap heap = null;
                 var ids = new NDArray(NPTypeCode.Int64, Shape.NpyIterOutputShape(dims, shapes), false);
                 try
                 {
@@ -630,6 +664,12 @@ namespace NumSharp
                     var flags = overflow is null
                         ? new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY }
                         : new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY, NDIterPerOpFlags.READONLY };
+                    // Pass 1, in NumPy's ufunc order: each pair's checks (the index-sized count, then the size) raise at the
+                    // first pair that fails, as the object loop does; the passing pairs record (list, count) and the
+                    // result's exact size. The result heap is fresh, so output k (the k-th visited) becomes list k.
+                    var src = new ListPointers(source);
+                    var plan = new long[checked(2 * count)];
+                    long units = 0, pieces = 0, next = 0;
                     Walk(ops, flags, (dataptrs, strides, n, aux) =>
                     {
                         byte* pl = (byte*)dataptrs[0];
@@ -637,18 +677,42 @@ namespace NumSharp
                         byte* po = (byte*)dataptrs[2];
                         byte* pv = flags.Length > 3 ? (byte*)dataptrs[3] : null;
                         long sl = strides[0], sc = strides[1], so = strides[2], sv = flags.Length > 3 ? strides[3] : 0;
+                        // The chunk's running totals in locals (the closure's fields would be stored on every element); a
+                        // check that throws abandons the whole call, so they need no write-back then.
+                        var lists0 = src;
+                        long u = units, p = pieces, nx = next;
                         for (long k = 0; k < n; k++, pl += sl, pc += sc, po += so, pv += sv)
                         {
                             if (pv is not null && *(bool*)pv)
                                 throw new OverflowException("cannot fit 'int' into an index-sized integer");
-                            *(long*)po = RepeatOne(source, *(long*)pl, *(long*)pc, heap);
+                            long id = *(long*)pl, times = *(long*)pc;
+                            CheckRepeatSize(lists0, id, times);
+                            plan[2 * nx] = id;
+                            plan[2 * nx + 1] = times;
+                            if (times > 0)
+                            {
+                                u = AddSize(u, lists0.UnitCount(id) * times);
+                                p = AddSize(p, lists0.Length(id) * times);
+                            }
+                            *(long*)po = nx++;
                         }
+                        units = u;
+                        pieces = p;
+                        next = nx;
                     });
+                    // Pass 2: the heap at its exact size, then each repetition copied in order.
+                    heap = NDListHeap.Reserved(source.Kind, units, pieces, count);
+                    for (long k = 0; k < count; k++)
+                    {
+                        heap.BeginList();
+                        heap.AppendReserved(src, plan[2 * k], plan[2 * k + 1]);
+                        heap.EndListReserved();
+                    }
                 }
                 catch
                 {
                     ids.Dispose();
-                    heap.Release();
+                    heap?.Release();
                     throw;
                 }
                 // A 0-d ufunc result is unwrapped to the object: the repeated list.
@@ -662,29 +726,36 @@ namespace NumSharp
             }
         }
 
-        /// <summary>CPython's <c>list * n</c> of one list into <paramref name="heap"/>: n &lt;= 0 or an empty list is an
-        ///     empty list; a result too large to allocate is its MemoryError.</summary>
+        /// <summary>The size check of CPython's <c>list * n</c> for one list (n &lt;= 0 or an empty list is an empty list):
+        ///     a result too large to allocate is its MemoryError.</summary>
         /// <param name="source">The list's heap.</param>
         /// <param name="id">The list.</param>
         /// <param name="times">The count (already index-sized).</param>
-        /// <param name="heap">The result heap.</param>
-        /// <returns>The new list's id.</returns>
         /// <exception cref="OutOfMemoryException">The repetition's pieces or code units do not fit in memory.</exception>
-        private static unsafe long RepeatOne(NDListHeap source, long id, long times, NDListHeap heap)
+        private static void CheckRepeatSize(in ListPointers source, long id, long times)
         {
-            var (start, end) = source.Range(id);
-            long pieces = end - start;
-            if (times > 0 && pieces > 0)
-            {
-                long units = source.Offsets[end] - source.Offsets[start];
-                // list_repeat's `len > PY_SSIZE_T_MAX / n` and its failed allocation, both MemoryError: the pieces' offsets
-                // (8 bytes each) and code units must stay addressable.
-                if (times > (long.MaxValue / 8) / pieces || (units > 0 && times > (long.MaxValue / 8) / units))
-                    throw new OutOfMemoryException(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
-            }
-            heap.BeginList();
-            heap.AppendListPieces(source, id, times);
-            return heap.EndList();
+            long pieces = source.Length(id);
+            if (times <= 0 || pieces == 0)
+                return;
+            long units = source.UnitCount(id);
+            // list_repeat's `len > PY_SSIZE_T_MAX / n` and its failed allocation, both MemoryError: the pieces' offsets
+            // (8 bytes each) and code units must stay addressable.
+            if (times > (long.MaxValue / 8) / pieces || (units > 0 && times > (long.MaxValue / 8) / units))
+                throw new OutOfMemoryException(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
+        }
+
+        /// <summary>A result size plus one more list's: past what an array can address, the allocation's MemoryError (each
+        ///     list fits, but NumPy's object loop would run out of memory before the last one).</summary>
+        /// <param name="total">The size so far.</param>
+        /// <param name="more">The next list's size (at most <c>long.MaxValue / 8</c>).</param>
+        /// <returns>The sum.</returns>
+        /// <exception cref="OutOfMemoryException">The sum passes <c>long.MaxValue / 8</c>.</exception>
+        private static long AddSize(long total, long more)
+        {
+            long sum = total + more;
+            if (sum > long.MaxValue / 8 || sum < total)
+                throw new OutOfMemoryException(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
+            return sum;
         }
 
         /// <summary>A list array multiplied by a C# value: a list array is <c>list * list</c>, a <see cref="BigInteger"/> a
@@ -815,46 +886,52 @@ namespace NumSharp
                 long* pa = (long*)aRows.Address;
                 long* pb = (long*)bCopy.Address;
                 bool* pv = overflow is null ? null : (bool*)overflow.Address;
-                var heap = NDListHeap.Empty(Kind);
+                NDListHeap heap = null;
                 var ids = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])outDims.Clone()), false);
                 try
                 {
                     long* po = (long*)ids.Address;
-                    var piecesOf = new List<(long Id, long Times)>();
+                    var src = new ListPointers(Heap);
+                    // Pass 1: every product of every output in OBJECT_dot's order (outputs in C order, each over k), checked
+                    // as it computes them (the index-sized count, then the size), and the result's exact size.
+                    long units = 0, pieces = 0;
                     for (long i = 0; i < rows; i++)
                     {
                         for (long j = 0; j < cols; j++)
                         {
-                            // Every product of this output in k order (the products are new lists; their sum concatenates
-                            // them), checked as OBJECT_dot computes them.
-                            piecesOf.Clear();
                             for (long k = 0; k < length; k++)
                             {
                                 if (pv is not null && pv[j * length + k])
                                     throw new OverflowException("cannot fit 'int' into an index-sized integer");
                                 long id = pa[i * length + k];
                                 long times = pb[j * length + k];
-                                var (start, end) = Heap.Range(id);
-                                long pieces = end - start;
-                                if (times > 0 && pieces > 0)
+                                CheckRepeatSize(src, id, times);
+                                if (times > 0)
                                 {
-                                    long units = Heap.Offsets[end] - Heap.Offsets[start];
-                                    if (times > (long.MaxValue / 8) / pieces || (units > 0 && times > (long.MaxValue / 8) / units))
-                                        throw new OutOfMemoryException(string.Empty); // NumPy's MemoryError (PyErr_NoMemory) has no text
+                                    units = AddSize(units, src.UnitCount(id) * times);
+                                    pieces = AddSize(pieces, src.Length(id) * times);
                                 }
-                                piecesOf.Add((id, times));
                             }
+                        }
+                    }
+                    // Pass 2: the heap at its exact size; each output is the sum (concatenation) of its products in k order,
+                    // and the fresh heap numbers the outputs in C order.
+                    heap = NDListHeap.Reserved(Kind, units, pieces, rows * cols);
+                    for (long i = 0; i < rows; i++)
+                    {
+                        for (long j = 0; j < cols; j++)
+                        {
                             heap.BeginList();
-                            foreach (var (id, times) in piecesOf)
-                                heap.AppendListPieces(Heap, id, times);
-                            po[i * cols + j] = heap.EndList();
+                            for (long k = 0; k < length; k++)
+                                heap.AppendReserved(src, pa[i * length + k], pb[j * length + k]);
+                            po[i * cols + j] = heap.EndListReserved();
                         }
                     }
                 }
                 catch
                 {
                     ids.Dispose();
-                    heap.Release();
+                    heap?.Release();
                     throw;
                 }
                 // OBJECT_dot of two 1-D operands writes one object, which np.dot returns as it is: the list.

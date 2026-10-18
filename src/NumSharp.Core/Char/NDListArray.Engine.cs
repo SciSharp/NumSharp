@@ -297,30 +297,258 @@ namespace NumSharp
         // =============================================================================================================
 
         /// <summary>
-        ///     Each list's DENSE rank among <paramref name="ids"/> (equal lists one rank, the smallest 0): the integers whose
-        ///     order is the lists' order, so NumPy's sort and selection algorithms can run on them unchanged.
+        ///     Each element's DENSE rank in Python's list order (equal lists one rank, the smallest 0): the integers whose order
+        ///     is the lists' order, so NumPy's sort and selection algorithms can run on them unchanged.
         /// </summary>
-        /// <param name="heap">The heap of the lists.</param>
-        /// <param name="ids">The list ids.</param>
-        /// <param name="ranks">Receives each id's rank (same length as <paramref name="ids"/>).</param>
-        /// <param name="order">Scratch of the same length (receives the positions in rank order).</param>
+        /// <param name="heap">The heap of the lists (one piece class: the lists are totally ordered).</param>
+        /// <param name="ids">The elements' list ids.</param>
+        /// <param name="ranks">Receives each element's rank.</param>
+        /// <param name="count">The number of elements.</param>
         /// <returns>The number of distinct ranks.</returns>
-        internal static long DenseRanks(NDListHeap heap, ReadOnlySpan<long> ids, Span<long> ranks, long[] order)
+        /// <remarks>
+        ///     Equal lists are found first by CONTENT (a hash of every piece's units, then a full comparison on a hash match),
+        ///     so only the distinct lists are sorted: a split result over a small vocabulary has a few hundred distinct lists
+        ///     among millions of elements, and sorting all of them with a comparison was the whole cost of the sorting
+        ///     members (the elements' ids are distinct even when their lists are equal). With every list distinct the hashing
+        ///     adds one pass to the same sort.
+        /// </remarks>
+        internal static unsafe long DenseRanks(NDListHeap heap, long* ids, long* ranks, long count)
         {
-            int n = ids.Length;
+            var lists = new ListPointers(heap);
+            int n = checked((int)count);
+            // The representatives of the distinct contents and each element's representative.
+            var repIds = new List<long>();
+            var repHashes = new List<ulong>();
+            var repOf = new int[n];
+            // Open addressing over the representatives (slot = representative + 1, 0 = empty), grown at half load.
+            var slots = new int[64];
+            int mask = slots.Length - 1;
             for (int i = 0; i < n; i++)
-                order[i] = i;
-            var local = ids.ToArray();
-            // Any comparison sort gives the ranks (equal lists get one rank whatever their order).
-            Array.Sort(order, 0, n, Comparer<long>.Create((x, y) => CompareLists(heap, local[x], heap, local[y])));
-            long rank = -1;
-            for (int k = 0; k < n; k++)
             {
-                if (k == 0 || CompareLists(heap, local[order[k - 1]], heap, local[order[k]]) != 0)
-                    rank++;
-                ranks[(int)order[k]] = rank;
+                long id = ids[i];
+                ulong h = lists.Hash(id);
+                int s = (int)(h ^ (h >> 32)) & mask;
+                while (true)
+                {
+                    int rep = slots[s] - 1;
+                    if (rep < 0)
+                    {
+                        rep = repIds.Count;
+                        repIds.Add(id);
+                        repHashes.Add(h);
+                        slots[s] = rep + 1;
+                        if (repIds.Count * 2 > slots.Length)
+                        {
+                            // Rehash into a table twice as large (the representatives keep their indices).
+                            slots = new int[slots.Length * 2];
+                            mask = slots.Length - 1;
+                            for (int r = 0; r < repIds.Count; r++)
+                            {
+                                ulong hr = repHashes[r];
+                                int t = (int)(hr ^ (hr >> 32)) & mask;
+                                while (slots[t] != 0)
+                                    t = (t + 1) & mask;
+                                slots[t] = r + 1;
+                            }
+                        }
+                        repOf[i] = rep;
+                        break;
+                    }
+                    if (repHashes[rep] == h && lists.Equal(repIds[rep], id))
+                    {
+                        repOf[i] = rep;
+                        break;
+                    }
+                    s = (s + 1) & mask;
+                }
             }
-            return rank + 1;
+            // The distinct lists in order: any comparison sort (the contents are distinct, so no two compare equal).
+            int k = repIds.Count;
+            var order = new int[k];
+            for (int r = 0; r < k; r++)
+                order[r] = r;
+            var reps = repIds.ToArray();
+            Array.Sort(order, Comparer<int>.Create((x, y) => lists.Compare(reps[x], reps[y])));
+            var rankOfRep = new long[k];
+            for (int j = 0; j < k; j++)
+                rankOfRep[order[j]] = j;
+            for (int i = 0; i < n; i++)
+                ranks[i] = rankOfRep[repOf[i]];
+            return k;
+        }
+    }
+
+    /// <summary>
+    ///     One heap's lists read through raw pointers, for the scans that compare or hash many lists of that heap (the ranks,
+    ///     argmax / argmin): valid while the heap does not grow, so only reading members may hold one.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="NDListArray.CompareLists"/> re-reads the heap's arrays through their NDArray handles for every
+    ///     comparison; a scan over millions of lists pays for those reads more than for the comparisons themselves.
+    /// </remarks>
+    internal readonly unsafe struct ListPointers
+    {
+        /// <summary>List i's first piece.</summary>
+        private readonly long* _start;
+        /// <summary>One past list i's last piece.</summary>
+        private readonly long* _end;
+        /// <summary>Piece k spans units <c>[_offsets[k], _offsets[k + 1])</c>.</summary>
+        private readonly long* _offsets;
+        /// <summary>The code units.</summary>
+        private readonly byte* _units;
+        /// <summary>The per-piece <c>np.str_</c> flags, or null when no piece has one.</summary>
+        private readonly bool* _flags;
+        /// <summary>The bytes of one code unit: 1 (bytes pieces) or 4 (str pieces, UCS4).</summary>
+        private readonly int _unitSize;
+
+        /// <summary>Captures <paramref name="heap"/>'s arrays.</summary>
+        /// <param name="heap">The heap.</param>
+        internal ListPointers(NDListHeap heap)
+        {
+            _start = heap.ListStart;
+            _end = heap.ListEnd;
+            _offsets = heap.Offsets;
+            _units = heap.Units;
+            _flags = heap.PieceFlags;
+            _unitSize = heap.UnitSize;
+        }
+
+        /// <summary>List <paramref name="id"/>'s first piece.</summary>
+        /// <param name="id">The list.</param>
+        /// <returns>The piece index.</returns>
+        internal long FirstPiece(long id) => _start[id];
+
+        /// <summary>One past list <paramref name="id"/>'s last piece.</summary>
+        /// <param name="id">The list.</param>
+        /// <returns>The piece index.</returns>
+        internal long EndPiece(long id) => _end[id];
+
+        /// <summary>The number of pieces of list <paramref name="id"/> (Python's <c>len(list)</c>).</summary>
+        /// <param name="id">The list.</param>
+        /// <returns>The length.</returns>
+        internal long Length(long id) => _end[id] - _start[id];
+
+        /// <summary>The code units all pieces of list <paramref name="id"/> span (they are contiguous: a list's pieces were
+        ///     appended one after another).</summary>
+        /// <param name="id">The list.</param>
+        /// <returns>The unit count.</returns>
+        internal long UnitCount(long id) => _offsets[_end[id]] - _offsets[_start[id]];
+
+        /// <summary>The piece offsets (piece k spans <c>[Offsets[k], Offsets[k + 1])</c>).</summary>
+        internal long* Offsets => _offsets;
+
+        /// <summary>The code units.</summary>
+        internal byte* Units => _units;
+
+        /// <summary>The per-piece <c>np.str_</c> flags, or null.</summary>
+        internal bool* Flags => _flags;
+
+        /// <summary>The bytes of one code unit: 1 (bytes pieces) or 4 (str pieces).</summary>
+        internal int UnitSize => _unitSize;
+
+        /// <summary>
+        ///     Python's order of two lists of this heap (<c>OBJECT_compare</c>): the first unequal pieces decide (str by code
+        ///     points, bytes by unsigned bytes, a prefix first), then the lengths.
+        /// </summary>
+        /// <param name="a">The first list.</param>
+        /// <param name="b">The second list.</param>
+        /// <returns>-1, 0 or 1.</returns>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal int Compare(long a, long b) => Compare(this, a, this, b);
+
+        /// <summary>Whether two lists of this heap hold the same pieces (Python's <c>==</c>; an element's own
+        ///     <c>np.str_</c> equals the same text).</summary>
+        /// <param name="a">The first list.</param>
+        /// <param name="b">The second list.</param>
+        /// <returns>The equality.</returns>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal bool Equal(long a, long b) => Equal(this, a, this, b);
+
+        /// <summary>
+        ///     Python's order of list <paramref name="a"/> of <paramref name="ha"/> against list <paramref name="b"/> of
+        ///     <paramref name="hb"/> (<c>list_richcompare</c>): the first unequal pieces decide (str by code points, bytes by
+        ///     unsigned bytes, a prefix first), then the lengths. The two heaps must have one unit size — the same piece class
+        ///     (<c>'U'</c> and <c>'T'</c> are both str): a str against a bytes piece is CPython's TypeError, which only
+        ///     <see cref="NDListArray.RichCompare"/> raises.
+        /// </summary>
+        /// <param name="ha">The first list's heap.</param>
+        /// <param name="a">The first list.</param>
+        /// <param name="hb">The second list's heap (the same unit size).</param>
+        /// <param name="b">The second list.</param>
+        /// <returns>-1, 0 or 1.</returns>
+        internal static int Compare(in ListPointers ha, long a, in ListPointers hb, long b)
+        {
+            long sa = ha._start[a], la = ha._end[a] - sa;
+            long sb = hb._start[b], lb = hb._end[b] - sb;
+            long common = la < lb ? la : lb;
+            for (long i = 0; i < common; i++)
+            {
+                long pa = sa + i, pb = sb + i;
+                long oa = ha._offsets[pa], na = ha._offsets[pa + 1] - oa;
+                long ob = hb._offsets[pb], nb = hb._offsets[pb + 1] - ob;
+                int c = ha._unitSize == 1
+                    ? new ReadOnlySpan<byte>(ha._units + oa, checked((int)na)).SequenceCompareTo(new ReadOnlySpan<byte>(hb._units + ob, checked((int)nb)))
+                    : new ReadOnlySpan<uint>((uint*)ha._units + oa, checked((int)na)).SequenceCompareTo(new ReadOnlySpan<uint>((uint*)hb._units + ob, checked((int)nb)));
+                if (c != 0)
+                    return c < 0 ? -1 : 1;
+            }
+            return la < lb ? -1 : la > lb ? 1 : 0;
+        }
+
+        /// <summary>Whether list <paramref name="a"/> of <paramref name="ha"/> and list <paramref name="b"/> of
+        ///     <paramref name="hb"/> hold the same pieces (Python's <c>==</c>); the heaps must have one unit size.</summary>
+        /// <param name="ha">The first list's heap.</param>
+        /// <param name="a">The first list.</param>
+        /// <param name="hb">The second list's heap (the same unit size).</param>
+        /// <param name="b">The second list.</param>
+        /// <returns>The equality.</returns>
+        internal static bool Equal(in ListPointers ha, long a, in ListPointers hb, long b)
+        {
+            long sa = ha._start[a], la = ha._end[a] - sa;
+            long sb = hb._start[b], lb = hb._end[b] - sb;
+            if (la != lb)
+                return false;
+            int unit = ha._unitSize;
+            for (long i = 0; i < la; i++)
+            {
+                long pa = sa + i, pb = sb + i;
+                long oa = ha._offsets[pa], na = ha._offsets[pa + 1] - oa;
+                long ob = hb._offsets[pb], nb = hb._offsets[pb + 1] - ob;
+                if (na != nb)
+                    return false;
+                long bytes = na * unit;
+                if (!new ReadOnlySpan<byte>(ha._units + oa * unit, checked((int)bytes))
+                        .SequenceEqual(new ReadOnlySpan<byte>(hb._units + ob * unit, checked((int)bytes))))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>A 64-bit hash of a list's content (its piece count, each piece's length and units): equal lists hash
+        ///     alike.</summary>
+        /// <param name="id">The list.</param>
+        /// <returns>The hash.</returns>
+        internal ulong Hash(long id)
+        {
+            const ulong K = 0x9E3779B97F4A7C15UL;
+            long s = _start[id], l = _end[id] - s;
+            ulong h = (ulong)l * K;
+            for (long i = 0; i < l; i++)
+            {
+                long o = _offsets[s + i], n = _offsets[s + i + 1] - o;
+                long bytes = n * _unitSize;
+                byte* p = _units + o * _unitSize;
+                // The piece's length separates ["ab"] from ["a", "b"]; its bytes go in eight at a time.
+                h = (BitOperations.RotateLeft(h, 5) ^ (ulong)bytes) * K;
+                long q = 0;
+                for (; q + 8 <= bytes; q += 8)
+                    h = (BitOperations.RotateLeft(h, 5) ^ System.Runtime.CompilerServices.Unsafe.ReadUnaligned<ulong>(p + q)) * K;
+                ulong tail = 0;
+                for (int t = 0; q < bytes; q++, t += 8)
+                    tail |= (ulong)p[q] << t;
+                h = (BitOperations.RotateLeft(h, 5) ^ tail) * K;
+            }
+            return h ^ (h >> 29);
         }
     }
 }

@@ -261,6 +261,11 @@ namespace NumSharp.Tests.Backends.Strings
             using var e = E();
             Action empty = () => e.argmax();
             empty.Should().Throw<ValueError>().WithMessage("attempt to get argmax of an empty sequence");
+            // The scan answers through NDArray's member of the same name, so the text names argmin (the oracle caught the
+            // argmax text when both ran NDArray's argmax over the winner mask).
+            Action emptyMin = () => e.argmin();
+            emptyMin.Should().Throw<ValueError>().WithMessage("attempt to get argmin of an empty sequence");
+            using (var i = t.argmin()) Values(i).Should().Be("1", "the first of the tied ['a'] lists");
         }
 
         // =============================================================================================================
@@ -294,6 +299,34 @@ namespace NumSharp.Tests.Backends.Strings
             using var o = head.copy();
             a.max(0, o).Should().BeSameAs(o);
             Lists(o).Should().Be("[['a', 'b'], ['d', 'e', 'f'], ['x', 'y']]");
+        }
+
+        /// <summary>
+        ///     max / min along an axis keep the FIRST of equal lists (npy_ObjectMax / npy_ObjectMin keep the accumulator on a
+        ///     tie) in both of NumPy's orders — the reduced axis innermost (each output's elements adjacent) and outermost (a
+        ///     row of accumulators per step) — and a start of the array's own lists folds every element. The ties are lists
+        ///     that are equal but print differently: a separator longer than the text returns [self] (the element's own
+        ///     np.str_), any other separator that is not found a new str. The mutation pass of the axis selection found the
+        ///     innermost tie and the same-heap start untested.
+        /// </summary>
+        [TestMethod]
+        public void MaxMin_AlongAnAxis_KeepTheFirstTie()
+        {
+            using var text = np.array(new[,] { { "ab", "ab" }, { "ab", "ab" } });
+            using var seps = np.array(new[,] { { "abc", "x" }, { "x", "abc" } });
+            using var t = np.@char.split(text, seps);
+            const string first = "array([list([np.str_('ab')]), list(['ab'])], dtype=object)";
+            using (var m = t.max(1)) m.ToString(true).Should().Be(first);
+            using (var m = t.min(1)) m.ToString(true).Should().Be(first);
+            using (var m = t.max(0)) m.ToString(true).Should().Be(first);
+            using (var tt = t.T)
+            using (var m = tt.max(1)) m.ToString(true).Should().Be(first);
+            // A start that is one of the array's own lists (the same heap): the winner is an element the fold visits first.
+            using var a = A();
+            using (var start = a["1, 1"])
+            using (var m = a.max(0, initial: start)) Lists(m).Should().Be("[['d', 'e', 'f'], ['d', 'e', 'f'], ['x', 'y']]");
+            using (var start = a["0, 1"])
+            using (var m = a.min(1, initial: start)) Lists(m).Should().Be("[['a', 'b'], []]");
         }
 
         /// <summary>sum concatenates in NumPy's visiting order (a transposed array in MEMORY order), starting from initial;
@@ -342,6 +375,11 @@ namespace NumSharp.Tests.Backends.Strings
             using var r = R();
             using (var lo = r["1:2"])
             using (var c = r.clip(lo)) Lists(c).Should().Be("[['c'], ['c'], ['c'], ['d', 'e', 'f']]");
+            // Both bounds from the array's own lists (the one-heap loop): np.maximum with the lower, then np.minimum with
+            // the upper (the mutation pass found two such bounds untested).
+            using (var lo = r["2:3"])
+            using (var hi = r["1:2"])
+            using (var c = r.clip(lo, hi)) Lists(c).Should().Be("[['a', 'b'], ['c'], [], ['c']]");
             Action unary = () => r.clip();
             unary.Should().Throw<TypeError>().WithMessage("bad operand type for unary +: 'list'");
             Action mean = () => r.mean();
@@ -355,6 +393,49 @@ namespace NumSharp.Tests.Backends.Strings
             emptyVar.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
             using var ze = np.@char.split(np.array(""));
             using (var v = ze.var()) v.GetDouble().Should().Be(0.0, "a 0-d empty list's deviations sum to 0");
+        }
+
+        /// <summary>
+        ///     The bulk list builders keep what the one-list-at-a-time builders kept (NumPy 2.4.2 literals). A running
+        ///     concatenation copies its previous list out of its own heap through pointers captured once, and every copied
+        ///     piece keeps its np.str_ flag. A bytes initial over empty str lists folds into a bytes result (the start's class,
+        ///     as NumPy returns the bytes list); before the performance pass the sum copied the bytes units into a str heap
+        ///     (an over-read), and the product and the maximum refused the result.
+        /// </summary>
+        [TestMethod]
+        public void BulkBuilders_KeepFlagsAndTheStartsClass()
+        {
+            // np.char.split(np.array(['ab', 'cd', 'e f']), 'xyz'): a separator longer than the text gives [self], the
+            // element's own np.str_.
+            using var r = np.@char.split(np.array(new[] { "ab", "cd", "e f" }), "xyz");
+            using (var c = r.cumsum())
+            {
+                using (var x = c["1"]) x.ToString().Should().Be("[np.str_('ab'), np.str_('cd')]");
+                using (var x = c["2"]) x.ToString().Should().Be("[np.str_('ab'), np.str_('cd'), 'e f']");
+            }
+            using var a = np.@char.split(np.array(new[,] { { "ab", "cd" }, { "ef", "g h" } }), "xyz");
+            using (var c = a.cumsum(1))
+            using (var x = c["1, 1"])
+                x.ToString().Should().Be("[np.str_('ef'), 'g h']");
+            using (var c = a.cumsum(0))
+            using (var x = c["1, 0"])
+                x.ToString().Should().Be("[np.str_('ab'), np.str_('ef')]");
+
+            var ab = new[] { Encoding.ASCII.GetBytes("ab") };
+            var bx = new[] { Encoding.ASCII.GetBytes("x") };
+            using var e = np.@char.split(np.array(new[] { "", " ", "  " }));
+            using (var s = e.sum(initial: ab)) Lists(s).Should().Be("[b'ab']");
+            using (var e2 = np.@char.split(np.array(new[,] { { "", " " }, { "  ", "" } })))
+            using (var s = e2.sum(0, initial: ab))
+                Lists(s).Should().Be("[[b'ab'], [b'ab']]");
+            using var none = E();
+            using (var p = none.prod(initial: bx)) Lists(p).Should().Be("[b'x']");
+            using (var m = e.max(initial: bx)) Lists(m).Should().Be("[b'x']");
+            using (var m = e.min(initial: bx)) Lists(m).Should().Be("[]");
+            using (var m = none.max(initial: bx)) Lists(m).Should().Be("[b'x']");
+            using var one = np.@char.split(np.array(new[] { "a" }));
+            Action ordered = () => one.max(initial: bx);
+            ordered.Should().Throw<TypeError>().WithMessage("'>=' not supported between instances of 'bytes' and 'str'");
         }
 
         // =============================================================================================================

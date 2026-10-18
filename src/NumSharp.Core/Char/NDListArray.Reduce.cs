@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Strings;
 
 // =============================================================================
@@ -26,9 +27,11 @@ using NumSharp.Backends.Strings;
 //     (`acc <= x`), add the list concatenation (a new list), multiply `list * list`: CPython's TypeError "can't multiply
 //     sequence by non-int of type 'list'" for a slice of two or more elements (one element is itself).
 //   * The result. axis=None gives NumPy's list as a 0-d NDListArray (the house rule: a 0-d array stands for NumPy's scalar
-//     — item() is the list); keepdims=True a (1, …, 1) one; an axis the reduced array in NumPy's reduction layout. The
-//     result's lists are copied into a heap of its own (a concatenation is a new list in NumPy too); `out=` stores them
-//     into the given list array.
+//     — item() is the list); keepdims=True a (1, …, 1) one; an axis the reduced array in NumPy's reduction layout. A sum,
+//     a product and an accumulation make new lists, in a heap of their own (a concatenation is a new list in NumPy too),
+//     sized once before anything is copied; maximum / minimum / clip SELECT lists that exist, so their result shares this
+//     array's heap (NumPy's result holds the same list objects) and copies no list; `out=` stores them into the given
+//     list array.
 //
 // The argument checks are NumPy's reduce prologue (ReductionArguments: out=, where=, the axis, out's shape), run over the
 // id arrays, which have the object arrays' layouts.
@@ -412,9 +415,19 @@ namespace NumSharp
                 // The mask broadcast to the input (the prologue proved it broadcasts that way).
                 if (mask is not null)
                     maskView = np.broadcast_to(mask, Shape.Adopt((long[])Ids.Shape.dimensions.Clone()));
-                var slices = Slices(reduced, maskView);
+                NDListArray computed;
+                if (maskView is null && TrySelectAlongAxis(fold, reduced, start, out var selected))
+                {
+                    // The selected lists are this heap's own: the result shares it (a reference of its own).
+                    var ids = ReductionIds(reduced, keepdims, selected);
+                    computed = new NDListArray(ids, Heap.Share());
+                }
+                else
+                {
+                    computed = FoldSlices(fold, ufunc, Slices(reduced, maskView), start, reduced, keepdims);
+                }
                 // A reduction to one element without out= returns the object itself: the list.
-                var result = FoldSlices(fold, ufunc, slices, start, reduced, keepdims).MarkStandIn();
+                var result = computed.MarkStandIn();
                 if (@out is null)
                     return result;
                 @out.Receive(result);
@@ -428,13 +441,43 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     A reduction's slices, flat: output <c>o</c> (in C order over the kept axes) folds
+        ///     <c>Ids[Bounds[o] .. Bounds[o + 1])</c> in NumPy's visiting order. One array for every output, where a list per
+        ///     output cost an allocation per output (100,000 of them for a (100000, 10) sum along axis 1).
+        /// </summary>
+        private readonly struct SliceSet
+        {
+            /// <summary>Every output's ids, back to back.</summary>
+            internal readonly long[] Ids;
+
+            /// <summary>Output o's ids start at <c>Bounds[o]</c>; <c>Bounds[Count]</c> is the end of the last.</summary>
+            internal readonly long[] Bounds;
+
+            /// <summary>Creates the set.</summary>
+            /// <param name="ids">The ids.</param>
+            /// <param name="bounds">The bounds (one more than the outputs).</param>
+            internal SliceSet(long[] ids, long[] bounds)
+            {
+                Ids = ids;
+                Bounds = bounds;
+            }
+
+            /// <summary>The number of outputs.</summary>
+            internal int Count => Bounds.Length - 1;
+
+            /// <summary>Output <paramref name="o"/>'s ids.</summary>
+            /// <param name="o">The output.</param>
+            internal ReadOnlySpan<long> this[int o] => Ids.AsSpan(checked((int)Bounds[o]), checked((int)(Bounds[o + 1] - Bounds[o])));
+        }
+
+        /// <summary>
         ///     The reduction's slices: for each output (in C order over the kept axes), the ids it folds, in NumPy's visiting
         ///     order (masked-off elements skipped).
         /// </summary>
         /// <param name="reduced">The reduced-axis flags (every axis, or one).</param>
         /// <param name="mask">The mask broadcast to the input, or null.</param>
-        /// <returns>One id list per output.</returns>
-        private unsafe List<List<long>> Slices(bool[] reduced, NDArray mask)
+        /// <returns>The slices.</returns>
+        private unsafe SliceSet Slices(bool[] reduced, NDArray mask)
         {
             var dims = Ids.Shape.dimensions;
             var strides = Ids.Shape.strides;
@@ -443,58 +486,59 @@ namespace NumSharp
             bool* m = mask is null ? null : (bool*)mask.Address;
             var mstrides = mask?.Shape.strides;
             long moff = mask?.Shape.offset ?? 0;
-            var slices = new List<List<long>>();
             int axis = Array.IndexOf(reduced, false) < 0 ? -1 : Array.IndexOf(reduced, true);
             if (axis < 0 || nd == 0)
             {
                 // Every axis: one output, NumPy's flat reduction order (the axes by |stride|, each in increasing index).
-                var slice = new List<long>();
-                slices.Add(slice);
-                if (size == 0)
-                    return slices;
-                var perm = new int[Math.Max(nd, 1)];
-                int count = NumPySequentialReduce.FlatVisitOrder(dims, strides, perm);
-                var index = new long[count];
-                long offset = Ids.Shape.offset, mo = moff;
-                for (long k = 0; k < size; k++)
+                var all = new long[size];
+                long used = 0;
+                if (size > 0)
                 {
-                    if (m is null || m[mo])
-                        slice.Add(ids[offset]);
-                    for (int j = 0; j < count; j++)
+                    var perm = new int[Math.Max(nd, 1)];
+                    int count = NumPySequentialReduce.FlatVisitOrder(dims, strides, perm);
+                    var index = new long[count];
+                    long offset = Ids.Shape.offset, mo = moff;
+                    for (long k = 0; k < size; k++)
                     {
-                        int ax = perm[j];
-                        index[j]++;
-                        offset += strides[ax];
-                        if (m is not null)
-                            mo += mstrides[ax];
-                        if (index[j] < dims[ax])
-                            break;
-                        offset -= index[j] * strides[ax];
-                        if (m is not null)
-                            mo -= index[j] * mstrides[ax];
-                        index[j] = 0;
+                        if (m is null || m[mo])
+                            all[used++] = ids[offset];
+                        for (int j = 0; j < count; j++)
+                        {
+                            int ax = perm[j];
+                            index[j]++;
+                            offset += strides[ax];
+                            if (m is not null)
+                                mo += mstrides[ax];
+                            if (index[j] < dims[ax])
+                                break;
+                            offset -= index[j] * strides[ax];
+                            if (m is not null)
+                                mo -= index[j] * mstrides[ax];
+                            index[j] = 0;
+                        }
                     }
                 }
-                return slices;
+                return new SliceSet(all, new long[] { 0, used });
             }
             // One axis: every output (C order over the other axes) folds its elements in increasing index.
             long n = dims[axis];
-            ForEachLine(Ids.Shape, axis, (start, stride, length) => { });
             long outer = 1;
             for (int d = 0; d < nd; d++)
                 if (d != axis)
                     outer *= dims[d];
+            var flat = new long[checked(outer * n)];
+            var bounds = new long[outer + 1];
+            long written = 0;
             var coord = new long[nd];
             long baseOffset = Ids.Shape.offset, baseMask = moff;
             for (long o = 0; o < outer; o++)
             {
-                var slice = new List<long>((int)Math.Min(n, 1 << 16));
                 for (long k = 0; k < n; k++)
                 {
                     if (m is null || m[baseMask + k * mstrides[axis]])
-                        slice.Add(ids[baseOffset + k * strides[axis]]);
+                        flat[written++] = ids[baseOffset + k * strides[axis]];
                 }
-                slices.Add(slice);
+                bounds[o + 1] = written;
                 for (int d = nd - 1; d >= 0; d--)
                 {
                     if (d == axis)
@@ -511,11 +555,133 @@ namespace NumSharp
                     coord[d] = 0;
                 }
             }
-            return slices;
+            return new SliceSet(flat, bounds);
         }
 
         /// <summary>
-        ///     Folds every slice into one list of a new heap and lays the results out as NumPy's reduction does.
+        ///     maximum / minimum along ONE axis in NumPy's slab order, when nothing can raise: no mask, a non-empty axis, and
+        ///     a start that is absent or a list of this heap (one piece class: every pair of lists is ordered). Each output's
+        ///     fold still visits its elements in increasing index, so the selected lists are the per-output folds' —
+        ///     only the interleaving of the outputs changes, which only an error could observe.
+        /// </summary>
+        /// <param name="fold">The object loop (only maximum / minimum are selected here).</param>
+        /// <param name="reduced">The reduced-axis flags.</param>
+        /// <param name="start">The fold's start.</param>
+        /// <param name="selected">Receives each output's selected list id, in C order over the kept axes.</param>
+        /// <returns>False when the general fold must run (another loop, every axis reduced, an empty axis, a start of another
+        ///     heap or not a list).</returns>
+        /// <remarks>
+        ///     When the reduced axis is the innermost in memory each output's elements are adjacent and the outputs fold one
+        ///     after another (a ROW); otherwise every step along the axis compares a whole row of accumulators with the next
+        ///     row of elements (a SLAB) — NumPy's reduction iterator order, one pass over the heap in memory order. Folding
+        ///     the outputs one after another there read the heap once per output: <c>max(axis=0)</c> of a (100000, 10) split
+        ///     result walked its 50 MB heap ten times (1.26x NumPy, against 4.4x for the flat maximum).
+        /// </remarks>
+        private unsafe bool TrySelectAlongAxis(ListFold fold, bool[] reduced, Start start, out long[] selected)
+        {
+            selected = null;
+            if (fold != ListFold.Max && fold != ListFold.Min)
+                return false;
+            int axis = Array.IndexOf(reduced, true);
+            if (axis < 0 || Array.IndexOf(reduced, false) < 0)
+                return false;
+            if (start.Present && !(start.IsList && ReferenceEquals(start.Heap, Heap)))
+                return false;
+            var dims = Ids.Shape.dimensions;
+            var strides = Ids.Shape.strides;
+            int nd = dims.Length;
+            long n = dims[axis];
+            if (n == 0)
+                return false;
+            // Every output's first element, C order over the kept axes (an odometer over the kept axes, as Slices walks).
+            long outer = 1;
+            for (int d = 0; d < nd; d++)
+                if (d != axis)
+                    outer *= dims[d];
+            var bases = new long[outer];
+            var coord = new long[nd];
+            long offset = Ids.Shape.offset;
+            for (long o = 0; o < outer; o++)
+            {
+                bases[o] = offset;
+                for (int d = nd - 1; d >= 0; d--)
+                {
+                    if (d == axis)
+                        continue;
+                    coord[d]++;
+                    offset += strides[d];
+                    if (coord[d] < dims[d])
+                        break;
+                    offset -= coord[d] * strides[d];
+                    coord[d] = 0;
+                }
+            }
+            long* ids = (long*)Ids.Address;
+            long step = strides[axis];
+            var lists = new ListPointers(Heap);
+            bool greatest = fold == ListFold.Max;
+            var acc = new long[outer];
+            long first;
+            if (start.Present)
+            {
+                Array.Fill(acc, start.Id);
+                first = 0;
+            }
+            else
+            {
+                for (long o = 0; o < outer; o++)
+                    acc[o] = ids[bases[o]];
+                first = 1;
+            }
+            // ROW mode when no kept axis longer than 1 has a smaller |stride| than the reduced axis.
+            bool row = true;
+            long reducedStride = Math.Abs(step);
+            for (int d = 0; d < nd; d++)
+            {
+                if (d != axis && dims[d] > 1 && Math.Abs(strides[d]) < reducedStride)
+                    row = false;
+            }
+            if (row)
+            {
+                for (long o = 0; o < outer; o++)
+                {
+                    long a = acc[o];
+                    long* line = ids + bases[o];
+                    for (long k = first; k < n; k++)
+                    {
+                        // npy_ObjectMax keeps the accumulator while acc >= x, npy_ObjectMin while acc <= x (a tie keeps it).
+                        long x = line[k * step];
+                        int c = lists.Compare(a, x);
+                        if (greatest ? c < 0 : c > 0)
+                            a = x;
+                    }
+                    acc[o] = a;
+                }
+            }
+            else
+            {
+                for (long k = first; k < n; k++)
+                {
+                    long* row0 = ids + k * step;
+                    for (long o = 0; o < outer; o++)
+                    {
+                        long x = row0[bases[o]];
+                        int c = lists.Compare(acc[o], x);
+                        if (greatest ? c < 0 : c > 0)
+                            acc[o] = x;
+                    }
+                }
+            }
+            selected = acc;
+            return true;
+        }
+
+        /// <summary>
+        ///     Folds every slice into one list and lays the results out as NumPy's reduction does. maximum / minimum SELECT
+        ///     lists that exist, so their result points into this array's own heap (NumPy's result holds the same list
+        ///     objects; a winning <c>initial</c> of another heap is appended to it) — unless the start is a non-empty list of
+        ///     the other piece class (<see cref="IsForeignStart"/>), whose class the result then takes; a sum or a product
+        ///     makes new lists, in a heap of their own — a sum's sized exactly before anything is copied.
         /// </summary>
         /// <param name="fold">The object loop.</param>
         /// <param name="ufunc">The ufunc's name (for NumPy's messages).</param>
@@ -524,23 +690,32 @@ namespace NumSharp
         /// <param name="reduced">The reduced-axis flags.</param>
         /// <param name="keepdims">Keep the reduced axes.</param>
         /// <returns>The result list array.</returns>
-        private NDListArray FoldSlices(ListFold fold, string ufunc, List<List<long>> slices, Start start, bool[] reduced, bool keepdims)
+        /// <exception cref="ValueError">An empty slice of maximum / minimum without a start.</exception>
+        /// <exception cref="TypeError">A fold whose operands cannot combine (the first output that raises).</exception>
+        /// <exception cref="NotSupportedException">A result NumSharp cannot hold (an int identity, a list of str and bytes
+        ///     items).</exception>
+        private NDListArray FoldSlices(ListFold fold, string ufunc, SliceSet slices, Start start, bool[] reduced, bool keepdims)
         {
+            int outputs = slices.Count;
             // NumPy's errors before any result: an empty slice of maximum / minimum, then the TypeErrors of a fold whose
             // operands cannot combine (the first output in order that raises), then the identities NumSharp cannot hold.
-            foreach (var slice in slices)
+            for (int o = 0; o < outputs; o++)
             {
-                if (slice.Count == 0 && !start.Present && (fold == ListFold.Max || fold == ListFold.Min))
+                if (slices[o].Length == 0 && !start.Present && (fold == ListFold.Max || fold == ListFold.Min))
                     throw new ValueError($"zero-size array to reduction operation {ufunc} which has no identity");
             }
-            foreach (var slice in slices)
-                CheckFoldTypes(fold, slice, start);
-            var heap = NewHeapLike(start);
+            for (int o = 0; o < outputs; o++)
+                CheckFoldTypes(fold, slices[o], start);
+            bool selects = fold == ListFold.Max || fold == ListFold.Min;
+            // A sum's heap is created at its exact size (the whole result counted first); a selection shares this heap.
+            var heap = fold == ListFold.Sum ? ReservedSumHeap(slices, start)
+                : selects && !IsForeignStart(start) ? Heap.Share()
+                : NewHeapLike(start);
             var memo = new Dictionary<(NDListHeap, long), long>();
-            var resultIds = new long[slices.Count];
+            var resultIds = new long[outputs];
             try
             {
-                for (int o = 0; o < slices.Count; o++)
+                for (int o = 0; o < outputs; o++)
                     resultIds[o] = FoldOne(fold, slices[o], start, heap, memo);
                 var ids = ReductionIds(reduced, keepdims, resultIds);
                 return new NDListArray(ids, heap);
@@ -550,6 +725,37 @@ namespace NumSharp
                 heap.Release();
                 throw;
             }
+        }
+
+        /// <summary>A sum's result heap, created at the whole result's exact size: per output, the start's pieces and
+        ///     every element's (the class of <see cref="NewHeapLike"/>).</summary>
+        /// <param name="slices">The slices.</param>
+        /// <param name="start">The fold's start.</param>
+        /// <returns>The heap (one reference, the caller's).</returns>
+        /// <exception cref="OutOfMemoryException">The result's size passes what an array can address (MemoryError).</exception>
+        private NDListHeap ReservedSumHeap(SliceSet slices, Start start)
+        {
+            var lists = new ListPointers(Heap);
+            bool hasStart = start.Present && start.IsList;
+            long startUnits = 0, startPieces = 0;
+            if (hasStart)
+            {
+                var first = new ListPointers(start.Heap);
+                startUnits = first.UnitCount(start.Id);
+                startPieces = first.Length(start.Id);
+            }
+            long units = 0, pieces = 0;
+            for (int o = 0; o < slices.Count; o++)
+            {
+                units = AddSize(units, startUnits);
+                pieces = AddSize(pieces, startPieces);
+                foreach (long id in slices[o])
+                {
+                    units = AddSize(units, lists.UnitCount(id));
+                    pieces = AddSize(pieces, lists.Length(id));
+                }
+            }
+            return NDListHeap.Reserved(IsForeignStart(start) ? start.Heap.Kind : Kind, units, pieces, slices.Count);
         }
 
         /// <summary>
@@ -562,9 +768,9 @@ namespace NumSharp
         /// <exception cref="TypeError">CPython's text for the first failing operation.</exception>
         /// <exception cref="NotSupportedException">A non-list result (a non-list start over an empty slice, an empty slice of
         ///     add / multiply without a start).</exception>
-        private void CheckFoldTypes(ListFold fold, List<long> slice, Start start)
+        private void CheckFoldTypes(ListFold fold, ReadOnlySpan<long> slice, Start start)
         {
-            if (slice.Count == 0)
+            if (slice.Length == 0)
             {
                 if (start.Present && start.IsList)
                     return;
@@ -595,7 +801,7 @@ namespace NumSharp
                         // n * list repeats the list (an int or bool start); the second element multiplies two lists.
                         if (start.Repeat is not null)
                         {
-                            if (slice.Count >= 2)
+                            if (slice.Length >= 2)
                                 throw new TypeError("can't multiply sequence by non-int of type 'list'");
                             return;
                         }
@@ -604,18 +810,22 @@ namespace NumSharp
                             : $"unsupported operand type(s) for *: '{t}' and 'list'");
                 }
             }
-            if (fold == ListFold.Prod && (slice.Count >= 2 || start.Present))
+            if (fold == ListFold.Prod && (slice.Length >= 2 || start.Present))
                 throw new TypeError("can't multiply sequence by non-int of type 'list'");
         }
 
-        /// <summary>One slice's fold, its result copied into <paramref name="heap"/>.</summary>
+        /// <summary>One slice's fold into <paramref name="heap"/>: a sum's new list (copied into the room
+        ///     <see cref="ReserveSums"/> made), a product's repetition or copy, the selected list of maximum / minimum (this
+        ///     array's own id when <paramref name="heap"/> is this array's heap).</summary>
         /// <param name="fold">The object loop.</param>
         /// <param name="slice">The ids folded, in order.</param>
         /// <param name="start">The fold's start.</param>
         /// <param name="heap">The result heap.</param>
         /// <param name="memo">Lists already copied into <paramref name="heap"/> (source heap and id → result id).</param>
         /// <returns>The result list's id in <paramref name="heap"/>.</returns>
-        private long FoldOne(ListFold fold, List<long> slice, Start start, NDListHeap heap, Dictionary<(NDListHeap, long), long> memo)
+        /// <exception cref="NotSupportedException">A concatenation of str and bytes items.</exception>
+        /// <exception cref="TypeError">A str item ordered against a bytes item (a start of the other class).</exception>
+        private long FoldOne(ListFold fold, ReadOnlySpan<long> slice, Start start, NDListHeap heap, Dictionary<(NDListHeap, long), long> memo)
         {
             switch (fold)
             {
@@ -623,12 +833,13 @@ namespace NumSharp
                 {
                     // A concatenation is a new list: the start's pieces, then every element's, in order.
                     CheckSameClass(start, slice);
+                    var lists = new ListPointers(Heap);
                     heap.BeginList();
                     if (start.Present)
-                        heap.AppendListPieces(start.Heap, start.Id);
+                        heap.AppendReserved(new ListPointers(start.Heap), start.Id);
                     foreach (long id in slice)
-                        heap.AppendListPieces(Heap, id);
-                    return heap.EndList();
+                        heap.AppendReserved(lists, id);
+                    return heap.EndListReserved();
                 }
                 case ListFold.Prod:
                 {
@@ -643,23 +854,38 @@ namespace NumSharp
                 }
                 default:
                 {
-                    // npy_ObjectMax / npy_ObjectMin: the accumulator stays on a tie.
-                    var op = fold == ListFold.Max ? PyCompareOp.Ge : PyCompareOp.Le;
-                    NDListHeap accHeap;
-                    long accId;
-                    int k = 0;
-                    if (start.Present)
+                    bool greatest = fold == ListFold.Max;
+                    if (!start.Present || ReferenceEquals(start.Heap, Heap))
                     {
-                        accHeap = start.Heap;
-                        accId = start.Id;
+                        // One heap: Python's list order through the raw pointers (no str / bytes pair can meet, and nothing
+                        // is appended while they are held).
+                        var lists = new ListPointers(Heap);
+                        long acc;
+                        int first;
+                        if (start.Present)
+                        {
+                            acc = start.Id;
+                            first = 0;
+                        }
+                        else
+                        {
+                            acc = slice[0];
+                            first = 1;
+                        }
+                        for (int k = first; k < slice.Length; k++)
+                        {
+                            // npy_ObjectMax keeps the accumulator while acc >= x, npy_ObjectMin while acc <= x (a tie keeps it).
+                            int c = lists.Compare(acc, slice[k]);
+                            if (greatest ? c < 0 : c > 0)
+                                acc = slice[k];
+                        }
+                        return CopyList(Heap, acc, heap, memo);
                     }
-                    else
-                    {
-                        accHeap = Heap;
-                        accId = slice[0];
-                        k = 1;
-                    }
-                    for (; k < slice.Count; k++)
+                    // A start of another heap: Python's rich comparison across the heaps (its str / bytes TypeError).
+                    var op = greatest ? PyCompareOp.Ge : PyCompareOp.Le;
+                    NDListHeap accHeap = start.Heap;
+                    long accId = start.Id;
+                    for (int k = 0; k < slice.Length; k++)
                     {
                         if (!RichCompare(op, accHeap, accId, Heap, slice[k]))
                         {
@@ -741,12 +967,34 @@ namespace NumSharp
                 if (fold == ListFold.Prod && n >= 2 && source.size > 0)
                     throw new TypeError("can't multiply sequence by non-int of type 'list'");
                 var layout = axis is null ? Shape.Vector(source.size) : source.Shape.KeepOrder();
-                var heap = NDListHeap.Empty(Kind);
+                NDListHeap heap = null;
                 var ids = new NDArray(NPTypeCode.Int64, layout, false);
                 try
                 {
                     long* src = (long*)source.Address;
                     long* dst = (long*)ids.Address;
+                    var lists = new ListPointers(Heap);
+                    // Pass 1: the exact size of every running list (a line's k-th output holds its first k + 1 lists).
+                    long units = 0, pieces = 0;
+                    ForEachLine(source.Shape, ax, (start, stride, length) =>
+                    {
+                        long lineUnits = 0, linePieces = 0;
+                        for (long k = 0; k < length; k++)
+                        {
+                            long id = src[start + k * stride];
+                            lineUnits += lists.UnitCount(id);
+                            linePieces += lists.Length(id);
+                            units = AddSize(units, lineUnits);
+                            pieces = AddSize(pieces, linePieces);
+                        }
+                    });
+                    // The heap at its exact size, its flags too when the source has any: pass 2 reads the result heap
+                    // through pointers captured once, and a flags array allocated by the first np.str_ piece AFTER that
+                    // capture would be invisible to it (the running lists would drop their pieces' np.str_ flags).
+                    heap = NDListHeap.Reserved(Kind, units, pieces, source.size, withFlags: Heap.PieceFlags != null);
+                    // Pass 2: each running list is the previous one (read from the result heap itself, whose arrays a
+                    // reserved heap never moves) followed by the next element's.
+                    var own = new ListPointers(heap);
                     var dstLines = new List<long>();
                     ForEachLine(ids.Shape, ax, (start, stride, length) => dstLines.Add(start));
                     long dstStride = ids.Shape.strides[ax];
@@ -760,9 +1008,9 @@ namespace NumSharp
                             long id = src[start + k * stride];
                             heap.BeginList();
                             if (previous >= 0)
-                                heap.AppendListPieces(heap, previous);
-                            heap.AppendListPieces(Heap, id);
-                            previous = heap.EndList();
+                                heap.AppendReserved(own, previous);
+                            heap.AppendReserved(lists, id);
+                            previous = heap.EndListReserved();
                             dst[dstStart + k * dstStride] = previous;
                         }
                     });
@@ -775,7 +1023,7 @@ namespace NumSharp
                 catch
                 {
                     ids.Dispose();
-                    heap.Release();
+                    heap?.Release();
                     throw;
                 }
             }
@@ -814,6 +1062,8 @@ namespace NumSharp
             if (hi.Present && !hi.IsLists)
                 throw new TypeError($"'<=' not supported between instances of 'list' and '{hi.TypeName}'");
             var layout = Shape.NpyIterOutputShape(dims, shapes.ToArray());
+            if ((!lo.Present || ReferenceEquals(lo.Lists.Heap, Heap)) && (!hi.Present || ReferenceEquals(hi.Lists.Heap, Heap)))
+                return ClipOneHeap(lo, hi, layout);
             var heap = NDListHeap.Empty(Kind);
             var ids = new NDArray(NPTypeCode.Int64, layout, false);
             var memo = new Dictionary<(NDListHeap, long), long>();
@@ -842,6 +1092,62 @@ namespace NumSharp
                     }
                     flatOut.SetAtIndex(CopyList(h, id, heap, memo), i);
                 }
+                return new NDListArray(ids, heap);
+            }
+            catch
+            {
+                ids.Dispose();
+                heap.Release();
+                throw;
+            }
+        }
+
+        /// <summary>
+        ///     The clip loop when every operand's lists live in this array's heap: the selected lists are the operands' own
+        ///     (NumPy's result holds the same list objects), so the result shares the heap and no list is copied, and the
+        ///     broadcast operands are walked once in NumPy's ufunc order.
+        /// </summary>
+        /// <param name="lo">The lower bound operand (lists of this heap, or absent).</param>
+        /// <param name="hi">The upper bound operand (lists of this heap, or absent).</param>
+        /// <param name="layout">The result's layout (NumPy's ufunc output layout over the operands).</param>
+        /// <returns>The clipped lists.</returns>
+        private unsafe NDListArray ClipOneHeap(Bound lo, Bound hi, Shape layout)
+        {
+            var heap = Heap.Share();
+            var ids = new NDArray(NPTypeCode.Int64, layout, false);
+            try
+            {
+                var lists = new ListPointers(Heap);
+                var ops = new List<NDArray> { Ids };
+                if (lo.Present)
+                    ops.Add(lo.Lists.Ids);
+                if (hi.Present)
+                    ops.Add(hi.Lists.Ids);
+                ops.Add(ids);
+                var flags = new NDIterPerOpFlags[ops.Count];
+                for (int i = 0; i < flags.Length - 1; i++)
+                    flags[i] = NDIterPerOpFlags.READONLY;
+                flags[^1] = NDIterPerOpFlags.WRITEONLY;
+                bool hasLo = lo.Present, hasHi = hi.Present;
+                int outIndex = ops.Count - 1;
+                Walk(ops.ToArray(), flags, (dataptrs, strides, n, aux) =>
+                {
+                    byte* px = (byte*)dataptrs[0];
+                    byte* pl = hasLo ? (byte*)dataptrs[1] : null;
+                    byte* ph = hasHi ? (byte*)dataptrs[hasLo ? 2 : 1] : null;
+                    byte* po = (byte*)dataptrs[outIndex];
+                    long sx = strides[0], sl = hasLo ? strides[1] : 0, sh = hasHi ? strides[hasLo ? 2 : 1] : 0, so = strides[outIndex];
+                    for (long k = 0; k < n; k++, px += sx, pl += sl, ph += sh, po += so)
+                    {
+                        long x = *(long*)px;
+                        // npy_ObjectMax(x, lo): x unless x >= lo is false; then npy_ObjectMin(., hi): it unless it <= hi is false.
+                        if (hasLo && lists.Compare(x, *(long*)pl) < 0)
+                            x = *(long*)pl;
+                        if (hasHi && lists.Compare(x, *(long*)ph) > 0)
+                            x = *(long*)ph;
+                        *(long*)po = x;
+                    }
+                });
                 return new NDListArray(ids, heap);
             }
             catch
@@ -1176,17 +1482,30 @@ namespace NumSharp
             _ => NDPyObject.TypeName(value),
         };
 
-        /// <summary>A new empty heap for a result: the start's class when it is a list, else this array's.</summary>
+        /// <summary>
+        ///     Whether the fold's start is a NON-EMPTY list of the other piece class (bytes against str lists). Every result
+        ///     NumSharp can hold is then the start's pieces or an empty list: a sum adds this array's lists to it, which
+        ///     <see cref="CheckSameClass"/> refuses unless they are empty, and a maximum / minimum compares it with them,
+        ///     which is CPython's TypeError unless one side is empty — so the result belongs in the start's class
+        ///     (<c>e.max(initial=[b'x'])</c> over empty str lists is <c>[b'x']</c>).
+        /// </summary>
+        /// <param name="start">The fold's start.</param>
+        /// <returns>True for a non-empty list of the other class.</returns>
+        private bool IsForeignStart(Start start)
+            => start.Present && start.IsList && (start.Heap.Kind == 'S') != (Kind == 'S') && start.Heap.Length(start.Id) > 0;
+
+        /// <summary>A new empty heap for a result: the start's class when it is a non-empty list of the other class
+        ///     (<see cref="IsForeignStart"/>), else this array's.</summary>
         /// <param name="start">The fold's start.</param>
         /// <returns>The heap (one reference, the caller's).</returns>
-        private NDListHeap NewHeapLike(Start start) => NDListHeap.Empty(Kind);
+        private NDListHeap NewHeapLike(Start start) => NDListHeap.Empty(IsForeignStart(start) ? start.Heap.Kind : Kind);
 
         /// <summary>A concatenation's class check: a list of str and bytes items has no NDListArray form.</summary>
         /// <param name="start">The fold's start.</param>
         /// <param name="slice">The slice concatenated after it.</param>
         /// <exception cref="NotSupportedException">The start's pieces and the slice's are of different classes and both
         ///     contribute pieces.</exception>
-        private void CheckSameClass(Start start, List<long> slice)
+        private void CheckSameClass(Start start, ReadOnlySpan<long> slice)
         {
             if (!start.Present || !start.IsList || (start.Heap.Kind == 'S') == (Kind == 'S'))
                 return;

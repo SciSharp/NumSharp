@@ -404,25 +404,117 @@ namespace NumSharp
         ///     <c>np.str_('ab')</c>, a bytes piece as <c>b'ab'</c>.</summary>
         /// <param name="id">The list id.</param>
         /// <returns>The repr.</returns>
-        internal unsafe string ListRepr(long id)
+        internal string ListRepr(long id)
         {
-            var sb = new StringBuilder("[");
-            var (start, end) = Heap.Range(id);
-            for (long k = start; k < end; k++)
+            var buffer = new ListReprBuffer();
+            buffer.AppendList(new ListPointers(Heap), id);
+            return buffer.ToString();
+        }
+
+        /// <summary>
+        ///     Python's <c>repr()</c> of lists, written into one reused character buffer. A piece of printable ASCII with no
+        ///     quote and no backslash (the common piece) is copied between single quotes, exactly as CPython's repr writes
+        ///     it (single quotes are its choice when the text holds no <c>'</c>); any other piece goes through
+        ///     <see cref="PyRepr"/>, which owns the quote choice and every escape.
+        /// </summary>
+        /// <remarks>
+        ///     A conversion of a million lists makes a million strings: the StringBuilder per list and the string per piece
+        ///     the repr used to build cost more than the text (~350 ns a list against NumPy's <c>str(list)</c> at ~300 ns),
+        ///     so <see cref="ReprTexts"/> clears and refills one buffer per element.
+        /// </remarks>
+        private sealed class ListReprBuffer
+        {
+            /// <summary>The characters written since the last <see cref="Clear"/>.</summary>
+            private char[] _chars = new char[64];
+
+            /// <summary>The number of characters written.</summary>
+            private int _length;
+
+            /// <summary>Forgets the text (the buffer is kept).</summary>
+            internal void Clear() => _length = 0;
+
+            /// <summary>The text written since the last <see cref="Clear"/>.</summary>
+            /// <returns>A new string.</returns>
+            public override string ToString() => new string(_chars, 0, _length);
+
+            /// <summary>Claims the next <paramref name="count"/> characters, growing the buffer (doubling) when needed.</summary>
+            /// <param name="count">The characters to write.</param>
+            /// <returns>The claimed characters.</returns>
+            private Span<char> Room(int count)
             {
-                if (k > start)
-                    sb.Append(", ");
-                byte* p = Heap.Piece(k, out long n);
-                if (Kind == 'S')
-                {
-                    sb.Append(PyRepr.Bytes(new ReadOnlySpan<byte>(p, checked((int)n))));
-                    continue;
-                }
-                // A str piece prints through the code points (a unit above U+10FFFF prints as '\U00110000', as in CPython).
-                string text = PyRepr.StrCodePoints(new ReadOnlySpan<uint>((uint*)p, checked((int)n)));
-                sb.Append(Heap.IsNpStr(k) ? "np.str_(" + text + ")" : text);
+                if (_length + count > _chars.Length)
+                    Array.Resize(ref _chars, Math.Max(_chars.Length * 2, _length + count));
+                var span = _chars.AsSpan(_length, count);
+                _length += count;
+                return span;
             }
-            return sb.Append(']').ToString();
+
+            /// <summary>Appends a text.</summary>
+            /// <param name="text">The text.</param>
+            private void Append(string text) => text.AsSpan().CopyTo(Room(text.Length));
+
+            /// <summary>Appends Python's repr of list <paramref name="id"/>: <c>['a', np.str_('b')]</c>, <c>[b'ab']</c>.</summary>
+            /// <param name="lists">The heap's lists (read only while the heap does not grow).</param>
+            /// <param name="id">The list.</param>
+            /// <exception cref="OverflowException">A piece longer than <see cref="int.MaxValue"/> code units.</exception>
+            internal unsafe void AppendList(in ListPointers lists, long id)
+            {
+                Room(1)[0] = '[';
+                long first = lists.FirstPiece(id), end = lists.EndPiece(id);
+                long* offsets = lists.Offsets;
+                bool* flags = lists.Flags;
+                for (long k = first; k < end; k++)
+                {
+                    if (k > first)
+                    {
+                        var separator = Room(2);
+                        separator[0] = ',';
+                        separator[1] = ' ';
+                    }
+                    long o = offsets[k];
+                    int n = checked((int)(offsets[k + 1] - o));
+                    if (lists.UnitSize == 1)
+                    {
+                        // A bytes piece: b'...' (bytes have no np.str_ flag).
+                        var bytes = new ReadOnlySpan<byte>(lists.Units + o, n);
+                        if (bytes.IndexOfAnyExceptInRange((byte)0x20, (byte)0x7E) < 0 && bytes.IndexOfAny((byte)'\'', (byte)'\\') < 0)
+                        {
+                            var dst = Room(n + 3);
+                            dst[0] = 'b';
+                            dst[1] = '\'';
+                            for (int i = 0; i < n; i++)
+                                dst[2 + i] = (char)bytes[i];
+                            dst[n + 2] = '\'';
+                        }
+                        else
+                        {
+                            Append(PyRepr.Bytes(bytes));
+                        }
+                        continue;
+                    }
+                    // A str piece prints through its code points (a unit above U+10FFFF prints as '\U00110000', as in
+                    // CPython); an element's own np.str_ prints inside np.str_(...).
+                    var units = new ReadOnlySpan<uint>((uint*)lists.Units + o, n);
+                    bool npStr = flags != null && flags[k];
+                    if (npStr)
+                        Append("np.str_(");
+                    if (units.IndexOfAnyExceptInRange(0x20u, 0x7Eu) < 0 && units.IndexOfAny((uint)'\'', (uint)'\\') < 0)
+                    {
+                        var dst = Room(n + 2);
+                        dst[0] = '\'';
+                        for (int i = 0; i < n; i++)
+                            dst[1 + i] = (char)units[i];
+                        dst[n + 1] = '\'';
+                    }
+                    else
+                    {
+                        Append(PyRepr.StrCodePoints(units));
+                    }
+                    if (npStr)
+                        Room(1)[0] = ')';
+                }
+                Room(1)[0] = ']';
+            }
         }
 
         // =============================================================================================================

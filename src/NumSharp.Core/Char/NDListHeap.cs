@@ -150,6 +150,55 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     A heap with no list yet and room for exactly <paramref name="units"/> code units, <paramref name="pieces"/>
+        ///     pieces and <paramref name="lists"/> lists: the heap of a bulk builder that counted its whole result first (a
+        ///     concatenation, a repetition, a sum, a running sum), whose appends (<see cref="AppendReserved"/>,
+        ///     <see cref="EndListReserved"/>) then never grow or move it — so a builder may also read the heap's own lists
+        ///     through pointers captured once (a running sum copies its previous list).
+        /// </summary>
+        /// <param name="kind">The class of the pieces.</param>
+        /// <param name="units">The code units to come.</param>
+        /// <param name="pieces">The pieces to come.</param>
+        /// <param name="lists">The lists to come.</param>
+        /// <param name="withFlags">Allocate the per-piece <c>np.str_</c> flags now. Needed when the pieces to come may carry
+        ///     flags AND the builder reads THIS heap through pointers captured at the start: <see cref="FlagPiece"/> would
+        ///     allocate the flags lazily, after that capture, and the captured pointers would miss every flag.</param>
+        /// <returns>The heap (one reference, the caller's).</returns>
+        /// <exception cref="OutOfMemoryException">An array cannot be allocated (NumPy's MemoryError).</exception>
+        /// <remarks>Each array is allocated once, at its final size, and not filled (every slot is written before it is
+        ///     read) — except <c>offsets[0]</c>, the units the first piece starts at, and the flags, whose unwritten slots
+        ///     must read false. An <see cref="Empty(char)"/> heap grown to the same size allocated every array twice and
+        ///     disposed the first four (~2 us of a 30 us 1K concatenation).</remarks>
+        internal static NDListHeap Reserved(char kind, long units, long pieces, long lists, bool withFlags = false)
+        {
+            NDArray u = null, offsets = null, start = null, end = null, flags = null;
+            try
+            {
+                u = new NDArray(kind == 'S' ? NPTypeCode.Byte : NPTypeCode.UInt32, Shape.Vector(units), false);
+                offsets = new NDArray(NPTypeCode.Int64, Shape.Vector(pieces + 1), false);
+                ((long*)offsets.Address)[0] = 0;
+                start = new NDArray(NPTypeCode.Int64, Shape.Vector(lists), false);
+                end = new NDArray(NPTypeCode.Int64, Shape.Vector(lists), false);
+                if (withFlags)
+                    flags = new NDArray(NPTypeCode.Boolean, Shape.Vector(pieces), true);
+            }
+            catch
+            {
+                // A failed allocation (MemoryError) leaves nothing behind.
+                u?.Dispose();
+                offsets?.Dispose();
+                start?.Dispose();
+                end?.Dispose();
+                flags?.Dispose();
+                throw;
+            }
+            // The constructor counts every list slot as a stored list; a reserved heap stores none yet.
+            var heap = new NDListHeap(kind, u, offsets, 0, flags, start, end);
+            heap._listCount = 0;
+            return heap;
+        }
+
+        /// <summary>
         ///     The heap of a producer that built one list per element in C order: the per-element <c>[self]</c> flags become
         ///     flags of the elements' single pieces.
         /// </summary>
@@ -383,6 +432,78 @@ namespace NumSharp
             EnsurePieces(pieces);
         }
 
+        // =============================================================================================================
+        // Bulk appending: one exact reservation, then copies without growth checks
+        // =============================================================================================================
+
+        /// <summary>
+        ///     Appends every piece of list <paramref name="id"/> of <paramref name="source"/>, <paramref name="times"/> times
+        ///     (Python's <c>list * n</c>; 0 or less appends nothing), into the room a <see cref="Reserved"/> heap was created
+        ///     with: the heap never grows (an append past the reservation throws), the source is read through its raw
+        ///     pointers.
+        /// </summary>
+        /// <param name="source">The source heap's pointers (this heap's own too: a reserved heap's arrays never move).</param>
+        /// <param name="id">The list id.</param>
+        /// <param name="times">How many times to append the pieces.</param>
+        /// <exception cref="InvalidOperationException">The source's unit size differs (a str heap and a bytes heap), or the
+        ///     pieces pass the heap's reservation (a builder that under-counted its result).</exception>
+        internal void AppendReserved(in ListPointers source, long id, long times = 1)
+        {
+            if (times <= 0)
+                return;
+            long start = source.FirstPiece(id), end = source.EndPiece(id);
+            if (start == end)
+                return;
+            int unit = UnitSize;
+            // Units are copied as bytes: a str heap and a bytes heap never exchange pieces (their callers refuse it).
+            if (source.UnitSize != unit)
+                throw new InvalidOperationException("an NDListHeap cannot take pieces of another unit size");
+            long* so = source.Offsets;
+            long u0 = so[start];
+            long units = so[end] - u0;
+            // The reservation is the contract: a builder that under-counted would write past the arrays, where the pool's
+            // size buckets leave slack that hides the overrun (no crash, right values), so the append refuses instead.
+            // The builders bound units * times and pieces * times before reserving (CheckRepeatSize, AddSize).
+            if (_unitCount + units * times > _units.size || _pieceCount + (end - start) * times + 1 > _offsets.size)
+                throw new InvalidOperationException("an NDListHeap append passed the heap's reservation");
+            long bytes = units * unit;
+            byte* from = source.Units + u0 * unit;
+            byte* du = (byte*)_units.Address;
+            long* dof = (long*)_offsets.Address;
+            bool* sf = source.Flags;
+            for (long t = 0; t < times; t++)
+            {
+                Buffer.MemoryCopy(from, du + _unitCount * unit, bytes, bytes);
+                // The pieces keep their spans, shifted to where their units now start.
+                long shift = _unitCount - u0;
+                for (long k = start; k < end; k++)
+                {
+                    dof[_pieceCount + 1] = so[k + 1] + shift;
+                    if (sf is not null && sf[k])
+                        FlagPiece(_pieceCount);
+                    _pieceCount++;
+                }
+                _unitCount += units;
+            }
+        }
+
+        /// <summary>Ends the list <see cref="BeginList"/> opened, into the room a <see cref="Reserved"/> heap was created with.</summary>
+        /// <returns>The new list's id.</returns>
+        /// <exception cref="InvalidOperationException">No list is open, or the lists pass the heap's reservation.</exception>
+        internal long EndListReserved()
+        {
+            if (_openStart < 0)
+                throw new InvalidOperationException("no NDListHeap list is open");
+            // The list slots too are reserved: one more list than the builder counted would write past them.
+            if (_listCount >= _listStart.size)
+                throw new InvalidOperationException("an NDListHeap list passed the heap's reservation");
+            long id = _listCount++;
+            ((long*)_listStart.Address)[id] = _openStart;
+            ((long*)_listEnd.Address)[id] = _pieceCount;
+            _openStart = -1;
+            return id;
+        }
+
         /// <summary>Appends a whole list of .NET pieces (<see cref="string"/> for str, <c>byte[]</c> for bytes).</summary>
         /// <param name="pieces">The pieces (each of this heap's class).</param>
         /// <returns>The new list's id.</returns>
@@ -462,7 +583,7 @@ namespace NumSharp
             {
                 _offsets = Grow(_offsets, _pieceCount + 1, need);
                 if (_pieceFlags is not null)
-                    _pieceFlags = Grow(_pieceFlags, _pieceCount, _offsets.size - 1, exact: true);
+                    _pieceFlags = Grow(_pieceFlags, _pieceCount, _offsets.size - 1, exact: true, zero: true);
             }
         }
 
@@ -483,12 +604,14 @@ namespace NumSharp
         /// <param name="used">Its used elements.</param>
         /// <param name="need">The elements needed.</param>
         /// <param name="exact">True to allocate exactly <paramref name="need"/> (a companion array that must match another's
-        ///     capacity); otherwise the capacity doubles.</param>
-        /// <returns>The new array (zero-filled past the used part, so a new flag array reads false).</returns>
-        private static NDArray Grow(NDArray array, long used, long need, bool exact = false)
+        ///     capacity, or a bulk builder's exact reservation); otherwise the capacity doubles.</param>
+        /// <param name="zero">True to zero-fill the new array (the flag array, whose unwritten slots must read false); the
+        ///     other arrays are written before they are read, so their fill would only cost a pass over fresh memory.</param>
+        /// <returns>The new array.</returns>
+        private static NDArray Grow(NDArray array, long used, long need, bool exact = false, bool zero = false)
         {
             long capacity = exact ? need : Math.Max(Math.Max(need, MinCapacity), array.size * 2);
-            var bigger = new NDArray(array.typecode, Shape.Vector(capacity), true);
+            var bigger = new NDArray(array.typecode, Shape.Vector(capacity), zero);
             long bytes = used * array.dtypesize;
             Buffer.MemoryCopy((void*)array.Address, (void*)bigger.Address, bytes, bytes);
             array.Dispose();

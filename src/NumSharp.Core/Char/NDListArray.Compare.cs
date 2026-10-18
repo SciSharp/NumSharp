@@ -547,12 +547,20 @@ namespace NumSharp
         /// <param name="dtype">The <c>StringDType</c> descriptor (its NA object, if any, is kept).</param>
         /// <param name="layout">The result's layout.</param>
         /// <returns>The text array.</returns>
-        private NDArray ReprTexts(DType dtype, Shape layout)
+        private unsafe NDArray ReprTexts(DType dtype, Shape layout)
         {
             using var flat = Ids.flatten();
             var texts = new string[flat.size];
+            // One reused buffer for every repr, the ids read straight from the fresh C-ordered copy.
+            var lists = new ListPointers(Heap);
+            var buffer = new ListReprBuffer();
+            long* ids = (long*)flat.Address;
             for (long i = 0; i < texts.Length; i++)
-                texts[i] = ListRepr(flat.GetInt64(i));
+            {
+                buffer.Clear();
+                buffer.AppendList(lists, ids[i]);
+                texts[i] = buffer.ToString();
+            }
             using var c = np.array(texts, dtype);
             using var shaped = c.reshape(Shape.Adopt((long[])Ids.Shape.dimensions.Clone()));
             var result = new NDArray(dtype, layout, true);
@@ -604,9 +612,41 @@ namespace NumSharp
             try
             {
                 NDListHeap ha = left.Heap, hb = right.Heap;
-                Walk(new NDArray[] { left.Ids, right.Ids, result },
-                    new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY },
-                    (dataptrs, strides, n, aux) =>
+                var operands = new NDArray[] { left.Ids, right.Ids, result };
+                var access = new[] { NDIterPerOpFlags.READONLY, NDIterPerOpFlags.READONLY, NDIterPerOpFlags.WRITEONLY };
+                if (ha.UnitSize == hb.UnitSize)
+                {
+                    // One piece class on both sides (no str / bytes pair can meet): Python's list order is the units'
+                    // order, read through the raw pointers of both heaps (nothing appends to them during the walk).
+                    var lists = new ListPointers(ha);
+                    var others = new ListPointers(hb);
+                    Walk(operands, access, (dataptrs, strides, n, aux) =>
+                    {
+                        byte* pa = (byte*)dataptrs[0];
+                        byte* pb = (byte*)dataptrs[1];
+                        byte* po = (byte*)dataptrs[2];
+                        long sa = strides[0], sb = strides[1], so = strides[2];
+                        var a = lists;
+                        var b = others;
+                        for (long k = 0; k < n; k++, pa += sa, pb += sb, po += so)
+                        {
+                            long x = *(long*)pa, y = *(long*)pb;
+                            *(bool*)po = op switch
+                            {
+                                PyCompareOp.Eq => ListPointers.Equal(a, x, b, y),
+                                PyCompareOp.Ne => !ListPointers.Equal(a, x, b, y),
+                                PyCompareOp.Lt => ListPointers.Compare(a, x, b, y) < 0,
+                                PyCompareOp.Le => ListPointers.Compare(a, x, b, y) <= 0,
+                                PyCompareOp.Gt => ListPointers.Compare(a, x, b, y) > 0,
+                                _ => ListPointers.Compare(a, x, b, y) >= 0,
+                            };
+                        }
+                    });
+                }
+                else
+                {
+                    // A str heap against a bytes heap: CPython's rich comparison, whose ordering of a str / bytes pair raises.
+                    Walk(operands, access, (dataptrs, strides, n, aux) =>
                     {
                         byte* pa = (byte*)dataptrs[0];
                         byte* pb = (byte*)dataptrs[1];
@@ -615,6 +655,7 @@ namespace NumSharp
                         for (long k = 0; k < n; k++, pa += sa, pb += sb, po += so)
                             *(bool*)po = RichCompare(op, ha, *(long*)pa, hb, *(long*)pb);
                     });
+                }
             }
             catch
             {

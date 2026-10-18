@@ -199,7 +199,7 @@ namespace NumSharp
         ///     range.</c>).</exception>
         /// <exception cref="TypeError">A str list item compared with a bytes one; a sorter that is not 1-D integers.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDArray searchsorted(NDListArray v, string side = "left", NDArray sorter = null)
+        public unsafe NDArray searchsorted(NDListArray v, string side = "left", NDArray sorter = null)
         {
             ThrowIfDisposed();
             if (v is null)
@@ -220,16 +220,26 @@ namespace NumSharp
                 using var hay = Ids.flatten();
                 long[] order = SorterIndices(sorter, hay.size);
                 long n = hay.size;
+                // The id arrays are fresh C-ordered copies and the result a fresh C-ordered array: read and written in place.
+                long* kp = (long*)keys.Address;
+                long* hp = (long*)hay.Address;
+                long* rp = (long*)result.Address;
+                // Two heaps of one piece class compare through their raw pointers (Python's order is the units' order);
+                // a str heap against a bytes heap keeps CompareLists, whose ordering of a str / bytes pair raises.
+                var lists = new ListPointers(Heap);
+                var needles = new ListPointers(v.Heap);
+                bool oneClass = Heap.UnitSize == v.Heap.UnitSize;
                 // npy_binsearch / npy_argbinsearch (binsearch.cpp): the bounds are CARRIED from key to key — a key not below
                 // the previous one keeps the lower bound, any other restarts from 0 with the upper bound one past the last
                 // answer — so over an unsorted haystack the answers are NumPy's, not a fresh search's. The comparisons are
                 // OBJECT_compare's (Py_LT, then Py_GT), side 'left' taking compare < 0 and 'right' compare <= 0.
                 long minIdx = 0, maxIdx = n;
-                long lastKey = keys.size > 0 ? keys.GetInt64(0) : 0;
+                long lastKey = keys.size > 0 ? kp[0] : 0;
                 for (long i = 0; i < keys.size; i++)
                 {
-                    long key = keys.GetInt64(i);
-                    int step = CompareLists(v.Heap, lastKey, v.Heap, key);
+                    long key = kp[i];
+                    // Two needles share their heap: one piece class, always the raw order.
+                    int step = needles.Compare(lastKey, key);
                     if (right ? step <= 0 : step < 0)
                     {
                         maxIdx = n;
@@ -246,13 +256,13 @@ namespace NumSharp
                         long at = order is null ? mid : order[mid];
                         if (at < 0 || at >= n)
                             throw new ValueError("Sorter index out of range.");
-                        int c = CompareLists(Heap, hay.GetInt64(at), v.Heap, key);
+                        int c = oneClass ? ListPointers.Compare(lists, hp[at], needles, key) : CompareLists(Heap, hp[at], v.Heap, key);
                         if (right ? c <= 0 : c < 0)
                             minIdx = mid + 1;
                         else
                             maxIdx = mid;
                     }
-                    result.SetAtIndex(minIdx, i);
+                    rp[i] = minIdx;
                 }
             }
             catch
@@ -305,8 +315,8 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>argmax(axis=None, out=None, *, keepdims=False)</c>: the index of the FIRST greatest list (Python's
-        ///     list order) of the flattened array or along <paramref name="axis"/> — NDArray's argmax over the lists' ranks,
-        ///     whose first-occurrence rule is OBJECT_argmax's.
+        ///     list order) of the flattened array or along <paramref name="axis"/> — <c>OBJECT_argmax</c>'s scan, one pass
+        ///     per line.
         /// </summary>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="out">NumPy's <c>out=</c> (an int64-castable array of the result's shape).</param>
@@ -317,13 +327,10 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDArray argmax(int? axis = null, NDArray @out = null, bool keepdims = false)
-        {
-            using var ranks = Ranks();
-            return ranks.argmax(axis, @out, keepdims);
-        }
+            => ArgExtreme(axis, @out, keepdims, greatest: true);
 
-        /// <summary>NumPy's <c>argmin(axis=None, out=None, *, keepdims=False)</c>: the index of the FIRST smallest list (see
-        ///     <see cref="argmax"/>).</summary>
+        /// <summary>NumPy's <c>argmin(axis=None, out=None, *, keepdims=False)</c>: the index of the FIRST smallest list
+        ///     (<c>OBJECT_argmin</c>'s scan; see <see cref="argmax"/>).</summary>
         /// <param name="axis">The axis, or null for the flattened array.</param>
         /// <param name="out">NumPy's <c>out=</c>.</param>
         /// <param name="keepdims">Keep the reduced axis as length 1.</param>
@@ -332,9 +339,85 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDArray argmin(int? axis = null, NDArray @out = null, bool keepdims = false)
+            => ArgExtreme(axis, @out, keepdims, greatest: false);
+
+        /// <summary>
+        ///     <c>OBJECT_argmax</c> / <c>OBJECT_argmin</c>: per line (the flattened array in C order, or each line along
+        ///     <paramref name="axis"/> in increasing index), the first element no later one is greater (smaller) than.
+        /// </summary>
+        /// <param name="axis">The axis, or null for the flattened array.</param>
+        /// <param name="out">NumPy's <c>out=</c>.</param>
+        /// <param name="keepdims">Keep the reduced axis as length 1.</param>
+        /// <param name="greatest">True for argmax (a later list wins when it is GREATER), false for argmin (when smaller).</param>
+        /// <returns>The indices (or <paramref name="out"/>).</returns>
+        /// <exception cref="ValueError">An empty array, or NDArray's out= errors.</exception>
+        /// <exception cref="AxisError">An axis outside the array.</exception>
+        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
+        /// <remarks>
+        ///     Each line's winner is marked in a uint8 array of the outer shape and NDArray's own member of the same name
+        ///     answers over that mask: argmax finds the one 1 of a zero mask, argmin the one 0 of a mask of ones. The axis
+        ///     rules, keepdims, out= and the error texts (<c>attempt to get argmin of an empty sequence</c>, <c>output array
+        ///     does not match result of np.argmin.</c>) are then NDArray's — NumPy's for the object array, its name
+        ///     included. The scan replaced an argmax over the lists' dense ranks, whose ranking is a sort: O(n log n) where
+        ///     NumPy's scan is O(n), 0.04x NumPy at 1M elements.
+        /// </remarks>
+        private unsafe NDArray ArgExtreme(int? axis, NDArray @out, bool keepdims, bool greatest)
         {
-            using var ranks = Ranks();
-            return ranks.argmin(axis, @out, keepdims);
+            ThrowIfDisposed();
+            // argmax: zeros with a 1 per winner; argmin: ones with a 0 per winner (uninitialized, then filled).
+            using var mask = new NDArray(NPTypeCode.Byte, Shape.Adopt((long[])Ids.Shape.dimensions.Clone()), greatest);
+            byte loser = greatest ? (byte)0 : (byte)1, winner = greatest ? (byte)1 : (byte)0;
+            if (!greatest && size > 0)
+                System.Runtime.InteropServices.NativeMemory.Fill((void*)mask.Address, (nuint)size, loser);
+            if (size > 0)
+            {
+                var lists = new ListPointers(Heap);
+                byte* m = (byte*)mask.Address;
+                if (axis is null || ndim == 0)
+                {
+                    // The flattened array in C order (a 0-d array's one element: NDArray's member decides the axis rule).
+                    using var flat = Ids.flatten();
+                    m[ScanLine(lists, (long*)flat.Address, 1, flat.size, greatest)] = winner;
+                }
+                else if (axis.Value >= -ndim && axis.Value < ndim)
+                {
+                    // An axis outside the array leaves the mask unmarked: NDArray's member raises the AxisError.
+                    int ax = axis.Value < 0 ? axis.Value + ndim : axis.Value;
+                    long* ids = (long*)Ids.Address;
+                    var maskStarts = new List<long>();
+                    ForEachLine(mask.Shape, ax, (start, stride, n) => maskStarts.Add(start));
+                    long maskStride = mask.Shape.strides[ax];
+                    int lineNo = 0;
+                    ForEachLine(Ids.Shape, ax, (start, stride, n) =>
+                        m[maskStarts[lineNo++] + ScanLine(lists, ids + start, stride, n, greatest) * maskStride] = winner);
+                }
+            }
+            return greatest ? mask.argmax(axis, @out, keepdims) : mask.argmin(axis, @out, keepdims);
+        }
+
+        /// <summary>One line's <c>OBJECT_argmax</c> / <c>OBJECT_argmin</c>: the position of the first element no later one is
+        ///     greater (smaller) than.</summary>
+        /// <param name="lists">The heap's lists.</param>
+        /// <param name="line">The line's first id.</param>
+        /// <param name="stride">The ids' stride along the line, in elements.</param>
+        /// <param name="n">The line's length (at least 1).</param>
+        /// <param name="greatest">True for argmax.</param>
+        /// <returns>The winner's position in the line.</returns>
+        private static unsafe long ScanLine(ListPointers lists, long* line, long stride, long n, bool greatest)
+        {
+            long best = line[0], at = 0;
+            for (long j = 1; j < n; j++)
+            {
+                long id = line[j * stride];
+                // OBJECT_argmax: PyObject_RichCompareBool(val, mp, Py_GT); OBJECT_argmin: Py_LT. A tie keeps the earlier one.
+                int c = lists.Compare(id, best);
+                if (greatest ? c > 0 : c < 0)
+                {
+                    best = id;
+                    at = j;
+                }
+            }
+            return at;
         }
 
         // =============================================================================================================
@@ -347,31 +430,23 @@ namespace NumSharp
         /// </summary>
         /// <returns>The ranks.</returns>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        internal NDArray Ranks()
+        internal unsafe NDArray Ranks()
         {
             ThrowIfDisposed();
-            using var flat = Ids.flatten();
-            long n = flat.size;
             var result = new NDArray(NPTypeCode.Int64, Shape.Adopt((long[])Ids.Shape.dimensions.Clone()), false);
-            if (n == 0)
+            if (size == 0)
                 return result;
-            // The distinct lists ranked once (many elements can point at one list after views, repeats and assignments).
-            var distinct = new List<long>();
-            var slot = new Dictionary<long, int>();
-            for (long i = 0; i < n; i++)
+            try
             {
-                long id = flat.GetInt64(i);
-                if (!slot.ContainsKey(id))
-                {
-                    slot[id] = distinct.Count;
-                    distinct.Add(id);
-                }
+                // The ids in C order (a fresh contiguous copy), ranked into the C-ordered result of the same dimensions.
+                using var flat = Ids.flatten();
+                DenseRanks(Heap, (long*)flat.Address, (long*)result.Address, flat.size);
             }
-            var ids = distinct.ToArray();
-            var ranks = new long[ids.Length];
-            DenseRanks(Heap, ids, ranks, new long[ids.Length]);
-            for (long i = 0; i < n; i++)
-                result.SetAtIndex(ranks[slot[flat.GetInt64(i)]], i);
+            catch
+            {
+                result.Dispose();
+                throw;
+            }
             return result;
         }
 
@@ -387,10 +462,15 @@ namespace NumSharp
             var perm = new long[n];
             if (stable)
             {
+                // The stable order: by rank, equal ranks in line order — one primitive sort of the keys rank * n + i (a
+                // rank is below the array's size and both are below 2^31 here, so a key fits a long; i < n, so the key
+                // orders by rank first and decodes back to its position).
+                var keys = new long[n];
                 for (long i = 0; i < n; i++)
-                    perm[i] = i;
-                // The stable order: by rank, equal ranks in line order.
-                Array.Sort(perm, (x, y) => ranks[x] != ranks[y] ? ranks[x].CompareTo(ranks[y]) : x.CompareTo(y));
+                    keys[i] = ranks[i] * n + i;
+                Array.Sort(keys);
+                for (long i = 0; i < n; i++)
+                    perm[i] = keys[i] % n;
                 return perm;
             }
             // npy_aquicksort over (rank, index) records in NumPy's initial order (index i at record i).
