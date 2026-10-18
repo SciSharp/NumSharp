@@ -46,7 +46,10 @@ batch 3 (`strip`, `lstrip`, `rstrip`, `replace`, with the module's re-exports; `
 predicates `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, with
 the module's re-exports; `b1328a4f`), batch 5 (the case maps `capitalize`, `lower`, `swapcase`, `title`, `upper` and
 `translate`, with the module's re-exports; `4c9e90a5`) and batch 6 (`np.@char.mod` and the chararray `%` operator;
-`cfd1ae6d`) are done. Open: C5's `encode` and `decode`, which wait for P2.6 milestone 4.
+`cfd1ae6d`) and batch 7 (`encode` / `decode`, with the module's re-exports; `5ce3a8ea`) are done: C5 is complete.
+`NDListArray` has NumPy's ndarray members (2026-10-18: the structural ones, the shared heap of lists, and the members
+that compare, sort, reduce, compute and assign lists), all but `dtype` / `data` (an object dtype, which `np.dtypes`
+leaves absent by design) and `ctypes` / `dump` / `dumps` (no NumSharp array has them). Open: C6.
 
 ---
 
@@ -514,10 +517,16 @@ C-D1 decision and C3 for C-D3.
     0-d index returns a writeable 0-d array, NumPy a scalar), VF17 (`np.broadcast_arrays` makes a read-only operand's
     result writeable).
 - **Phase 4's divergences** (pinned in `CharObjectPathTests`):
-  - **The object result is an `NDListArray`**, not an ndarray: it has the array attributes, basic indexing, `item`,
-    `tolist`, iteration and NumPy's repr / str, but none of the other ndarray members (`reshape`, `T`, `flatten`, ...).
-  - **Element access is a 1-D piece array** (C-D3 "As built", point 2; `[Misaligned]`): NumPy returns the Python list,
-    which `item()` gives.
+  - **The object result is an `NDListArray`**, not an ndarray. Since 2026-10-18 it has 65 of the 70 public members of
+    NumPy's ndarray (the state log's `NDListArray` entry). Missing: `dtype` and `data` (an object descriptor and a
+    memoryview of format `'O'` need an object dtype, which `np.dtypes` leaves absent by design: an owner decision), and
+    `ctypes` / `dump` / `dumps` (no NumSharp array has them). A member whose NumPy result holds an object that is not a
+    list (the int identity of an empty `sum`, the int 0 of an empty `dot`, the new ints of a growing `resize`, `imag`'s
+    zeros, the pointers of `tobytes`) raises `NotSupportedException`.
+  - **Element access through the integer indexer (`r[0]`) is a 1-D piece array** (C-D3 "As built", point 2;
+    `[Misaligned]`): NumPy returns the Python list, which `item()` gives. One integer per axis in slice notation
+    (`r["0"]`) returns a 0-d list array that stands for that list: comparisons, `+`, `fill`, `put` and assignment treat
+    it as NumPy treats the list (against an ndarray it is `np.asarray(list)`, its items).
   - **Python's `None` is `null` here** (the object path models NumPy's object arrays), where the rest of the module
     raises `ArgumentNullException` for a null array argument (C-D6).
   - **The broadcast error** is `IncorrectShapeException` (the house convention for shape errors) with NumPy's text.
@@ -1028,6 +1037,78 @@ C-D1 decision and C3 for C-D3.
     had other sessions' builds running: two 1M `S` cells read 2.3–5.8× slower in the first run (108 and 264 ms) than
     alone (46.6 and 45.6 ms), and the alone runs are the ones counted.
   - **Open:** `encode` and `decode` (P2.6 milestone 4), then C6.
+- **2026-10-18 — `NDListArray`'s ndarray members** (`0d2905ee` the structural members, `4741fdc5` the shared heap,
+  `020d8289` the compute members, `9068ca99` the mutation pass's fixes and pins, `63f363f2` the performance pass; the
+  owner's request: "Also NDListArray's other ndarray members").
+  - **The structural members** (`0d2905ee`): `T` / `mT` / `transpose` / `swapaxes`, `reshape` / `ravel` / `flatten` /
+    `squeeze`, `copy` / `view`, `take` / `compress` / `repeat` / `diagonal`, and the outer array's `strides` /
+    `itemsize` / `nbytes` / `device` / `flags` / `base` / `to_device`: each the same ndarray operation applied to the
+    lists' ids (8 bytes per element, NumPy's pointers), so every view-or-copy decision, byte stride, flag and error is
+    NumPy's while the lists are shared. `np.ravel` now reshapes to `(-1,)` as `PyArray_Ravel` does.
+  - **The heap** (`4741fdc5`): `NDListArray` holds one int64 list id per element (`Ids`) into a shared, append-only
+    `NDListHeap` (each list a range of pieces, each piece its exact units and its own `np.str_` flag). A view is one
+    NumSharp view (0.16–0.57 µs, were 0.67–1.55), a copy moves one int64 array, and element assignment appends to the
+    heap. `item(i)` is NumPy's flat index.
+  - **The compute members** (`020d8289`): the six comparisons (CPython's `list_richcompare`; another value through
+    `np.asarray`; Python's reflected operator for a value on the left; the str-against-bytes TypeError); `all` / `any` /
+    `nonzero` / `astype` (a list is true when it is not empty; object converts to anything only under `'unsafe'`);
+    `sort` / `argsort` (NumPy's introsort over (rank, index) records, so equal lists land where NumPy puts them;
+    timsort's stable order for `'stable'`), `partition` / `argpartition` (NumPy sorts the whole line after its own
+    checks), `searchsorted` (`npy_binsearch` with its carried bounds), `argmax` / `argmin`; `max` / `min` / `sum` /
+    `prod` / `cumsum` / `cumprod` / `trace` / `clip` (the object loops folded in NumPy's reduction order, with
+    `initial`, `where=`, `out=`, `keepdims` and NumPy's identity rule for empty slices) and `mean` / `var` / `std`
+    (NumPy's statements, ending in CPython's TypeError); `+` / `*` (concatenation, repetition with CPython's
+    OverflowError / MemoryError), `dot` (`OBJECT_dot`), `round` / `conj` / `conjugate` / `real` / `imag`; and the
+    members that write (`__setitem__` with NumPy's writeability-first rule, `fill`, `put`, `take` / `compress` with
+    `out=`, `getfield` / `setfield`, `view`, `flat`, `resize`, `setflags`, `byteswap`, `choose`, `tobytes`, `tofile`).
+  - **Fixed on the way.** The heap read its unit count from a capacity slot, so a list appended to a split result landed
+    at a wrong offset (`020d8289`). A list compared with an ndarray through `==` / `!=` ran `np.equal`, where NumPy runs
+    `ndarray.__eq__`, whose pair without a ufunc loop is an all-False / all-True constant; and NDArray's `==` / `!=` of
+    a text array against another class reported `np.broadcast`'s "shape mismatch" text where NumPy reports the ufunc's
+    `operands could not be broadcast together with shapes (2,) (0,) ` (`9068ca99`). The performance pass (`63f363f2`)
+    found three more: argmin's empty-sequence error named argmax (the oracle caught it), a bytes `initial` over empty
+    str lists over-read in `sum` and was refused by `prod` / `max` (NumPy's result is the bytes list), and a running sum
+    that would have dropped its pieces' `np.str_` flags.
+  - **The performance pass** (`63f363f2`). Members that read many lists go through `ListPointers` (one heap's arrays as
+    raw pointers; Python's list order and equality also across two heaps of one piece class). argmax / argmin are
+    `OBJECT_argmax`'s one scan per line; the sorting members rank only the DISTINCT lists (a content hash finds the
+    equal ones). The builders (`sum`, `cumsum`, `+`, `*`, `dot`) count their result first and create the heap once at
+    that size (`NDListHeap.Reserved`; an append past the reservation throws, because the pool's size-bucket slack hid an
+    under-sized heap completely). `max` / `min` / `clip` select existing lists, so their results share the array's heap,
+    and `max` / `min` along an axis fold in NumPy's slab order (one pass over the heap). `astype(T)` writes every repr
+    into one reused buffer.
+  - **Gates.** Oracle section `strcharlist` (new; 12,450 cases, 4,533 NumPy errors, zero excuses): every member over `U`
+    / `S` / `StringDType` results of 14 layouts and over their reversed and transposed views, with NumPy's arguments and
+    errors; each result is compared piece by piece with its layout (byte strides, C / F, OWNDATA, WRITEABLE, base). Unit
+    tests `ListArrayMembersTests` (7) and `ListArrayComputeTests` (19). The leak catalogue covers every member. Two
+    mutation passes: 25 planted defects in the compute members (20 killed; the 5 survivors pinned in `9068ca99`, which
+    also fixed the two defects they exposed) and 20 in the performance pass (16 killed; the 4 survivors killed by three
+    NumPy-probed pins and by `AppendReserved`'s reservation check).
+  - **Performance** (NPY/NS, two pinned P-cores): 81 cells (27 members × 1K / 100K / 1M over `np.char.split` results of
+    0–3 words; NumPy 2.4.2 re-measured back to back; every result's digest identical): geomean 7.48×, min 1.92× (`+` at
+    1K), max 459× (`== 1` at 1M), none under 1.5×. Before the performance pass (`63f363f2`) the same cells gave geomean
+    2.56× with 29 under 1.5×. At 1M: `argmax` 0.04× → 4.05× (its ranking was a sort), `sort` 1.93× → 25.8×,
+    `max(axis=0)` 0.98× → 5.34×, `cumsum(axis=1)` 0.67× → 2.64×, `+` 0.79× → 3.79×, `astype(T)` 0.83× → 3.39×.
+  - **Not built:** `dtype` / `data` (no object dtype), `ctypes` / `dump` / `dumps` (no NumSharp array has them).
+- **2026-10-18 — C5's seventh batch: `encode` / `decode`** (`5ce3a8ea`; the owner's request: "encode/decode are done on
+  strings branch. Complete these: … np.char.encode and np.char.decode … chararray.encode() and chararray.decode()").
+  - **Built.** `np.@char.encode` / `decode` (`APIs/np.char.codec.cs`) ARE `np.strings.encode` / `decode` (P2.6
+    milestone 4, `1236cccc`; `np.char.encode is np.strings.encode`), converting `a` with the module's text rule. The
+    chararray members (`Char/NDCharArray.Codec.cs`) are NumPy's `encode(self, encoding, errors)` /
+    `decode(self, …)`: no asarray step, so the result is the function's fresh PLAIN `S` / `U` array, computed from the
+    STORED text (`np.char.array(['ab  ']).encode()` is `b'ab  '`), 0-d for a 0-d chararray. A `U` chararray has no
+    `decode` and an `S` one no `encode` (the function's AttributeError).
+  - **Gates.** Oracle section `strcharmeth` +408 cases (14,510 in all, 4,388 NumPy errors, zero excuses, with the
+    boundary audit): the members over both classes × 14 layouts with six codec / handler forms each, the other class's
+    method, the functions over chararray and plain operands, the codecs' other paths (lone surrogates, trailing NULs,
+    UTF-16 / UTF-32 growth, `namereplace`, cp1252), arrays of encodings and handlers, broadcast mismatches, unknown
+    codecs and handlers, non-str and NUL-holding arguments, `StringDType` text and Python values. Unit tests
+    `CharStringMethodsTests` (41: +4). Leak catalogue: the four new members. Mutation pass: 5 planted defects (a member
+    calling the other codec, swapped arguments, a dropped `errors`, a chararray result), all killed.
+  - **Performance** (NPY/NS, two pinned P-cores): 15 cells (the two functions and the two members over their classes at
+    1K / 100K / 1M, on P2.6's codec as of `d314dd81`; every result's digest identical): 20.2–130×, geomean 57.1×; the
+    slowest cell is `decode` of `S` at 1M.
+  - **C5 is complete.** Open: C6 (the coverage mapping `char.chararray` → `NumSharp.NDCharArray`).
 
 ---
 
@@ -1041,7 +1122,7 @@ C-D1 decision and C3 for C-D3.
 | C4 | `multiply` (phase 1, done), `partition`, `rpartition` (done, `ffa74606`) |
 | P2.3 | `add` |
 | P2.5 | `str_len`, `count`, `find`, `rfind`, `index`, `rindex`, `startswith`, `endswith` (done, `6d06fa3c`), `lstrip`, `rstrip`, `strip`, `replace` (done, `66b68e96`), `expandtabs`, `center`, `ljust`, `rjust`, `zfill` (the last five: done, `ffa74606`) |
-| P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower` (the case maps: done, `4c9e90a5`), `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal` (the nine predicates: done, `b1328a4f`), `mod` (done, `cfd1ae6d`), `encode`, `decode`, `translate` (done, `4c9e90a5`) |
+| P2.6 | `capitalize`, `swapcase`, `title`, `upper`, `lower` (the case maps: done, `4c9e90a5`), `isalnum`, `isalpha`, `isdigit`, `islower`, `isspace`, `istitle`, `isupper`, `isnumeric`, `isdecimal` (the nine predicates: done, `b1328a4f`), `mod` (done, `cfd1ae6d`), `encode`, `decode` (done, `5ce3a8ea`), `translate` (done, `4c9e90a5`) |
 
 The facade (C0) declares all 53; a row is complete when its computation lands.
 
@@ -1051,7 +1132,7 @@ The facade (C0) declares all 53; a row is complete when its computation lands.
 |---|---|---|---|
 | String methods, rule 1 (`asarray`) | `capitalize`, `center`, `expandtabs`, `ljust`, `lower`, `partition`, `rjust`, `rpartition`, `swapcase`, `title`, `translate`, `upper`, `zfill` | chararray; `U` owning copy, `S` view | P2.5 / P2.6 / C4 (`center`, `expandtabs`, `ljust`, `partition`, `rjust`, `rpartition`, `zfill`: done, `ffa74606`; `capitalize`, `lower`, `swapcase`, `title`, `translate`, `upper`: done, `4c9e90a5`) |
 | String methods, rule 2 (ufunc wrap) | `lstrip`, `rstrip`, `strip`, `replace` | chararray view | P2.5 (done, `66b68e96`) |
-| String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done) |
+| String methods, rule 3 | `decode`, `encode`, `join` | ndarray of text | P2.6 / C3 (`join`: phase 4, done; `decode`, `encode`: done, `5ce3a8ea`) |
 | String methods, rule 4 | `count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper` | ndarray of int64 / bool | P2.5 / P2.6 (`count`, `endswith`, `find`, `index`, `rfind`, `rindex`, `startswith`: done, `6d06fa3c`; the nine predicates: done, `b1328a4f`) |
 | String methods, rule 5 | `split`, `rsplit`, `splitlines` | object array of lists (`NDListArray`) | C3 (phase 4, done) |
 | Views and copies (the finalize hook) | `T`, `mT`, `transpose`, `swapaxes`, `reshape`, `ravel`, `flatten`, `squeeze`, `copy`, `take`, `repeat`, `compress`, `diagonal`, `real`, `imag`, `view`, `astype`, `byteswap`, `flat` | chararray (`diagonal`, `imag` read-only); `astype` / `view` to a numeric dtype per §1.6 | C2 |

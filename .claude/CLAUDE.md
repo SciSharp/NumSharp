@@ -499,9 +499,25 @@ int64 list id per element (`Ids`, NumPy's 8-byte object pointer) into a shared, 
 each list a range of pieces, each piece its exact units, a per-piece `np.str_` flag — unicodeobject.c returns the element's
 own `np.str_` when the separator is longer or of a wider kind; the repr prints `np.str_('ab')`). Every structural member is
 the same NDArray operation on `Ids` (a view shares the ids, a copy copies them, the lists stay shared), so strides, flags,
-base and errors are NumPy's for the object array, and a view costs one NumSharp view (0.16–0.4 µs). Basic indexing
-gives a view, a full integer index a NEW 1-D piece array (NumPy: the list itself, which `item()` gives —
-`[Misaligned]`). `join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's
+base and errors are NumPy's for the object array, and a view costs one NumSharp view (0.16–0.4 µs). The members that
+read and write the lists' VALUES (`Char/NDListArray.{Engine,Compare,Sort,Reduce,Arithmetic,Assign,TextOperands}.cs`) are
+NumPy's object loops over CPython's list semantics: `list_richcompare` (ordering a str item against a bytes item is
+CPython's TypeError), the truth members over non-emptiness, `astype` (object converts only under `'unsafe'`), the sorts
+over the lists' dense ranks (NumPy's introsort for the default kind, so equal lists land as NumPy's do; timsort for
+`'stable'`), `searchsorted` with `npy_binsearch`'s carried bounds, the reductions in NumPy's flat reduction order
+(`initial` / `where=` / `out=`), `+` / `*` / `dot` with CPython's errors, and assignment as pointer copies (a list of
+another heap is appended first; the writeability before the index). Basic indexing gives a view; one integer per axis in
+slice notation (`r["0"]`) a 0-d list array that STANDS FOR NumPy's Python list (`IsStandIn`: against an ndarray it is its
+items, `np.asarray(list)`; `==` / `!=` then run NDArray's operators, whose no-loop pair is NumPy's all-False constant);
+the `long[]` / `int[]` indexer a NEW 1-D piece array (NumPy: the list itself, which `item()` gives — `[Misaligned]`).
+A NumPy result holding a non-list object (an int identity, `imag`'s zeros) is `NotSupportedException`; `dtype` / `data`
+need an object dtype (absent by design), `ctypes` / `dump` / `dumps` exist on no NumSharp array. Oracle section
+`strcharlist` (12,450 cases, strict), unit tests `ListArrayMembersTests` / `ListArrayComputeTests`. Speed (`63f363f2`): the
+members that read many lists go through `ListPointers` (raw pointers into a heap; never held across an append), the
+builders create their heap once at the counted size (`NDListHeap.Reserved`, whose appends THROW past the reservation —
+the pool's size-bucket slack hid an under-sized heap completely, no crash and right values), and a member that selects
+lists (`max` / `min` / `clip`) shares the array's heap; 81 benchmark cells run 1.9–460× NumPy.
+`join` takes `seq`'s class, as wide as the longest result; over an `NDListArray` it raises NumPy 2.4.2's
 own `TypeError: currently only the no-argument instantiation is supported; use np.dtype instead.` (`ObjectDType(n)`:
 NumPy cannot finish `np.char.join(' ', np.char.split(a))`). In the object path a C# `null` IS Python's None (an object
 array), where the rest of the module raises `ArgumentNullException`. Oracle section `strcharobj` (3,625 cases, strict,
@@ -512,7 +528,9 @@ TRAPS: (1) under `DOTNET_TieredCompilation=0` CoreLib's ReadyToRun bodies are ne
 span searches ran 3–4× slower inside a per-element loop than with `DOTNET_ReadyToRun=0` (U `split(' ')` 324 vs 61 µs per
 1K) — the engine copies pieces inline and searches with its own vectors (`FindUnit` / `FindNeedle`); benchmark text code
 under the default runtime, and check TC=0 too. (2) A raw U+2028 / U+2029 / U+0085 in a C# string literal or comment is a
-C# LINE TERMINATOR (CS1010 / CS1056 far from the cause); write them as `\u2028` escapes. (3) Iterating a Python str that
+C# LINE TERMINATOR (CS1010 / CS1056 far from the cause); write them as `\u2028` escapes. (6) Two splits of the SAME
+text build heaps that number their lists identically, so assigning the lists of a second split of the same text cannot
+show a foreign id stored without its list being imported: assign lists split from a DIFFERENT text. (3) Iterating a Python str that
 holds U+110000 creates it as a one-character str (CPython's SystemError): encode such text with
 `s.encode('utf-32-le', 'surrogatepass')`, never `for c in s`. (4) `cond ? long : BigInteger` types BOTH arms BigInteger
 (the oracle decoded every int as BigInteger once; 15 string sections failed). (5) The oracle harness reads an
@@ -554,6 +572,9 @@ chararray as ONE argument object, an ndarray on the left runs np.remainder's Typ
 `unsupported operand type(s) for %`. CPython's `%` converts an ndarray argument through NumPy's slots on every path
 (`int()` / `float()` of a 0-d array only, `__index__` of an integer 0-d array only, bytes formatting's `%s` from the C-order
 buffer), so `'%e' % np.array([1, 2])` is NumPy's `only 0-dimensional arrays can be converted to Python scalars`.
+`np.@char.encode` / `decode` (`5ce3a8ea`, `APIs/np.char.codec.cs`) ARE `np.strings`' codecs, and the members
+(`Char/NDCharArray.Codec.cs`) return the function's PLAIN `S` / `U` result as it is (NumPy's `encode(self, …)`, no asarray
+step), computed from the stored text. C5 is complete.
 TRAPS: (1) a function that forwards a chararray to a DIFFERENTLY named public function (partition → `np.stack`)
 computes inside `NDCharArrayBoundary.Inside()`: the audit skips only frames named like the function, and the forward would apply
 `np.stack`'s chararray rule. (2) NumPy 2.4.2's zfill of an EMPTY element reads uninitialized memory for its sign: oracle
