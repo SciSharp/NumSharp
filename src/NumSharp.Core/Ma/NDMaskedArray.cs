@@ -185,10 +185,10 @@ namespace NumSharp
         /// <param name="source">The masked array this one derives from.</param>
         /// <returns>This array, so the call chains onto its <c>new</c> expression.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-        /// <exception cref="TypeError">The inherited text fill cannot be encoded / decoded into this array's string class
-        ///     (see <see cref="MaskedArrayModule.CheckFillValue"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">An inherited text fill for a numeric array, or a
-        ///     numeric one for a text array: the conversion computes on text.</exception>
+        /// <exception cref="TypeError">The inherited fill cannot be converted to this array's dtype: a text fill this
+        ///     array's string class cannot encode / decode, or one a numeric array cannot parse (numpy.ma's <c>Cannot convert
+        ///     fill_value … to dtype …</c>, see <see cref="MaskedArrayModule.CheckFillValue"/>; a number formats into a text
+        ///     array, which cannot fail).</exception>
         /// <remarks>
         ///     The conversion is an ARRAY cast (unsafe), so a numeric fill never raises: the default 1e20 a float64 source
         ///     materialized becomes <c>long.MinValue</c> in an int64 result and 0 in an int8 one (MSVC's out-of-range casts,
@@ -275,9 +275,6 @@ namespace NumSharp
         /// <exception cref="AttributeError">No <paramref name="fill_value"/> on the <see cref="MaskedArrayModule.masked"/>
         ///     singleton: its getter cannot materialize a default (NumPy's <c>attributes of masked are not
         ///     writeable</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A masked slot of a text array must receive a number
-        ///     formatted as text, or a text fill must be parsed as a number for a numeric array: the next phase of the
-        ///     string support.</exception>
         /// <exception cref="NotSupportedException">The stored fill cannot reach the data under NumPy's <c>same_kind</c>
         ///     rule — a fill of another kind SHARED with a derived array (an int64 fill on the bool result of
         ///     <c>ma.logical_not</c> / <c>ma.equal</c>, a complex fill on the float result of <c>ma.absolute</c>): NumPy's
@@ -289,7 +286,7 @@ namespace NumSharp
         ///     <c>result = self._data.copy('K'); np.copyto(result, fill_value, where=m)</c>. So an unmasked array never
         ///     refuses (or converts) the argument, and a fill that NumPy refuses is refused even when no slot is masked —
         ///     except a NUMBER for TEXT data: NumPy formats it (which cannot fail) and then returns the data untouched when
-        ///     nothing is masked, so that case answers here without the formatting the next phase owns.
+        ///     nothing is masked, so that case answers here without formatting it.
         ///     <para>Scoped (<c>[NDScoped]</c>): the 0-d fill scalar handed to <see cref="np.copyto(NDArray, NDArray, string, NDArray)"/> (and a converted array
         ///     fill) is reclaimed on return; only the result leaves.</para>
         /// </remarks>
@@ -302,7 +299,7 @@ namespace NumSharp
                 return _data.view();
 
             // A number given for TEXT data is formatted by `_check_fill_value` before the mask is read; the formatting
-            // cannot fail, so with nothing masked the data is the answer and the next phase's formatting is never needed —
+            // cannot fail, so with nothing masked the data is the answer and the formatting is skipped —
             // except into a StringDType(coerce=False), whose setitem takes only a str: there `_check_fill_value` raises
             // numpy.ma's "Cannot convert fill_value 0 to dtype StringDType(coerce=False)" whatever the mask holds (the
             // check below raises it).
@@ -872,10 +869,9 @@ namespace NumSharp
         /// </summary>
         /// <exception cref="TypeError">Set: a <see cref="string"/> for a numeric array (<c>Cannot set fill value of string
         ///     with array of dtype float64</c>), a C# number the dtype cannot hold (<c>Cannot convert fill_value 300 to dtype
-        ///     int8</c>), a complex for a real dtype (Python's own <c>int()</c> / <c>float()</c> text), or text the array's
-        ///     class cannot encode or decode.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Set: a number for a text array, or text for a numeric
-        ///     array that NumPy would parse (the next phase of the string support).</exception>
+        ///     int8</c>), a complex for a real dtype (Python's own <c>int()</c> / <c>float()</c> text), text the array's
+        ///     class cannot encode or decode, or bytes / a text array a numeric array cannot parse (<c>Cannot convert
+        ///     fill_value b'x' to dtype float64</c>; a number formats into a text array, which cannot fail).</exception>
         /// <exception cref="ValueError">Set: an array with dimensions written into a stored 0-d fill (NumPy's element
         ///     assignment: <c>setting an array element with a sequence.</c>, even for one element; a bool fill takes a
         ///     one-element array), or into a stored N-d fill it does not broadcast to.</exception>
@@ -945,7 +941,6 @@ namespace NumSharp
         /// <exception cref="TypeError">See <see cref="MaskedArrayModule.CheckFillValue"/>; also a complex array with
         ///     dimensions written into a stored 0-d complex fill (<c>only 0-dimensional arrays can be converted to Python
         ///     scalars</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="MaskedArrayModule.CheckFillValue"/>.</exception>
         /// <exception cref="ValueError">An array with dimensions written into a stored 0-d fill (<c>setting an array element
         ///     with a sequence.</c>; text: without the period), or one a stored N-d fill cannot broadcast.</exception>
         internal NDArray ResolveFillAssignment(object value)
@@ -2233,12 +2228,11 @@ namespace NumSharp
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
         /// <exception cref="MaskError">The mask is neither the data's shape, nor one element, nor the data's size
         ///     (<c>Mask and data not compatible: data size is 3, mask size is 2.</c>).</exception>
-        /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for numeric data (see
-        ///     <see cref="CheckFillValue"/>).</exception>
+        /// <exception cref="TypeError">A <see cref="string"/> <paramref name="fill_value"/> for numeric data, or a fill
+        ///     numpy.ma cannot convert to the data's dtype (see <see cref="CheckFillValue"/>).</exception>
         /// <exception cref="ValueError">A C# array-like holding numbers with a <c>StringDType(coerce: false)</c>
-        ///     <paramref name="dtype"/> (<c>StringDType only allows string data when string coercion is disabled.</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text mask (NumPy reads the strings' truth
-        ///     values), or a fill value that must be formatted as text or parsed as a number.</exception>
+        ///     <paramref name="dtype"/> (<c>StringDType only allows string data when string coercion is disabled.</c>), or
+        ///     text data a numeric <paramref name="dtype"/> cannot parse (<c>could not convert string to float</c>).</exception>
         /// <remarks>
         ///     <para>
         ///     <b>The mask, as NumPy reconciles it.</b> A mask of the data's shape is used as is; a ONE-element mask is
@@ -2308,7 +2302,6 @@ namespace NumSharp
         /// <returns>A boolean mask with <paramref name="d"/>'s shape: the caller's own array when it already is one (and
         ///     <paramref name="copy"/> is false), otherwise a fresh array.</returns>
         /// <exception cref="MaskError">The mask's size is neither one nor the data's size, and its shape is not the data's.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text mask (the strings' truth values).</exception>
         /// <remarks>NumPy's <c>mask = np.array(mask, copy=copy, dtype=bool)</c> returns the caller's boolean array itself
         /// when no conversion is needed, and <c>_data._mask = mask</c> then ADOPTS it: <c>x._mask is m</c>, a masked write
         /// such as <c>x[1] = masked</c> lands in the caller's array, and a write to the caller's array shows through
@@ -2365,7 +2358,6 @@ namespace NumSharp
         /// <returns>A new <see cref="NDMaskedArray"/>.</returns>
         /// <exception cref="MaskError">See <see cref="array"/>.</exception>
         /// <exception cref="TypeError">See <see cref="array"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="array"/>.</exception>
         public NDMaskedArray masked_array(object data, object mask = null, object fill_value = null, bool copy = false, DType dtype = null,
             bool? hard_mask = null, bool keep_mask = true, bool shrink = true)
             => array(data, mask, fill_value, copy, dtype, hard_mask, keep_mask, shrink);
@@ -2379,8 +2371,10 @@ namespace NumSharp
         /// <param name="a">A <see cref="NDMaskedArray"/>, <see cref="NDArray"/>, or array-like/scalar.</param>
         /// <param name="dtype">Optional dtype to cast the data to (no copy when it already matches).</param>
         /// <returns>A masked array over <paramref name="a"/>'s data (aliased when possible).</returns>
-        /// <exception cref="TypeError">A masked operand's text fill cannot be converted into a text <paramref name="dtype"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The cast converts between text and numbers.</exception>
+        /// <exception cref="TypeError">A masked operand's fill cannot be converted to <paramref name="dtype"/> (numpy.ma's
+        ///     <c>Cannot convert fill_value … to dtype …</c>).</exception>
+        /// <exception cref="ValueError">Text data that does not parse as a numeric <paramref name="dtype"/> (NumPy's
+        ///     <c>could not convert string to float: 'a'</c> / <c>invalid literal for int() with base 10</c>).</exception>
         /// <remarks>NumPy's <c>masked_array(a, dtype=dtype, copy=False, keep_mask=True, subok=False)</c>: the class
         /// constructor, so a masked operand also lends its fill value (converted to the dtype) and its hard-mask flag.
         /// Scoped by hand: a scalar/array-like operand that is materialized and then CAST leaves its pre-cast
@@ -2392,7 +2386,7 @@ namespace NumSharp
         /// <param name="a">Array-like.</param><param name="dtype">Optional dtype cast.</param>
         /// <returns><paramref name="a"/> itself, or a masked array over its data.</returns>
         /// <exception cref="TypeError">See <see cref="asarray"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="asarray"/>.</exception>
+        /// <exception cref="ValueError">See <see cref="asarray"/>.</exception>
         public NDMaskedArray asanyarray(object a, DType dtype = null)
             => a is NDMaskedArray m && (dtype is null || m.dtype.Equals(dtype)) ? m : asarray(a, dtype);
 
@@ -2540,11 +2534,10 @@ namespace NumSharp
         ///     into a real or integer dtype (Python's own <c>int()</c> / <c>float()</c> TypeError, which NumPy does not
         ///     catch: <c>int() argument must be a string, a bytes-like object or a real number, not 'complex'</c>); a text
         ///     fill whose characters the target class cannot encode or decode (<c>Cannot convert fill_value é to dtype
-        ///     |S2</c>).
+        ///     |S2</c>); bytes or a text array a numeric dtype cannot parse (<c>Cannot convert fill_value b'x' to dtype
+        ///     float64</c>, the parse error as the inner exception). A number for a text dtype is formatted (NumPy's
+        ///     <c>np.asarray(5, dtype='&lt;U2')</c> is <c>'5'</c>), which cannot fail.
         /// </exception>
-        /// <exception cref="StringComputationNotSupportedException">The conversion formats a number as text (a numeric fill
-        ///     for a text dtype, NumPy's <c>np.asarray(5, dtype='&lt;U2')</c> is <c>'5'</c>) or parses text as a number (a
-        ///     bytes or text-array fill for a numeric dtype): the computing phase of the string dtypes.</exception>
         /// <remarks>
         ///     <para>
         ///     <b>Order.</b> NumPy tests <c>isinstance(fill_value, str)</c> against the dtype's character before it converts
@@ -2690,7 +2683,6 @@ namespace NumSharp
         /// <returns>The array to store, or null for a null <paramref name="fill_value"/> (NumPy's None, which stays None:
         ///     the default is only materialized when something reads it).</returns>
         /// <exception cref="TypeError">See <see cref="CheckFillValue"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="CheckFillValue"/>.</exception>
         /// <remarks>Footgun: only for an array being BUILT. A fill stored into an EXISTING array (the getter's
         ///     materialized default, the setter's target) must be detached (<see cref="Own"/>): a scope reclaiming it would
         ///     leave the longer-lived array holding a disposed fill. Detaching every new array's fill instead left an
@@ -2791,8 +2783,8 @@ namespace NumSharp
 
         /// <summary>
         ///     True when a fill given for a TEXT dtype would be FORMATTED as text by NumPy's <c>_check_fill_value</c> (a
-        ///     number, a bool, or an array of a non-string dtype): a conversion that cannot fail, but whose result is the
-        ///     next phase's business. A <see cref="string"/>, <see cref="byte"/>[] or text array is converted between the
+        ///     number, a bool, or an array of a non-string dtype): a conversion that cannot fail (the value's <c>str()</c>).
+        ///     A <see cref="string"/>, <see cref="byte"/>[] or text array is converted between the
         ///     string classes instead.
         /// </summary>
         /// <param name="fill">The fill as the caller gave it (not null).</param>
@@ -2891,7 +2883,6 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
         /// <exception cref="TypeError">A masked operand with a non-bool <paramref name="dtype"/> (<c>No loop matching the
         ///     specified signature and casting was found for ufunc logical_and</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand (its truth values are read).</exception>
         public NDMaskedArray alltrue(object target, int? axis = 0, DType dtype = null) => LogicalReduce(target, axis, dtype, and: true);
 
         /// <summary>
@@ -2906,7 +2897,6 @@ namespace NumSharp
         /// <returns>See <see cref="alltrue"/>.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
         /// <exception cref="TypeError">A masked operand with a non-bool <paramref name="dtype"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand (its truth values are read).</exception>
         public NDMaskedArray sometrue(object target, int? axis = 0, DType dtype = null) => LogicalReduce(target, axis, dtype, and: false);
 
         /// <summary>
@@ -2924,7 +2914,6 @@ namespace NumSharp
         /// <returns>The masked reduction (see <see cref="alltrue"/>).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
         /// <exception cref="TypeError">A masked operand with a non-bool <paramref name="dtype"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand.</exception>
         /// <remarks>Scoped by hand: the filled copy, the reshaped views and the mask reduction are reclaimed; only the
         /// result's data and mask leave.</remarks>
         private NDMaskedArray LogicalReduce(object target, int? axis, DType dtype, bool and)
@@ -2997,8 +2986,6 @@ namespace NumSharp
         /// <param name="m">Array-like to coerce; null or <see cref="nomask"/> is <see cref="nomask"/>.</param>
         /// <param name="shrink">Collapse an all-False mask to <see cref="nomask"/> (default true).</param>
         /// <returns>A boolean mask array, or <see cref="nomask"/> when it shrinks to empty.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand: NumPy reads the strings'
-        ///     truth values (the next phase of the string support). An empty one converts (an empty boolean mask).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the operand's materialization and a coerced mask that shrinks to
         /// <see cref="nomask"/> are reclaimed. The shared <see cref="nomask"/> sentinel must never be disposed by
         /// the caller; a non-shrunk result is a fresh array the caller owns (NumPy's default <c>copy=False</c> would hand
@@ -3009,8 +2996,8 @@ namespace NumSharp
             // `if m is nomask: return nomask`; np.array(None, dtype=bool) is False, which shrinks to nomask as well.
             if (m is null || ReferenceEquals(m, nomask))
                 return nomask;
-            // filled(m, True): a masked array's masked slots read True (for text data that formats True as text: the
-            // next phase, raised by the fill check).
+            // filled(m, True): a masked array's masked slots read True (formatted as 'True' into text data, whose truth
+            // values are then read).
             var b = m is NDMaskedArray masked && masked._mask is not null ? masked.filled(true) : AsData(m);
             // NumPy converts by truth value: numbers via `!= 0` (NaN is True), text by non-emptiness through the
             // text-to-bool cast (refused unless empty), booleans copied.
@@ -3044,8 +3031,6 @@ namespace NumSharp
         ///     broadcast.</exception>
         /// <exception cref="AttributeError">Both operands are dtype-less scalars/lists: NumPy then reads
         ///     <c>None.names</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two non-empty text operands of one dtype (NumPy reads
-        ///     their truth values), or one text operand beside a no-mask one (see <see cref="make_mask"/>).</exception>
         /// <remarks>
         ///     <para>
         ///     NumPy's statements, in order: <c>m1 is nomask or m1 is False</c> → <c>make_mask(m2)</c> (no dtype check: a
@@ -3282,8 +3267,6 @@ namespace NumSharp
         /// <returns>The common fill value (boxed; the FIRST operand's when they are equal), or null when the two differ.</returns>
         /// <exception cref="ValueError">A fill value is an array (NumPy's deprecated non-scalar fill) and the elementwise
         ///     comparison has more than one element: Python's truth test of the comparison raises.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two text ARRAY fills: NumPy compares their text (the
-        ///     next phase of the string support).</exception>
         /// <remarks>
         ///     The comparison is Python's <c>==</c> between the two scalars: text by content (a <c>str</c> never equals a
         ///     <c>bytes</c>, so a <c>U</c> and an <c>S</c> array share no fill), numbers by value (<c>5.0 == 5</c>), and a
@@ -3374,7 +3357,6 @@ namespace NumSharp
         /// <param name="fill_value">The new fill value (null restores the dtype default).</param>
         /// <exception cref="TypeError">See <see cref="NDMaskedArray.fill_value"/>: NumPy's method IS the property setter, so
         ///     the same <c>_check_fill_value</c> runs.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="NDMaskedArray.fill_value"/>.</exception>
         public void set_fill_value(object a, object fill_value)
         {
             if (a is NDMaskedArray m)
@@ -3399,8 +3381,6 @@ namespace NumSharp
         /// <exception cref="MaskError">The mask's size is neither one nor the data's (NumPy's constructor check, raised
         ///     before the data is examined).</exception>
         /// <exception cref="TypeError">Text data: NumPy's <c>np.isfinite</c> has no loop for it, whatever the size.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text mask for numeric data (its strings'
-        ///     truth values), or a text fill written into numbers.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>a = masked_array(a, copy=copy, mask=mask, subok=True)</c>; <c>invalid =
         ///     np.logical_not(np.isfinite(a._data))</c>; <c>if not invalid.any(): return a</c>; <c>a._mask |= invalid</c>;
@@ -3546,8 +3526,6 @@ namespace NumSharp
         /// <param name="compare">The comparison, applied as <c>compare(self.data, other)</c>.</param>
         /// <returns>The masked boolean result, a 0-d unmasked one, or <see cref="NDMasked"/>.</returns>
         /// <exception cref="TypeError">No comparison loop for the pair (NumPy's text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads text, or a text fill value's truth
-        ///     is needed: the next phase.</exception>
         /// <remarks>Scoped by hand: the strong operand conversions and the combined mask's intermediates are reclaimed; only
         /// the result's data and mask leave.</remarks>
         internal NDMaskedArray ComparisonOperator(NDMaskedArray self, object other, Func<NDArray, NDArray, NDArray> compare)
@@ -3576,13 +3554,11 @@ namespace NumSharp
         /// <summary>
         ///     <c>_check_fill_value(fill, np.bool)</c> of an inherited fill: <c>np.array(np.asarray(fill, dtype=bool))</c>, the
         ///     truth of each element of the stored fill array — a number is True unless it is zero (NaN is True), a complex
-        ///     unless both parts are zero, text unless it is empty (read through the text-to-bool cast, the next phase for
-        ///     non-empty text).
+        ///     unless both parts are zero, text unless it is empty (read through the text-to-bool cast).
         /// </summary>
         /// <param name="fill">The stored fill array (0-d, or N-d for NumPy's deprecated non-scalar fill).</param>
         /// <returns>A NEW bool array of <paramref name="fill"/>'s shape, tracked by the ambient scope like the new comparison
         ///     result that stores it (the result's Yield hands it back).</returns>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text fill (its truth reads the text).</exception>
         /// <remarks>NumPy wraps the conversion in <c>except (TypeError, ValueError): fill = _check_fill_value(None, np.bool)</c>,
         ///     but casting an array to bool raises for no dtype NumPy 2.4.2 has (text casts by its emptiness), so the
         ///     fallback cannot run and is not ported.</remarks>
@@ -4726,8 +4702,6 @@ namespace NumSharp
         /// <param name="axis">Reduction axis, or null to reduce the flattened array.</param>
         /// <param name="keepdims">Keep reduced axes as size-1 (NumPy keepdims).</param>
         /// <returns>The masked reduction result (or <see cref="NDMasked"/> for a fully-masked scalar).</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose reduction would
-        ///     compute: NumPy formats the numeric identity into those slots first (the next phase).</exception>
         /// <remarks>Scoped by hand — the one scope sum/prod/min/max ride: the identity-filled copy of the data (and
         /// a materialized scalar operand) is reclaimed, as is the computed value when a fully-masked 0-D result
         /// collapses to the <see cref="NDMasked"/> singleton; only the reduction and its mask leave.</remarks>
@@ -5818,7 +5792,7 @@ namespace NumSharp
                 // Masked iff NO unmasked pair contributed: ~(slide of the not-masks). Data from the 0-filled inputs.
                 var contributed = np.not_equal(f(np.logical_not(getmaskarray(a)).astype(np.int32), np.logical_not(getmaskarray(v)).astype(np.int32), mode), NDArray.Scalar(0));
                 mask = np.logical_not(contributed);
-                // `f(filled(a, 0), filled(v, 0), mode=mode)`: over text the 0 fill is formatted first (the next phase).
+                // `f(filled(a, 0), filled(v, 0), mode=mode)`: over text the 0 fill is formatted first ('0').
                 Exception deferral = null;
                 data = f(FilledForNumericOp(a, 0, ref deferral), FilledForNumericOp(v, 0, ref deferral), mode);
                 if (deferral is not null)
@@ -6117,8 +6091,6 @@ namespace NumSharp
         /// <param name="fn">The underlying <c>np.*</c> scan (data, axis) → result.</param>
         /// <param name="axis">Scan axis, or null to scan the flattened array.</param>
         /// <returns>The masked scan.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose scan would
-        ///     compute (see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>Scoped by hand — the one scope cumsum/cumprod ride: the identity-filled copy (and a
         /// materialized scalar operand) is reclaimed; the scan and its (possibly raveled) mask leave. NumPy's
         /// <c>self.filled(0).cumsum(...)</c> over TEXT formats the identity and then refuses the dtype
@@ -6209,9 +6181,9 @@ namespace NumSharp
         /// value (converted to the result dtype) and its hard-mask flag; a plain prototype gives an unmasked result.</summary>
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype (null ⇒ prototype's).</param>
         /// <returns>A masked array of zeros.</returns>
-        /// <exception cref="TypeError">The prototype's text fill cannot be converted into a text <paramref name="dtype"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A zero must be written into text, or a fill converted
-        ///     between text and numbers (the next phase).</exception>
+        /// <exception cref="TypeError">The prototype's fill cannot be converted to the result dtype: a text class that
+        ///     cannot encode / decode it, or a text fill a numeric <paramref name="dtype"/> cannot parse (numpy.ma's
+        ///     <c>Cannot convert fill_value … to dtype …</c>).</exception>
         public NDMaskedArray zeros_like(object a, DType dtype = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
@@ -6224,7 +6196,6 @@ namespace NumSharp
         /// <param name="a">Prototype array-like.</param><param name="dtype">Override dtype.</param>
         /// <returns>A masked array of ones.</returns>
         /// <exception cref="TypeError">See <see cref="zeros_like"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">See <see cref="zeros_like"/>.</exception>
         public NDMaskedArray ones_like(object a, DType dtype = null)
         {
             // Scoped by hand: a scalar/array-like prototype is materialized only to read its shape/dtype.
@@ -6316,8 +6287,6 @@ namespace NumSharp
         ///     <paramref name="a"/>'s fill value and hardness.</returns>
         /// <exception cref="IndexError">A condition with dimensions whose shape is not <paramref name="a"/>'s
         ///     (<c>Inconsistent shape between the condition and the input (got (2,) and (3,))</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text condition (its strings' truth values,
-        ///     the next phase of the string support).</exception>
         /// <remarks>
         ///     <para>
         ///     NumPy's statements: <c>cond = make_mask(condition, shrink=False)</c>, then <c>if cshape and cshape !=
@@ -6346,7 +6315,7 @@ namespace NumSharp
             if (condShape.NDim != 0 && !condShape.dimensions.AsSpan().SequenceEqual(d.Shape.dimensions))
                 throw new IndexError("Inconsistent shape between the condition and the input " +
                                      $"(got {ArrayFormatter.ShapeTuple(condShape.dimensions)} and {ArrayFormatter.ShapeTuple(d.Shape.dimensions)})");
-            // make_mask(condition, shrink=False): always an array, a fresh one (text: the next phase unless empty).
+            // make_mask(condition, shrink=False): always an array, a fresh one (text: its strings' truth values).
             var cond = make_mask(condOperand, shrink: false);
             var source = a as NDMaskedArray;
             var existing = source?._mask;
@@ -6396,8 +6365,6 @@ namespace NumSharp
         /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (text against a number:
         ///     <c>(&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class 'numpy.dtypes.Float64DType'&gt;)</c>), or the fill check
         ///     refuses a <see cref="string"/> value for numeric data.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text (the next phase of
-        ///     the string support).</exception>
         /// <remarks>NumPy's statements: <c>output = masked_where(equal(x, value), x, copy=copy); output.fill_value =
         /// value</c>, with numpy.ma's masked <c>equal</c>: a bare scalar becomes a STRONG default-width array
         /// (<c>getdata(1.5)</c> is float64), so the comparison of float32 data runs in float64. Scoped by hand: the
@@ -6415,7 +6382,6 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="value">Value kept unmasked.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>NumPy's <c>masked_where(not_equal(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
         /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_not_equal(object a, object value, bool copy = true)
@@ -6428,7 +6394,6 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>NumPy's <c>masked_where(greater(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
         /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_greater(object a, object value, bool copy = true)
@@ -6441,7 +6406,6 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>NumPy's <c>masked_where(greater_equal(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
         /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_greater_equal(object a, object value, bool copy = true)
@@ -6455,7 +6419,6 @@ namespace NumSharp
         /// <returns>The masked array.</returns>
         /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>;
         ///     the text names <c>'less'</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>NumPy's <c>masked_where(less(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
         /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_less(object a, object value, bool copy = true)
@@ -6468,7 +6431,6 @@ namespace NumSharp
         /// <param name="a">Data.</param><param name="value">Threshold.</param><param name="copy">Copy the data.</param>
         /// <returns>The masked array.</returns>
         /// <exception cref="TypeError">NumPy's comparison has no loop for the operands (see <see cref="masked_equal"/>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>NumPy's <c>masked_where(less_equal(x, value), x, copy=copy)</c> with numpy.ma's masked comparison.
         /// Scoped by hand: the comparison only feeds masked_where's condition.</remarks>
         public NDMaskedArray masked_less_equal(object a, object value, bool copy = true)
@@ -6491,7 +6453,6 @@ namespace NumSharp
         ///     'numpy.dtypes._PyFloatDType'&gt;)</c>, whatever the data's size).</exception>
         /// <exception cref="ValueError">Array bounds whose comparison has more than one element (Python's truth test of
         ///     <c>v2 &lt; v1</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>if v2 &lt; v1: (v1, v2) = (v2, v1)</c> (a Python comparison: a NaN bound never swaps),
         ///     <c>xf = filled(x)</c>, <c>condition = (xf &gt;= v1) &amp; (xf &lt;= v2)</c> with the RAW bounds — a C# number is a
@@ -6520,7 +6481,6 @@ namespace NumSharp
         /// <exception cref="TypeError">See <see cref="masked_inside"/>; the comparison refusal names <c>'less'</c>, the
         ///     first comparison NumPy evaluates here.</exception>
         /// <exception cref="ValueError">See <see cref="masked_inside"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>
         ///     NumPy's statements: the same swap, <c>xf = filled(x)</c>, <c>condition = (xf &lt; v1) | (xf &gt; v2)</c>, then
         ///     masked_where. A NaN bound is not swapped away: <c>masked_outside(x, nan, 2.0)</c> masks <c>x &gt; 2</c>.
@@ -6576,8 +6536,6 @@ namespace NumSharp
         ///     Python scalar's class, <c>_PyFloatDType</c> / <c>_PyLongDType</c>), or a masked numeric array with a
         ///     <see cref="string"/> value (the fill check).</exception>
         /// <exception cref="DTypePromotionError">Float data with a text value (<c>np.isclose</c> cannot promote it).</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text, or a number must be
-        ///     formatted as text.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>xnew = filled(x, value)</c>, the mask from <c>isclose</c> (float) or
         ///     <c>umath.equal(xnew, value)</c>, <c>masked_array(xnew, mask=mask, copy=copy, fill_value=value)</c>, then
@@ -6600,7 +6558,7 @@ namespace NumSharp
                 throw ComparisonNoLoop("equal", data.dtype.Meta, scalarClass);
             // NumPy fills masked positions with `value` FIRST (xnew = filled(x, value)), THEN masks by
             // approximate equality — so a pre-masked slot's data becomes `value` and is re-masked. A numeric ARRAY value
-            // for text data is formatted into the masked slots (the next phase) and then refused by `equal` (no loop for
+            // for text data is formatted into the masked slots and then refused by `equal` (no loop for
             // text and numbers): the comparison runs over the unfilled text so that refusal is raised.
             Exception deferral = null;
             var xnew = FilledForNumericOp(a, value, ref deferral);
@@ -6627,7 +6585,6 @@ namespace NumSharp
         /// <exception cref="TypeError">NumPy's <c>equal</c> has no loop for the data and the value (text data with a C#
         ///     number names the Python scalar's class, <c>_PyFloatDType</c> / <c>_PyLongDType</c>; a bool names
         ///     <c>BoolDType</c>), or the fill check refuses a <see cref="string"/> value for numeric data.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The comparison reads non-empty text.</exception>
         /// <remarks>
         ///     Unlike <see cref="masked_equal"/>, NumPy compares with <c>umath.equal(x._data, value)</c> — the RAW value, a
         ///     weak Python scalar — so float16/float32 data compare at their own width (<c>masked_object(float32 [1.1],
@@ -6666,7 +6623,6 @@ namespace NumSharp
         /// <returns>The boolean comparison of the data (a masked-array <paramref name="value"/> compares by its data; its
         ///     mask joins through <see cref="WithBoundMasks"/>).</returns>
         /// <exception cref="TypeError">No loop for the pair (NumPy's class-naming UFuncTypeError).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two non-empty text operands: the next phase.</exception>
         private static NDArray CompareWithPythonValue(string ufunc, NDArray x, object value)
         {
             if (PythonScalarClass(value) is { } scalarClass && x.typecode == NPTypeCode.String)
@@ -6755,7 +6711,6 @@ namespace NumSharp
         /// <exception cref="TypeError">Python cannot order the two (<c>'&lt;' not supported between instances of 'str' and
         ///     'float'</c>, and always for a complex).</exception>
         /// <exception cref="ValueError">An array comparison with other than one element (Python's truth test).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two text arrays: NumPy compares their text.</exception>
         private static bool PythonLess(object a, object b)
         {
             if (a is NDArray or NDMaskedArray || b is NDArray or NDMaskedArray)
@@ -6856,7 +6811,6 @@ namespace NumSharp
         /// <returns>The element-wise masked maximum.</returns>
         /// <exception cref="TypeError">The operands have no comparison loop (text against numbers): NumPy's
         ///     <c>ufunc 'greater' did not contain a loop ...</c>, raised by <c>greater(a, b)</c> in that operand order.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two text operands: the comparison reads the text.</exception>
         public NDMaskedArray maximum(object a, object b)
         {
             // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed.
@@ -6872,7 +6826,6 @@ namespace NumSharp
         /// <returns>The element-wise masked minimum.</returns>
         /// <exception cref="TypeError">The operands have no comparison loop: NumPy's <c>ufunc 'less' did not contain a
         ///     loop ...</c>, naming the operands in call order.</exception>
-        /// <exception cref="StringComputationNotSupportedException">Two text operands: the comparison reads the text.</exception>
         public NDMaskedArray minimum(object a, object b)
         {
             // Scoped by hand: the masked comparison is only where's condition operand and is reclaimed. `less(a, b)`
@@ -7168,7 +7121,6 @@ namespace NumSharp
         ///     concatenated</c>).</exception>
         /// <exception cref="IncorrectShapeException">The operands' ranks or non-axis dimensions differ (NumPy's ValueError
         ///     texts).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text joined with numbers that NumPy formats.</exception>
         public NDMaskedArray concatenate(object[] arrays, int? axis = 0) => MapSeq(arrays, ds => np.concatenate(ds, axis), shrink: true);
 
         /// <summary>Stack arrays along a NEW axis (masks stacked alike).</summary>
@@ -7270,8 +7222,6 @@ namespace NumSharp
         /// <exception cref="ArgumentException">The condition is not 1-D (NumPy's ValueError <c>condition must be a 1-d
         ///     array</c>), checked before its values are read.</exception>
         /// <exception cref="IndexError">A truthy condition entry past the axis length.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text condition (its strings' truth
-        ///     values, the next phase of the string support).</exception>
         /// <remarks>NumPy's <c>MaskedArray.compress</c>: <c>condition = np.asarray(condition)</c>, then
         /// <c>_data.compress(condition, axis)</c> — whose 1-d check, nonzero and take run in NumPy's order inside
         /// <see cref="np.compress"/> — and the same compress of the mask, with <c>_update_from(self)</c>.</remarks>
@@ -7322,8 +7272,8 @@ namespace NumSharp
         /// <exception cref="ArgumentException">The operand has fewer than two dimensions (NumPy's ValueError <c>diag requires
         ///     an array of at least two dimensions</c>), or the axes are invalid.</exception>
         /// <exception cref="TypeError">A nomask text operand: the diagonal sum has no string loop.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A masked text operand: NumPy casts the diagonal to
-        ///     float64 first (<c>D.astype(None)</c>), which parses the text.</exception>
+        /// <exception cref="ValueError">A masked text operand whose diagonal does not parse as float64: NumPy casts the
+        ///     diagonal first (<c>D.astype(None)</c>: <c>could not convert string to float</c>).</exception>
         /// <remarks>
         ///     NumPy's statements: with no mask, <c>super().trace(offset, axis1, axis2).astype(dtype)</c>; with a mask,
         ///     <c>D = self.diagonal(offset, axis1, axis2); return D.astype(dtype).filled(0).sum(axis=-1)</c> — the cast comes
@@ -7347,8 +7297,6 @@ namespace NumSharp
         /// <param name="a">Data.</param>
         /// <returns>An array of int64 index arrays (the house tuple convention).</returns>
         /// <exception cref="ValueError">A 0-d operand (<c>Calling nonzero on 0d arrays is not allowed</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with elements (its truth values are
-        ///     read; a masked slot also receives the formatted <c>'0'</c>).</exception>
         /// <remarks>NumPy's <c>np.asarray(self.filled(0)).nonzero()</c>; over text the fill is formatted first, so a 0-d
         /// operand's rank refusal still wins (see <see cref="FilledForNumericOp"/>). Scoped (<c>[NDScoped]</c>): the
         /// zero-filled copy the indices are read from is reclaimed.</remarks>
@@ -7662,6 +7610,8 @@ namespace NumSharp
         ///     <c>add.reduce</c> has no string loop (<c>the resolved dtypes are not compatible with add.reduce</c>); a
         ///     <c>StringDType</c> operand with a mask (an all-False one included) stops earlier, at the masked sort's
         ///     <c>Unsuitable type ... for calculating minimum.</c></exception>
+        /// <exception cref="InvalidOperationException">Never for a caller's input: the mean of a masked text median returned
+        ///     instead of refusing (a wiring error inside NumSharp).</exception>
         /// <remarks>Scoped by hand: the compressed copy, the masked sort, the middle-index arithmetic, the gathered
         /// middles and the NaN probe (see <see cref="MedianAxisMasked"/>) are all reclaimed here; only the median
         /// and its mask leave.</remarks>
@@ -7689,8 +7639,10 @@ namespace NumSharp
                 // before anything is ordered — NumPy's Unsuitable type refusal, an all-False mask included.
                 ThrowIfUnsuitableExtremum(d, "minimum");
                 np.mean(d);
-                // np.mean never returns for a string dtype; this keeps the method total if that ever changes.
-                throw NDStringUfuncs.NextPhase("median", d.dtype);
+                // np.mean never returns for a fixed-width string dtype (its add.reduce refuses), and a StringDType operand
+                // stopped at the masked sort above: reaching this line is a wiring error inside NumSharp, not an answer.
+                throw new InvalidOperationException(
+                    $"np.mean returned for a {d.dtype.ToString(true)} operand; numpy.ma's median of text has no result to return.");
             }
             if (axis is null)
             {
@@ -7962,8 +7914,6 @@ namespace NumSharp
         /// treat masked as 0).</param>
         /// <returns>The masked dot product, soft with the default fill value: an array result always carries a mask ARRAY
         ///     (all-False when every slot has a valid pair); a 0-d result is unmasked or carries a 0-d True mask.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose product would
-        ///     compute (NumPy formats the 0 fill into it; see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>Scoped by hand: the propagated operands, the zero-filled copies, the validity indicators and
         /// their product are reclaimed; only the product and its mask leave. Over text NumPy's product refuses by dtype
         /// (<c>data type must provide an itemsize</c>, or a scalar operand's multiply loop) after formatting the fill, and
@@ -8010,8 +7960,6 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The last axes differ (<c>shapes (3,) and (1,) not aligned: ...</c>);
         ///     a 0-d operand counts as one element.</exception>
         /// <exception cref="ValueError">A text operand (<c>data type must provide an itemsize</c>).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose product would
-        ///     compute (see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>NumPy's statements: <c>fa = filled(a, 0); fb = filled(b, 0)</c>; a 0-d one is reshaped to <c>(1,)</c>
         /// (so a scalar operand is a one-element vector, not np.inner's scalar product); then <c>np.inner(fa, fb)</c>
         /// viewed as a masked array with no mask. Scoped by hand: the zero-filled operand copies only feed the
@@ -8037,8 +7985,6 @@ namespace NumSharp
         /// masked (NumPy's <c>ma.outer</c>).</summary>
         /// <param name="a">Left operand.</param><param name="b">Right operand.</param>
         /// <returns>The masked outer product.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with a masked slot whose product would
-        ///     compute (see <see cref="FilledForNumericOp"/>).</exception>
         /// <remarks>Scoped by hand: the zero-filled operand copies, the stand-in all-False masks and the raveled /
         /// reshaped mask views are reclaimed; only the product and its mask leave. Over text NumPy's
         /// <c>np.outer(filled(a, 0).ravel(), ...)</c> refuses by dtype (the multiply loops) after formatting the
@@ -8782,8 +8728,6 @@ namespace NumSharp
         /// <exception cref="InvalidCastException"><paramref name="values"/> cannot reach the data's dtype by a same_kind cast
         ///     (<c>Cannot cast scalar from dtype('float64') to dtype('int64') according to the rule 'same_kind'</c>; text
         ///     values for numeric data whatever the mask holds).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Numbers written into text data (NumPy formats them
-        ///     as text: the next phase of the string support).</exception>
         /// <remarks>
         ///     NumPy's copies all use <c>np.copyto</c>'s default <c>same_kind</c> casting: a float written into int data is
         ///     refused, an int64 written into int8 data wraps.
@@ -9044,7 +8988,6 @@ namespace NumSharp
         /// <see cref="SortFill"/>).</param>
         /// <returns>The sorted masked array — a copy finalized from <paramref name="a"/>: its hard-mask flag and fill value.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is outside the operand.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with elements to compare.</exception>
         /// <remarks>
         ///     NumPy's statements: <c>a = np.array(a, copy=True, subok=True)</c> (a copy that keeps the subclass, so it
         ///     finalizes from the operand), <c>a = a.flatten(); axis = 0</c> for <c>axis=None</c>, then
@@ -9093,7 +9036,6 @@ namespace NumSharp
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices.</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with two or more elements to order.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): the filled sort keys (and an array-like operand this method had to
         /// materialize) are reclaimed; only the index array leaves.</remarks>
         [NDScoped]
@@ -9117,7 +9059,6 @@ namespace NumSharp
         /// <param name="endwith">True (default) sends masked entries to the END; false to the FRONT.</param>
         /// <param name="fill_value">Override the masked sort key; null uses the endwith default.</param>
         /// <returns>An int64 <see cref="NDArray"/> of sort indices (1-D for an operand of two or more dimensions).</returns>
-        /// <exception cref="StringComputationNotSupportedException">A text operand with two or more elements to order.</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>): an array-like operand materialized to read its rank is reclaimed.</remarks>
         [NDScoped]
         public NDArray argsort(object a, bool endwith = true, object fill_value = null)

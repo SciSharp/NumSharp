@@ -20,12 +20,13 @@ namespace NumSharp.Backends
         ///     input gives shape (1,)).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before every shortcut (empty,
         ///     0-d and one-element inputs included).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string input or a string <paramref name="dtype"/> that
-        ///     NumPy computes on (the next phase of NumSharp's string support).</exception>
+        /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
+        ///     multiply loop accumulates text).</exception>
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number.</exception>
         public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's cumprod checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // NumPy reads it), then refuses with its verbatim text.
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("cumprod", arr, axis_, dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceCumMul(p, axis_, dtype));

@@ -103,8 +103,8 @@ namespace NumSharp
 
         /// <summary>
         ///     Whether this 0-d object is the stand-in for the Python <c>str</c> / <c>bytes</c> (or NumPy scalar) an element
-        ///     access returns in NumPy, not a real 0-d chararray. It prints as a plain 0-d array; the comparison operators of
-        ///     the next phase must read it as the scalar it stands for (a Python <c>str</c> compares without stripping).
+        ///     access returns in NumPy, not a real 0-d chararray. It prints as a plain 0-d array, and the comparison operators
+        ///     read it as the scalar it stands for (a Python <c>str</c> compares without stripping).
         /// </summary>
         internal bool IsScalarStandIn { get; private set; }
 

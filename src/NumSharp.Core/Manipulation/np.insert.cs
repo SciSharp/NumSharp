@@ -421,7 +421,8 @@ namespace NumSharp
         ///     contain a loop …</c>), or a one-element float within bounds (<c>slice indices must be integers …</c>).</exception>
         /// <exception cref="IndexError">A float / complex <paramref name="obj"/> of any size but one (<c>arrays used as indices
         ///     must be of integer (or boolean) type</c>), or a one-element float out of bounds.</exception>
-        /// <exception cref="StringComputationNotSupportedException">The values are converted between text and numbers.</exception>
+        /// <exception cref="ValueError">Text values for a numeric array that do not parse as its number type (NumPy converts
+        ///     the values with <c>array(values, dtype=arr.dtype)</c>: <c>could not convert string to float</c>).</exception>
         /// <remarks>Scoped by <c>[NDScoped]</c>: the same transient set as the long-obj overload, plus the
         ///     bool-mask flatnonzero temp, is released on return.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
@@ -666,8 +667,8 @@ namespace NumSharp
         /// <param name="values">The values to insert (converted, as NumPy does, before the slice error).</param>
         /// <param name="axis">The normalized axis.</param>
         /// <returns>The exception to throw.</returns>
-        /// <exception cref="StringComputationNotSupportedException">Thrown (not returned) when converting the values parses
-        ///     text into numbers — NumPy's step before its slice error.</exception>
+        /// <exception cref="ValueError">Thrown (not returned) when converting the values parses text that is not a number
+        ///     — NumPy's step before its slice error.</exception>
         /// <exception cref="UnicodeError">Thrown (not returned) when the values do not convert between the string classes.</exception>
         private static Exception InsertNonIntegerObj(NDArray arr, NDArray obj, NDArray values, int axis)
         {

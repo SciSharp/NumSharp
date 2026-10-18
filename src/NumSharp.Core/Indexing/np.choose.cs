@@ -264,8 +264,8 @@ namespace NumSharp
             // Fixed-width strings: NumPy's ConvertToCommonType over DESCRIPTORS — the widest choice's width, S + U
             // giving U; a Python number next to a string has no common dtype (TypeError). A numeric choice array is
             // FORMATTED into that descriptor, which cannot fail — so NumPy's later checks (the index cast, the broadcast,
-            // out=, the index range) still decide, and the formatting is the computational phase only where the result
-            // reads a formatted element (see step 6). The gather kernels copy elemBytes bytes, any width.
+            // out=, the index range) still decide, and the formatted elements are read where the result takes them (see
+            // step 6). The gather kernels copy elemBytes bytes, any width.
             DType stringDescr = null;
             if (anyString)
             {

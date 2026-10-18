@@ -20,12 +20,12 @@ namespace NumSharp.Backends
         ///     input gives shape (1,)).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before every shortcut (empty,
         ///     0-d and one-element inputs included).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string input or a string <paramref name="dtype"/> that
-        ///     NumPy computes on (the next phase of NumSharp's string support).</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim
+        ///     text). A <c>StringDType</c> input computes (the concatenations).</exception>
         public override unsafe NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's cumsum checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // NumPy reads it), then refuses with its verbatim text (fixed width) or computes on the text (StringDType).
             // StringDType: NumPy's add.accumulate computes (strings plan D18) once its checks passed.
             if (Strings.NDStringUfuncs.VStringReduces("cumsum", arr, axis_, dtype))
                 return Strings.NDVStringReduction.CumSum(arr, axis_, null);

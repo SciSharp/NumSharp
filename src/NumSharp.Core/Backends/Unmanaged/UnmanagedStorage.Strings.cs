@@ -41,17 +41,20 @@ namespace NumSharp.Backends
         internal VStringArraySlice VStringSlice => InternalArray as VStringArraySlice;
 
         /// <summary>
-        ///     The refusal of a text route that has no <c>StringDType</c> form yet: a <see cref="NotSupportedException"/> naming
-        ///     the descriptor and the plan, thrown before any byte of the 16-byte cells is read as fixed-width text.
+        ///     The loud refusal of a raw or fixed-width route reached by a <c>StringDType</c> operand: a
+        ///     <see cref="NotSupportedException"/> naming the descriptor, thrown before any byte of the 16-byte cells is read
+        ///     as fixed-width text (rule 2 of <c>docs/plans/strings-phase1-completion.md</c> §3). Every <c>np.*</c> function
+        ///     answers a <c>StringDType</c> operand through its own route first (computing as NumPy does, or raising NumPy's
+        ///     refusal), so reaching this is a NumSharp wiring gap, never NumPy's answer.
         /// </summary>
         /// <param name="descr">The <c>StringDType</c> descriptor of the refused operand.</param>
         /// <param name="operation">The operation, when the caller knows it (<c>"astype"</c>, <c>"np.concatenate"</c>).</param>
         /// <returns>The exception to throw.</returns>
         internal static NotSupportedException VStringNotSupported(DType descr, string operation = null)
             => new NotSupportedException(
-                (operation is null ? "This operation" : operation) + $" does not support {descr} arrays yet: NEP 55 StringDType " +
-                "arrays are being completed in strings phase 1 (docs/plans/strings-phase1-completion.md), and a route without " +
-                "its StringDType form refuses rather than reading the 16-byte cells as fixed-width text.");
+                (operation is null ? "This operation" : operation) + $" reached a route without a {descr} form: NumSharp " +
+                "refuses rather than read the 16-byte StringDType cells as fixed-width text. Every np.* function answers " +
+                "StringDType through its own route, so this is a NumSharp wiring gap; please report the call that reached it.");
 
         /// <summary>
         ///     Allocates a string storage of <paramref name="shape"/>'s dimensions — the string half of NumPy's

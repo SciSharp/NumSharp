@@ -523,7 +523,7 @@ namespace NumSharp
         ///     <para>NumPy's <c>_comparison</c> also gives the result self's attributes, the fill value cast to bool
         ///     (<c>_check_fill_value(fill, np.bool)</c>, which falls back to the default instead of raising). No set
         ///     operation reads them — in1d concatenates the comparison into a new array, intersect1d indexes with it,
-        ///     unique keeps its data — so they are not computed (for a text fill the cast to bool is the next phase).</para>
+        ///     unique keeps its data — so they are not computed (a text fill would read as its truth, non-empty text True).</para>
         /// </remarks>
         private NDMaskedArray MaskedEquality(NDMaskedArray self, NDMaskedArray other, bool equal)
         {

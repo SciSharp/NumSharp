@@ -19,7 +19,10 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
         /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation minimum which has
         ///     no identity", NumPy's ValueError).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string input NumPy computes on (the next phase).</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim
+        ///     text). A <c>StringDType</c> input computes.</exception>
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number
+        ///     (NumPy casts the text first: <c>could not convert string to float</c>).</exception>
         /// <remarks><see cref="NDAnchoredAttribute"/>: the reduction engines read <paramref name="arr"/>'s raw address,
         ///     and every front door — <c>np.min</c>, <c>np.amin</c>, <c>ndarray.min</c>, <see cref="AMin"/> — reaches them
         ///     through this method, which opens no scope; the weaver roots <paramref name="arr"/> until it returns (see
@@ -28,7 +31,7 @@ namespace NumSharp.Backends
         public override NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's min checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // NumPy reads it), then refuses with its verbatim text (fixed width) or computes on the text (StringDType).
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("min", arr, axis_, dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceAMin(p, axis_, keepdims, dtype));

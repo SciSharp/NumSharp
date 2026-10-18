@@ -406,7 +406,7 @@ namespace NumSharp
         /// <exception cref="TypeError">Not integer or bool: <c>only int indices permitted</c>.</exception>
         /// <remarks>
         ///     NumSharp used to cast any dtype to int64 (<c>unravel_index(np.array(new[] { 1.7 }), …)</c> read index 1) and to
-        ///     defer text to the next phase; NumPy refuses both before reading an element. NumSharp's char counts as an
+        ///     refuse text as a later phase's work; NumPy refuses both before reading an element. NumSharp's char counts as an
         ///     integer (its uint16 storage).
         /// </remarks>
         internal static void ThrowIfNotIntIndices(NDArray indices)

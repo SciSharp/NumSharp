@@ -544,6 +544,13 @@ namespace NumSharp.Backends.Strings
             string input = a.dtype.Meta.ToString();
             // The reduction signature's first slot: dtype= wins, then the out's class, else None.
             string first = dtype is not null ? dtype.Meta.ToString() : @out is not null ? DispatchClass(@out) : "None";
+            // An INTEGER out under multiply (any of the eight widths) meets the StringDType repeat promoter first: it finds
+            // the loop (int64 or uint64, StringDType) -> StringDType, which is not reduce-compatible (its first input and
+            // its output differ), so promote_and_get_ufuncimpl fixes the first slot to that output class and retries with
+            // (StringDType, StringDType), which has no loop (probed: np.prod(T, out=int8) and np.cumprod(T, out=uint64)
+            // both name two StringDType classes; a float / bool / complex out names its own class).
+            if (ufunc == "multiply" && dtype is null && @out is not null && IsRepeatCount(@out.dtype))
+                first = input;
             bool loopExists = ufunc is "add" or "maximum" or "minimum";
             if (!loopExists)
                 return VStringNoLoop(ufunc, new[] { first, input }, dtype is not null ? first : "None");

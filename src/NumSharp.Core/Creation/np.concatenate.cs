@@ -46,8 +46,9 @@ namespace NumSharp
         ///     <paramref name="out"/> has the wrong rank or shape (NumPy's ValueError texts).</exception>
         /// <exception cref="InvalidCastException">An input does not cast to the result dtype under
         ///     <paramref name="casting"/> (NumPy's TypeError text).</exception>
-        /// <exception cref="StringComputationNotSupportedException">Text joined with numbers that NumPy formats or parses
-        ///     (see the string route, <c>np.concatenate.Strings.cs</c>).</exception>
+        /// <exception cref="ValueError">Numbers joined into a numeric <paramref name="dtype"/> with text that does not parse
+        ///     as that number (the string route, <c>np.concatenate.Strings.cs</c>, formats numbers into a text result and parses
+        ///     text into a numeric one).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.concatenate.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         public static NDArray concatenate(

@@ -12,9 +12,8 @@ namespace NumSharp.Tests.Backends.Strings
     ///     the rule it broke.
     /// </summary>
     /// <remarks>
-    ///     A call NumPy answers by computing on text (concatenation, comparisons, sorting, text-to-number parsing) throws
-    ///     <see cref="StringComputationNotSupportedException"/> in this phase; every NumPy refusal is reproduced with
-    ///     NumPy's text. Exception types follow the house map: NumPy's <c>ValueError</c> for a failed broadcast is
+    ///     A call NumPy answers by computing on text (concatenation, comparisons, sorting, text-to-number parsing) computes
+    ///     NumPy's result; every NumPy refusal is reproduced with NumPy's text, in NumPy's order. Exception types follow the house map: NumPy's <c>ValueError</c> for a failed broadcast is
     ///     <see cref="IncorrectShapeException"/> without out= / where= and <see cref="ArgumentException"/> with them, the
     ///     no-loop <c>TypeError</c> of a request NumPy cannot resolve at all is <see cref="IncorrectTypeException"/>, and a
     ///     non-bool where= mask is <see cref="ArgumentException"/>.

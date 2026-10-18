@@ -671,14 +671,5 @@ namespace NumSharp.Backends.Strings
                     return false;
             return true;
         }
-
-        /// <summary>The refusal for a copy between a string and a numeric storage.</summary>
-        /// <param name="src">The source storage.</param>
-        /// <param name="dst">The destination storage.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static StringComputationNotSupportedException MixedKinds(UnmanagedStorage src, UnmanagedStorage dst)
-            => new StringComputationNotSupportedException(
-                $"Cannot copy {src.Descr.ToString(true)} data into a {dst.Descr.ToString(true)} array: converting between numbers and " +
-                "text is not part of NumSharp's fixed-width string storage phase yet (string arrays copy only between string dtypes).");
     }
 }

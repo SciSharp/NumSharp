@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Strings;
 
 // =============================================================================
 // NDMatrix.Reductions.cs — matrix.sum / mean / prod / std / var / any / all / max / min / argmax / argmin / ptp
@@ -137,6 +138,52 @@ namespace NumSharp
         private long ReduceCount(int? axis)
             => axis is null ? size : Shape.dimensions[DefaultEngine.NormalizeAxis(axis.Value, ndim)];
 
+        /// <summary>
+        ///     The text form of <c>add.reduce</c> / <c>multiply.reduce(self, axis, dtype, out, keepdims=True)</c>, the
+        ///     reduction NumPy's <c>matrix.sum</c> / <c>matrix.prod</c> (and <c>_mean</c>'s sum) run: when this matrix or
+        ///     <paramref name="out"/> holds text (<c>S</c>, <c>U</c> or <c>StringDType</c>), NumPy resolves a text loop on
+        ///     (out, self) — the <c>StringDType</c> concatenation of a <c>StringDType</c> or <c>U</c> matrix into a
+        ///     <c>StringDType</c> out, the string repeat of integer counts into a text out — or refuses.
+        /// </summary>
+        /// <param name="op">The NumPy function whose reduction this is (<c>"sum"</c> or <c>"prod"</c>).</param>
+        /// <param name="axis">The axis as the caller passed it, or null for every axis.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="out">The out matrix (the kept shape).</param>
+        /// <returns>True when a text loop computed into <paramref name="out"/>; false when no text is involved (the caller's
+        ///     numeric path continues).</returns>
+        /// <exception cref="ValueError">A read-only out, an out of the wrong shape, two or more axes for a loop that is not
+        ///     reorderable, or an empty reduction without identity.</exception>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal.</exception>
+        /// <exception cref="OverflowException">A repeat past <c>2^63 - 1</c> characters (the repeat's own checks).</exception>
+        [NDScopedCovered]
+        private bool ReduceTextInto(string op, int? axis, DType dtype, NDMatrix @out)
+        {
+            // A StringDType matrix: its loop resolution (a dtype= request, an out of another class or multiply have no
+            // loop: refused there), then the concatenation into out.
+            if (NDStringUfuncs.VStringReduces(op, this, axis, dtype, @out, loopOnly: true))
+            {
+                NDVStringReduction.SumNumPy(op, this, NormalizedAxis(axis), keepdims: true, @out);
+                return true;
+            }
+            switch (NDStringUfuncs.ReduceIntoOutRoute(op, this, axis, @out, dtype))
+            {
+                case NDStringUfuncs.TextOutReduce.Concatenate:
+                    NDVStringReduction.SumNumPyOfCast(this, NormalizedAxis(axis), keepdims: true, @out);
+                    return true;
+                case NDStringUfuncs.TextOutReduce.Repeat:
+                    NDStringRepeatReduction.ReduceNumPy(this, axis, keepdims: true, @out);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>The axis counted from the front (a validated axis), or null for every axis.</summary>
+        /// <param name="axis">The axis as the caller passed it, already validated.</param>
+        /// <returns>The non-negative axis, or null.</returns>
+        private int? NormalizedAxis(int? axis) => axis is { } ax ? (ax < 0 ? ax + ndim : ax) : null;
+
         #endregion
 
         #region sum / prod / mean
@@ -180,6 +227,11 @@ namespace NumSharp
                 return FromWrapped(TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype), this);
             }
 
+            // Text (this matrix or out): add.reduce's text loop resolution answers — the concatenation computes into
+            // out, everything else is NumPy's refusal.
+            if (ReduceTextInto("sum", axis, dtype, @out))
+                return axis is null ? ScalarFrom(@out) : @out;
+
             // NumPy's reduce prologue runs before an element is read; the loop and the unsafe store are the
             // file header's out= rule.
             ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "add");
@@ -215,6 +267,11 @@ namespace NumSharp
                     return TensorEngine.ReduceProduct(this, null, keepdims: false, dtype);
                 return FromWrapped(TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype), this);
             }
+
+            // Text (this matrix or out): multiply.reduce's text loop resolution answers — integer counts into a text out
+            // repeat the out's first count, everything else is NumPy's refusal.
+            if (ReduceTextInto("prod", axis, dtype, @out))
+                return axis is null ? ScalarFrom(@out) : @out;
 
             // NumPy's reduce prologue runs before an element is read; the loop is the file header's out= rule.
             ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "multiply");
@@ -268,6 +325,21 @@ namespace NumSharp
                     loop = np.float64;
                 else if (typecode == NPTypeCode.Half)
                     loop = np.float32;
+            }
+
+            // Text without an implicit loop (a float, complex or text matrix): _count_reduce_items validates the axis,
+            // then umr_sum's text loop resolution answers; a sum it computed into out (the StringDType concatenation)
+            // meets true_divide(ret, rcount, out=ret), which has no text loop (NumPy's division refusal). An integer, bool
+            // or float16 matrix sums in its implicit loop and casts the sum into a text out: the numeric path below,
+            // whose division refuses the same way.
+            if (loop is null && (NDStringUfuncs.IsText(this) || NDStringUfuncs.IsText(@out)))
+            {
+                long rcount = ReduceCount(axis);
+                if (ReduceTextInto("sum", axis, null, @out))
+                {
+                    DefaultEngine.DivideByCountLikeNumPy(@out, rcount);
+                    return axis is null ? ScalarFrom(@out) : @out;
+                }
             }
 
             ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "add");
@@ -386,6 +458,23 @@ namespace NumSharp
         [NDScopedCovered]
         private void StoreVariance(int? axis, DType dtype, NDMatrix @out, int ddof)
         {
+            // _var's last statement, ret = umr_sum(x, axis, dtype, out, keepdims): without dtype= a float or complex
+            // matrix keeps its deviations' float dtype (a complex one's (x * conj(x)).real is float64), and a text out
+            // meets add.reduce's loop resolution on (out, x), which has no loop. NumPy validated the axis first
+            // (_count_reduce_items), the mean and the deviations cannot fail, and umr_sum parses out= (its read-only
+            // check) before it resolves the loop. (An integer or bool matrix sums in float64 and the division refuses
+            // the text out; a text matrix is refused by the mean's own reduction; both run below.)
+            if (dtype is null && NDStringUfuncs.IsText(@out) && (typecode.IsFloatingPoint() || typecode == NPTypeCode.Complex))
+            {
+                ReduceCount(axis);
+                if (!@out.Shape.IsWriteable)
+                    throw new ValueError("output array is read-only");
+                DType deviations = typecode == NPTypeCode.Complex ? np.float64 : this.dtype;
+                throw NDStringUfuncs.IsVString(@out)
+                    ? NDStringUfuncs.VStringNoLoop("add", new[] { NDStringUfuncs.DispatchClass(@out), deviations.Meta.ToString() })
+                    : NDStringUfuncs.ReduceOutError("add", deviations, @out.dtype, accumulate: false);
+            }
+
             ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "add");
             if (TensorEngine is not DefaultEngine engine)
                 throw new NotSupportedException("matrix.var / matrix.std with out= need NumSharp's DefaultEngine.");

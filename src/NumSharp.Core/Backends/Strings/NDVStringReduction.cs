@@ -178,6 +178,40 @@ namespace NumSharp.Backends.Strings
             return Sum(a, axis, keepdims, @out);
         }
 
+        /// <summary>
+        ///     <c>add.reduce(u, axis, out=out, keepdims=keepdims)</c> of a <c>U</c> input into a <c>StringDType</c> out: NumPy's
+        ///     <c>StringDType</c> add promoter pairs <c>StringDType</c> with <c>StrDType</c>, so the loop is the
+        ///     <c>StringDType</c> concatenation over the input cast to the default <c>StringDType()</c>
+        ///     (<c>np.trace(np.array([['c', 'a'], ['x', 'b']]), out=T)</c> is <c>'cb'</c>, probed).
+        ///     <c>PyUFunc_ReduceWrapper</c>'s checks (not reorderable, the out's rank and shape, the missing identity) read
+        ///     only shapes, so they run on the <c>U</c> input in NumPy's order; the iterator then casts the input, which is
+        ///     where an invalid code point would be reported.
+        /// </summary>
+        /// <param name="u">The <c>U</c> input (the caller resolved the loop:
+        ///     <see cref="NDStringUfuncs.TextOutReduce.Concatenate"/>).</param>
+        /// <param name="axis">The normalized axis, or null for every axis.</param>
+        /// <param name="keepdims">Keep the reduced axis.</param>
+        /// <param name="out">The <c>StringDType</c> out (writeable).</param>
+        /// <returns><paramref name="out"/> itself.</returns>
+        /// <exception cref="ValueError">Two or more reduced axes, an out of the wrong rank or length, or an empty reduction.</exception>
+        /// <exception cref="IncorrectShapeException">The out does not broadcast against the result.</exception>
+        /// <exception cref="TypeError">A <c>U</c> unit that is not a valid code point (the cast's
+        ///     <c>Invalid unicode code point found</c>).</exception>
+        internal static NDArray SumNumPyOfCast(NDArray u, int? axis, bool keepdims, NDArray @out)
+        {
+            // The loop resolution cannot refuse here: a reduction (unlike an accumulation) has no uniform-descriptor check,
+            // and the cast's StringDType() NA rule is compatible with every out's (NumPy computes into an out with an NA
+            // object, probed).
+            int[] axes = axis is { } ax ? new[] { ax } : null;
+            if (NDStringUfuncs.VStringNotReorderable("add", u, axes) is { } many)
+                throw many;
+            ReductionArguments.ValidateOperands(u, ReductionArguments.AxisFlags(u.ndim, axis), keepdims, @out, null, "add");
+            if (NDStringUfuncs.VStringNoIdentity("add", u, axes) is { } empty)
+                throw empty;
+            using var t = NDVStringComparison.ToDefaultVString(u);
+            return Sum(t, axis, keepdims, @out);
+        }
+
         /// <summary>The reductions <see cref="Reduce"/> runs.</summary>
         private enum ReduceKind
         {
@@ -951,9 +985,55 @@ namespace NumSharp.Backends.Strings
         ///         input included, as its numeric accumulation does.
         ///     </para>
         /// </remarks>
-        internal static NDArray CumSum(NDArray a, int? axis, NDArray @out)
+        internal static NDArray CumSum(NDArray a, int? axis, NDArray @out) => CumSum(a, axis, @out, castInput: false);
+
+        /// <summary>
+        ///     <c>add.accumulate</c> of a <c>U</c> input into a <c>StringDType</c> out: NumPy's <c>StringDType</c> add promoter
+        ///     pairs <c>StringDType</c> with <c>StrDType</c>, so the loop is the <c>StringDType</c> concatenation and the
+        ///     input is cast to the default <c>StringDType()</c> (<c>np.cumsum(np.array(['c', 'a']), out=T)</c> is
+        ///     <c>['c', 'ca']</c>, probed).
+        /// </summary>
+        /// <param name="u">The <c>U</c> input (the caller resolved the loop: <see cref="NDStringUfuncs.TextOutReduce.Concatenate"/>).</param>
+        /// <param name="axis">The axis, or null for the flattened input.</param>
+        /// <param name="out">The <c>StringDType</c> out (writeable).</param>
+        /// <returns><paramref name="out"/> itself.</returns>
+        /// <exception cref="TypeError">An out with an NA object: the accumulation's uniform-descriptor check refuses it over
+        ///     the cast's <c>StringDType()</c> (<c>the resolved dtypes are not compatible with add.accumulate. Resolved
+        ///     (StringDType(na_object=None), StringDType(), StringDType(na_object=None))</c>, probed), before anything is
+        ///     cast.</exception>
+        /// <exception cref="ValueError">The iterator's shape errors (<see cref="CumSum(NDArray, int?, NDArray)"/>).</exception>
+        /// <exception cref="IncorrectShapeException">The iterator's op_axes error.</exception>
+        internal static NDArray CumSumOfCast(NDArray u, int? axis, NDArray @out)
+        {
+            // reducelike_promote_and_resolve runs before the iterator: the resolved descriptors are (out, StringDType(), out)
+            // and enforce_uniform_args compares the first two — NumPy's StringDType-to-StringDType cast from a descriptor
+            // WITHOUT an NA object to one with it is safe, the reverse is not, so only an out with an NA object is refused.
+            if (@out.dtype.VString.HasNAObject)
+            {
+                string o = @out.dtype.ToString(true);
+                throw new TypeError($"the resolved dtypes are not compatible with add.accumulate. Resolved ({o}, StringDType(), {o})");
+            }
+            return CumSum(u, axis, @out, castInput: true);
+        }
+
+        /// <summary>
+        ///     The body of <see cref="CumSum(NDArray, int?, NDArray)"/> and <see cref="CumSumOfCast"/>.
+        /// </summary>
+        /// <param name="a">The input: <c>StringDType</c>, or a <c>U</c> array when <paramref name="castInput"/> is set.</param>
+        /// <param name="axis">The axis, or null for the flattened input.</param>
+        /// <param name="out">The output, or null.</param>
+        /// <param name="castInput">Whether <paramref name="a"/> is a <c>U</c> input NumPy casts to the default
+        ///     <c>StringDType()</c>. Its descriptor differs from the loop's, so <c>PyUFunc_Accumulate</c> always takes the
+        ///     ITERATOR path (its shape errors, a longer out accepted), and the cast runs after every shape check, on exactly
+        ///     the cells the accumulation reads — the iterator's buffered cast.</param>
+        /// <returns><paramref name="out"/> itself, or the fresh result.</returns>
+        /// <exception cref="ValueError">The iterator's remapped-shapes error.</exception>
+        /// <exception cref="IncorrectShapeException">The direct path's wrong size, or the iterator's op_axes error.</exception>
+        /// <exception cref="OutOfMemoryException">NumPy's <c>MemoryError</c> texts.</exception>
+        private static NDArray CumSum(NDArray a, int? axis, NDArray @out, bool castInput)
         {
             NDArray flat = null, contiguous = null, overlapCopy = null, broadcastInput = null, outView = null, target = null;
+            NDArray castSource = null;
             bool castOut = @out is not null && !NDStringUfuncs.IsVString(@out);
             NDArray result = null;
             try
@@ -983,9 +1063,10 @@ namespace NumSharp.Backends.Strings
                         RunCumSum(input, result, ax, loopDescr, a.dtype, fresh: true);
                     return result;
                 }
-                // need_outer_iterator: more than one dimension, an out of another dtype (the iterator's UPDATEIFCOPY), or
-                // an out whose bounds overlap the input's (NPY_MAY_SHARE_BOUNDS).
-                bool iterator = input.ndim > 1 || castOut
+                // need_outer_iterator: more than one dimension, an out of another dtype (the iterator's UPDATEIFCOPY), an
+                // input of another descriptor than the loop's (a cast U input), or an out whose bounds overlap the input's
+                // (NPY_MAY_SHARE_BOUNDS).
+                bool iterator = input.ndim > 1 || castOut || castInput
                                 || NDMemOverlap.SolveMayShareMemory(@out, input, maxWork: 0) != MemOverlap.No;
                 if (iterator && AccumulateIteratorShapeError(@out, input) is { } shapeError)
                     throw shapeError;
@@ -1006,22 +1087,31 @@ namespace NumSharp.Backends.Strings
                 NDArray src = input;
                 if (!SameDims(target, input))
                     src = broadcastInput = np.broadcast_to(input, new Shape((long[])target.Shape.dimensions.Clone()));
+                // The iterator's buffered input cast: every shape check passed, so the cells the accumulation reads are cast
+                // to the default StringDType() now (a U input and a StringDType out never share memory).
+                DType inputDescr = a.dtype;
+                if (castInput)
+                {
+                    src = castSource = NDVStringComparison.ToDefaultVString(src);
+                    inputDescr = castSource.dtype;
+                }
                 // COPY_IF_OVERLAP: an out that may share cells with the input accumulates from a copy, unless it is the
                 // input itself (NumPy's exact alias: the iterator copies nothing, the loop reads each input before it writes).
-                if (!castOut && NDMemOverlap.SolveMayShareMemory(@out, input, maxWork: 0) != MemOverlap.No && !SameElements(@out, input))
+                if (!castOut && !castInput && NDMemOverlap.SolveMayShareMemory(@out, input, maxWork: 0) != MemOverlap.No
+                    && !SameElements(@out, input))
                 {
                     overlapCopy = np.copy(src);
                     src = overlapCopy;
                 }
                 if (!castOut)
                 {
-                    RunCumSum(src, target, ax, loopDescr, a.dtype, fresh: false);
+                    RunCumSum(src, target, ax, loopDescr, inputDescr, fresh: false);
                     return @out;
                 }
                 // A U out: the accumulation runs into a default StringDType() temporary of the written cells, then NumPy's
                 // write-back casts it in (the iterator casts unsafely).
                 result = new NDArray(loopDescr, new Shape((long[])target.Shape.dimensions.Clone()), true);
-                RunCumSum(src, result, ax, loopDescr, a.dtype, fresh: true);
+                RunCumSum(src, result, ax, loopDescr, inputDescr, fresh: true);
                 np.copyto(target, result, "unsafe");
                 return @out;
             }
@@ -1035,6 +1125,7 @@ namespace NumSharp.Backends.Strings
             finally
             {
                 overlapCopy?.Dispose();
+                castSource?.Dispose();
                 broadcastInput?.Dispose();
                 if (target is not null && !ReferenceEquals(target, outView))
                     target.Dispose();

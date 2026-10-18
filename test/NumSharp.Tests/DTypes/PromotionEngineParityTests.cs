@@ -103,7 +103,7 @@ namespace NumSharp.Tests.DTypes
         public void SetPromotion_RefusesTheStringLane()
         {
             Action act = () => np._FindCommonType_Array(NPTypeCode.Int32, NPTypeCode.String, NPTypeCode.Double);
-            act.Should().Throw<NotSupportedException>().WithMessage("This operation is not supported for fixed-width string arrays*");
+            act.Should().Throw<NotSupportedException>().WithMessage("A fixed-width string array reached a numeric promotion table*");
         }
 
         [TestMethod]

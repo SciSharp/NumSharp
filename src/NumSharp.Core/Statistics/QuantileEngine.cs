@@ -1151,6 +1151,10 @@ namespace NumSharp.Statistics
                     // _lerp's add / subtract wrote out (broadcast; the buffer already has out's dtype when the lerp computed
                     // in it). The NaN slices' np.copyto reaches every float / complex out under same_kind.
                     np.copyto(target, resultRaw, "unsafe");
+                    // A TEXT out: the add (a number casts into text under same_kind) wrote it, and the subtract that follows
+                    // has no loop for the text class its dtype= names (LerpTextOutError).
+                    if (Backends.Strings.NDStringUfuncs.IsText(target))
+                        throw LerpTextOutError(a, resultRaw.typecode, target);
                     return @out;
                 case 3:
                     // the nan forms: `out[...] = result` — an array broadcast through the unsafe cast, but a 0-d result
@@ -1277,6 +1281,28 @@ namespace NumSharp.Statistics
             Array.Resize(ref sorted, u);
             return sorted;
         }
+
+        /// <summary>
+        ///     NumPy's refusal at <c>_lerp</c>'s second statement over a TEXT out: <c>subtract(b, diff_b_a * (1 - t),
+        ///     out=out, where=t &gt;= 0.5, casting='unsafe', dtype=type(out.dtype))</c> fixes the loop's output to out's class
+        ///     (<c>StrDType</c>, <c>BytesDType</c> or <c>StringDType</c>), and no subtract loop produces text. The first
+        ///     statement, <c>add(a, diff_b_a * t, out=out)</c>, already wrote out: a number casts into text under same_kind
+        ///     (<c>np.percentile(np.array([3, 1, 2]), 50, out=np.zeros((), 'U6'))</c> raises with <c>'2.0'</c> in out, probed).
+        /// </summary>
+        /// <param name="a">The data (<c>b</c> has its dtype).</param>
+        /// <param name="lerpType">The lerp's dtype, which is also <c>diff_b_a * (1 - t)</c>'s: the data's dtype promoted
+        ///     with the weight's.</param>
+        /// <param name="target">The text out.</param>
+        /// <returns>The exception (not thrown): <c>ufunc 'subtract' did not contain a loop with signature matching types
+        ///     (&lt;class 'numpy.dtypes.Int64DType'&gt;, &lt;class 'numpy.dtypes.Float64DType'&gt;) -&gt; &lt;class
+        ///     'numpy.dtypes.StrDType'&gt;</c>.</returns>
+        /// <remarks>
+        ///     NumPy's out then holds the add's value at every position; NumSharp's holds the lerp, which differs from it only
+        ///     in the last bits of the positions whose weight is at least 0.5 (where NumPy's subtract would have written).
+        /// </remarks>
+        private static TypeError LerpTextOutError(NDArray a, NPTypeCode lerpType, NDArray target)
+            => Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract",
+                new[] { a.dtype.Meta.ToString(), DType.From(lerpType).Meta.ToString() }, target.dtype.Meta.ToString());
 
         /// <summary>NumPy's TypeError for <c>_lerp</c>'s <c>b - a</c> over bool data.</summary>
         /// <returns>The exception to throw.</returns>

@@ -171,11 +171,16 @@ namespace NumSharp
 
             ValidateModeKwargs(mode, constant_values, end_values, stat_length, reflect_type);
 
-            // No-op fast path: every pad value is zero. Still allocates a new array per NumPy.
-            if (AllPairsZero(padPairs))
+            // No-op fast path: every pad value is zero. Still allocates a new array per NumPy. NumPy itself has no such
+            // shortcut — its mode bodies run for every axis, widths of 0 included — so the copy is taken only where no
+            // mode body can raise (ZeroWidthIsCopy): linear_ramp's linspace over text, the stat modes' reductions over
+            // text or with stat_length=0, and a constant_values array that does not broadcast all raise in NumPy.
+            if (AllPairsZero(padPairs) && ZeroWidthIsCopy(mode, constant_values))
                 return array.copy();
 
-            // Empty-axis guard: only 'constant' and 'empty' may extend an empty axis.
+            // Empty-axis guard: only 'constant' and 'empty' may extend an empty axis. Past it NumPy returns _pad_simple's
+            // array as it is ("_pad_simple already returned the correct result"): no other mode body runs over an empty
+            // array, so none of their checks (a text linear_ramp's linspace, a text stat) can raise there.
             if (array.size == 0 && mode != "constant" && mode != "empty")
             {
                 for (int ax = 0; ax < array.ndim; ax++)
@@ -184,6 +189,9 @@ namespace NumSharp
                         throw new ArgumentException(
                             $"can't extend empty axis {ax} using modes other than 'constant' or 'empty'");
                 }
+                if (mode is "edge" or "wrap" or "reflect" or "symmetric" or "maximum" or "minimum" or "mean" or "median"
+                    or "linear_ramp")
+                    return _PadSimple(array, padPairs, fillValue: null).padded;
             }
 
             switch (mode)
@@ -330,11 +338,13 @@ namespace NumSharp
             // text '0' — its str().
             constantValues ??= 0L;
 
-            object[,] valuePairs = _AsPairsValues(constantValues, Math.Max(ndim, 1));
+            // NumPy's _as_pairs runs over the TRUE rank: a 0-d input validates the values' shape against (0, 2) and then
+            // has no axis whose constant would be converted.
+            object[,] valuePairs = _AsPairsValues(constantValues, ndim);
 
             // Encode every constant up front, before any write, so a refused value leaves no half-built result behind
             // (NumPy validates the values while converting them, before it allocates).
-            var encoded = new NDArray[Math.Max(ndim, 1), 2];
+            var encoded = new NDArray[ndim, 2];
             for (int axis = 0; axis < encoded.GetLength(0); axis++)
                 for (int side = 0; side < 2; side++)
                 {
@@ -597,15 +607,19 @@ namespace NumSharp
         private static NDArray PadStat(NDArray array, long[,] padPairs, object statLength, string mode)
         {
             int ndim = array.ndim;
-            if (ndim == 0) return array.copy();
-            // -1 sentinel == "use full valid axis length"
+            // -1 sentinel == "use full valid axis length". NumPy's _as_pairs(stat_length, ndim, as_index=True) runs over the
+            // TRUE rank before any axis is visited, so a 0-d input still refuses a negative or badly shaped stat_length.
             long[,] lengthPairs = _AsPairs(statLength, ndim, asIndex: true);
+            if (ndim == 0) return array.copy();
             var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);
 
             for (int axis = 0; axis < ndim; axis++)
             {
                 long left = padPairs[axis, 0], right = padPairs[axis, 1];
-                if (left == 0 && right == 0) continue;
+                // NumPy computes each axis' statistics whatever its widths (_get_stats runs for every axis); a zero-width
+                // axis is skipped only where that computation cannot raise — a text input's reduction refuses (or, for
+                // StringDType maximum / minimum, computes an unused value), and stat_length=0 refuses maximum / minimum.
+                if (left == 0 && right == 0 && !ZeroWidthStatCanRaise(array, lengthPairs, axis, mode)) continue;
                 var roi = _ViewRoi(padded, originalSlice, axis);
                 try
                 {
@@ -674,8 +688,50 @@ namespace NumSharp
             return (leftStat, rightStat);
         }
 
+        /// <summary>
+        ///     Whether the statistics of a ZERO-width axis can raise, so that <see cref="PadStat"/> must compute them as
+        ///     NumPy's <c>_get_stats</c> does even though nothing is padded along that axis.
+        /// </summary>
+        /// <param name="array">The input (non-empty: an empty input never reaches the stat modes).</param>
+        /// <param name="lengthPairs">The <c>stat_length</c> pairs (-1 for NumPy's <c>None</c>).</param>
+        /// <param name="axis">The axis.</param>
+        /// <param name="mode">The stat mode.</param>
+        /// <returns>True for a text input (its reduction refuses, or computes an unused <c>StringDType</c> extreme) and
+        ///     for a zero <c>stat_length</c> under <c>maximum</c> / <c>minimum</c> (<c>stat_length of 0 yields no value for
+        ///     padding</c>); false when the statistics are numbers that nothing reads.</returns>
+        private static bool ZeroWidthStatCanRaise(NDArray array, long[,] lengthPairs, int axis, string mode)
+            => array.typecode == NPTypeCode.String
+               || (mode is "maximum" or "minimum") && (lengthPairs[axis, 0] == 0 || lengthPairs[axis, 1] == 0);
+
+        /// <summary>
+        ///     One side's statistic of a stat-mode pad: NumPy's <c>stat_func(chunk, axis=axis, keepdims=True)</c> with
+        ///     <c>np.amax</c> / <c>np.amin</c> / <c>np.mean</c> / <c>np.median</c>.
+        /// </summary>
+        /// <param name="chunk">The <c>stat_length</c> slice next to the pad area.</param>
+        /// <param name="axis">The padded axis.</param>
+        /// <param name="mode"><c>maximum</c>, <c>minimum</c>, <c>mean</c> or <c>median</c>.</param>
+        /// <returns>The statistic with the axis kept at length 1 (a 0-d result from the 1-D numeric fast path broadcasts
+        ///     the same way).</returns>
+        /// <exception cref="TypeError">A text chunk whose reduction NumPy refuses (its texts, from the reductions).</exception>
+        /// <exception cref="NotSupportedException">An unknown mode (the caller validated it).</exception>
+        /// <remarks>Numbers take two shortcuts that give NumPy's values: a flat reduction for a 1-D chunk, and the mean as
+        ///     <c>sum / n</c> (see the body); text takes NumPy's statement as it is.</remarks>
         private static NDArray StatReduce(NDArray chunk, int axis, string mode)
         {
+            // Text takes NumPy's statement exactly (np.amax / np.amin / np.mean / np.median with the axis and
+            // keepdims=True): the numeric shortcuts below rewrite the call (a flat reduction, the mean as sum / n), which
+            // changes the answer for text — np.mean of StringDType text reaches the divide's no-loop refusal, a flat one
+            // the str / int refusal, the mean rewritten as sum / n yet another text (probed against 2.4.2).
+            if (chunk.typecode == NPTypeCode.String)
+                return mode switch
+                {
+                    "maximum" => np.amax(chunk, axis: axis, keepdims: true),
+                    "minimum" => np.amin(chunk, axis: axis, keepdims: true),
+                    "mean" => np.mean(chunk, axis, true),
+                    "median" => np.median(chunk, axis: axis, keepdims: true),
+                    _ => throw new NotSupportedException($"stat mode '{mode}'"),
+                };
+
             // 1D fast path: no-axis variants are 100×+ faster than axis+keepdims
             // for np.mean (DefaultEngine.Mean axis-path perf bug).  Returns 0-D,
             // broadcasts identically.
@@ -772,18 +828,30 @@ namespace NumSharp
 
         // ---------------------------- linear_ramp ----------------------------
 
+        /// <summary>
+        ///     NumPy's <c>mode='linear_ramp'</c>: each pad area is <c>np.linspace(end_value, edge, num=width,
+        ///     endpoint=False, dtype=padded.dtype)</c> along its axis (the right one reversed).
+        /// </summary>
+        /// <param name="array">The input (non-empty: an empty input returned before the mode body).</param>
+        /// <param name="padPairs">The (before, after) widths per axis.</param>
+        /// <param name="endValues">The <c>end_values</c> argument (null for NumPy's default 0).</param>
+        /// <returns>The padded array; a copy for a 0-d input, which has no axis to pad.</returns>
+        /// <exception cref="DTypePromotionError">Text on either side of a linspace (the input or an end value): NumPy's
+        ///     <c>result_type(start, stop, float)</c> refusal (<see cref="ThrowIfLinearRampText"/>).</exception>
+        /// <exception cref="TypeError">A fixed-width text input with an end value whose class promotes with text (a NumPy
+        ///     float or complex scalar): linspace's <c>np.subtract</c> has no text loop.</exception>
+        /// <exception cref="ValueError"><paramref name="endValues"/> does not broadcast to (ndim, 2).</exception>
         private static NDArray PadLinearRamp(NDArray array, long[,] padPairs, object endValues)
         {
             int ndim = array.ndim;
-            if (ndim == 0) return array.copy();
+            // NumPy's _as_pairs(end_values, ndim) runs first, over the TRUE rank: a 0-d input validates the values' shape
+            // against (0, 2) and then has no axis to pad.
             object[,] endPairs = _AsPairsValues(endValues ?? 0, ndim);
-            // NumPy's ramps are np.linspace(edge, end_value, num=width): its result_type(edge, end, float(num)) has no
-            // common DType for text, and the promotion raises NumPy's DTypePromotionError itself (first axis, before side).
-            if (array.typecode == NPTypeCode.String)
-            {
-                DTypePromotion.ResultType(array.dtype, endPairs[0, 0] ?? 0, 1.0);
-                throw Backends.Strings.NDStringUfuncs.NextPhase("pad (linear_ramp)", array);
-            }
+            if (ndim == 0) return array.copy();
+            // NumPy runs np.linspace(start=end_value, stop=edge, num=width, dtype=padded.dtype) for every axis and side,
+            // widths of 0 included, and text on either side refuses there. Checked before any ramp is computed: the
+            // padded array of a call that raises is discarded in NumPy too, so the order of the work is unobservable.
+            ThrowIfLinearRampText(array, endValues, ndim);
             var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);
 
             for (int axis = 0; axis < ndim; axis++)
@@ -817,6 +885,171 @@ namespace NumSharp
                 finally { roi.Dispose(); }
             }
             return padded;
+        }
+
+        /// <summary>
+        ///     The refusal of NumPy's per-axis <c>np.linspace(start=end_value, stop=edge, num=width, endpoint=False,
+        ///     dtype=padded.dtype)</c> when text is on either side. <c>linspace</c> first promotes
+        ///     <c>_array_converter(start, stop).result_type(ensure_inexact=True)</c> — the start's class, the edge's class
+        ///     and the abstract Python float, in that order — and then computes <c>np.subtract(stop, start,
+        ///     dtype=type(result))</c>; with text one of the two always refuses. Every start comes from ONE
+        ///     <c>np.array(end_values)</c>, so every start has the same class and the first linspace (axis 0, left) decides.
+        /// </summary>
+        /// <param name="array">The input; its descriptor is every edge's (the edges are slices of the padded array).</param>
+        /// <param name="endValues">The <c>end_values</c> argument as given (null for NumPy's default 0).</param>
+        /// <param name="ndim">The input's rank (at least 1); kept for the order of the checks it documents.</param>
+        /// <exception cref="DTypePromotionError">The promotion refuses: a text input meets an integer, bool, text or Python
+        ///     number start, a StringDType input any number, a numeric input a text start (NumPy's text, raised by
+        ///     <see cref="DTypePromotion.ResultType"/>).</exception>
+        /// <exception cref="TypeError">The promotion succeeds into a text dtype (a NumPy float or complex start with an
+        ///     S / U input promotes to U32 / S32 / U64) and the subtract finds no text loop: <c>ufunc 'subtract' did not
+        ///     contain a loop with signature matching types (&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class
+        ///     'numpy.dtypes.Float64DType'&gt;) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>.</exception>
+        /// <remarks>
+        ///     NumPy's <c>_as_pairs(end_values, ndim)</c> makes the starts: an <c>np.array(end_values)</c> of one or two
+        ///     elements (not shaped (2, 1)) hands out its elements as NumPy scalars — STRONG operands of the array's dtype,
+        ///     so the default <c>0</c> is an <c>np.int64</c> and the pair <c>(1, 2.5)</c> two <c>np.float64</c>s — while a
+        ///     larger array goes through <c>broadcast_to(...).tolist()</c>, whose Python ints, floats and complex numbers
+        ///     are WEAK (<c>_PyLongDType</c>, <c>_PyFloatDType</c>, <c>_PyComplexDType</c>); a Python bool stays
+        ///     <c>BoolDType</c> and a str <c>StrDType</c>. Probed against 2.4.2: every refusal's DType list names exactly
+        ///     these classes, and a zero width refuses too (the linspace runs with <c>num=0</c>).
+        /// </remarks>
+        private static void ThrowIfLinearRampText(NDArray array, object endValues, int ndim)
+        {
+            var (startArray, strong) = LinearRampEndValuesArray(endValues);
+            bool textInput = array.typecode == NPTypeCode.String;
+            bool textStart = startArray.Meta is StringDTypeMeta || startArray.Meta == DTypeRegistry.VString;
+            // Numbers on both sides: every linspace computes (BuildLinearRamp is its arithmetic).
+            if (!textInput && !textStart || ndim == 0)
+                return;
+            // The start operand as linspace's promotion sees it: the NumPy scalar's descriptor, or the Python value's
+            // class (an abstract one for a weak int / float / complex).
+            object start = strong ? startArray : WeakStartClass(startArray);
+            // result_type(start, stop, ensure_inexact): raises NumPy's DTypePromotionError when no common DType exists.
+            DType promoted = DTypePromotion.ResultType(start, array.dtype, DTypeRegistry.PyFloat);
+            string startClass = start is DType d ? d.Meta.ToString() : start.ToString();
+            // The promotion found a (text) dtype; np.subtract(stop, start, dtype=type(promoted)) has no loop for it.
+            throw new TypeError(
+                $"ufunc 'subtract' did not contain a loop with signature matching types ({array.dtype.Meta}, {startClass}) -> {promoted.Meta}");
+        }
+
+        /// <summary>
+        ///     The dtype of NumPy's <c>np.array(end_values)</c> inside <c>_as_pairs</c>, and whether its elements reach
+        ///     <c>np.linspace</c> as NumPy scalars (strong) rather than as the Python values of <c>tolist()</c> (weak).
+        /// </summary>
+        /// <param name="endValues">The argument as given: null (NumPy's default <c>0</c>), a C# scalar (a Python scalar of
+        ///     the boundary map), a string or <c>byte[]</c>, a two-value tuple, a C# array, an <c>object[,]</c>, a
+        ///     dictionary (a NumSharp form) or an <see cref="NDArray"/>.</param>
+        /// <returns>The array's descriptor (its CLASS is what the promotion reads) and the strength: true for one element,
+        ///     or two elements not shaped (2, 1) — NumPy's <c>x[0]</c> / <c>x[1]</c> shortcuts.</returns>
+        private static (DType Descr, bool Strong) LinearRampEndValuesArray(object endValues)
+        {
+            switch (endValues)
+            {
+                case null:
+                    return (np.int64, true);
+                case NDArray nd:
+                    return (nd.dtype, nd.size == 1 || nd.size == 2 && !(nd.ndim == 2 && nd.Shape.dimensions[0] == 2));
+                case string or char:
+                    return (np.dtype("U"), true);
+                case byte[]:
+                    return (np.dtype("S"), true);
+                case object[,] o2:
+                {
+                    var values = new List<object>(o2.Length);
+                    foreach (var v in o2)
+                        values.Add(v);
+                    bool column = o2.GetLength(0) == 2 && o2.GetLength(1) == 1;
+                    return (CoercedEndValuesDescr(values), o2.Length == 1 || o2.Length == 2 && !column);
+                }
+                case object[] o1:
+                    return (CoercedEndValuesDescr(o1), o1.Length <= 2);
+                case int[] ia:
+                    return (np.int64, ia.Length <= 2);
+                case long[] la:
+                    return (np.int64, la.Length <= 2);
+                case double[] da:
+                    return (np.float64, da.Length <= 2);
+                case IDictionary dict:
+                {
+                    // A NumSharp form (NumPy refuses a dict here): its values are read like the tolist() path's.
+                    var values = new List<object>();
+                    foreach (DictionaryEntry kv in dict)
+                    {
+                        var (b, a) = ExtractValuePair(kv.Value);
+                        values.Add(b);
+                        values.Add(a);
+                    }
+                    return (CoercedEndValuesDescr(values), false);
+                }
+                default:
+                    return TryExtractPair(endValues, out object before, out object after)
+                        ? (CoercedEndValuesDescr(new[] { before, after }), true)
+                        : (CoercedEndValuesDescr(new[] { endValues }), true);
+            }
+        }
+
+        /// <summary>
+        ///     The dtype NumPy's array coercion gives a list of Python scalars: any str makes a str array (the numbers
+        ///     become their text), else any bytes a bytes array, else complex, float, int and bool in that order (bool
+        ///     alone stays bool; bool with ints is int).
+        /// </summary>
+        /// <param name="values">The C# values (the boundary map's Python scalars; an <see cref="NDArray"/> element counts
+        ///     as its dtype's kind).</param>
+        /// <returns>The coerced descriptor (unsized for text: only the class is read).</returns>
+        private static DType CoercedEndValuesDescr(IEnumerable<object> values)
+        {
+            bool anyStr = false, anyBytes = false, anyComplex = false, anyFloat = false, anyInt = false, allBool = true;
+            bool anyHugeUnsigned = false, anyNegative = false;
+            foreach (var v in values)
+            {
+                allBool &= v is bool;
+                switch (v)
+                {
+                    case string or char: anyStr = true; break;
+                    case byte[]: anyBytes = true; break;
+                    case System.Numerics.Complex: anyComplex = true; break;
+                    case float or double or decimal or Half: anyFloat = true; break;
+                    case bool: break;
+                    case ulong ul: anyInt = true; anyHugeUnsigned |= ul > long.MaxValue; break;
+                    case sbyte or byte or short or ushort or int or uint or long or System.Numerics.BigInteger:
+                        anyInt = true;
+                        anyNegative |= Convert.ToDouble(v) < 0;
+                        break;
+                    case NDArray nd:
+                        if (nd.typecode == NPTypeCode.String) anyStr = true;
+                        else if (nd.typecode == NPTypeCode.Complex) anyComplex = true;
+                        else if (nd.typecode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half or NPTypeCode.Decimal) anyFloat = true;
+                        else if (nd.typecode != NPTypeCode.Boolean) anyInt = true;
+                        allBool &= nd.typecode == NPTypeCode.Boolean;
+                        break;
+                    default: anyFloat = true; break;
+                }
+            }
+            if (anyStr) return np.dtype("U");
+            if (anyBytes) return np.dtype("S");
+            if (anyComplex) return np.complex128;
+            if (anyFloat) return np.float64;
+            if (anyInt) return anyHugeUnsigned ? (anyNegative ? np.float64 : np.uint64) : np.int64;
+            return allBool ? np.@bool : np.float64;
+        }
+
+        /// <summary>
+        ///     The class linspace's promotion sees for a WEAK start (a Python value of <c>tolist()</c>): the abstract NEP 50
+        ///     class of a Python int, float or complex; a Python bool's <c>BoolDType</c>; a str's or bytes' own class.
+        /// </summary>
+        /// <param name="arrayDescr">The descriptor of <c>np.array(end_values)</c>.</param>
+        /// <returns>A <see cref="DTypeMeta"/> (abstract) or the <see cref="DType"/> itself.</returns>
+        private static object WeakStartClass(DType arrayDescr)
+        {
+            var tc = arrayDescr.typecode;
+            if (tc.IsInteger())
+                return DTypeRegistry.PyLong;
+            if (tc is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Half or NPTypeCode.Decimal)
+                return DTypeRegistry.PyFloat;
+            if (tc == NPTypeCode.Complex)
+                return DTypeRegistry.PyComplex;
+            return arrayDescr;
         }
 
         /// <summary>
@@ -1356,6 +1589,11 @@ namespace NumSharp
         ///     where the per-axis value is a scalar of any dtype (not necessarily integer).
         ///     Returns <c>object[ndim, 2]</c> with each cell holding the boxed scalar.
         /// </summary>
+        /// <param name="x">The argument (null, a scalar, a pair, a dictionary, a C# array or an <c>object[,]</c>).</param>
+        /// <param name="ndim">The number of axes.</param>
+        /// <returns>The (ndim, 2) table.</returns>
+        /// <exception cref="ValueError">The values do not broadcast to (ndim, 2) (NumPy's <c>np.broadcast_to</c> text).</exception>
+        /// <exception cref="ArgumentException">A dictionary axis out of bounds, or an <c>object[,]</c> that is not (N, 2).</exception>
         internal static object[,] _AsPairsValues(object x, int ndim)
         {
             var result = new object[ndim, 2];
@@ -1398,8 +1636,10 @@ namespace NumSharp
                     for (int i = 0; i < ndim; i++) { result[i, 0] = o2[0, 0]; result[i, 1] = o2[0, 1]; }
                     return result;
                 }
+                // NumPy's _as_pairs ends in np.broadcast_to(x, (ndim, 2)), whose refusal names both shapes.
                 if (rows != ndim)
-                    throw new ArgumentException($"constant_values shape ({rows},{cols}) not broadcastable to ({ndim},2)");
+                    throw new ValueError(
+                        $"operands could not be broadcast together with remapped shapes [original->remapped]: ({rows},{cols})  and requested shape ({ndim},2)");
                 for (int i = 0; i < rows; i++) { result[i, 0] = o2[i, 0]; result[i, 1] = o2[i, 1]; }
                 return result;
             }
@@ -1422,6 +1662,14 @@ namespace NumSharp
             return result;
         }
 
+        /// <summary>
+        ///     <c>_as_pairs</c> for a 1-D list of values: one value for both sides of every axis, two values for (before,
+        ///     after) of every axis.
+        /// </summary>
+        /// <param name="arr">The values.</param>
+        /// <param name="ndim">The number of axes.</param>
+        /// <returns>The (ndim, 2) table of boxed values.</returns>
+        /// <exception cref="ValueError">Any other length: NumPy's <c>np.broadcast_to(x, (ndim, 2))</c> refusal.</exception>
         private static object[,] FromValues1D(object[] arr, int ndim)
         {
             var result = new object[ndim, 2];
@@ -1435,7 +1683,9 @@ namespace NumSharp
                 for (int i = 0; i < ndim; i++) { result[i, 0] = arr[0]; result[i, 1] = arr[1]; }
                 return result;
             }
-            throw new ArgumentException($"values length {arr.Length} not broadcastable to (ndim={ndim}, 2)");
+            // NumPy's _as_pairs ends in np.broadcast_to(x, (ndim, 2)): a 1-D array of any other length cannot broadcast.
+            throw new ValueError(
+                $"operands could not be broadcast together with remapped shapes [original->remapped]: ({arr.Length},)  and requested shape ({ndim},2)");
         }
 
         private static (object before, object after) ExtractValuePair(object v)
@@ -1564,7 +1814,8 @@ namespace NumSharp
         ///     (an unsigned array casts instead: <c>np.pad(uint8, 1, constant_values=1000)</c> pads with 232); a float
         ///     infinity into a signed integer.</exception>
         /// <exception cref="ValueError">A float NaN constant into a signed integer array ("cannot convert float NaN to
-        ///     integer").</exception>
+        ///     integer"); a text constant into a numeric array whose text does not parse (the cast of NumPy's
+        ///     <c>np.str_</c> scalar: "invalid literal for int() with base 10: np.str_('z')").</exception>
         private static unsafe object CastBoxToDType(object value, NPTypeCode tc)
         {
             if (value is null) return BoxedZero(tc);
@@ -1577,6 +1828,15 @@ namespace NumSharp
                 value = nd.GetAtIndex(0);
             }
 
+            // A text constant reaches NumPy's setitem as the NumPy scalar np.array(...) indexes out of _as_pairs (np.str_ /
+            // np.bytes_), which the numeric dtype CASTS: its refusal quotes np.str_('z'), not a Python str (probed:
+            // np.pad(np.zeros(3, int), 1, constant_values='z') is "invalid literal for int() with base 10: np.str_('z')").
+            if (value is string or char or byte[] && tc != NPTypeCode.String)
+            {
+                using var text = Backends.Strings.NDStringArrays.FromScalar(value, null);
+                using var cast = text.astype(DType.From(tc), true, 'K', "unsafe");
+                return cast.GetAtIndex(0);
+            }
             if (!NDArray.IsStoreScalar(value) || tc == NPTypeCode.String)
                 return NumSharp.Utilities.Converts.ChangeType(value, tc);
 
@@ -1670,6 +1930,34 @@ namespace NumSharp
                     return false;
             return true;
         }
+
+        /// <summary>
+        ///     Whether a pad whose widths are all zero is a plain copy in NumPy, i.e. whether no part of NumPy's mode body —
+        ///     which <c>numpy.pad</c> runs for every axis whatever its widths — can raise for these arguments.
+        /// </summary>
+        /// <param name="mode">The (validated) mode.</param>
+        /// <param name="constantValues">The <c>constant_values</c> argument, or null.</param>
+        /// <returns>
+        ///     True for the movement modes (<c>edge</c>, <c>wrap</c>, <c>reflect</c>, <c>symmetric</c>, <c>empty</c>), whose
+        ///     zero-width bodies only read; and for <c>constant</c> with NumPy's default 0 (an explicit value is converted to
+        ///     the array's dtype for every axis — <c>np.pad(np.zeros(3, int), 0, constant_values='z')</c> raises — and an
+        ///     array of values goes through <c>_as_pairs</c>' broadcast, which refuses a bad shape). False for <c>linear_ramp</c> (its
+        ///     <c>np.linspace</c> runs per axis and refuses text on either side) and for the stat modes (their reductions run
+        ///     per axis: a text input refuses, <c>stat_length=0</c> refuses <c>maximum</c> / <c>minimum</c>), whose bodies
+        ///     then skip the zero-width work they can prove cannot raise.
+        /// </returns>
+        /// <remarks>Probed against 2.4.2: <c>np.pad(np.array(['ab']), 0, 'linear_ramp')</c> raises NumPy's
+        ///     DTypePromotionError, <c>np.pad(np.array(['ab']), 0, 'maximum')</c> the maximum no-loop TypeError,
+        ///     <c>np.pad(np.zeros(3), 0, 'maximum', stat_length=0)</c> <c>stat_length of 0 yields no value for padding</c>,
+        ///     <c>np.pad(np.zeros(3), 0, constant_values=[1, 2, 3])</c> the broadcast ValueError, <c>np.pad(np.zeros(3, int),
+        ///     0, constant_values='z')</c> the int() ValueError.</remarks>
+        private static bool ZeroWidthIsCopy(string mode, object constantValues)
+            => mode switch
+            {
+                "edge" or "wrap" or "reflect" or "symmetric" or "empty" => true,
+                "constant" => constantValues is null,
+                _ => false,
+            };
 
     }
 }

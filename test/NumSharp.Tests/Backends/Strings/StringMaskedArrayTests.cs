@@ -7,8 +7,7 @@ namespace NumSharp.Tests.Backends.Strings
 {
     /// <summary>
     ///     numpy.ma over the fixed-width string dtypes: which calls NumPy answers from the dtype or the shape (its own
-    ///     errors, empty results, the fill value), and which read the text (deferred with
-    ///     <see cref="StringComputationNotSupportedException"/> until string computation lands). Every expected value and
+    ///     errors, empty results, the fill value), and which read the text (they compute, as NumPy's do). Every expected value and
     ///     message was probed against NumPy 2.4.2; the string oracle's <c>strma</c> section replays the full matrix over
     ///     every layout, these tests pin one representative of each rule.
     /// </summary>

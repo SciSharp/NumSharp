@@ -19,16 +19,10 @@ namespace NumSharp.Tests.Strings
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>Phases.</b> A phase-1 case must match NumPy now. A phase-2 case is one NumPy answers by COMPUTING on text
-    ///     (sorting, searching and the rest of the computational phase): it passes as "deferred" while NumSharp throws
-    ///     <see cref="StringComputationNotSupportedException"/>, and is held to NumPy's answer the moment NumSharp returns
-    ///     a result or throws anything else — so the computational phase is gated by this same corpus without editing it.
-    ///     </para>
-    ///     <para>
-    ///     <b>Deferral ceilings.</b> A section may not defer more cases than <see cref="DeferralCeilings"/> allows: a
-    ///     computation that NumSharp answers today (a comparison, a conversion between text and numbers) cannot slide back
-    ///     into a deferral without failing the gate, even where the generator labels its case phase 2 (a computing call
-    ///     whose phase follows NumPy's outcome). Lower a ceiling when a later phase removes deferrals.
+    ///     <b>Strict.</b> Every case of every section must match NumPy (strings phase 2, P2.7, retired the "deferred"
+    ///     outcome: a phase-2 case — one NumPy answers by COMPUTING on text — is held to NumPy's answer like any other). A
+    ///     case's <c>phase</c> field records which stage of the string support answered it first; it no longer changes the
+    ///     verdict.
     ///     </para>
     ///     <para>
     ///     <b>Comparison details.</b> Strides and contiguity are compared only on axes of more than one element of a
@@ -78,7 +72,7 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     An unsized string <c>dtype=</c> request (<c>'U'</c>, <c>'S'</c>) on every ufunc, reduction, scan, gufunc,
         ///     <c>np.clip</c>, <c>np.einsum</c> and <c>np.trace</c>, over both string classes and every numeric dtype: NumPy's
-        ///     refusal, which names the requested CLASS, or its string loop (the next phase).
+        ///     refusal, which names the requested CLASS, or its string loop (which computes).
         /// </summary>
         [TestMethod] public void StringDTypeRequests() => Run("strdtype");
 
@@ -104,8 +98,8 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     The text calls whose answer the SHAPE decides — truth tests, counts, index searches, sorts, arg-reductions,
         ///     <c>np.unique</c>, the set routines and the equality tests over empty inputs, lines of one element, or a pair the
-        ///     comparison operators cannot compare — answered now (phase 1); the same calls over text NumPy compares stay
-        ///     deferred.
+        ///     comparison operators cannot compare — answered from the shape (phase 1); the same calls over text NumPy
+        ///     compares compute (phase 2) and are held to NumPy's results as well.
         /// </summary>
         [TestMethod] public void ShapeDecidedAnswers() => Run("strshape");
 
@@ -137,8 +131,7 @@ namespace NumSharp.Tests.Strings
         ///     Section striter: <c>np.nditer</c> and <c>np.nested_iters</c> over fixed-width strings, as traces — the value
         ///     stream of every layout under each order and flag set, buffered width / class conversions under every casting
         ///     rule (NumPy's Unicode errors included), the copy routes and their write-backs, writes through the views,
-        ///     allocated outputs, mixed pairs, NumPy's refusals and ranges; text-number conversions are the computational
-        ///     phase (deferred).
+        ///     allocated outputs, mixed pairs, NumPy's refusals and ranges, and the text-number conversions.
         /// </summary>
         [TestMethod] public void TextIteration() => Run("striter");
 
@@ -260,8 +253,8 @@ namespace NumSharp.Tests.Strings
         ///     <c>T</c> / <c>U</c> / <c>S</c> / numbers / values, and the <c>T</c> constructors), plus element access, stores,
         ///     casts and attributes. A case NumPy answers without computing on the text is strict (movement, printing, the
         ///     <c>'N/A'</c> fill value, masks, casts, and the refusals NumPy raises before reading a string: no loop,
-        ///     <c>Unsuitable type ... for calculating minimum</c>, <c>Cannot convert fill_value</c>); one that computed on the
-        ///     text (concatenating sums, comparisons, logical reductions) is the computational phase and passes as a deferral.
+        ///     <c>Unsuitable type ... for calculating minimum</c>, <c>Cannot convert fill_value</c>); one that computes on the
+        ///     text (concatenating sums, comparisons, logical reductions) is held to NumPy's result.
         /// </summary>
         [TestMethod] public void MaskedStringDType() => Run("tma");
 
@@ -298,8 +291,8 @@ namespace NumSharp.Tests.Strings
         ///     Python values (str, bytes, lists, numbers) with NumPy's refusals in its order (non-string, StringDType, the
         ///     <c>S</c> / <c>U</c> pair's <c>NotImplemented</c> — NumSharp's null — before the broadcast);
         ///     <c>compare_chararrays</c> with every <c>cmp</c> spelling (str, bytes, refused, a lone surrogate, None) and both
-        ///     <c>rstrip</c> values; <c>np.char.add</c>; <c>np.char.multiply</c> with its <c>ValueError</c> rule. Strict, but
-        ///     for the three StringDType additions / repetitions NumPy computes (deferred).
+        ///     <c>rstrip</c> values; <c>np.char.add</c>; <c>np.char.multiply</c> with its <c>ValueError</c> rule (StringDType
+        ///     additions and repetitions included). Strict.
         /// </summary>
         [TestMethod] public void CharModuleFunctions() => Run("strchar");
 
@@ -780,28 +773,6 @@ namespace NumSharp.Tests.Strings
             return n;
         }
 
-        /// <summary>
-        ///     The most cases each section may defer to the computational phase (see the class remarks). Sorting <c>S</c> /
-        ///     <c>U</c> text computes since P2.2 milestone A (it lowered the ceilings: reductions 32 → 24, straxis 130 → 90,
-        ///     strshape 190 → 142, strma 113 → 18); searching it (argmax / argmin and the nan forms, searchsorted, digitize,
-        ///     histogram2d / histogramdd's bin search) since milestone B (reductions 24 → 14, straxis 90 → 50, strshape
-        ///     142 → 84, strvalid 5 → 0, strsurface 67 → 54, strma 18 → 6); the set routines, lexsort, sort_complex,
-        ///     np.histogram and the quantiles over text since milestone C; computing on <c>StringDType</c> since P2.T,
-        ///     ordering it since P2.2 over <c>StringDType</c>, and <c>chararray.partition(sep)</c> (numpy.char phase 3's one
-        ///     deferral, the string partition) since P2.5. No section defers anything now; a section not listed may defer
-        ///     nothing, and the table stays for a later phase's deferrals.
-        /// </summary>
-        private static readonly Dictionary<string, int> DeferralCeilings = new()
-        {
-            // P2.2 milestone C answered the last fixed-width deferrals (reductions 14, straxis 50, strshape 84, strsurface 54,
-            // strma 6 before it): every section that holds only S / U computations is strict. P2.T computes on StringDType
-            // (the comparisons, the truth values, add / multiply / maximum / minimum, the reductions and statistics, numpy.ma
-            // over them: tma 437 → 5, strchar 3 → 0), and StringDType's part of P2.2 the sorts, searches, set routines and
-            // order statistics (tma 5 → 0: numpy.ma's median, sort and unique over StringDType).
-            // numpy.char phase 3's chararray.partition(sep) — the STRING partition — computes since P2.5 (strcharops 22 → 0):
-            // no section defers anything.
-        };
-
         /// <summary>The corpus is complete: every section has cases and every case belongs to a section above.</summary>
         [TestMethod]
         public void Corpus_EverySectionIsReplayed()
@@ -827,14 +798,6 @@ namespace NumSharp.Tests.Strings
         // ------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        ///     The environment variable that lists every deferred case of a section on the test's standard output, with
-        ///     NumSharp's refusal text (any non-empty value but <c>0</c> turns it on). A development aid: a phase of the
-        ///     computational work reads it to see which NumPy answers are still refused, and that none of the calls it just
-        ///     implemented still is. Off by default, because a section can defer hundreds of cases.
-        /// </summary>
-        internal const string ListDeferredVariable = "NUMSHARP_STRING_ORACLE_DEFERRED";
-
-        /// <summary>
         ///     The environment variable naming a directory of randomized soak corpora — fresh random texts, NA kinds,
         ///     layouts, sizes and keyword combinations for the computing families, recorded from NumPy 2.4.2 by
         ///     <c>python test/oracle/soak_strings_oracle.py --seeds … --out DIR</c>; <see cref="StringSoak"/> replays them
@@ -845,7 +808,7 @@ namespace NumSharp.Tests.Strings
         /// <summary>
         ///     The randomized soak: replays every <c>*.jsonl</c> file of the directory in <see cref="SoakDirVariable"/>
         ///     with the committed sections' comparator (<see cref="ReplayOne"/>: values, dtype, shape, layout, NumPy's
-        ///     exact errors, and the same computed excuses). Every soak case is phase 1, so a deferral is a failure.
+        ///     exact errors, and the same computed excuses).
         /// </summary>
         /// <remarks>
         ///     The committed sections gate one fixed matrix each; the soak draws a new one per seed, so a run with fresh
@@ -871,11 +834,7 @@ namespace NumSharp.Tests.Strings
             var failures = new List<string>();
             foreach (var c in cases)
             {
-                var outcome = ReplayOne(c, out var message);
-                // A soak case is phase 1: NumSharp must answer it now, so a deferral counts as a divergence.
-                if (outcome == Outcome.Deferred)
-                    failures.Add($"{c.Id} [{c.Layout}]: deferred to the computational phase: {message}");
-                else if (outcome == Outcome.Failed)
+                if (ReplayOne(c, out var message) == Outcome.Failed)
                     failures.Add($"{c.Id} [{c.Layout}]: {message}");
             }
             Console.WriteLine($"[strings/soak] {cases.Count} cases in {files.Length} file(s), {failures.Count} failed");
@@ -890,20 +849,13 @@ namespace NumSharp.Tests.Strings
         private static void Run(string section)
         {
             var failures = new List<string>();
-            var deferredCases = new List<string>();
-            int deferred = 0, total = 0;
+            int total = 0;
             foreach (var c in Cases)
             {
                 if (!c.Id.StartsWith(section + "/", StringComparison.Ordinal))
                     continue;
                 total++;
-                var outcome = ReplayOne(c, out var message);
-                if (outcome == Outcome.Deferred)
-                {
-                    deferred++;
-                    deferredCases.Add($"{c.Id} [{c.Layout}]: {message}");
-                }
-                else if (outcome == Outcome.Failed)
+                if (ReplayOne(c, out var message) == Outcome.Failed)
                     failures.Add($"{c.Id} [{c.Layout}]: {message}");
             }
             int excused = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedLayouts.ContainsKey(c.Id));
@@ -911,20 +863,10 @@ namespace NumSharp.Tests.Strings
             int excusedOrder = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedOrders.ContainsKey(c.Id));
             int excusedIdentity = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedIdentities.ContainsKey(c.Id));
             int excusedRefusal = Cases.Count(c => c.Id.StartsWith(section + "/", StringComparison.Ordinal) && ExcusedRefusals.ContainsKey(c.Id));
-            Console.WriteLine($"[strings/{section}] {total} cases, {deferred} deferred to the computational phase, " +
+            Console.WriteLine($"[strings/{section}] {total} cases, " +
                               $"{excused} with an excused layout, {excusedClass} with an excused class, " +
                               $"{excusedOrder} with an excused order, {excusedIdentity} with an excused identity, " +
                               $"{excusedRefusal} excused refusals, {failures.Count} failed");
-            var listDeferred = Environment.GetEnvironmentVariable(ListDeferredVariable);
-            if (!string.IsNullOrEmpty(listDeferred) && listDeferred != "0")
-                foreach (var d in deferredCases)
-                    Console.WriteLine("  deferred " + d);
-            // A computation answered today must not slide back into a deferral (the class remarks): more deferrals than
-            // the section's ceiling fail the section.
-            int ceiling = DeferralCeilings.TryGetValue(section, out var cap) ? cap : 0;
-            if (deferred > ceiling)
-                failures.Add($"{deferred} cases deferred to the computational phase, more than the section's ceiling of " +
-                             $"{ceiling} (set {ListDeferredVariable}=1 to list them)");
             // Every divergence goes to the test's standard output (the assertion message keeps the first 80).
             foreach (var f in failures)
                 Console.WriteLine("  " + f);
@@ -938,17 +880,13 @@ namespace NumSharp.Tests.Strings
             /// <summary>NumSharp matched NumPy.</summary>
             Passed,
 
-            /// <summary>A phase-2 case NumSharp refused with <see cref="StringComputationNotSupportedException"/>.</summary>
-            Deferred,
-
             /// <summary>A divergence.</summary>
             Failed,
         }
 
         /// <summary>Replays one case and compares it.</summary>
         /// <param name="c">The case.</param>
-        /// <param name="message">The divergence, when the outcome is <see cref="Outcome.Failed"/>; NumSharp's refusal text,
-        ///     when it is <see cref="Outcome.Deferred"/>.</param>
+        /// <param name="message">The divergence, when the outcome is <see cref="Outcome.Failed"/>.</param>
         /// <returns>The verdict.</returns>
         private static Outcome ReplayOne(StringOracleCorpus.Case c, out string message)
         {
@@ -974,11 +912,6 @@ namespace NumSharp.Tests.Strings
             }
             catch (Exception e)
             {
-                if (c.Phase == 2 && e is StringComputationNotSupportedException)
-                {
-                    message = Shorten(e.Message);
-                    return Outcome.Deferred;
-                }
                 if (c.Error is null && e is NotSupportedException && RefusalExcuse(c) is { } refusal)
                 {
                     ExcusedRefusals.TryAdd(c.Id, refusal);

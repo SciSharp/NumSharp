@@ -75,9 +75,14 @@ namespace NumSharp
             // StringDType loop concatenates (a dtype= request has no loop, an empty diagonal has no identity).
             if (Backends.Strings.NDStringUfuncs.VStringReduces("trace", diag, diag.ndim - 1, dtype, @out, loopOnly: true))
                 return Backends.Strings.NDVStringReduction.SumNumPy("trace", diag, diag.ndim - 1, false, @out);
-            // NumPy's trace is the diagonal's add.reduce: the diagonal's own checks above come first, then the reduction
-            // refuses text, or a string dtype= request (a numeric input then reads as text of its REQUIRED_STR_LEN).
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("trace", a, (int?)null, dtype);
+            // NumPy's trace is the diagonal's add.reduce(diag, -1, dtype=dtype, out=out): the diagonal's own checks above
+            // come first, then the loop resolution on (out, diag). A U diagonal into a StringDType out concatenates (the
+            // StringDType add promoter pairs StringDType with StrDType; the diagonal is cast to the default StringDType());
+            // text with any other out, a text out for numbers, or a string dtype= request is NumPy's refusal (a numeric
+            // input then reads as text of its REQUIRED_STR_LEN).
+            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("trace", diag, diag.ndim - 1, @out, dtype)
+                == Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate)
+                return Backends.Strings.NDVStringReduction.SumNumPyOfCast(diag, diag.ndim - 1, false, @out);
 
             // dtype rule: when not specified, the engine Sum's NEP50 promotion applies
             // (signed/bool -> int64, unsigned -> uint64, floats preserved) — the same

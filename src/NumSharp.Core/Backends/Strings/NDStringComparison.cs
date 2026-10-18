@@ -137,9 +137,6 @@ namespace NumSharp.Backends.Strings
         /// <returns><paramref name="out"/> itself, or a fresh bool array of the broadcast shape.</returns>
         /// <exception cref="ArgumentException"><paramref name="ufunc"/> is not a comparison, or the operands are not two
         ///     strings of one class (a caller bug: the guard routes only those here).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A text <paramref name="out"/> (the guard keeps those
-        ///     deferred: NumPy formats the bools as <c>'True'</c> / <c>'False'</c>, the number-to-text cast of a later
-        ///     subphase; a direct caller reaches the iterator's buffered cast, which refuses it).</exception>
         internal static unsafe NDArray Execute(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where, bool rstrip = false)
         {
             if (!NDStringUfuncs.ComparesText(x1.dtype, x2.dtype))
@@ -523,7 +520,6 @@ namespace NumSharp.Backends.Strings
         /// <param name="x2">The second input.</param>
         /// <param name="result">The output.</param>
         /// <param name="where">The mask, or null (a mask reaching here runs the per-run ARRAYMASK route).</param>
-        /// <exception cref="StringComputationNotSupportedException">The buffered cast into a text <c>out=</c>.</exception>
         private static unsafe void RunIterator(NDInnerLoopFunc kernel, TextCompareShape shape, NDArray x1, NDArray x2,
                                                NDArray result, NDArray where)
         {

@@ -911,11 +911,9 @@ namespace NumSharp
         private static Exception PromotionTableMiss((NPTypeCode, NPTypeCode) key)
             => key.Item1 == NPTypeCode.String || key.Item2 == NPTypeCode.String
                 ? new NotSupportedException(
-                    "This operation is not supported for fixed-width string arrays: it promotes its operands with NumPy's " +
-                    "numeric type rules, and text has no numeric type. NumSharp's string support covers storage, element " +
-                    "access, conversion to and from C#, copying, casts between string dtypes, conversion between text and " +
-                    "numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting and searching; the rest of " +
-                    "string computation is the next phase.")
+                    "A fixed-width string array reached a numeric promotion table: NumPy's numeric type rules have no entry " +
+                    "for text. Every np.* function answers text through its own route first (computing as NumPy does, or " +
+                    "raising NumPy's refusal), so this is a NumSharp wiring gap; please report the call that reached it.")
                 : new KeyNotFoundException($"The given key '({key.Item1}, {key.Item2})' was not present in the dictionary.");
 
         internal static NPTypeCode _FindCommonArrayType(Type dtype_left, Type dtype_right)

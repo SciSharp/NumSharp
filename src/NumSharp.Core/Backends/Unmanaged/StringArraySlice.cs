@@ -237,10 +237,13 @@ namespace NumSharp.Backends.Unmanaged
         ///     <c>U</c> ASCII-decoded).
         /// </summary>
         /// <param name="index">The element index.</param>
-        /// <param name="value">A <see cref="string"/>, <c>byte[]</c>, <see cref="char"/>, or a 0-d string <see cref="NDArray"/>.</param>
+        /// <param name="value">A <see cref="string"/>, <c>byte[]</c>, <see cref="char"/>, null (Python's <c>None</c>, stored
+        ///     as <c>'None'</c>), a number (stored as its <c>str()</c>) or a 0-d <see cref="NDArray"/>.</param>
         /// <exception cref="UnicodeEncodeError">A non-ASCII string into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
-        /// <exception cref="NotSupportedException">A value that is not text (numbers become text in the computational phase).</exception>
+        /// <exception cref="ValueError">A sequence (<c>setting an array element with a sequence</c>).</exception>
+        /// <exception cref="NotSupportedException">A value that is neither text, bytes, None, a number nor a 0-d array (a C#
+        ///     object has no Python <c>str()</c> to store).</exception>
         public void SetIndex(long index, object value)
             => NDStringStorage.WriteElement(Bytes.Address + index * ItemSize, IsUnicode, Chars, value);
 

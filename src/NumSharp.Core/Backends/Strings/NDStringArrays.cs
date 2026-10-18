@@ -263,13 +263,12 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="shape">The result dimensions and layout: a fresh dense layout (C, F or <c>np.full_like</c>'s KEEPORDER
         ///     permutation, <see cref="Shape.NewLikeLayout"/>) is kept, a view's layout is re-laid out in C order.</param>
-        /// <param name="fillValue">A <see cref="string"/>, <c>byte[]</c>, <see cref="char"/>, null (None) or a 0-d string array.</param>
+        /// <param name="fillValue">A <see cref="string"/>, <c>byte[]</c>, <see cref="char"/>, null (None), a number (formatted
+        ///     as its <c>str()</c>, NumPy's <c>copyto(casting='unsafe')</c>) or a 0-d array.</param>
         /// <param name="dtype">The result dtype (a string dtype), or null to take the fill value's.</param>
         /// <returns>The filled array.</returns>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
         /// <exception cref="UnicodeDecodeError">Non-ASCII bytes into <c>U</c>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A numeric fill value (number to text is the computational
-        ///     phase).</exception>
         public static NDArray Full(Shape shape, object fillValue, DType dtype)
         {
             using var value = fillValue is NDArray nd

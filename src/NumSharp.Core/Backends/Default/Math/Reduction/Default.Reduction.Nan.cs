@@ -84,7 +84,7 @@ namespace NumSharp.Backends
         public override NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false)
         {
             // Text, or a string dtype= request: NumPy's nanprod checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // NumPy reads it), then refuses with its verbatim text (no multiply loop reduces text).
             Strings.NDStringUfuncs.ThrowIfReduce("nanprod", a, axis);
             var arr = a;
             var shape = arr.Shape;

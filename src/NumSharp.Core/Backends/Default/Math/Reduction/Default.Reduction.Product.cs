@@ -17,12 +17,13 @@ namespace NumSharp.Backends
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the accumulator of the input.</param>
         /// <returns>The product (a read-only 0-d scalar for a full reduction).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string input or <paramref name="dtype"/> NumPy
-        ///     computes on (the next phase of NumSharp's string support).</exception>
+        /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
+        ///     multiply loop reduces text into itself).</exception>
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number.</exception>
         public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's prod checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // NumPy reads it), then refuses with its verbatim text.
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("prod", arr, axis_, dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceProduct(p, axis_, keepdims, dtype));

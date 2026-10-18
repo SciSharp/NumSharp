@@ -266,7 +266,9 @@ namespace NumSharp
         /// <returns>A 0-d <c>S</c>/<c>U</c> array.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
         /// <exception cref="UnicodeEncodeError">Non-ASCII text into <c>S</c>.</exception>
-        /// <exception cref="NotSupportedException">A numeric dtype (text to number parsing is the computational phase).</exception>
+        /// <exception cref="ValueError">A numeric dtype and text that does not parse as that number (<c>could not convert
+        ///     string to float: 'x'</c>, NumPy's <c>int()</c> / <c>float()</c> texts).</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer dtype's range.</exception>
         public static NDArray array(string value, DType dtype)
         {
             if (value == null)

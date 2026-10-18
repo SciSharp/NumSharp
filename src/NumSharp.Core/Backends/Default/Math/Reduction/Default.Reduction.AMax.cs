@@ -19,7 +19,10 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
         /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation maximum which has
         ///     no identity", NumPy's ValueError).</exception>
-        /// <exception cref="StringComputationNotSupportedException">A string input NumPy computes on (the next phase).</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim
+        ///     text). A <c>StringDType</c> input computes.</exception>
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number
+        ///     (NumPy casts the text first: <c>could not convert string to float</c>).</exception>
         /// <remarks><see cref="NDAnchoredAttribute"/>: the reduction engines read <paramref name="arr"/>'s raw address
         ///     (the float16 walks and the exact schedules among them), and every front door — <c>np.max</c>,
         ///     <c>np.amax</c>, <c>ndarray.max</c>, <see cref="AMax"/> — reaches them through this method, which opens no
@@ -29,7 +32,7 @@ namespace NumSharp.Backends
         public override NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
         {
             // Text, or a string dtype= request: NumPy's max checks its arguments first (the axis, and the dtype= class where
-            // NumPy reads it), then refuses with its verbatim text or computes on text (the next phase).
+            // NumPy reads it), then refuses with its verbatim text (fixed width) or computes on the text (StringDType).
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("max", arr, axis_, dtype) is { } parsed)
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceAMax(p, axis_, keepdims, dtype));

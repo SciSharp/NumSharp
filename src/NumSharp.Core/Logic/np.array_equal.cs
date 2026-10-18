@@ -137,7 +137,7 @@ namespace NumSharp {
             // StringDType first (IsString refuses it): NumPy's statements over the StringDType comparison and isnan.
             if (b is not null && (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(b)))
                 return ArrayEqualVString(a, b, equal_nan);
-            // Text: NumPy's statements decide by shape and dtype until (a1 == a2).all() compares text (the next phase).
+            // Text: NumPy's statements decide by shape and dtype until (a1 == a2).all() compares the text.
             if (b is not null && (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(b)))
                 return ArrayEqualText(a, b, equal_nan);
 

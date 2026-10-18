@@ -3,25 +3,20 @@ using System;
 namespace NumSharp
 {
     /// <summary>
-    ///     A call that NumPy answers by COMPUTING on fixed-width string data (<c>S</c> / <c>U</c>), which NumSharp's string
-    ///     support does not do yet. The string dtypes cover storage, element access, conversion to and from C#, copying,
-    ///     casts between string dtypes, conversion between text and numbers (NumPy's legacy casts: a number's scalar
-    ///     <c>str()</c>, a text's <c>int()</c> / <c>float()</c> / <c>complex()</c>), indexing, printing, comparisons, truth
-    ///     tests, concatenation, repetition, sorting and searching; the rest of text computation — the set routines, and
-    ///     the <c>np.strings</c> functions beyond <c>add</c> / <c>multiply</c> — is the next phase.
+    ///     A computation on text that NumSharp deliberately does not run: <c>np.evaluate</c> (and <c>NDExpr</c> evaluation)
+    ///     with an <c>S</c>, <c>U</c> or <c>StringDType</c> operand. <c>np.evaluate</c> is a NumSharp extension without a
+    ///     NumPy function to follow; its fused kernels compute on numbers, so text is computed with the string functions
+    ///     (<c>np.strings</c>, the comparisons, the truth tests) and their numeric or bool results feed the expression
+    ///     (decision D20 of <c>docs/plans/strings-phase2.md</c>).
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>When it is thrown.</b> Only where NumPy itself returns a result: <c>np.unique(u)</c>, <c>np.isin(u, v)</c>,
-    ///     <c>np.histogram(u)</c>, <c>np.percentile(u, q)</c> and similar. Where NumPy raises an error for a string operand
-    ///     (<c>np.subtract(u, u)</c>, <c>np.sum(u)</c>, <c>np.dot(u, u)</c>), NumSharp raises NumPy's own exception and text
-    ///     instead, because that answer is final.
-    ///     </para>
-    ///     <para>
-    ///     <b>For the computational phase.</b> Every throw site is a place that phase implements: finding all references to
-    ///     this type lists them. The string oracle (<c>test/oracle/gen_strings_oracle.py</c>) already holds NumPy's results
-    ///     for these calls and counts them as deferred while this exception is thrown; once a site computes, the oracle
-    ///     compares its result with NumPy's byte for byte.
+    ///     <b>Every NumPy call over text has its answer.</b> Since strings phase 2 (P2.7) no <c>np.*</c> function throws this
+    ///     type: where NumPy computes on text (the <c>np.strings</c> functions, sorting, searching, the set routines, the
+    ///     statistics and reductions over <c>StringDType</c>, the conversions between text and numbers, …) NumSharp computes
+    ///     the same result, and where NumPy refuses a string operand (<c>np.subtract(u, u)</c>, <c>np.sum(u)</c>,
+    ///     <c>np.dot(u, u)</c>) NumSharp raises NumPy's own exception and text. The string oracle
+    ///     (<c>test/oracle/gen_strings_oracle.py</c>) holds every such case to NumPy byte for byte, with no deferral.
     ///     </para>
     ///     <para>
     ///     It derives from <see cref="NotSupportedException"/>, so existing <c>catch (NotSupportedException)</c> code sees it.
@@ -29,7 +24,7 @@ namespace NumSharp
     /// </remarks>
     public sealed class StringComputationNotSupportedException : NotSupportedException, INumSharpException
     {
-        /// <summary>Creates the exception with a message that names the call and the string dtype involved.</summary>
+        /// <summary>Creates the exception with a message that names the operand's string dtype and says why it is refused.</summary>
         /// <param name="message">The message.</param>
         public StringComputationNotSupportedException(string message) : base(message) { }
     }

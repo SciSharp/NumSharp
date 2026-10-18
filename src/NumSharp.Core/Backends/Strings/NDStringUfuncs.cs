@@ -13,14 +13,14 @@ namespace NumSharp.Backends.Strings
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>Three kinds of answer.</b> Where NumPy itself refuses (no loop for the operand classes), the exception carries
-    ///     NumPy's exact text: that is final behavior, not a gap. The comparisons and the <c>logical_*</c> truth tests
-    ///     COMPUTE (strings phase 2, P2.1: <see cref="NDStringComparison"/>, <see cref="NDStringTruth"/>), after the same
-    ///     checks; concatenation, repetition (P2.3), sorting and searching (P2.2) compute too. Where NumPy computes in a way a
-    ///     later subphase implements (the set routines, a text <c>out=</c>), the answer is
-    ///     <see cref="NextPhase(string, NDArray)"/>: a
-    ///     <see cref="NotSupportedException"/> that names the operation. The refusals are raised BEFORE broadcasting, as
-    ///     NumPy resolves the loop before it broadcasts.
+    ///     <b>Two kinds of answer.</b> Where NumPy itself refuses (no loop for the operand classes), the exception carries
+    ///     NumPy's exact text: that is final behavior, not a gap. Where NumPy computes, NumSharp computes after the same
+    ///     checks: the comparisons and the <c>logical_*</c> truth tests (<see cref="NDStringComparison"/>,
+    ///     <see cref="NDStringTruth"/>), the concatenation and the repetition (<see cref="NDStringArithmetic"/>, a
+    ///     repetition reduced into a text <c>out=</c> through <see cref="NDStringRepeatReduction"/>), sorting and searching.
+    ///     The answer functions report a computing call by returning null (no exception), so a refusal-only guard reached by
+    ///     such a call reports an internal wiring error instead of a NumPy answer (<see cref="ComputingLoopMisrouted"/>).
+    ///     The refusals are raised BEFORE broadcasting, as NumPy resolves the loop before it broadcasts.
     ///     </para>
     ///     <para>
     ///     <b>Three NumPy texts, chosen by the ufunc's type resolver</b> (probed against 2.4.2, <c>probe_compute*.py</c>):
@@ -115,7 +115,9 @@ namespace NumSharp.Backends.Strings
         ///     string input cannot reach by a same_kind cast, a computing loop's output that <paramref name="out"/> cannot
         ///     receive, or operands that do not broadcast with <paramref name="out"/> / <paramref name="where"/>.</exception>
         /// <exception cref="IncorrectShapeException">The two inputs of a computing call do not broadcast.</exception>
-        /// <exception cref="StringComputationNotSupportedException">NumPy computes this call on text (<see cref="NextPhase(string, NDArray)"/>).</exception>
+        /// <exception cref="InvalidOperationException">A call whose string loop COMPUTES reached this refusal-only guard: such
+        ///     calls go through <see cref="BinaryGuard"/>, so this is a wiring error inside NumSharp, never a user's error
+        ///     (<see cref="ComputingLoopMisrouted"/>).</exception>
         internal static void ThrowIfBinary(string ufunc, NDArray x1, NDArray x2, NDArray @out = null, NPTypeCode? loop = null,
             NDArray where = null)
         {
@@ -128,16 +130,18 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The error of a refusal-only guard reached by a call whose <c>StringDType</c> loop COMPUTES (a comparison, a
-        ///     logical ufunc, <c>add</c>, <c>multiply</c>, <c>maximum</c>, <c>minimum</c>, <c>isnan</c>): such a call must go
-        ///     through the computing guards (<see cref="BinaryGuard"/>, the <c>isnan</c> route), so this is a wiring error
-        ///     inside NumSharp, never a user's error.
+        ///     The error of a refusal-only guard reached by a call whose string loop COMPUTES (a fixed-width or
+        ///     <c>StringDType</c> comparison, logical ufunc, <c>add</c>, <c>multiply</c>, <c>maximum</c>, <c>minimum</c>,
+        ///     <c>isnan</c>, or a reduction into a text <c>out=</c>): such a call must go through the computing guards
+        ///     (<see cref="BinaryGuard"/>, the <c>isnan</c> route, <see cref="ReduceIntoOutRoute(string, NDArray, int?,
+        ///     NDArray, DType)"/>), so this is a wiring error inside NumSharp, never a user's error.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <returns>The exception (not thrown).</returns>
         private static InvalidOperationException ComputingLoopMisrouted(string ufunc)
             => new InvalidOperationException(
-                $"ufunc '{ufunc}' has a StringDType loop that computes; its caller must route the call through the computing guard.");
+                $"ufunc '{ufunc}' has a string loop that computes on these operands; its caller must route the call through " +
+                "the computing guard.");
 
         /// <summary>
         ///     The guard of a binary ufunc whose loop can COMPUTE on text (the comparisons, the logical ufuncs, <c>add</c>):
@@ -184,34 +188,34 @@ namespace NumSharp.Backends.Strings
             if (!IsString(x1) && !IsString(x2))
                 return null;
             var error = BinaryAnswer(ufunc, x1, x2, @out, loop, where, out DType computed);
-            // ComputeAnswer's refusal means every check passed and the loop would compute: an empty result computes nothing,
-            // the comparisons and the logical ufuncs compute now, the concatenation / repeat loops are a later subphase.
-            if (error is StringComputationNotSupportedException && computed is not null)
-            {
-                var dims = BroadcastDims(x1, x2, @out, where);
-                if (ShapeSize(dims) == 0)
-                    return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
-                // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width, NumPy's
-                // output cast): the bools are computed into a temporary and cast into out= under where= (the guard
-                // already checked the bool → text cast and the broadcast).
-                bool textOut = IsString(@out);
-                if (s_comparisons.Contains(ufunc) && ComparesText(x1.dtype, x2.dtype))
-                    return textOut
-                        ? NDStringArithmetic.CastInto(@out, where, () => NDStringComparison.Execute(ufunc, x1, x2, null, null))
-                        : NDStringComparison.Execute(ufunc, x1, x2, @out, where);
-                if (s_logical.Contains(ufunc))
-                    return textOut
-                        ? NDStringArithmetic.CastInto(@out, where, () => LogicalOverTruth(ufunc, x1, x2, null, null))
-                        : LogicalOverTruth(ufunc, x1, x2, @out, where);
-                // The concatenation of two strings of one class, and the repeat of a string by an integer into its (text)
-                // out= — the guard's output cast already refused every non-text out for both. A numeric operand that a
-                // string dtype= request casts to text never gets here (AddUnderStringRequest computes that call first).
-                if (ufunc == "add" && ComparesText(x1.dtype, x2.dtype))
-                    return NDStringArithmetic.Add(x1, x2, @out, where);
-                if (ufunc == "multiply" && textOut)
-                    return NDStringArithmetic.Multiply(x1, x2, @out, where);
-            }
-            throw error;
+            if (error is not null)
+                throw error;
+            // No refusal: every check passed and the loop computes (BinaryAnswer set its output descriptor). An empty
+            // broadcast computes nothing; the comparisons, the logical ufuncs, the concatenation and the repetition run.
+            var dims = BroadcastDims(x1, x2, @out, where);
+            if (ShapeSize(dims) == 0)
+                return @out ?? new NDArray(computed, dims.Length == 0 ? Shape.NewScalar() : Shape.Adopt(dims), true);
+            // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width, NumPy's
+            // output cast): the bools are computed into a temporary and cast into out= under where= (the guard
+            // already checked the bool → text cast and the broadcast).
+            bool textOut = IsString(@out);
+            if (s_comparisons.Contains(ufunc) && ComparesText(x1.dtype, x2.dtype))
+                return textOut
+                    ? NDStringArithmetic.CastInto(@out, where, () => NDStringComparison.Execute(ufunc, x1, x2, null, null))
+                    : NDStringComparison.Execute(ufunc, x1, x2, @out, where);
+            if (s_logical.Contains(ufunc))
+                return textOut
+                    ? NDStringArithmetic.CastInto(@out, where, () => LogicalOverTruth(ufunc, x1, x2, null, null))
+                    : LogicalOverTruth(ufunc, x1, x2, @out, where);
+            // The concatenation of two strings of one class, and the repeat of a string by an integer into its (text)
+            // out= — the guard's output cast already refused every non-text out for both. A numeric operand that a
+            // string dtype= request casts to text never gets here (AddUnderStringRequest computes that call first).
+            if (ufunc == "add" && ComparesText(x1.dtype, x2.dtype))
+                return NDStringArithmetic.Add(x1, x2, @out, where);
+            if (ufunc == "multiply" && textOut)
+                return NDStringArithmetic.Multiply(x1, x2, @out, where);
+            // BinaryAnswer reported a computing loop this switch does not run: a wiring error inside NumSharp.
+            throw ComputingLoopMisrouted(ufunc);
         }
 
         /// <summary>
@@ -310,9 +314,9 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's answer for a binary ufunc with at least one string operand, in NumPy's resolution order: a numeric
-        ///     <c>dtype=</c> loop first checks each input's same_kind cast (inputs in order), then the ufunc's string loops
-        ///     decide between computing (the next phase) and its no-loop text.
+        ///     NumPy's REFUSAL of a binary ufunc call with at least one string operand, for the entry points whose call never
+        ///     computes on text (<c>clip</c>'s <c>minimum</c> / <c>maximum</c>, the shifts, <c>logaddexp</c>, <c>diff</c>'s
+        ///     <c>subtract</c>, ...): the answer <see cref="BinaryAnswer"/> gives, in NumPy's resolution order.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="x1">The first operand.</param>
@@ -322,7 +326,8 @@ namespace NumSharp.Backends.Strings
         /// <param name="loop">The <c>dtype=</c> loop request, or null. A string-lane request is ignored: it cannot select
         ///     a numeric loop, and the classification by operand classes gives NumPy's answer.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <returns>The exception to throw (never null): NumPy's refusal, or — for a call whose string loop computes, which
+        ///     these entry points never make — the wiring error <see cref="ComputingLoopMisrouted"/>.</returns>
         /// <remarks>
         ///     NumPy parses <c>out=</c> and <c>where=</c> before it resolves the loop, so a read-only out or a non-bool mask
         ///     wins over every loop answer; a loop NumPy computes then still casts its output into <c>out=</c> and broadcasts
@@ -332,12 +337,16 @@ namespace NumSharp.Backends.Strings
             NDArray where = null)
             => IsVString(x1) || IsVString(x2)
                 ? VStringBinaryAnswer(ufunc, x1, x2, @out, loop, where, out _) ?? ComputingLoopMisrouted(ufunc)
-                : BinaryAnswer(ufunc, x1, x2, @out, loop, where, out _);
+                : BinaryAnswer(ufunc, x1, x2, @out, loop, where, out _) ?? ComputingLoopMisrouted(ufunc);
 
         /// <summary>
-        ///     <see cref="BinaryError"/>, also reporting the descriptor of the loop NumPy would compute (the comparisons and the
-        ///     logical ufuncs: bool; a concatenation: its <see cref="Concatenation"/>; a repeat: <c>out=</c>'s), so
-        ///     <see cref="BinaryGuard"/> can build an empty result.
+        ///     NumPy's answer for a binary ufunc with at least one fixed-width string operand, in NumPy's resolution order:
+        ///     the <c>out=</c> / <c>where=</c> parse, then the string promoters (the comparisons and logical ufuncs, the
+        ///     concatenation of two strings of one class, the repetition of a string by an integer — each of which wins over a
+        ///     <c>dtype=</c> request), then a numeric <c>dtype=</c> loop's input casts (inputs in order), then the no-loop text.
+        ///     Also reports the descriptor of the loop NumPy computes (the comparisons and the logical ufuncs: bool; a
+        ///     concatenation: its <see cref="Concatenation"/>; a repetition: <c>out=</c>'s), so <see cref="BinaryGuard"/> can
+        ///     build an empty result.
         /// </summary>
         /// <param name="ufunc">NumPy's ufunc name.</param>
         /// <param name="x1">The first operand.</param>
@@ -345,8 +354,9 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <param name="loop">The <c>dtype=</c> loop request, or null.</param>
         /// <param name="where">The <c>where=</c> mask, or null.</param>
-        /// <param name="computed">The computing loop's output descriptor; null when the answer is not a computation.</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <param name="computed">The computing loop's output descriptor when the call computes (the return is then null);
+        ///     meaningless when an exception is returned.</param>
+        /// <returns>The exception to throw, or null when every check passed and NumPy's string loop computes.</returns>
         private static Exception BinaryAnswer(string ufunc, NDArray x1, NDArray x2, NDArray @out, NPTypeCode? loop,
             NDArray where, out DType computed)
         {
@@ -395,6 +405,19 @@ namespace NumSharp.Backends.Strings
                 return ComputeAnswer(ufunc, x1, x2, @out, where, computed);
             }
 
+            // The string repeat: NumPy's multiply loops for a fixed-width string and an integer count (PyTypeNum_ISINTEGER:
+            // the eight widths, not bool) read the count as int64, and they win over ANY dtype= request just as the add
+            // promoter does — multiply(u, 2, out=U5, dtype=...) is ['abab', 'cc'] for dtype S, U, int64, float64, bool or
+            // object (probed against 2.4.2: every outcome is the no-request outcome), so the numeric input casts below never
+            // run for it.
+            if (ufunc == "multiply" && (s1 && d2.typecode.IsInteger() || s2 && d1.typecode.IsInteger()))
+            {
+                // NumPy's legacy string multiply loop needs a preallocated result (its verbatim refusal without one); with
+                // one, an empty broadcast writes nothing into it.
+                computed = @out?.dtype;
+                return MultiplyRepeatAnswer(x1, x2, @out, where);
+            }
+
             // dtype= with a numeric loop: the signature fixes the loop, and NumPy checks every input's cast to it in input
             // order. Text never reaches a number by a same_kind cast, so a string input always fails here.
             if (numeric is { } loopCode)
@@ -408,16 +431,6 @@ namespace NumSharp.Backends.Strings
             // NumPy's string add promoter refuses a bytes/str mix with its own text (probed: add(U3, S2)).
             if (ufunc == "add" && s1 && s2)
                 return new TypeError($"ufunc 'add' cannot use operands with types {d1.ToString(true)} and {d2.ToString(true)}");
-
-            // NumPy's string multiply promoter takes any integer type number (PyTypeNum_ISINTEGER: the eight widths, not
-            // bool) as the repeat count and converts it to int64.
-            if (ufunc == "multiply" && (s1 && d2.typecode.IsInteger() || s2 && d1.typecode.IsInteger()))
-            {
-                // NumPy's legacy string multiply loop needs a preallocated result (its verbatim refusal without one); with
-                // one, an empty broadcast writes nothing into it.
-                computed = @out?.dtype;
-                return MultiplyRepeatAnswer(x1, x2, @out, where);
-            }
 
             if (s_descriptorNoLoop.Contains(ufunc))
                 return NoLoop(ufunc, d1, d2);
@@ -605,7 +618,10 @@ namespace NumSharp.Backends.Strings
         /// <param name="a">The input.</param>
         /// <param name="out">The out array (any dtype).</param>
         /// <param name="accumulate">Whether this is <c>ufunc.accumulate</c>.</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <returns>The exception to throw (never null): NumPy's refusal, or <see cref="ComputingLoopMisrouted"/> for the one
+        ///     combination NumPy computes (a text out and integer counts under <c>multiply.reduce</c>, which
+        ///     <see cref="ReduceIntoOutRoute(string, NDArray, int?, NDArray, DType)"/> returns as
+        ///     <see cref="TextOutReduce.Repeat"/> before it would call this).</returns>
         /// <remarks>
         ///     <para>
         ///     add: two texts of one class resolve the concatenation loop (output = the two lengths added) and are then
@@ -614,14 +630,26 @@ namespace NumSharp.Backends.Strings
         ///     multiply: an INTEGER out and a text input resolve the string repeat (the count as int64, the result the out's
         ///     dtype cast to the text class: <c>int8</c> reads as <c>&lt;U4</c>) and are refused the same way; a text out and an
         ///     integer input refuse an accumulation and REPEAT the out's text in a reduction (NumPy computes:
-        ///     <c>np.prod([1, 2, 3], out=np.zeros((), 'U4'))</c> is <c>'1111'</c>). Every other combination names both
-        ///     descriptors: <c>ufunc 'maximum' did not contain a loop with signature matching types (dtype('float64'),
-        ///     dtype('&lt;U2')) -&gt; None</c> (probed against 2.4.2).
+        ///     <c>np.prod([1, 2, 3], out=np.zeros((), 'U4'))</c> is <c>'1111'</c>, <see cref="NDStringRepeatReduction"/>).
+        ///     Every other combination names both descriptors: <c>ufunc 'maximum' did not contain a loop with signature
+        ///     matching types (dtype('float64'), dtype('&lt;U2')) -&gt; None</c> (probed against 2.4.2).
         ///     </para>
         /// </remarks>
         internal static Exception ReduceOutError(string ufunc, NDArray a, NDArray @out, bool accumulate)
+            => ReduceOutError(ufunc, a.dtype, @out.dtype, accumulate);
+
+        /// <summary>
+        ///     <see cref="ReduceOutError(string, NDArray, NDArray, bool)"/> over descriptors: for a caller whose reduced
+        ///     operand exists only inside NumPy's algorithm (<c>_var</c>'s squared deviations meeting a text <c>out=</c>).
+        /// </summary>
+        /// <param name="ufunc">The ufunc (<see cref="ReduceUfuncOf"/>).</param>
+        /// <param name="d">The reduced operand's descriptor (fixed-width text or a number).</param>
+        /// <param name="o">The out's descriptor (fixed-width text or a number; a <c>StringDType</c> out is
+        ///     <see cref="VStringNoLoop"/>'s, not this).</param>
+        /// <param name="accumulate">Whether this is <c>ufunc.accumulate</c>.</param>
+        /// <returns>The exception to throw (never null).</returns>
+        internal static Exception ReduceOutError(string ufunc, DType d, DType o, bool accumulate)
         {
-            DType d = a.dtype, o = @out.dtype;
             bool textD = d.Meta is StringDTypeMeta, textO = o.Meta is StringDTypeMeta;
             string method = accumulate ? "accumulate" : "reduce";
             switch (ufunc)
@@ -646,7 +674,7 @@ namespace NumSharp.Backends.Strings
                             ? new TypeError(
                                 "the resolved dtypes are not compatible with multiply.accumulate. Resolved " +
                                 $"({o.ToString(true)}, dtype('int64'), {o.ToString(true)})")
-                            : NextPhase("multiply", @out);
+                            : ComputingLoopMisrouted("multiply");
                     return NoLoop("multiply", o, d);
                 default:
                     return NoLoop(ufunc, o, d);
@@ -659,7 +687,7 @@ namespace NumSharp.Backends.Strings
         /// </summary>
         /// <param name="d">The descriptor.</param>
         /// <returns>True for an integer count.</returns>
-        private static bool IsRepeatCount(DType d) => d.typecode is NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16
+        internal static bool IsRepeatCount(DType d) => d.typecode is NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16
             or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64;
 
         /// <summary>
@@ -915,31 +943,21 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     The refusal for a call NumPy answers by computing on fixed-width text that NumSharp does not compute yet: the
-        ///     <c>np.strings</c> functions beyond <c>add</c> / <c>multiply</c> and the calls built on them (strings phase 2,
-        ///     P2.7: a string ufunc's computing loop, <c>np.evaluate</c> over text, the FFT of text, <c>np.pad</c>'s
-        ///     <c>linear_ramp</c> of text, a multiply reduction of repeat counts into a text <c>out=</c>). The sorts,
-        ///     searches, unique values, set routines, histograms and quantiles over text compute (P2.2).
+        ///     <c>np.evaluate</c>'s refusal of a text operand — an <c>S</c>, <c>U</c> or <c>StringDType</c> leaf or positional
+        ///     operand — raised before anything is bound or compiled (decision D20 of <c>docs/plans/strings-phase2.md</c>).
+        ///     <c>np.evaluate</c> is a NumSharp extension with no NumPy function to follow: its fused kernels compute on
+        ///     numbers, and a text leaf would save at most about 18 % of a typical filter expression (the text kernel is the
+        ///     rest, measured for D20), so text stays with the string functions and its numeric or bool results feed the
+        ///     expression.
         /// </summary>
-        /// <param name="op">The NumPy function or ufunc name.</param>
-        /// <param name="a">A string operand of the call; its descriptor is named in the message.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static StringComputationNotSupportedException NextPhase(string op, NDArray a) => NextPhase(op, a.dtype);
-
-        /// <summary>
-        ///     <see cref="NextPhase(string, NDArray)"/> naming a descriptor rather than an operand: the string loop's output
-        ///     descriptor of a computing loop this phase does not run yet.
-        /// </summary>
-        /// <param name="op">The NumPy function or ufunc name.</param>
-        /// <param name="descr">The descriptor named in the message.</param>
-        /// <returns>The exception (not thrown).</returns>
-        internal static StringComputationNotSupportedException NextPhase(string op, DType descr)
+        /// <param name="a">The text operand; its descriptor is named in the message.</param>
+        /// <returns>The exception (not thrown): a <see cref="StringComputationNotSupportedException"/>, which is a
+        ///     <see cref="NotSupportedException"/> — the type's only throw site.</returns>
+        internal static StringComputationNotSupportedException EvaluateTextOperand(NDArray a)
             => new StringComputationNotSupportedException(
-                $"{op} is not supported for fixed-width string arrays yet ({descr.ToString(true)}): NumSharp's string support " +
-                "covers storage, element access, conversion to and from C#, copying, casts between string dtypes, conversion " +
-                "between text and numbers, indexing, printing, comparisons, truth tests, concatenation, repetition, sorting, " +
-                "searching, unique values, the set routines, histograms and quantiles. The rest of string computation (the " +
-                "np.strings functions and the calls built on them) is the next phase.");
+                $"np.evaluate does not take text operands ({a.dtype.ToString(true)}): its fused kernels compute on numbers. " +
+                "Compute on the text with the string functions (np.strings, the comparisons, the truth tests) and pass their " +
+                "numeric or bool results to np.evaluate.");
 
         /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's

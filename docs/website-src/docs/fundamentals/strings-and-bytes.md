@@ -45,7 +45,7 @@ Use `np.strings` for elementwise text operations and the usual `np.*` functions 
      Moving data → Moving_ViewsCopiesAndCasts, Moving_NonAsciiToBytes_Throws
      Converting between text and numbers → Converting_NumbersToText, Converting_TextToNumbers, Converting_StoresAndUfuncs, Converting_CSharpStringIsText
      Printing → Printing_StrAndRepr
-     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_Searching, Computing_CharModule, Computing_NumPyRefusals, Computing_NextPhase, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
+     Computing on text → Computing_Comparisons, Computing_TruthValues, Computing_ConcatenationAndRepetition, Computing_Sorting, Computing_Searching, Computing_CharModule, Computing_NumPyRefusals, Computing_StringDTypeAndEvaluate, Computing_NeverEqualToNumbers, Computing_ChecksInNumPysOrder
      Variable-width text: StringDType → StringDType_Creating, StringDType_NAObjects, StringDType_WritingElements, StringDType_MovingAndCasting, StringDType_Nditer, StringDType_Computing, StringDType_Ordering, StringDType_TextFiles, StringDType_Refusals, StringDType_ByteswapIsACopy
      .npy files → Npy_RoundTrip, Npy_CharWritesAsU1, Npy_StringDTypeIsNumPysPickle
      The Char dtype → Char_IsTwoByteUtf16CodeUnit
@@ -682,7 +682,7 @@ Those reductions differ for `StringDType`, which has concatenation and lexical-s
 var t = names.astype(np.dtypes.StringDType());
 t == t;                               // [ True  True  True]
 np.unique(t);                         // ['bird' 'cat' 'dog']
-np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException: a fused expression computes on numbers
+np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException: np.evaluate does not take text operands
 ```
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.

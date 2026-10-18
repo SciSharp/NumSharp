@@ -180,9 +180,8 @@ namespace NumSharp
 
         /// <summary>
         ///     An advanced SET on this string array through its unit view. The value is converted to THIS array's dtype the
-        ///     way NumPy's setitem converts it (truncated / NUL-padded, <c>S ↔ U</c> ASCII-checked; numbers are refused —
-        ///     formatting them is the computational phase), then its unit view is assigned to the selection of this array's
-        ///     unit view.
+        ///     way NumPy's setitem converts it (truncated / NUL-padded, <c>S ↔ U</c> ASCII-checked, numbers formatted as their
+        ///     <c>str()</c>), then its unit view is assigned to the selection of this array's unit view.
         /// </summary>
         /// <param name="value">The value (a string array, any shape broadcastable to the selection; or numbers; or null —
         ///     Python's <c>None</c>, stored as the text <c>'None'</c>, truncated to the width).</param>

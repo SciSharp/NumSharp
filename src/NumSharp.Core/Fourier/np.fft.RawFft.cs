@@ -86,11 +86,12 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Full port of <c>_raw_fft</c>'s front-matter (numpy 2.4.2). Validates <c>n</c>, resolves
-        ///     the normalization factor <c>fct</c> (inverse swaps the norm first), resolves the output
-        ///     length along the axis (<c>rfft</c> → <c>n//2+1</c>; others → <c>n</c>), normalizes the
-        ///     axis and validates a provided <paramref name="out"/> shape — THEN reaches the compute
-        ///     seam and throws (the transform kernel is a separate agent's work).
+        ///     Port of <c>_raw_fft</c> (numpy 2.4.2). Validates <c>n</c>, resolves the normalization
+        ///     factor <c>fct</c> (inverse swaps the norm first) in the input's <c>real_dtype</c> (whose
+        ///     promotion refuses text), resolves the output length along the axis (<c>rfft</c> →
+        ///     <c>n//2+1</c>; others → <c>n</c>), normalizes the axis, validates a provided
+        ///     <paramref name="out"/>, then runs the ported pocketfft transform
+        ///     (<see cref="PocketFFTDriver"/>).
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <param name="n">Transform length (already defaulted by the caller).</param>
@@ -110,6 +111,15 @@ namespace NumSharp
         ///     <c>real_dtype</c> (float32/float16), matching numpy's <c>reciprocal(sqrt(n, dtype=...))</c>.
         ///     Threaded through the N-D compositions so every 1-D leaf reproduces its own numpy loop.
         /// </param>
+        /// <returns>The transform: complex128 for the complex and forward outputs, float64 for <c>irfft</c>
+        ///     (<paramref name="out"/> itself when given).</returns>
+        /// <exception cref="ValueError"><c>n &lt; 1</c>, an unknown <paramref name="norm"/>, or an
+        ///     <paramref name="out"/> of the wrong shape or read-only.</exception>
+        /// <exception cref="DTypePromotionError">A text input (<c>S</c>, <c>U</c> or <c>StringDType</c>):
+        ///     <c>result_type(a.real.dtype, 1.0)</c> has no common DType (NumPy's text).</exception>
+        /// <exception cref="TypeError">A complex input to <c>rfft</c> (no complex loop).</exception>
+        /// <exception cref="AxisError">An axis outside the input (the caller's <c>a.shape[axis]</c> lookup reports
+        ///     NumPy's IndexError first when <c>n</c> was omitted).</exception>
         internal static NDArray RawFft(NDArray a, int n, int axis, bool isReal, bool isForward, string norm, NDArray @out, string name, bool floatPrec = false)
         {
             if (n < 1)
@@ -120,12 +130,14 @@ namespace NumSharp
             if (!isForward)
                 effNorm = SwapDirection(norm);
 
-            // NumPy's next statement is real_dtype = result_type(a.real.dtype, 1.0): text has no common DType with the weak
-            // float, so a string input raises DTypePromotionError with NumPy's text (thrown by the promotion itself).
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
+            // NumPy's next statement is real_dtype = result_type(a.real.dtype, 1.0): text (S, U or StringDType: IsText never
+            // throws) has no common DType with the weak float, so a text input raises DTypePromotionError with NumPy's text,
+            // thrown by the promotion itself (`a.real` of a non-complex array is the array).
+            if (Backends.Strings.NDStringUfuncs.IsText(a))
             {
                 DTypePromotion.ResultType(a.dtype, 1.0);
-                throw Backends.Strings.NDStringUfuncs.NextPhase(name, a);
+                // No string class promotes with the abstract Python float, so the promotion above always raises.
+                throw new InvalidOperationException($"result_type({a.dtype.ToString(true)}, float) returned for the FFT of text.");
             }
 
             // fct = reciprocal(sqrt/n) computed in the input's real_dtype (numpy's _raw_fft:

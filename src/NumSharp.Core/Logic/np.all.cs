@@ -156,9 +156,6 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not
         ///     broadcast against <paramref name="a"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
-        ///     values (the next phase of NumSharp's string support). An empty one is answered from its shape (the reduction's
-        ///     identity).</exception>
         /// <remarks>
         ///     A bare <c>null</c> axis binds this overload (NumPy's <c>axis=None</c>): the <c>int[]</c>-axis overloads
         ///     carry a lower <c>OverloadResolutionPriority</c> for exactly that literal.
@@ -216,9 +213,6 @@ namespace NumSharp
         /// <exception cref="AxisError">An axis is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not
         ///     broadcast against <paramref name="a"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty string array: NumPy reads the strings' truth
-        ///     values (the next phase of NumSharp's string support). An empty one is answered from its shape (the reduction's
-        ///     identity).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
         // A bare null axis fits int? and int[] equally well (CS0121 for np.all(a, null, null, false, w)); the
         // lower priority hands that literal to the int? overload (NumPy's axis=None). An int[] argument fits only

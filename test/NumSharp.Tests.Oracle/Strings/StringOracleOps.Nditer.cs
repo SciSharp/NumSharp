@@ -16,9 +16,8 @@ namespace NumSharp.Tests.Strings
     ///     before close and the caller's arrays after close, values as hex (<c>u</c> = UTF-32, <c>b</c> = bytes).
     /// </summary>
     /// <remarks>
-    ///     A step that raises ends the walk as a <c>!Type: text</c> line, as in the generator; a
-    ///     <see cref="StringComputationNotSupportedException"/> is NOT rendered — it propagates, so the harness counts a
-    ///     phase-2 case (text parsed into numbers or numbers formatted as text) as deferred rather than as a mismatch.
+    ///     A step that raises ends the walk as a <c>!Type: text</c> line, as in the generator (text parsed into numbers and
+    ///     numbers formatted as text included: they compute, with NumPy's errors).
     /// </remarks>
     internal static partial class StringOracleOps
     {
@@ -120,7 +119,7 @@ namespace NumSharp.Tests.Strings
 
                     walked = true;
                 }
-                catch (Exception e) when (e is not StringComputationNotSupportedException)
+                catch (Exception e)
                 {
                     lines.Add("!" + PythonErrorName(e) + ": " + TraceMessage(e.Message));
                 }
@@ -163,7 +162,7 @@ namespace NumSharp.Tests.Strings
                     lines.Add(string.Join(" ", row));
                 }
             }
-            catch (Exception e) when (e is not StringComputationNotSupportedException)
+            catch (Exception e)
             {
                 lines.Add("!" + PythonErrorName(e) + ": " + TraceMessage(e.Message));
             }

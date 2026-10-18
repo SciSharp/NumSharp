@@ -75,8 +75,9 @@ namespace NumSharp
     ///     <c>decimal</c> as a float (32, enough for the 31 characters of <c>-0.0000000000000000000000000001</c>).
     ///     </para>
     ///     <para>
-    ///     Only the descriptor resolution exists in this phase: the strided loops that format a number as text arrive with
-    ///     the computational phase. The <c>S ↔ U</c> casts run on NumSharp's unit-view kernels (ASCII-checked).
+    ///     The descriptor resolution lives here; the casts themselves run on NumSharp's string kernels: a number is formatted
+    ///     as its scalar <c>str()</c> (<see cref="NumSharp.Backends.Strings.NDTextConversion"/>), and the <c>S ↔ U</c>
+    ///     casts on the unit-view kernels (ASCII-checked).
     ///     </para>
     /// </remarks>
     public sealed class ToStringCastingImpl : CastingImpl

@@ -25,8 +25,8 @@ namespace NumSharp
         /// <exception cref="InvalidCastException">Without a period, an operand does not cast 'safely' to the loop's dtype
         ///     (text, or a complex x / xp — NumPy's TypeError <c>Cannot cast array data from dtype('&lt;U2') to dtype('float64')
         ///     according to the rule 'safe'</c>, <c>Cannot cast scalar …</c> for a 0-d x).</exception>
-        /// <exception cref="StringComputationNotSupportedException">With a period, a non-empty text operand: NumPy parses the
-        ///     text to float64 (the computational phase of the string dtypes).</exception>
+        /// <exception cref="ValueError">With a period, a text operand that does not parse as float64: NumPy parses the text
+        ///     first (<c>np.asarray(…, dtype=float64)</c>: <c>could not convert string to float</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.interp.html
         ///     <para>
@@ -66,8 +66,7 @@ namespace NumSharp
         /// <returns>The interpolated values, same shape as x: complex128 for a complex fp, else float64.</returns>
         /// <exception cref="ValueError">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
         /// <exception cref="InvalidCastException">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
-        /// <exception cref="StringComputationNotSupportedException">As
-        ///     <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
+        /// <exception cref="ValueError">As <see cref="interp(NDArray,NDArray,NDArray,double?,double?,double?)"/>.</exception>
         /// <exception cref="TypeError"><paramref name="fp"/> is not complex, no period is given, and <paramref name="left"/> or
         ///     <paramref name="right"/> is given: <c>must be real number, not complex</c>.</exception>
         /// <remarks>
@@ -109,7 +108,7 @@ namespace NumSharp
         /// <returns>The float64 result, x's shape.</returns>
         /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
         /// <exception cref="InvalidCastException">An operand that does not cast 'safely' to float64.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A period with a non-empty text operand.</exception>
+        /// <exception cref="ValueError">A period with a text operand that does not parse as float64.</exception>
         /// <exception cref="TypeError"><paramref name="complexFill"/> is true.</exception>
         private static unsafe NDArray InterpReal(NDArray x, NDArray xp, NDArray fp,
             double? left, double? right, double? period, bool complexFill)
@@ -214,7 +213,7 @@ namespace NumSharp
         /// <returns>The complex128 result, x's shape.</returns>
         /// <exception cref="ValueError">A rank, emptiness, length or period error (see the public overload).</exception>
         /// <exception cref="InvalidCastException">xp or x does not cast 'safely' to float64.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A period with a non-empty text x or xp.</exception>
+        /// <exception cref="ValueError">A period with a text x or xp that does not parse as float64.</exception>
         private static unsafe NDArray InterpComplex(NDArray x, NDArray xp, NDArray fp,
             Complex? left, Complex? right, double? period)
         {
@@ -458,8 +457,8 @@ namespace NumSharp
         /// <param name="fpType">The loop dtype of fp (float64 or complex128).</param>
         /// <returns>The prepared x, xp and fp.</returns>
         /// <exception cref="ValueError">A zero period (checked first), a sample array that is not 1-D, or lengths that differ.</exception>
-        /// <exception cref="StringComputationNotSupportedException">A non-empty text operand: <c>np.asarray(…, dtype=…)</c> parses
-        ///     text into numbers (the computational phase). An EMPTY text operand converts without parsing, as in NumPy.</exception>
+        /// <exception cref="ValueError">A text operand that does not parse as the number type: <c>np.asarray(…, dtype=…)</c>
+        ///     parses the text. An EMPTY text operand converts without parsing, as in NumPy.</exception>
         private static (NDArray x, NDArray xp, NDArray fp) PreparePeriodic(
             NDArray x, NDArray xp, NDArray fp, double period, NPTypeCode fpType)
         {
@@ -468,7 +467,7 @@ namespace NumSharp
             period = Math.Abs(period);
 
             // np.asarray(x / xp / fp, dtype=…) in that order: a FORCED (unsafe) conversion, so a complex x drops its imaginary
-            // part (NumPy warns) and text is parsed — astype refuses a non-empty text parse as the computational phase.
+            // part (NumPy warns) and text is parsed (a text that is not a number is NumPy's ValueError).
             var xd = x.astype(NPTypeCode.Double, copy: true, order: 'C');
             var xpd = xp.astype(NPTypeCode.Double, copy: true, order: 'C');
             var fpd = fp.astype(fpType, copy: true, order: 'C');

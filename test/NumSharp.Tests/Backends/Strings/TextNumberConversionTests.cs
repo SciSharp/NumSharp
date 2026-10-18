@@ -1021,7 +1021,7 @@ namespace NumSharp.Tests.Backends.Strings
             Action family = () => NDTextParse.FamilyOf(NPTypeCode.String);
             family.Should().Throw<NotSupportedException>().WithMessage("String is not a parse target.");
             Action promote = () => np._FindCommonArrayType(NPTypeCode.String, NPTypeCode.Int32);
-            promote.Should().Throw<NotSupportedException>().WithMessage("This operation is not supported for fixed-width string arrays*");
+            promote.Should().Throw<NotSupportedException>().WithMessage("A fixed-width string array reached a numeric promotion table*");
             Action promoteScalar = () => np._FindCommonArrayScalarType(NPTypeCode.Int32, NPTypeCode.String);
             promoteScalar.Should().Throw<NotSupportedException>();
             Action miss = () => np._FindCommonArrayType(NPTypeCode.Empty, NPTypeCode.Int32);

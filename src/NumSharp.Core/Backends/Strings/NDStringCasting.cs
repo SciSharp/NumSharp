@@ -10,10 +10,10 @@ namespace NumSharp.Backends.Strings
     ///     <c>np.copyto</c>.
     /// </summary>
     /// <remarks>
-    ///     Only text ↔ text conversions run in this phase. A cast between a string dtype and a number (or a
-    ///     <c>datetime64</c>/<c>timedelta64</c>) is checked against the casting rule exactly like NumPy — so a refused rule
-    ///     raises NumPy's TypeError text — and only a cast the rule ALLOWS is then refused with
-    ///     <see cref="NotSupportedException"/>, because parsing and formatting numbers is the computational phase.
+    ///     A cast between a string dtype and a number (or a <c>datetime64</c>/<c>timedelta64</c>) is checked against the
+    ///     casting rule exactly like NumPy — so a refused rule raises NumPy's TypeError text — and an allowed one formats the
+    ///     numbers as text (their scalar <c>str()</c>) or parses the text (<c>int()</c> / <c>float()</c> / <c>complex()</c>,
+    ///     <see cref="NDTextConversion"/>), with NumPy's errors for text that does not parse.
     /// </remarks>
     internal static class NDStringCasting
     {
@@ -214,16 +214,5 @@ namespace NumSharp.Backends.Strings
                 $"Cannot cast {(scalar ? "scalar" : "array data")} from {from.ToString(true)} to {to.ToString(true)} " +
                 $"according to the rule '{DTypeCasting.CastingToString(casting)}'");
 
-        /// <summary>
-        ///     The refusal of an ALLOWED cast between text and a number or a date: NumPy formats / parses the values, which is
-        ///     the computational phase of the string dtypes.
-        /// </summary>
-        /// <param name="from">The source descriptor.</param>
-        /// <param name="to">The target descriptor.</param>
-        /// <returns>The exception (not thrown).</returns>
-        public static StringComputationNotSupportedException TextConversion(DType from, DType to)
-            => new StringComputationNotSupportedException(
-                $"Casting {from.ToString(true)} to {to.ToString(true)} converts between text and {(from.Meta is StringDTypeMeta ? to : from).name} " +
-                "values, which NumSharp's fixed-width string storage does not do yet (only string-to-string casts are supported).");
     }
 }

@@ -24,9 +24,13 @@ namespace NumSharp
             // out= loop resolution); the out receives the accumulation itself, or its cast into an S / U out.
             if (Backends.Strings.NDStringUfuncs.VStringReduces("cumsum", arr, axis, typeCode, @out))
                 return Backends.Strings.NDVStringReduction.CumSum(arr, axis, @out);
-            // Fixed-width text (input or out=): add.accumulate's loop on (out, arr) answers after the axis (ReduceOutError);
-            // without out= the engine's guard answers (ReduceError).
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("cumsum", arr, axis, @out, typeCode);
+            // Fixed-width text (input or out=): add.accumulate's loop on (out, arr) answers after the axis. A U input into a
+            // StringDType out concatenates (the StringDType add promoter pairs StringDType with StrDType; the input is cast
+            // to the default StringDType()); every other combination is NumPy's refusal (ReduceOutError), and without out=
+            // the engine's guard answers (ReduceError).
+            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("cumsum", arr, axis, @out, typeCode)
+                == Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate)
+                return Backends.Strings.NDVStringReduction.CumSumOfCast(arr, axis, @out);
             // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
             // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout
             // directly (no post-hoc copy needed). axis=None ravels in C-order to a 1-D result.
