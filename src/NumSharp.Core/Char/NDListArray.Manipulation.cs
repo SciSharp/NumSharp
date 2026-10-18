@@ -117,7 +117,9 @@ namespace NumSharp
             ThrowIfDisposed();
             // NDArray's own check (the device text, then the stream) answers for the object array too; it returns the
             // id array itself, which is not this method's result.
+#pragma warning disable NDW012 // not a leak: NDArray.to_device("cpu") returns the id array itself, which this array owns
             Ids.to_device(device, stream);
+#pragma warning restore NDW012
             return this;
         }
 
@@ -245,38 +247,47 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The integer indices (any shape; NumPy's conversion and its TypeError for a float array).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="out">NumPy's <c>out=</c>: must be null (an <see cref="NDListArray"/> has no element assignment).</param>
+        /// <param name="out">NumPy's <c>out=</c>: a list array of the result's shape whose elements are set to the taken
+        ///     lists (returned), or null for a new array.</param>
         /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c> or <c>"clip"</c> (null is <c>"raise"</c>).</param>
-        /// <returns>The taken lists.</returns>
+        /// <returns>The taken lists (<paramref name="out"/> when given).</returns>
         /// <exception cref="IndexError">An index out of bounds under <c>"raise"</c> (<c>index 7 is out of bounds for axis 0
         ///     with size 6</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
         /// <exception cref="TypeError">Indices that are not integers.</exception>
-        /// <exception cref="ValueError">A mode NumPy does not take.</exception>
-        /// <exception cref="NotSupportedException">An <paramref name="out"/> array.</exception>
+        /// <exception cref="ValueError">A mode NumPy does not take; an <paramref name="out"/> of another shape (<c>output
+        ///     array does not match result of ndarray.take</c>) or a read-only one (<c>WRITEBACKIFCOPY base is
+        ///     read-only</c>), both checked before the indices' bounds.</exception>
+        /// <exception cref="NotSupportedException">An <paramref name="out"/> of the other piece class (str and bytes) that
+        ///     would receive a non-empty list.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray take(NDArray indices, int? axis = null, NDListArray @out = null, string mode = "raise")
         {
-            RefuseOut(@out, "take");
-            return Derive(a => a.take(indices, axis, null, mode));
+            if (@out is not null)
+                return TakeInto(@out, destination => Ids.take(indices, axis, destination, mode));
+            // array_take returns PyArray_Return's result: a 0-d take is the element itself, the list.
+            return Derive(a => a.take(indices, axis, null, mode)).MarkStandIn();
         }
 
         /// <summary>NumPy's <c>take</c> with one index: a 0-d list array holding the list (NumPy returns the list itself,
         ///     which this array's <see cref="item()"/> gives).</summary>
         /// <param name="index">The index (of the flattened array, or along <paramref name="axis"/>).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="out">Must be null.</param>
+        /// <param name="out">A list array of the result's shape to store into, or null.</param>
         /// <param name="mode"><c>"raise"</c>, <c>"wrap"</c> or <c>"clip"</c>.</param>
-        /// <returns>The taken list (a 0-d list array without an axis; along an axis, the sub-array).</returns>
+        /// <returns>The taken list (a 0-d list array without an axis; along an axis, the sub-array), or
+        ///     <paramref name="out"/>.</returns>
         /// <exception cref="IndexError">An index out of bounds under <c>"raise"</c>.</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="ValueError">A mode NumPy does not take.</exception>
-        /// <exception cref="NotSupportedException">An <paramref name="out"/> array.</exception>
+        /// <exception cref="ValueError">A mode NumPy does not take; an <paramref name="out"/> of another shape or a read-only
+        ///     one.</exception>
+        /// <exception cref="NotSupportedException">An <paramref name="out"/> of the other piece class.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray take(long index, int? axis = null, NDListArray @out = null, string mode = "raise")
         {
-            RefuseOut(@out, "take");
-            return Derive(a => a.take(index, axis, null, mode));
+            if (@out is not null)
+                return TakeInto(@out, destination => Ids.take(index, axis, destination, mode));
+            return Derive(a => a.take(index, axis, null, mode)).MarkStandIn();
         }
 
         /// <summary>NumPy's <c>compress(condition, axis=None, out=None)</c>: the lists where <paramref name="condition"/> is
@@ -284,16 +295,20 @@ namespace NumSharp
         /// <param name="condition">A 1-D bool array (a shorter one selects its prefix; a longer one with a true entry past the
         ///     end is NumPy's IndexError).</param>
         /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <param name="out">Must be null.</param>
-        /// <returns>The selected lists (a copy of the pointers).</returns>
+        /// <param name="out">A list array of the result's shape to store into (NumPy's compress is a take of the condition's
+        ///     nonzero indices, so its checks and texts are take's), or null.</param>
+        /// <returns>The selected lists (a copy of the pointers), or <paramref name="out"/>.</returns>
         /// <exception cref="IndexError">A true entry past the axis (<c>index 6 is out of bounds for axis 0 with size
         ///     6</c>).</exception>
         /// <exception cref="AxisError">An axis outside the array.</exception>
-        /// <exception cref="NotSupportedException">An <paramref name="out"/> array.</exception>
+        /// <exception cref="ValueError">An <paramref name="out"/> of another shape (<c>output array does not match result of
+        ///     ndarray.take</c>) or a read-only one.</exception>
+        /// <exception cref="NotSupportedException">An <paramref name="out"/> of the other piece class.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
         public NDListArray compress(NDArray condition, int? axis = null, NDListArray @out = null)
         {
-            RefuseOut(@out, "compress");
+            if (@out is not null)
+                return TakeInto(@out, destination => Ids.compress(condition, axis, destination));
             return Derive(a => a.compress(condition, axis));
         }
 
@@ -355,15 +370,5 @@ namespace NumSharp
             return Over(ids);
         }
 
-        /// <summary>Refuses NumPy's <c>out=</c> of a selection member: the result would be written into another list
-        ///     array's pointers, and an <see cref="NDListArray"/> has no element assignment.</summary>
-        /// <param name="out">The out array, or null.</param>
-        /// <param name="member">The member's name.</param>
-        /// <exception cref="NotSupportedException"><paramref name="out"/> is not null.</exception>
-        private static void RefuseOut(NDListArray @out, string member)
-        {
-            if (@out is not null)
-                throw new NotSupportedException($"NDListArray.{member}(out=...): an NDListArray has no element assignment to write into.");
-        }
     }
 }

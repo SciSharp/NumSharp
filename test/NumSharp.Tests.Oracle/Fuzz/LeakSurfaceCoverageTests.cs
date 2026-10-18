@@ -116,6 +116,8 @@ namespace NumSharp.Tests.Fuzz
             ("NDMatrix", typeof(NDMatrix)),
             // NDCharArray's implicit conversions from a C# string / byte[] (the 0-d stand-ins its typed indexer setters take).
             ("NDCharArray", typeof(NDCharArray)),
+            // NDListArray's comparisons, + (concatenation) and * (repetition): each builds a new bool array or list array.
+            ("NDListArray", typeof(NDListArray)),
             // Object owners with operators: DType's conversions and safe-cast ordering, the flags object's
             // equality, and poly1d's arithmetic (which allocates a new polynomial per call).
             ("DType", typeof(DType)),

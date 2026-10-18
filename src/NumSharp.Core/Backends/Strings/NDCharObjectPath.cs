@@ -1768,7 +1768,7 @@ namespace NumSharp.Backends.Strings
                     sink.Release(out var units, out var offsets);
                     // The heap takes the arrays over (and reads and disposes the per-element self flags); on a failure the
                     // catch below disposes them again, which NDArray.Dispose ignores.
-                    return NDListArray.FromElements(units, offsets, starts, ends, self, kind, outer);
+                    return NDListArray.FromElements(units, offsets, sink.Count, starts, ends, self, kind, outer);
                 }
                 catch
                 {
@@ -2005,7 +2005,7 @@ namespace NumSharp.Backends.Strings
                         });
                     }
                     sink.Release(out var units, out var offsets);
-                    return NDListArray.FromElements(units, offsets, starts, ends, null, kind, outer);
+                    return NDListArray.FromElements(units, offsets, sink.Count, starts, ends, null, kind, outer);
                 }
                 catch
                 {

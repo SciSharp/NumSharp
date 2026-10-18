@@ -11601,14 +11601,18 @@ def gen_strcharobj():
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Section strcharlist: the ndarray members of numpy.char's object result (C-D3's NDListArray) that move the lists —
-# transposition, reshaping, copies and views, selection, and the attributes of the outer array
+# Section strcharlist: the ndarray members of numpy.char's object result (C-D3's NDListArray) — transposition,
+# reshaping, copies and views, selection, the attributes of the outer array (L-A), and the members that compare, sort,
+# reduce, compute and assign lists (L-B / L-C)
 # ----------------------------------------------------------------------------------------------------------------------
 #
 # The receiver is np.char.split's object array (or a basic index of it); a member's object result is compared piece by
 # piece (_cobj_expect) together with its layout: the byte strides, C / F contiguity, OWNDATA, WRITEABLE and how its base
 # relates to the receiver (NumPy's object array holds 8-byte pointers, NumSharp's list array int64 ranges of the same
-# layout, so all of it must agree).
+# layout, so all of it must agree). A case may also be an operator (``binop``: ``recv op other``, ``rev`` for ``other op
+# recv``), an assignment (``setitem``: ``recv[index] = args[0]``) or an in-place member (``inplace``: the receiver after
+# the call is the result). A NumPy outcome an NDListArray cannot hold — an object array with an element that is not a
+# list, a list of str and bytes items, the int identity of an empty sum — is not a case (_clst_representable).
 
 CLST = "strcharlist"
 
@@ -11658,19 +11662,65 @@ def _clst_expect(r, recv):
     if isinstance(r, list):
         selfs = [0] if any(type(p) is np.str_ for p in r) else []
         return {"kind": "lists", "shape": [], "lists": [[_cobj_piece(p) for p in r]], "strself": selfs}
+    if isinstance(r, tuple) and r and all(isinstance(x, np.ndarray) for x in r):
+        return expect_of(r, [])
     if isinstance(r, (bool, int, str, tuple)):
         return {"kind": "pyvalue", "value": enc(list(r) if isinstance(r, tuple) else r)}
     return expect_of(r, [])
 
 
+def _clst_list_ok(el, classes):
+    """Whether one element is a list an NDListArray holds: its items str (np.str_ included) or bytes, their classes
+    collected into ``classes``."""
+    if not isinstance(el, list):
+        return False
+    for p in el:
+        if isinstance(p, (bytes, np.bytes_)):
+            classes.add("b")
+        elif isinstance(p, (str, np.str_)):
+            classes.add("u")
+        else:
+            return False
+    return True
+
+
+def _clst_representable(params, r):
+    """Whether NumPy's result has an NDListArray form: every element of an object array (or a list result) a list of str
+    or bytes items, one class in the whole result; a plain Python int from a member whose result is a list (the identity
+    0 / 1 of an empty sum / product, an empty dot) is not."""
+    if isinstance(r, np.ndarray) and r.dtype == object:
+        classes = set()
+        return all(_clst_list_ok(el, classes) for el in r.flat) and len(classes) <= 1
+    if isinstance(r, list):
+        classes = set()
+        return _clst_list_ok(r, classes) and len(classes) <= 1
+    if type(r) is int and params.get("name") in ("sum", "prod", "trace", "dot", "cumsum", "cumprod"):
+        return False
+    return True
+
+
+_CLST_BINOPS = {"eq": operator.eq, "ne": operator.ne, "lt": operator.lt, "le": operator.le, "gt": operator.gt,
+                "ge": operator.ge, "add": operator.add, "mul": operator.mul}
+
+
 def _clst_call(params, views):
     """Makes one case's call: the member ``params.name`` of the receiver (``_cobj_value(params.recv)``) with ``args`` /
     ``kw``; an attribute (no call) when ``params.attr`` is true; ``is_recv`` reports whether the result IS the receiver.
+    ``binop`` applies an operator to the receiver and ``other`` (reflected with ``rev``); ``setitem`` assigns
+    ``args[0]`` at that index; ``inplace`` makes the receiver after the call the result (a member that returns None).
 
     Returns:
         (result, receiver).
     """
     recv = _cobj_value(params["recv"], views)
+    if "binop" in params:
+        other = _cobj_value(params["other"], views)
+        fn = _CLST_BINOPS[params["binop"]]
+        return (fn(other, recv) if params.get("rev") else fn(recv, other)), recv
+    if "setitem" in params:
+        value = _cobj_value(params["args"][0], views)
+        recv[_cobj_index(params["setitem"])] = value
+        return recv, recv
     attr = getattr(recv, params["name"])
     if params.get("attr"):
         r = attr
@@ -11678,6 +11728,8 @@ def _clst_call(params, views):
         args = [_cobj_value(a, views) for a in params.get("args", [])]
         kw = {name: _cobj_value(a, views) for name, a in params.get("kw", {}).items()}
         r = attr(*args, **kw)
+    if params.get("inplace"):
+        r = recv
     if params.get("is_recv"):
         r = r is recv
     return r, recv
@@ -11696,6 +11748,11 @@ def add_clst(params, operands=(), layout=""):
             "layout": layout}
     try:
         r, recv = _clst_call(params, views)
+        if not _clst_representable(params, r):
+            # NumPy's result has no NDListArray form (NumSharp raises NotSupportedException there): not a case.
+            _IDS.discard(cid)
+            _OP_COUNT[prefix] = n - 1
+            return
         case["expected"] = _clst_expect(r, recv)
     except Exception as e:  # noqa: BLE001 -- every NumPy exception is a recorded outcome
         case["error"] = err_info(e)
@@ -11798,6 +11855,290 @@ def gen_strcharlist():
             if args is None:
                 params["attr"] = True
             add_clst(params, [m2], layout=f"U:c2:{rl}")
+    _gen_strcharlist_ops()
+
+
+# The texts of the L-B / L-C receivers: short words with repeats (ties for the sort family's order, equal lists for the
+# comparisons), an empty text (an empty list), and lists that differ only in length or in a later item.
+CLST_U = ["b a", "a", "", "c c", "a b", "b", "a", "b a", "c", "a b c", "", "b"]
+CLST_S = [b"b a", b"a", b"", b"c c", b"a b", b"b", b"a", b"b a", b"c", b"a b c", b"", b"b"]
+CLST_OPS_LAYOUTS = ["c1", "c2", "f2", "t3", "s1", "r2", "o1", "col", "bc", "z0", "e1", "e2", "one", "c3"]
+# The layouts that get every member; the others get the core of each family.
+CLST_OPS_FULL = {"c1", "c2", "f2", "z0", "e1"}
+
+
+def _gen_strcharlist_ops():
+    """L-B / L-C: comparisons (with list arrays, Python values, the other class, reflected), truth (all / any / nonzero),
+    astype, the sort family (sort / argsort / partition / argpartition / searchsorted / argmax / argmin), the reductions
+    (max / min / sum / prod / cumsum / cumprod / trace / clip / mean / var / std), + and *, dot, round / conj / real /
+    imag, and assignment (setitem, fill, put, take / compress out=, resize, byteswap, getfield / setfield, view, choose)
+    over np.char.split results of every class and layout and over their reversed views."""
+    v = _cobj_v
+    for kind in ("U", "S", "T"):
+        pool = CLST_S if kind == "S" else CLST_U
+        for li, layout in enumerate(CLST_OPS_LAYOUTS):
+            full = layout in CLST_OPS_FULL
+            if kind == "T" and not full:
+                continue
+            text = _cobj_operand(kind, pool, layout, seed=li)
+            shape = text[1].shape
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            # The other class's operand (comparisons and + across classes) and a numeric count operand: a case carries
+            # them only when a spec names them (operand 1 either way).
+            other_kind = "U" if kind == "S" else "S"
+            other = _cobj_operand(other_kind, CLST_U if other_kind == "U" else CLST_S, layout, seed=li)
+            counts_base = np.array([(3 * i) % 4 - 1 for i in range(max(size, 1) + 2)], dtype=np.int64)
+            counts = (counts_base, counts_base[:size].reshape(shape) if size else counts_base[:0].reshape(shape))
+            extra_ops = {None: [text], "class": [text, other], "counts": [text, counts]}
+            split = {"split": [{"op": 0}]}
+            receivers = [(split, "")]
+            if full and nd >= 1 and size > 0:
+                receivers.append(({"view": [split, "::-1" + ", :" * (nd - 1)]}, ":rev"))
+            for recv, rl in receivers:
+                label = f"{kind}:{layout}{rl}"
+                rev_other = {"view": [split, "::-1" + ", :" * (nd - 1)]} if nd >= 1 else split
+                elem = {"view": [split, ", ".join(["0"] * nd)]} if nd >= 1 and size > 0 else None
+                other_split = {"split": [{"op": 1}]}
+                counts_spec = {"op": 1}
+
+                def m(name, args=(), kw=None, sub="", uses=None, **extra):
+                    params = {"recv": recv, "name": name, "args": list(args), "kw": kw or {}}
+                    params.update(extra)
+                    add_clst(params, extra_ops[uses], layout=f"{label}:{name}{sub}")
+
+                def b(op, other_spec, sub="", rev=False, uses=None):
+                    params = {"recv": recv, "name": op, "binop": op, "other": other_spec}
+                    if rev:
+                        params["rev"] = True
+                    add_clst(params, extra_ops[uses], layout=f"{label}:{op}{sub}{':rev' if rev else ''}")
+
+                # ---- comparisons ----
+                for op in (("eq", "ne", "lt", "le", "gt", "ge") if full else ("eq", "lt")):
+                    b(op, recv, ":self")
+                    b(op, rev_other, ":revview")
+                    if elem is not None:
+                        b(op, elem, ":elem")
+                        b(op, elem, ":elem", rev=True)
+                    b(op, other_split, ":class", uses="class")
+                    if full:
+                        for value, vs in ((1, "int"), ("x", "str"), (1.5, "float"), (True, "bool")):
+                            b(op, v(value), f":{vs}")
+                            b(op, v(value), f":{vs}", rev=True)
+                        if op not in ("eq", "ne"):
+                            b(op, v(None), ":none")
+                            b(op, v(None), ":none", rev=True)
+                if nd >= 1 and size > 1:
+                    b("lt", {"view": [split, ":1" + ", :" * (nd - 1)]}, ":bcast")
+                    b("eq", {"view": [split, "1:" + ", :" * (nd - 1)]}, ":nobcast")
+                # ---- truth / astype ----
+                m("all")
+                m("any")
+                if nd >= 1:
+                    m("all", [v(0)], sub=":0")
+                    m("any", [v(-1)], {"keepdims": v(True)}, sub=":-1kd")
+                m("any", [v(nd)], sub=":oob")
+                m("nonzero")
+                for dt in ("bool", "int64", "float64", "complex128", "U", "S", "T"):
+                    m("astype", [v(dt)], sub=f":{dt}")
+                if full:
+                    m("astype", [v("bool")], {"order": v("F")}, sub=":F")
+                    m("astype", [v("bool")], {"casting": v("safe")}, sub=":safe")
+                    m("astype", [v("T")], {"casting": v("same_kind")}, sub=":same_kind")
+                    m("astype", [v("bool")], {"casting": v("bogus")}, sub=":bogus")
+                    m("astype", [v("bool")], {"order": v("Q")}, sub=":Q")
+                # ---- sort family ----
+                if nd >= 1:
+                    m("sort", inplace=True)
+                    m("sort", [v(0)], inplace=True, sub=":0")
+                    m("sort", kw={"kind": v("stable")}, inplace=True, sub=":stable")
+                    m("sort", kw={"stable": v(True)}, inplace=True, sub=":stableflag")
+                    if full:
+                        m("sort", kw={"kind": v("heapsort")}, inplace=True, sub=":heap")
+                        m("sort", kw={"kind": v("x")}, sub=":badkind")
+                        m("sort", kw={"order": v("x")}, sub=":order")
+                        m("sort", [v(nd)], sub=":oob")
+                m("argsort")
+                m("argsort", [v(None)], sub=":none")
+                m("argsort", kw={"kind": v("stable")}, sub=":stable")
+                if full:
+                    m("argsort", kw={"kind": v("mergesort")}, sub=":merge")
+                    m("argsort", kw={"stable": v(True)}, sub=":stableflag")
+                    m("argsort", kw={"kind": v("bogus")}, sub=":badkind")
+                if nd >= 1:
+                    m("argsort", [v(0)], sub=":0")
+                    last = shape[-1]
+                    if last > 0:
+                        m("partition", [v(0)], inplace=True, sub=":0")
+                        m("partition", [v(last - 1)], inplace=True, sub=":last")
+                        m("partition", [v([0, last - 1])], inplace=True, sub=":both")
+                        m("argpartition", [v(0)], sub=":0")
+                        m("argpartition", [v(-1)], sub=":-1")
+                    m("partition", [v(last)], sub=":oob")
+                    if full:
+                        m("partition", [v(0)], {"kind": v("x")}, sub=":badkind")
+                        m("partition", [v(1.5)], sub=":float")
+                        m("argpartition", [v(0)], {"axis": v(nd)}, sub=":axisoob")
+                        m("partition", [v(0)], {"order": v("x")}, sub=":order")
+                    if nd == 1:
+                        m("searchsorted", [recv])
+                        m("searchsorted", [rev_other], {"side": v("right")}, sub=":right")
+                        if elem is not None:
+                            m("searchsorted", [elem], sub=":elem")
+                        m("searchsorted", [recv], {"side": v("x")}, sub=":badside")
+                        m("searchsorted", [v("x")], sub=":str")
+                        m("searchsorted", [other_split], sub=":class", uses="class")
+                        if size > 0:
+                            m("searchsorted", [recv], {"sorter": v(list(range(size))[::-1])}, sub=":sorter")
+                            m("searchsorted", [recv], {"sorter": v([0])}, sub=":badsorter")
+                m("argmax")
+                m("argmin")
+                if nd >= 1:
+                    m("argmax", [v(0)], sub=":0")
+                    m("argmin", [v(-1)], {"keepdims": v(True)}, sub=":-1kd")
+                # ---- reductions ----
+                for name in ("max", "min"):
+                    m(name)
+                    if nd >= 1:
+                        m(name, [v(0)], sub=":0")
+                        m(name, [v(-1)], {"keepdims": v(True)}, sub=":-1kd")
+                    m(name, kw={"initial": v(["m"] if kind != "S" else [b"m"])}, sub=":initial")
+                    if full and nd >= 1:
+                        m(name, kw={"where": v([True, False] * (shape[-1] // 2) + [True] * (shape[-1] % 2)),
+                                    "initial": v(["zz"] if kind != "S" else [b"zz"])}, sub=":where")
+                        m(name, kw={"where": v([True] * shape[-1])}, sub=":wherenoinit")
+                        m(name, [v(nd)], sub=":oob")
+                m("sum")
+                if nd >= 1:
+                    m("sum", [v(0)], sub=":0")
+                    m("sum", [v(-1)], {"keepdims": v(True)}, sub=":-1kd")
+                m("sum", kw={"initial": v(["z"] if kind != "S" else [b"z"])}, sub=":initial")
+                if full:
+                    m("sum", kw={"initial": v(0)}, sub=":initial0")
+                    m("sum", kw={"dtype": v("bool")}, sub=":bool")
+                    m("sum", kw={"dtype": v("int64")}, sub=":int64")
+                    if nd >= 1:
+                        m("sum", kw={"where": v([True] * shape[-1])}, sub=":wherenoinit")
+                        m("sum", [v(0)], {"where": v([False] * shape[-1]), "initial": v(["z"] if kind != "S" else [b"z"])},
+                          sub=":whereinit")
+                m("prod")
+                if nd >= 1:
+                    m("prod", [v(0)], sub=":0")
+                m("cumsum")
+                if nd >= 1:
+                    m("cumsum", [v(0)], sub=":0")
+                    m("cumsum", [v(-1)], sub=":-1")
+                m("cumprod")
+                if nd >= 2:
+                    m("trace")
+                    m("trace", [v(1)], sub=":1")
+                    m("trace", [v(0), v(1), v(0)], sub=":axes")
+                    m("trace", [v(-1)], sub=":-1")
+                elif full:
+                    m("trace", sub=":rank")
+                if elem is not None:
+                    m("clip", [elem, elem], sub=":elem")
+                    m("clip", [v(None), elem], sub=":hi")
+                    m("clip", [elem], sub=":lo")
+                    m("clip", [rev_other, recv], sub=":arrays")
+                m("clip", [v("a"), v("b")], sub=":str")
+                if full:
+                    m("clip", sub=":none")
+                m("mean")
+                if nd >= 1:
+                    m("mean", [v(0)], sub=":0")
+                m("var")
+                m("std")
+                if full:
+                    m("mean", kw={"dtype": v("bool")}, sub=":bool")
+                    m("var", kw={"ddof": v(1)}, sub=":ddof")
+                    if nd >= 1:
+                        m("std", [v(0)], sub=":0")
+                        m("mean", kw={"where": v([True] * shape[-1])}, sub=":where")
+                # ---- + and * ----
+                b("add", recv, ":self")
+                b("add", rev_other, ":revview")
+                if elem is not None:
+                    b("add", elem, ":elem")
+                    b("add", elem, ":elem", rev=True)
+                b("add", other_split, ":class", uses="class")
+                for value, vs in ((1, "int"), ("x", "str"), (1.5, "float"), (True, "bool")):
+                    b("add", v(value), f":{vs}")
+                    if full:
+                        b("add", v(value), f":{vs}", rev=True)
+                b("add", v(None), ":none")
+                for value, vs in ((2, "2"), (0, "0"), (-1, "-1"), (True, "true")):
+                    b("mul", v(value), f":{vs}")
+                    if full:
+                        b("mul", v(value), f":{vs}", rev=True)
+                b("mul", counts_spec, ":counts", uses="counts")
+                b("mul", counts_spec, ":counts", rev=True, uses="counts")
+                b("mul", v(1.5), ":float")
+                b("mul", recv, ":self")
+                if full:
+                    b("mul", v("x"), ":str")
+                    b("mul", v("x"), ":str", rev=True)
+                    b("mul", v(None), ":none")
+                    b("mul", v(2 ** 62), ":big")
+                # ---- dot ----
+                if nd >= 1:
+                    last = shape[-1]
+                    m("dot", [v([1, 2, 0, 1, 2][:last] + [1] * max(0, last - 5))], sub=":counts")
+                    m("dot", [v(2)], sub=":scalar")
+                    m("dot", [v([1] * (last + 1))], sub=":align")
+                    m("dot", [recv if nd == 1 else v([1.5] * last)], sub=":lists")
+                    if full:
+                        m("dot", [v([1.5] * last)], sub=":float")
+                        if nd == 1:
+                            m("dot", [v([[1, 0]] * last)], sub=":2d")
+                # ---- round / conj / real / imag ----
+                m("round")
+                if full:
+                    m("round", [v(2)], sub=":2")
+                    m("round", [v(-2)], sub=":-2")
+                m("conj")
+                m("conjugate")
+                m("real", attr=True, is_recv=True)
+                if size == 0:
+                    m("imag", attr=True)
+                # ---- assignment ----
+                if nd >= 1 and size > 0:
+                    m("setitem", [elem], setitem=", ".join(["0"] * nd), sub=":elem")
+                    m("setitem", [rev_other], setitem=":" + ", :" * (nd - 1), sub=":all")
+                    m("setitem", [{"view": [split, ":1" + ", :" * (nd - 1)]}], setitem=":" + ", :" * (nd - 1), sub=":bcast")
+                    m("setitem", [elem], setitem="9" + ", 0" * (nd - 1), sub=":oob")
+                    if shape[0] > 1:
+                        m("setitem", [{"view": [split, ":-1" + ", :" * (nd - 1)]}], setitem="1:" + ", :" * (nd - 1),
+                          sub=":overlap")
+                        m("setitem", [{"view": [split, ":1" + ", :" * (nd - 1)]}], setitem="1:" + ", :" * (nd - 1),
+                          sub=":bcastrow")
+                    if full:
+                        # A list into a sub-array is the sequence of its items: only a length that does not broadcast (a
+                        # ValueError) or an empty destination is a case NumSharp can answer.
+                        m("setitem", [{"view": [split, ", ".join(["0"] * nd)]}], setitem="0:0" + ", :" * (nd - 1),
+                          sub=":listempty")
+                    m("fill", [elem], inplace=True)
+                    m("fill", [v(["z", "w"] if kind != "S" else [b"z", b"w"])], inplace=True, sub=":list")
+                    m("fill", [v([])], inplace=True, sub=":empty")
+                    m("put", [v([0, size - 1])], {"values": {"view": [split, "::-1" + ", :" * (nd - 1)]}}, inplace=True)
+                    m("put", [v([size + 3])], {"values": rev_other, "mode": v("clip")}, inplace=True, sub=":clip")
+                    m("put", [v([-1, size])], {"values": rev_other, "mode": v("wrap")}, inplace=True, sub=":wrap")
+                    m("put", [v([size + 3])], {"values": rev_other}, sub=":raise")
+                    m("put", [v([0])], {"values": rev_other, "mode": v("x")}, sub=":badmode")
+                    if full:
+                        if nd == 1 and size >= 2:
+                            # The out is a view of the receiver's own lists (NumPy copies first: they overlap).
+                            m("take", [v([size - 1, 0])], {"out": {"view": [rev_other, "0:2"]}}, sub=":out")
+                        m("take", [v([size - 1, 0])], {"out": recv}, sub=":outbad")
+                    m("resize", [v(size)], {"refcheck": v(False)}, inplace=True, sub=":same")
+                    m("resize", [v(max(size - 1, 0))], {"refcheck": v(False)}, inplace=True, sub=":shrink")
+                    m("resize", [v(-1)], {"refcheck": v(False)}, sub=":neg")
+                m("byteswap")
+                m("byteswap", [v(True)], is_recv=True, sub=":inplace")
+                m("getfield", [v("int64")])
+                m("setfield", [v(1), v("int64")])
+                m("view", [v("int64")], sub=":dtype")
+                m("choose", [v([0])], sub=":choose")
 
 
 # ----------------------------------------------------------------------------------------------------------------------

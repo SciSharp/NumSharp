@@ -962,6 +962,7 @@ namespace NumSharp.Tests.Fuzz
                 return c.join(new[] { "xy", "z" });
             });
             AddListArray(l);
+            AddListArrayCompute(l);
         }
 
         /// <summary>

@@ -162,7 +162,7 @@ namespace NumSharp
         /// <exception cref="UnicodeEncodeError">A lone surrogate: <c>'utf-8' codec can't encode character '\ud800' in
         ///     position 0: surrogates not allowed</c>, checked first as CPython encodes before it looks for a NUL.</exception>
         /// <exception cref="ValueError"><c>embedded null character</c>.</exception>
-        private static void CheckToFileArgument(string s)
+        internal static void CheckToFileArgument(string s)
         {
             if (string.IsNullOrEmpty(s))
                 return;

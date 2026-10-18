@@ -38,7 +38,7 @@ namespace NumSharp
     ///     Not thread-safe (NumSharp's single-threaded rule): an append may move the arrays, so a caller reads the addresses
     ///     (<see cref="Units"/>, <see cref="Offsets"/>, ...) after its last append, never across one.
     /// </remarks>
-    internal sealed unsafe class NDListHeap
+    internal sealed unsafe class NDListHeap : IDisposable
     {
         /// <summary>The smallest capacity a growing array is given (in elements).</summary>
         private const long MinCapacity = 16;
@@ -114,18 +114,23 @@ namespace NumSharp
         ///     in id order (any shape, C-contiguous: they are read flat).
         /// </summary>
         /// <param name="kind">The class of the pieces.</param>
-        /// <param name="units">The code units (1-D uint8 for <c>'S'</c>, uint32 otherwise; its size is the unit count).</param>
-        /// <param name="offsets">The piece offsets (1-D int64, piece count + 1 entries).</param>
-        /// <param name="pieceFlags">One flag per piece (1-D bool, piece count entries), or null.</param>
+        /// <param name="units">The code units (1-D uint8 for <c>'S'</c>, uint32 otherwise); it may be longer than the units
+        ///     the pieces use (a producer's capacity).</param>
+        /// <param name="offsets">The piece offsets (1-D int64, at least <paramref name="pieceCount"/> + 1 entries; a
+        ///     producer's capacity may leave more, uninitialized).</param>
+        /// <param name="pieceCount">The number of pieces written: <c>offsets[pieceCount]</c> is the units used, and the next
+        ///     append starts there. The arrays' SIZES are capacities, never counts.</param>
+        /// <param name="pieceFlags">One flag per piece slot (1-D bool, <c>offsets.size - 1</c> entries), or null.</param>
         /// <param name="listStart">Each list's first piece (C-contiguous int64).</param>
         /// <param name="listEnd">One past each list's last piece (C-contiguous int64).</param>
-        internal NDListHeap(char kind, NDArray units, NDArray offsets, NDArray pieceFlags, NDArray listStart, NDArray listEnd)
+        internal NDListHeap(char kind, NDArray units, NDArray offsets, long pieceCount, NDArray pieceFlags, NDArray listStart, NDArray listEnd)
         {
             Kind = kind;
             _units = units;
-            _unitCount = units.size;
             _offsets = offsets;
-            _pieceCount = offsets.size - 1;
+            _pieceCount = pieceCount;
+            // The units in use end where the last piece ends; the rest of the units array is capacity.
+            _unitCount = ((long*)offsets.Address)[pieceCount];
             _pieceFlags = pieceFlags;
             _listStart = listStart;
             _listEnd = listEnd;
@@ -141,7 +146,7 @@ namespace NumSharp
             var offsets = new NDArray(NPTypeCode.Int64, Shape.Vector(1), true);
             var start = new NDArray(NPTypeCode.Int64, Shape.Vector(0), true);
             var end = new NDArray(NPTypeCode.Int64, Shape.Vector(0), true);
-            return new NDListHeap(kind, units, offsets, null, start, end);
+            return new NDListHeap(kind, units, offsets, 0, null, start, end);
         }
 
         /// <summary>
@@ -151,12 +156,13 @@ namespace NumSharp
         /// <param name="kind">The class of the pieces.</param>
         /// <param name="units">The code units (handed over).</param>
         /// <param name="offsets">The piece offsets (handed over).</param>
+        /// <param name="pieceCount">The pieces the producer wrote (the arrays' sizes are its capacities).</param>
         /// <param name="starts">Each element's first piece, in C order (handed over).</param>
         /// <param name="ends">One past each element's last piece (handed over).</param>
         /// <param name="selfElements">Whether each element's single piece is its own <c>np.str_</c> (bool, in C order), or
         ///     null; it is read and disposed here.</param>
         /// <returns>The heap (one reference, the caller's).</returns>
-        internal static NDListHeap FromElements(char kind, NDArray units, NDArray offsets, NDArray starts, NDArray ends, NDArray selfElements)
+        internal static NDListHeap FromElements(char kind, NDArray units, NDArray offsets, long pieceCount, NDArray starts, NDArray ends, NDArray selfElements)
         {
             NDArray flags = null;
             if (selfElements is not null)
@@ -175,7 +181,7 @@ namespace NumSharp
                             f[st[e]] = true;
                 }
             }
-            return new NDListHeap(kind, units, offsets, flags, starts, ends);
+            return new NDListHeap(kind, units, offsets, pieceCount, flags, starts, ends);
         }
 
         // =============================================================================================================
@@ -192,6 +198,12 @@ namespace NumSharp
             _refs++;
             return this;
         }
+
+        /// <summary>
+        ///     Drops ONE reference (the one <see cref="Share"/>, a constructor or <see cref="Empty"/> handed out): the last
+        ///     reference disposes the arrays. Each holder calls it once — <see cref="Release"/> under its ownership name.
+        /// </summary>
+        public void Dispose() => Release();
 
         /// <summary>A list array no longer points at this heap; the last one disposes its arrays.</summary>
         internal void Release()
