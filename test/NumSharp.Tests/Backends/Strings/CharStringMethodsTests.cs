@@ -38,6 +38,9 @@ namespace NumSharp.Tests.Backends.Strings
         {
             object list = a.ndim == 0 ? a.tolist() : a.flatten().tolist();
             static string one(object x) => x is byte[] b ? System.Text.Encoding.Latin1.GetString(b) : (string)x;
+            // A 0-d S array's tolist() is ONE bytes object, which is an IList of its bytes too: test it first.
+            if (list is byte[] single)
+                return new[] { one(single) };
             return list is IList items ? items.Cast<object>().Select(one).ToArray() : new[] { one(list) };
         }
 
@@ -1142,6 +1145,104 @@ namespace NumSharp.Tests.Backends.Strings
             ((byte[])bytes.tolist()).Should().Equal((byte)'5');
             Action number = () => np.@char.mod(5, "x");
             number.Should().Throw<TypeError>().Where(e => e.Message == "string operation on non-string array");
+        }
+
+        // ------------------------------------------------------------------ encode / decode (C5, seventh batch)
+
+        /// <summary>
+        ///     <c>chararray.encode</c> is <c>encode(self, encoding, errors)</c>: a fresh PLAIN <c>S</c> array (NumPy's
+        ///     <c>_to_bytes_or_str_array</c> builds it from a list) of the STORED text, trailing whitespace included; an
+        ///     <c>errors</c> without an <c>encoding</c> is dropped (UTF-8 strict); an <c>S</c> chararray has no encode.
+        /// </summary>
+        [TestMethod]
+        public void Encode_Member_IsThePlainFunctionResult_OfTheStoredText()
+        {
+            var c = (NDCharArray)np.array(new[] { "ab  ", "cé" }).view(typeof(NDCharArray));
+            var r = c.encode();
+            r.Should().NotBeOfType<NDCharArray>();
+            r.dtype.ToString().Should().Be("|S4");
+            r.strides.Should().Equal(4L);
+            r.flags.owndata.Should().BeTrue();
+            Texts(r).Should().Equal("ab  ", "cÃ©");
+            Texts(np.@char.encode(c, "latin-1")).Should().Equal("ab  ", "cé");
+            Texts(c.encode(errors: "ignore")).Should().Equal("ab  ", "cÃ©");
+            var xml = c.encode("ascii", "xmlcharrefreplace");
+            xml.dtype.ToString().Should().Be("|S7");
+            Texts(xml).Should().Equal("ab  ", "c&#233;");
+            Action strict = () => c.encode("ascii");
+            strict.Should().Throw<UnicodeEncodeError>().Where(e =>
+                e.Message == "'ascii' codec can't encode character '\\xe9' in position 1: ordinal not in range(128)");
+            Action decode = () => c.decode();
+            decode.Should().Throw<AttributeError>().Where(e => e.Message == "type object 'str' has no attribute 'decode'");
+        }
+
+        /// <summary>
+        ///     <c>chararray.decode</c> is <c>decode(self, encoding, errors)</c>: a fresh PLAIN <c>U</c> array of the stored
+        ///     bytes; a strict UTF-8 error names the first bad element's byte; a <c>U</c> chararray has no decode and an
+        ///     <c>S</c> one no encode.
+        /// </summary>
+        [TestMethod]
+        public void Decode_Member_IsThePlainFunctionResult_OfTheStoredBytes()
+        {
+            var s = (NDCharArray)np.array(new object[] { B("ab  "), B("é") }).view(typeof(NDCharArray));
+            var r = s.decode("latin-1");
+            r.Should().NotBeOfType<NDCharArray>();
+            r.dtype.ToString().Should().Be("<U4");
+            r.strides.Should().Equal(16L);
+            r.flags.owndata.Should().BeTrue();
+            Texts(r).Should().Equal("ab  ", "é");
+            Texts(s.decode("utf-8", "replace")).Should().Equal("ab  ", "�");
+            Action strict = () => s.decode();
+            strict.Should().Throw<UnicodeDecodeError>().Where(e =>
+                e.Message == "'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data");
+            Action encode = () => s.encode();
+            encode.Should().Throw<AttributeError>().Where(e => e.Message == "type object 'bytes' has no attribute 'encode'");
+        }
+
+        /// <summary>
+        ///     The members keep NumPy's shapes: a 0-d chararray gives a 0-d plain result, an empty one an empty <c>S1</c>
+        ///     array of its shape.
+        /// </summary>
+        [TestMethod]
+        public void EncodeMember_ZeroDimensionalAndEmpty_KeepTheShape()
+        {
+            var zero = (NDCharArray)np.array("xy  ").view(typeof(NDCharArray));
+            var r = zero.encode();
+            r.Should().NotBeOfType<NDCharArray>();
+            r.ndim.Should().Be(0);
+            r.dtype.ToString().Should().Be("|S4");
+            Texts(r).Should().Equal("xy  ");
+            var empty = (NDCharArray)np.zeros(new Shape(0, 3), np.dtype("<U2")).view(typeof(NDCharArray));
+            var e = empty.encode();
+            e.Should().NotBeOfType<NDCharArray>();
+            e.dtype.ToString().Should().Be("|S1");
+            e.shape.Should().Equal(0L, 3L);
+        }
+
+        /// <summary>
+        ///     <c>np.char.encode</c> / <c>np.char.decode</c> ARE <c>np.strings.encode</c> / <c>decode</c>: a Python str /
+        ///     bytes is a 0-d operand, an array of encodings broadcasts, a UTF-16 element drops its trailing NUL, a number is
+        ///     NumPy's TypeError.
+        /// </summary>
+        [TestMethod]
+        public void EncodeDecodeFunctions_AreStringsCodecs()
+        {
+            var e = np.@char.encode("aé");
+            e.ndim.Should().Be(0);
+            e.dtype.ToString().Should().Be("|S3");
+            Texts(e).Should().Equal("aÃ©");
+            var d = np.@char.decode(B("aé"), "latin-1");
+            d.ndim.Should().Be(0);
+            d.dtype.ToString().Should().Be("<U2");
+            Texts(d).Should().Equal("aé");
+            var each = np.@char.encode(new[] { "a", "bé" }, np.array(new[] { "ascii", "latin-1" }));
+            each.dtype.ToString().Should().Be("|S2");
+            Texts(each).Should().Equal("a", "bé");
+            var utf16 = np.@char.encode(np.array(new[] { "a", "bc" }), "utf-16-le");
+            utf16.dtype.ToString().Should().Be("|S4");
+            Texts(utf16).Should().Equal("a", "b\0c");
+            Action number = () => np.@char.encode(5);
+            number.Should().Throw<TypeError>().Where(x => x.Message == "string operation on non-string array");
         }
     }
 }

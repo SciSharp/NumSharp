@@ -860,6 +860,120 @@ namespace NumSharp.Tests.Fuzz
                 }
                 return np.@char.mod(u, 255);
             });
+            // ---- encode / decode (C5's seventh batch): numpy.strings' codecs re-exported, the chararray members over them ----
+            E(l, "np.char.encode", "U / StringDType text, a chararray input (a plain result), an array of encodings, a Python str; a strict error, an S operand (AttributeError) and a number (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "ab", "cé" });
+                using var t = np.array(new[] { "x", "é中" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "ab  ", "c" });
+                using var s = np.array(new object[] { new byte[] { 97 }, new byte[] { 98 } });
+                using var codecs = np.array(new[] { "ascii", "latin-1" });
+                using var vstring = np.@char.encode(t, "utf-16");
+                using var chars = np.@char.encode(c);
+                using var each = np.@char.encode(u, codecs);
+                using var str = np.@char.encode("aé", "latin-1");
+                try
+                {
+                    np.@char.encode(u, "ascii");
+                }
+                catch (UnicodeEncodeError)
+                {
+                }
+                try
+                {
+                    np.@char.encode(s);
+                }
+                catch (AttributeError)
+                {
+                }
+                try
+                {
+                    np.@char.encode(5);
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.encode(u, "ascii", "xmlcharrefreplace");
+            });
+            E(l, "np.char.decode", "S bytes, a chararray input (a plain result), Python bytes; a strict error, a U operand (AttributeError) and an unknown codec (LookupError)", f =>
+            {
+                using var s = np.array(new object[] { new byte[] { 97, 233 }, new byte[] { 98 } });
+                using var u = np.array(new[] { "ab" });
+                using var c = np.@char.array(new object[] { new byte[] { 97, 32, 32 }, new byte[] { 99 } });
+                using var chars = np.@char.decode(c);
+                using var pyBytes = np.@char.decode(new byte[] { 97, 233 }, "latin-1");
+                using var replaced = np.@char.decode(s, "utf-8", "replace");
+                try
+                {
+                    np.@char.decode(s);
+                }
+                catch (UnicodeDecodeError)
+                {
+                }
+                try
+                {
+                    np.@char.decode(u);
+                }
+                catch (AttributeError)
+                {
+                }
+                try
+                {
+                    np.@char.decode(s, "nope");
+                }
+                catch (LookupError)
+                {
+                }
+                return np.@char.decode(s, "latin-1");
+            });
+            E(l, "NDCharArray.encode", "a U chararray (a plain result of the stored text), a 0-d one, keyword errors only; a strict error and an S chararray (AttributeError)", f =>
+            {
+                using var c = np.@char.array(new[] { "ab  ", "cé" });
+                using var s = np.@char.array(new object[] { new byte[] { 97 }, new byte[] { 98 } });
+                using var one = (NDCharArray)c["0:1"];
+                using var zero = (NDCharArray)one.reshape(Shape.Scalar);
+                using var scalar = zero.encode();
+                using var dropped = c.encode(errors: "ignore");
+                try
+                {
+                    c.encode("ascii");
+                }
+                catch (UnicodeEncodeError)
+                {
+                }
+                try
+                {
+                    s.encode();
+                }
+                catch (AttributeError)
+                {
+                }
+                return c.encode("latin-1");
+            });
+            E(l, "NDCharArray.decode", "an S chararray (a plain result of the stored bytes), a 0-d one; a strict error and a U chararray (AttributeError)", f =>
+            {
+                using var s = np.@char.array(new object[] { new byte[] { 97, 32, 32 }, new byte[] { 233 } });
+                using var c = np.@char.array(new[] { "ab" });
+                using var one = (NDCharArray)s["0:1"];
+                using var zero = (NDCharArray)one.reshape(Shape.Scalar);
+                using var scalar = zero.decode();
+                using var replaced = s.decode("utf-8", "replace");
+                try
+                {
+                    s.decode();
+                }
+                catch (UnicodeDecodeError)
+                {
+                }
+                try
+                {
+                    c.decode();
+                }
+                catch (AttributeError)
+                {
+                }
+                return s.decode("latin-1");
+            });
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a
             // Python scalar, an object list holding None), the element errors (whose piece store and readers must be

@@ -141,6 +141,12 @@ namespace NumSharp.Tests.Strings
                 case "translate":
                     result = c.translate(arg(0, "table"), arg(1, "deletechars"));
                     return true;
+                case "encode":
+                    result = c.encode(arg(0, "encoding"), arg(1, "errors"));
+                    return true;
+                case "decode":
+                    result = c.decode(arg(0, "encoding"), arg(1, "errors"));
+                    return true;
             }
             result = null;
             return false;
@@ -209,6 +215,9 @@ namespace NumSharp.Tests.Strings
                 "char.translate" => np.@char.translate(arg(0, "a"), arg(1, "table"), arg(2, "deletechars")),
                 // mod: np.asarray(a) and _vec_string with str.__mod__ / bytes.__mod__ per element (numpy.strings' own).
                 "char.mod" => np.@char.mod(arg(0, "a"), arg(1, "values")),
+                // encode / decode: _vec_string with str.encode / bytes.decode per element (numpy.strings' own).
+                "char.encode" => np.@char.encode(arg(0, "a"), arg(1, "encoding"), arg(2, "errors")),
+                "char.decode" => np.@char.decode(arg(0, "a"), arg(1, "encoding"), arg(2, "errors")),
                 var f => throw new InvalidOperationException($"the chararray behavior sections have no function '{f}'"),
             };
         }

@@ -12986,11 +12986,103 @@ def _chm_mod():
     _chm_fn([t_formats], "mod", [_chx_arr(0), _chx_v("x")], layout="T:str")
 
 
+def _chm_codec():
+    """numpy.char's encode / decode (numpy.strings' functions re-exported) and the chararray members of the two names
+    (C5's seventh batch). The functions are _to_bytes_or_str_array(_vec_string(a, object, 'encode' | 'decode',
+    _clean_args(encoding, errors))): a NEW plain S / U array (a chararray operand too), computed from the STORED text
+    (a chararray's trailing whitespace included). The members are encode(self, encoding, errors) / decode(self, encoding,
+    errors), the function's plain result as it is. A U chararray has no decode and an S one no encode (CPython's
+    AttributeError)."""
+    # The codec forms of a member, (args, kw, label). A U chararray encodes: UTF-8, ASCII strict (the pool's non-ASCII
+    # texts raise), ASCII with replace, UTF-16 with its per-element BOM, Latin-1 with xmlcharrefreplace by keyword, errors
+    # alone (_clean_args drops it: UTF-8 strict). An S chararray decodes: UTF-8 strict (the pool's 0xa0 / 0x85 / 0xff bytes
+    # raise), Latin-1, UTF-8 with replace / surrogateescape, ASCII with backslashreplace by keyword, errors alone.
+    forms = {
+        "U": [([], None, "default"), ([_chx_v("ascii")], None, "ascii"),
+              ([_chx_v("ascii"), _chx_v("replace")], None, "ascii_replace"), ([_chx_v("utf-16")], None, "utf16"),
+              ([], {"encoding": _chx_v("latin-1"), "errors": _chx_v("xmlcharrefreplace")}, "kw"),
+              ([], {"errors": _chx_v("ignore")}, "errors_only")],
+        "S": [([], None, "default"), ([_chx_v("latin-1")], None, "latin1"),
+              ([_chx_v("utf-8"), _chx_v("replace")], None, "replace"),
+              ([_chx_v("utf-8"), _chx_v("surrogateescape")], None, "surrogateescape"),
+              ([], {"encoding": _chx_v("ascii"), "errors": _chx_v("backslashreplace")}, "kw"),
+              ([], {"errors": _chx_v("ignore")}, "errors_only")],
+    }
+    for spec in ["<U4", "|S4"]:
+        kind = spec[1]
+        own, other = ("encode", "decode") if kind == "U" else ("decode", "encode")
+        fn_codec = _chx_v("utf-8") if kind == "U" else _chx_v("latin-1")
+        for layout in CHM_LAYOUTS:
+            cha = _chx_pool(spec, layout, 5)
+            label = f"{spec}:{layout}"
+            for args, kw, fl in forms[kind]:
+                _chm_member([cha], own, args, kw, layout=f"{label}:{fl}")
+            # The other class's method: CPython's AttributeError, before any element is read.
+            _chm_member([cha], other, [], layout=f"{label}:wrong_class")
+            _chm_fn([cha], own, [_chx_cha(0)], layout=f"{label}:chararray")
+            _chm_fn([cha], own, [_chx_cha(0), fn_codec], layout=f"{label}:chararray:codec")
+            _chm_fn([cha], own, [_chx_arr(0), fn_codec], layout=f"{label}:plain")
+    # Texts that reach the codecs' other paths: a lone surrogate (UTF-8 refuses it, surrogatepass codes it), a trailing NUL
+    # (the element drops it), elements that grow (UTF-16 / UTF-32), a name for namereplace, as a row, a column and a 0-d
+    # chararray.
+    u_texts = ["a\xe9", "\u20ac x", "\ud800z", "b\x00", "", "\U0001f600", "  "]
+    s_texts = [b"a\xe9", b"\xe2\x82\xac", b"\xed\xa0\x80", b"b\x00", b"", b"\xff\xfe", b"  "]
+    u_forms = [([_chx_v("utf-8")], "utf8"), ([_chx_v("utf-8"), _chx_v("surrogatepass")], "surrogatepass"),
+               ([_chx_v("utf-16-le")], "utf16le"), ([_chx_v("utf-32")], "utf32"),
+               ([_chx_v("ascii"), _chx_v("backslashreplace")], "backslashreplace"),
+               ([_chx_v("ascii"), _chx_v("namereplace")], "namereplace"), ([_chx_v("cp1252")], "cp1252"),
+               ([_chx_v("latin-1"), _chx_v("ignore")], "latin1_ignore")]
+    s_forms = [([_chx_v("utf-8")], "utf8"), ([_chx_v("utf-8"), _chx_v("surrogatepass")], "surrogatepass"),
+               ([_chx_v("latin-1")], "latin1"), ([_chx_v("ascii"), _chx_v("replace")], "ascii_replace"),
+               ([_chx_v("utf-8"), _chx_v("xmlcharrefreplace")], "xmlcharrefreplace"), ([_chx_v("cp1252")], "cp1252"),
+               ([_chx_v("utf-16-le"), _chx_v("replace")], "utf16le_replace")]
+    for spec, texts, fforms, name in [("<U3", u_texts, u_forms, "encode"), ("|S3", s_texts, s_forms, "decode")]:
+        row = _chx_vals(texts, spec)
+        col = _chx_vals([[t] for t in texts], spec)
+        for args, fl in fforms:
+            _chm_member([row], name, args, layout=f"{spec}:texts:{fl}")
+            _chm_member([col], name, args, layout=f"{spec}:texts:column:{fl}")
+            _chm_fn([row], name, [_chx_cha(0)] + args, layout=f"{spec}:texts:chararray:{fl}")
+        for i, t in enumerate(texts[:4]):
+            _chm_member([_chx_vals(t, spec)], name, fforms[0][0], layout=f"{spec}:0d:{i}")
+    # The codec arguments: an array of encodings (one per element), a broadcast mismatch, unknown and non-text codecs, an
+    # unknown handler (looked up only at the first error), an argument that is not a str, an embedded NUL.
+    u_row = _chx_vals(["ab", "\xe9", "c"], "<U2")
+    s_row = _chx_vals([b"ab", b"\xe9", b"c"], "|S2")
+    for base, name in [(u_row, "encode"), (s_row, "decode")]:
+        lab = "U" if name == "encode" else "S"
+        _chm_member([base, _chx_vals(["utf-8", "latin-1", "ascii"], "<U7")], name, [_chx_arr(1)], layout=f"{lab}:enc_array")
+        _chm_member([base, _chx_vals(["utf-8", "latin-1", "ascii"], "<U7"), _chx_vals(["strict", "replace", "ignore"], "<U7")],
+                    name, [_chx_arr(1), _chx_arr(2)], layout=f"{lab}:enc_err_arrays")
+        _chm_member([base, _chx_vals(["utf-8", "latin-1"], "<U7")], name, [_chx_arr(1)], layout=f"{lab}:mismatch")
+        for args, al in [([_chx_v("nope")], "unknown"), ([_chx_v("base64")], "base64"),
+                         ([_chx_v("ascii"), _chx_v("nope")], "unknown_handler"), ([_chx_v(5)], "int_encoding"),
+                         ([_chx_v(b"utf-8")], "bytes_encoding"), ([_chx_v("utf\x00-8")], "nul_encoding"),
+                         ([_chx_v("latin-1"), _chx_v(3)], "int_errors")]:
+            _chm_member([base], name, args, layout=f"{lab}:{al}")
+            _chm_fn([base], name, [_chx_cha(0)] + args, layout=f"{lab}:{al}:fn")
+    # StringDType text: encode over it; decode is str's AttributeError.
+    t_text = {"T": enc(["ab", "\xe9 \u4e2d", "", "\U0001f600"])}
+    for args, tl in [([], "default"), ([_chx_v("latin-1"), _chx_v("replace")], "latin1_replace"),
+                     ([_chx_v("utf-16")], "utf16"), ([_chx_v("ascii")], "ascii")]:
+        _chm_fn([t_text], "encode", [_chx_arr(0)] + args, layout=f"T:{tl}")
+    _chm_fn([t_text], "decode", [_chx_arr(0)], layout="T:decode")
+    # Python values: a str, bytes, lists, nested lists, empty text, numbers (NumPy's `string operation on non-string
+    # array`), each class's wrong method.
+    for value, vl in [("a\xe9", "str"), (b"a\xe9", "bytes"), (["ab", "\xe9"], "list"), ([b"ab", b"\xe9"], "bytes_list"),
+                      ([["a", "b"], ["\xe9", ""]], "nested"), ("", "empty_str"), (b"", "empty_bytes"), (5, "int"),
+                      (5.5, "float")]:
+        _chm_fn([], "encode", [_chx_v(value)], layout=f"value:{vl}")
+        _chm_fn([], "encode", [_chx_v(value), _chx_v("latin-1")], layout=f"value:{vl}:latin1")
+        _chm_fn([], "decode", [_chx_v(value)], layout=f"value:{vl}")
+        _chm_fn([], "decode", [_chx_v(value), _chx_v("latin-1")], layout=f"value:{vl}:latin1")
+
+
 def gen_strcharmeth():
     """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
     C5): partition / rpartition, the padding functions, str_len, the search functions, the strips and replace,
     NumPy's trivial-loop copy of a chararray beside a StringDType argument, the nine predicates, the case maps with
-    translate, and mod with the chararray % operator."""
+    translate, mod with the chararray % operator, and encode / decode."""
     _chm_transform()
     _chm_search()
     _chm_strip()
@@ -12998,6 +13090,7 @@ def gen_strcharmeth():
     _chm_predicates()
     _chm_case()
     _chm_mod()
+    _chm_codec()
     _chx_flush()
 
 # ----------------------------------------------------------------------------------------------------------------------
