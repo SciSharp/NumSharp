@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -122,6 +123,53 @@ namespace NumSharp.Tests.Backends.Strings
             {
                 f.flags.owndata.Should().BeFalse();
                 Py(f.tolist()).Should().Be("[['a', 'b'], ['c'], ['x', 'y'], [], ['d', 'e', 'f'], ['g']]");
+            }
+        }
+
+        /// <summary>
+        ///     <c>tofile(fid, sep, format)</c>'s <c>fid</c> is NumPy's: a file name (a <see cref="string"/>, a UTF-8
+        ///     <c>byte[]</c>, a <see cref="FileInfo"/>) is created or truncated first, so binary mode's OSError leaves an empty
+        ///     file behind as NumPy's does; any other object fails NumPy's <c>flush()</c> call with the AttributeError naming
+        ///     its Python type.
+        /// </summary>
+        [TestMethod]
+        public void Tofile_TakesAFileNameOrAStream()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "nslist_tofile_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                using var r = R();
+                var text = Path.Combine(dir, "t.txt");
+                r.tofile(text, "|");
+                File.ReadAllText(text, Encoding.ASCII).Should().Be("['a', 'b']|['c']|[]|['d', 'e', 'f']");
+                var bytesName = Path.Combine(dir, "b.txt");
+                r.tofile(Encoding.UTF8.GetBytes(bytesName), "|");
+                File.ReadAllText(bytesName, Encoding.ASCII).Should().Be("['a', 'b']|['c']|[]|['d', 'e', 'f']");
+                var info = new FileInfo(Path.Combine(dir, "path.txt"));
+                r.tofile(info, ",", "%-4s");
+                File.ReadAllText(info.FullName, Encoding.ASCII).Should().Be("['a', 'b'],['c'],[]  ,['d', 'e', 'f']");
+
+                // Binary mode: the file is opened ("wb") before the object array's refusal.
+                var binary = Path.Combine(dir, "bin.txt");
+                Action bin = () => r.tofile(binary);
+                bin.Should().Throw<OSError>().WithMessage("cannot write object arrays to a file in binary mode");
+                new FileInfo(binary).Length.Should().Be(0);
+
+                foreach (var (fid, name) in new (object, string)[] { (5, "int"), (null, "NoneType"), (new object[] { 1 }, "list"), (1.5, "float") })
+                {
+                    Action notAFile = () => r.tofile(fid, "|");
+                    notAFile.Should().Throw<AttributeError>().WithMessage($"'{name}' object has no attribute 'flush'");
+                }
+
+                using var e = E();
+                var empty = Path.Combine(dir, "empty.txt");
+                e.tofile(empty, "|");
+                new FileInfo(empty).Length.Should().Be(0);
+            }
+            finally
+            {
+                Directory.Delete(dir, recursive: true);
             }
         }
 
