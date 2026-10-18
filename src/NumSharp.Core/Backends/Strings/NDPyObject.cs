@@ -141,8 +141,10 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     The Python type name CPython's messages quote for an object (<c>Py_TYPE(obj)-&gt;tp_name</c>) under the boundary
         ///     map: <c>NoneType</c>, <c>bool</c>, <c>int</c>, <c>float</c> (a <see cref="decimal"/> too, which converts to
-        ///     one), <c>complex</c>, <c>str</c> (a <see cref="char"/> too), <c>bytes</c>, <c>numpy.float16</c>,
-        ///     <c>numpy.ndarray</c>, <c>tuple</c>, <c>dict</c>, <c>list</c>; an opaque object reports its .NET type name.
+        ///     one), <c>complex</c>, <c>str</c> (a <see cref="char"/> too, and an element stand-in of <c>U</c> text),
+        ///     <c>bytes</c> (an element stand-in of <c>S</c> text), <c>numpy.float16</c>, <c>chararray</c> (the class
+        ///     <c>numpy.char</c> defines in Python, so its type name has no module), <c>numpy.ndarray</c>, <c>tuple</c>,
+        ///     <c>dict</c>, <c>list</c>; an opaque object reports its .NET type name.
         /// </summary>
         /// <param name="obj">The C# value standing in for a Python object (null is <c>None</c>).</param>
         /// <returns>The name, as in <c>'int' object is not iterable</c> or <c>must be str or None, not float</c>.</returns>
@@ -160,6 +162,10 @@ namespace NumSharp.Backends.Strings
             string or char => "str",
             byte[] => "bytes",
             Half => "numpy.float16",
+            // An element stand-in is the Python str / bytes it stands for; a chararray is the Python class defchararray
+            // defines, whose tp_name is its bare name (CPython's '%d format: a real number is required, not chararray').
+            NDCharArray { IsScalarStandIn: true } standIn => standIn.dtype.@char == 'S' ? "bytes" : "str",
+            NDCharArray => "chararray",
             NDArray => "numpy.ndarray",
             ITuple => "tuple",
             IDictionary => "dict",

@@ -215,6 +215,7 @@ namespace NumSharp.Tests.Strings
                 ">=" => l >= r,
                 "+" => l + r,
                 "*" => l * r,
+                "%" => l % r,
                 var s => throw new InvalidOperationException($"the strcharops section has no operator '{s}'"),
             };
         }

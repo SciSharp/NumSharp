@@ -916,5 +916,209 @@ namespace NumSharp.Tests.Backends.Strings
             mapped.ndim.Should().Be(0);
             Texts(mapped).Should().Equal("xy  ");
         }
+
+        // ------------------------------------------------------------------ % and np.char.mod (C5, batch 6)
+
+        /// <summary>Latin-1 bytes of a text (NumPy's <c>S</c> values in these probes).</summary>
+        /// <param name="s">The text.</param>
+        /// <returns>The bytes.</returns>
+        private static byte[] B(string s) => System.Text.Encoding.Latin1.GetBytes(s);
+
+        /// <summary>The text of a 0-d stand-in (a Python str / bytes result), bytes read as Latin-1.</summary>
+        /// <param name="r">The stand-in.</param>
+        /// <returns>The text.</returns>
+        private static string ElementText(NDArray r)
+        {
+            r.ndim.Should().Be(0);
+            object item = r.item();
+            return item is byte[] b ? System.Text.Encoding.Latin1.GetString(b) : (string)item;
+        }
+
+        /// <summary>
+        ///     <c>chararray.__mod__(self, i)</c> is <c>asarray(mod(self, i))</c>: every STORED element formatted with CPython's
+        ///     <c>%</c> against the broadcast value (a trailing blank of a format stays in the result); a <c>U</c> result is an
+        ///     owning chararray, an <c>S</c> one a chararray view (OWNDATA false), as NumPy's <c>asarray</c> gives them.
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_FormatsEachStoredElement_AsAsarrayOfMod()
+        {
+            var numbers = np.@char.array(new[] { "%d", "%x", "%o" });
+            var r = numbers % 255;
+            r.Should().BeOfType<NDCharArray>();
+            r.dtype.ToString().Should().Be("<U3");
+            r.flags.owndata.Should().BeTrue();
+            Texts(r).Should().Equal("255", "ff", "377");
+            Texts(numbers % np.array(new long[] { 1, 2, 3 })).Should().Equal("1", "2", "3");
+
+            var text = np.@char.array(new[] { "%s  ", "<%r>" });
+            Texts(text % 1.5).Should().Equal("1.5  ", "<np.float64(1.5)>");
+            Texts(text % (object)null).Should().Equal("None  ", "<None>");
+
+            var s = np.@char.array(new[] { (object)B("%s"), B("%s") });
+            var sr = s % "X";
+            sr.Should().BeOfType<NDCharArray>();
+            sr.dtype.ToString().Should().Be("|S4");          // the np.str_'s UCS-4 buffer, read back without its NULs
+            sr.flags.owndata.Should().BeFalse();
+            Texts(sr).Should().Equal("X", "X");
+
+            var zero = (NDCharArray)np.array("%s!").view(typeof(NDCharArray));
+            var z = zero % "X";
+            z.Should().BeOfType<NDCharArray>();
+            z.ndim.Should().Be(0);
+            Texts(z).Should().Equal("X!");
+
+            var grid = np.@char.array(new[,] { { "%d", "%i" }, { "%x", "%o" } });
+            var g = grid % np.array(new long[] { 7, 9 });
+            g.shape.Should().Equal(2L, 2L);
+            Texts(g).Should().Equal("7", "9", "7", "11");
+        }
+
+        /// <summary>
+        ///     The formatting's errors are NumPy's, from the first element (C order) that raises: <c>'%d' % 'X'</c>, a left-over
+        ///     argument, a non-broadcasting value; an EMPTY chararray formats nothing and keeps its dtype (a view for
+        ///     <c>S</c>).
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_Errors_AreTheFirstElements()
+        {
+            var c = np.@char.array(new[] { "a%sb", "%d!  ", "x" });
+            Action number = () => { var _ = c % "X"; };
+            number.Should().Throw<TypeError>().Where(e => e.Message == "%d format: a real number is required, not numpy.str_");
+            Action reversed = () => { var _ = (NDCharArray)c["::-1"] % "X"; };
+            reversed.Should().Throw<TypeError>().Where(e => e.Message == "not all arguments converted during string formatting");
+            Action none = () => { var _ = c % (object)null; };
+            none.Should().Throw<TypeError>().Where(e => e.Message == "%d format: a real number is required, not NoneType");
+            Action shape = () => { var _ = c % np.array(new[] { "a", "b" }); };
+            shape.Should().Throw<IncorrectShapeException>();
+
+            var empty = (NDCharArray)np.array(new string[0]).astype(np.dtype("S3")).view(typeof(NDCharArray));
+            var r = empty % "x";
+            r.Should().BeOfType<NDCharArray>();
+            r.dtype.ToString().Should().Be("|S3");
+            r.size.Should().Be(0);
+            r.flags.owndata.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     With the chararray on the RIGHT, Python asks the left operand alone (<c>__rmod__</c> is NotImplemented): a str
+        ///     formats the chararray as ONE argument object — <c>%s</c> is its str(), <c>%r</c> its repr, <c>%d</c> needs a
+        ///     0-d array, <c>%(k)s</c> is NumPy's IndexError, a format without a spec is no error (a mapping) — and the result
+        ///     is a Python str, a read-only 0-d stand-in.
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_StrOnTheLeft_FormatsTheChararrayAsOneArgument()
+        {
+            var c = np.@char.array(new[] { "a%sb", "%d!  ", "x" });
+            var s = "%s" % c;
+            s.Should().BeOfType<NDCharArray>();
+            s.flags.writeable.Should().BeFalse();
+            ElementText(s).Should().Be("['a%sb' '%d!' 'x']");
+            ElementText("%r" % c).Should().Be("chararray(['a%sb', '%d!', 'x'], dtype='<U5')");
+            ElementText("abc" % c).Should().Be("abc");
+            ElementText("%-30s|" % c).Should().Be("['a%sb' '%d!' 'x']            |");
+
+            Action d = () => { var _ = "%d" % c; };
+            d.Should().Throw<TypeError>().Where(e => e.Message == "%d format: a real number is required, not chararray");
+            Action f = () => { var _ = "%f" % c; };
+            f.Should().Throw<TypeError>().Where(e => e.Message == "only 0-dimensional arrays can be converted to Python scalars");
+            Action key = () => { var _ = "%(k)s" % c; };
+            key.Should().Throw<IndexError>();
+            Action two = () => { var _ = "%s %s" % c; };
+            two.Should().Throw<TypeError>().Where(e => e.Message == "not enough arguments for format string");
+
+            // int() / float() of a 0-d chararray's element (array_int / array_float); __index__ only for integer arrays.
+            var seven = (NDCharArray)np.array("7").view(typeof(NDCharArray));
+            ElementText("%d" % seven).Should().Be("7");
+            ElementText("%f" % seven).Should().Be("7.000000");
+            Action index = () => { var _ = "%x" % seven; };
+            index.Should().Throw<TypeError>().Where(e => e.Message == "%x format: an integer is required, not chararray");
+            var x = (NDCharArray)np.array("x").view(typeof(NDCharArray));
+            Action literal = () => { var _ = "%d" % x; };
+            literal.Should().Throw<ValueError>().Where(e => e.Message == "invalid literal for int() with base 10: 'x'");
+        }
+
+        /// <summary>
+        ///     bytes on the left (a C# <c>byte[]</c>, or an element of an <c>S</c> chararray) is bytes formatting: <c>%s</c> /
+        ///     <c>%b</c> write the chararray's C-order buffer, NUL padding included (the 0-d stand-in reads back without the
+        ///     trailing NULs), and a float conversion's failure is its own TypeError.
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_BytesOnTheLeft_WritesTheChararraysBuffer()
+        {
+            var cs = np.@char.array(new[] { (object)B("a%sb"), B("%d!  "), B("x") });
+            var r = (object)B("%s") % cs;
+            r.dtype.ToString().Should().Be("|S15");
+            ElementText(r).Should().Be("a%sb\0%d!  x");
+            ElementText((object)B("%s") % (NDCharArray)cs["::-1"]).Should().Be("x\0\0\0\0%d!  a%sb");
+            Action f = () => { var _ = (object)B("%f") % cs; };
+            f.Should().Throw<TypeError>().Where(e => e.Message == "float argument required, not chararray");
+        }
+
+        /// <summary>
+        ///     An element (NumPy's stripped Python str / bytes) on the left formats ANY right operand: a chararray as one
+        ///     argument, a number, a tuple's items one per spec; a C# literal is the Python object it was (a Python int has no
+        ///     buffer for bytes formatting's <c>%s</c>, its repr is <c>5</c>).
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_ElementOnTheLeft_IsPythonsStringFormatting()
+        {
+            var c = np.@char.array(new[] { "a%sb", "%d!  ", "%r" });
+            ElementText((NDCharArray)c[0] % 5).Should().Be("a5b");
+            ElementText((NDCharArray)c[1] % 5).Should().Be("5!");
+            ElementText((NDCharArray)c[2] % 5).Should().Be("5");
+            ElementText((NDCharArray)c[0] % c).Should().Be("a['a%sb' '%d!' '%r']b");
+            var pair = (NDCharArray)np.@char.array(new[] { "%s-%s" })[0];
+            ElementText(pair % (object)(1L, 2L)).Should().Be("1-2");
+            ElementText((NDCharArray)np.@char.array(new[] { "%x" })[0] % np.array(255L)).Should().Be("ff");
+
+            var bytesFormat = (NDCharArray)np.@char.array(new[] { (object)B("%s") })[0];
+            Action buffer = () => { var _ = bytesFormat % 5; };
+            buffer.Should().Throw<TypeError>()
+                .Where(e => e.Message == "%b requires a bytes-like object, or an object that implements __bytes__, not 'int'");
+        }
+
+        /// <summary>
+        ///     Every other left operand has no <c>%</c> for a chararray: a Python number, bool or None is CPython's TypeError,
+        ///     an ndarray (or a NumPy scalar) runs <c>np.remainder</c>, whose missing text loop is NumPy's TypeError.
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_OtherLeftOperands_AreNumPysTypeErrors()
+        {
+            var c = np.@char.array(new[] { "a", "b" });
+            static void Raises(Action a, string text) => a.Should().Throw<TypeError>().Where(e => e.Message == text);
+            Raises(() => { var _ = 5 % c; }, "unsupported operand type(s) for %: 'int' and 'chararray'");
+            Raises(() => { var _ = 1.5 % c; }, "unsupported operand type(s) for %: 'float' and 'chararray'");
+            Raises(() => { var _ = true % c; }, "unsupported operand type(s) for %: 'bool' and 'chararray'");
+            Raises(() => { var _ = (object)null % c; }, "unsupported operand type(s) for %: 'NoneType' and 'chararray'");
+            Raises(() => { var _ = (object)(1L, 2L) % c; }, "unsupported operand type(s) for %: 'tuple' and 'chararray'");
+            Raises(() => { var _ = np.array(new[] { "%s", "%s" }) % c; },
+                "ufunc 'remainder' not supported for the input types, and the inputs could not be safely coerced to any " +
+                "supported types according to the casting rule ''safe''");
+            Raises(() => { var _ = T("%s", "%s") % c; },
+                "ufunc 'remainder' did not contain a loop with signature matching types (<class " +
+                "'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.StrDType'>) -> None");
+        }
+
+        /// <summary>
+        ///     <c>np.char.mod</c> IS <c>np.strings.mod</c>: a PLAIN result (a chararray operand too, <c>np.asarray</c> drops the
+        ///     class), a 0-d array for a Python str / bytes format, NumPy's TypeError for a non-text one.
+        /// </summary>
+        [TestMethod]
+        public void ModFunction_IsStringsMod()
+        {
+            var c = np.@char.array(new[] { "%s", "<%s>" });
+            var r = np.@char.mod(c, "q");
+            r.Should().NotBeOfType<NDCharArray>();
+            Texts(r).Should().Equal("q", "<q>");
+            Texts(np.@char.mod(new[] { "%d", "%x" }, 255)).Should().Equal("255", "ff");
+            var str = np.@char.mod("a%sb", "X");
+            str.ndim.Should().Be(0);
+            Texts(str).Should().Equal("aXb");
+            var bytes = np.@char.mod(B("%d"), 5);
+            bytes.dtype.ToString().Should().Be("|S1");
+            ((byte[])bytes.tolist()).Should().Equal((byte)'5');
+            Action number = () => np.@char.mod(5, "x");
+            number.Should().Throw<TypeError>().Where(e => e.Message == "string operation on non-string array");
+        }
     }
 }

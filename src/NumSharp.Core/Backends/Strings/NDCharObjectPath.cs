@@ -136,6 +136,18 @@ namespace NumSharp.Backends.Strings
             internal bool IsText => Objects is null && Lists is null && (Array.Storage.IsFixedString || Array.Storage.IsVString);
 
             /// <summary>
+            ///     One Python object as the single element of a 0-d object argument, NOT converted with
+            ///     <c>np.asarray</c>: CPython's <c>str.__mod__</c> / <c>bytes.__mod__</c> receive the right operand of
+            ///     <c>'%s' % x</c> as the object itself (a tuple gives its items one per spec, an ndarray, a list or a dict is a
+            ///     mapping), where <see cref="Convert"/> would turn a tuple or an ndarray into an array to broadcast.
+            /// </summary>
+            /// <param name="value">The object (null is Python's <c>None</c>; the boundary map of the element readers applies:
+            ///     a C# string is a str, a <c>byte[]</c> bytes, an element stand-in the str / bytes it stands for).</param>
+            /// <returns>The argument: a 0-d int64 handle array over a one-object table. It owns the handle array, which
+            ///     <see cref="Dispose"/> releases; the object itself stays the caller's.</returns>
+            internal static VecArg OfObject(object value) => new VecArg(NDArray.Scalar(0L), true, objects: new[] { value });
+
+            /// <summary>
             ///     NumPy's <c>np.asarray(value)</c> of one argument under <c>numpy.char</c>'s text rule
             ///     (<see cref="CharModule.TextOperand"/>), with a C# Python literal at NumPy's default dtype (a Python int is
             ///     int64, or uint64 past int64; a float float64; a complex complex128; an int past uint64 an object element)
@@ -685,7 +697,9 @@ namespace NumSharp.Backends.Strings
                 e.Length = n;
             }
 
-            /// <summary>An object-list element as the Python object it stands for (the house boundary map).</summary>
+            /// <summary>An object-list element as the Python object it stands for (the house boundary map): a C# string or
+            ///     char a str, an element stand-in the str / bytes it stands for, a <c>byte[]</c> bytes, a <see cref="Half"/> an
+            ///     np.float16, anything else the object itself.</summary>
             /// <param name="obj">The C# value (null is None).</param>
             /// <param name="e">Receives the object.</param>
             private void ReadObject(object obj, ref Elem e)
@@ -697,6 +711,11 @@ namespace NumSharp.Backends.Strings
                         return;
                     case char c:
                         SetString(c.ToString(), ref e);
+                        return;
+                    case NDCharArray standIn when standIn.IsScalarStandIn:
+                        // An element stand-in IS the Python str / bytes chararray element access returns (the boundary
+                        // map), not the 0-d array that carries it: '%r' of it is "'ab'", never "array('ab', dtype='<U2')".
+                        ReadObject(standIn.tolist(), ref e);
                         return;
                     case byte[] b:
                         e.Kind = ElemKind.Bytes;

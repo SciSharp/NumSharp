@@ -207,6 +207,8 @@ namespace NumSharp.Tests.Strings
                 "char.title" => np.@char.title(arg(0, "a")),
                 "char.upper" => np.@char.upper(arg(0, "a")),
                 "char.translate" => np.@char.translate(arg(0, "a"), arg(1, "table"), arg(2, "deletechars")),
+                // mod: np.asarray(a) and _vec_string with str.__mod__ / bytes.__mod__ per element (numpy.strings' own).
+                "char.mod" => np.@char.mod(arg(0, "a"), arg(1, "values")),
                 var f => throw new InvalidOperationException($"the chararray behavior sections have no function '{f}'"),
             };
         }

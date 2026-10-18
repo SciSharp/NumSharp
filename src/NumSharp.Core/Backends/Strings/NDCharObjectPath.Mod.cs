@@ -123,6 +123,54 @@ namespace NumSharp.Backends.Strings
             if (loop == NDStringMethods.TextLoop.None)
                 throw new TypeError(NonStringArrayText);
             using var vals = VecArg.Convert(values, "values");
+            return ModWalk(a, loop, vals);
+        }
+
+        /// <summary>
+        ///     CPython's <c>format % arg</c> for ONE format — a 0-d <c>U</c> or <c>S</c> array standing for a Python str or
+        ///     bytes — and ONE Python object: <c>str.__mod__</c> / <c>bytes.__mod__</c>, which Python runs for
+        ///     <c>'%s' % chararray</c> (str's slot is asked first, and the chararray's reflected <c>__rmod__</c> returns
+        ///     NotImplemented anyway). Unlike <see cref="Mod"/>, <paramref name="arg"/> is the argument object ITSELF, never
+        ///     <c>np.asarray</c>'d: a tuple gives its items one per spec, an ndarray, a list or a dict is a mapping (one
+        ///     argument that silences the left-over check and feeds <c>%(key)</c> lookups).
+        /// </summary>
+        /// <param name="format">The format: a 0-d <c>U</c> array (str formatting) or <c>S</c> array (bytes formatting).</param>
+        /// <param name="arg">The argument under the boundary map of the element readers: null is None, a C# string a str, a
+        ///     <c>byte[]</c> bytes, an element stand-in the str / bytes it stands for, an <see cref="NDArray"/> the ndarray
+        ///     (its <c>str()</c> / <c>repr()</c> are NumPy's printing, its bytes the C-order buffer, its numbers
+        ///     <c>int(a)</c> / <c>float(a)</c> of a 0-d array).</param>
+        /// <returns>A fresh 0-d array of <paramref name="format"/>'s class holding the formatted text, as wide as the text
+        ///     (trailing NULs counted), at least 1.</returns>
+        /// <exception cref="TypeError"><paramref name="format"/> is not text; the argument count; a conversion the argument
+        ///     refuses (<c>%d format: a real number is required, not chararray</c>, <c>only 0-dimensional arrays can be
+        ///     converted to Python scalars</c> for a float conversion of an array of more than zero dimensions).</exception>
+        /// <exception cref="ValueError">A malformed format; <c>int()</c> / <c>float()</c> of a 0-d text array that holds no
+        ///     number; a <c>StringDType</c> array under bytes formatting's <c>%s</c> (<c>cannot include dtype
+        ///     'numpy.dtypes.StringDType' in a buffer</c>).</exception>
+        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of
+        ///     range.</exception>
+        /// <exception cref="IndexError">A <c>%(key)</c> lookup on an ndarray or a NumPy scalar.</exception>
+        /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>
+        internal static NDArray ModObject(NDArray format, object arg)
+        {
+            var loop = NDStringMethods.ResolveOne(format);
+            if (loop == NDStringMethods.TextLoop.None)
+                throw new TypeError(NonStringArrayText);
+            using var vals = VecArg.OfObject(arg);
+            return ModWalk(format, loop, vals);
+        }
+
+        /// <summary>
+        ///     The walk of <see cref="Mod"/> / <see cref="ModObject"/> once the format's loop and the argument are known:
+        ///     the broadcast, NumPy's empty-result rule, and the C-order formatting of every element (see the file header).
+        /// </summary>
+        /// <param name="a">The formats (text).</param>
+        /// <param name="loop">Their loop: bytes formatting for <c>S</c>, str formatting for <c>U</c> / <c>StringDType</c>.</param>
+        /// <param name="vals">The converted argument (the caller disposes it).</param>
+        /// <returns>The formatted array (see <see cref="Mod"/>).</returns>
+        /// <exception cref="Exception">The first element's error (see <see cref="Mod"/>).</exception>
+        private static NDArray ModWalk(NDArray a, NDStringMethods.TextLoop loop, VecArg vals)
+        {
             if (vals.Lists is not null)
                 throw new NotSupportedException("An object array of lists as np.strings.mod's values has no NumSharp form.");
             var outer = np.broadcast_shapes(a.Shape, vals.BroadcastShape);
@@ -1450,7 +1498,11 @@ namespace NumSharp.Backends.Strings
                     long n;
                     if (v.Kind == ElemKind.Object && v.Obj is NDArray nd)
                     {
-                        // An ndarray object exposes its data: the C-order bytes (PyBUF_FULL_RO copied contiguous).
+                        // An ndarray object exposes its data: the C-order bytes (PyBUF_FULL_RO copied contiguous). A
+                        // StringDType array has no buffer format (its cells are references into an arena), so NumPy's
+                        // buffer export refuses it.
+                        if (nd.Storage.IsVString)
+                            throw new ValueError("cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
                         ndBytes = nd.tobytes('C');
                         n = ndBytes.Length;
                         data = null;
@@ -1539,8 +1591,9 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     Whether <c>PyFloat_AsDouble</c> succeeds for the value: every NumPy numeric scalar (np.bool and the complex
-        ///     scalars too), a Python int that fits a float, a Python float / np.float16 / decimal; not a text value, None, a
-        ///     complex object, a container.
+        ///     scalars too), a Python int that fits a float, a Python float / np.float16 / decimal, a 0-d ndarray whose element
+        ///     <c>float()</c> takes (<c>array_float</c>: a number, or text that spells one); not a text value, None, a complex
+        ///     object, a container, an ndarray of one or more dimensions.
         /// </summary>
         /// <param name="v">The value.</param>
         /// <returns>True when the value converts.</returns>
@@ -1553,6 +1606,10 @@ namespace NumSharp.Backends.Strings
                 case ElemKind.Object:
                     if (PrintfFormatter.TryPyInt(v.Obj, out BigInteger big))
                         return !double.IsInfinity(PythonInt.ToDouble(big));
+                    // bytes formatting's formatfloat turns ANY failure of PyFloat_AsDouble into its own TypeError, so an
+                    // ndarray only asks whether array_float would succeed.
+                    if (v.Obj is NDArray array)
+                        return PrintfFormatter.TryArrayFloat(array, out _);
                     return v.Obj is double or float or Half or decimal;
                 default:
                     return false;
@@ -1560,8 +1617,8 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     bytes formatting's <c>byte_converter</c>: a bytes value of exactly one byte, or an integer (a NumPy integer or a
-        ///     Python int / bool, through <c>__index__</c>) in <c>range(256)</c>.
+        ///     bytes formatting's <c>byte_converter</c>: a bytes value of exactly one byte, or an integer (a NumPy integer, a
+        ///     Python int / bool, or a 0-d integer ndarray, through <c>__index__</c>) in <c>range(256)</c>.
         /// </summary>
         /// <param name="v">The value.</param>
         /// <returns>The byte.</returns>
@@ -1587,7 +1644,10 @@ namespace NumSharp.Backends.Strings
                     }
                     break;   // np.bool, the floats and complex have no __index__
                 case ElemKind.Object:
-                    if (PrintfFormatter.TryPyInt(v.Obj, out BigInteger value))
+                    // A Python int, or an ndarray's __index__ (array_index: only a 0-d INTEGER array has one; its TypeError
+                    // for any other array becomes this conversion's own).
+                    if (PrintfFormatter.TryPyInt(v.Obj, out BigInteger value)
+                        || v.Obj is NDArray array && PrintfFormatter.TryArrayIndex(array, out value))
                     {
                         if (value.Sign < 0 || value > 255)
                             throw new OverflowException("%c arg not in range(256)");
@@ -1812,7 +1872,8 @@ namespace NumSharp.Backends.Strings
         /// <summary>
         ///     The element a Python object stands for when a tuple item or a dict value reaches a spec (the boundary map of
         ///     <see cref="Operand"/>'s object reader): a C# string is a str (its code points in the derived scratch), a char a
-        ///     one-character str, a <c>byte[]</c> bytes, a <see cref="Half"/> an np.float16, anything else the object itself.
+        ///     one-character str, an element stand-in the str / bytes it stands for, a <c>byte[]</c> bytes, a
+        ///     <see cref="Half"/> an np.float16, anything else the object itself.
         /// </summary>
         /// <param name="obj">The object (null is None).</param>
         /// <param name="w">The call's state (the derived scratch).</param>
@@ -1831,6 +1892,11 @@ namespace NumSharp.Backends.Strings
                     e.Kind = ElemKind.Str;
                     e.Units = (byte*)w.DerivedPoints(c.ToString(), out long one);
                     e.Length = one;
+                    return;
+                case NDCharArray standIn when standIn.IsScalarStandIn:
+                    // An element stand-in IS the Python str / bytes chararray element access returns (the boundary map),
+                    // not the 0-d array that carries it.
+                    ElemOfObject(standIn.tolist(), w, out e);
                     return;
                 case byte[] b:
                     e.Kind = ElemKind.Bytes;

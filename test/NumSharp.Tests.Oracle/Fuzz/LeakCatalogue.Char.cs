@@ -384,6 +384,57 @@ namespace NumSharp.Tests.Fuzz
                 }
                 return c * 2;
             });
+            E(l, "NDCharArray.op_Modulus", "chararray % a value / an array / None (U taken over, S viewed), str and bytes % chararray (one argument object), an element % a number, the TypeErrors of a number, None and an ndarray on the left", f =>
+            {
+                using var c = np.@char.array(new[] { "%d", "%x" });
+                using var s = np.@char.array(new object[] { new byte[] { 37, 115 }, new byte[] { 37, 114 } });
+                using var text = np.@char.array(new[] { "%s", "<%r>" });
+                using var values = np.array(new[] { 7L, 255L });
+                using var byArray = c % values;
+                using var bytes = s % "q";
+                using var none = text % (object)null;
+                using var str = "%s" % c;
+                using var buffer = (object)new byte[] { 37, 115 } % s;
+                using var element = (NDCharArray)c[1];
+                using var formatted = element % 255;
+                using var plain = np.array(new[] { "%s", "%s" });
+                try
+                {
+                    _ = c % "x";
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    _ = "%d" % c;
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    _ = 5 % c;
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    _ = (object)null % c;
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    _ = plain % c;
+                }
+                catch (TypeError)
+                {
+                }
+                return c % 5;
+            });
             E(l, "NDCharArray.Equals", "against a chararray holding the same text, against another object", f =>
             {
                 using var c = np.@char.array(new[] { "ab", "c" });
@@ -779,6 +830,35 @@ namespace NumSharp.Tests.Fuzz
                 {
                 }
                 return c.translate(table);
+            });
+            E(l, "np.char.mod", "U / S / StringDType formats, a chararray input (a plain result), an array of values, a Python str / bytes format; a conversion error and a non-text format (TypeError)", f =>
+            {
+                using var u = np.array(new[] { "%d", "%x" });
+                using var s = np.array(new object[] { new byte[] { 37, 115 }, new byte[] { 37, 100 } });
+                using var t = np.array(new[] { "%s!", "<%r>" }, np.dtypes.StringDType());
+                using var c = np.@char.array(new[] { "%s  ", "%r" });
+                using var values = np.array(new[] { 7L, 255L });
+                using var byArray = np.@char.mod(u, values);
+                using var bytes = np.@char.mod(s, 5);
+                using var vstring = np.@char.mod(t, "x");
+                using var chars = np.@char.mod(c, 1.5);
+                using var str = np.@char.mod("a%sb", "X");
+                using var pyBytes = np.@char.mod(new byte[] { 37, 100 }, 5);
+                try
+                {
+                    np.@char.mod(u, "x");
+                }
+                catch (TypeError)
+                {
+                }
+                try
+                {
+                    np.@char.mod(5, "x");
+                }
+                catch (TypeError)
+                {
+                }
+                return np.@char.mod(u, 255);
             });
             // ---- numpy.char's object path (phase 4: section strcharobj replays it outside the sweep) ----
             // Each entry takes the S, U and StringDType text routes, a separator / limit / keepends operand (an array, a

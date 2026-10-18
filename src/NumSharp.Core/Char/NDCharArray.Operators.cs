@@ -5,7 +5,7 @@ using NumSharp.Generic;
 
 // =============================================================================
 // NDCharArray.Operators.cs — chararray.__eq__ / __ne__ / __lt__ / __le__ / __gt__ / __ge__ / __add__ / __radd__ /
-// __mul__ / __rmul__ (numpy/_core/defchararray.py) with Python's binary-operator dispatch
+// __mul__ / __rmul__ / __mod__ / __rmod__ (numpy/_core/defchararray.py) with Python's binary-operator dispatch
 // =============================================================================
 //
 // NumPy's methods, one line each:
@@ -15,6 +15,10 @@ using NumSharp.Generic;
 //     __radd__(self, other)-> add(other, self)
 //     __mul__(self, i)     -> asarray(multiply(self, i))  (np.char.multiply, ValueError for a non-integer count)
 //     __rmul__(self, i)    -> asarray(multiply(self, i))
+//     __mod__(self, i)     -> asarray(mod(self, i))       (np.char.mod: CPython's % per element, over the STORED text)
+//     __rmod__(self, other)-> NotImplemented              (so `x % c` is answered by x alone: a str / bytes formats c as
+//                                                          its one argument, an ndarray runs np.remainder — no text loop,
+//                                                          NumPy's TypeError —, anything else is CPython's TypeError)
 //
 // PYTHON'S DISPATCH decides which method runs, and NumSharp replays it:
 //   * a chararray on the LEFT: its method first;
@@ -37,7 +41,13 @@ using NumSharp.Generic;
 // THE C# null LITERAL keeps NDArray's meaning for == and != (a reference test, 0-d result); an ordering against null is
 // NumPy's TypeError for None. For + it is None too: np.add's object loop copies a 0-d or short 1-d chararray into object
 // as a chararray (the finalize error), and a larger one reaches CPython's concatenation error on its first element; for *
-// it is a count that is not an integer (np.char.multiply's ValueError).
+// it is a count that is not an integer (np.char.multiply's ValueError); for % it is a value ('%s' % None is 'None') on the
+// right of a chararray, and None.__mod__ does not exist on the left (CPython's TypeError).
+//
+// % WITH A str / bytes ON THE LEFT is Python's own string formatting, not the chararray's: str.__mod__ formats the
+// chararray as ONE argument object (a mapping: '%s' is str(c) — "['a' 'b']" —, '%r' its repr, '%d' int(c), which only a
+// 0-d array has, '%(k)s' NumPy's IndexError), and the result is a Python str / bytes, here a read-only 0-d stand-in (the
+// form + gives a Python str result too).
 //
 // A RESULT THE CLASS CANNOT HOLD: chararray + StringDType is a PLAIN StringDType array in NumPy (__array_wrap__ keeps a
 // non-text result an ndarray) once the trivial loop does not copy the chararray; the operator's NDCharArray type cannot
@@ -285,7 +295,8 @@ namespace NumSharp
         /// <summary>
         ///     The Python type name of an operator operand, as CPython's binary-operator <c>TypeError</c> spells it: a
         ///     chararray is <c>chararray</c>, an element stand-in the <c>str</c> / <c>bytes</c> it stands for, a C# string
-        ///     <c>str</c>, a <c>byte[]</c> <c>bytes</c>, a tuple <c>tuple</c>, a sequence <c>list</c>.
+        ///     <c>str</c>, a <c>byte[]</c> <c>bytes</c>, a <c>decimal</c> <c>float</c>, a <see cref="System.Numerics.Complex"/>
+        ///     <c>complex</c>, a tuple <c>tuple</c>, a dictionary <c>dict</c>, a sequence <c>list</c>.
         /// </summary>
         /// <param name="value">The operand.</param>
         /// <returns>The name.</returns>
@@ -300,7 +311,11 @@ namespace NumSharp
             bool => "bool",
             ITuple => "tuple",
             sbyte or byte or short or ushort or int or uint or long or ulong or System.Numerics.BigInteger => "int",
-            float or double => "float",
+            // NumSharp's decimal stands for a Python float wherever a C# value is a Python object (NDPyObject.TypeName).
+            float or double or decimal => "float",
+            System.Numerics.Complex => "complex",
+            // A dict is enumerable too: tested before the sequences.
+            System.Collections.IDictionary => "dict",
             System.Collections.IEnumerable => "list",
             _ => value.GetType().Name,
         };
@@ -482,6 +497,200 @@ namespace NumSharp
                 return scalar;
             }
             return new NDCharArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
+        }
+
+        #endregion
+
+        #region Formatting core
+
+        /// <summary>
+        ///     <c>left % right</c> with an <see cref="NDCharArray"/> on at least one side, replaying Python's dispatch:
+        ///     <c>chararray.__mod__(self, i)</c> is <c>asarray(mod(self, i))</c> and <c>chararray.__rmod__</c> returns
+        ///     <c>NotImplemented</c>, so a chararray on the LEFT formats its own elements, and with the chararray on the RIGHT
+        ///     only the left operand's own <c>%</c> can answer.
+        /// </summary>
+        /// <param name="left">The left operand.</param>
+        /// <param name="right">The right operand.</param>
+        /// <returns>
+        ///     A chararray on the left: the formatted chararray (<see cref="FormatElements"/>: an owning copy for <c>U</c>, a
+        ///     view for <c>S</c>). A Python str / bytes on the left (a C# string or char, a <c>byte[]</c>, an element
+        ///     stand-in): the str / bytes CPython's <c>str.__mod__</c> / <c>bytes.__mod__</c> returns, as a new read-only 0-d
+        ///     stand-in (<see cref="FormatPythonText"/>).
+        /// </returns>
+        /// <exception cref="TypeError">
+        ///     A chararray on the left: <see cref="np.strings.mod(NDArray, object)"/>'s errors (the argument count, a
+        ///     conversion the value refuses). A str / bytes on the left: CPython's formatting errors with the right operand
+        ///     as the one argument (<c>%d format: a real number is required, not chararray</c>, <c>only 0-dimensional arrays
+        ///     can be converted to Python scalars</c>, <c>not enough arguments for format string</c>). An ndarray or a NumPy
+        ///     scalar on the left: <c>np.remainder</c>'s no-loop texts (<c>ufunc 'remainder' not supported for the input
+        ///     types, ...</c>). Any other left operand: <c>unsupported operand type(s) for %: 'int' and 'chararray'</c>.
+        /// </exception>
+        /// <exception cref="ValueError">A malformed format; <c>int()</c> / <c>float()</c> of text that spells no number.</exception>
+        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of range.</exception>
+        /// <exception cref="IndexError">A <c>%(key)</c> lookup on an ndarray or a NumPy scalar.</exception>
+        /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>
+        /// <exception cref="IncorrectShapeException">A chararray on the left whose values do not broadcast.</exception>
+        /// <remarks>
+        ///     The order is Python's. A chararray on the left answers first (with a chararray on the right too: Python asks a
+        ///     reflected method first only for a right operand whose class SUBCLASSES the left's, which another chararray does
+        ///     not). Then a str or bytes on the left: <c>str</c>'s number slot is asked before the chararray's (the chararray
+        ///     is no str subclass), and it formats ANY right operand. Then nothing: <c>__rmod__</c> is NotImplemented, so an
+        ///     ndarray on the left runs its own <c>np.remainder</c>, and every other Python object ends in CPython's
+        ///     <c>TypeError</c>.
+        /// </remarks>
+        [NDScoped]
+        private static NDCharArray ModOperator(object left, object right)
+        {
+            if (IsRealOperand(left, out NDCharArray chars))
+                return FormatElements(chars, right);
+            if (TryPythonText(left, out NDArray format))
+                return FormatPythonText(format, right);
+            // A C# number or bool literal reaches the (NDArray, chararray) form through NDArray's implicit conversion (C#
+            // prefers it to boxing): the 0-d array is marked as the Python int / float / complex / bool it was, whose own %
+            // gives up against an array — and so does __rmod__.
+            if (left is NDArray { WasPythonLiteral: true } or NDArray { WasPythonBool: true })
+            {
+                var literal = (NDArray)left;
+                object python = literal.WasPythonBool ? true : literal.Nep50Operand;
+                throw new TypeError($"unsupported operand type(s) for %: '{PythonTypeName(python)}' and '{PythonTypeName(right)}'");
+            }
+            // __rmod__ is NotImplemented: an ndarray (or a NumPy scalar: np.float16, a C# char's np.uint16) answers with
+            // ndarray.__mod__, which is np.remainder — no loop takes a text operand, so it raises NumPy's ufunc TypeError.
+            if (left is NDArray or Half)
+                throw RemainderOfArray(left, right);
+            throw new TypeError($"unsupported operand type(s) for %: '{PythonTypeName(left)}' and '{PythonTypeName(right)}'");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>chararray.__mod__(self, i)</c>: <c>asarray(mod(self, i))</c> — every stored element formatted with
+        ///     CPython's <c>%</c> against the broadcast element of <paramref name="values"/>, then <c>np.char.asarray</c>'s
+        ///     form of the plain result.
+        /// </summary>
+        /// <param name="chars">The chararray (a real one, not an element stand-in).</param>
+        /// <param name="values">The values, as <see cref="np.strings.mod(NDArray, object)"/> converts them.</param>
+        /// <returns>An owning chararray for <c>U</c> (<c>asarray</c> copies <c>U</c>: the fresh result is taken over, no copy
+        ///     made), a chararray view of the computed array for <c>S</c>.</returns>
+        /// <exception cref="Exception"><see cref="np.strings.mod(NDArray, object)"/>'s errors.</exception>
+        /// <remarks>The formats are the STORED text: trailing whitespace stays in the format (<c>'%s  ' % 'x'</c> is
+        ///     <c>'x  '</c>), as NumPy's <c>np.asarray(self)</c> reads it; only element access strips.</remarks>
+        [NDScoped]
+        private static NDCharArray FormatElements(NDCharArray chars, object values)
+        {
+            NDArray fresh;
+            // Inside a boundary region the module function computes the plain array (no chararray view of it is made just
+            // to be dropped), and asarray then gives the result its final form.
+            using (NDCharArrayBoundary.Inside())
+                fresh = np.@char.mod(chars, values);
+            return AsArrayOfFresh(fresh);
+        }
+
+        /// <summary>
+        ///     The left operand as the Python str / bytes whose <c>__mod__</c> formats: a C# string or a boxed char (a str), a
+        ///     <c>byte[]</c> (bytes), an element stand-in (the str / bytes it stands for), or the 0-d array a C# string /
+        ///     Python bytes became through a conversion (marked <see cref="NDArray.WasPythonStr"/> /
+        ///     <see cref="NDArray.WasPythonBytes"/>).
+        /// </summary>
+        /// <param name="value">The left operand.</param>
+        /// <param name="format">Receives the 0-d <c>U</c> / <c>S</c> array holding the format (the operand itself, or a new
+        ///     array the calling operator's scope reclaims).</param>
+        /// <returns>True for a str or bytes.</returns>
+        /// <remarks>An UNBOXED C# char binds the (NDArray, chararray) form through NDArray's implicit conversion, which makes
+        ///     it NumPy's <c>np.uint16</c> scalar (the house map of a char as an array); only a char reaching the
+        ///     <c>object</c> form (boxed) is the one-character str of the string module's object map.</remarks>
+        private static bool TryPythonText(object value, out NDArray format)
+        {
+            switch (value)
+            {
+                case string s:
+                    format = NDArray.FromPythonOperand(s);
+                    return true;
+                case char c:
+                    format = NDArray.FromPythonOperand(c.ToString());
+                    return true;
+                case byte[] b:
+                    format = NDArray.PythonBytesLiteral(b);
+                    return true;
+                case NDCharArray standIn when standIn.IsScalarStandIn:
+                    format = standIn;
+                    return true;
+                case NDArray marked when marked.WasPythonStr || marked.WasPythonBytes:
+                    format = marked;
+                    return true;
+                default:
+                    format = null;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        ///     CPython's <c>str.__mod__</c> / <c>bytes.__mod__</c> with <paramref name="right"/> as the ONE argument object:
+        ///     Python's answer for <c>'%s' % chararray</c> and for an element stand-in on the left of any operand.
+        /// </summary>
+        /// <param name="format">The format (a 0-d <c>U</c> / <c>S</c> array: a Python str / bytes).</param>
+        /// <param name="right">The argument: a chararray or another ndarray (a mapping: <c>%s</c> is its <c>str()</c>, a
+        ///     <c>%(key)</c> lookup NumPy's IndexError, the numbers <c>int(a)</c> / <c>float(a)</c> of a 0-d array), an element
+        ///     stand-in (the str / bytes it stands for), a tuple (its items, one per spec), a C# number, string, <c>byte[]</c>,
+        ///     dict or null as the Python object it stands for.</param>
+        /// <returns>The formatted str / bytes as a new read-only 0-d stand-in.</returns>
+        /// <exception cref="Exception">CPython's formatting errors (see <see cref="NDCharObjectPath.ModObject"/>).</exception>
+        /// <remarks>A Python str / bytes result keeps every character the formatting writes, trailing NULs included (bytes
+        ///     formatting's <c>%s</c> of an <c>S</c> chararray ends with its NUL padding); the 0-d stand-in, like any <c>S</c> /
+        ///     <c>U</c> element, reads back without the trailing ones.</remarks>
+        [NDScoped]
+        private static NDCharArray FormatPythonText(NDArray format, object right)
+            => FromPlainOperator(NDCharObjectPath.ModObject(format, PythonObjectOf(right)));
+
+        /// <summary>
+        ///     The Python object a right operand stands for when it is formatted as ONE argument object: a 0-d array that a C#
+        ///     literal became through NDArray's implicit conversion (C# prefers that conversion to boxing, so
+        ///     <c>c[0] % 5</c> binds the (chararray, NDArray) form) is the literal itself again — a Python int / float /
+        ///     complex, bool, str or bytes, or a <see cref="Half"/> (np.float16) or char (a one-character str) — and anything
+        ///     else is itself.
+        /// </summary>
+        /// <param name="value">The right operand.</param>
+        /// <returns>The object the formatting reads.</returns>
+        /// <remarks>The difference is visible: a Python int has no buffer, so <c>b'%s' % 5</c> raises <c>%b requires a
+        ///     bytes-like object, or an object that implements __bytes__, not 'int'</c>, where a 0-d int64 array's buffer
+        ///     would be written; and <c>'%r' % 5</c> is <c>5</c>, not <c>array(5)</c>.</remarks>
+        private static object PythonObjectOf(object value) => value switch
+        {
+            NDArray { WasPythonLiteral: true } literal => literal.Nep50Operand,
+            NDArray { WasPythonBool: true } flag => flag.item(),
+            NDArray { WasPythonStr: true } text => text.PythonStrText,
+            NDArray { WasPythonBytes: true } bytes => bytes.tolist(),
+            NDArray { WasNumPyScalar: true } scalar => scalar.item(),
+            _ => value,
+        };
+
+        /// <summary>
+        ///     <c>ndarray.__mod__(left, right)</c>, i.e. <c>np.remainder(left, right)</c>, for an ndarray (or NumPy scalar) on
+        ///     the left of a chararray: NumPy has no remainder loop for text, so this always raises the ufunc's TypeError.
+        /// </summary>
+        /// <param name="left">The ndarray, or a <see cref="Half"/> (NumPy's np.float16 scalar).</param>
+        /// <param name="right">The right operand (a chararray or an element stand-in).</param>
+        /// <returns>Never returns the exception for a text operand: <c>np.remainder</c> raises during the call. The
+        ///     exception returned (for the caller to throw) reports a result that NumPy's rule forbids.</returns>
+        /// <exception cref="TypeError">NumPy's no-loop texts (<c>ufunc 'remainder' not supported for the input types, and
+        ///     the inputs could not be safely coerced to any supported types according to the casting rule ''safe''</c>, or
+        ///     the <c>StringDType</c> loop's).</exception>
+        /// <remarks>Scoped by hand (an <see cref="Exception"/> result is no carrier the scope weaver handles): the 0-d array
+        ///     a NumPy scalar becomes is this call's own, released on every path.</remarks>
+        private static Exception RemainderOfArray(object left, object right)
+        {
+            NDArray converted = left is NDArray ? null : NDArray.FromPythonOperand(left);
+            try
+            {
+                // NDArray's own (NDArray, NDArray) operator: np.remainder's engine over the two operands, which raises for
+                // the text one. The right operand is a chararray or an element stand-in here (the forms that reach this
+                // call all have one on the right), already an array, so no np.asanyarray runs on it.
+                NDArray l = converted ?? (NDArray)left;
+                using NDArray none = right is NDArray r ? l % r : l % right;
+                return new InvalidOperationException("np.remainder computed a result for a chararray operand.");
+            }
+            finally
+            {
+                converted?.Dispose();
+            }
         }
 
         #endregion
@@ -739,6 +948,59 @@ namespace NumSharp
 
         /// <inheritdoc cref="operator *(NDCharArray, NDCharArray)"/>
         public static NDCharArray operator *(string left, NDCharArray right) => MultiplyOperator(left, right);
+
+        #endregion
+
+        #region %
+
+        /// <summary>
+        ///     NumPy's <c>chararray.__mod__</c>: every element of the left chararray formatted with CPython's <c>%</c> against
+        ///     the broadcast element of the right operand (<c>np.char.asarray(np.char.mod(self, values))</c>); with the
+        ///     chararray on the RIGHT, the left operand's own <c>%</c> (<c>chararray.__rmod__</c> is NotImplemented).
+        /// </summary>
+        /// <param name="left">The left operand.</param>
+        /// <param name="right">The right operand.</param>
+        /// <returns>
+        ///     A chararray on the left: the formatted chararray — an owning copy for <c>U</c>, a view of the computed array for
+        ///     <c>S</c> — over the broadcast shape (<c>np.@char.array(new[] { "%d", "%x" }) % 255</c> is <c>['255', 'ff']</c>).
+        ///     A C# string, a <c>byte[]</c> or an element stand-in on the left: Python's <c>str</c> / <c>bytes</c> formatting
+        ///     with the right operand as its ONE argument, the result a read-only 0-d stand-in (<c>"%s" % c</c> is
+        ///     <c>str(c)</c>, <c>"['a' 'b']"</c>; <c>c[0] % 5</c> formats the element's text).
+        /// </returns>
+        /// <exception cref="TypeError">The formatting's errors (the argument count, a conversion the value refuses:
+        ///     <c>%d format: a real number is required, not numpy.str_</c>); an ndarray or a NumPy scalar on the left of a
+        ///     chararray: <c>np.remainder</c>'s no-loop text; any other left operand: <c>unsupported operand type(s) for %:
+        ///     'int' and 'chararray'</c>.</exception>
+        /// <exception cref="ValueError">A malformed format (<c>incomplete format</c>); a NaN under an integer conversion;
+        ///     <c>int()</c> / <c>float()</c> of text that spells no number.</exception>
+        /// <exception cref="OverflowException">An infinity under an integer conversion; a <c>%c</c> argument out of
+        ///     range.</exception>
+        /// <exception cref="IndexError">A <c>%(key)</c> lookup on a NumPy scalar or an ndarray.</exception>
+        /// <exception cref="KeyError">A <c>%(key)</c> missing from a dict.</exception>
+        /// <exception cref="IncorrectShapeException">The values do not broadcast against the chararray.</exception>
+        /// <remarks>Python's dispatch: the chararray's <c>__mod__</c> answers when it is on the left; on the right only a str /
+        ///     bytes (which formats any object) or an ndarray (<c>np.remainder</c>, which raises) has a <c>%</c> for it. The
+        ///     static rule applies, as for <c>+</c>: an <see cref="NDArray"/>-typed reference to a chararray binds
+        ///     <see cref="NDArray"/>'s <c>%</c> (<c>np.remainder</c>).</remarks>
+        public static NDCharArray operator %(NDCharArray left, NDCharArray right) => ModOperator(left, right);
+
+        /// <inheritdoc cref="operator %(NDCharArray, NDCharArray)"/>
+        public static NDCharArray operator %(NDCharArray left, NDArray right) => ModOperator(left, right);
+
+        /// <inheritdoc cref="operator %(NDCharArray, NDCharArray)"/>
+        public static NDCharArray operator %(NDArray left, NDCharArray right) => ModOperator(left, right);
+
+        /// <inheritdoc cref="operator %(NDCharArray, NDCharArray)"/>
+        public static NDCharArray operator %(NDCharArray left, object right) => ModOperator(left, right);
+
+        /// <inheritdoc cref="operator %(NDCharArray, NDCharArray)"/>
+        public static NDCharArray operator %(object left, NDCharArray right) => ModOperator(left, right);
+
+        /// <inheritdoc cref="operator %(NDCharArray, NDCharArray)"/>
+        public static NDCharArray operator %(NDCharArray left, string right) => ModOperator(left, right);
+
+        /// <inheritdoc cref="operator %(NDCharArray, NDCharArray)"/>
+        public static NDCharArray operator %(string left, NDCharArray right) => ModOperator(left, right);
 
         #endregion
 

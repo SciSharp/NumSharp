@@ -8878,7 +8878,7 @@ CHF = "strcharfn"
 FINALIZE_TEXT = "Can only create a chararray from string data."
 
 _CHX_OPS = {"==": operator.eq, "!=": operator.ne, "<": operator.lt, "<=": operator.le, ">": operator.gt,
-            ">=": operator.ge, "+": operator.add, "*": operator.mul}
+            ">=": operator.ge, "+": operator.add, "*": operator.mul, "%": operator.mod}
 
 
 def _chx_dec(v):
@@ -8935,8 +8935,10 @@ def _chx_build(recipe):
     Args:
         recipe: ``{"pool": [spec, layout, seed]}`` (``_cha_operand``), ``{"nonempty": [spec, layout, seed]}``
             (``_cha_operand`` over the pool without its empty string: NumPy 2.4.2's zfill of an empty element reads
-            uninitialized memory, see ``_fn_nonempty``), ``{"values": enc, "dtype": spec}`` (``np.array(values, dtype)``)
-            or ``{"T": enc}`` (a StringDType array of the values).
+            uninitialized memory, see ``_fn_nonempty``), ``{"fmt": [spec, layout, pool, seed]}`` (``_cha_operand``'s
+            layout over the % format pool ``CHM_FMT_POOLS[pool]``, latin-1 bytes for an S spec),
+            ``{"values": enc, "dtype": spec}`` (``np.array(values, dtype)``) or ``{"T": enc}`` (a StringDType array of
+            the values).
 
     Returns:
         The (base, view) pair.
@@ -8953,6 +8955,16 @@ def _chx_build(recipe):
         return base, build(base)
     if "T" in recipe:
         return t_plain(np.array(_chx_dec(recipe["T"]), dtype=np.dtypes.StringDType()))
+    if "fmt" in recipe:
+        # A pool of % formats (section strcharmeth's mod cases), laid out like a chararray-pool operand.
+        spec, layout, pool_name, seed = recipe["fmt"]
+        n, build = LAYOUTS[layout]
+        pool = CHM_FMT_POOLS[pool_name]
+        if spec[1] == "S":
+            pool = [f.encode("latin-1") for f in pool]
+        base = (np.array([pool[(seed + i) % len(pool)] for i in range(n)], dtype=spec) if n
+                else np.zeros(0, dtype=spec))
+        return base, build(base)
     arr = np.array(_chx_dec(recipe["values"]), dtype=recipe["dtype"])
     return target(arr) if recipe.get("out") else plain(arr)
 
@@ -12222,17 +12234,148 @@ def _chm_case():
         _chm_fn([], "translate", [_chx_v(value), _chx_v(CHM_TR_S if is_bytes else CHM_TR_U)], layout=f"value:{vl}")
 
 
+# The % format pools of _chm_mod (the "fmt" recipe of _chx_build): formats that take one value of any kind (str(), repr(),
+# ascii(), a width, a precision cut, a literal %, a stored trailing blank — the formats are the STORED text —, a non-ASCII
+# character), and formats that take one NUMBER (each integer conversion, the float ones, %c).
+CHM_FMT_POOLS = {
+    "text": ["%s", "<%s>", "%-3s|", "%r", "%.1s", "%%%s", "%3s", "%a", "x%s  ", "\xe9%s"],
+    "num": ["%d", "%x", "%05.1f", "%e", "%+i", "%o", "%#x", "%-4d|", "%g", "%c"],
+}
+# The str formats of `fmt % chararray` (CPython's str.__mod__ with the chararray as ONE argument object, a mapping).
+CHM_MOD_STR_FORMATS = ["%s", "%r", "%a", "%d", "%x", "%f", "%c", "%(k)s", "abc", "%s %s", "%5s|", "%.3s", "%%", "%-30s|",
+                       "%*s"]
+# The bytes formats of `fmt % chararray` (bytes.__mod__: %s / %b are the chararray's C-order buffer).
+CHM_MOD_BYTES_FORMATS = [b"%s", b"%b", b"%r", b"%a", b"%d", b"abc", b"%5s|", b"%.3s", b"%c", b"%f", b"%x", b"%(k)s",
+                         b"%s %s"]
+
+
+def _chm_mod():
+    """numpy.char's mod (numpy.strings' function re-exported) and the chararray % operator (C5's sixth batch).
+    np.char.mod(a, values) is np.asarray(a) and _vec_string with str.__mod__ / bytes.__mod__ per element: a PLAIN result
+    (a chararray operand too). chararray.__mod__(self, i) is asarray(mod(self, i)) — a U result an owning chararray, an S
+    result a chararray view — and __rmod__ returns NotImplemented, so with the chararray on the right the left operand
+    answers alone: a str / bytes (or an element, a str / bytes too) formats the chararray as its ONE argument (a mapping:
+    str() / repr(), int() / float() of a 0-d chararray only, NumPy's IndexError for %(key)s), an ndarray runs
+    np.remainder (no text loop: NumPy's TypeError), a Python number / None ends in CPython's TypeError."""
+    for spec in ["<U8", "|S8"]:
+        word, alien = _chm_words(spec)
+        for layout in CHM_LAYOUTS:
+            text = {"fmt": [spec, layout, "text", 0]}
+            num = {"fmt": [spec, layout, "num", 0]}
+            shape = _chx_shape(text)
+            nd = len(shape)
+            size = int(np.prod(shape)) if shape else 1
+            label = f"{spec}:{layout}"
+            C = _chx_cha(0)
+
+            def op(recipes, args, sub):
+                add_chx(CHM, "cha_op", {"sym": "%", "args": args}, recipes, layout=f"{label}:{sub}")
+
+            # ---- c % v: the text formats with one value of each kind ----
+            for v, vl in [(_chx_v("xy"), "str"), (_chx_v(b"xy"), "bytes"), (_chx_v(5), "int"), (_chx_v(1.5), "float"),
+                          (_chx_v(None), "none"), (_chx_v(True), "bool"), (_chx_v(word("q\xe9")), "word"),
+                          (_chx_v(alien("q")), "alien"), (_chx_v({"k": 1}), "dict")]:
+                op([text], [C, v], f"text:{vl}")
+            # ---- c % v: the number formats ----
+            for v, vl in [(_chx_v(5), "int"), (_chx_v(255), "int255"), (_chx_v(-3), "neg"), (_chx_v(2.5), "float"),
+                          (_chx_v(True), "bool"), (_chx_v("x"), "str"), (_chx_v(None), "none")]:
+                op([num], [C, v], f"num:{vl}")
+            # ---- c % arrays: the values element by element (same shape, a row broadcast, a StringDType value) ----
+            if nd >= 1 and size > 0:
+                flat = [str(i) for i in range(size)]
+                vals = np.array(flat).reshape(shape).tolist()
+                ints = (np.arange(size) * 7 - 3).reshape(shape).tolist()
+                floats = (np.arange(size) * 1.25 - 2).reshape(shape).tolist()
+                row = [f"r{i}" for i in range(shape[-1])]
+                op([text, _chx_vals(vals, "<U3")], [C, _chx_arr(1)], "text:plain")
+                op([text, _chx_vals(vals, "<U3")], [C, _chx_cha(1)], "text:chararray")
+                op([text, _chx_vals(row, "<U3")], [C, _chx_arr(1)], "text:row")
+                op([text], [C, _chx_v(row)], "text:list")
+                op([num, _chx_vals(ints, "int64")], [C, _chx_arr(1)], "num:ints")
+                op([num, _chx_vals(floats, "float64")], [C, _chx_arr(1)], "num:floats")
+            op([text, {"T": enc(["t\xe9"])}], [C, _chx_arr(1)], "text:stringdtype")
+            # ---- the chararray on the RIGHT: Python's str / bytes formatting, an element, numbers, None, arrays ----
+            if layout in ("c1", "c2", "f2", "z0", "e1", "one", "bc", "d5", "r2", "s1"):
+                for fmt in CHM_MOD_STR_FORMATS:
+                    op([text], [_chx_v(fmt), C], f"R:str:{fmt}")
+                for fmt in CHM_MOD_BYTES_FORMATS:
+                    op([text], [_chx_v(fmt), C], f"R:bytes:{fmt.decode()}")
+                for v, vl in [(_chx_v(5), "int"), (_chx_v(1.5), "float"), (_chx_v(True), "bool"), (_chx_v(None), "none")]:
+                    op([text], [v, C], f"R:{vl}")
+                op([text, _chx_vals(["%s"] * max(size, 1) if not shape else np.full(shape, "%s").tolist(), "<U2")],
+                   [_chx_arr(1), C], "R:plain_text")
+                op([text, _chx_vals([1] * 3, "int64")], [_chx_arr(1), C], "R:plain_int")
+                op([text, {"T": enc(["%s"])}], [_chx_arr(1), C], "R:stringdtype")
+                if nd >= 1 and size > 0:
+                    elem = {"elem": [0, [0] * nd]}
+                    op([text], [elem, C], "R:elem")
+                    for v, vl in [(_chx_v(5), "int"), (_chx_v(word("v")), "word"), (_chx_v(None), "none")]:
+                        op([text], [elem, v], f"elem:{vl}")
+    # ---- int() / float() / __index__ of a 0-d chararray as str / bytes formatting's ONE argument ----
+    for spec, values in [("<U32", ["7", " 7 ", "x", "1.5", "1_000", "123456789012345678901234567890", "١٢", ""]),
+                         ("|S8", [b"7", b"1.5", b"x", b" 9 "])]:
+        for value in values:
+            zero_d = _chx_vals(value, spec)
+            for fmt in ["%d", "%f", "%x", "%c", "%s", "%r", "%i", "%e"]:
+                add_chx(CHM, "cha_op", {"sym": "%", "args": [_chx_v(fmt), _chx_cha(0)]}, [zero_d],
+                        layout=f"0d:{spec}:str:{fmt}")
+            for fmt in [b"%d", b"%f", b"%s", b"%c", b"%x"]:
+                add_chx(CHM, "cha_op", {"sym": "%", "args": [_chx_v(fmt), _chx_cha(0)]}, [zero_d],
+                        layout=f"0d:{spec}:bytes:{fmt.decode()}")
+    # ---- an element format over a plain 0-d / 1-d array argument (int(a), float(a), __index__; bytes formatting's
+    # buffer, its %c byte and its float conversion's own TypeError; a StringDType array has no buffer) ----
+    for spec, formats in [("<U2", ["%x", "%d", "%f", "%c", "%s", "%r"]), ("|S2", [b"%x", b"%d", b"%f", b"%c", b"%s", b"%r"])]:
+        elems = _chx_vals(formats, spec)
+        for arg, al in [(_chx_vals(255, "int64"), "i255"), (_chx_vals(-3, "int64"), "ineg"),
+                        (_chx_vals(5.7, "float64"), "f"), (_chx_vals(True, "bool"), "b"), (_chx_vals(65, "uint8"), "u8"),
+                        (_chx_vals([5], "int64"), "1d"), (_chx_vals(float("nan"), "float64"), "nan"),
+                        (_chx_vals(float("inf"), "float64"), "inf"), (_chx_vals("7", "<U2"), "u7"),
+                        (_chx_vals("x", "<U2"), "ux"), (_chx_vals(b"1.5", "|S3"), "s15"), ({"T": enc(["9"])}, "t1d")]:
+            for i in range(len(formats)):
+                add_chx(CHM, "cha_op", {"sym": "%", "args": [{"elem": [0, [i]]}, _chx_arr(1)]}, [elems, arg],
+                        layout=f"elem_arg:{spec}:{al}:{i}")
+    # ---- an element format over a Python value: the value is the Python object itself (a Python int has no buffer for
+    # bytes formatting's %s, its repr is not a NumPy scalar's) ----
+    for spec, formats in [("<U2", ["%x", "%d", "%f", "%c", "%s", "%r"]), ("|S2", [b"%x", b"%d", b"%f", b"%c", b"%s", b"%r"])]:
+        elems = _chx_vals(formats, spec)
+        for v, vl in [(_chx_v(5), "int"), (_chx_v(65), "int65"), (_chx_v(2.5), "float"), (_chx_v(True), "bool"),
+                      (_chx_v(None), "none"), (_chx_v("q"), "str"), (_chx_v(b"q"), "bytes")]:
+            for i in range(len(formats)):
+                add_chx(CHM, "cha_op", {"sym": "%", "args": [{"elem": [0, [i]]}, v]}, [elems],
+                        layout=f"elem_value:{spec}:{vl}:{i}")
+    # ---- np.char.mod: chararray and plain operands (a PLAIN result), Python values, StringDType ----
+    for spec in ["<U8", "|S8"]:
+        for layout in ["c1", "c2", "f2", "z0", "e2", "bc", "r2", "d5"]:
+            text = {"fmt": [spec, layout, "text", 2]}
+            num = {"fmt": [spec, layout, "num", 2]}
+            label = f"{spec}:{layout}"
+            _chm_fn([text], "mod", [_chx_cha(0), _chx_v("v")], layout=f"{label}:chararray")
+            _chm_fn([text], "mod", [_chx_arr(0), _chx_v("v")], layout=f"{label}:plain")
+            _chm_fn([text], "mod", [_chx_cha(0)], {"values": _chx_v(None)}, layout=f"{label}:kw")
+            _chm_fn([num], "mod", [_chx_cha(0), _chx_v(7)], layout=f"{label}:num")
+            _chm_fn([num], "mod", [_chx_arr(0), _chx_v(2.5)], layout=f"{label}:num_float")
+    for value, vl, values in [("a%sb", "str", "X"), (b"%d", "bytes", 5), (["%d", "%x"], "list", 255),
+                              ([b"%s", b"%r"], "bytes_list", b"q"), ([["%s", "%d"], ["%x", "%o"]], "nested", 9),
+                              ("", "empty", "x"), ("%s", "none", None), ("%(k)s", "dict", {"k": "v"}), (5, "int", "x"),
+                              (5.5, "float", 1), ("%d", "str_value", "x")]:
+        _chm_fn([], "mod", [_chx_v(value), _chx_v(values)], layout=f"value:{vl}")
+    t_formats = {"T": enc(["%s!", "%r", "<%5s>", "%d"])}
+    _chm_fn([t_formats], "mod", [_chx_arr(0), _chx_v(5)], layout="T")
+    _chm_fn([t_formats], "mod", [_chx_arr(0), _chx_v("x")], layout="T:str")
+
+
 def gen_strcharmeth():
     """Section strcharmeth: numpy.char's string functions and the chararray string members (the numpy.char plan's C4 /
     C5): partition / rpartition, the padding functions, str_len, the search functions, the strips and replace,
-    NumPy's trivial-loop copy of a chararray beside a StringDType argument, the nine predicates, and the case maps
-    with translate."""
+    NumPy's trivial-loop copy of a chararray beside a StringDType argument, the nine predicates, the case maps with
+    translate, and mod with the chararray % operator."""
     _chm_transform()
     _chm_search()
     _chm_strip()
     _chm_tcopy()
     _chm_predicates()
     _chm_case()
+    _chm_mod()
     _chx_flush()
 
 # ----------------------------------------------------------------------------------------------------------------------
