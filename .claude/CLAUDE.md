@@ -301,7 +301,9 @@ replays the directory `NUMSHARP_STRING_ORACLE_SOAK_DIR` names (Inconclusive when
 - **`NpyString_cmp` is strncmp** over the shorter size, then the sizes: a NUL both texts share ENDS the byte comparison
   (`'a\0c' == 'a\0b'`, `'a\0c' < 'a\0bb'`, `'a\0' < 'ab'`), and every `T` comparison, sort, search, extreme, set routine
   and order statistic inherits it (297 of the 381). `U` compares every code point. `NDVStringCells.Order` /
-  `StrncmpStop` (32 / 16 bytes a step, `~(a == b) | (a == 0)`); the fast paths test for a NUL only where it can change
+  `StrncmpStop` (32 / 16 bytes a step, `~(a == b) | (a == 0)`; since `c0684587` the step that would run past the text
+  moves back to end on its last byte instead of a byte loop, and 8–15 bytes are two SWAR words (`WordStop`): equal
+  20–60-byte texts 26.1 → 7.5 ns a pair, `np.equal(a, a.copy())` of such texts 0.72 → 1.43× NumPy); the fast paths test for a NUL only where it can change
   the answer — `Equal` only for a pair of one size whose bytes differ, `Less` / the 128-bit key one vector compare per
   short pair (`ShortHasNul`), `TryFirstWord` via `WordHasNul`; `VStringSort` keys on each text's comparison prefix
   (`NulLengthInPlace`); `VStringDistinct` drops duplicates by byte content inside each strncmp-equal run. Cost 1.02–1.19×
