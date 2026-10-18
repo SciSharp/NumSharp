@@ -568,6 +568,21 @@ owns the allocator, so views keep it alive). Rules a new route must keep:
   or heap allocation of THIS thread fail (`DisarmFaultInjection` cancels); production pays one volatile read. Each
   operation must raise NumPy's text for its loop and dispose its half-built result (`StringDTypeFaultTests`: the live
   allocator count returns to its baseline).
+- **A fill of a FRESH buffer reserves its arena once and appends in element order** (2026-10-18, `82e4508a`). Only medium /
+  long texts move the arena cursor, so a store may settle the texts that need no arena (short, empty, NA) first and append
+  the rest afterwards in the original order: cells and arena stay NumPy's element-by-element stores byte for byte, only
+  the capacity differs (`VStringAllocator.TryReserve`). `np.array(values, T)` (`VStringArraySlice.SetRange`) does it in two
+  passes over the leading run of strings (pass 1 counts a long text by its LENGTH, exact for ASCII; pass 2 encodes each
+  text straight into its slot, `AppendFresh` + `NDUtf8.EncodeExact`), then the general store from the first value it
+  cannot place; the `S` → `T` cast does it when every destination cell is zero (`ReserveForFreshBytes`). Rules: a cell
+  holding a SHORT text sends a longer one to the heap (`heap_or_arena_allocate`), so never reserve for, or `AppendFresh`
+  into, a destination that holds text (an append would also overwrite and leak a held heap string); and no exact size pass
+  over all texts (an `Encoding.UTF8.GetByteCount` per string cost as much as the reservation saved at 20–60 characters).
+  Every public assignment route (`np.copyto`, slice / fancy / mask assignment) casts an `S` value into a fresh temporary
+  first, so a held destination reaches the cast only through `NDIter.Copy` itself. Measured (100K texts, NPY/NS): create
+  `T` 4–12 / 20–60 / 300–500 characters x2.68 → x3.49, x1.17 → x2.52, x0.62 → x2.52; `S` → `T` 20–60 / 300–500 bytes
+  x2.09 → x3.86, x1.30 → x5.53. Gates: `StringDTypeFillTests` (the element-by-element store as the reference) and
+  `StringDTypeFaultTests.Array_FailsCleanlyPartWay`.
 - The oracle carries `T` values as values, never cells (`"t"` + `"values"`, `{"na": true}`), and compares `tobytes()`
   cells with the heap pointers masked; sections `tstore` / `tcreate` / `tmove` / `tcast` (8,324 strict).
 - NumPy 2.4.2 bugs on `T` that NumSharp does not reproduce (pinned by unit tests, kept out of the corpus): `np.place`
