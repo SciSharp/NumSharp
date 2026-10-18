@@ -185,15 +185,16 @@ namespace NumSharp
         ///     ndim checks, for a constant when its order uses it).</exception>
         /// <exception cref="AxisError">The axis is out of range.</exception>
         /// <exception cref="IndexError">An empty series: <c>index 0 is out of bounds for axis 0 with size 0</c>.</exception>
-        /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text).</exception>
+        /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text); a str constant,
+        ///     or a None constant of a 1-D series, when an order uses it (NumPy's no-loop / unsupported-operand texts).</exception>
         /// <exception cref="ArgumentException">A scl, constant or lbnd value the series cannot absorb in place (NumPy's
         ///     UFuncTypeError text).</exception>
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
         /// <exception cref="OverflowException">A Python-int scl / lbnd / constant too large for the series' float dtype
         ///     (<c>int too large to convert to float</c>).</exception>
-        /// <exception cref="NotSupportedException">A null or string series; a str / null constant or a str lbnd when an
-        ///     order USES it (NumPy fails there with a str-dtype error; a str lbnd is never read by an order that takes the
-        ///     one-coefficient zero branch, nor at all when <paramref name="m"/> is 0).</exception>
+        /// <exception cref="NotSupportedException">A null or string series; a str lbnd when an order USES it (NumPy fails
+        ///     there with a str-dtype error; a str lbnd is never read by an order that takes the one-coefficient zero branch,
+        ///     nor at all when <paramref name="m"/> is 0); a None constant of an N-D series.</exception>
         internal static NDArray Int(PolyBasis basis, object c, int m, object k, object lbnd, object scl, int axis)
         {
             NDArray src = Coefficients(c);
@@ -353,22 +354,31 @@ namespace NumSharp
         /// <param name="kRaw">The order's constant as <see cref="IntegrationConstants"/> holds it (converted here, AFTER
         ///     {p}val ran: Python evaluates <c>k[i] - chebval(lbnd, tmp)</c> left to right and only the subtraction
         ///     converts <c>k[i]</c>, so an lbnd error is reported before a constant's).</param>
-        /// <param name="lbndArg">The lower bound.</param>
+        /// <param name="lbndArg">The lower bound: a C# value under the package's boundary map, or a boxed
+        ///     <see cref="PolyNumber"/> from the series classes (a NumPy scalar is evaluated at in scalarmath,
+        ///     <see cref="NDPolyEval.ValAtScalar"/>).</param>
         /// <exception cref="ValueError">An array constant for a real 1-D series (NumPy's setitem text), a constant whose
         ///     broadcast would stretch tmp[0], or a ragged constant (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text).</exception>
+        /// <exception cref="TypeError">An array constant for a complex 1-D series (<c>complex()</c>'s text); a str or None
+        ///     constant (see <see cref="RefuseNonNumericConstant"/>).</exception>
         /// <exception cref="ArgumentException">A result tmp[0] cannot hold in place (N-D) — named complex64 where NumPy's
         ///     value is complex64.</exception>
         /// <exception cref="IncorrectShapeException">A constant that does not broadcast with tmp[0] (N-D).</exception>
         /// <exception cref="OverflowException">A Python-int lbnd or constant too large for the series' dtype.</exception>
-        /// <exception cref="NotSupportedException">A str lbnd (NumPy evaluates the series AT it — a str-dtype error), or a str /
-        ///     None constant.</exception>
+        /// <exception cref="NotSupportedException">A str lbnd (NumPy evaluates the series AT it — a str-dtype error).</exception>
         private static void Correct(PolyBasis basis, NDArray buf, long ws, long len, long[] md, bool oneD, NPTypeCode t,
             object kRaw, object lbndArg)
         {
             // np.ndim('a') is 0, so a str lbnd passes the scalar check and NumPy only fails here, at {p}val(lbnd, tmp).
             if (lbndArg is string)
                 throw new NotSupportedException("a str lbnd makes NumPy evaluate the series at a str, which NumSharp has no dtype for");
+            // A boxed PolyNumber comes from the series classes (integ's `lbnd = off + scl*lbnd`). Its Python and array kinds
+            // mean what their plain C# forms mean, so they are unwrapped into them; a NumPy SCALAR stays boxed: {p}val at a
+            // NumPy scalar is scalarmath on every coefficient (x is not an ndarray), which no array argument expresses.
+            if (lbndArg is PolyNumber boxed && boxed.Kind != PolyNumberKind.Scalar)
+                lbndArg = boxed.ToObject();
+            PolyNumber scalarLbnd = lbndArg is PolyNumber s ? s : default;
+            bool scalarX = lbndArg is PolyNumber;
             // A Python complex lbnd against a float16/float32 series is NumPy's complex64 loop: {p}val's value is a
             // complex64 (a 1-D series) or complex64 array (N-D), which NumSharp's single complex width carries as
             // complex128 — so the 1-D value is interpreted in NumPy's complex64 scalarmath here (PyVal1D), and the N-D
@@ -379,7 +389,9 @@ namespace NumSharp
                 // tmp[0] is a NumPy scalar and so is {p}val's result: scalarmath, then setitem's cast.
                 byte* p = Ptr(buf) + ws * DirectILKernelGenerator.GetTypeSize(t);
                 PolyNumber v;
-                if (valC64)
+                if (scalarX)
+                    v = NDPolyEval.ValAtScalar(basis, scalarLbnd, p, len, DirectILKernelGenerator.GetTypeSize(t), t);
+                else if (valC64)
                     v = PyVal1D(basis, PyScalar.Cplx((System.Numerics.Complex)lbndArg), p, len, t);
                 else
                 {
@@ -387,16 +399,28 @@ namespace NumSharp
                     using (var val = NDPolyEval.Val(basis, lbndArg, tmp, tensor: true))
                         v = PolyNumber.ScalarOf(val);
                 }
+                RefuseNonNumericConstant(kRaw, v);
                 var r = PolyNumber.Binary(BinaryOp.Subtract, Constant(kRaw), v);
                 StoreFirst(p, t, PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromScalar(t, p), r));
                 return;
             }
 
             NDArray arr;
-            using (var tmp = MovedView(buf, ws, len, md))
-                arr = NDPolyEval.Val(basis, lbndArg, tmp, tensor: true);
+            // An N-D series meets a NumPy-scalar lbnd in ufuncs only (every operand of {p}val's recurrence is a row array),
+            // and a ufunc reads a NumPy scalar exactly as it reads a strong 0-d array of its dtype: the kernel's 0-d mode.
+            NDArray scalarArray = scalarX ? scalarLbnd.ToNDArray() : null;
             try
             {
+                using (var tmp = MovedView(buf, ws, len, md))
+                    arr = NDPolyEval.Val(basis, scalarArray ?? lbndArg, tmp, tensor: true);
+            }
+            finally
+            {
+                scalarArray?.Dispose();
+            }
+            try
+            {
+                RefuseNonNumericConstant(kRaw, PolyNumber.FromArray(arr));
                 var ki = Constant(kRaw);
                 var r = PolyNumber.Binary(BinaryOp.Subtract, ki, PolyNumber.FromArray(arr));
                 bool rC64 = PolyNumber.IsComplex64Loop(ki, valC64 ? NPTypeCode.Complex : arr.typecode, valC64);
@@ -510,9 +534,23 @@ namespace NumSharp
         /// <exception cref="TypeError">An array constant into a complex 1-D series.</exception>
         /// <exception cref="ArgumentException">A constant the series cannot absorb in place (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="IncorrectShapeException">A constant that does not broadcast with the row.</exception>
-        /// <exception cref="NotSupportedException">A str / None constant.</exception>
+        /// <exception cref="TypeError">A str constant (the add ufunc has no loop for a str dtype), or a None constant of a 1-D
+        ///     series (the object loop's CPython addition).</exception>
+        /// <exception cref="NotSupportedException">A None constant of an N-D series (NumPy's object-dtype in-place add).</exception>
         private static void AddToFirstRow(NDArray cm, object kRaw, bool oneD)
         {
+            if (kRaw is string text)
+            {
+                // c[0] + 'a': the NumPy value's add finds no ufunc loop for (its dtype, <U{len}) — 1-D (scalarmath defers to
+                // the ufunc) and N-D (the in-place ufunc) alike; the str's dtype is np.array(text)'s, <U1 for the empty str.
+                int len = 0;
+                foreach (var _ in text.EnumerateRunes())
+                    len++;
+                throw new TypeError($"ufunc 'add' did not contain a loop with signature matching types " +
+                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('<U{Math.Max(1, len)}')) -> None");
+            }
+            if (kRaw is null && oneD)
+                throw new TypeError($"unsupported operand type(s) for +: '{NDPolyBase.ObjectLoopTypeName(PolyNumber.FromScalar(cm.typecode, Ptr(cm)))}' and 'NoneType'");
             var ki = Constant(kRaw);
             if (oneD)
             {
@@ -704,6 +742,35 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A str / None item (NumPy's str / object operand).</exception>
         private static PolyNumber Constant(object kRaw) => kRaw is PolyNumber p ? p : PolyNumber.FromObject(kRaw);
 
+        /// <summary>
+        ///     NumPy's <c>k[i] - {p}val(lbnd, tmp)</c> for the two constants NumPy computes nothing with, raised in NumPy's
+        ///     words: a str has no <c>__sub__</c>, so the value's reflected subtract runs the ufunc, which has no loop for a
+        ///     str dtype; None reaches the object loop, whose CPython subtraction refuses it.
+        /// </summary>
+        /// <param name="kRaw">The constant as <see cref="IntegrationConstants"/> holds it.</param>
+        /// <param name="v">{p}val's value (a NumPy scalar for a 1-D series, the row array for an N-D one).</param>
+        /// <exception cref="TypeError">A str constant (<c>ufunc 'subtract' did not contain a loop with signature matching types
+        ///     (dtype('&lt;U1'), dtype('float64')) -&gt; None</c>) or a None constant (<c>unsupported operand type(s) for -:
+        ///     'NoneType' and 'float'</c>).</exception>
+        private static void RefuseNonNumericConstant(object kRaw, in PolyNumber v)
+        {
+            switch (kRaw)
+            {
+                case string text:
+                {
+                    // np.array(text).dtype: <U{len(text)} counted in code points, <U1 for the empty str.
+                    int len = 0;
+                    foreach (var _ in text.EnumerateRunes())
+                        len++;
+                    string other = v.IsComplex64 ? "complex64" : v.Dtype.AsNumpyDtypeName();
+                    throw new TypeError($"ufunc 'subtract' did not contain a loop with signature matching types " +
+                                        $"(dtype('<U{Math.Max(1, len)}'), dtype('{other}')) -> None");
+                }
+                case null:
+                    throw new TypeError($"unsupported operand type(s) for -: 'NoneType' and '{NDPolyBase.ObjectLoopTypeName(v)}'");
+            }
+        }
+
         /// <summary><c>list(nd)</c>: a 0-d array is not iterable (one constant); rank 1 yields NumPy scalars, rank ≥ 2 row views.</summary>
         /// <param name="list">The destination (items boxed as <see cref="PolyNumber"/>s).</param><param name="nd">The array.</param>
         private static void AddArrayItems(List<object> list, NDArray nd)
@@ -746,6 +813,10 @@ namespace NumSharp
                     return 0;
                 case NDArray nd:
                     return nd.ndim;
+                // A boxed value the series classes computed (integ's `off + scl*lbnd`, `1./scl`): a scalar, unless its
+                // arithmetic met an ndarray (an array lbnd), whose rank is then the array's.
+                case PolyNumber p:
+                    return p.Kind == PolyNumberKind.Array ? p.Array.ndim : 0;
             }
             if (PolySequence.IsSequence(x))
                 return PolySequence.NDim(x);

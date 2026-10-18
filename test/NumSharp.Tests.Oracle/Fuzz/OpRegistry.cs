@@ -26,6 +26,10 @@ namespace NumSharp.Tests.Fuzz
             // Every axis-taking function under one key, params.fn naming the NumPy spelling (OpRegistry.AxisArgs.cs).
             if (op == "axis_arg")
                 return AxisArgFromCorpus(p, ops);
+            // numpy.polynomial's series classes (OpRegistry.PolyClass.cs): "<module>.<Class>[.<member>]" keys, before the
+            // module functions, whose keys share the module prefix.
+            if (IsPolyClassOp(op))
+                return PolyClassArray(op, p, ops);
             // numpy.polynomial submodules (OpRegistry.Polynomial.cs): module-qualified keys, plan D5.
             if (IsPolynomialOp(op))
                 return ApplyPolynomial(op, p, ops);

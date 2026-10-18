@@ -1,9 +1,9 @@
 # numpy.polynomial — compute routes for the 28 remaining names (discovery, 2026-10-17)
 
-> **Status (2026-10-18): 20 of the 28 names delivered** — the weights, the Chebyshev points, the four Gauss
-> quadratures, `chebinterpolate`, the six fits and `polyvalfromroots`, each with a DELIVERED note in its section; still
-> open: `format_float`, `set_default_printstyle` and the six classes. Below is the discovery of 2026-10-17 as written,
-> with the delivery notes added to its sections.
+> **Status (2026-10-18): all 28 names delivered** — the weights, the Chebyshev points, the four Gauss quadratures,
+> `chebinterpolate`, the six fits, `polyvalfromroots`, `format_float` and `set_default_printstyle`, and the six classes
+> with their printers (§3.7, §3.8), each with a DELIVERED note in its section. Below is the discovery of 2026-10-17 as
+> written, with the delivery notes added to its sections.
 >
 > **The discovery.** This document decides HOW each name that `numpy.polynomial` still
 > lacks in NumSharp should compute: which of the house engines carries its loops, what NumPy's statements are, which
@@ -582,6 +582,42 @@ and is bounded-ULP, so the oracle tier is host-pinned, as the main plan already 
 
 ### 3.7 The six classes — U10
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyBase{,.Protocol,.Algebra,.Printing}.cs` +
+> `NDPolyKind.cs` + the six sealed classes `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}.cs` + a factory
+> per facade (`np.polynomial.Chebyshev(...)`, `np.polynomial.chebyshev.Chebyshev(...)`), the object layer recommended
+> below: every member calls U1-U9. Oracle tiers `polyclass.jsonl` (21,628 portable cases, 4,475 NumPy errors typed
+> strictly) and `polyclass_parity.jsonl` (213 BLAS / LAPACK-bound cases, host-pinned), zero excuses. Unit tests
+> `test/NumSharp.Tests/Polynomial/PolynomialClassTests.cs` (39) and `PolynomialClassPrintingTests.cs` (11). A mutation
+> pass of 18 planted defects killed all 18 (the weakest two, `+p` returning a copy and the complex64 carrier of `roots`,
+> by one case each; the tier then gained `+p is p` for every series kind and float32 complex roots in every basis).
+> Benchmark `benchmark/polynomial/polyclass_results.md` (252 cells, all bit-exact, geomean 8.22×; every section's
+> minimum 1.81× or more but pickling's 0.24–0.70×, a floor). What the delivery found:
+> - **The series-algebra interpretation, as recommended** (`NDPolyBase.Algebra.cs`, `SeriesVal`): `convert` / `cast` /
+>   `p(q)` are NumPy's `self(kind.identity(...))`, the mapped series `off + scl*q` (two class operations) and then U3's
+>   step table interpreted over values that are a NumPy-scalar coefficient or a series, every operation through
+>   `PyBinary`, the class's own operator protocol — NumPy's sequence of series operations, `x*0` included, byte for
+>   byte (the tier's `call_series` and `convert` / `cast` cases over every pair of classes).
+> - **Python's operator protocol is the layer's real logic** (`NDPolyBase.Protocol.cs`): NumPy's methods return
+>   NotImplemented on any exception of the coefficient arithmetic, after which CPython tries the reflected method (only
+>   for another type) and its own fallbacks — list concatenation and repetition, a str's `%`, ndarray's
+>   `__array_ufunc__ = None` refusal — before `unsupported operand type(s)`. The tier records NumPy's outcome over every
+>   operand kind in both positions (Python numbers, NumPy scalars, 0-d and 1-D arrays of every dtype, lists, tuples,
+>   strs, None, another class, another domain / window / symbol).
+> - **C#'s overload resolution needs an overload per conversion it would otherwise make**: `object` alone loses to
+>   NDArray's `(object, NDArray)` operator, and C# prefers converting a C# array or a string to `NDArray` over `object`,
+>   so the converted temporary leaked (the leak gate's finding). Forward `(series, Array)` and `(series, string)`
+>   overloads mirror the reflected ones. An equality overload with an NDArray operand would make `p == null`
+>   ambiguous, so `p == arr` stays `p == (object)arr` (documented).
+> - **Lifetimes**: an assignment stores a view and releases the array it replaces (the `poly1d` precedent); the class
+>   attributes are shared arrays with an extra buffer reference (a caller's `Dispose` of `p.domain` cannot free them).
+> - **A float64 lane for `{p}val` at a NumPy scalar** (`NDPolyEval.ValAtScalarF64`): `p(0.5)` and integ's lbnd ran the
+>   step trees with a `PolyNumber` per operand (0.75–1.35× and 0.86–1.49× NumPy); the same trees on doubles through the
+>   same cached scalar kernels give the same bits at 2.5–5.3× and 4.9–12.7×.
+> - **A float32 series' complex roots are complex64**, mapped back through a float32 domain in complex64 arithmetic
+>   (`MapDomainWith(xIsComplex64)`).
+> - **Pickling is the floor**: `__getstate__` copies three arrays (NumSharp's allocation floor, 0.44 µs a copy) and
+>   `__setstate__` stores three views (a series never disposes the caller's state), where NumPy assigns `__dict__`.
+
 NumPy's `ABCPolyBase` holds no loops of its own. Every member binds a module function (`_add = chebadd`,
 `_val = chebval`, `_fit = chebfit`, …) or a `polyutils` helper, plus small Python logic:
 - the domain/window/symbol checks (`_get_coefficients`, verbatim TypeErrors);
@@ -612,6 +648,13 @@ Measured proxies (the unit functions the members call; the class adds an object 
 
 ### 3.8 Printing — U11
 
+> **The class half DELIVERED with U10 (2026-10-18)**: `NDPolyBase.Printing.cs` — `__str__` (= `ToString()`) and
+> `__format__` (= `IFormattable`) through NumPy's `_generate_string` (both styles, line breaking at the linewidth, the
+> scaled symbol of a mapped domain), `__repr__` through the array printer, `_repr_latex_` with NumPy's `\text{}` scalars;
+> gated by the `polyclass` tier's printer cases (every class × coefficient kinds × print options × styles) and
+> `PolynomialClassPrintingTests.cs` (`test_printing.py`'s class part, with NumPy's real LaTeX output). Benchmark: the
+> printers are 12.5–17× NumPy (`polyclass_results.md`, section P).
+>
 > **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyPrinting.cs` + `np.polynomial.set_default_printstyle`
 > and `np.polynomial.polyutils.format_float`, over the prerequisite this section names done in full: np.format_float_positional
 > / np.format_float_scientific are NumPy's `dragon4.c`, ported statement for statement
@@ -690,12 +733,12 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 18 | `lagfit` | laguerre | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 2.23–3.21× |
 | 19 | `hermfit` | hermite | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 1.73–2.75× |
 | 20 | `hermefit` | hermite_e | **DELIVERED** — as `polyfit` | as `polyfit` | host-pinned | 1.68–2.69× |
-| 21 | `Polynomial` | package, polynomial | **object layer over U1–U9**; series-algebra step-table interpretation for `convert`/`cast` | — | portable (fit/roots host-pinned) | 6–45× (proxies; fit 1.6×) |
-| 22 | `Chebyshev` | package, chebyshev | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
-| 23 | `Legendre` | package, legendre | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
-| 24 | `Laguerre` | package, laguerre | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
-| 25 | `Hermite` | package, hermite | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
-| 26 | `HermiteE` | package, hermite_e | as `Polynomial` | — | as `Polynomial` | as `Polynomial` |
+| 21 | `Polynomial` | package, polynomial | **DELIVERED** — object layer over U1–U9 (`NDPolyBase` + a sealed class), Python's operator protocol (`PyBinary`), U3's step tables over series values for `convert` / `cast` / `p(q)`, a float64 lane for `p(scalar)` | a second evaluator per class | portable `polyclass` (products / roots / fit host-pinned `polyclass_parity`) | 1.81× (fit) – 194×; geomean 9.75 without pickling (0.24× / 0.70×, the allocation floor), 8.38 with it |
+| 22 | `Chebyshev` | package, chebyshev | **DELIVERED** — as `Polynomial` | — | as `Polynomial` | 1.95× min; geomean 9.45 without pickling, 8.14 with it |
+| 23 | `Legendre` | package, legendre | **DELIVERED** — as `Polynomial` | — | as `Polynomial` | 1.88× min; geomean 9.64 without pickling, 8.29 with it |
+| 24 | `Laguerre` | package, laguerre | **DELIVERED** — as `Polynomial` | — | as `Polynomial` | 1.99× min; geomean 8.50 without pickling, 7.36 with it |
+| 25 | `Hermite` | package, hermite | **DELIVERED** — as `Polynomial` | — | as `Polynomial` | 2.08× min; geomean 9.98 without pickling, 8.57 with it |
+| 26 | `HermiteE` | package, hermite_e | **DELIVERED** — as `Polynomial` | — | as `Polynomial` | 2.11× min; geomean 10.06 without pickling, 8.64 with it |
 | 27 | `set_default_printstyle` | package | **DELIVERED** — a process-wide flag (default: ASCII on Windows), Python's `==` against the two texts | — | portable | 103–135× |
 | 28 | `format_float` | polyutils | **DELIVERED** — NumPy's branch over the Dragon4 PORT (np.format_float_* rewritten as NumPy's dragon4.c: object x, string trim, NumPy's in-place BigInt on 64-bit blocks + a 19-digit chunk step) | fixing the emulation in place (it cannot see NumPy's digit buffer) | portable | 12–57×; geomean 46 |
 
@@ -777,8 +820,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread); **DELIVERED**: `polygauss.jsonl` (244 portable errors) + `polygauss_parity.jsonl` (352) | degrees 1…257; the `operator.index` / list-repeat argument matrix; for the Hermite pair also 206–208 (where the plain recurrence overflows and NumPy's normed one does not) and the onsets of zero weights (371), NaN weights (372) and NaN nodes (741) to degree 1000 |
 | `chebinterpolate` | **DELIVERED**: `polyinterp.jsonl` (83 portable errors / flags) + `polyinterp_parity.jsonl` (1,030 values, host-pinned) | (n,), (n, k) and (2, n, 3) results, scalar results, every dtype the delegate returns, lists / tuples, `args`, the deg kinds and their wrap-around |
 | fits | **DELIVERED**: `polyfit.jsonl` (324 portable errors / kinds / flags) + `polyfit_parity.jsonl` (1,242 values, statistics and flags, host-pinned: gelsd at one thread) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |
-| classes | portable (fit/roots inherit their tiers) | `test_classes.py` × 6, `test_symbol.py`, `convert`/`cast` bytes (the series-object Clenshaw) |
-| printing | portable | `test_printing.py`; `format_float` over print options |
+| classes | **DELIVERED**: `polyclass.jsonl` (21,628 portable cases, 4,475 NumPy errors) + `polyclass_parity.jsonl` (213 BLAS / LAPACK-bound, host-pinned) | the constructor's argument kinds and check order, every operator forward and reflected over every operand kind, `**` and `maxpower`, `==`, every member and its argument kinds, the call at points of every kind and at a series of every class, `convert` / `cast` bytes, the class methods, the printers, pickling state, object-identity facets; `test_classes.py` × 6 and `test_symbol.py` ported as unit tests |
+| printing | **DELIVERED**: `polyprint.jsonl` (6,797: `format_float`, `set_default_printstyle`) and the `polyclass` tier's printer cases | `test_printing.py` (the class part as `PolynomialClassPrintingTests.cs`, NumPy's real LaTeX); `format_float` over print options |
 
 ## 8. Open questions for the owner
 

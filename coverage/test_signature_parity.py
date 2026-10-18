@@ -317,6 +317,13 @@ class SignatureRuleTests(unittest.TestCase):
         shape = sp.Param("shape", sp.P.POSITIONAL_OR_KEYWORD, "(2, 3)")
         self.assertEqual("null_default", sp.compare_default(shape, parameter("Shape shape = default"))[0])
         self.assertEqual("default", sp.compare_default(shape, parameter("int shape = 6"))[0])
+        # An [Optional] parameter without a constant (the inventory's "missing" kind): the member reads an omitted
+        # argument as NumPy's default, whatever NumPy's default is ([] for fromroots' domain, 0 for trim's tol).
+        missing = {"name": "domain", "type": "object", "optional": True, "isParams": False,
+                   "default": "Type.Missing", "defaultKind": "missing"}
+        self.assertEqual((None, ""), sp.compare_default(sp.Param("domain", sp.P.POSITIONAL_OR_KEYWORD, "[]"), missing))
+        self.assertEqual((None, ""), sp.compare_default(sp.Param("tol", sp.P.POSITIONAL_OR_KEYWORD, "0"), missing))
+        self.assertEqual(("missing", "Type.Missing"), sp.cs_default_value(missing))
         self.assertEqual(-1.0, sp.cs_default_value(parameter("int axis = -1")))
         self.assertEqual("K", sp.cs_default_value(parameter("char order = 'K'")))
         self.assertEqual("safe", sp.cs_default_value(parameter('string casting = "safe"')))

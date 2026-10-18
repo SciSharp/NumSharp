@@ -223,8 +223,10 @@ static MethodOverload DescribeOverload(MethodInfo method)
 /// <returns>
 ///     The parameter. <see cref="ApiParameter.DefaultKind" /> is <c>null</c>, <c>"null"</c> (a null default, or a
 ///     struct's <c>default</c>, which reflection also reports as null), <c>"bool"</c>, <c>"number"</c>,
-///     <c>"string"</c>, <c>"char"</c>, <c>"enum"</c> or <c>"other"</c>; <see cref="ApiParameter.Default" /> is the
-///     literal (<c>"default"</c> for a struct's default, so it is not read as a null reference).
+///     <c>"string"</c>, <c>"char"</c>, <c>"enum"</c>, <c>"other"</c> or <c>"missing"</c> (an <c>[Optional]</c>
+///     parameter without a constant: see the body); <see cref="ApiParameter.Default" /> is the literal
+///     (<c>"default"</c> for a struct's default, so it is not read as a null reference; <c>"Type.Missing"</c> for a
+///     <c>"missing"</c> one).
 /// </returns>
 static ApiParameter DescribeParameter(ParameterInfo parameter)
 {
@@ -246,6 +248,15 @@ static ApiParameter DescribeParameter(ParameterInfo parameter)
         text = kind == "null" && parameterType.IsValueType && Nullable.GetUnderlyingType(parameterType) is null
             ? "default"
             : FormatDefault(value);
+    }
+    else if (parameter.IsOptional)
+    {
+        // An [Optional] parameter without a constant, the spelling C# leaves for a default it cannot write (CS1763
+        // forbids `object tol = 0` or a list): an omitted argument arrives as Type.Missing, which the member replaces
+        // with NumPy's default, while an explicit null stays NumPy's None (NDPolyBase.trim's tol, the series
+        // classes' fromroots domain). signature_parity reads the kind as "NumPy's default by construction".
+        kind = "missing";
+        text = "Type.Missing";
     }
 
     return new ApiParameter(
@@ -400,6 +411,9 @@ static string FormatParameter(ParameterInfo parameter)
         ? parameter.ParameterType.GetElementType()!
         : parameter.ParameterType);
     var optional = parameter.HasDefaultValue ? $" = {FormatDefault(parameter.DefaultValue)}" : string.Empty;
+    // An [Optional] parameter without a constant is written as C# declares it, so the display does not read as required.
+    if (!parameter.HasDefaultValue && parameter.IsOptional)
+        prefix = "[Optional] " + prefix;
     return $"{prefix}{type} {parameter.Name}{optional}";
 }
 
@@ -578,8 +592,8 @@ internal sealed record MethodOverload(
 /// <summary>One parameter of a method overload.</summary>
 /// <param name="Name">The parameter name (what a C# named argument, NumPy's keyword, must spell).</param>
 /// <param name="Type">The parameter type in <c>FriendlyType</c> spelling, by-ref element type for <c>out</c>/<c>ref</c>/<c>in</c>.</param>
-/// <param name="Optional">Whether a call may omit it (it has a default).</param>
-/// <param name="Default">The default as C# text (<c>null</c>, <c>default</c>, <c>"\n"</c>, <c>'C'</c>, <c>1E-08</c>, ...); null without a default.</param>
+/// <param name="Optional">Whether a call may omit it (it has a default, or is <c>[Optional]</c>).</param>
+/// <param name="Default">The default as C# text (<c>null</c>, <c>default</c>, <c>"\n"</c>, <c>'C'</c>, <c>1E-08</c>, <c>Type.Missing</c>, ...); null without a default.</param>
 /// <param name="DefaultKind">The default's kind (see <c>DescribeParameter</c>); null without a default.</param>
 /// <param name="IsParams">Whether it is a <c>params</c> array (NumPy's <c>*args</c> counterpart).</param>
 /// <param name="ByRef"><c>"out"</c>, <c>"ref"</c> or <c>"in"</c> for a by-reference parameter; null otherwise.</param>

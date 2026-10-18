@@ -998,6 +998,45 @@ namespace NumSharp.Tests.Fuzz
             }
         }
 
+        /// <summary>
+        ///     numpy.polynomial's six series classes (plan U10, U11's class half), PORTABLE: the constructor, Python's operator
+        ///     protocol in both directions over operands of every kind, the members, the class methods (fit's and
+        ///     Chebyshev.interpolate's argument errors), convert between every pair of classes, printing under the print
+        ///     options, assigned state and pickling — every case that never reaches OpenBLAS.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A case differs from NumPy's recorded outcome.</exception>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polyclass() => RunCorpus("polyclass.jsonl");
+
+        /// <summary>
+        ///     The series classes' cases that reach OpenBLAS — roots of degree two and more (LAPACK geev), fit (gelsd),
+        ///     Chebyshev.interpolate (np.dot's products), long products in np.convolve's vector regime — HOST-PINNED like
+        ///     <see cref="PolyfitParity"/> (threads = 1): Inconclusive, never red, on a host that cannot load the pinned library.
+        /// </summary>
+        /// <exception cref="AssertFailedException">A case differs from NumPy's recorded outcome.</exception>
+        /// <exception cref="AssertInconclusiveException">The pinned OpenBLAS cannot be loaded on this host.</exception>
+        /// <remarks>Enables and disables the process-global OpenBLAS engine, so it must not overlap other tiers.</remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        [DoNotParallelize]
+        public void PolyclassParity()
+        {
+            var pin = MatmulParityPin.Load("polyclass_parity.host.jsonl");
+            string mismatch = pin.TryEnableParityBackend();
+            if (mismatch != null)
+                Assert.Inconclusive(mismatch);
+
+            try
+            {
+                RunCorpus("polyclass_parity.jsonl");
+            }
+            finally
+            {
+                NumSharp.Interop.OpenBLAS.OpenBlasEngine.Disable();
+            }
+        }
+
         // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
         // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
         // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
@@ -1316,6 +1355,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyfit_parity.jsonl"] = 1180,   // their lstsq-based values, statistics and flags, host-pinned (threads = 1) — 1,242 at delivery
             ["polypts.jsonl"] = 340,   // numpy.polynomial Chebyshev points / Gauss-Chebyshev quadrature (U8): errors, empties, flags, Char — 362 at delivery
             ["polyprint.jsonl"] = 6500,   // numpy.polynomial's printing helpers (U11): polyutils.format_float x kinds x print options, set_default_printstyle x style kinds — 6,797 at delivery
+            ["polyclass.jsonl"] = 21200,   // numpy.polynomial's six series classes (U10 + U11's class half): constructor kinds, the binary operators forward / reflected over every operand kind, ** and maxpower, ==, the members and their argument kinds, the call, conversions, the class methods, the printers, pickling state, object identity facets, the dtype axis (G: the members over integer / complex coefficient arrays) — 21,628 at delivery
+            ["polyclass_parity.jsonl"] = 205,   // their BLAS / LAPACK-bound calls (np.convolve's vector regime, roots of degree two and more, fit, the products at a series), host-pinned (threads = 1) — 213 at delivery
             ["polypts_host.jsonl"] = 320,   // their sin / cos values, host-pinned — 347 at delivery
             ["polyweight_host.jsonl"] = 1200,   // the exp-based weights' C-runtime loops (float64 / float16 / complex128), host-pinned — 1,235 at delivery
             ["polyroots_parity.jsonl"] = 1350,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery, 1,354 with section K's edge series
@@ -1503,7 +1544,10 @@ namespace NumSharp.Tests.Fuzz
             {
                 var reason = MisalignedRegistry.Classify(c, DivergenceKind.Threw, null, null, default, empty);
                 if (reason != null) Bump(documented, reason);
-                else failures.Add($"{c.Id} [{c.Layout}]: THREW {e.GetType().Name}: {e.Message}");
+                // NUMSHARP_ORACLE_STACK=1 appends the stack trace: a replay exception that is not the case's own outcome
+                // (a registry or harness defect) is found from where it was thrown, which the message alone rarely names.
+                else failures.Add($"{c.Id} [{c.Layout}]: THREW {e.GetType().Name}: {e.Message}" +
+                                  (Environment.GetEnvironmentVariable("NUMSHARP_ORACLE_STACK") == "1" ? "\n" + e.StackTrace : ""));
             }
         }
 

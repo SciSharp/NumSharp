@@ -538,6 +538,7 @@ namespace NumSharp.Tests.Fuzz
                 "NDMaskedArray" => MaskedTargets,
                 "NDMatrix" => MatrixTargets,
                 "NDCharArray" => CharArrayTargets,
+                "NDPolynomial" or "NDChebyshev" or "NDLegendre" or "NDLaguerre" or "NDHermite" or "NDHermiteE" => SeriesTargets(m.OwnerType),
                 "NDArray<T>" => new[]
                 {
                     new ReadTarget("NDArray<double> (3,4)", _ =>
@@ -553,6 +554,37 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>The single target of a static member: no instance.</summary>
         private static readonly IReadOnlyList<ReadTarget> StaticTarget = new[] { new ReadTarget("static", _ => (null, Noop)) };
+
+        /// <summary>
+        ///     Series-class targets (numpy.polynomial's six classes), built through the class's own public constructor: one
+        ///     with the class defaults, whose <c>domain</c> / <c>window</c> reads return the class's shared attributes (which
+        ///     the read must leave alone: they are in <see cref="Ownership.SharedArrays"/>), and one with its own float32
+        ///     coefficients, domain, window and symbol and an assigned <c>maxpower</c> (the instance attribute's branch).
+        /// </summary>
+        /// <param name="type">The series class.</param>
+        /// <returns>The two targets; each disposer releases the series and the array it was built from.</returns>
+        private static IReadOnlyList<ReadTarget> SeriesTargets(Type type)
+        {
+            // The class's (coef, domain, window, symbol) constructor; a null domain / window is NumPy's None (the default).
+            NDPolyBase Make(object coef, object domain, object window, string symbol)
+                => (NDPolyBase)Activator.CreateInstance(type, coef, domain, window, symbol);
+
+            return new[]
+            {
+                new ReadTarget($"{type.Name}([1, 2, 3])", _ =>
+                {
+                    var p = Make(new object[] { 1.0, 2.0, 3.0 }, null, null, "x");
+                    return (p, p.Dispose);
+                }),
+                new ReadTarget($"{type.Name}(float32, domain, window, symbol, maxpower)", _ =>
+                {
+                    var c = np.array(new float[] { 1f, -2f, 0.5f });
+                    var p = Make(c, new object[] { 0.0, 2.0 }, new object[] { -1.0, 0.5 }, "t");
+                    p.maxpower = 5L;
+                    return (p, () => { p.Dispose(); c.Dispose(); });
+                }),
+            };
+        }
 
         /// <summary>
         ///     ndarray targets: an owning C-contiguous float64 matrix, a transposed (non-contiguous) VIEW

@@ -37,7 +37,9 @@ namespace NumSharp.Tests.Fuzz
         ///     portable tier (<c>polygauss.jsonl</c>) holds only argument errors and every success case is in the
         ///     host-pinned <c>polygauss_parity.jsonl</c>, which this pass replays. The six least-squares fits
         ///     (<c>polynomial.polyfit</c> … <c>hermite_e.hermefit</c>) compute through <c>np.linalg.lstsq</c> the same way
-        ///     (<c>polyfit.jsonl</c> / <c>polyfit_parity.jsonl</c>).
+        ///     (<c>polyfit.jsonl</c> / <c>polyfit_parity.jsonl</c>), and so do the six series classes' <c>fit</c> class
+        ///     methods (<c>polynomial.Polynomial.fit</c> … <c>hermite_e.HermiteE.fit</c>, whose portable cases in
+        ///     <c>polyclass.jsonl</c> are argument errors).
         /// </remarks>
         internal static readonly HashSet<string> BackendOnlyOpKeys = new(StringComparer.Ordinal)
         {
@@ -46,6 +48,8 @@ namespace NumSharp.Tests.Fuzz
             "legendre.leggauss", "laguerre.laggauss", "hermite.hermgauss", "hermite_e.hermegauss",
             "polynomial.polyfit", "chebyshev.chebfit", "legendre.legfit", "laguerre.lagfit", "hermite.hermfit",
             "hermite_e.hermefit",
+            "polynomial.Polynomial.fit", "chebyshev.Chebyshev.fit", "legendre.Legendre.fit", "laguerre.Laguerre.fit",
+            "hermite.Hermite.fit", "hermite_e.HermiteE.fit",
         };
 
         /// <summary>

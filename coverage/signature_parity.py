@@ -438,10 +438,12 @@ def cs_default_value(parameter: Mapping[str, Any]) -> Any:
         parameter: One ``parameters`` entry of an overload.
 
     Returns:
-        None for null / ``default``, a bool, a float, a str (a C# string or char), or ``("enum", text)`` /
-        ``("other", text)``.
+        None for null / ``default``, a bool, a float, a str (a C# string or char), ``("missing", text)`` for an
+        ``[Optional]`` parameter without a constant, or ``("enum", text)`` / ``("other", text)``.
     """
     kind, text = parameter.get("defaultKind"), parameter.get("default")
+    if kind == "missing":
+        return ("missing", text)
     if kind == "null" or text is None:
         return None
     if kind == "bool":
@@ -489,11 +491,16 @@ def compare_default(np_param: Param, cs_param: Mapping[str, Any]) -> tuple[str |
         cs_param: The C# parameter (it has a default).
 
     Returns:
-        ``(kind, text)``: kind is None (no difference), ``default`` (two values differ) or ``null_default`` (one side
-        is None / null, the other a value); text shows both defaults.
+        ``(kind, text)``: kind is None (no difference: also for an ``[Optional]`` C# parameter without a constant,
+        whose omitted argument the member reads as NumPy's default), ``default`` (two values differ) or
+        ``null_default`` (one side is None / null, the other a value); text shows both defaults.
     """
     text = np_param.default
     if text in ("<no value>", "<optional>"):
+        return None, ""
+    if cs_param.get("defaultKind") == "missing":
+        # An [Optional] parameter without a constant (C# cannot write NumPy's [] or 0 as the default of an object
+        # parameter): an omitted argument arrives as Type.Missing, which the member replaces with NumPy's default.
         return None, ""
     npv, cs_value = literal(text), cs_default_value(cs_param)
     shown = f"{np_param.name}: {text} vs {cs_param.get('default')}"

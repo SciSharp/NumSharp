@@ -14,7 +14,10 @@ files), so the tables are what CPython does:
   UPPER (likewise), TITLE (general category Lt, makeunicodedata.py's rule: str.istitle of one character also counts an
   uppercase one), CASED (_PyUnicode_IsCased: read from str.title, whose state is "the previous character is cased", and
   checked against Unicode's definition Lowercase | Uppercase | Lt), CASE_IGNORABLE (_PyUnicode_IsCaseIgnorable: read from
-  str.lower's final-sigma rule), PRINTABLE (str.isprintable);
+  str.lower's final-sigma rule), PRINTABLE (str.isprintable), XID_START (_PyUnicode_IsXidStart: read as c.isidentifier(),
+  which is XID_Start or the LOW LINE U+005F, the one character CPython's _PyUnicode_ScanIdentifier admits besides; the LOW
+  LINE itself is excluded, it is not XID_Start) and XID_CONTINUE (_PyUnicode_IsXidContinue: read as ("a" + c).isidentifier()
+  — str.isidentifier tests the first character for XID_Start and every other for XID_Continue, without NFKC);
 * the decimal value (unicodedata.decimal: Py_UNICODE_TODECIMAL);
 * the full case mappings: str.upper / str.lower / str.title of the one character, which are _PyUnicode_ToUpperFull /
   _PyUnicode_ToLowerFull / _PyUnicode_ToTitleFull (one to three code points; str.lower of a lone U+03A3 is sigma, the
@@ -51,6 +54,8 @@ CASED = 1 << 8
 CASE_IGNORABLE = 1 << 9
 PRINTABLE = 1 << 10
 EXTENDED_CASE = 1 << 11
+XID_START = 1 << 12
+XID_CONTINUE = 1 << 13
 
 SIGMA = "Σ"
 FINAL_SIGMA = "ς"
@@ -111,6 +116,14 @@ def _read():
             f |= CASE_IGNORABLE
         if c.isprintable():
             f |= PRINTABLE
+        # _PyUnicode_IsXidStart / _PyUnicode_IsXidContinue, as str.isidentifier reads them (CPython's
+        # _PyUnicode_ScanIdentifier: XID_Start or U+005F first, XID_Continue after, no NFKC): a one-character identifier
+        # starts with XID_Start unless it is the LOW LINE, which isidentifier admits on its own; any character after "a"
+        # continues an identifier exactly when it is XID_Continue.
+        if c.isidentifier() and cp != 0x5F:
+            f |= XID_START
+        if ("a" + c).isidentifier():
+            f |= XID_CONTINUE
         d = unicodedata.decimal(c, -1)
         assert (d >= 0) == bool(f & DECIMAL), hex(cp)
         decimals[cp] = d
@@ -297,7 +310,7 @@ def main():
     out.append("")
     out.append(_cs_array("Index2", _ctype(i2size), t2, "The second index stage: the record of every code point of every distinct block."))
     out.append("")
-    out.append(_cs_array("RecordFlags", "ushort", rec_flags, "Each record's flags (<see cref=\"AlphaMask\"/> ... <see cref=\"ExtendedCaseMask\"/>)."))
+    out.append(_cs_array("RecordFlags", "ushort", rec_flags, "Each record's flags (<see cref=\"AlphaMask\"/> ... <see cref=\"XidContinueMask\"/>)."))
     out.append("")
     out.append(_cs_array("RecordDecimal", "sbyte", rec_dec, "Each record's decimal value (0..9), or -1."))
     out.append("")

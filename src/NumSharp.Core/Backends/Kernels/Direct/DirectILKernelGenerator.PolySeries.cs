@@ -443,6 +443,35 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        ///     <c>scl * x</c>, and <c>off + scl*x</c> when the sum runs in complex64 too, in NumPy's complex64 loops for a
+        ///     COMPLEX64 array x — a carrier whose components are float32-exact: <c>np.linalg.eigvals</c>' complex roots of a
+        ///     float32 series, which the series classes' <c>roots()</c> maps back to a float32 domain. The product is
+        ///     <c>simd_cmul</c>'s form (CFLOAT_multiply's scalar-broadcast loop at every length, as for
+        ///     <see cref="PolyComplex64ScaleReal"/>): <c>re = fma(sr, xr, -(si·xi))</c>, <c>im = fma(sr, xi, si·xr)</c> in float32;
+        ///     the sum is CFLOAT_add's <c>(or + re, oi + im)</c>.
+        /// </summary>
+        /// <param name="x">The complex64 values (contiguous carriers; each component float32-exact).</param>
+        /// <param name="n">Element count.</param>
+        /// <param name="sr">The scale's real part (float32).</param>
+        /// <param name="si">The scale's imaginary part (float32).</param>
+        /// <param name="add">Whether the sum runs here (complex64): otherwise only the product is stored.</param>
+        /// <param name="or">The offset's real part (float32; read when <paramref name="add"/>).</param>
+        /// <param name="oi">The offset's imaginary part (float32; read when <paramref name="add"/>).</param>
+        /// <param name="r">Destination: <paramref name="n"/> complex carriers.</param>
+        /// <remarks>A scalar loop on purpose: its only caller maps a series' roots, as many as its degree, where a vector
+        ///     body (deinterleaving the carriers into float32 lanes) would never amortize its setup.</remarks>
+        internal static unsafe void PolyComplex64AffineComplex(Complex* x, long n, float sr, float si, bool add, float or, float oi, Complex* r)
+        {
+            for (long i = 0; i < n; i++)
+            {
+                float xr = (float)x[i].Real, xi = (float)x[i].Imaginary;
+                float pr = MathF.FusedMultiplyAdd(sr, xr, -(si * xi));
+                float pi = MathF.FusedMultiplyAdd(sr, xi, si * xr);
+                r[i] = add ? new Complex(or + pr, oi + pi) : new Complex(pr, pi);
+            }
+        }
+
+        /// <summary>
         ///     <c>off + v</c> in NumPy's complex64 loop for a REAL float32 array v promoted to complex64 (imaginary
         ///     part +0) and a complex64 scalar <c>off = or + oi·j</c>: <c>(or + v, oi + 0)</c> component-wise in
         ///     float32 — the imaginary part is the same for every element, and a <c>-0</c> offset imaginary part

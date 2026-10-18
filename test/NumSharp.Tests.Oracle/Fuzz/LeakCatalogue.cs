@@ -357,6 +357,7 @@ namespace NumSharp.Tests.Fuzz
             AddMaskedArray(list);
             AddMatrix(list);
             AddCharArray(list);
+            AddPolyClass(list);
             return list;
         }
 

@@ -1949,6 +1949,9 @@ namespace NumSharp
         /// <param name="x">The points.</param>
         /// <param name="off">The offset (from mapparms).</param>
         /// <param name="scl">The scale (from mapparms).</param>
+        /// <param name="xIsComplex64">The complex128 array x carries NumPy COMPLEX64 values (each component float32-exact):
+        ///     the series classes' roots of a float32 series, which NumPy's eigvals returns as complex64. A float16 /
+        ///     float32 off or scl then meets it in NumPy's complex64 loops, which run on the float32 kernels.</param>
         /// <returns>The mapped points (an array result laid out as NumPy's).</returns>
         /// <exception cref="IncorrectShapeException">Array operands that do not broadcast.</exception>
         /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
@@ -1969,7 +1972,7 @@ namespace NumSharp
         ///     speed — which also lifts the case above NumPy: it ran at 0.62× NumPy before this layout work, because
         ///     the fused pass over the permuted x was the gather-scatter walk.</para>
         /// </remarks>
-        public static PolyNumber MapDomainWith(in PolyNumber x, in PolyNumber off, in PolyNumber scl)
+        public static PolyNumber MapDomainWith(in PolyNumber x, in PolyNumber off, in PolyNumber scl, bool xIsComplex64 = false)
         {
             if (!x.IsNdArray || off.IsNdArray || scl.IsNdArray)
                 return PolyNumber.Binary(BinaryOp.Add, off, PolyNumber.Binary(BinaryOp.Multiply, scl, x));
@@ -1989,17 +1992,17 @@ namespace NumSharp
             // C unless an N-D, non-C-contiguous, non-empty x lays NumPy's result out otherwise (remarks). An empty
             // result's strides are meaningless (NumPy 2.x reports zeros for every zero-size array).
             if (xa.ndim < 2 || xa.size == 0 || xa.Shape.IsContiguous)
-                return PolyNumber.FromArray(MapDomainIntoC(xa, off, scl, t1, t2, sclP, offP));
+                return PolyNumber.FromArray(MapDomainIntoC(xa, off, scl, t1, t2, sclP, offP, xIsComplex64));
             Shape xs = xa.Shape;
             Shape layout = Shape.NpyIterOutputShape((long[])xs.dimensions.Clone(), new ReadOnlySpan<Shape>(in xs));
             if (layout.IsContiguous)
-                return PolyNumber.FromArray(MapDomainIntoC(xa, off, scl, t1, t2, sclP, offP));
+                return PolyNumber.FromArray(MapDomainIntoC(xa, off, scl, t1, t2, sclP, offP, xIsComplex64));
 
             // The routes run over x seen in the layout's memory order; their C result is relabelled into it.
             NDArray xv = np.transpose(xa, layout.DenseAxisOrder());
             try
             {
-                return PolyNumber.FromArray(NDArray.AdoptLayout(MapDomainIntoC(xv, off, scl, t1, t2, sclP, offP), layout));
+                return PolyNumber.FromArray(NDArray.AdoptLayout(MapDomainIntoC(xv, off, scl, t1, t2, sclP, offP, xIsComplex64), layout));
             }
             finally
             {
@@ -2020,18 +2023,19 @@ namespace NumSharp
         /// <param name="t2">The loop dtype of <c>off + …</c> (the result dtype).</param>
         /// <param name="sclP">The scale as a 0-d parameter of <paramref name="t1"/>.</param>
         /// <param name="offP">The offset as a 0-d parameter of <paramref name="t2"/>.</param>
+        /// <param name="xIsComplex64">x carries NumPy complex64 values (see <see cref="MapDomainWith"/>).</param>
         /// <returns>A new C-contiguous array of <paramref name="xa"/>'s shape — the caller relabels it when NumPy's layout
         ///     differs (<see cref="NDArray.AdoptLayout"/> checks this contract instead of trusting it).</returns>
         /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
         private static NDArray MapDomainIntoC(NDArray xa, in PolyNumber off, in PolyNumber scl, NPTypeCode t1, NPTypeCode t2,
-                                              NDArray sclP, NDArray offP)
+                                              NDArray sclP, NDArray offP, bool xIsComplex64 = false)
         {
             // A complex loop may be NumPy's COMPLEX64 one (NEP 50: a Python complex with a float16/float32 x, a
             // complex64 off/scl with a narrow x): the fused pass would compute it in complex128, so it runs on the
             // float32 kernels instead (see MapDomainComplex64).
             if (t2 == NPTypeCode.Complex)
             {
-                bool mulC64 = t1 == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(scl, xa.typecode, false);
+                bool mulC64 = t1 == NPTypeCode.Complex && PolyNumber.IsComplex64Loop(scl, xa.typecode, xIsComplex64);
                 bool addC64 = PolyNumber.IsComplex64Loop(off, mulC64 ? NPTypeCode.Complex : t1, mulC64);
                 if (mulC64 || addC64)
                     return MapDomainComplex64(xa, off, scl, t1, sclP, offP, mulC64, addC64);
@@ -2342,6 +2346,9 @@ namespace NumSharp
         ///         <item><c>scl*x</c> real (float16/float32) and <c>off + …</c> complex64 — the real product through
         ///         the fused pass, then the complex64 add of the real values (imaginary part +0).</item>
         ///     </list>
+        ///     A complex x in a complex64 product is a complex64 CARRIER (<c>xIsComplex64</c> of <see cref="MapDomainWith"/>:
+        ///     the roots of a float32 series): its two components enter the product as they are
+        ///     (<see cref="DirectILKernelGenerator.PolyComplex64AffineComplex"/>).
         /// </summary>
         /// <param name="x">The points (rank ≥ 1).</param>
         /// <param name="off">The offset.</param>
@@ -2369,6 +2376,25 @@ namespace NumSharp
             NDArray temp = null, product = null;
             try
             {
+                if (mulC64 && x.typecode == NPTypeCode.Complex)
+                {
+                    // A complex x in a complex64 product is a complex64 CARRIER (roots of a float32 series): its own
+                    // components enter the loop, read as contiguous carriers (a C-order copy otherwise).
+                    temp = x.Shape.IsContiguous ? null : x.copy('C');
+                    var xc = temp is null ? (Complex*)((byte*)x.Storage.Address + x.Shape.offset * sizeof(Complex))
+                                          : (Complex*)temp.Storage.Address;
+                    Complex sc = Complex64Of(scl);
+                    Complex oc = addC64 ? Complex64Of(off) : default;
+                    DirectILKernelGenerator.PolyComplex64AffineComplex(xc, n, (float)sc.Real, (float)sc.Imaginary, addC64,
+                        (float)oc.Real, (float)oc.Imaginary, rp);
+                    if (addC64)
+                        return r;
+                    // complex128 sum: a complex128 / float64 NumPy off plus the exactly widened complex64 product.
+                    var sum = np.evaluate(NDExpr.Arr(offP) + NDExpr.Arr(r));
+                    r.Dispose();
+                    r = null;
+                    return sum;
+                }
                 if (mulC64)
                 {
                     // The kernels walk memory linearly and the result is C-ordered, so x must be a C-contiguous

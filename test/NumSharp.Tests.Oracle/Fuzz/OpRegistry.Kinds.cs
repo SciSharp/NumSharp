@@ -200,6 +200,9 @@ namespace NumSharp.Tests.Fuzz
                 return ApplyInstanceTuple(op.Substring("ndarray.".Length), p, ops);
             if (IsMatrixOp(op))
                 return ApplyMatrixTuple(op, p, ops);
+            // numpy.polynomial's series classes (OpRegistry.PolyClass.cs): a series result is four slots.
+            if (IsPolyClassOp(op))
+                return PolyClassTuple(op, p, ops);
             // numpy.polynomial's tuple results: polyutils' as_series / mapparms (OpRegistry.PolySeries.cs) and the six
             // {p}div (quo, rem) of the series algebra (OpRegistry.PolyAlgebra.cs).
             if (IsPolynomialOp(op))
@@ -594,6 +597,9 @@ namespace NumSharp.Tests.Fuzz
         {
             if (IsMatrixOp(op))
                 return ApplyMatrixText(op, p, ops);
+            // The series classes' printers and str attributes (OpRegistry.PolyClass.cs).
+            if (IsPolyClassOp(op))
+                return PolyClassText(op, p, ops);
             switch (op)
             {
                 // np.nditer's state contract between construction and close (OpRegistry.Nditer.cs).

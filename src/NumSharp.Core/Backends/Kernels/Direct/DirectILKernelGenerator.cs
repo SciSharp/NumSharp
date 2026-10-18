@@ -2432,7 +2432,7 @@ namespace NumSharp.Backends.Kernels
         /// </remarks>
         // Per-element op called from the binary IL kernel's inner loop.
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static System.Numerics.Complex ComplexPowNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
+        internal static System.Numerics.Complex ComplexPowNumPy(System.Numerics.Complex a, System.Numerics.Complex b)
         {
             double ar = a.Real, ai = a.Imaginary;
             double br = b.Real, bi = b.Imaginary;

@@ -99,6 +99,14 @@ namespace NumSharp.Tests.Fuzz
             // NDListArray (numpy.char's object array of lists): it holds NumSharp arrays (the pieces and the element
             // ranges), and every member that moves the lists builds new ones.
             ("NDListArray", typeof(NDListArray), false),
+            // numpy.polynomial's six series classes: each concrete class with every member NDPolyBase (the port of
+            // ABCPolyBase) gives it, as coverage/object_surfaces.py credits them.
+            ("NDPolynomial", typeof(NDPolynomial), false),
+            ("NDChebyshev", typeof(NDChebyshev), false),
+            ("NDLegendre", typeof(NDLegendre), false),
+            ("NDLaguerre", typeof(NDLaguerre), false),
+            ("NDHermite", typeof(NDHermite), false),
+            ("NDHermiteE", typeof(NDHermiteE), false),
         };
 
         /// <summary>
@@ -123,6 +131,15 @@ namespace NumSharp.Tests.Fuzz
             ("DType", typeof(DType)),
             ("NDArrayFlags", typeof(NDArrayFlags)),
             ("poly1d", typeof(poly1d)),
+            // The series classes' Python operators (each concrete class declares its own set, typed with itself), and the
+            // base class's set, which binds where a series is typed NDPolyBase.
+            ("NDPolyBase", typeof(NDPolyBase)),
+            ("NDPolynomial", typeof(NDPolynomial)),
+            ("NDChebyshev", typeof(NDChebyshev)),
+            ("NDLegendre", typeof(NDLegendre)),
+            ("NDLaguerre", typeof(NDLaguerre)),
+            ("NDHermite", typeof(NDHermite)),
+            ("NDHermiteE", typeof(NDHermiteE)),
         };
 
         /// <summary>Whether <paramref name="type"/> declares (not inherits) at least one public static <c>op_*</c> member.</summary>
@@ -322,6 +339,84 @@ namespace NumSharp.Tests.Fuzz
         };
 
         /// <summary>
+        ///     The series classes' owner ids → the polyclass tier's key prefix: <c>gen_oracle.py gen_polyclass</c> keys a
+        ///     member <c>&lt;module&gt;.&lt;Class&gt;.&lt;name&gt;</c> (the constructor <c>&lt;module&gt;.&lt;Class&gt;</c>), and
+        ///     <c>OpRegistry.PolyClass.cs</c> calls the class's own member for it.
+        /// </summary>
+        internal static readonly Dictionary<string, string> PolyClassKeyPrefixes = new(StringComparer.Ordinal)
+        {
+            ["NDPolynomial"] = "polynomial.Polynomial",
+            ["NDChebyshev"] = "chebyshev.Chebyshev",
+            ["NDLegendre"] = "legendre.Legendre",
+            ["NDLaguerre"] = "laguerre.Laguerre",
+            ["NDHermite"] = "hermite.Hermite",
+            ["NDHermiteE"] = "hermite_e.HermiteE",
+        };
+
+        /// <summary>
+        ///     A series class's C# spellings of NumPy members → the Python names whose polyclass cases invoke them (every
+        ///     other member keeps NumPy's name): the call, <c>foreach</c> (its <c>__iter__</c> case enumerates the series),
+        ///     <c>ToString()</c> and the <c>IFormattable</c> overload (the <c>__str__</c> case compares <c>ToString()</c> with
+        ///     <c>__str__()</c>, the <c>__format__</c> case <c>string.Format</c> with <c>__format__</c>), <c>Equals</c> (what
+        ///     <c>__eq__</c> and <c>==</c> run) and <c>Deconstruct</c> (the full fit's <c>var (series, status) = fit(...)</c>).
+        /// </summary>
+        internal static readonly Dictionary<string, string[]> PolyClassMemberNames = new(StringComparer.Ordinal)
+        {
+            ["Call"] = new[] { "__call__" },
+            ["GetEnumerator"] = new[] { "__iter__" },
+            ["ToString"] = new[] { "__str__", "__format__" },
+            ["Equals"] = new[] { "__eq__", "__ne__" },
+            ["Deconstruct"] = new[] { "fit" },
+        };
+
+        /// <summary>
+        ///     The series classes' operators → the dunder names the polyclass registry spells with them (it binds both
+        ///     operands dynamically, so each concrete class's own operator runs; the equality operators are NDPolyBase's
+        ///     alone, measured through every class's <c>__eq__</c> / <c>__ne__</c> cases).
+        /// </summary>
+        internal static readonly Dictionary<string, string[]> PolyClassOperatorNames = new(StringComparer.Ordinal)
+        {
+            ["op_Addition"] = new[] { "__add__", "__radd__" },
+            ["op_Subtraction"] = new[] { "__sub__", "__rsub__" },
+            ["op_Multiply"] = new[] { "__mul__", "__rmul__" },
+            ["op_Division"] = new[] { "__truediv__", "__rtruediv__" },
+            ["op_Modulus"] = new[] { "__mod__", "__rmod__" },
+            ["op_UnaryNegation"] = new[] { "__neg__" },
+            ["op_UnaryPlus"] = new[] { "__pos__" },
+            ["op_Equality"] = new[] { "__eq__" },
+            ["op_Inequality"] = new[] { "__ne__" },
+        };
+
+        /// <summary>
+        ///     The polyclass corpus keys that invoke a series-class member: the owner's key prefix with the member's Python
+        ///     name(s); an operator of a concrete class maps through <see cref="PolyClassOperatorNames"/>, and an operator of
+        ///     <see cref="NDPolyBase"/> to every class's keys of that name (its equality operators are the only ones a dynamic
+        ///     call binds; its arithmetic ones are the catalogue's).
+        /// </summary>
+        /// <param name="m">A surface member.</param>
+        /// <returns>The keys, or an empty sequence when the member's owner is not a series class.</returns>
+        internal static IEnumerable<string> PolyClassKeys(SurfaceMember m)
+        {
+            if (m.Kind == SurfaceKind.Operator)
+            {
+                if (!PolyClassOperatorNames.TryGetValue(m.Name, out var dunders))
+                    yield break;
+                IEnumerable<string> prefixes = m.Owner == "NDPolyBase"
+                    ? (m.Name is "op_Equality" or "op_Inequality" ? PolyClassKeyPrefixes.Values : Array.Empty<string>())
+                    : PolyClassKeyPrefixes.TryGetValue(m.Owner, out var own) ? new[] { own } : Array.Empty<string>();
+                foreach (string prefix in prefixes)
+                    foreach (string dunder in dunders)
+                        yield return prefix + "." + dunder;
+                yield break;
+            }
+
+            if (!PolyClassKeyPrefixes.TryGetValue(m.Owner, out var keyPrefix))
+                yield break;
+            foreach (string name in PolyClassMemberNames.TryGetValue(m.Name, out var names) ? names : new[] { m.Name })
+                yield return keyPrefix + "." + name;
+        }
+
+        /// <summary>
         ///     The completeness verdict: lists every surface member no measurement covers, then every
         ///     stale mapping/catalogue id and every object owner whose operators are not enumerated. See the
         ///     class remarks for the resolution order.
@@ -377,10 +472,13 @@ namespace NumSharp.Tests.Fuzz
             foreach (var name in RandomOpKeys.Keys)
                 if (!ids.Contains("np.random." + name))
                     stale.Add($"RandomOpKeys entry '{name}' names no np.random member");
-            // A module-qualified key ("legendre.leggauss") is a numpy.polynomial submodule's member, "np.polynomial." + key.
+            // A module-qualified key ("legendre.leggauss") is a numpy.polynomial submodule's member, "np.polynomial." + key;
+            // a class-qualified one ("chebyshev.Chebyshev.fit") a series class's member (PolyClassKeys).
+            var polyClassKeys = new HashSet<string>(surface.SelectMany(PolyClassKeys), StringComparer.Ordinal);
             foreach (var op in UndisposedIntermediateTests.BackendOnlyOpKeys)
-                if (!LinalgOpKeys.ContainsValue(op) && !ids.Contains("np." + op) && !ids.Contains("np.polynomial." + op))
-                    stale.Add($"BackendOnlyOpKeys entry '{op}' maps to no np / np.linalg / np.polynomial member");
+                if (!LinalgOpKeys.ContainsValue(op) && !ids.Contains("np." + op) && !ids.Contains("np.polynomial." + op)
+                    && !polyClassKeys.Contains(op))
+                    stale.Add($"BackendOnlyOpKeys entry '{op}' maps to no np / np.linalg / np.polynomial / series-class member");
 
             // Operator enumeration must track the owners: an object owner that gains an operator (or a
             // conversion) outside OperatorOwners would be invisible to this gate, not merely uncovered.
@@ -440,6 +538,9 @@ namespace NumSharp.Tests.Fuzz
                 if (m.Owner == "NDMatrix" && MatrixOperatorKeys.TryGetValue(m.Name, out var matrixKeys)
                     && matrixKeys.Any(Has))
                     return "corpus: matrix operators";
+                // ... and the polyclass tier, whose registry spells NumPy's operators with the series classes' C# ones.
+                if (PolyClassKeys(m).Any(Has))
+                    return "corpus: polyclass operators";
                 return null;
             }
 
@@ -516,6 +617,22 @@ namespace NumSharp.Tests.Fuzz
                 case "NDMatrix":
                     // The matrix tier keys every member as matrix.<name> (gen_matrix_oracle.py).
                     return Has("matrix." + m.Name) ? "corpus: matrix" : null;
+                // numpy.polynomial's series classes: the polyclass tier's <module>.<Class>.<name> keys. A class method whose
+                // every success needs LAPACK (fit: lstsq) is measured by the backend pass.
+                case "NDPolynomial":
+                case "NDChebyshev":
+                case "NDLegendre":
+                case "NDLaguerre":
+                case "NDHermite":
+                case "NDHermiteE":
+                    foreach (string key in PolyClassKeys(m))
+                    {
+                        if (Has(key))
+                            return "corpus: polyclass";
+                        if (UndisposedIntermediateTests.BackendOnlyOpKeys.Contains(key) && ev.BackendRoute(key) is { } route)
+                            return route;
+                    }
+                    return null;
                 case "Generator":
                     if (Has("grnd:" + m.Name))
                         return "corpus: grnd stream";

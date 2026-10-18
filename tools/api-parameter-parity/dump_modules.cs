@@ -220,14 +220,18 @@ static string ExtendedTypeName(Type t)
 ///     array or a by-reference (<c>out</c> / <c>ref</c>) parameter.</summary>
 /// <param name="p">The parameter.</param>
 /// <returns>A JSON-serializable dictionary; <c>default</c> is the C# literal as text, <c>defaultKind</c> its kind
-///     (<c>null</c>, <c>bool</c>, <c>number</c>, <c>string</c>, <c>char</c>, <c>enum</c>, <c>other</c>).</returns>
+///     (<c>null</c>, <c>bool</c>, <c>number</c>, <c>string</c>, <c>char</c>, <c>enum</c>, <c>other</c>, or
+///     <c>missing</c> for an <c>[Optional]</c> parameter without a constant, whose text is <c>Type.Missing</c>).</returns>
 static Dictionary<string, object?> DescribeParameter(ParameterInfo p)
 {
     bool hasDefault = p.HasDefaultValue;
     object? value = hasDefault ? p.DefaultValue : null;
     // A struct parameter's `default` (e.g. `Shape s = default`) has no CLR constant: HasDefaultValue is true and the
     // value is null; Missing.Value / DBNull mark an optional parameter without a usable value.
-    string? kind = !hasDefault ? null
+    // An [Optional] parameter without a constant (CS1763 forbids `object tol = 0` or a list): an omitted argument
+    // arrives as Type.Missing, which the member replaces with NumPy's default, while an explicit null stays NumPy's
+    // None (NDPolyBase.trim's tol, the series classes' fromroots domain). signature_diff reads it as NumPy's default.
+    string? kind = !hasDefault ? (p.IsOptional ? "missing" : null)
         : value is null || value == DBNull.Value || value == Missing.Value ? "null"
         : value is bool ? "bool"
         : value is string ? "string"
@@ -238,6 +242,7 @@ static Dictionary<string, object?> DescribeParameter(ParameterInfo p)
     string? text = kind switch
     {
         null => null,
+        "missing" => "Type.Missing",
         // A struct's default (`Shape size = default`) reads null through reflection, like a reference type's null;
         // C# source writes it `default`, so the text says so while the kind stays "null" (both mean "not given").
         "null" => p.ParameterType.IsValueType && Nullable.GetUnderlyingType(p.ParameterType) is null ? "default" : "null",

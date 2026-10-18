@@ -714,9 +714,14 @@ namespace NumSharp.Tests.Fuzz
             // IndexError NumPy leaks where it reads a.shape[axis] first, the same way.
             bool strictType = c.Valueclass == "linalg_empty" || c.Valueclass == "nditer_construct" ||
                               c.Valueclass == "nditer_protocol" || c.Valueclass == "axis_args";
+            // The series-class tier holds the exception CLASS too, by inheritance: NumPy's class (the first builtin of its
+            // MRO, LinAlgError kept) must be NumSharp's exception class or one of its bases (IncorrectTypeException is a
+            // TypeError), with the BCL types the house uses for three Python classes.
+            bool polyClass = c.Valueclass == "polyclass";
             bool typeOk = gotType == c.Error.Type
-                          || (!strictType && (!ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
-                                              || allowed.Contains(gotType)))
+                          || (polyClass && PolyClassErrorMatches(caught, c.Error.Type))
+                          || (!strictType && !polyClass && (!ErrorTypeMap.TryGetValue(c.Error.Type, out var allowed)
+                                                            || allowed.Contains(gotType)))
                           // The one house convention the axis tier keeps: NumPy's broadcast ValueError ("shape mismatch:
                           // objects cannot be broadcast to a single shape…", np.cross over operands whose axis moves leave
                           // other shapes) is NumSharp's IncorrectShapeException library-wide (np.broadcast and every shape
@@ -739,6 +744,39 @@ namespace NumSharp.Tests.Fuzz
             failures.Add($"{c.Id} [{c.Layout}]: error mismatch\n" +
                          $"      numpy:    {c.Error.Type}: {Show(wantText)}\n" +
                          $"      numsharp: {gotType}: {Show(gotText)}");
+        }
+
+        /// <summary>
+        ///     The series-class tier's exception-class rule: NumPy's class name is NumSharp's exception class or one of its
+        ///     base classes, or the BCL class the house raises for it — <c>OverflowError</c> → <see cref="OverflowException"/>,
+        ///     <c>ZeroDivisionError</c> → <see cref="DivideByZeroException"/>, <c>MemoryError</c> →
+        ///     <see cref="OutOfMemoryException"/>, a broadcasting <c>ValueError</c> → <see cref="IncorrectShapeException"/>
+        ///     (the library-wide shape error), np.dot's alignment <c>ValueError</c> → <see cref="ArgumentException"/> (the
+        ///     class two of np.dot's branches raise it with), and a ufunc casting <c>TypeError</c> (NumPy's UFuncTypeError)
+        ///     → <see cref="ArgumentException"/> (the library's type for that check). Texts are compared verbatim either way.
+        /// </summary>
+        /// <param name="caught">NumSharp's exception.</param>
+        /// <param name="numpyType">NumPy's recorded class name.</param>
+        /// <returns>Whether the classes correspond.</returns>
+        private static bool PolyClassErrorMatches(Exception caught, string numpyType)
+        {
+            for (Type t = caught.GetType(); t != null; t = t.BaseType)
+                if (t.Name == numpyType)
+                    return true;
+            return numpyType switch
+            {
+                "OverflowError" => caught is OverflowException,
+                "ZeroDivisionError" => caught is DivideByZeroException,
+                "MemoryError" => caught is OutOfMemoryException,
+                // np.dot's alignment check (`shapes (5,5) and (6,) not aligned: ...`) is the library's ArgumentException in two
+                // of its branches and IncorrectShapeException in the others; both stand for NumPy's ValueError.
+                "ValueError" => caught is IncorrectShapeException
+                                || (caught is ArgumentException && caught.Message.Contains(" not aligned: ", StringComparison.Ordinal)),
+                // NumPy's UFuncTypeError for a ufunc casting rule (`Cannot cast ufunc 'multiply' output from ...`) is the
+                // library's ArgumentException (DefaultEngine.UfuncOut's house type for that check), text verbatim.
+                "TypeError" => caught is ArgumentException && caught.Message.StartsWith("Cannot cast ufunc ", StringComparison.Ordinal),
+                _ => false,
+            };
         }
 
         /// <summary>

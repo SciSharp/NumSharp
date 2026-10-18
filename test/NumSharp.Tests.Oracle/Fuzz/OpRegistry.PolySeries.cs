@@ -145,6 +145,21 @@ namespace NumSharp.Tests.Fuzz
                         return e.GetProperty("str").GetString();
                     case "none":
                         return null;   // Python's None: C# null (the house map)
+                    case "series":
+                    {
+                        // A series argument of the polyclass tier (OpRegistry.PolyClass.cs): its constructor's arguments in
+                        // the generator's encode order (coef, domain, window), then the attributes assigned after it.
+                        string cls = e.GetProperty("cls").GetString();
+                        object coef = Decode(e.GetProperty("coef"));
+                        object domain = e.TryGetProperty("domain", out var d) ? Decode(d) : null;
+                        object window = e.TryGetProperty("window", out var w) ? Decode(w) : null;
+                        string symbol = e.TryGetProperty("symbol", out var sy) ? sy.GetString() : "x";
+                        NDPolyBase series = PolyClassNew(cls, coef, domain, window, symbol);
+                        if (e.TryGetProperty("assign", out var assign))
+                            foreach (JsonElement pair in assign.EnumerateArray())
+                                PolyClassAssign(series, pair[0].GetString(), Decode(pair[1]));
+                        return series;
+                    }
                     case "npscalar":
                     {
                         // A NumPy scalar with a C# spelling of its own: np.float16 is Half, np.uint16 is char (the house

@@ -51,9 +51,14 @@ namespace NumSharp
     ///         <c>chebpts2</c>, <c>chebgauss</c>, <c>leggauss</c>, <c>laggauss</c>, <c>hermgauss</c>, <c>hermegauss</c>;
     ///         the last four run <c>np.linalg.eigvalsh</c>), <c>chebinterpolate</c>, the least-squares fits
     ///         <c>{p}fit</c> (<c>np.linalg.lstsq</c>) and <c>polyvalfromroots</c>;</item>
-    ///         <item>printing: <see cref="set_default_printstyle"/> and <see cref="PolyUtilsModule.format_float"/>.</item>
+    ///         <item>printing: <see cref="set_default_printstyle"/> and <see cref="PolyUtilsModule.format_float"/>;</item>
+    ///         <item>the six series classes — <see cref="NDPolynomial"/>, <see cref="NDChebyshev"/>, <see cref="NDLegendre"/>,
+    ///         <see cref="NDLaguerre"/>, <see cref="NDHermite"/>, <see cref="NDHermiteE"/> (factories <see cref="Polynomial"/>,
+    ///         <see cref="Chebyshev"/>, …) — NumPy's <c>ABCPolyBase</c> statement for statement over the module functions:
+    ///         the arithmetic with Python's operator protocol, evaluation (at a NumPy scalar in scalarmath, as NumPy's
+    ///         <c>p(x)</c> does), calculus, roots, fits, basis conversion (NumPy's recurrence run at a series) and printing.</item>
     ///     </list>
-    ///     <para>Still open: the six convenience classes (<c>Polynomial</c>, <c>Chebyshev</c>, …). The kernels are emitted
+    ///     <para>The kernels are emitted
     ///     at run time and have no fallback: under NativeAOT (no dynamic code) a call that reaches one raises
     ///     <see cref="System.PlatformNotSupportedException"/>, and the evaluation, calculus, algebra, Vandermonde and
     ///     companion paths all reach one.</para>
@@ -93,6 +98,114 @@ namespace NumSharp
         public PolyUtilsModule polyutils { get; } = new PolyUtilsModule();
 
         /// <summary>
+        ///     NumPy's <c>numpy.polynomial.polynomial.Polynomial(coef, domain=None, window=None, symbol='x')</c>: a power series — a new
+        ///     <see cref="NDPolynomial"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDPolynomial"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDPolynomial(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.html</remarks>
+        public NDPolynomial Polynomial(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDPolynomial(coef, domain, window, symbol);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.polynomial.chebyshev.Chebyshev(coef, domain=None, window=None, symbol='x')</c>: a Chebyshev series — a new
+        ///     <see cref="NDChebyshev"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDChebyshev"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDChebyshev(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.Chebyshev.html</remarks>
+        public NDChebyshev Chebyshev(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDChebyshev(coef, domain, window, symbol);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.polynomial.legendre.Legendre(coef, domain=None, window=None, symbol='x')</c>: a Legendre series — a new
+        ///     <see cref="NDLegendre"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDLegendre"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDLegendre(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.Legendre.html</remarks>
+        public NDLegendre Legendre(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDLegendre(coef, domain, window, symbol);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.polynomial.laguerre.Laguerre(coef, domain=None, window=None, symbol='x')</c>: a Laguerre series — a new
+        ///     <see cref="NDLaguerre"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDLaguerre"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDLaguerre(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.Laguerre.html</remarks>
+        public NDLaguerre Laguerre(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDLaguerre(coef, domain, window, symbol);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.polynomial.hermite.Hermite(coef, domain=None, window=None, symbol='x')</c>: a (physicists') Hermite series — a new
+        ///     <see cref="NDHermite"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDHermite"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDHermite(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite.Hermite.html</remarks>
+        public NDHermite Hermite(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDHermite(coef, domain, window, symbol);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.polynomial.hermite_e.HermiteE(coef, domain=None, window=None, symbol='x')</c>: a (probabilists') HermiteE series — a new
+        ///     <see cref="NDHermiteE"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDHermiteE"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDHermiteE(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.hermite_e.HermiteE.html</remarks>
+        public NDHermiteE HermiteE(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDHermiteE(coef, domain, window, symbol);
+
+        /// <summary>
         ///     Sets how the series classes print their terms (NumPy's <c>numpy.polynomial.set_default_printstyle</c>):
         ///     <c>"unicode"</c> writes superscripts and subscripts (<c>1.0 + 2.0·x + 3.0·x²</c>, <c>T₁(x)</c>),
         ///     <c>"ascii"</c> plain text (<c>1.0 + 2.0 x + 3.0 x**2</c>, <c>T_1(x)</c>).
@@ -106,8 +219,8 @@ namespace NumSharp
         ///     <para>The style is ONE process-wide setting, like NumPy's class attribute <c>ABCPolyBase._use_unicode</c>
         ///     (not scoped to a thread). NumPy's default is <c>os.name != 'nt'</c>: ASCII on Windows, Unicode elsewhere —
         ///     NumSharp starts from the same platform rule.</para>
-        ///     <para>The series classes (plan U10) read it when they print; until they exist the setting is only
-        ///     stored.</para>
+        ///     <para>The series classes read it in <c>str(p)</c> (<see cref="NDPolyBase.__str__"/>, <c>ToString()</c>);
+        ///     <c>format(p, "ascii")</c> / <c>"unicode"</c> (<see cref="NDPolyBase.__format__"/>) choose per call.</para>
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.set_default_printstyle.html</para>
         /// </remarks>
         public void set_default_printstyle(object style) => NDPolyPrinting.SetDefaultPrintStyle(style);

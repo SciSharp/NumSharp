@@ -586,11 +586,25 @@ namespace NumSharp
         /// <summary>A tolerance argument as NumPy sees it (a Python number, a NumPy scalar, an array).</summary>
         /// <param name="tol">The C# value.</param>
         /// <returns>The value.</returns>
-        /// <exception cref="TypeError">null (<c>'&lt;' not supported between instances of 'NoneType' and 'int'</c>).</exception>
+        /// <exception cref="TypeError">A value Python's <c>tol &lt; 0</c> refuses before NumPy sees it — null, a str, a tuple, a
+        ///     list or any other non-numeric object (<c>'&lt;' not supported between instances of 'str' and 'int'</c>, CPython's
+        ///     text with the operand's type name).</exception>
         internal static PolyNumber Tolerance(object tol)
         {
-            if (tol is null)
-                throw new TypeError("'<' not supported between instances of 'NoneType' and 'int'");
+            // trimcoef's first statement is `if tol < 0`: Python's comparison of the argument with an int. Only a number or an
+            // array (NumPy's comparison ufunc, then the truth value of its result) gets past it; every other object has no
+            // `<` against an int.
+            switch (tol)
+            {
+                case null:
+                    throw new TypeError("'<' not supported between instances of 'NoneType' and 'int'");
+                case string:
+                    throw new TypeError("'<' not supported between instances of 'str' and 'int'");
+                case System.Runtime.CompilerServices.ITuple:
+                    throw new TypeError("'<' not supported between instances of 'tuple' and 'int'");
+            }
+            if (!PolyNumber.IsScalarValue(tol) && tol is not NDArray && !PolySequence.IsArrayLike(tol))
+                throw new TypeError($"'<' not supported between instances of '{(PolySequence.IsSequence(tol) ? "list" : NDPolySeries.PythonTypeName(tol))}' and 'int'");
             return PolyNumber.FromObject(tol);
         }
 

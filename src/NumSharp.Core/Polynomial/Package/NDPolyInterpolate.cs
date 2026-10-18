@@ -221,7 +221,7 @@ namespace NumSharp
         /// <returns>The items, in order.</returns>
         /// <exception cref="TypeError">A 0-d array (<c>iteration over a 0-d array</c>, its iterator's error), or an object that
         ///     is not iterable (<c>Value after * must be an iterable, not {type}</c>, CPython's text).</exception>
-        private static object[] StarArgs(object args)
+        internal static object[] StarArgs(object args)
         {
             switch (args)
             {

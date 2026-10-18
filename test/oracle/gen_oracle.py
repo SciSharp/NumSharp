@@ -21983,6 +21983,1047 @@ def gen_polyprint():
 
 
 # ---------------------------------------------------------------------------
+# T-polyclass — numpy.polynomial's six series classes (plan U10, numpy-polynomial-remaining-compute.md §3.7) and their
+# printing (U11's class half): Polynomial, Chebyshev, Legendre, Laguerre, Hermite and HermiteE, NumPy's ABCPolyBase over
+# the module functions of each basis. One op key per NumPy member, "<module>.<Class>.<member>"
+# ("chebyshev.Chebyshev.__add__", "laguerre.Laguerre.integ"; the constructor is "<module>.<Class>"), so the coverage join
+# credits each member's own row. params.args lists the call's arguments IN ORDER as [name, spec] pairs: the replay decodes
+# them in that order, which is the order their operands were described. A series argument is a "series" spec (class,
+# coefficients, domain, window, symbol, attributes assigned after construction) that the replay builds through the public
+# constructor and property setters. A NumPy scalar travels as a 0-d operand WITHOUT the explicit-array mark (np.float16 /
+# np.uint16 as their C# spellings Half / char), an explicit np.array(x) as a 0-d operand listed in params.array0d, which
+# the replay marks as np.array does.
+#   (A) the constructor over coefficients, domains, windows and symbols of every kind (Python lists / tuples / scalars /
+#       str, every dtype and view, NumPy scalars, 0-d and 2-D arrays): as_series' texts, the two-element checks, the
+#       identifier test, and the order of the three;
+#   (B) the binary operators over operands of every kind in both directions — Python's protocol around NumPy's methods:
+#       _get_coefficients' texts, NotImplemented and the reflected slot, CPython's sequence fallbacks, the ufunc refusal of
+#       NumPy scalars and arrays, the unsupported-operand texts — over every class and series dtype; the power with its
+#       argument kinds and maxpower; the unary operators; == and != (and __eq__ / __ne__ by name);
+#   (C) the members: copy, degree, cutdeg, trim, truncate, mapparms, integ, deriv, roots, linspace, the call at points of
+#       every kind and at a series, has_same*, len, iteration, the attributes, pickling (__getstate__ / __setstate__);
+#   (D) the class methods: identity, basis, fromroots, cast, convert (every pair of classes, domains, windows, dtypes),
+#       fit and Chebyshev.interpolate (argument errors portable, values host-pinned);
+#   (E) printing: str in both styles, format, repr, _repr_latex_ under the print options it reads;
+#   (F) assigned state: an instance domain / window / coef / maxpower assigned after construction.
+# A series result is recorded as four slots [coef, domain, window, tag], tag = int64 [class id, code points of the
+# symbol]; divmod's (quo, rem) as eight; a full fit as the series' four and lstsq's four; linspace / mapparms as two;
+# __getstate__ as a [key code points, value] pair per entry; a number or bool as a 0-d array; the printers as text; an
+# error as NumPy's class (LinAlgError kept, otherwise the first builtin class of its MRO) and its text.
+# HOST SPLIT: a case that reaches OpenBLAS — np.convolve's vector regime (_PAConvRecorder), LAPACK geev (_PREigRecorder:
+# roots of degree >= 2), gelsd (fit's lstsq), np.dot (Chebyshev.interpolate) — goes to polyclass_parity.jsonl, replayed
+# only with NumPy's own scipy-openblas at one thread; every other case is portable.
+# Not recorded (documented divergences, unit-tested instead): object-dtype series (a list holding None, a Python int past
+# uint64: NumPy computes with Python objects, NumSharp refuses — M2), `str % series` with a conversion (NumPy makes a
+# str), a series as integ's lower bound, a None or Python-int-past-int64 LEFT operand (C# cannot spell it), `x == p`
+# with x not a series (C#'s operator resolution: write p == x), and a state dictionary holding None.
+_PC_CLASSES = (("polynomial", "Polynomial"), ("chebyshev", "Chebyshev"), ("legendre", "Legendre"),
+               ("laguerre", "Laguerre"), ("hermite", "Hermite"), ("hermite_e", "HermiteE"))
+_PC_CLASS_ID = {name: i for i, (_, name) in enumerate(_PC_CLASSES)}
+_PC_MODULE = {name: mod for mod, name in _PC_CLASSES}
+
+
+class _PCSer:
+    """A series ARGUMENT of a case: its class and constructor arguments (values _pc_enc can encode), and the attributes
+    assigned after construction. Encoded as a "series" spec; rebuilt as a fresh NumPy series for every call."""
+
+    def __init__(self, cls, coef, domain=None, window=None, symbol=None, assign=None):
+        """Records the arguments.
+
+        Args:
+            cls: The class name ("Polynomial", ...).
+            coef: The coefficients.
+            domain: The domain, or None for the class default.
+            window: The window, or None for the class default.
+            symbol: The symbol, or None for the default 'x'.
+            assign: Attributes assigned after construction (name -> value), in order, or None.
+        """
+        self.cls = cls
+        self.coef = coef
+        self.domain = domain
+        self.window = window
+        self.symbol = symbol
+        self.assign = assign
+
+    def make(self):
+        """Builds the NumPy series.
+
+        Returns:
+            The series.
+        """
+        k = getattr(np.polynomial, self.cls)
+        kw = {}
+        if self.domain is not None:
+            kw["domain"] = _pc_py(self.domain)
+        if self.window is not None:
+            kw["window"] = _pc_py(self.window)
+        if self.symbol is not None:
+            kw["symbol"] = self.symbol
+        s = k(_pc_py(self.coef), **kw)
+        for attr, v in (self.assign or {}).items():
+            setattr(s, attr, _pc_py(v))
+        return s
+
+
+class _PCNp:
+    """A NumPy SCALAR argument (np.float64(2), np.int8(3), np.bool_(True), ...)."""
+
+    def __init__(self, v):
+        """Wraps the scalar.
+
+        Args:
+            v: The NumPy scalar.
+        """
+        self.v = v
+
+
+def _pc_enc(v, operands, explicit):
+    """Encodes one argument (see the T-polyclass header).
+
+    Args:
+        v: The argument: a _PCSer, a _PCNp, a _PSArr, a list / tuple of those, or a Python value _ps_enc encodes.
+        operands: The case's operand descriptors (appended to).
+        explicit: The positions of explicit 0-d arrays (appended to).
+
+    Returns:
+        The spec.
+    """
+    if isinstance(v, _PCSer):
+        spec = {"kind": "series", "cls": v.cls, "coef": _pc_enc(v.coef, operands, explicit)}
+        if v.domain is not None:
+            spec["domain"] = _pc_enc(v.domain, operands, explicit)
+        if v.window is not None:
+            spec["window"] = _pc_enc(v.window, operands, explicit)
+        if v.symbol is not None:
+            spec["symbol"] = v.symbol
+        if v.assign:
+            spec["assign"] = [[k, _pc_enc(x, operands, explicit)] for k, x in v.assign.items()]
+        return spec
+    if isinstance(v, _PCNp):
+        s = v.v
+        if isinstance(s, (np.float16, np.uint16)):
+            return _ps_enc(s, operands)
+        a = np.array(s)
+        operands.append(describe(a, a))
+        return "a"
+    if isinstance(v, _PSArr):
+        if v.view.ndim == 0:
+            explicit.append(len(operands))
+        operands.append(describe(v.base, v.view))
+        return "a"
+    if isinstance(v, list):
+        return {"kind": "list", "items": [_pc_enc(i, operands, explicit) for i in v]}
+    if isinstance(v, tuple):
+        return {"kind": "tuple", "items": [_pc_enc(i, operands, explicit) for i in v]}
+    if isinstance(v, np.generic):
+        raise TypeError("a NumPy scalar argument must be wrapped in _PCNp")
+    return _ps_enc(v, operands)
+
+
+def _pc_py(v):
+    """The Python value of an argument (a fresh series for a _PCSer).
+
+    Args:
+        v: The argument.
+
+    Returns:
+        The value NumPy is called with.
+    """
+    if isinstance(v, _PCSer):
+        return v.make()
+    if isinstance(v, _PCNp):
+        return v.v
+    if isinstance(v, _PSArr):
+        return v.view
+    if isinstance(v, list):
+        return [_pc_py(i) for i in v]
+    if isinstance(v, tuple):
+        return tuple(_pc_py(i) for i in v)
+    return v
+
+
+class _PCBlasRecorder:
+    """Records whether a call reached np.linalg.lstsq (gelsd) or np.dot (the BLAS products): the polynomial package reads
+    both through the numpy module at call time (polyutils._fit, chebinterpolate), so replacing the attributes for one
+    call sees every use."""
+
+    def __init__(self):
+        """Creates a recorder that has seen nothing."""
+        self.used = False
+        self._lstsq = None
+        self._dot = None
+
+    def __enter__(self):
+        """Installs the recording wrappers.
+
+        Returns:
+            The recorder.
+        """
+        self._lstsq = np.linalg.lstsq
+        self._dot = np.dot
+        rec = self
+        lstsq0, dot0 = self._lstsq, self._dot
+
+        def lstsq(*a, **k):
+            rec.used = True
+            return lstsq0(*a, **k)
+
+        def dot(a, b, out=None):
+            rec.used = True
+            return dot0(a, b) if out is None else dot0(a, b, out)
+
+        np.linalg.lstsq = lstsq
+        np.dot = dot
+        return self
+
+    def __exit__(self, *exc):
+        """Restores NumPy's functions.
+
+        Returns:
+            False (exceptions propagate).
+        """
+        np.linalg.lstsq = self._lstsq
+        np.dot = self._dot
+        return False
+
+
+def _pc_error_type(e):
+    """NumPy's exception class as the corpus records it.
+
+    Args:
+        e: The exception.
+
+    Returns:
+        "LinAlgError" for np.linalg.LinAlgError, otherwise the first builtin class of its MRO (a UFuncTypeError is a
+        TypeError).
+    """
+    if isinstance(e, np.linalg.LinAlgError):
+        return "LinAlgError"
+    for k in type(e).__mro__:
+        if k.__module__ == "builtins":
+            return k.__name__
+    return type(e).__name__
+
+
+def _pc_codepoints(s):
+    """A str as the int64 array of its code points (how the tier records a symbol and a state key).
+
+    Args:
+        s: The str.
+
+    Returns:
+        The array.
+    """
+    return np.array([ord(ch) for ch in s], dtype=np.int64)
+
+
+def _pc_slots(s):
+    """The four slots of a series result.
+
+    Args:
+        s: The series.
+
+    Returns:
+        [coef, domain, window, tag].
+    """
+    tag = np.array([_PC_CLASS_ID[type(s).__name__]] + [ord(ch) for ch in s.symbol], dtype=np.int64)
+    return [np.asarray(s.coef), np.asarray(s.domain), np.asarray(s.window), tag]
+
+
+class _PCOut:
+    """A recorded result already in its corpus form (a fit's flattened slots, a state dictionary)."""
+
+    def __init__(self, expected, object_free=True):
+        """Wraps the expectation.
+
+        Args:
+            expected: The expected record.
+            object_free: False when a slot held an object array (the case is skipped).
+        """
+        self.expected = expected
+        self.object_free = object_free
+
+
+def _pc_expect(r):
+    """The expected record of a NumPy result (see the T-polyclass header).
+
+    Args:
+        r: The result.
+
+    Returns:
+        (expected, object_free): the record, and False when it held an object array (NumPy computed with Python
+        objects: not recorded).
+    """
+    from numpy.polynomial._polybase import ABCPolyBase
+    if isinstance(r, _PCOut):
+        return r.expected, r.object_free
+    if isinstance(r, ABCPolyBase):
+        slots = _pc_slots(r)
+    elif isinstance(r, tuple) and r and all(isinstance(x, ABCPolyBase) for x in r):
+        slots = [a for x in r for a in _pc_slots(x)]
+    elif isinstance(r, tuple):
+        slots = [np.asarray(x) for x in r]
+    elif isinstance(r, str):
+        return {"kind": "text", "value": r}, True
+    else:
+        a = np.asarray(r)
+        return _arr_expected(a), a.dtype != object
+    if any(a.dtype == object for a in slots):
+        return None, False
+    return {"kind": "tuple", "slots": [_arr_expected(a) for a in slots]}, True
+
+
+def gen_polyclass():
+    """Generates the polyclass tiers (see the T-polyclass header).
+
+    Returns:
+        (cases, host): the portable cases and the host-pinned (OpenBLAS / LAPACK) cases.
+    """
+    import numpy.polynomial._polybase as pb
+    cases = []
+    host = []
+    counter = [0]
+    skipped = {"object": 0, "memory": 0}
+    A = _PSArr
+    N = _PCNp
+    S = _PCSer
+    nan = float("nan")
+    inf = float("inf")
+
+    def emit(op, fn, args, layout, cid, kind="tuple", extra=None, style=None, opts=None):
+        """Records one call: NumPy's result, or its error.
+
+        Args:
+            op: The corpus key.
+            fn: Calls NumPy with the arguments' Python values, in order; returns the result.
+            args: (name, value) pairs, in call order.
+            layout: The case's layout label.
+            cid: The case id prefix.
+            kind: The result kind of the member (an error case keeps it for the replay's routing).
+            extra: Further plain params (the operator symbol, a facet).
+            style: "ascii" / "unicode" to set the class print style for the call, or None.
+            opts: np.printoptions for the call, or None.
+
+        Returns:
+            None.
+        """
+        operands, explicit = [], []
+        params = {"args": [[name, _pc_enc(v, operands, explicit)] for name, v in args]}
+        if explicit:
+            params["array0d"] = explicit
+        if extra:
+            params.update(extra)
+        if style is not None:
+            params["style"] = style
+        if opts:
+            params["opts"] = opts
+        n = counter[0]
+        counter[0] += 1
+        default = pb.ABCPolyBase._use_unicode
+        conv = _PAConvRecorder()
+        eig = _PREigRecorder()
+        lap = _PCBlasRecorder()
+        r = None
+        err = None
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings(), np.printoptions(**(opts or {})), conv, eig, lap:
+                warnings.simplefilter("ignore")
+                if style is not None:
+                    pb.ABCPolyBase._use_unicode = style == "unicode"
+                py = [_pc_py(v) for _, v in args]
+                r = fn(*py)
+                exp, object_free = _pc_expect(r)
+        except MemoryError:
+            skipped["memory"] += 1
+            return
+        except Exception as e:
+            err = e
+        finally:
+            pb.ABCPolyBase._use_unicode = default
+        dest = host if (conv.blas_bound() or eig.lapack or lap.used) else cases
+        if err is not None:
+            dest.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                         "expected": {"kind": kind} if kind != "array" else {}, "expects_throw": True,
+                         "error": {"type": _pc_error_type(err), "text": str(err).strip()}, "layout": layout,
+                         "valueclass": "polyclass"})
+            return
+        if not object_free:
+            skipped["object"] += 1
+            return
+        dest.append(_case(op, params, operands, exp, layout, "polyclass", cid=f"{cid}/{n}"))
+
+    def key(cls, member=None):
+        """The op key of a class member ("chebyshev.Chebyshev.__add__"), or of the constructor.
+
+        Args:
+            cls: The class name.
+            member: The member, or None for the constructor.
+
+        Returns:
+            The key.
+        """
+        k = f"{_PC_MODULE[cls]}.{cls}"
+        return k if member is None else f"{k}.{member}"
+
+    def arr(values, dt):
+        """A fresh 1-D array of dtype dt.
+
+        Args:
+            values: The values.
+            dt: The dtype.
+
+        Returns:
+            The _PSArr.
+        """
+        with np.errstate(all="ignore"):
+            return A(np.array(values).astype(dt))
+
+    for cls_index, (module, cls) in enumerate(_PC_CLASSES):
+        other_cls = _PC_CLASSES[(cls_index + 1) % len(_PC_CLASSES)][1]
+        cnew = getattr(np.polynomial, cls)
+
+        # (A) the constructor ------------------------------------------------------------------------------------------
+        def ctor(coef, domain=None, window=None, symbol=None, omit=False):
+            """One constructor call with the given arguments (omitted ones are the defaults)."""
+            args = [("coef", coef)]
+            kw = {}
+            if domain is not None or omit:
+                args.append(("domain", domain))
+            if window is not None or omit:
+                args.append(("window", window))
+            if symbol is not None or omit:
+                args.append(("symbol", symbol))
+            names = [n for n, _ in args]
+
+            def call(*vals):
+                return cnew(**dict(zip(names, vals)))
+            return args, call
+
+        coef_kinds = [
+            ("list_int", [1, 2, 3]), ("list_float", [0.5, -1.5, 2.25]), ("list_complex", [1 + 2j, -0.5, 3j]),
+            ("list_mixed", [1, 2.5, -3]), ("list_bool", [True, False]), ("list_empty", []), ("list_nested", [[1, 2]]),
+            ("list_ragged", [[1], [2, 3]]), ("list_one", [7]), ("list_tz", [1, 2, 0, 0]), ("list_zero", [0]),
+            ("list_special", [nan, inf, -0.0, -inf]), ("tuple", (1, 2, 3)), ("tuple_empty", ()), ("int", 5),
+            ("float", 2.5), ("complex", 1 + 1j), ("bool", True), ("str", "ab"), ("list_str", ["a", "b"]),
+            ("np_f64", N(np.float64(2.5))), ("np_f32", N(np.float32(2.5))), ("np_f16", N(np.float16(2.5))),
+            ("np_uint16", N(np.uint16(3))), ("np_i8", N(np.int8(-3))), ("np_bool", N(np.bool_(True))),
+            ("np_c128", N(np.complex128(1 - 2j))), ("arr0", A(np.array(4.0))), ("arr0_i", A(np.array(4))),
+            ("arr2d", A(np.array([[1.0, 2.0]]))), ("arr_empty", A(np.zeros(0))), ("list_npf32", [N(np.float32(1)), 2.5]),
+            ("list_arr0", [A(np.array(1.5)), 2]), ("big_int", [2 ** 63, 1]), ("uint64_max", A(np.array([2 ** 64 - 1, 1], np.uint64))),
+        ]
+        for dt in ALL_DTYPES:
+            coef_kinds.append((f"dt_{dt}", A(_ps_series(4, dt))))
+            coef_kinds.append((f"dt_{dt}_special", A(_ps_series(4, dt, "special"))))
+        base = np.linspace(-1.5, 2.0, 9)
+        base32 = base.astype(np.float32)
+        basec = base + 1j * base[::-1]
+        coef_kinds += [("strided", A(base, base[::2])), ("reversed", A(base, base[::-1])), ("offset", A(base, base[2:6])),
+                       ("f32_reversed", A(base32, base32[::-1])), ("c128_strided", A(basec, basec[1::3]))]
+        for lab, coef in coef_kinds:
+            uid = "/uint16/" if "uint16" in lab else "/"
+            args, call = ctor(coef)
+            emit(key(cls), call, args, "ctor_coef", f"{key(cls)}{uid}coef/{lab}")
+        dom_kinds = [
+            ("list", [0, 1]), ("tuple", (0, 2)), ("floats", [-2.5, 4.0]), ("complex", [0, 1j]), ("same", [1, 1]),
+            ("nan", [0, nan]), ("f32", arr([0, 1], np.float32)), ("f16", arr([0, 1], np.float16)),
+            ("i8", arr([0, 3], np.int8)), ("u16", arr([1, 2], np.uint16)), ("c128", arr([0, 1 + 1j], np.complex128)),
+            ("short", [1]), ("long", [1, 2, 3]), ("empty", []), ("nested", [[0, 1]]), ("scalar", 5), ("str", "ab"),
+            ("bool", [True, False]), ("np_f64", N(np.float64(1))), ("arr0", A(np.array(2.0))),
+            ("reversed", A(base, base[::-1][:2])), ("big", [0, 1e300]),
+        ]
+        for lab, d in dom_kinds:
+            uid = "/uint16/" if "u16" in lab else "/"
+            args, call = ctor([1, 2], domain=d)
+            emit(key(cls), call, args, "ctor_domain", f"{key(cls)}{uid}domain/{lab}")
+            if lab in ("list", "complex", "short", "nested", "f32", "str", "empty", "nan", "u16"):
+                args, call = ctor([1, 2], window=d)
+                emit(key(cls), call, args, "ctor_window", f"{key(cls)}{uid}window/{lab}")
+        for lab, sym in (("x", "x"), ("t", "t"), ("under", "y_1"), ("underscore", "_"), ("umlaut", "ä"),
+                         ("greek", "αβ"), ("math_italic", "\U0001d465"), ("digit_tail", "x1"), ("keyword", "if"),
+                         ("empty", ""), ("digit_head", "1x"), ("space", "x y"), ("dash", "a-b"), ("none", None),
+                         ("combining_head", "́x"), ("combining_tail", "x́"), ("double_struck", "ℕ"),
+                         ("fullwidth", "ｘ"), ("zwsp", "x​"), ("zwj", "x‍"), ("dollar", "x$"),
+                         ("cjk", "中"), ("roman", "Ⅰ"), ("middle_dot", "x·"), ("long", "abc" * 10)):
+            args, call = ctor([1, 2], symbol=sym, omit=sym is None)
+            emit(key(cls), call, args, "ctor_symbol", f"{key(cls)}/symbol/{lab}")
+        # the order of the checks: coefficients, then domain, then window, then symbol
+        for lab, (c, d, w, s) in (("coef_dom", ([], [1], None, None)), ("dom_win", ([1], [1], [1], None)),
+                                  ("win_sym", ([1], [0, 1], [1], "1x")), ("dom_sym", ([1], [1], None, "")),
+                                  ("coef_sym", ([[1]], None, None, None)), ("all_ok", ([1, 2], (0, 3), (-1, 0), "t"))):
+            args, call = ctor(c, domain=d, window=w, symbol=s)
+            emit(key(cls), call, args, "ctor_order", f"{key(cls)}/order/{lab}")
+
+        # (B) the binary operators ---------------------------------------------------------------------------------------
+        def operand_kinds(full):
+            """The other operand's kinds (the full set for the f64 sweep, the core set for the dtype sweeps)."""
+            core = [
+                ("same", S(cls, [4, 5])), ("same_long", S(cls, [1.5, -2, 0.5, 3])), ("other_dom", S(cls, [4, 5], domain=[0, 1])),
+                ("int", 2), ("float", 2.5), ("complex", 1 + 2j), ("np_f64", N(np.float64(2))), ("np_f32", N(np.float32(2))),
+                ("np_f16", N(np.float16(2))), ("arr1", A(np.array([1.0, 2.0]))), ("arr0", A(np.array(2.0))),
+                ("list", [1, 2]), ("zero", 0),
+            ]
+            if not full:
+                return core
+            return core + [
+                ("same_f32", S(cls, arr([4, 5], np.float32))), ("same_f16", S(cls, arr([4, 5], np.float16))),
+                ("same_c", S(cls, [4j, 5])), ("same_one", S(cls, [3])), ("same_zero", S(cls, [0])),
+                ("same_tz", S(cls, [4, 5, 0])), ("same_neg", S(cls, [-1, 0.25, -2])),
+                ("other_cls", S(other_cls, [4, 5])), ("other_win", S(cls, [4, 5], window=[0, 1])),
+                ("other_sym", S(cls, [4, 5], symbol="y")), ("nan_dom", S(cls, [4, 5], domain=[nan, 1])),
+                ("int_neg", -3), ("int_big", 2 ** 62), ("float0", 0.0), ("negzero", -0.0), ("nan", nan), ("inf", inf),
+                ("complex0", 0j), ("bool", True), ("bool_false", False), ("np_i8", N(np.int8(2))), ("np_u8", N(np.uint8(2))),
+                ("np_i64", N(np.int64(2))), ("np_u64", N(np.uint64(2))), ("np_bool", N(np.bool_(True))),
+                ("np_c128", N(np.complex128(2 + 1j))), ("np_uint16", N(np.uint16(3))), ("np_f64_0", N(np.float64(0))),
+                ("arr0_i0", A(np.array(0))), ("arr0_c", A(np.array(1j))), ("arr1_f32", arr([1, 2], np.float32)),
+                ("arr1_i", A(np.array([1, 2]))), ("arr1_bool", A(np.array([True]))), ("arr1_c", A(np.array([1j, 2]))),
+                ("arr_empty", A(np.zeros(0))), ("arr2d", A(np.array([[1.0, 2.0]]))), ("arr1_uint16", arr([1, 2], np.uint16)),
+                ("arr1_zero", A(np.zeros(2))), ("list_f", [0.5, 1.5]), ("list_empty", []), ("list_nested", [[1, 2]]),
+                ("list_str", ["a"]), ("list_np", [N(np.float32(1)), 2]), ("tuple", (1, 2)), ("tuple_empty", ()),
+                ("str", "ab"), ("str_empty", ""), ("str_pct", "100%%"), ("none", None),
+            ]
+
+        ops = [("__add__", "__radd__", "+", lambda a, b: a + b), ("__sub__", "__rsub__", "-", lambda a, b: a - b),
+               ("__mul__", "__rmul__", "*", lambda a, b: a * b), ("__truediv__", "__rtruediv__", "/", lambda a, b: a / b),
+               ("__floordiv__", "__rfloordiv__", "//", lambda a, b: a // b), ("__mod__", "__rmod__", "%", lambda a, b: a % b),
+               ("__divmod__", "__rdivmod__", "divmod", lambda a, b: divmod(a, b))]
+        selves = [("f64", S(cls, [1, 2, 3]), True), ("f32", S(cls, arr([1, 2, 3], np.float32)), False),
+                  ("f16", S(cls, arr([1, 2, 3], np.float16)), False), ("c128", S(cls, [1 + 1j, 2, -0.5j]), False),
+                  ("dom", S(cls, [1, 2, 3], domain=[0, 2]), False), ("win", S(cls, [1, -2, 0.5], window=[0, 1]), False),
+                  ("sym", S(cls, [1, 2], symbol="t"), False), ("tz", S(cls, [1, 2, 0]), False),
+                  ("one", S(cls, [5]), False)]
+        for slab, self_, full in selves:
+            for olab, other in operand_kinds(full):
+                uid = "/uint16/" if "uint16" in olab else "/"
+                for fwd, rev, sym, f in ops:
+                    emit(key(cls, fwd), f, [("a", self_), ("b", other)], "op_forward",
+                         f"{key(cls, fwd)}{uid}{slab}/{olab}", extra={"sym": sym})
+                    if isinstance(other, _PCSer) or other is None or (isinstance(other, int) and abs(other) > 2 ** 62):
+                        continue
+                    emit(key(cls, rev), f, [("a", other), ("b", self_)], "op_reflected",
+                         f"{key(cls, rev)}{uid}{olab}/{slab}", extra={"sym": sym})
+        # long products: np.convolve's vector regime (host) and its scalar regime (portable)
+        for n1, n2 in ((20, 20), (16, 3), (40, 17), (8, 8)):
+            a = S(cls, [((i * 7) % 11 - 5) / 4 for i in range(n1)])
+            b = S(cls, [((i * 5) % 13 - 6) / 8 for i in range(n2)])
+            for fwd, rev, sym, f in ops[2:3] + ops[4:7]:
+                emit(key(cls, fwd), f, [("a", a), ("b", b)], "op_long", f"{key(cls, fwd)}/long/{n1}x{n2}", extra={"sym": sym})
+        # the unary operators (and `+p is p`: NumPy's __pos__ returns the series itself)
+        for slab, self_, _ in selves:
+            emit(key(cls, "__neg__"), lambda a: -a, [("a", self_)], "op_unary", f"{key(cls, '__neg__')}/{slab}")
+            emit(key(cls, "__pos__"), lambda a: +a, [("a", self_)], "op_unary", f"{key(cls, '__pos__')}/{slab}")
+        for slab, self_, _ in selves:
+            emit(key(cls, "__pos__"), lambda a: (+a) is a, [("a", self_)], "identity",
+                 f"{key(cls, '__pos__')}/identity/{slab}", kind="array", extra={"facet": "identity"})
+        # object identity: a getter returns the stored array itself; the class default is ONE object shared by every
+        # series built without a domain / window; a derived series owns copies (the constructor's as_series)
+        for attr in ("coef", "domain", "window"):
+            for slab, s in (("default", S(cls, [1, 2])), ("given", S(cls, [1, 2], domain=[0, 1], window=[0, 2]))):
+                emit(key(cls, attr), lambda p, a=attr: getattr(p, a) is getattr(p, a), [("self", s)], "identity",
+                     f"{key(cls, attr)}/identity/{slab}", kind="array", extra={"facet": "identity"})
+        for attr in ("domain", "window"):
+            for slab, (sa, sb) in (("defaults", (S(cls, [1]), S(cls, [2]))),
+                                   ("given", (S(cls, [1], domain=[0, 1], window=[0, 2]), S(cls, [2], domain=[0, 1], window=[0, 2])))):
+                emit(key(cls, attr), lambda p, q, a=attr: getattr(p, a) is getattr(q, a), [("self", sa), ("other", sb)],
+                     "identity", f"{key(cls, attr)}/shared/{slab}", kind="array", extra={"facet": "shared"})
+            emit(key(cls, attr), lambda p, a=attr: getattr(p + 1, a) is getattr(p, a), [("self", S(cls, [1, 2]))], "identity",
+                 f"{key(cls, attr)}/derived", kind="array", extra={"facet": "derived"})
+            emit(key(cls, attr), lambda p, a=attr: getattr(p.copy(), a) is getattr(p, a), [("self", S(cls, [1, 2], domain=[0, 1]))],
+                 "identity", f"{key(cls, attr)}/copied", kind="array", extra={"facet": "copied"})
+        # the power
+        pow_kinds = [("0", 0), ("1", 1), ("2", 2), ("3", 3), ("5", 5), ("2.0", 2.0), ("2.5", 2.5), ("-1", -1),
+                     ("true", True), ("false", False), ("np_i8", N(np.int8(2))), ("np_f64", N(np.float64(2.0))),
+                     ("np_f64_frac", N(np.float64(2.5))), ("np_c128", N(np.complex128(2 + 0j))),
+                     ("np_c128_imag", N(np.complex128(2 + 1j))), ("np_bool", N(np.bool_(True))), ("np_f16", N(np.float16(3))),
+                     ("np_uint16", N(np.uint16(2))), ("str", "2"), ("none", None), ("list", [2]), ("arr0", A(np.array(2))),
+                     ("arr0_f", A(np.array(2.0))), ("arr0_c", A(np.array(2 + 0j))), ("arr1", A(np.array([2]))), ("100", 100),
+                     ("101", 101), ("nan", nan), ("inf", inf), ("complex", 2 + 0j), ("series", S(cls, [1, 2]))]
+        for blab, base_s in (("short", S(cls, [1, 2])), ("three", S(cls, [1, -1, 0.5])), ("f32", S(cls, arr([1, 2], np.float32))),
+                             ("c128", S(cls, [1j, 2]))):
+            for plab, pw in pow_kinds:
+                if blab != "short" and plab not in ("0", "1", "2", "3", "5", "2.0", "np_c128", "101"):
+                    continue
+                uid = "/uint16/" if "uint16" in plab else "/"
+                emit(key(cls, "__pow__"), lambda a, b: a ** b, [("a", base_s), ("b", pw)], "op_pow",
+                     f"{key(cls, '__pow__')}{uid}{blab}/{plab}", extra={"sym": "**"})
+        for mlab, mp in (("5", 5), ("none", None), ("2.5", 2.5), ("0", 0)):
+            for plab, pw in (("3", 3), ("5", 5), ("6", 6), ("150", 150)):
+                emit(key(cls, "__pow__"), lambda a, b: a ** b, [("a", S(cls, [1, 1], assign={"maxpower": mp})), ("b", pw)],
+                     "op_pow_maxpower", f"{key(cls, '__pow__')}/maxpower{mlab}/{plab}", extra={"sym": "**"})
+        # equality
+        eq_kinds = [("same", S(cls, [1, 2, 3])), ("same_f32", S(cls, arr([1, 2, 3], np.float32))),
+                    ("diff_coef", S(cls, [1, 2, 4])), ("diff_len", S(cls, [1, 2, 3, 0])), ("diff_dom", S(cls, [1, 2, 3], domain=[0, 1])),
+                    ("diff_win", S(cls, [1, 2, 3], window=[0, 1])), ("diff_sym", S(cls, [1, 2, 3], symbol="y")),
+                    ("other_cls", S(other_cls, [1, 2, 3])), ("poszero", S(cls, [1, 2, 0.0])), ("int", 1), ("list", [1, 2, 3]),
+                    ("arr", A(np.array([1.0, 2.0, 3.0]))), ("none", None), ("str", "x")]
+        for slab, self_ in (("plain", S(cls, [1, 2, 3])), ("nan", S(cls, [nan, 2, 3])), ("negzero", S(cls, [1, 2, -0.0])),
+                            ("dom_nan", S(cls, [1, 2, 3], domain=[nan, 1]))):
+            for elab, other in eq_kinds:
+                for name, sym, f in (("__eq__", "==", lambda a, b: a == b), ("__ne__", "!=", lambda a, b: a != b)):
+                    emit(key(cls, name), f, [("a", self_), ("b", other)], "op_eq", f"{key(cls, name)}/{slab}/{elab}",
+                         kind="array", extra={"sym": sym})
+                    if elab in ("same", "diff_dom", "int"):
+                        emit(key(cls, name), (lambda a, b: a.__eq__(b)) if name == "__eq__" else (lambda a, b: a.__ne__(b)),
+                             [("a", self_), ("b", other)], "op_eq_method", f"{key(cls, name)}/method/{slab}/{elab}",
+                             kind="array", extra={"sym": name})
+
+        # (C) the members ----------------------------------------------------------------------------------------------
+        mselves = [("f64", S(cls, [1.0, 2.0, 3.0])), ("dom", S(cls, [1.0, 2.0, 3.0], domain=[0, 2])),
+                   ("domwin", S(cls, [1.0, -2.0, 0.5, 3.0], domain=[0, 2], window=[0, 1])),
+                   ("f32", S(cls, arr([1, 2, 3], np.float32))),
+                   ("f32dom", S(cls, arr([1, 2, 3], np.float32), domain=arr([0, 2], np.float32), window=arr([-1, 1], np.float32))),
+                   ("f16", S(cls, arr([1, 2, 3], np.float16))), ("c128", S(cls, [1 + 1j, 2, -0.5j])),
+                   ("cdom", S(cls, [1, 2], domain=[0, 1j])), ("tz", S(cls, [1.0, 2.0, 0.0, 0.0])), ("one", S(cls, [5.0])),
+                   ("sym", S(cls, [1.0, 2.0], symbol="t")), ("f16dom", S(cls, [1, 2, 3], domain=arr([0, 4], np.float16)))]
+
+        def member(name, f, layout, args, lab, kind="tuple"):
+            emit(key(cls, name), f, args, layout, f"{key(cls, name)}/{lab}", kind=kind)
+
+        for slab, s in mselves:
+            member("copy", lambda p: p.copy(), "member", [("self", s)], slab)
+            member("degree", lambda p: p.degree(), "member", [("self", s)], slab, kind="array")
+            member("mapparms", lambda p: p.mapparms(), "member", [("self", s)], slab)
+            member("deriv", lambda p: p.deriv(), "member", [("self", s)], slab)
+            member("integ", lambda p: p.integ(), "member", [("self", s)], slab)
+            member("roots", lambda p: p.roots(), "member", [("self", s)], slab, kind="array")
+            member("linspace", lambda p, nn: p.linspace(nn), "member", [("self", s), ("n", 5)], slab)
+            member("__len__", lambda p: len(p), "member", [("self", s)], slab, kind="array")
+            member("__iter__", lambda p: np.array(list(p)), "member", [("self", s)], slab,
+                   kind="array")
+            for attr in ("coef", "domain", "window", "symbol", "maxpower", "basis_name"):
+                k = "text" if attr in ("symbol", "basis_name") else "array"
+                member(attr, (lambda p, a=attr: str(getattr(p, a)) if a in ("symbol", "basis_name") else getattr(p, a)),
+                       "attribute", [("self", s)], slab, kind=k)
+            member("trim", lambda p: p.trim(), "member", [("self", s)], slab)
+            member("cutdeg", lambda p, d: p.cutdeg(d), "member", [("self", s), ("deg", 1)], slab)
+            member("truncate", lambda p, z: p.truncate(z), "member", [("self", s), ("size", 2)], slab)
+            member("convert", lambda p: p.convert(), "member", [("self", s)], slab)
+        p0 = S(cls, [1.0, 2.0, 3.0], domain=[0, 2])
+        for lab, d in (("0", 0), ("1", 1), ("2", 2), ("5", 5), ("m1", -1), ("1.0", 1.0), ("1.5", 1.5), ("true", True),
+                       ("np_i64", N(np.int64(1))), ("str", "1"), ("none", None), ("arr0", A(np.array(1))),
+                       ("arr1", A(np.array([1]))), ("list", [1]), ("tuple", (1,)), ("np_f16", N(np.float16(1))),
+                       ("np_c128", N(np.complex128(1))), ("big", 2 ** 70)):
+            member("cutdeg", lambda p, x: p.cutdeg(x), "cutdeg", [("self", p0), ("deg", d)], f"kind/{lab}")
+        tz = S(cls, [1, 1e-10, 0, 0])
+        for lab, t in (("omit", "omit"), ("0", 0), ("0.5", 0.5), ("2", 2), ("m1", -1), ("1e-20", 1e-20),
+                       ("np_f32", N(np.float32(0.5))), ("str", "1"), ("true", True), ("complex", 1j), ("none", None),
+                       ("arr0", A(np.array(0.5))), ("np_f16", N(np.float16(0.5))), ("nan", nan), ("inf", inf)):
+            for slab, s in (("tz", tz), ("allzero", S(cls, [0, 0, 0])), ("c", S(cls, [1j, 1e-10, 0]))):
+                if t == "omit":
+                    member("trim", lambda p: p.trim(), "trim", [("self", s)], f"kind/{lab}/{slab}")
+                else:
+                    member("trim", lambda p, x: p.trim(x), "trim", [("self", s), ("tol", t)], f"kind/{lab}/{slab}")
+        for lab, z in (("1", 1), ("2", 2), ("3", 3), ("10", 10), ("0", 0), ("m1", -1), ("1.0", 1.0), ("1.5", 1.5),
+                       ("true", True), ("false", False), ("str", "2"), ("none", None), ("arr0", A(np.array(2))),
+                       ("arr1", A(np.array([2]))), ("complex", 2 + 0j), ("np_f32", N(np.float32(2))), ("nan", nan),
+                       ("inf", inf), ("np_uint16", N(np.uint16(2))), ("list", [2]), ("np_c128", N(np.complex128(2))),
+                       ("np_c128_imag", N(np.complex128(2 + 1j))), ("arr0_c", A(np.array(2 + 0j)))):
+            uid = "/uint16/" if "uint16" in lab else "/"
+            emit(key(cls, "truncate"), lambda p, x: p.truncate(x), [("self", p0), ("size", z)], "truncate",
+                 f"{key(cls, 'truncate')}{uid}kind/{lab}")
+        for lab, d in (("f16", arr([0, 4], np.float16)), ("i8", arr([0, 4], np.int8)), ("u16", arr([1, 3], np.uint16)),
+                       ("c", [0, 2j]), ("same", [3, 3]), ("nan", [nan, 1]), ("inf", [0, inf]), ("f32_win", None)):
+            uid = "/uint16/" if "u16" in lab else "/"
+            s = S(cls, [1, 2], domain=d) if d is not None else S(cls, [1, 2], window=arr([0, 1], np.float32))
+            emit(key(cls, "mapparms"), lambda p: p.mapparms(), [("self", s)], "mapparms", f"{key(cls, 'mapparms')}{uid}{lab}")
+        # integ: m, k and lbnd sweeps
+        pi = S(cls, [1.0, 2.0, 3.0], domain=[0, 2], window=[-1, 1])
+        for m in (0, 1, 2, 3, -1):
+            member("integ", lambda p, mm: p.integ(mm), "integ", [("self", pi), ("m", m)], f"m/{m}")
+        for lab, k in (("empty", []), ("one", [1]), ("scalar", 1), ("two", [1, 2]), ("tuple", (1, 2)),
+                       ("arr", A(np.array([1.0, 2.0]))), ("complex", [1j]), ("three", [1, 2, 3]), ("float", 0.5),
+                       ("np_f32", N(np.float32(2))), ("arr0", A(np.array(3.0))), ("str", "a"), ("nested", [[1]])):
+            member("integ", lambda p, mm, kk: p.integ(mm, kk), "integ", [("self", pi), ("m", 2), ("k", k)], f"k/{lab}")
+        for lab, lb in (("none", None), ("0", 0), ("1", 1), ("0.5", 0.5), ("m1.5", -1.5), ("complex", 1j),
+                        ("np_f32", N(np.float32(0.5))), ("np_f16", N(np.float16(0.5))), ("arr0", A(np.array(0.5))),
+                        ("arr1", A(np.array([0, 1]))), ("list", [0, 1]), ("str", "a"), ("true", True),
+                        ("np_c128", N(np.complex128(0.5 + 1j))), ("big", 1e300)):
+            member("integ", lambda p, b: p.integ(lbnd=b), "integ", [("self", pi), ("lbnd", lb)], f"lbnd/{lab}")
+            member("integ", lambda p, mm, kk, b: p.integ(mm, kk, b), "integ", [("self", pi), ("m", 2), ("k", [1, -1]), ("lbnd", lb)],
+                   f"lbnd2/{lab}")
+        for slab, s in mselves:
+            member("integ", lambda p, mm, kk, b: p.integ(mm, kk, b), "integ", [("self", s), ("m", 1), ("k", [1]), ("lbnd", 0.5)],
+                   f"full/{slab}")
+        for m in (0, 1, 2, 3, 5, -1):
+            for slab, s in mselves[:6]:
+                member("deriv", lambda p, mm: p.deriv(mm), "deriv", [("self", s), ("m", m)], f"m/{m}/{slab}")
+        # roots: degrees below 2 are portable (no eigvals); the rest is host-pinned
+        for lab, s in (("deg0", S(cls, [3])), ("deg1", S(cls, [1, 2], domain=[0, 4])), ("deg1c", S(cls, [1j, 2])),
+                       ("deg2", S(cls, [1, -3, 2])), ("deg3", S(cls, [1, 2, 3, 4], domain=[0, 1])),
+                       ("deg4c", S(cls, [1, 1j, -2, 0.5, 1])), ("f32", S(cls, arr([1, -3, 2], np.float32))),
+                       ("tz", S(cls, [1, 2, 0])), ("zero", S(cls, [0, 0]))):
+            member("roots", lambda p: p.roots(), "roots", [("self", s)], f"kind/{lab}", kind="array")
+        # float32 series whose roots are complex in every basis (conjugate pairs through the class's own fromroots): NumPy
+        # returns complex64, and maps them back through a float32 domain in complex64 arithmetic
+        for lab, rts, d, w in (("c64a", [0.5 + 1j, 0.5 - 1j, 2.0], [0, 3], [-1, 1]),
+                               ("c64b", [-1 + 0.25j, -1 - 0.25j], [-2, 5], [0, 1]),
+                               ("c64c", [0.3 + 2j, 0.3 - 2j, 1 + 1j, 1 - 1j], [1, 1.5], [-1, 1])):
+            coef = cnew.fromroots(rts).coef.real.astype(np.float32)
+            s = S(cls, A(coef), domain=arr(d, np.float32), window=arr(w, np.float32))
+            member("roots", lambda p: p.roots(), "roots", [("self", s)], f"kind/{lab}", kind="array")
+        # linspace
+        for n in (0, 1, 2, 5, -1, "default"):
+            for dlab, d in (("none", None), ("list", [0, 1]), ("tuple", (5, 6)), ("complex", [0, 1j]),
+                            ("f32", arr([0, 1], np.float32)), ("short", [1]), ("same", [2, 2]), ("arr", A(np.array([2.0, 3.0])))):
+                if n == "default":
+                    if d is None:
+                        member("linspace", lambda p: p.linspace(), "linspace", [("self", p0)], f"default/{dlab}")
+                    continue
+                if d is None:
+                    member("linspace", lambda p, nn: p.linspace(nn), "linspace", [("self", p0), ("n", n)], f"n{n}/{dlab}")
+                else:
+                    member("linspace", lambda p, nn, dd: p.linspace(nn, dd), "linspace", [("self", p0), ("n", n), ("domain", d)],
+                           f"n{n}/{dlab}")
+        # the call: points of every kind
+        x_kinds = [("0.5", 0.5), ("1", 1), ("m2", -2), ("0", 0), ("negzero", -0.0), ("nan", nan), ("inf", inf), ("1j", 1j),
+                   ("complex", 0.3 + 0.7j), ("true", True), ("none", None), ("str", "a"), ("list", [0, 1]), ("tuple", (0, 1)),
+                   ("nested", [[0, 1], [2, 3]]), ("list_empty", []), ("ragged", [[0], [1, 2]]),
+                   ("np_f32", N(np.float32(0.5))), ("np_f16", N(np.float16(0.5))), ("np_i8", N(np.int8(3))),
+                   ("np_c128", N(np.complex128(0.5 + 0.25j))), ("np_bool", N(np.bool_(True))), ("np_uint16", N(np.uint16(3))),
+                   ("np_f64", N(np.float64(0.25))), ("arr0", A(np.array(0.5))), ("arr0_f32", A(np.array(0.5, np.float32))),
+                   ("arr2d", A(np.array([[0.0, 1.0], [2.0, -1.0]]))), ("arr_empty", A(np.zeros(0))),
+                   ("arr_strided", A(base, base[::3])), ("arr_reversed", A(base, base[::-1])), ("big", 1e200)]
+        for dt in ALL_DTYPES:
+            x_kinds.append((f"dt_{dt}", A(_ps_series(5, dt))))
+        for slab, s in (("f64", mselves[0][1]), ("domwin", mselves[2][1]), ("f32", mselves[3][1]), ("c128", mselves[6][1]),
+                        ("f16", mselves[5][1])):
+            for xlab, x in x_kinds:
+                if slab != "f64" and not (xlab in ("0.5", "1j", "list", "arr0", "np_f32", "np_f16", "dt_float32",
+                                                   "dt_float16", "dt_complex128", "dt_int8", "arr2d", "true")):
+                    continue
+                uid = "/uint16/" if "uint16" in xlab else "/"
+                emit(key(cls, "__call__"), lambda p, v: p(v), [("self", s), ("x", x)], "call",
+                     f"{key(cls, '__call__')}{uid}{slab}/{xlab}", kind="array")
+        for slab, s in (("f64", mselves[0][1]), ("domwin", mselves[2][1]), ("c128", mselves[6][1])):
+            for _, xcls in _PC_CLASSES:
+                for xlab, xs in (("plain", S(xcls, [0, 1])), ("dom", S(xcls, [0.5, 2], domain=[0, 3], window=[-1, 2]))):
+                    emit(key(cls, "__call__"), lambda p, v: p(v), [("self", s), ("x", xs)], "call_series",
+                         f"{key(cls, '__call__')}/series/{slab}/{xcls}/{xlab}")
+        # has_same* and has_sametype
+        ref = S(cls, [1, 2, 3], domain=[0, 1])
+        for lab, o in (("same", S(cls, [1, 2, 3], domain=[0, 1])), ("f32", S(cls, arr([1, 2, 3], np.float32), domain=[0, 1])),
+                       ("len", S(cls, [1, 2, 3, 0], domain=[0, 1])), ("nan", S(cls, [1, nan, 3], domain=[0, 1])),
+                       ("dom", S(cls, [1, 2, 3])), ("win", S(cls, [1, 2, 3], domain=[0, 1], window=[0, 1])),
+                       ("other_cls", S(other_cls, [1, 2, 3], domain=[0, 1])), ("none", None)):
+            for name in ("has_samecoef", "has_samedomain", "has_samewindow", "has_sametype"):
+                emit(key(cls, name), lambda p, q, nm=name: getattr(p, nm)(q), [("self", ref), ("other", o)], "has_same",
+                     f"{key(cls, name)}/{lab}", kind="array")
+        for lab, o in (("int", 1), ("list", [1, 2, 3]), ("arr", A(np.array([1.0, 2.0, 3.0]))), ("str", "x")):
+            emit(key(cls, "has_sametype"), lambda p, q: p.has_sametype(q), [("self", ref), ("other", o)], "has_same",
+                 f"{key(cls, 'has_sametype')}/{lab}", kind="array")
+        # pickling: the state NumPy saves, and a series restored from a state
+        for lab, s in (("plain", S(cls, [1, 2])), ("dom", S(cls, [1, 2], domain=[0, 1])),
+                       ("domwin", S(cls, [1, 2], domain=[0, 1], window=[0, 2], symbol="t")),
+                       ("maxpower", S(cls, [1, 2], assign={"maxpower": 7})),
+                       ("late_dom", S(cls, [1, 2], assign={"domain": A(np.array([0.0, 3.0]))})),
+                       ("late_win_dom", S(cls, [1, 2], window=[0, 1], assign={"maxpower": 3, "domain": A(np.array([1.0, 2.0]))}))):
+            def getstate(p):
+                st = p.__getstate__()
+                slots = []
+                for kk, vv in st.items():
+                    slots.append(_pc_codepoints(kk))
+                    slots.append(_pc_codepoints(vv) if isinstance(vv, str) else np.asarray(vv))
+                return _PCOut({"kind": "tuple", "slots": [_arr_expected(a) for a in slots]})
+            emit(key(cls, "__getstate__"), getstate, [("self", s)], "pickle", f"{key(cls, '__getstate__')}/{lab}")
+
+            def roundtrip(p, q):
+                q.__setstate__(p.__getstate__())
+                return q
+            emit(key(cls, "__setstate__"), roundtrip, [("self", s), ("target", S(cls, [9, 9, 9], domain=[5, 6]))], "pickle",
+                 f"{key(cls, '__setstate__')}/{lab}")
+
+        # (D) the class methods ------------------------------------------------------------------------------------------
+        def cm(name, f, args, layout, lab, kind="tuple"):
+            emit(key(cls, name), f, args, layout, f"{key(cls, name)}/{lab}", kind=kind)
+
+        for dlab, d in (("none", None), ("list", [0, 1]), ("tuple", (2, 5)), ("f32", arr([0, 1], np.float32)),
+                        ("complex", [0, 1j]), ("same", [3, 3]), ("short", [1]), ("nan", [nan, 1]), ("i8", arr([-2, 2], np.int8)),
+                        ("str", "ab")):
+            for wlab, w in (("none", None), ("list", [0, 2]), ("f16", arr([-1, 1], np.float16))):
+                for symlab, sym in (("x", None), ("t", "t")):
+                    if wlab != "none" and symlab != "x":
+                        continue
+                    args = []
+                    kws = []
+                    if d is not None:
+                        args.append(("domain", d))
+                        kws.append("domain")
+                    if w is not None:
+                        args.append(("window", w))
+                        kws.append("window")
+                    if sym is not None:
+                        args.append(("symbol", sym))
+                        kws.append("symbol")
+                    cm("identity", lambda *v, kk=tuple(kws): getattr(np.polynomial, cls).identity(**dict(zip(kk, v))), args,
+                       "identity", f"{dlab}/{wlab}/{symlab}")
+        for lab, d in (("0", 0), ("1", 1), ("3", 3), ("m1", -1), ("1.5", 1.5), ("2.0", 2.0), ("str", "2"), ("none", None),
+                       ("true", True), ("np_i8", N(np.int8(2))), ("arr0", A(np.array(2))), ("arr1", A(np.array([2]))),
+                       ("np_f16", N(np.float16(2))), ("complex", 2 + 0j), ("np_c128", N(np.complex128(2))),
+                       ("np_c128_imag", N(np.complex128(2 + 1j))), ("arr0_c", A(np.array(2 + 0j)))):
+            cm("basis", lambda dd: getattr(np.polynomial, cls).basis(dd), [("deg", d)], "basis", f"deg/{lab}")
+        cm("basis", lambda dd, do, wi: getattr(np.polynomial, cls).basis(dd, do, wi), [("deg", 2), ("domain", [0, 2]), ("window", [0, 1])],
+           "basis", "domwin")
+        for rlab, r in (("two", [1, 2]), ("three", [1, -3, 0.5]), ("complex", [1j, -1j]), ("f32", arr([1, 2], np.float32)),
+                        ("one", [2]), ("empty", []), ("nested", [[1, 2]]), ("scalar", 3), ("arr0", A(np.array(3.0))),
+                        ("i8", arr([1, -2], np.int8)), ("tuple", (1, 2)), ("long", [0.5 * (i % 7) - 1.5 for i in range(20)])):
+            for dlab, d in (("omit", "omit"), ("none", None), ("given", [0, 4]), ("empty_list", []), ("tuple", (0, 4)),
+                            ("empty_arr", A(np.zeros(0))), ("short", [1])):
+                if rlab not in ("two", "three", "complex") and dlab not in ("omit", "none", "given"):
+                    continue
+                if d == "omit":
+                    cm("fromroots", lambda rr: getattr(np.polynomial, cls).fromroots(rr), [("roots", r)], "fromroots",
+                       f"{rlab}/{dlab}")
+                else:
+                    cm("fromroots", lambda rr, dd: getattr(np.polynomial, cls).fromroots(rr, dd), [("roots", r), ("domain", d)],
+                       "fromroots", f"{rlab}/{dlab}")
+        cm("fromroots", lambda rr, dd, ww: getattr(np.polynomial, cls).fromroots(rr, dd, ww),
+           [("roots", [1, 3]), ("domain", None), ("window", [0, 1])], "fromroots", "none/window")
+        cm("fromroots", lambda rr, dd, ww: getattr(np.polynomial, cls).fromroots(rr, dd, ww),
+           [("roots", [1, 2, 3]), ("domain", [0, 1e-200]), ("window", None)], "fromroots", "tiny_scale")
+        # cast and convert
+        for _, src in _PC_CLASSES:
+            for slab, s in (("plain", S(src, [1, 2, 3, 4])), ("dom", S(src, [1, -2, 0.5], domain=[0, 3], window=[-1, 1])),
+                            ("f32", S(src, arr([1, 2, 3], np.float32))), ("c128", S(src, [1j, 2, 3 + 1j]))):
+                cm("cast", lambda q: getattr(np.polynomial, cls).cast(q), [("series", s)], "cast", f"{src}/{slab}")
+                emit(key(src, "convert"), lambda q, cc=cls: q.convert(kind=getattr(np.polynomial, cc)), [("self", s)], "convert",
+                     f"{key(src, 'convert')}/to{cls}/{slab}", extra={"kind": cls})
+            cm("cast", lambda q, d: getattr(np.polynomial, cls).cast(q, d), [("series", S(src, [1, 2, 3])), ("domain", [0, 1])],
+               "cast", f"{src}/domain")
+            cm("cast", lambda q, d, w: getattr(np.polynomial, cls).cast(q, d, w),
+               [("series", S(src, [1, 2, 3])), ("domain", [1, 2]), ("window", [0, 2])], "cast", f"{src}/domwin")
+        cs = S(cls, [1, 2, 3, 4, 5], domain=[0, 3], window=[-1, 1])
+        for dlab, d in (("none", None), ("list", [1, 2]), ("nan", [nan, 1]), ("f32", arr([0, 1], np.float32)),
+                        ("complex", [0, 1j]), ("short", [1])):
+            for wlab, w in (("none", None), ("list", [0, 2])):
+                for klab in (None, other_cls):
+                    args = [("self", cs)]
+                    names = []
+                    if d is not None:
+                        args.append(("domain", d))
+                        names.append("domain")
+                    if w is not None:
+                        args.append(("window", w))
+                        names.append("window")
+
+                    def conv(q, *v, nn=tuple(names), kk=klab):
+                        kw = dict(zip(nn, v))
+                        if kk is not None:
+                            kw["kind"] = getattr(np.polynomial, kk)
+                        return q.convert(**kw)
+                    emit(key(cls, "convert"), conv, args, "convert", f"{key(cls, 'convert')}/{dlab}/{wlab}/{klab}",
+                         extra={"kind": klab} if klab else None)
+        emit(key(cls, "convert"), lambda q: q.convert(kind=getattr(np.polynomial, other_cls)), [("self", S(cls, [1]))],
+             "convert", f"{key(cls, 'convert')}/one_coef", extra={"kind": other_cls})
+        emit(key(cls, "convert"), lambda q, d: q.convert(domain=d, kind=getattr(np.polynomial, other_cls)),
+             [("self", S(cls, [1])), ("domain", [nan, 1])], "convert", f"{key(cls, 'convert')}/one_coef_nan",
+             extra={"kind": other_cls})
+        # fit: values host-pinned (lstsq), argument errors portable
+        xs = np.linspace(0, 1, 7)
+        ys = xs ** 2 + 1
+        for lab, args, f in (
+                ("deg2", [("x", A(xs)), ("y", A(ys)), ("deg", 2)], lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("dom_empty", [("x", A(xs)), ("y", A(ys)), ("deg", 2), ("domain", [])],
+                 lambda x, y, d, do: getattr(np.polynomial, cls).fit(x, y, d, do)),
+                ("dom_given", [("x", A(xs)), ("y", A(ys)), ("deg", 2), ("domain", [0, 2])],
+                 lambda x, y, d, do: getattr(np.polynomial, cls).fit(x, y, d, do)),
+                ("same_x", [("x", [1, 1, 1]), ("y", [1, 2, 3]), ("deg", 0)],
+                 lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("window", [("x", A(xs)), ("y", A(ys)), ("deg", 1), ("window", [0, 1])],
+                 lambda x, y, d, w: getattr(np.polynomial, cls).fit(x, y, d, window=w)),
+                ("symbol", [("x", A(xs)), ("y", A(ys)), ("deg", 1), ("symbol", "t")],
+                 lambda x, y, d, s: getattr(np.polynomial, cls).fit(x, y, d, symbol=s)),
+                ("deg_list", [("x", A(xs)), ("y", A(ys)), ("deg", [0, 2])], lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("w", [("x", A(xs)), ("y", A(ys)), ("deg", 2), ("w", A(np.linspace(1, 2, 7)))],
+                 lambda x, y, d, w: getattr(np.polynomial, cls).fit(x, y, d, w=w)),
+                ("rcond", [("x", A(xs)), ("y", A(ys)), ("deg", 3), ("rcond", 0.5)],
+                 lambda x, y, d, r: getattr(np.polynomial, cls).fit(x, y, d, rcond=r)),
+                ("f32", [("x", arr(xs, np.float32)), ("y", arr(ys, np.float32)), ("deg", 2)],
+                 lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("deg_m1", [("x", A(xs)), ("y", A(ys)), ("deg", -1)], lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("deg_float", [("x", A(xs)), ("y", A(ys)), ("deg", 1.5)], lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("x_2d", [("x", A(xs.reshape(1, -1))), ("y", A(ys)), ("deg", 1)],
+                 lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("len", [("x", A(xs)), ("y", A(ys[:-1])), ("deg", 1)], lambda x, y, d: getattr(np.polynomial, cls).fit(x, y, d)),
+                ("dom_short", [("x", A(xs)), ("y", A(ys)), ("deg", 1), ("domain", [1])],
+                 lambda x, y, d, do: getattr(np.polynomial, cls).fit(x, y, d, do)),
+                ("sym_bad", [("x", A(xs)), ("y", A(ys)), ("deg", 1), ("symbol", "1x")],
+                 lambda x, y, d, s: getattr(np.polynomial, cls).fit(x, y, d, symbol=s))):
+            cm("fit", f, args, "fit", lab)
+
+        def fit_full(x, y, d, full):
+            s, stats = getattr(np.polynomial, cls).fit(x, y, d, full=full)
+            slots = _pc_slots(s) + [np.asarray(v) for v in stats]
+            return _PCOut({"kind": "tuple", "slots": [_arr_expected(a) for a in slots]})
+        cm("fit", fit_full, [("x", A(xs)), ("y", A(ys)), ("deg", 2), ("full", True)], "fit", "full")
+        if cls == "Chebyshev":
+            for flab in ("sin", "cubic", "x", "list", "pyfloat", "zerod", "f32", "i64", "stack2", "wronglen", "none"):
+                for dlab, d in (("none", None), ("list", [0, 2]), ("nan", [nan, 1])):
+                    if flab not in ("sin", "cubic") and dlab != "none":
+                        continue
+                    func = _PI_FUNCS[flab]
+                    if d is None:
+                        emit(key(cls, "interpolate"), lambda dd, fn=func: np.polynomial.Chebyshev.interpolate(fn, dd),
+                             [("deg", 4)], "interpolate", f"{key(cls, 'interpolate')}/{flab}/{dlab}", extra={"func": flab})
+                    else:
+                        emit(key(cls, "interpolate"), lambda dd, do, fn=func: np.polynomial.Chebyshev.interpolate(fn, dd, do),
+                             [("deg", 4), ("domain", d)], "interpolate", f"{key(cls, 'interpolate')}/{flab}/{dlab}",
+                             extra={"func": flab})
+            for dlab, dg in (("m1", -1), ("float", 2.5), ("str", "2"), ("arr0", A(np.array(3))), ("bool", True)):
+                emit(key(cls, "interpolate"), lambda dd: np.polynomial.Chebyshev.interpolate(_PI_FUNCS["sin"], dd),
+                     [("deg", dg)], "interpolate", f"{key(cls, 'interpolate')}/deg/{dlab}", extra={"func": "sin"})
+            emit(key(cls, "interpolate"), lambda dd, aa: np.polynomial.Chebyshev.interpolate(_PI_FUNCS["sin_ab"], dd, args=aa),
+                 [("deg", 3), ("args", (2.0, 0.5))], "interpolate", f"{key(cls, 'interpolate')}/args", extra={"func": "sin_ab"})
+
+        # (E) printing ---------------------------------------------------------------------------------------------------
+        pcoefs = [("plain", [1, 2, 3]), ("neg", [1, -2, 3.5]), ("zero", [0, 0, 0]), ("one", [5]), ("special", [nan, inf, -inf]),
+                  ("complex", [1 + 2j, -3j, 0.5]), ("cspecial", [complex(nan, 1), complex(1, nan), complex(nan, nan)]),
+                  ("tiny", [1e-9, 1e9, 1e-3]), ("f32", arr([0.1, 1 / 3], np.float32)), ("f16", arr([0.1, 1 / 3], np.float16)),
+                  ("long", list(range(1, 30))), ("negzero", [-0.0, -0.0]), ("sci", [1e-5, 2.5e10, -3e-7]), ("i", arr([1, -2, 3], np.int8))]
+        for clab, coef in pcoefs:
+            s = S(cls, coef)
+            for flab, style, f in (("str_ascii", "ascii", lambda p: str(p)), ("str_unicode", "unicode", lambda p: str(p)),
+                                   ("fmt_empty", "ascii", lambda p: format(p, "")), ("fmt_ascii", None, lambda p: format(p, "ascii")),
+                                   ("fmt_unicode", None, lambda p: format(p, "unicode")), ("fmt_bad", None, lambda p: format(p, "x")),
+                                   ("repr", None, lambda p: repr(p)), ("latex", None, lambda p: p._repr_latex_())):
+                name = {"str_ascii": "__str__", "str_unicode": "__str__", "fmt_empty": "__format__", "fmt_ascii": "__format__",
+                        "fmt_unicode": "__format__", "fmt_bad": "__format__", "repr": "__repr__", "latex": "_repr_latex_"}[flab]
+                extra = {"fmt": {"fmt_empty": "", "fmt_ascii": "ascii", "fmt_unicode": "unicode", "fmt_bad": "x"}[flab]} \
+                    if name == "__format__" else None
+                emit(key(cls, name), f, [("self", s)], "print", f"{key(cls, name)}/{clab}/{flab}", kind="text", extra=extra,
+                     style=style)
+        for dlab, (d, w) in (("01", ([0, 1], None)), ("02_01", ([0, 2], [0, 1])), ("13", ([1, 3], None)),
+                             ("m11_04", ([-1, 1], [0, 4])), ("complex", ([0, 1j], None)), ("negzero_off", ([-1, 1], [-0.0, 2])),
+                             ("nan", ([nan, 1], None)), ("sym", (None, None))):
+            s = S(cls, [1, 2, -0.5], domain=d, window=w, symbol="t" if dlab == "sym" else None)
+            for flab, name, style, f in (("ascii", "__format__", None, lambda p: format(p, "ascii")),
+                                         ("unicode", "__format__", None, lambda p: format(p, "unicode")),
+                                         ("latex", "_repr_latex_", None, lambda p: p._repr_latex_()),
+                                         ("repr", "__repr__", None, lambda p: repr(p))):
+                extra = {"fmt": flab} if name == "__format__" else None
+                emit(key(cls, name), f, [("self", s)], "print_domain", f"{key(cls, name)}/dom/{dlab}/{flab}", kind="text",
+                     extra=extra, style=style)
+        for olab, opts, coef in (("lw30", {"linewidth": 30}, list(range(20))), ("lw0", {"linewidth": 0}, [1, 2, 3]),
+                                 ("prec2", {"precision": 2}, [1 / 3, 2 / 3]), ("fixed3", {"floatmode": "fixed", "precision": 3}, [1 / 3, 2]),
+                                 ("sign", {"sign": "+"}, [1, -2]), ("thr3", {"threshold": 3}, list(range(10))),
+                                 ("suppress", {"suppress": True}, [1e-9, 1.0]), ("nanstr", {"nanstr": "NaN", "infstr": "INF"}, [nan, inf])):
+            s = S(cls, coef)
+            for flab, name, f in (("ascii", "__format__", lambda p: format(p, "ascii")), ("repr", "__repr__", lambda p: repr(p)),
+                                  ("latex", "_repr_latex_", lambda p: p._repr_latex_())):
+                extra = {"fmt": "ascii"} if name == "__format__" else None
+                emit(key(cls, name), f, [("self", s)], "print_opts", f"{key(cls, name)}/opts/{olab}/{flab}", kind="text",
+                     extra=extra, opts=opts)
+
+        # (F) assigned state: attributes assigned after construction, read by the members ------------------------------
+        dom3 = {"domain": A(np.array([0.0, 1.0, 2.0]))}
+        coef2d = {"coef": A(np.array([[1.0, 2.0], [3.0, 4.0]]))}
+        for lab, assign, name, f, extra_args, kd, sym in (
+                ("dom3_call", dom3, "__call__", lambda p, x: p(x), [("x", 0.5)], "array", None),
+                ("dom3_copy", dom3, "copy", lambda p: p.copy(), [], "tuple", None),
+                ("dom3_mapparms", dom3, "mapparms", lambda p: p.mapparms(), [], "tuple", None),
+                ("dom3_add", dom3, "__add__", lambda p, q: p + q, [("b", S(cls, [1, 2], assign=dom3))], "tuple", "+"),
+                ("dom3_eq", dom3, "__eq__", lambda p, q: p == q, [("b", S(cls, [1, 2]))], "array", "=="),
+                ("dom3_samedomain", dom3, "has_samedomain", lambda p, q: p.has_samedomain(q), [("other", S(cls, [1, 2]))],
+                 "array", None),
+                ("dom2d_copy", {"domain": A(np.array([[0.0, 1.0]]))}, "copy", lambda p: p.copy(), [], "tuple", None),
+                ("dom_f32_call", {"domain": arr([0, 2], np.float32)}, "__call__", lambda p, x: p(x), [("x", 1.0)], "array", None),
+                ("win_late_mapparms", {"window": A(np.array([0.0, 4.0]))}, "mapparms", lambda p: p.mapparms(), [], "tuple", None),
+                ("win_late_str", {"window": A(np.array([0.0, 4.0]))}, "__repr__", lambda p: repr(p), [], "text", None),
+                ("coef2d_len", coef2d, "__len__", lambda p: len(p), [], "array", None),
+                ("coef2d_degree", coef2d, "degree", lambda p: p.degree(), [], "array", None),
+                ("coef2d_iter", coef2d, "__iter__", lambda p: np.array(list(p)), [], "array", None),
+                ("coef2d_call", coef2d, "__call__", lambda p, x: p(x), [("x", 0.5)], "array", None),
+                ("coef2d_str", coef2d, "__format__", lambda p: format(p, "ascii"), [], "text", None),
+                ("coef0d_len", {"coef": A(np.array(3.0))}, "__len__", lambda p: len(p), [], "array", None),
+                ("coef_f16_call", {"coef": arr([1, 2], np.float16)}, "__call__", lambda p, x: p(x), [("x", 0.5)], "array", None),
+                ("coef_degree", {"coef": A(np.array([1.0, 2.0, 0.0]))}, "degree", lambda p: p.degree(), [], "array", None),
+                ("maxpower_pow", {"maxpower": 2}, "__pow__", lambda p, b: p ** b, [("b", 3)], "tuple", "**"),
+                ("maxpower_attr", {"maxpower": 2}, "maxpower", lambda p: p.maxpower, [], "array", None),
+                ("maxpower_float_pow", {"maxpower": 2.5}, "__pow__", lambda p, b: p ** b, [("b", 2)], "tuple", "**"),
+                ("maxpower_copy_pow", {"maxpower": 2}, "copy", lambda p: p.copy(), [], "tuple", None)):
+            extra = {"sym": sym} if sym else ({"fmt": "ascii"} if name == "__format__" else None)
+            self_name = "a" if sym else "self"
+            emit(key(cls, name), f, [(self_name, S(cls, [1, 2], assign=assign))] + extra_args, "assigned",
+                 f"{key(cls, name)}/assigned/{lab}", kind=kd, extra=extra)
+
+        # (G) the dtype axis: the members the sweeps above run over Python lists or float32 / float16 arrays only, now over
+        # series of coefficient ARRAYS of five more dtypes (as_series makes an integer series float64 and keeps complex128;
+        # the corpus records each operand's dtype, which the dtype-spread gate counts), and the class methods over domain,
+        # root and point arrays of those dtypes.
+        dt_coefs = [("f64", A(np.array([1.0, -2.0, 0.5]))), ("i8", arr([1, -2, 3], np.int8)), ("i64", A(np.array([2, -1, 4]))),
+                    ("u8", arr([1, 2, 3], np.uint8)), ("c128", A(np.array([1 + 1j, -2, 0.5j])))]
+        dt_doms = [("f64", A(np.array([0.0, 2.0]))), ("i8", arr([0, 2], np.int8)), ("i64", A(np.array([0, 2]))),
+                   ("u8", arr([0, 2], np.uint8)), ("c128", A(np.array([0, 2 + 0j])))]
+        for dlab, coef in dt_coefs:
+            s1, s2 = S(cls, coef, domain=[0, 2]), S(cls, coef, domain=[0, 2])
+            for name, f, more, kd, extra in (
+                    ("__eq__", lambda a, b: a == b, [("b", s2)], "array", {"sym": "=="}),
+                    ("__ne__", lambda a, b: a != b, [("b", s2)], "array", {"sym": "!="}),
+                    ("__neg__", lambda a: -a, [], "tuple", None),
+                    ("__pos__", lambda a: +a, [], "tuple", None),
+                    ("__str__", lambda p: str(p), [], "text", None),
+                    ("_repr_latex_", lambda p: p._repr_latex_(), [], "text", None),
+                    ("copy", lambda p: p.copy(), [], "tuple", None),
+                    ("deriv", lambda p: p.deriv(), [], "tuple", None),
+                    ("linspace", lambda p, nn: p.linspace(nn), [("n", 4)], "tuple", None),
+                    ("trim", lambda p: p.trim(), [], "tuple", None),
+                    ("basis_name", lambda p: str(p.basis_name), [], "text", None),
+                    ("symbol", lambda p: p.symbol, [], "text", None),
+                    ("maxpower", lambda p: p.maxpower, [], "array", None),
+                    ("has_samecoef", lambda p, q: p.has_samecoef(q), [("other", s2)], "array", None),
+                    ("has_samedomain", lambda p, q: p.has_samedomain(q), [("other", s2)], "array", None),
+                    ("has_samewindow", lambda p, q: p.has_samewindow(q), [("other", s2)], "array", None),
+                    ("has_sametype", lambda p, q: p.has_sametype(q), [("other", s2)], "array", None),
+                    ("convert", lambda p, oc=other_cls: p.convert(kind=getattr(np.polynomial, oc)), [], "tuple",
+                     {"kind": other_cls})):
+                self_name = "a" if name in ("__eq__", "__ne__", "__neg__", "__pos__") else "self"
+                emit(key(cls, name), f, [(self_name, s1)] + more, "dtype", f"{key(cls, name)}/dtype/{dlab}", kind=kd,
+                     extra=extra, style="ascii" if name == "__str__" else None)
+
+            def getstate_dt(p):
+                st = p.__getstate__()
+                slots = []
+                for kk, vv in st.items():
+                    slots.append(_pc_codepoints(kk))
+                    slots.append(_pc_codepoints(vv) if isinstance(vv, str) else np.asarray(vv))
+                return _PCOut({"kind": "tuple", "slots": [_arr_expected(a) for a in slots]})
+            emit(key(cls, "__getstate__"), getstate_dt, [("self", s1)], "dtype", f"{key(cls, '__getstate__')}/dtype/{dlab}")
+
+            def roundtrip_dt(p, q):
+                q.__setstate__(p.__getstate__())
+                return q
+            emit(key(cls, "__setstate__"), roundtrip_dt, [("self", s1), ("target", S(cls, [9, 9], domain=[5, 6]))], "dtype",
+                 f"{key(cls, '__setstate__')}/dtype/{dlab}")
+            emit(key(cls, "cast"), lambda q: getattr(np.polynomial, cls).cast(q), [("series", S(other_cls, coef))], "dtype",
+                 f"{key(cls, 'cast')}/dtype/{dlab}")
+        for dlab, d in dt_doms:
+            emit(key(cls, "identity"), lambda dd: getattr(np.polynomial, cls).identity(dd), [("domain", d)], "dtype",
+                 f"{key(cls, 'identity')}/dtype/{dlab}")
+            emit(key(cls, "basis"), lambda dg, dd: getattr(np.polynomial, cls).basis(dg, dd), [("deg", 2), ("domain", d)], "dtype",
+                 f"{key(cls, 'basis')}/dtype/{dlab}")
+        for rlab, r in (("f64", A(np.array([0.5, -1.0]))), ("i8", arr([1, -2], np.int8)), ("i64", A(np.array([3, -1]))),
+                        ("u8", arr([1, 4], np.uint8)), ("c128", A(np.array([1j, -1j])))):
+            emit(key(cls, "fromroots"), lambda rr: getattr(np.polynomial, cls).fromroots(rr), [("roots", r)], "dtype",
+                 f"{key(cls, 'fromroots')}/dtype/{rlab}")
+        pts = np.arange(7)
+        for xlab, x, y in (("i8", arr(pts, np.int8), A(pts ** 2 + 1.0)), ("i64", A(pts.astype(np.int64)), A(pts * 0.5)),
+                           ("u8", arr(pts, np.uint8), A(pts - 3.0)), ("c128_y", A(pts * 1.0), A(pts + 1j * pts)),
+                           ("i8_y", A(pts * 0.25), arr(pts, np.int8))):
+            emit(key(cls, "fit"), lambda xx, yy, dd: getattr(np.polynomial, cls).fit(xx, yy, dd), [("x", x), ("y", y), ("deg", 2)],
+                 "dtype", f"{key(cls, 'fit')}/dtype/{xlab}")
+        if cls == "Chebyshev":
+            for dlab, d in dt_doms[:4]:
+                emit(key(cls, "interpolate"), lambda dd, do: np.polynomial.Chebyshev.interpolate(_PI_FUNCS["sin"], dd, do),
+                     [("deg", 4), ("domain", d)], "interpolate", f"{key(cls, 'interpolate')}/dtype/{dlab}", extra={"func": "sin"})
+
+    # Char: NumSharp's uint16-like dtype computes exactly as uint16 does (the house weave).
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "")
+                             and any(o.get("dtype") == "uint16" for o in c.get("operands", []))], "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "")
+                            and any(o.get("dtype") == "uint16" for o in c.get("operands", []))], "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}, skipped {skipped}")
+    return cases, host
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -23450,8 +24491,18 @@ def main():
         # numpy.polynomial's printing helpers (U11): polyutils.format_float and set_default_printstyle, portable.
         cases = gen_polyprint()
         write_jsonl(os.path.join(corpus_dir, "polyprint.jsonl"), cases)
+    elif mode == "polyclass":
+        # numpy.polynomial's six series classes (U10, U11's class half): portable + host-pinned (whatever reaches OpenBLAS:
+        # np.convolve's vector regime, LAPACK geev / gelsd, np.dot) at threads = 1.
+        for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            if os.environ.get(var) != "1":
+                sys.exit(f"polyclass needs {var}=1 set before Python starts (the BLAS/LAPACK bits depend on the thread count)")
+        cases, host = gen_polyclass()
+        write_jsonl(os.path.join(corpus_dir, "polyclass.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polyclass_parity.jsonl"), host)
+        write_jsonl(os.path.join(corpus_dir, "polyclass_parity.host.jsonl"), [blas_identity()])
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | polyprint | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | polygauss | polyinterp | polyfit | polyprint | polyclass | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

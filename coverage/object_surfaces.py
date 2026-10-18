@@ -86,12 +86,14 @@ OBJECT_SURFACES = (
     ObjectSurface("iinfo", "Machine limits", "NumSharp.iinfo"),
     ObjectSurface("ndarray.flags", "Array flags", "NumSharp.NDArrayFlags"),
     ObjectSurface("poly1d", "Polynomials", "NumSharp.poly1d"),
-    ObjectSurface("polynomial.polynomial.Polynomial", "Polynomial objects"),
-    ObjectSurface("polynomial.chebyshev.Chebyshev", "Polynomial objects"),
-    ObjectSurface("polynomial.legendre.Legendre", "Polynomial objects"),
-    ObjectSurface("polynomial.hermite.Hermite", "Polynomial objects"),
-    ObjectSurface("polynomial.hermite_e.HermiteE", "Polynomial objects"),
-    ObjectSurface("polynomial.laguerre.Laguerre", "Polynomial objects"),
+    # numpy.polynomial's six series classes are NumSharp's ND* series classes (one sealed class each over NDPolyBase, the
+    # port of ABCPolyBase): their members, the base class's included, are credited against the concrete class.
+    ObjectSurface("polynomial.polynomial.Polynomial", "Polynomial objects", "NumSharp.NDPolynomial"),
+    ObjectSurface("polynomial.chebyshev.Chebyshev", "Polynomial objects", "NumSharp.NDChebyshev"),
+    ObjectSurface("polynomial.legendre.Legendre", "Polynomial objects", "NumSharp.NDLegendre"),
+    ObjectSurface("polynomial.hermite.Hermite", "Polynomial objects", "NumSharp.NDHermite"),
+    ObjectSurface("polynomial.hermite_e.HermiteE", "Polynomial objects", "NumSharp.NDHermiteE"),
+    ObjectSurface("polynomial.laguerre.Laguerre", "Polynomial objects", "NumSharp.NDLaguerre"),
     # NumSharp's numpy.ma implementation: NDMaskedArray is a standalone class (no NDArray base),
     # so every member it credits is its own masked-array code, never an inherited ndarray member.
     ObjectSurface("ma.MaskedArray", "Masked arrays", "NumSharp.NDMaskedArray"),
@@ -318,6 +320,10 @@ REVIEWED_PROTOCOL_ADAPTERS: dict[tuple[str, str], tuple[str, str | None, str]] =
     ("poly1d", "__repr__"): ("ToString", "ToString()", "poly1d.ToString() is NumPy's repr: poly1d([...])."),
     ("poly1d", "__call__"): ("Call", None, "poly1d.Call(x) is NumPy's p(x) (poly1d.__call__)."),
     ("vectorize", "__call__"): ("Call", None, "Vectorized.Call(args) is NumPy's vfunc(*args)."),
+    **{(path, "__call__"): ("Call", None, "Call(x) is NumPy's p(x) (ABCPolyBase.__call__): the series at points, or "
+                                          "composed with a series argument.")
+       for path in ("polynomial.polynomial.Polynomial", "polynomial.chebyshev.Chebyshev", "polynomial.legendre.Legendre",
+                    "polynomial.hermite.Hermite", "polynomial.hermite_e.HermiteE", "polynomial.laguerre.Laguerre")},
     ("lib.npyio.NpzFile", "__repr__"): ("ToString", "ToString()", "NpzFile.ToString() is NumPy's repr."),
     ("lib.npyio.NpzFile", "__enter__"): ("Dispose", None,
                                          "C#'s using statement over the IDisposable NpzFile ports `with np.load(f)`."),

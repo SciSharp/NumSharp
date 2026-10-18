@@ -821,9 +821,12 @@ def cs_default_value(prm):
         prm: A parameter dictionary of the dump.
 
     Returns:
-        None for null, a bool, a float, a str (a C# string or char), or ``("enum", text)`` / ``("other", text)``.
+        None for null, a bool, a float, a str (a C# string or char), ``("missing", text)`` for an ``[Optional]``
+        parameter without a constant, or ``("enum", text)`` / ``("other", text)``.
     """
     kind, text = prm["defaultKind"], prm["default"]
+    if kind == "missing":
+        return ("missing", text)
     if kind == "null":
         return None
     if kind == "bool":
@@ -871,11 +874,16 @@ def compare_default(np_param, cs_param):
         cs_param: The C# parameter dictionary (it has a default).
 
     Returns:
-        ``(kind, text)``: kind is None (no difference), ``default`` (two values differ) or ``null_default`` (one side
-        is None / null, the other a value); text shows both defaults.
+        ``(kind, text)``: kind is None (no difference: also for an ``[Optional]`` C# parameter without a constant,
+        whose omitted argument the member reads as NumPy's default), ``default`` (two values differ) or
+        ``null_default`` (one side is None / null, the other a value); text shows both defaults.
     """
     text = np_param.default
     if text in ("<no value>", "<optional>"):
+        return None, ""
+    if cs_param["defaultKind"] == "missing":
+        # An [Optional] parameter without a constant (C# cannot write NumPy's [] or 0 as the default of an object
+        # parameter): an omitted argument arrives as Type.Missing, which the member replaces with NumPy's default.
         return None, ""
     npv, csv_value = literal(text), cs_default_value(cs_param)
     shown = f"{text} vs {cs_param['default']}"

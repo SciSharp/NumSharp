@@ -25,7 +25,7 @@
 | Page section | NumPy API | NumSharp today |
 |---|---|---|
 | Legacy "polynomial module" (`numpy.lib.polynomial`) | `poly1d`, `polyval`, `poly`, `roots`, `polyfit`, `polyder`, `polyint`, `polyadd`, `polydiv`, `polymul`, `polysub` | **Done** — all 11 functions and `poly1d(c_or_r, r, variable)`, byte-exact. Oracle: `poly.jsonl` (portable); `roots`, `polyfit` and `poly`-of-a-matrix are in host-pinned `linalg_parity`. Unit tests + live-parity tests. Only `RankWarning` is absent: NumSharp emits no warnings anywhere. |
-| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **U3 + U1 + U4 + U2 + U5 + U7 + U6 + U8 + U9 + U11's two functions delivered** — 193 of 193 names: the evaluation family (37, `polyvalfromroots` included), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) the companion / roots pair (12: `{p}companion`/`{p}roots`), the fits (6: `{p}fit`), the weights (5: `{p}weight`), the Chebyshev points and interpolation (4: `chebpts1`/`chebpts2`/`chebgauss`/`chebinterpolate`), the Gauss-Legendre / -Laguerre / -Hermite quadratures (4: `leggauss`/`laggauss`/`hermgauss`/`hermegauss`) and the printing helper `polyutils.format_float` (with `set_default_printstyle`, outside the 193), all bit-exact (`polyeval.jsonl` 27,385 + `polyseries.jsonl` 19,478 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 + `polyweight.jsonl` 1,860 + `polyweight_host.jsonl` 1,235 + `polypts.jsonl` 362 + `polypts_host.jsonl` 347 + `polygauss.jsonl` 244 + `polyinterp.jsonl` 83 + `polyfit.jsonl` 324 + `polyprint.jsonl` 6,797 cases; the BLAS-bound products, the LAPACK-bound roots / Gauss nodes / fits and the gemv-bound interpolation byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354 + `polygauss_parity.jsonl` 352 + `polyinterp_parity.jsonl` 1,030 + `polyfit_parity.jsonl` 1,242). Still open: the six classes (U10) and their rendering (the class half of U11). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`; 0 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
+| "Polynomial package" (`numpy.polynomial`) | 6 modules × ~31 names, `polyutils`, 6 classes, `set_default_printstyle` | **Every unit delivered (U1–U11)** — 193 of 193 names and the 6 classes: the evaluation family (37, `polyvalfromroots` included), the additive family with `polyutils` (54: `{p}add/sub/trim/line`, the 24 constants, `as_series`/`trimseq`/`trimcoef`/`getdomain`/`mapparms`/`mapdomain`), the calculus family (12: `{p}der`/`{p}int`), the series algebra (40: `{p}mulx/mul/div/pow/fromroots`, `X2poly`/`poly2X`), the Vandermonde family (18: `{p}vander`/`{p}vander2d`/`{p}vander3d`) the companion / roots pair (12: `{p}companion`/`{p}roots`), the fits (6: `{p}fit`), the weights (5: `{p}weight`), the Chebyshev points and interpolation (4: `chebpts1`/`chebpts2`/`chebgauss`/`chebinterpolate`), the Gauss-Legendre / -Laguerre / -Hermite quadratures (4: `leggauss`/`laggauss`/`hermgauss`/`hermegauss`) and the printing helper `polyutils.format_float` (with `set_default_printstyle`, outside the 193), plus the six series classes `Polynomial` … `HermiteE` (U10, with their printers, U11's class half: `NDPolynomial` … `NDHermiteE` over `NDPolyBase`), all bit-exact (`polyeval.jsonl` 27,385 + `polyseries.jsonl` 19,478 + `polycalc.jsonl` 27,526 + `polyalgebra.jsonl` 28,144 + `polyvander.jsonl` 31,180 + `polyroots.jsonl` 8,195 + `polyweight.jsonl` 1,860 + `polyweight_host.jsonl` 1,235 + `polypts.jsonl` 362 + `polypts_host.jsonl` 347 + `polygauss.jsonl` 244 + `polyinterp.jsonl` 83 + `polyfit.jsonl` 324 + `polyprint.jsonl` 6,797 + `polyclass.jsonl` 21,628 cases; the BLAS-bound products, the LAPACK-bound roots / Gauss nodes / fits and the gemv-bound interpolation byte-exact with the OpenBLAS backend, `polyalgebra_parity.jsonl` 139 + `polyroots_parity.jsonl` 1,354 + `polygauss_parity.jsonl` 352 + `polyinterp_parity.jsonl` 1,030 + `polyfit_parity.jsonl` 1,242 + `polyclass_parity.jsonl` 213). Facade `np.polynomial.{polynomial,chebyshev,legendre,laguerre,hermite,hermite_e,polyutils}`, each class also reachable by NumPy's name (`np.polynomial.Chebyshev(...)`, `np.polynomial.chebyshev.Chebyshev(...)`); 6 of 6 classes. `coverage/generate_coverage.py` catalogues all seven `numpy.polynomial.*` submodules as out-of-headline surfaces. |
 | "Transition guide" | the reversed coefficient order; `Polynomial.fit(...).convert()` | Documentation only. It is a real hazard for us, though, because the new package **reuses the legacy names with the opposite coefficient order** (§2 D5). |
 
 User demand on record: issue **#496** "Can NumSharp fit polynomial surface equations?" — that is exactly
@@ -1118,7 +1118,16 @@ a unit below, that document wins.
 - **Perf:** NumPy `chebpts1(100)` **2.6 µs**, `chebinterpolate(sin, 20)` **59 µs**.
 - **Tests to port:** `TestInterpolate` + the `chebpts*` cases of `TestMisc`.
 
-### U10 — Convenience classes (6 classes + base)
+### U10 — Convenience classes (6 classes + base) — DELIVERED 2026-10-18
+
+> **DELIVERED (2026-10-18).** `NDPolyBase` (abstract; `Polynomial/Package/NDPolyBase{,.Protocol,.Algebra,.Printing}.cs`) +
+> `NDPolyKind` + six sealed classes `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}` + a factory per
+> facade. No CRTP base (`NDPolyBase<TSelf>` was not needed): each class re-declares the covariant members and its
+> operator set typed with itself. Oracle tiers `polyclass.jsonl` (21,628) + `polyclass_parity.jsonl` (213,
+> host-pinned), zero excuses; unit tests `PolynomialClassTests.cs` (39) + `PolynomialClassPrintingTests.cs` (11);
+> benchmark `benchmark/polynomial/polyclass_results.md` (252 cells, all bit-exact, geomean 8.22×, 1.81× and more but
+> pickling, a floor). Routes and findings: [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md)
+> §3.7; the C# spellings below (Appendix B) and in `.claude/CLAUDE.md` ("the series classes").
 
 - **Scope:** `NDPolyBase`/`NDPolyBase<TSelf>` + the six classes and their facade aliases:
   - **construction:** `as_series` (untrimmed), the two-element domain/window check, `symbol` validation (a
@@ -1146,7 +1155,7 @@ a unit below, that document wins.
   **337 µs**, `Chebyshev.fit` **98 µs**.
 - **Tests to port:** `test_classes.py` (33 tests × 6 classes), `test_symbol.py` (31).
 
-### U11 — Printing (2 names + class rendering) — the 2 names DELIVERED 2026-10-18
+### U11 — Printing (2 names + class rendering) — DELIVERED 2026-10-18 (the class rendering with U10)
 
 > **`format_float` and `set_default_printstyle` DELIVERED (2026-10-18).** `Polynomial/Package/NDPolyPrinting.cs`; the
 > prerequisite below done in full: np.format_float_positional / np.format_float_scientific are NumPy's `dragon4.c`,
@@ -1154,7 +1163,8 @@ a unit below, that document wins.
 > digits) and NumPy's `string trim`; oracle tier `polyprint.jsonl` (6,797 cases, 0 excused) + the surface tier's
 > formatter cases (4,446), benchmark geomean 11.45× (320 cells, min 1.65×); routes and findings:
 > [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md) §3.8. The class rendering
-> (`__str__` / `__format__` / `__repr__` / `_repr_latex_`) comes with U10 and reads `NDPolyPrinting.UseUnicode`.
+> (`__str__` / `__format__` / `__repr__` / `_repr_latex_`, `NDPolyBase.Printing.cs`) came with U10 and reads
+> `NDPolyPrinting.UseUnicode`: section P of the class benchmark, 12.5–17× NumPy.
 
 - **Scope:**
   - `polyutils.format_float`;
@@ -1236,12 +1246,12 @@ edits to the same files survive.
 | M1 | complex64 coefficients / `x` → complex128 results | NumSharp has one complex width (F1, #569) |
 | M2 | no object-dtype fallback in `as_series`: `Fraction`/mixed exotic coefficients → `ValueError("Coefficient arrays have no common type")`; Decimal handled natively | no object dtype |
 | M3 | `RankWarning` not emitted by `*fit`/`.fit` | NumSharp emits no warnings (same as legacy `polyfit`) |
-| M4 | `p(x)` → `p.Call(x)`; `p // q` → `floordiv`; `divmod(p, q)` → `p.divmod(q)`; `p ** n` → `p.pow(n)`; `__format__` → `IFormattable`; `_repr_latex_` → method; pickle n/a | C# operator set |
+| M4 | `p(x)` → `p.Call(x)` (`p.Call(q)` for a series); `p // q` → `p.__floordiv__(q)`; `divmod(p, q)` → `p.__divmod__(q)` (a `(quo, rem)` tuple); `p ** n` → `p.__pow__(n)`; `str` / `format` → `__str__()` = `ToString()` / `__format__(spec)` = `IFormattable`; `_repr_latex_` → method; pickle → `__getstate__` / `__setstate__`; `p == arr` → `p == (object)arr`; `p + None` → `p + (object)null` | C# operator set and overload resolution (Python's `//`, `**`, `divmod` have no C# operator; NumPy's dunder names are kept) |
 | M5 | class attrs `Polynomial.domain/window` → `NDPolynomial.default_domain/default_window`; `np.polynomial.Polynomial.fit(...)` → `NDPolynomial.fit(...)` (or a `using` alias) | CS0102; a member cannot be both invocable and dotted |
 | ~~M6~~ | ~~module constants are read-only~~ — RETIRED in U1: the constants are writeable shared singletons exactly as NumPy's (D6) | — |
-| M7 | NumPy-strong scalar `x` (`np.float64(0.5)`) behaves weak | house-wide 0-d-is-weak rule |
-| M8 | `symbol` identifier validation approximates Python's `str.isidentifier` (XID_Start/XID_Continue + NFKC) with .NET Unicode categories | no NFKC-identifier API in the BCL |
-| M9 | `__hash__ = None` (unhashable) vs .NET `GetHashCode` | decide in U10 (follow the `poly1d` precedent; never silently hash mutable coefficients by value) |
+| ~~M7~~ | ~~NumPy-strong scalar `x` (`np.float64(0.5)`) behaves weak~~ — RETIRED in U10: an unmarked 0-d NDArray is NumPy's strong scalar and a C# number the weak Python one throughout the class layer, as in U1-U9 | — |
+| ~~M8~~ | ~~`symbol` identifier validation approximates Python's `str.isidentifier`~~ — RETIRED in U10: `PyUnicodeData.IsIdentifier` is Python's rule (the XID_Start / XID_Continue tables of `tools/gen_unicode_tables.py`, NFKC) | — |
+| M9 | `__hash__ = None` (unhashable) vs .NET `GetHashCode` | decided in U10: `GetHashCode` raises NumPy's `TypeError: unhashable type: 'Polynomial'` (a series is unusable as a dictionary key, as in NumPy) |
 
 ---
 
@@ -1318,8 +1328,8 @@ edits to the same files survive.
 | U7 | `chebroots` deg 20 / `polyroots` deg 50 | 45 / 204 | LAPACK-bound → parity plus wrapper savings |
 | U8 | `leggauss(50)` / `chebgauss(50)` | 478 / 3.4 | eigvalsh-bound / trivial |
 | U9 | `chebpts1(100)` / `chebinterpolate(sin, 20)` | 2.6 / 59 | trivial / gemv-bound |
-| U10 | construct / `p+q` / `p*q` / `ch(x@100K)` / `convert` / `.fit` | 1.4 / 12 / 15 / 6,122 / 337 / 98 | object overhead + the U3/U2 kernels |
-| U11 | `str(ch)` / `repr(ch)` | 38 / 89 | string building |
+| U10 | construct / `p+q` / `p*q` / `ch(x@100K)` / `convert` / `.fit` | 1.4 / 12 / 15 / 6,122 / 337 / 98 | object overhead + the U3/U2 kernels — **measured at delivery** (`polyclass_results.md`, Chebyshev, its own inputs): construct 3.7×, `p+q` 12.9×, `p*q` 11.8× (8 terms) / 4.2× (64), `ch(x)` 13.5× (1K) / 31.8× (100K), `convert` 11.1×, `.fit` 1.95× |
+| U11 | `str(ch)` / `repr(ch)` | 38 / 89 | string building — **measured at delivery**: `str` 13.1×, `repr` 20.8× |
 
 Method: `timeit` autorange, best of 7 repeats; coefficients `default_rng(0).standard_normal(deg+1)`,
 `x = uniform(-1, 1, N)`; `p = Polynomial(c10)`, `q = Polynomial(c5)`, `ch = Chebyshev(c10)`; the fit
@@ -1976,24 +1986,26 @@ while the bug lives:
 Unit totals: U1 54 · U2 40 · U3 37 · U4 12 · U5 18 · U6 6 · U7 12 · U8 10 · U9 3 · U11 1 (+`set_default_printstyle`)
 = 193 functions; U10 = the class layer.
 
-## Appendix B — `ABCPolyBase` → C# surface (U10/U11)
+## Appendix B — `ABCPolyBase` → C# surface (U10/U11), as delivered
 
-| NumPy | C# (proposed) |
+| NumPy | C# |
 |---|---|
-| `Poly(coef, domain=None, window=None, symbol='x')` | `new NDPoly(coef, domain, window, symbol)`; alias `np.polynomial.Poly(...)` |
-| `p.coef / p.domain / p.window / p.symbol` | same-named instance properties |
-| `Poly.domain / Poly.window` (class defaults) | `NDPoly.default_domain / default_window` (M5) |
-| `maxpower` (100), `basis_name` | instance read-only properties (+ static defaults) |
-| `p(x)` | `p.Call(x)` (the `poly1d` precedent) |
-| `+ - *`, `/` (numbers only), `%`, unary `-`/`+`, `==`/`!=` | C# operators on `NDPolyBase<TSelf>` (D11 overload set) |
-| `//`, `divmod`, `**` | `floordiv(other)`, `divmod(other)` → `(q, r)`, `pow(n)` (M4) |
-| `len(p)`, `iter(p)` | `__len__()`/`Count`, `IEnumerable` over coefficients |
-| `copy degree cutdeg trim truncate mapparms` | same-named methods |
-| `convert(domain, kind, window)`, `Poly.cast(series, domain, window)` | `convert<TKind>(...)` / `convert(kind: …)`; static `NDPoly.cast(series, …)` |
-| `integ(m, k, lbnd)`, `deriv(m)`, `roots()`, `linspace(n, domain)` | same-named methods |
-| `Poly.fit(...)`, `Poly.fromroots(...)`, `Poly.identity(...)`, `Poly.basis(...)`, `Chebyshev.interpolate(...)` | static members on the `ND*` type (inherited CRTP statics) |
+| `Poly(coef, domain=None, window=None, symbol='x')` | `new NDPoly(coef, domain, window, symbol)`; `np.polynomial.Poly(...)` and `np.polynomial.<module>.Poly(...)` |
+| `p.coef / p.domain / p.window / p.symbol / p.maxpower / p.basis_name` | same-named instance properties (`coef`, `domain`, `window`, `maxpower` settable: a view stored, the replaced array released) |
+| `Poly.domain / Poly.window / Poly.maxpower` (class attributes) | `NDPoly.default_domain / default_window / default_maxpower` (M5) |
+| `p(x)` | `p.Call(x)` → NDArray; `p.Call(q)` → a series (composition) |
+| `+ - *`, `/` (numbers only), `%`, unary `-`/`+`, `==`/`!=` | C# operators on each class and on `NDPolyBase` (forward `(series, object / NDArray / object[] / Array / string)`, reflected `(NDArray / Array / object[] / IList / ITuple / string, series)`; `==` / `!=` on `NDPolyBase`) |
+| `//`, `divmod`, `**` | `__floordiv__` / `__rfloordiv__`, `__divmod__` / `__rdivmod__` → `(quo, rem)`, `__pow__(power)` (M4) |
+| `len(p)`, `iter(p)` | `__len__()`, `__iter__()` / `foreach` over the coefficients |
+| `copy degree cutdeg trim truncate mapparms` | same-named methods (`trim([Optional] tol)`: an omitted tol is NumPy's 0, null its None) |
+| `convert(domain, kind, window)`, `Poly.cast(series, domain, window)` | `convert(domain, kind: typeof(NDChebyshev), window)` (any class); static `NDPoly.cast(series, domain, window)` |
+| `integ(m, k, lbnd)`, `deriv(m)`, `roots()`, `linspace(n, domain)` | same-named methods (`linspace` → `(x, y)`) |
+| `Poly.fit(...)`, `Poly.fromroots(...)`, `Poly.identity(...)`, `Poly.basis(...)`, `Chebyshev.interpolate(...)` | static members of each class (`fit(..., full: true)` deconstructs as `var (series, (resid, rank, sv, rcond)) = ...`; `fromroots(roots, [Optional] domain, ...)`: omitted is NumPy's `[]`, null its None) |
 | `has_samecoef/samedomain/samewindow/sametype` | same-named methods |
-| `str(p)`, `format(p, 'ascii'|'unicode')`, `repr(p)`, `p._repr_latex_()` | `ToString()`, `ToString("ascii"|"unicode")` (IFormattable), `repr`/`ToString(true)`-style, `_repr_latex_()` |
+| `str(p)`, `format(p, 'ascii'|'unicode')`, `repr(p)`, `p._repr_latex_()` | `__str__()` = `ToString()`, `__format__(spec)` = `IFormattable` (`$"{p:unicode}"`), `__repr__()`, `_repr_latex_()` |
+| `p == q` / `__eq__` / `hash(p)` | `==` / `__eq__(object)` / `Equals(object)`; `GetHashCode()` raises TypeError (M9) |
+| `__getstate__()` / `__setstate__(d)` (pickle) | the same methods over an `OrderedDictionary` in NumPy's `__dict__` order |
+| (none) | `Dispose()`: a series owns its coefficients, own domain / window and fit statistics |
 
 ## Appendix C — verbatim error texts (probed 2.4.2)
 

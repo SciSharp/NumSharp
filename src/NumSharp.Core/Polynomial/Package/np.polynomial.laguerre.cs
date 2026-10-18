@@ -737,5 +737,23 @@ namespace NumSharp
         [NDScoped]
         public NDPolyFitResult lagfit(object x, object y, object deg, object rcond = null, bool full = false, object w = null)
             => NDPolyFit.Fit(PolyBasis.Laguerre, x, y, deg, rcond, full, w);
+
+        /// <summary>
+        ///     NumPy's <c>numpy.polynomial.laguerre.Laguerre(coef, domain=None, window=None, symbol='x')</c>: a Laguerre series — a new
+        ///     <see cref="NDLaguerre"/> (the class itself; its class methods <c>fit</c>, <c>fromroots</c>, <c>identity</c>,
+        ///     <c>basis</c> and <c>cast</c> are static members of <see cref="NDLaguerre"/>).
+        /// </summary>
+        /// <param name="coef">The coefficients, low degree first (see <see cref="NDLaguerre(object, object, object, string)"/>).</param>
+        /// <param name="domain">The domain, or null for the class default.</param>
+        /// <param name="window">The window, or null for the class default.</param>
+        /// <param name="symbol">The variable's name for printing: a Python identifier.</param>
+        /// <returns>The series (dispose it when done).</returns>
+        /// <exception cref="ValueError">The constructor's errors (an empty or non-1-d series, a domain or window of the wrong
+        ///     length, an invalid symbol).</exception>
+        /// <exception cref="TypeError">A null symbol.</exception>
+        /// <exception cref="System.NotSupportedException">Coefficients NumPy keeps as an object array.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.laguerre.Laguerre.html</remarks>
+        public NDLaguerre Laguerre(object coef, object domain = null, object window = null, string symbol = "x")
+            => new NDLaguerre(coef, domain, window, symbol);
     }
 }

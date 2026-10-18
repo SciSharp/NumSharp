@@ -6,8 +6,9 @@ namespace NumSharp.Tests.Fuzz.Ownership
 {
     /// <summary>
     ///     The process-wide arrays NumSharp hands out but no caller owns — <c>np.ma.nomask</c>, the masked constant's data
-    ///     and mask, and the 24 <c>numpy.polynomial</c> module constants (<c>polydomain</c>, <c>chebzero</c>, …) — watched by
-    ///     one ledger that every ownership check consults.
+    ///     and mask, the 24 <c>numpy.polynomial</c> module constants (<c>polydomain</c>, <c>chebzero</c>, …) and the 12
+    ///     class attributes of its six series classes (<c>NDChebyshev.default_domain</c>, …, which <c>p.domain</c> of a series
+    ///     built without one returns itself) — watched by one ledger that every ownership check consults.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -45,13 +46,21 @@ namespace NumSharp.Tests.Fuzz.Ownership
             (() => np.polynomial.hermite_e, "hermite_e", "herme"),
         };
 
+        /// <summary>The six series classes, whose static <c>default_domain</c> / <c>default_window</c> are shared arrays.</summary>
+        private static readonly Type[] PolynomialClasses =
+        {
+            typeof(NDPolynomial), typeof(NDChebyshev), typeof(NDLegendre), typeof(NDLaguerre), typeof(NDHermite), typeof(NDHermiteE),
+        };
+
         /// <summary>
-        ///     Every shared array with its name. Reading a polynomial constant creates it on first access (as NumPy's import
-        ///     does), so the list is complete from the first call on.
+        ///     Every shared array with its name. Reading a polynomial constant or class attribute creates it on first access
+        ///     (as NumPy's import does), so the list is complete from the first call on. A class attribute assigned later
+        ///     (<c>NDChebyshev.default_domain = ...</c>) is a new array the list does not watch: no oracle case assigns one.
         /// </summary>
         /// <returns>The arrays and their names.</returns>
-        /// <exception cref="InvalidOperationException">A polynomial module no longer has a constant the list names (a
-        ///     renamed member: update this list rather than watch fewer arrays).</exception>
+        /// <exception cref="InvalidOperationException">A polynomial module no longer has a constant the list names, or a
+        ///     series class its static <c>default_domain</c> / <c>default_window</c> (a renamed member: update this list
+        ///     rather than watch fewer arrays).</exception>
         public static IEnumerable<(NDArray Array, string Role)> All()
         {
             yield return (np.ma.nomask, "shared np.ma.nomask");
@@ -69,6 +78,14 @@ namespace NumSharp.Tests.Fuzz.Ownership
                     yield return ((NDArray)p.GetValue(m), $"shared np.polynomial.{name}.{prefix}{suffix}");
                 }
             }
+
+            foreach (var type in PolynomialClasses)
+                foreach (var name in new[] { "default_domain", "default_window" })
+                {
+                    var p = type.GetProperty(name, BindingFlags.Static | BindingFlags.Public)
+                            ?? throw new InvalidOperationException($"{type.Name} has no static {name}: update SharedArrays");
+                    yield return ((NDArray)p.GetValue(null), $"shared {type.Name}.{name}");
+                }
         }
 
         /// <summary>The shared arrays by reference, for <see cref="Contains"/> (built on first use).</summary>

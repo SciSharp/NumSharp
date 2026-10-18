@@ -79,6 +79,15 @@ namespace NumSharp.Backends.Strings
         ///     more than one code point), not deltas. A layout bit, not a property.</summary>
         internal const int ExtendedCaseMask = 1 << 11;
 
+        /// <summary><c>XID_START_MASK</c>: <c>_PyUnicode_IsXidStart</c>, Unicode's XID_Start (the characters an identifier
+        ///     may start with, closed under NFKC). The LOW LINE U+005F is NOT in it: <see cref="IsIdentifier"/> admits it as a
+        ///     first character on its own, as CPython's <c>_PyUnicode_ScanIdentifier</c> does.</summary>
+        internal const int XidStartMask = 1 << 12;
+
+        /// <summary><c>XID_CONTINUE_MASK</c>: <c>_PyUnicode_IsXidContinue</c>, Unicode's XID_Continue (XID_Start plus
+        ///     digits, combining marks and connector punctuation such as the LOW LINE).</summary>
+        internal const int XidContinueMask = 1 << 13;
+
         /// <summary>The flags of <see cref="IsAlnum"/>: <c>Py_UNICODE_ISALNUM</c> is ALPHA, DECIMAL, DIGIT or NUMERIC.</summary>
         internal const int AlnumMask = AlphaMask | DecimalMask | DigitMask | NumericMask;
 
@@ -215,6 +224,54 @@ namespace NumSharp.Backends.Strings
         /// <returns>True for a case-ignorable character.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool IsCaseIgnorable(uint cp) => (Flags(cp) & CaseIgnorableMask) != 0;
+
+        /// <summary>
+        ///     CPython 3.12's <c>str.isidentifier()</c> (<c>PyUnicode_IsIdentifier</c> over <c>_PyUnicode_ScanIdentifier</c>):
+        ///     a non-empty string whose first code point is XID_Start or the LOW LINE U+005F and whose every other code point
+        ///     is XID_Continue — per code point, WITHOUT the NFKC normalization the Python parser applies to identifiers in
+        ///     source code, so <c>'ﬁ'</c> (XID_Start) is an identifier and <c>'x²'</c> (U+00B2 is not XID_Continue) is not.
+        /// </summary>
+        /// <param name="s">The string; its UTF-16 is read as code points (a surrogate pair is one code point, a lone
+        ///     surrogate is U+D800–U+DFFF, which has neither property — as a Python str holding one).</param>
+        /// <returns>True for a valid identifier; false for an empty string.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="s"/> is null.</exception>
+        /// <remarks>Python keywords (<c>'class'</c>) ARE identifiers to this test, as to CPython's: keyword-ness is a parser
+        ///     rule, not a character property. numpy.polynomial's classes validate their <c>symbol</c> with it.</remarks>
+        internal static bool IsIdentifier(string s)
+        {
+            if (s is null) throw new ArgumentNullException(nameof(s));
+            if (s.Length == 0)
+                return false;
+            int i = 0;
+            bool first = true;
+            while (i < s.Length)
+            {
+                // Decode one code point: a well-formed surrogate pair is one, anything else a single unit (a lone surrogate
+                // keeps its own value, which carries no flag).
+                uint cp = s[i];
+                if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+                {
+                    cp = (uint)char.ConvertToUtf32(s[i], s[i + 1]);
+                    i += 2;
+                }
+                else
+                {
+                    i++;
+                }
+                int f = Flags(cp);
+                if (first)
+                {
+                    if ((f & XidStartMask) == 0 && cp != 0x5F)
+                        return false;
+                    first = false;
+                }
+                else if ((f & XidContinueMask) == 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         /// <summary><c>_PyUnicode_ToUpperFull</c>: the code point's full uppercase mapping.</summary>
         /// <param name="cp">The code unit (past U+10FFFF maps to itself).</param>

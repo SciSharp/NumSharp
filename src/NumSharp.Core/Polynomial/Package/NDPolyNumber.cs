@@ -205,7 +205,9 @@ namespace NumSharp
         ///     NDArray is an ndarray; a typed C# array (or <see cref="Memory{T}"/>) of a dtype is converted with
         ///     <see cref="np.asanyarray(object, DType, char)"/> to an ndarray; a Python SEQUENCE — a tuple
         ///     (<see cref="ITuple"/>), <c>object[]</c> or any other non-dtype C# array (jagged, <c>NDArray[]</c>), any other
-        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="PolySequence.ToArray"/>).
+        ///     enumerable — is coerced by np.array's rules, nested to any depth (<see cref="PolySequence.ToArray"/>). A
+        ///     boxed <see cref="PolyNumber"/> is returned as it is: the internal spelling of a NumPy SCALAR (no C# value is
+        ///     one — a 0-d NDArray is an ndarray here) that the series classes hand on through an <c>object</c> parameter.
         /// </summary>
         /// <param name="o">The value.</param>
         /// <returns>The number.</returns>
@@ -219,6 +221,10 @@ namespace NumSharp
                 case null:
                     throw new NotSupportedException("None has no NumSharp equivalent: NumPy would build an object array, a dtype NumSharp does not have");
                 case NDArray nd: return FromArray(nd);
+                // A value the package already classified, passed on boxed through an `object` parameter: the series
+                // classes compute NumPy SCALARS (mapparms' off/scl, integ's `off + scl*lbnd`, `1./scl`) and hand them to
+                // the module functions as NumPy hands them, without a 0-d array — which NumPy would read as an ndarray.
+                case PolyNumber p: return p;
                 case bool b: return FromPython(PyScalar.Bool(b));
                 case sbyte v: return FromPython(PyScalar.Int(v));
                 case byte v: return FromPython(PyScalar.Int(v));
@@ -251,10 +257,12 @@ namespace NumSharp
         ///     Callers use it to skip an <see cref="NDScope"/> when no intermediate array can appear.
         /// </summary>
         /// <param name="o">The value.</param>
-        /// <returns>True for bool, the integer primitives, BigInteger, float, double, Complex, Half, char, decimal.</returns>
+        /// <returns>True for bool, the integer primitives, BigInteger, float, double, Complex, Half, char, decimal, and a
+        ///     boxed scalar-kind <see cref="PolyNumber"/> (a Python or NumPy scalar the series classes pass on).</returns>
         public static bool IsScalarValue(object o)
             => o is bool or sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger
-                 or float or double or Complex or Half or char or decimal;
+                 or float or double or Complex or Half or char or decimal
+               || o is PolyNumber { Kind: not PolyNumberKind.Array };
 
         /// <summary>
         ///     <see cref="FromObject"/> for a statically typed value — the same classification, but a C# primitive,
