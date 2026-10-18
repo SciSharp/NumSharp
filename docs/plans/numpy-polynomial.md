@@ -1052,7 +1052,10 @@ a unit below, that document wins.
 > **Weights DELIVERED (2026-10-18)** — the five `{p}weight` names: `Polynomial/Package/NDPolyWeight.cs`, oracle tiers
 > `polyweight.jsonl` / `polyweight_host.jsonl` (3,095 cases, 0 excused), benchmark geomean 1.78× (189 cells, all
 > bit-exact). Routes, findings and floors: [numpy-polynomial-remaining-compute.md](numpy-polynomial-remaining-compute.md)
-> §3.2. The five `{p}gauss` names are still open.
+> §3.2. **Chebyshev points DELIVERED (2026-10-18)** — `chebpts1`, `chebpts2`, `chebgauss`:
+> `Polynomial/Package/NDPolyChebPoints.cs` + one emitted fill per formula, oracle tiers `polypts.jsonl` /
+> `polypts_host.jsonl` (709 cases, 0 excused), benchmark geomean 3.37× (35 cells, all bit-exact); §3.3 of the same
+> plan. `leggauss`, `laggauss`, `hermgauss`, `hermegauss` are still open.
 
 - **Scope:** `{p}gauss` and `{p}weight` for the five non-power bases.
 - **Shared backend:**

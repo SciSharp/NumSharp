@@ -5930,6 +5930,56 @@ Traps:
 - **A route probe and the benchmark disagree under load**: the same call read 212 µs in one run and 140 µs, then
   122 µs, in later ones. Compare routes interleaved in one process before acting on a benchmark cell.
 
+### Polynomial package — Chebyshev points and Gauss-Chebyshev quadrature (U8)
+`chebpts1`, `chebpts2`, `chebgauss` (3 names)
+
+Plans `docs/plans/numpy-polynomial.md` (U8) and `docs/plans/numpy-polynomial-remaining-compute.md` §3.3 (delivered
+2026-10-18). **Bit-exact with NumPy 2.4.2**: oracle tiers `polypts.jsonl` (362 portable cases: errors, empty results,
+flags, Char) and `polypts_host.jsonl` (347 value cases, `RunHostLibmCorpus`), 0 excused. Unit tests
+`Polynomial/PolynomialChebPointsTests.cs` (9; 19 of 20 planted defects caught, the survivor equivalent). **Perf (NPY/NS,
+`benchmark/polynomial/polypts_*`, 35 cells, every one SHA-256-checked): geomean 3.37×** — chebpts1 2.26–4.83×, chebpts2
+1.15–11.9×, chebgauss 1.16–5.8×.
+
+- **Engine** (`Polynomial/Package/NDPolyChebPoints.cs`): NumPy's statements.
+  - npts goes through Python's `int()` and `_npts != npts` (`PolyPowerArgument`, shared with `{p}pow`): a fraction, a
+    str (`int('3')` succeeds, then `'3' != 3`) and a 0-d array holding 3.5 are `npts must be integer`.
+  - deg goes through `operator.index` (`PolyIndexArgument`): a float, even 3.0, is `deg must be an integer, received 3.0`.
+  - The nodes are NumPy's statement chains on the exact integer ramp: chebpts1 `sin(c·(1 − n + 2k))` with
+    `c = (0.5·π)/float(n)`, chebpts2 `cos(k·(π/(n − 1)) + (−π))` with linspace's endpoint stored as 0, chebgauss
+    `cos((π·(2k + 1))/(2.0·deg))`, and `w = π/deg` in every slot (`np.ones(deg)·c` is c exactly).
+  - chebpts1's `0.5*np.pi / n` converts n to a float BEFORE np.arange runs, so a count past the float range raises
+    CPython's `OverflowError: int too large to convert to float` there.
+- **One emitted fill per formula** (`DirectILKernelGenerator.PolyChebPoints.cs`, `GetPolyChebNodesKernel`). It writes
+  only the result, the ramp kept as a running double (exact below 2^53, i.e. for every count that can be allocated).
+  `Math.Sin` / `Math.Cos` are the C runtime functions NumPy's float64 loops call on win-amd64. The plan's arange + fused
+  `np.evaluate` route measured 1.27× / 1.41× at 1K: the ramp array and the 0-d parameter around a sin that costs the
+  same on both sides.
+- **chebpts1 computes half its sines.** Its ramp is antisymmetric and the C runtime's sin is odd bit for bit (measured:
+  140M values on ucrtbase, every chebpts1 argument up to 5,000 points among them; 7.5M on glibc), so each sine's
+  negation fills the mirrored slot. `Nodes_AreNumPysStatementChain` compares every element with `Math.Sin` of its own
+  argument, so a host whose sin is not odd fails CI instead of differing silently.
+- **np.arange's length rule is ported** (`NDPolyChebPoints.ArangeLength`, plan finding F8): `ceil((stop − start)/step)` as
+  a correctly rounded Python int division, checked against `(double)NPY_MAX_INTP` (2^63), every OverflowError re-raised
+  as `ValueError: Maximum allowed size exceeded`. A length that rounds to exactly 2^63 casts to INT64_MIN on x86, and
+  np.arange returns an EMPTY array. So:
+  - from 2^60 points: `array is too big; …`;
+  - counts in [2^63 − 512, 2^63 + 1024]: chebpts1 returns an empty float64 array (an empty OBJECT array from 2^63 + 2:
+    `NotSupportedException`), chebpts2 raises linspace's `IndexError: index -1 is out of bounds for axis 0 with size 0`,
+    chebgauss raises np.ones' `Maximum allowed dimension exceeded` (or `array is too big` below 2^63);
+  - past the band: `Maximum allowed size exceeded`;
+  - counts below the byte limit the machine cannot hold: NumPy's MemoryError is `OutOfMemoryException`.
+- **The floors under 1.5×**: chebpts2 and chebgauss at 10K (1.15×, 1.16×). NumPy's extra passes are cache-resident
+  there, and both sides spend about 5.5 ns per node in the same C runtime cos (NumSharp's managed call ~10% slower per
+  element than NumPy's C loop). Their arguments are rounded on the way to any mirror, so they have no exact pairs.
+
+Traps:
+- **`TaskStop` ends a background command's bash wrapper, not the app `dotnet run` started**: an orphaned probe kept 16
+  threads busy for 40 minutes, and the house rule does not allow killing it. Size a probe's loop before running it (a
+  bit-pattern sweep stepped by a fixed stride was 4.4·10^12 iterations).
+- **`python -I` removes the script's own folder from `sys.path`**: a script that imports a sibling script fails under it.
+- **A benchmark report must skip its own summary lines**: the runner prints per-section summaries after the cells, and a
+  section key such as `A` makes a summary line parse as a cell unless the label must contain a `/`.
+
 ### Random (`np.random.*`)
 `bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `dirichlet`, `exponential`, `f`, `gamma`, `geometric`, `get_bit_generator`, `gumbel`, `hypergeometric`, `laplace`, `logistic`, `lognormal`, `logseries`, `multinomial`, `multivariate_normal`, `negative_binomial`, `noncentral_chisquare`, `noncentral_f`, `normal`, `pareto`, `permutation`, `poisson`, `power`, `rand`, `randint`, `randn`, `random_sample`, `rayleigh`, `seed`, `set_bit_generator`, `shuffle`, `standard_cauchy`, `standard_exponential`, `standard_gamma`, `standard_normal`, `standard_t`, `triangular`, `uniform`, `vonmises`, `wald`, `weibull`, `zipf`
 

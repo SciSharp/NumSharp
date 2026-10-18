@@ -233,6 +233,28 @@ raises Python's own operator TypeErrors (`unsupported operand type(s) for +: 'fl
 
 ### 3.3 `chebpts1`, `chebpts2`, `chebgauss` — U8 / U9
 
+> **DELIVERED (2026-10-18).** `src/NumSharp.Core/Polynomial/Package/NDPolyChebPoints.cs` + the fill kernels
+> `src/NumSharp.Core/Backends/Kernels/Direct/DirectILKernelGenerator.PolyChebPoints.cs` + the three facade members; oracle
+> tiers `polypts.jsonl` (362 portable cases: errors, empty results, flags, Char) and `polypts_host.jsonl` (347 value
+> cases, `RunHostLibmCorpus`), zero excuses; unit tests `test/NumSharp.Tests/Polynomial/PolynomialChebPointsTests.cs` (9;
+> 19 of 20 planted defects caught, the survivor equivalent: chebpts2's endpoint from the ramp formula is also cos of a
+> value within a few ULP of 0, which is 1.0); 189 argument-kind outcomes probed against NumPy, all equal but the two
+> counts where NumPy returns an empty object array (refused); benchmark `benchmark/polynomial/polypts_results.md` (35
+> cells, all bit-exact, geomean 3.37×). What the delivery changed against the recommendation below:
+> - **One emitted fill per formula instead of arange + fused np.evaluate.** The recommended route measured 1.27×
+>   (chebpts1) and 1.41× (chebgauss) at 1K points: around a sin that costs the same on both sides it paid the int64
+>   ramp's allocation and fill (0.95 µs), the 0-d parameter (0.27 µs) and np.evaluate's setup. The fill writes only the
+>   result, its ramp a running double (exact below 2^53, i.e. for every count that can be allocated): 1.65× / 1.78× at
+>   1K, and chebpts2's linspace pass is gone too (one fill: `cos(k·s + (-π))`, the endpoint stored as cos(0)).
+> - **chebpts1's fill is MIRRORED** (finding F9): its ramp is antisymmetric and the C runtime's sin is odd bit for bit,
+>   so half the sin calls fill both halves with the same bytes — 2.26× at 10K (was 1.20×), 4.2–4.8× at 100K / 1M.
+> - **np.arange's length rule is ported** (finding F8), so every huge count raises NumPy's error in NumPy's order and
+>   the 2^63 band behaves as on NumPy's x86 builds (chebpts1 empty, chebpts2 IndexError, chebgauss np.ones' errors).
+> - **The cells under 1.5×** are chebpts2 and chebgauss at 10K (1.15×, 1.16×): NumPy's extra passes are cache-resident
+>   there, and both sides spend about 5.5 ns per node in the same C runtime cos, NumSharp's managed call ~10% slower per
+>   element than NumPy's C loop. Their arguments have no exact pairs (they are rounded on the way to the mirror), so
+>   F9's halving does not apply.
+
 **NumPy 2.4.2.**
 - `chebpts1(npts)`: `_npts = int(npts)`; `_npts != npts` → `ValueError('npts must be integer')`; `< 1` → `npts must be >= 1`;
   `x = 0.5*np.pi/_npts * np.arange(-_npts+1, _npts+1, 2)`; `np.sin(x)`.
@@ -445,13 +467,13 @@ Measured proxies (the unit functions the members call; the class adds an object 
 | 4 | `lagweight` | laguerre | **DELIVERED** — fused; int16/uint8 cast-first; f16 eager | — | portable f32, host-libm f64/f16/complex | f64 1.04× / 1.84× at 100K / 1M (CRT exp floor), f16 0.76× (house f16 exp); arrays geomean 1.45 |
 | 5 | `hermweight` | hermite | **DELIVERED** — fused with `Square` (NumPy's `x**2`); int / bool cast-first; f16 eager | `Power(x, 2)` (pow: slower, not NumPy's op) | as lagweight | f64 0.98× / 1.98× at 100K / 1M, f16 0.76×; arrays geomean 1.51 |
 | 6 | `hermeweight` | hermite_e | **DELIVERED** — as hermweight | `Power(x, 2)` | as lagweight | f64 0.92× / 1.87× at 100K / 1M; arrays geomean 1.54 |
-| 7 | `chebgauss` | chebyshev | **`np.arange` + fused `Cos`; `np.full` for w** | eager (2× the fixed cost) | host-libm (cos) | 2.1–3.0× |
+| 7 | `chebgauss` | chebyshev | **DELIVERED** — one emitted fill (`cos((π·(2k+1))/(2.0·deg))`), `np.full` for w | arange + fused `Cos` (1.41× at 1K: the ramp and the 0-d parameter around a cos-bound pass) | host-libm (cos) | 1.16× (10K, cos floor) – 5.8×; geomean 3.14 |
 | 8 | `leggauss` | legendre | **composition** (U7 companion → `eigvalsh` → U3/U4 → house ufuncs/reductions) | arena (not needed) | host-pinned (syevd) | 4.3–10.2× |
 | 9 | `laggauss` | laguerre | **composition** (as leggauss, no symmetrisation) | — | host-pinned | 18.9× (deg 20) |
 | 10 | `hermgauss` | hermite | **composition + `_normed_hermite_n` as a U3 step-table program** | array-statement loop (1.14–1.51×) | host-pinned | est. 3.8–12× |
 | 11 | `hermegauss` | hermite_e | **composition + `_normed_hermite_e_n` as a U3 step-table program** | array-statement loop (1.38×) | host-pinned | est. as hermgauss |
-| 12 | `chebpts1` | chebyshev | **`np.arange` + fused `Sin`** (lever: NDExpr index leaf) | eager | host-libm (sin) | 1.8–2.0× |
-| 13 | `chebpts2` | chebyshev | **`np.cos(np.linspace(...))`** (lever: index leaf) | — | host-libm (cos) | 1.39× (1M, cos-bound) – 4.1× |
+| 12 | `chebpts1` | chebyshev | **DELIVERED** — one emitted fill, MIRRORED (the antisymmetric ramp and the odd C-runtime sin: half the sin calls, the same bytes) | arange + fused `Sin` (1.27× at 1K) | host-libm (sin) | 2.26–4.83×; geomean 3.99 |
+| 13 | `chebpts2` | chebyshev | **DELIVERED** — one emitted fill (`cos(k·s + (-π))`, endpoint `cos(0)`) | `np.cos(np.linspace(...))` (1.8× at 1K, one pass more) | host-libm (cos) | 1.15× (10K, cos floor) – 11.9×; geomean 3.92 |
 | 14 | `chebinterpolate` | chebyshev | **composition** (`chebpts1` → delegate → `chebvander` → `np.dot` → 2 in-place divides) | a fused DCT (breaks gemv parity) | host-pinned (gemv) | 4.8–12.7× |
 | 15 | `polyfit` | polynomial | **composition of `_fit`** + fused streaming norm + C-ordered scaling, `lstsq` via backend | a fit kernel (LAPACK-bound) | host-pinned (gelsd) | 1.41× (n=1000 d=10; ceiling ~1.77×) |
 | 16 | `chebfit` | chebyshev | as `polyfit` | as `polyfit` | host-pinned | 1.51–2.6× |
@@ -478,8 +500,8 @@ Measured proxies (the unit functions the members call; the class adds an object 
    otherwise. Decided from `Shape.NpyIterOutputShape` of the `x - r` temporary.
 3. **Dragon4 float32/float16 entry points** (#28 and the class printing).
 4. **U3 over a series algebra** (#21–#26: `convert`/`cast`/`identity`), reusing the U4 `PyVal1D` interpreter pattern.
-5. *Optional:* an **NDExpr index leaf** (iota / linspace ramp): chebpts1 ~3× at small n, chebpts2 one pass less at
-   large n; also np.hanning & co.
+5. *Optional:* an **NDExpr index leaf** (iota / linspace ramp). No longer needed by the Chebyshev points (their own
+   fill kernel writes the ramp, §3.3); still a lever for np.hanning & co.
 6. *Optional:* **lane-matched float16 in NDExpr**, removing the float16 split of the weights (and of np.var/np.std).
 7. *Optional:* fusing `mapdomain` into the U3 kernel prologue for the classes' `__call__`.
 8. *Not needed:* X23 (NDExpr `Power` fast path). The weights use `Square`, which is what NumPy's `x**2` runs; X23
@@ -517,6 +539,16 @@ Measured proxies (the unit functions the members call; the class adds an object 
 - **F7 — the scalar floor.** A NumSharp function of a scalar returns a 0-d NDArray, and `NDArray.Scalar` alone costs
   0.34 µs (allocation plus disposal); NumPy returns a Python float or a NumPy scalar. So any scalar call NumPy answers
   in under ~0.5 µs of Python arithmetic stays below 1.5×, whatever the computation costs.
+- **F8 — np.arange's length is a DOUBLE, and at 2**63 its C cast is x86's INT64_MIN** (found delivering the
+  Chebyshev points). `PyArray_ArangeObj` computes `ceil((stop - start) / step)` as a Python int true division, range-
+  checks it against `(double)NPY_MAX_INTP`, which rounds to 2**63, and casts. A length that rounds to exactly 2**63
+  passes and casts to INT64_MIN under cvttsd2si (undefined C; .NET 9+ saturates), a negative length, so np.arange
+  returns an EMPTY array: `chebpts1(2**63 - 2)` is `array([])`, `chebpts2` there fails on linspace's `y[-1] = stop`
+  (IndexError), and every OverflowError of the length computation becomes `ValueError: Maximum allowed size
+  exceeded`. `NDPolyChebPoints.ArangeLength` ports it (np.random.permutation has the start-0 case).
+- **F9 — the C runtime's sin is an odd function bit for bit** (win-amd64 ucrtbase: 140M values, every chebpts1
+  argument up to 5,000 points among them; glibc: 7.5M). So a computation over an exactly antisymmetric argument set
+  may evaluate half of it and negate: chebpts1's fill does, 1.9–2.0× faster at 10K–1M with the same bytes.
 
 ## 7. Oracle and test hooks per family
 
@@ -524,7 +556,7 @@ Measured proxies (the unit functions the members call; the class adds an object 
 |---|---|---|
 | `polyvalfromroots` | the `polyeval` tier (portable), new section | all layouts × dtypes × tensor; the four complex modes of §3.1; Python/NumPy-scalar x; list/tuple x; empty r; int/bool r; the ValueError; the result-layout facet |
 | weights | `chebweight`/`legweight` portable; `lagweight`/`hermweight`/`hermeweight` host-libm (`RunHostLibmCorpus`) | every dtype incl. bool/int8/uint8 wrap-arounds, Python-scalar kinds, list/tuple TypeErrors, the huge-Python-int TypeError |
-| `chebpts1`/`chebpts2`/`chebgauss` | host-libm | the `int()`/`_as_int` argument matrix of §3.3 |
+| `chebpts1`/`chebpts2`/`chebgauss` | **DELIVERED**: `polypts.jsonl` (362, portable: errors, empty results, flags, Char) + `polypts_host.jsonl` (347, host-libm values) | the `int()`/`_as_int` argument matrix of §3.3, np.arange's 2**63 band |
 | `leg/lag/herm/hermegauss` | host-pinned (`linalg_parity` model, syevd at one thread) | degrees 1…200; Hermite past 207 (where the plain recurrence overflows and NumPy's normed one does not) |
 | `chebinterpolate` | host-pinned (gemv) | (n,) and (n, k) results, every dtype the delegate returns, `args` |
 | fits | host-pinned (gelsd) | the `_fit` TypeError/ValueError matrix, deg lists, weights, 2-D y, `full`, float16 refusal, float32 lite |

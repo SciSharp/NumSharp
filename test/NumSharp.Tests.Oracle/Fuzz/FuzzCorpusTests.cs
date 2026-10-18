@@ -865,6 +865,20 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void PolyweightHost() => RunHostLibmCorpus("polyweight_host.jsonl");
 
+        // numpy.polynomial's Chebyshev points and Gauss-Chebyshev quadrature (plan U8): chebpts1 / chebpts2 / chebgauss
+        // over int()'s / operator.index's argument kinds (Python ints, floats, bools, strs, None, complexes, np.float16 /
+        // np.uint16 scalars, 0-d arrays of every dtype, sized arrays, lists, tuples), np.arange's double length rule at the
+        // int64 edge (array is too big, the 2**63 band, Maximum allowed size exceeded), the results' flags and Char.
+        // PORTABLE: the errors, the empty results and the flags; the values are the PolyptsHost tier.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void Polypts() => RunCorpus("polypts.jsonl");
+
+        // The node values: np.sin / np.cos of float64 values, the C runtime's on both sides — HOST-PINNED.
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void PolyptsHost() => RunHostLibmCorpus("polypts_host.jsonl");
+
         // The {p}roots calls that reach LAPACK geev (np.linalg.eigvals of the companion — rotated [::-1, ::-1] for every
         // basis but the power series — sorted in place): NumSharp computes them only through NumSharp.Interop.OpenBLAS's
         // LAPACK seam, the scipy-openblas NumPy itself calls, so the tier is HOST-PINNED exactly like LinalgParity
@@ -1175,6 +1189,8 @@ namespace NumSharp.Tests.Fuzz
             ["polyalgebra_parity.jsonl"] = 135,   // U2's BLAS-bound products (host-pinned): 186 at delivery, 139 once complex products with infinities / NaNs below zdotu's vector block moved to the portable tier (the managed dot reproduces zdotu's C99 result and CDOUBLE_dot's plain loop)
             ["polyroots.jsonl"] = 8150,   // numpy.polynomial companion matrices + the roots that never reach LAPACK (U7): {p}companion / {p}roots x 6 bases, sections A-L of gen_polyroots — 6,681 at delivery, 8,195 with the wholeness sections (K: two-term OBJECT series NumPy still computes, 0-d-zero trims, edge numeric series; L: object series of three or more terms — the companion arithmetic's OverflowErrors and eigvals' isfinite TypeError)
             ["polyweight.jsonl"] = 1800,   // numpy.polynomial weight functions (U8): {p}weight x 5 bases, sections A-H of gen_polyweight — 1,860 at delivery
+            ["polypts.jsonl"] = 340,   // numpy.polynomial Chebyshev points / Gauss-Chebyshev quadrature (U8): errors, empties, flags, Char — 362 at delivery
+            ["polypts_host.jsonl"] = 320,   // their sin / cos values, host-pinned — 347 at delivery
             ["polyweight_host.jsonl"] = 1200,   // the exp-based weights' C-runtime loops (float64 / float16 / complex128), host-pinned — 1,235 at delivery
             ["polyroots_parity.jsonl"] = 1350,   // U7's roots that run LAPACK geev (host-pinned, threads = 1): 1,242 at delivery, 1,354 with section K's edge series
             ["place.jsonl"] = 12,

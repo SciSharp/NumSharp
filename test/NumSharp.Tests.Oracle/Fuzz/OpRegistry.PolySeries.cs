@@ -471,6 +471,8 @@ namespace NumSharp.Tests.Fuzz
                         "companion" => a.CalcFacet(m.chebcompanion(a.Get("c"))),
                         "roots" => a.CalcFacet(m.chebroots(a.Get("c"))),
                         "weight" => a.CalcFacet(m.chebweight(a.Get("x"))),
+                        "pts1" => a.CalcFacet(m.chebpts1(a.Get("npts"))),
+                        "pts2" => a.CalcFacet(m.chebpts2(a.Get("npts"))),
                         _ => throw new NotSupportedException($"chebyshev op '{fn}' is not registered in OpRegistry"),
                     };
                 }
@@ -576,7 +578,8 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>
         ///     The tuple-valued polynomial functions: <c>as_series</c> (one slot per series — arity asserted),
         ///     <c>mapparms</c> (<c>(off, scl)</c>, each a Python / NumPy scalar recorded as a 0-d array, or an array),
-        ///     and the six <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by <see cref="ApplyPolyAlgebraTuple"/>).
+        ///     <c>chebgauss</c> (<c>(x, w)</c>), and the six <c>{p}div</c> (<c>(quo, rem)</c>, dispatched by
+        ///     <see cref="ApplyPolyAlgebraTuple"/>).
         /// </summary>
         /// <param name="op">The key.</param>
         /// <param name="p">The params.</param>
@@ -593,6 +596,12 @@ namespace NumSharp.Tests.Fuzz
                 {
                     var alist = a.Get("alist");
                     return u.as_series(alist, a.Flag("trim", true));
+                }
+                case "chebyshev.chebgauss":
+                {
+                    // Gauss-Chebyshev quadrature's (x, w): both slots, values or (a "facet": "flags" case) flags.
+                    var (x, w) = np.polynomial.chebyshev.chebgauss(a.Get("deg"));
+                    return new[] { a.CalcFacet(x), a.CalcFacet(w) };
                 }
                 case "polyutils.mapparms":
                 {

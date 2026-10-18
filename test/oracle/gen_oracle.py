@@ -20801,6 +20801,158 @@ def gen_polyweight():
 
 
 # ---------------------------------------------------------------------------
+# T-polypts — numpy.polynomial's Chebyshev points and Gauss-Chebyshev quadrature (plan U8, numpy-polynomial-remaining-
+# compute.md §3.3): chebpts1(npts) = np.sin(0.5*np.pi/n * np.arange(-n + 1, n + 1, 2)), chebpts2(npts) =
+# np.cos(np.linspace(-np.pi, 0, n)), chebgauss(deg) = (np.cos(np.pi * np.arange(1, 2*deg, 2) / (2.0*deg)),
+# np.ones(deg) * (np.pi/deg)):
+#   (A) every count 1..80 and the counts around the powers of two up to 2049 (the values);
+#   (B) the argument kinds: Python ints / floats / bools / strs (int()'s parser: signs, underscores, Unicode digits and
+#       spaces), None, complexes, np.float16 / np.uint16 scalars as bit patterns, 0-d arrays of every dtype, 1-D / 2-D
+#       arrays, lists and tuples — int() and `_npts != npts` for npts, operator.index for deg;
+#   (C) the size edges: np.arange's double length rule — array is too big from 2**60, the band whose length rounds to
+#       2**63 and casts to INT64_MIN (chebpts1's empty float64 result, chebpts2's IndexError, chebgauss' np.ones errors),
+#       Maximum allowed size exceeded past it — and chebpts1's int-to-float OverflowError;
+#   (D) the results' C / F / OWNDATA flags;
+#   (E) Char (the uint16 proxy of the 0-d count arrays, relabelled).
+# HOST SPLIT. Every node is np.sin / np.cos of a float64 value, the C runtime's on both sides: those values go to
+# polypts_host.jsonl, replayed on win-amd64 only. Errors, empty results and the flags are portable.
+# Not recorded: chebpts1's empty OBJECT result (npts in [2**63 + 2, 2**63 + 1024], NumSharp has no object dtype —
+# unit-tested), and counts NumPy refuses with MemoryError (they depend on the machine).
+POLY_PTS_OPS = ("chebyshev.chebpts1", "chebyshev.chebpts2", "chebyshev.chebgauss")
+_PP_T = 2 ** 63
+_PP_PY_INTS = [("0", 0), ("m1", -1), ("m3", -3), ("m2p70", -(2 ** 70)), ("2p60", 2 ** 60), ("2p61", 2 ** 61),
+               ("2p62", 2 ** 62), ("tm513", _PP_T - 513), ("tm512", _PP_T - 512), ("tm511", _PP_T - 511),
+               ("tm2", _PP_T - 2), ("tm1", _PP_T - 1), ("t", _PP_T), ("tp1", _PP_T + 1), ("tp2", _PP_T + 2),
+               ("tp1024", _PP_T + 1024), ("tp1025", _PP_T + 1025), ("tp2048", _PP_T + 2048), ("2p64m1", 2 ** 64 - 1),
+               ("2p64", 2 ** 64), ("2p70", 2 ** 70), ("2p1023", 2 ** 1023), ("2p1024m2p971", 2 ** 1024 - 2 ** 971),
+               ("2p1024m2p970", 2 ** 1024 - 2 ** 970), ("2p1024", 2 ** 1024), ("2p1100", 2 ** 1100)]
+_PP_PY_FLOATS = [("3.0", 3.0), ("3.7", 3.7), ("1.0", 1.0), ("2.0", 2.0), ("0.5", 0.5), ("0.0", 0.0), ("-0.0", -0.0),
+                 ("-2.0", -2.0), ("3.0000000000000004", 3.0000000000000004), ("5e-324", 5e-324), ("nan", float("nan")),
+                 ("inf", float("inf")), ("-inf", float("-inf")), ("1e300", 1e300), ("1e19", 1e19),
+                 ("2p63f", float(_PP_T)), ("2p60f", float(2 ** 60)), ("2p62f", float(2 ** 62))]
+_PP_STRS = ["3", "3.0", " 3 ", "３", "٣", "3 ", " 3", "3_0", "1_000", "_3", "3_", "0x3", "3e0", "-0",
+            "+3", "-3", "00", "", " ", "abc", "１０"]
+_PP_F16 = [("3", 0x4200), ("3.5", 0x4300), ("1", 0x3c00), ("2", 0x4000), ("0", 0x0000), ("m0", 0x8000), ("nan", 0x7e00),
+           ("inf", 0x7c00), ("m2", 0xc000), ("sub", 0x0001)]
+
+
+def gen_polypts():
+    """Generates the polypts tiers (see the T-polypts header).
+
+    Returns:
+        (cases, host): the portable cases and the host-pinned (win-amd64 libm) value cases.
+    """
+    cases = []
+    host = []
+    counter = [0]
+    skipped = {"object": 0, "memory": 0}
+    A = _PSArr
+
+    def flags(a):
+        """The [C_CONTIGUOUS, F_CONTIGUOUS, OWNDATA] record of one result.
+
+        Args:
+            a: The result array.
+
+        Returns:
+            A bool array of three flags.
+        """
+        return np.array([a.flags.c_contiguous, a.flags.f_contiguous, a.flags.owndata])
+
+    def emit(op, arg, layout, cid, facet=None):
+        """Records one call of op on arg (its error, or its result's values / flags).
+
+        Args:
+            op: The corpus key ("chebyshev.chebpts1", ...).
+            arg: The npts / deg argument (a Python value, a NumPy scalar or an _PSArr).
+            layout: The case's layout label.
+            cid: The case id prefix.
+            facet: "flags" to record the result's flags instead of its values.
+
+        Returns:
+            None.
+        """
+        module, name = op.split(".")
+        fn = getattr(_poly_module(module), name)
+        is_tuple = name == "chebgauss"
+        operands = []
+        params = {"deg" if is_tuple else "npts": _ps_enc(arg, operands)}
+        if facet:
+            params["facet"] = facet
+        n = counter[0]
+        counter[0] += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = fn(_ps_py(arg))
+        except MemoryError:
+            skipped["memory"] += 1             # the machine's limit, not NumPy's rule
+            return
+        except Exception as e:
+            cases.append({"id": f"{cid}/{n}", "op": op, "params": params, "operands": operands,
+                          "expected": {"kind": "tuple"} if is_tuple else {}, "expects_throw": True,
+                          "error": _poly_exc(e), "layout": layout, "valueclass": "error"})
+            return
+        slots = [np.asarray(s) for s in (r if is_tuple else (r,))]
+        if any(s.dtype == object for s in slots):
+            skipped["object"] += 1             # NumPy's empty object array (see the header)
+            return
+        empty = all(s.size == 0 for s in slots)
+        if facet == "flags":
+            slots = [flags(s) for s in slots]
+        expected = _tuple_expected(slots) if is_tuple else _arr_expected(slots[0])
+        dest = cases if facet == "flags" or empty else host
+        dest.append(_case(op, params, operands, expected, layout, "polypts", cid=f"{cid}/{n}"))
+
+    for op in POLY_PTS_OPS:
+        # (A) the counts
+        for k in list(range(1, 81)) + [100, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1000, 1023, 1024, 1025, 2047,
+                                       2048, 2049]:
+            emit(op, k, "python_int", f"{op}/n/{k}")
+
+        # (B) argument kinds
+        for lab, v in _PP_PY_INTS:
+            emit(op, v, "python_int", f"{op}/pyint/{lab}")
+        for lab, v in _PP_PY_FLOATS:
+            emit(op, v, "python_float", f"{op}/pyfloat/{lab}")
+        for v in (True, False):
+            emit(op, v, "python_bool", f"{op}/pybool/{v}")
+        for i, s in enumerate(_PP_STRS):
+            emit(op, s, "python_str", f"{op}/str/{i}")
+        emit(op, None, "python_object", f"{op}/none")
+        for lab, v in (("3+0j", 3 + 0j), ("3+1j", 3 + 1j), ("0j", 0j)):
+            emit(op, v, "python_complex", f"{op}/pycomplex/{lab}")
+        for lab, bits in _PP_F16:
+            emit(op, _pw_f16(bits), "numpy_scalar", f"{op}/npf16/{lab}")
+        for v in (0, 1, 2, 3, 100):
+            emit(op, np.uint16(v), "numpy_scalar", f"{op}/npu16/{v}")
+        for dt in ALL_DTYPES:
+            kind = np.dtype(dt).kind
+            vals = [True, False] if kind == "b" else [3, 0] + ([3.5, -2.0, float("nan")] if kind == "f" else []) \
+                + ([3 + 0j, 3 + 1j] if kind == "c" else [])
+            for v in vals:
+                with np.errstate(all="ignore"):
+                    emit(op, A(np.array(v, dtype=dt)), "scalar_0d", f"{op}/zerod/{dt}/{v}")
+        for lab, arr in (("1d_one", np.array([3])), ("1d_empty", np.zeros(0)), ("1d_two", np.array([3, 4])),
+                         ("2d_one", np.array([[3]])), ("1d_float", np.array([3.0]))):
+            emit(op, A(arr), "c_contiguous_nd", f"{op}/arr/{lab}")
+        for lab, v in (("list", [3]), ("list_empty", []), ("list_nested", [[3]]), ("tuple", (3,)), ("tuple_empty", ())):
+            emit(op, v, "python_object", f"{op}/seq/{lab}")
+
+        # (D) flags of the results (empty band results included)
+        for k in (1, 2, 5, 64):
+            emit(op, k, "python_int", f"{op}/flags/{k}", facet="flags")
+        emit(op, _PP_T, "python_int", f"{op}/flags/band", facet="flags")
+
+    # (E) Char: NumSharp's uint16-like dtype is the uint16 proxy, relabelled.
+    cases += _relabel_dtype([c for c in cases if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    host += _relabel_dtype([c for c in host if "/uint16/" in (c.get("id") or "")], "uint16", "char")
+    print(f"  portable {len(cases)}, host-pinned {len(host)}  (skipped: {skipped['object']} object results, "
+          f"{skipped['memory']} MemoryErrors)")
+    return cases, host
+
+
+# ---------------------------------------------------------------------------
 # T-nditer-construct — np.nditer's DESCRIPTOR construction (the open-bugs rundown's bug 6 and its numeric neighbours):
 # npyiter_check_casting's read / write-back cast checks, npyiter_allocate_arrays' copy routes (a read-only 0-d operand
 # copied whatever the flags say, a `copy` / `updateifcopy` operand copied into a temporary laid out in the iterator's
@@ -22230,8 +22382,13 @@ def main():
         cases, host = gen_polyweight()
         write_jsonl(os.path.join(corpus_dir, "polyweight.jsonl"), cases)
         write_jsonl(os.path.join(corpus_dir, "polyweight_host.jsonl"), host)
+    elif mode == "polypts":
+        # numpy.polynomial Chebyshev points / Gauss-Chebyshev quadrature (U8): portable + host-pinned (sin / cos).
+        cases, host = gen_polypts()
+        write_jsonl(os.path.join(corpus_dir, "polypts.jsonl"), cases)
+        write_jsonl(os.path.join(corpus_dir, "polypts_host.jsonl"), host)
     else:
-        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
+        print(f"unknown mode '{mode}' (expected: conversion | creation | multioutput | smoke | astype_full | binary | divmod_power | comparison | unary | reduce | where | place | putmask | matmul | rounding | bitwise | unary_extra | sinc | i0 | nanreduce | scan | nanscan | stat | logic | modf | manip | sort | tail | params | aliasing | copyto | errors | groupa | numpy_f32 | nan_order | reduce_start | matmul_parity | linalg_parity | poly | einsum | specials | precision | random_parity | generator_parity | products | fft | windows | evaluate | real_if_close | instance | emath | polyeval | polyseries | polycalc | polyvander | polyalgebra | polyroots | polyweight | polypts | iter | dtype_text | errors_full | out_where | gcd | unwrap | half_minmax | clip_pyint | clip_ufunc | reduce_kwargs | sum_identity | varstd | nanvarstd | mean_loops | ndarray | nanmean)")
         sys.exit(2)
 
 

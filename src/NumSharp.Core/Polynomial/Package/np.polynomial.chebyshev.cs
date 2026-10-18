@@ -656,5 +656,94 @@ namespace NumSharp
         /// </remarks>
         [NDScoped]
         public NDArray chebweight(object x) => NDPolyWeight.Weight(PolyBasis.Chebyshev, x);
+
+        // ---------------------------------------------------------------------------------------------
+        //  Chebyshev points and Gauss-Chebyshev quadrature (plan U8): chebpts1 / chebpts2 / chebgauss
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The Chebyshev points of the first kind: <c>sin(0.5*pi/npts * k)</c> for <c>k = -npts+1, -npts+3, …, npts-1</c>,
+        ///     i.e. <c>-cos(pi*(2j + 1)/(2*npts))</c> in increasing order — the roots of the Chebyshev polynomial
+        ///     <c>T_npts</c>, the classic interpolation nodes. Computed as NumPy 2.4.2 writes it (an integer ramp, one product,
+        ///     <c>np.sin</c>) in one pass with no intermediate arrays; bit-identical to NumPy.
+        /// </summary>
+        /// <param name="npts">
+        ///     The number of points, which must be integral: a C# integer, <see cref="System.Numerics.BigInteger"/> or
+        ///     <c>bool</c>; a <c>float</c> / <c>double</c> / <see cref="System.Half"/> / <c>decimal</c> or a 0-d
+        ///     <see cref="NDArray"/> equal to an integer (<c>3.0</c>); or a str of an integer — which NumPy accepts in
+        ///     <c>int()</c> and then rejects, since <c>'3' != 3</c>. Python's <c>int(npts)</c> decides everything else.
+        /// </param>
+        /// <returns>A new float64 array of <paramref name="npts"/> points in [-1, 1].</returns>
+        /// <exception cref="ValueError"><c>npts must be integer</c> (a fraction, or a str), <c>npts must be &gt;= 1</c>,
+        ///     int()'s <c>cannot convert float NaN to integer</c> / <c>invalid literal for int() with base 10: '…'</c>, or a
+        ///     count too large to allocate: <c>array is too big; …</c> (from <c>2**60</c>) or <c>Maximum allowed size
+        ///     exceeded</c> (past npy_intp, NumPy's np.arange length rule).</exception>
+        /// <exception cref="TypeError">int()'s <c>int() argument must be a string, a bytes-like object or a real number,
+        ///     not '…'</c> (null, a <see cref="System.Numerics.Complex"/>, a list or tuple) or <c>only 0-dimensional arrays can
+        ///     be converted to Python scalars</c> (an array of one or more dims).</exception>
+        /// <exception cref="System.OverflowException">int() of an infinity (<c>cannot convert float infinity to integer</c>),
+        ///     or a count past the float range (<c>int too large to convert to float</c>, from <c>0.5*np.pi / npts</c>).</exception>
+        /// <exception cref="System.NotSupportedException">A count in <c>[2**63 + 2, 2**63 + 1024]</c>, where NumPy's np.arange
+        ///     length rounds to <c>2**63</c> and returns an EMPTY object array (a dtype NumSharp does not have). The counts
+        ///     <c>[2**63 - 512, 2**63 + 1]</c> return an empty float64 array, as NumPy's do.</exception>
+        /// <exception cref="System.OutOfMemoryException">A count below the byte limit that the machine cannot hold (NumPy's
+        ///     MemoryError).</exception>
+        /// <remarks>
+        ///     <para>sin is the C runtime's on both sides (Math.Sin, NumPy's float64 loop on win-amd64), so the speed gain is
+        ///     NumPy's ramp, product and temporaries, not the sine.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebpts1.html</para>
+        /// </remarks>
+        [NDScoped]
+        public NDArray chebpts1(object npts) => NDPolyChebPoints.Pts1(npts);
+
+        /// <summary>
+        ///     The Chebyshev points of the second kind: <c>cos(linspace(-pi, 0, npts))</c>, i.e. <c>-cos(pi*k/(npts - 1))</c>
+        ///     in increasing order — the extrema of <c>T_(npts-1)</c> together with both endpoints ±1. Computed as NumPy 2.4.2
+        ///     writes it (linspace's ramp times its step plus its start, the endpoint stored as 0, then <c>np.cos</c>) in one
+        ///     pass; bit-identical to NumPy.
+        /// </summary>
+        /// <param name="npts">
+        ///     The number of points (at least 2), which must be integral: the same kinds as <see cref="chebpts1"/>'s.
+        /// </param>
+        /// <returns>A new float64 array of <paramref name="npts"/> points from -1 to 1.</returns>
+        /// <exception cref="ValueError"><c>npts must be integer</c>, <c>npts must be &gt;= 2</c>, int()'s ValueErrors, or a
+        ///     count too large to allocate (<c>array is too big; …</c>, <c>Maximum allowed size exceeded</c>).</exception>
+        /// <exception cref="TypeError">int()'s TypeErrors (see <see cref="chebpts1"/>).</exception>
+        /// <exception cref="System.OverflowException">int() of an infinity.</exception>
+        /// <exception cref="IndexError">A count in <c>[2**63 - 512, 2**63 + 1024]</c>: np.arange returns an empty ramp there
+        ///     and NumPy's linspace fails on <c>y[-1, ...] = stop</c> (<c>index -1 is out of bounds for axis 0 with size 0</c>).</exception>
+        /// <exception cref="System.OutOfMemoryException">A count below the byte limit that the machine cannot hold.</exception>
+        /// <remarks>
+        ///     <para>cos is the C runtime's on both sides.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebpts2.html</para>
+        /// </remarks>
+        [NDScoped]
+        public NDArray chebpts2(object npts) => NDPolyChebPoints.Pts2(npts);
+
+        /// <summary>
+        ///     Gauss-Chebyshev quadrature: the nodes <c>x_k = cos(pi*(2k + 1)/(2*deg))</c> (DECREASING, the roots of
+        ///     <c>T_deg</c>) and the weights <c>w_k = pi/deg</c>, so that <c>Σ w_k f(x_k)</c> integrates
+        ///     <c>f(x)/sqrt(1 - x**2)</c> over [-1, 1] exactly for every polynomial f of degree up to <c>2*deg - 1</c>.
+        ///     Computed as NumPy 2.4.2 writes it (<c>np.cos(np.pi * np.arange(1, 2*deg, 2) / (2.0*deg))</c>,
+        ///     <c>np.ones(deg) * (np.pi/deg)</c>); bit-identical to NumPy.
+        /// </summary>
+        /// <param name="deg">
+        ///     The number of nodes: an integer — a C# integer, <see cref="System.Numerics.BigInteger"/>, <c>bool</c> or
+        ///     <c>char</c>, or a 0-d integer <see cref="NDArray"/> (Python's <c>operator.index</c>). A float, even an integral
+        ///     one, is refused.
+        /// </param>
+        /// <returns>(x, w): NumPy's tuple of two new float64 arrays of <paramref name="deg"/> elements.</returns>
+        /// <exception cref="TypeError"><c>deg must be an integer, received {deg}</c>, with <c>deg</c> as NumPy's f-string
+        ///     formats it (<c>received 3.0</c>, <c>received True</c> for a 0-d bool array).</exception>
+        /// <exception cref="ValueError"><c>deg must be a positive integer</c>, or a count too large to allocate:
+        ///     <c>array is too big; …</c>, <c>Maximum allowed dimension exceeded</c> (np.ones' shape past int64, for the counts
+        ///     whose np.arange came back empty) or <c>Maximum allowed size exceeded</c>.</exception>
+        /// <exception cref="System.OutOfMemoryException">A count below the byte limit that the machine cannot hold.</exception>
+        /// <remarks>
+        ///     <para>cos is the C runtime's on both sides.</para>
+        ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.chebyshev.chebgauss.html</para>
+        /// </remarks>
+        [NDScoped]
+        public (NDArray x, NDArray w) chebgauss(object deg) => NDPolyChebPoints.Gauss(deg);
     }
 }
