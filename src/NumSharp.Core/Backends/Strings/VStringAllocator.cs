@@ -60,8 +60,23 @@ namespace NumSharp.Backends.Strings
     ///     <para>
     ///     <b>Errors.</b> NumPy's members return -1 and the caller raises <c>MemoryError</c> with its own text; here the
     ///     members return the same codes (0 success, -1 failure, 1 = "is null" for <see cref="load"/>) and the callers
-    ///     throw <see cref="OutOfMemoryException"/> with NumPy's text. Every pointer the allocator hands out is
-    ///     <see cref="NativeMemory"/> memory (NumPy's <c>PyMem_RawMalloc</c>).
+    ///     throw <see cref="OutOfMemoryException"/> with NumPy's text. The arena is <see cref="NativeMemory"/> memory
+    ///     (NumPy's <c>PyMem_RawMalloc</c> / <c>PyMem_RawRealloc</c>).
+    ///     </para>
+    ///     <para>
+    ///     <b>Heap strings come from pages, not from one <c>malloc</c> each</b> (the one place this port leaves NumPy's
+    ///     memory calls; the cells are NumPy's byte for byte, but the heap pointer they hold is an address either way). NumPy
+    ///     <c>PyMem_RawMalloc</c>s every text that outgrows its arena slot, and that call was half of an assignment of
+    ///     longer texts over a held array: 44 ns a text of 20–60 bytes, 149 ns of 300–500 (measured, pinned). A text of at
+    ///     most <see cref="HeapPoolMaxBytes"/> bytes is carved instead from a page of its SIZE CLASS (block strides of 32
+    ///     to 1,040 bytes in steps of 16): pages of 1 to 64 KiB taken from <see cref="Unmanaged.Pooling.SizeBucketedBufferPool"/>
+    ///     (warm memory, recycled across buffers, accounted there), a free list and a bump pointer per page, an 8-byte header
+    ///     in front of every text that names its page. Freeing a text pushes it on its page's free list; a page whose last
+    ///     text is freed goes back to the buffer pool (the allocator keeps ONE emptied page as a spare for its next page), so
+    ///     the memory a buffer holds follows its live texts (as pymalloc's pools do), not its peak. A longer text is a block
+    ///     of its own from the C allocator (a null page in its header). The clear loop returns the pages whole and visits the
+    ///     cells only while such a block exists. Measured (pinned) on <c>np.copyto(dst, b)</c> of 100,000 texts over a held
+    ///     array: 62.2 → 39.6 ns a text at 20–60 bytes and 189 → 89 at 300–500 (NumPy 64.1 and 154).
     ///     </para>
     /// </remarks>
     internal sealed unsafe class VStringAllocator
@@ -110,6 +125,78 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>Heap bytes that are reported to the GC in batches of at least this many (see <see cref="AccountHeap"/>).</summary>
         private const long PressureBatch = 64 * 1024;
+
+        // ------------------------------------------------------------------------------------------------------------
+        // the heap pages (NumSharp's: NumPy mallocs each heap string — see the class remarks)
+        // ------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The longest heap text a page block holds (the payload of the largest size class, a block stride of 1,040 bytes):
+        ///     a longer text is a block of its own from the C allocator, whose cost is small next to copying the text.
+        /// </summary>
+        internal const int HeapPoolMaxBytes = 1032;
+
+        /// <summary>The number of heap size classes: block strides of 32, 48, …, 1,040 bytes (class k strides 16·(k + 2)).</summary>
+        private const int HeapClassCount = 64;
+
+        /// <summary>The bytes in front of every heap text: the address of its <see cref="HeapPage"/>, or null for a text that is a
+        ///     C-allocator block of its own.</summary>
+        private const int HeapBlockHeaderBytes = 8;
+
+        /// <summary>The bytes of a page's <see cref="HeapPage"/> header; the first block starts right after it.</summary>
+        private const int HeapPageHeaderBytes = 64;
+
+        /// <summary>log2 of the smallest page (1 KiB): a buffer with a few heap texts holds little memory for them.</summary>
+        private const int HeapMinPageShift = 10;
+
+        /// <summary>log2 of the largest page (64 KiB): pages double per class up to here, so a bulk assignment takes few pages.</summary>
+        private const int HeapMaxPageShift = 16;
+
+        /// <summary>
+        ///     The header of a heap page: one size class's blocks follow it. A page sits in two doubly linked lists — every page
+        ///     of the allocator (<see cref="ClearAndFree"/> returns them) and, while it has room, its class's OPEN list
+        ///     (allocations take the first page there).
+        /// </summary>
+        /// <remarks>Exactly <see cref="HeapPageHeaderBytes"/> bytes, so the blocks after it keep the page's alignment (the buffer
+        ///     pool aligns pages of 4 KiB and more to 64 bytes).</remarks>
+        [StructLayout(LayoutKind.Sequential, Size = HeapPageHeaderBytes)]
+        private struct HeapPage
+        {
+            /// <summary>The next page of the class's open list (null at its end).</summary>
+            public HeapPage* NextOpen;
+
+            /// <summary>The previous page of the class's open list (null for its first).</summary>
+            public HeapPage* PrevOpen;
+
+            /// <summary>The next page of the allocator (null at the end).</summary>
+            public HeapPage* NextAll;
+
+            /// <summary>The previous page of the allocator (null for the first).</summary>
+            public HeapPage* PrevAll;
+
+            /// <summary>The first freed block (its header still names this page; the 8 bytes after the header link the next
+            ///     freed block), or null.</summary>
+            public byte* Free;
+
+            /// <summary>The first block never handed out; equals <see cref="End"/> once every block was used once.</summary>
+            public byte* Bump;
+
+            /// <summary>One past the page's last whole block.</summary>
+            public byte* End;
+
+            /// <summary>The blocks handed out and not freed: the page is released (<see cref="ReleaseHeapPage"/>) when this
+            ///     reaches 0.</summary>
+            public int Live;
+
+            /// <summary>The size class (block stride 16·(Class + 2)).</summary>
+            public byte Class;
+
+            /// <summary>log2 of the page's bytes (the size it was taken from the buffer pool with, which Return needs).</summary>
+            public byte Shift;
+
+            /// <summary>1 while the page is in its class's open list.</summary>
+            public byte Open;
+        }
 
         // ------------------------------------------------------------------------------------------------------------
         // fault injection (tests only)
@@ -208,6 +295,36 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>The number of live heap strings (diagnostic: tests prove the clear loop frees every one).</summary>
         internal long HeapStrings { get; private set; }
+
+        /// <summary>Every heap page of this allocator, linked through <see cref="HeapPage.NextAll"/>; null when there is none.</summary>
+        private HeapPage* _heapPages;
+
+        /// <summary>Per size class, the first page of its open list (pages with a free or never-used block), as an address;
+        ///     created with the first heap page, so a buffer without heap texts pays nothing for it.</summary>
+        private nint[] _heapOpen;
+
+        /// <summary>Per size class, log2 of the bytes of the next page it takes (0 before its first page); created with
+        ///     <see cref="_heapOpen"/>.</summary>
+        private byte[] _heapShift;
+
+        /// <summary>The heap texts longer than <see cref="HeapPoolMaxBytes"/>, each a C-allocator block of its own: the clear
+        ///     loop visits the cells only while there is one.</summary>
+        private long _soloHeapStrings;
+
+        /// <summary>An emptied page kept for the next page any class needs (in neither list; see
+        ///     <see cref="ReleaseHeapPage"/>), or null.</summary>
+        private HeapPage* _heapSpare;
+
+        /// <summary>The number of heap pages this allocator holds, the spare not counted (diagnostic: tests prove an emptied
+        ///     page is released).</summary>
+        internal long HeapPages { get; private set; }
+
+        /// <summary>The heap texts that are C-allocator blocks of their own (diagnostic: tests prove the clear loop frees every
+        ///     one).</summary>
+        internal long HeapSoloStrings => _soloHeapStrings;
+
+        /// <summary>Whether the allocator holds an emptied spare page (diagnostic; not counted in <see cref="HeapPages"/>).</summary>
+        internal bool HasHeapSpare => _heapSpare != null;
 
         /// <summary>The arena's capacity in bytes (diagnostic).</summary>
         internal long ArenaCapacity => (long)_arenaSize;
@@ -668,18 +785,308 @@ namespace NumSharp.Backends.Strings
             // A failure scheduled by a test (FailAllocationAfter): the same null an exhausted heap gives.
             if (InjectedFailure())
                 return null;
-            byte* heap;
+            byte* heap = HeapMalloc(size);
+            if (heap == null)
+                return null;
+            HeapStrings++;
+            return heap;
+        }
+
+        /// <summary>
+        ///     The memory of a new heap text (NumPy's <c>allocator->malloc</c> in <c>heap_or_arena_allocate</c>): a block of the
+        ///     text's size class from one of this allocator's heap pages, or, for a text longer than
+        ///     <see cref="HeapPoolMaxBytes"/>, a C-allocator block of its own (see the class remarks).
+        /// </summary>
+        /// <param name="size">The text size in bytes (more than <see cref="NPY_SHORT_STRING_MAX_SIZE"/>).</param>
+        /// <returns>The first text byte (the block's contents are undefined; the caller writes the text), or null when the
+        ///     memory is exhausted.</returns>
+        /// <remarks>The lock must be held. Every byte up to the size class's capacity belongs to the block, so a reader of the
+        ///     text's <paramref name="size"/> bytes never leaves it.</remarks>
+        private byte* HeapMalloc(ulong size)
+        {
+            if (size > HeapPoolMaxBytes)
+            {
+                // A long text: the C allocator's block (the copy of the text costs more than the call), a null page in its
+                // header so the free hands it back to the C allocator.
+                byte* solo;
+                try
+                {
+                    solo = (byte*)NativeMemory.Alloc((nuint)(size + HeapBlockHeaderBytes));
+                }
+                catch (OutOfMemoryException)
+                {
+                    return null;
+                }
+                *(HeapPage**)solo = null;
+                _soloHeapStrings++;
+                AccountHeap((long)size);
+                return solo + HeapBlockHeaderBytes;
+            }
+            int k = HeapClass(size);
+            HeapPage* page = _heapOpen == null ? null : (HeapPage*)_heapOpen[k];
+            if (page == null && (page = NewHeapPage(k)) == null)
+                return null;
+            byte* block = page->Free;
+            if (block != null)
+                page->Free = *(byte**)(block + HeapBlockHeaderBytes);
+            else
+            {
+                block = page->Bump;
+                page->Bump = block + HeapStride(k);
+            }
+            page->Live++;
+            // A full page leaves its class's open list, so the next allocation of the class finds room at the list's head.
+            if (page->Free == null && page->Bump == page->End)
+                CloseHeapPage(page);
+            *(HeapPage**)block = page;
+            return block + HeapBlockHeaderBytes;
+        }
+
+        /// <summary>
+        ///     Releases the memory of a heap text (NumPy's <c>allocator->free</c>): a page block goes on its page's free list,
+        ///     and the page itself is released (<see cref="ReleaseHeapPage"/>: the spare, or back to the buffer pool) when that
+        ///     was its last live block; a block of its own goes back to the C allocator.
+        /// </summary>
+        /// <param name="text">The first text byte, as <see cref="HeapMalloc"/> returned it.</param>
+        /// <remarks>The lock must be held.</remarks>
+        private void HeapFree(byte* text)
+        {
+            byte* block = text - HeapBlockHeaderBytes;
+            HeapPage* page = *(HeapPage**)block;
+            if (page == null)
+            {
+                NativeMemory.Free(block);
+                _soloHeapStrings--;
+                return;
+            }
+            System.Diagnostics.Debug.Assert(block >= (byte*)page + HeapPageHeaderBytes && block < page->End
+                         && (block - ((byte*)page + HeapPageHeaderBytes)) % HeapStride(page->Class) == 0,
+                "A heap text's header names a page the text is not a block of.");
+            *(byte**)(block + HeapBlockHeaderBytes) = page->Free;
+            page->Free = block;
+            if (--page->Live == 0)
+            {
+                ReleaseHeapPage(page);
+                return;
+            }
+            // A page that was full has room again: back into its class's open list.
+            if (page->Open == 0)
+                OpenHeapPage(page);
+        }
+
+        /// <summary>The size class of a heap text: the smallest class whose blocks hold it (16 → 0, 25 → 1, …, 1,032 → 63).</summary>
+        /// <param name="size">The text size, 16 to <see cref="HeapPoolMaxBytes"/>.</param>
+        /// <returns>The class index.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int HeapClass(ulong size) => (int)((size + HeapBlockHeaderBytes + 15) >> 4) - 2;
+
+        /// <summary>The block stride of a size class: its header and its text capacity (16·(k + 2) bytes).</summary>
+        /// <param name="k">The class index.</param>
+        /// <returns>The stride in bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int HeapStride(int k) => (k + 2) << 4;
+
+        /// <summary>
+        ///     Takes a new page for size class <paramref name="k"/> from the buffer pool and puts it at the head of the class's
+        ///     open list: the class's first page is the smallest power of two of at least 1 KiB that holds four blocks, each
+        ///     later one twice the last, up to 64 KiB.
+        /// </summary>
+        /// <param name="k">The class index.</param>
+        /// <returns>The page, or null when the memory is exhausted.</returns>
+        /// <remarks>The lock must be held.</remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private HeapPage* NewHeapPage(int k)
+        {
+            _heapOpen ??= new nint[HeapClassCount];
+            _heapShift ??= new byte[HeapClassCount];
+            int stride = HeapStride(k);
+            int shift = _heapShift[k];
+            if (shift == 0)
+            {
+                shift = HeapMinPageShift;
+                while ((1 << shift) - HeapPageHeaderBytes < 4 * stride)
+                    shift++;
+            }
+            HeapPage* page;
+            if (_heapSpare != null && (1 << _heapSpare->Shift) - HeapPageHeaderBytes >= 4 * stride)
+            {
+                // The spare (the last emptied page) holds four blocks of this class: re-use it at its own size, so one
+                // element rewritten back and forth (its page emptied, then needed again) costs no buffer-pool round trip.
+                page = _heapSpare;
+                _heapSpare = null;
+                shift = page->Shift;
+            }
+            else
+            {
+                try
+                {
+                    page = (HeapPage*)Unmanaged.Pooling.SizeBucketedBufferPool.Take(1 << shift);
+                }
+                catch (OutOfMemoryException)
+                {
+                    return null;
+                }
+            }
+            int bytes = 1 << shift;
+            byte* first = (byte*)page + HeapPageHeaderBytes;
+            page->Free = null;
+            page->Bump = first;
+            page->End = first + (bytes - HeapPageHeaderBytes) / stride * stride;
+            page->Live = 0;
+            page->Class = (byte)k;
+            page->Shift = (byte)shift;
+            page->Open = 0;
+            page->PrevAll = null;
+            page->NextAll = _heapPages;
+            if (_heapPages != null)
+                _heapPages->PrevAll = page;
+            _heapPages = page;
+            OpenHeapPage(page);
+            HeapPages++;
+            _heapShift[k] = (byte)Math.Min(shift + 1, HeapMaxPageShift);
+            return page;
+        }
+
+        /// <summary>Puts a page at the head of its class's open list (it has a free or never-used block).</summary>
+        /// <param name="page">The page (not in the list).</param>
+        private void OpenHeapPage(HeapPage* page)
+        {
+            ref nint head = ref _heapOpen[page->Class];
+            page->PrevOpen = null;
+            page->NextOpen = (HeapPage*)head;
+            if (head != 0)
+                ((HeapPage*)head)->PrevOpen = page;
+            head = (nint)page;
+            page->Open = 1;
+        }
+
+        /// <summary>Takes a page out of its class's open list (it is full, or about to go back to the buffer pool).</summary>
+        /// <param name="page">The page (in the list).</param>
+        private void CloseHeapPage(HeapPage* page)
+        {
+            if (page->PrevOpen != null)
+                page->PrevOpen->NextOpen = page->NextOpen;
+            else
+                _heapOpen[page->Class] = (nint)page->NextOpen;
+            if (page->NextOpen != null)
+                page->NextOpen->PrevOpen = page->PrevOpen;
+            page->NextOpen = page->PrevOpen = null;
+            page->Open = 0;
+        }
+
+        /// <summary>
+        ///     Checks every invariant of the heap pages (diagnostic, for tests): both lists are consistent, each page's bump
+        ///     pointer, free list and live count agree, every live block's header names its page, and a page is in its class's
+        ///     open list exactly when it has room. A text written past its block's capacity overwrites the next block's header,
+        ///     which this finds while that block is live.
+        /// </summary>
+        /// <returns>Null when every invariant holds, else a description of the first violation.</returns>
+        /// <remarks>Takes the lock. Walks every block of every page: for tests only.</remarks>
+        internal string ValidateHeapPages()
+        {
+            acquire_allocator();
             try
             {
-                heap = (byte*)NativeMemory.Alloc((nuint)size);
-            }
-            catch (OutOfMemoryException)
-            {
+                long pages = 0, openFlagged = 0, listedTotal = 0;
+                HeapPage* previous = null;
+                for (HeapPage* page = _heapPages; page != null; previous = page, page = page->NextAll)
+                {
+                    if (++pages > HeapPages)
+                        return $"the page list holds more than the {HeapPages} pages counted";
+                    if (page == _heapSpare)
+                        return $"page {pages}: the spare page is still in the page list";
+                    if (page->PrevAll != previous)
+                        return $"page {pages}: its PrevAll does not name the page before it";
+                    if (page->Class >= HeapClassCount)
+                        return $"page {pages}: class {page->Class} out of range";
+                    int stride = HeapStride(page->Class);
+                    long bytes = 1L << page->Shift;
+                    byte* first = (byte*)page + HeapPageHeaderBytes;
+                    if (page->End != first + (bytes - HeapPageHeaderBytes) / stride * stride)
+                        return $"page {pages}: End is not the end of its last whole block";
+                    if (page->Bump < first || page->Bump > page->End || (page->Bump - first) % stride != 0)
+                        return $"page {pages}: Bump is not a block boundary of the page";
+                    long used = (page->Bump - first) / stride;
+                    var free = new System.Collections.Generic.HashSet<long>();
+                    for (byte* block = page->Free; block != null; block = *(byte**)(block + HeapBlockHeaderBytes))
+                    {
+                        if (block < first || block >= page->Bump || (block - first) % stride != 0)
+                            return $"page {pages}: a freed block is not a used block of the page";
+                        if (!free.Add(block - first) || free.Count > used)
+                            return $"page {pages}: the free list repeats a block";
+                    }
+                    if (page->Live != used - free.Count)
+                        return $"page {pages}: Live {page->Live}, but {used} blocks used and {free.Count} freed";
+                    if (page->Live < 1)
+                        return $"page {pages}: a page without live blocks was not released";
+                    for (long b = 0; b < used; b++)
+                        if (!free.Contains(b * stride) && *(HeapPage**)(first + b * stride) != page)
+                            return $"page {pages}: the header of live block {b} does not name its page";
+                    bool room = page->Free != null || page->Bump < page->End;
+                    if ((page->Open != 0) != room)
+                        return $"page {pages}: Open is {page->Open} but the page {(room ? "has" : "has no")} room";
+                    if (page->Open != 0)
+                        openFlagged++;
+                }
+                if (pages != HeapPages)
+                    return $"the page list holds {pages} pages, {HeapPages} counted";
+                for (int k = 0; _heapOpen != null && k < HeapClassCount; k++)
+                {
+                    HeapPage* before = null;
+                    long listed = 0;
+                    for (HeapPage* page = (HeapPage*)_heapOpen[k]; page != null; before = page, page = page->NextOpen)
+                    {
+                        // a cycle in the list would walk forever: no list holds more pages than the allocator has
+                        if (++listed > HeapPages)
+                            return $"class {k}: the open list holds more pages than the allocator has";
+                        if (page->PrevOpen != before)
+                            return $"class {k}: the open list's PrevOpen links are broken";
+                        if (page->Class != k || page->Open == 0)
+                            return $"class {k}: the open list holds a page of class {page->Class} (Open {page->Open})";
+                    }
+                    listedTotal += listed;
+                }
+                // every page flagged open is reachable from its class's list (the walk above saw each listed page once)
+                if (listedTotal != openFlagged)
+                    return $"{openFlagged} pages are flagged open, {listedTotal} are in the open lists";
                 return null;
             }
-            HeapStrings++;
-            AccountHeap((long)size);
-            return heap;
+            finally
+            {
+                release_allocator();
+            }
+        }
+
+        /// <summary>
+        ///     Unlinks a page without live blocks and keeps it as the allocator's one SPARE page when there is none (the next
+        ///     page any class needs re-uses it if it holds four of that class's blocks), or returns it to the buffer pool. The
+        ///     class's next page is taken at this page's size again, so a class that empties and refills keeps pages near its
+        ///     working size instead of doubling.
+        /// </summary>
+        /// <param name="page">The page (no live block).</param>
+        /// <remarks>Why a spare: one element rewritten back and forth between two lengths frees its page's only text and then
+        ///     needs a page again, each time; releasing the page made each such write a buffer-pool round trip, 21 % slower
+        ///     than the <c>malloc</c> / <c>free</c> pair it replaced (131 → 159 ns a write, measured). A spare bounds what an
+        ///     allocator holds beyond its live texts to one page (at most 64 KiB).</remarks>
+        private void ReleaseHeapPage(HeapPage* page)
+        {
+            if (page->Open != 0)
+                CloseHeapPage(page);
+            if (page->PrevAll != null)
+                page->PrevAll->NextAll = page->NextAll;
+            else
+                _heapPages = page->NextAll;
+            if (page->NextAll != null)
+                page->NextAll->PrevAll = page->PrevAll;
+            _heapShift[page->Class] = page->Shift;
+            HeapPages--;
+            if (_heapSpare == null)
+            {
+                page->NextAll = page->PrevAll = null;
+                _heapSpare = page;
+                return;
+            }
+            Unmanaged.Pooling.SizeBucketedBufferPool.Return((IntPtr)page, 1L << page->Shift);
         }
 
         /// <summary>
@@ -693,8 +1100,8 @@ namespace NumSharp.Backends.Strings
             if ((s[15] & NPY_STRING_OUTSIDE_ARENA) != 0)
             {
                 // It's a heap string (not in the arena buffer) so it needs to be deallocated with free(). For heap strings
-                // the offset is a raw address so this cast is safe.
-                NativeMemory.Free((void*)*(ulong*)s);
+                // the offset is a raw address so this cast is safe. (NumSharp's heap is paged: HeapFree.)
+                HeapFree((byte*)*(ulong*)s);
                 HeapStrings--;
                 *(ulong*)s = 0;
                 return 0;
@@ -971,7 +1378,10 @@ namespace NumSharp.Backends.Strings
         /// <remarks>
         ///     The arena strings are not zeroed one by one (NumPy's clear loop does, through <c>NpyString_free</c>): the arena is
         ///     freed whole right after, and the cells go back to the pool, which zeroes a buffer before a <c>StringDType</c>
-        ///     allocation takes it again. Idempotent: a second call does nothing.
+        ///     allocation takes it again. The heap pages go back to the buffer pool whole too, so the loop over the cells runs
+        ///     only while a heap text longer than <see cref="HeapPoolMaxBytes"/> (a C-allocator block of its own) is left — a
+        ///     buffer that holds 100,000 heap texts of page size is released without reading its cells. Idempotent: a second call
+        ///     does nothing.
         /// </remarks>
         internal void ClearAndFree(byte* cells, long count)
         {
@@ -981,15 +1391,38 @@ namespace NumSharp.Backends.Strings
                 if (_freed)
                     return;
                 _freed = true;
-                for (long i = 0; i < count; i++)
+                // NumPy's clear loop frees every heap string. A page block goes back with its page (below), so the cells are
+                // visited only while some text is a C-allocator block of its own, and only until the last one is found.
+                for (long i = 0; i < count && _soloHeapStrings > 0; i++)
                 {
                     byte* s = cells + i * SIZEOF_NPY_PACKED_STATIC_STRING;
                     if (OwnsHeapString(s))
                     {
-                        NativeMemory.Free((void*)*(ulong*)s);
-                        HeapStrings--;
+                        byte* block = (byte*)*(ulong*)s - HeapBlockHeaderBytes;
+                        if (*(HeapPage**)block == null)
+                        {
+                            NativeMemory.Free(block);
+                            _soloHeapStrings--;
+                        }
                     }
                 }
+                System.Diagnostics.Debug.Assert(_soloHeapStrings == 0,
+                    "A heap text of its own was not in any cell of the buffer.");
+                HeapStrings = 0;
+                while (_heapPages != null)
+                {
+                    HeapPage* next = _heapPages->NextAll;
+                    Unmanaged.Pooling.SizeBucketedBufferPool.Return((IntPtr)_heapPages, 1L << _heapPages->Shift);
+                    _heapPages = next;
+                }
+                if (_heapSpare != null)
+                {
+                    Unmanaged.Pooling.SizeBucketedBufferPool.Return((IntPtr)_heapSpare, 1L << _heapSpare->Shift);
+                    _heapSpare = null;
+                }
+                HeapPages = 0;
+                _heapOpen = null;
+                _heapShift = null;
                 if (_arena != null)
                 {
                     NativeMemory.Free(_arena);
