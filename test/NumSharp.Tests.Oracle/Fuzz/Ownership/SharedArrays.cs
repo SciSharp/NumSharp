@@ -7,7 +7,7 @@ namespace NumSharp.Tests.Fuzz.Ownership
     /// <summary>
     ///     The process-wide arrays NumSharp hands out but no caller owns — <c>np.ma.nomask</c>, the masked constant's data
     ///     and mask, the 24 <c>numpy.polynomial</c> module constants (<c>polydomain</c>, <c>chebzero</c>, …) and the 12
-    ///     class attributes of its six series classes (<c>NDChebyshev.default_domain</c>, …, which <c>p.domain</c> of a series
+    ///     class attributes of its six series classes (<c>NDChebyshev.Class.domain</c>, …, which <c>p.domain</c> of a series
     ///     built without one returns itself) — watched by one ledger that every ownership check consults.
     /// </summary>
     /// <remarks>
@@ -46,21 +46,31 @@ namespace NumSharp.Tests.Fuzz.Ownership
             (() => np.polynomial.hermite_e, "hermite_e", "herme"),
         };
 
-        /// <summary>The six series classes, whose static <c>default_domain</c> / <c>default_window</c> are shared arrays.</summary>
-        private static readonly Type[] PolynomialClasses =
+        /// <summary>
+        ///     The six series classes' class objects (<c>NDChebyshev.Class</c>, …), whose <c>domain</c> / <c>window</c> class
+        ///     attributes are shared arrays. Named in code, not by reflection: a renamed class object fails the build here
+        ///     instead of shrinking the watched list.
+        /// </summary>
+        /// <returns>Each class object with its CLR name, for the role text.</returns>
+        private static IEnumerable<(NDPolyClass Class, string Name)> PolynomialClasses()
         {
-            typeof(NDPolynomial), typeof(NDChebyshev), typeof(NDLegendre), typeof(NDLaguerre), typeof(NDHermite), typeof(NDHermiteE),
-        };
+            yield return (NDPolynomial.Class, nameof(NDPolynomial));
+            yield return (NDChebyshev.Class, nameof(NDChebyshev));
+            yield return (NDLegendre.Class, nameof(NDLegendre));
+            yield return (NDLaguerre.Class, nameof(NDLaguerre));
+            yield return (NDHermite.Class, nameof(NDHermite));
+            yield return (NDHermiteE.Class, nameof(NDHermiteE));
+        }
 
         /// <summary>
         ///     Every shared array with its name. Reading a polynomial constant or class attribute creates it on first access
         ///     (as NumPy's import does), so the list is complete from the first call on. A class attribute assigned later
-        ///     (<c>NDChebyshev.default_domain = ...</c>) is a new array the list does not watch: no oracle case assigns one.
+        ///     (<c>NDChebyshev.Class.domain = ...</c>) is a new array the list does not watch: no oracle case assigns one.
         /// </summary>
         /// <returns>The arrays and their names.</returns>
-        /// <exception cref="InvalidOperationException">A polynomial module no longer has a constant the list names, or a
-        ///     series class its static <c>default_domain</c> / <c>default_window</c> (a renamed member: update this list
-        ///     rather than watch fewer arrays).</exception>
+        /// <exception cref="InvalidOperationException">A polynomial module no longer has a constant the list names (a renamed
+        ///     member: update this list rather than watch fewer arrays). The class attributes are named in code
+        ///     (<see cref="PolynomialClasses"/>), so a renamed one fails the build instead.</exception>
         public static IEnumerable<(NDArray Array, string Role)> All()
         {
             yield return (np.ma.nomask, "shared np.ma.nomask");
@@ -79,13 +89,13 @@ namespace NumSharp.Tests.Fuzz.Ownership
                 }
             }
 
-            foreach (var type in PolynomialClasses)
-                foreach (var name in new[] { "default_domain", "default_window" })
-                {
-                    var p = type.GetProperty(name, BindingFlags.Static | BindingFlags.Public)
-                            ?? throw new InvalidOperationException($"{type.Name} has no static {name}: update SharedArrays");
-                    yield return ((NDArray)p.GetValue(null), $"shared {type.Name}.{name}");
-                }
+            // The class attributes as they are now: an attribute assigned since the snapshot is a different array, which a
+            // Rebase() re-takes (see the summary).
+            foreach (var (cls, name) in PolynomialClasses())
+            {
+                yield return (cls.domain, $"shared {name}.Class.domain");
+                yield return (cls.window, $"shared {name}.Class.window");
+            }
         }
 
         /// <summary>The shared arrays by reference, for <see cref="Contains"/> (built on first use).</summary>

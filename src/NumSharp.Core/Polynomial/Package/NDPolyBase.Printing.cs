@@ -70,7 +70,7 @@ namespace NumSharp
             if (string.IsNullOrEmpty(fmt_str))
                 return __str__();
             if (fmt_str != "ascii" && fmt_str != "unicode")
-                throw new ValueError($"Unsupported format string '{fmt_str}' passed to {Kind.ClassRepr}.__format__. Valid options are 'ascii' and 'unicode'");
+                throw new ValueError($"Unsupported format string '{fmt_str}' passed to {_kind}.__format__. Valid options are 'ascii' and 'unicode'");
             return GenerateString(fmt_str == "unicode");
         }
 
@@ -91,7 +91,7 @@ namespace NumSharp
         /// </summary>
         /// <returns>The text.</returns>
         public string __repr__()
-            => $"{Kind.Name}({ReprBody(Coef)}, domain={ReprBody(domain)}, window={ReprBody(window)}, symbol='{symbol}')";
+            => $"{_kind.__name__}({ReprBody(Coef)}, domain={ReprBody(domain)}, window={ReprBody(window)}, symbol='{symbol}')";
 
         /// <summary>Python's <c>repr(a)[6:-1]</c> of an array.</summary>
         /// <param name="a">The array.</param>

@@ -539,6 +539,8 @@ namespace NumSharp.Tests.Fuzz
                 "NDMatrix" => MatrixTargets,
                 "NDCharArray" => CharArrayTargets,
                 "NDPolynomial" or "NDChebyshev" or "NDLegendre" or "NDLaguerre" or "NDHermite" or "NDHermiteE" => SeriesTargets(m.OwnerType),
+                // numpy.polynomial's class objects (process singletons, never disposed): see PolyClassTargets.
+                "NDPolyClass" => PolyClassTargets,
                 "NDArray<T>" => new[]
                 {
                     new ReadTarget("NDArray<double> (3,4)", _ =>
@@ -554,6 +556,28 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>The single target of a static member: no instance.</summary>
         private static readonly IReadOnlyList<ReadTarget> StaticTarget = new[] { new ReadTarget("static", _ => (null, Noop)) };
+
+        /// <summary>
+        ///     The six class objects of numpy.polynomial's series classes (<c>NDPolynomial.Class</c>, …), each read with every
+        ///     attribute: the classes differ where it matters (Laguerre's <c>[0, 1]</c> interval, Polynomial's null
+        ///     <c>basis_name</c>), so each drives its own value.
+        /// </summary>
+        /// <remarks>
+        ///     The class objects are process singletons, so the cleanup releases nothing. <c>domain</c> / <c>window</c> return
+        ///     the shared class attributes (listed in <see cref="Ownership.SharedArrays"/>, and returned by both reads, so held
+        ///     rather than fresh), and the round-trip write of each settable attribute assigns the attribute its own value — a
+        ///     no-op by reference for <c>domain</c> / <c>window</c> and an equal value for <c>maxpower</c> — so no read changes
+        ///     a class the rest of the run reads.
+        /// </remarks>
+        private static readonly IReadOnlyList<ReadTarget> PolyClassTargets = new[]
+        {
+            new ReadTarget("Polynomial", _ => (NDPolynomial.Class, Noop)),
+            new ReadTarget("Chebyshev", _ => (NDChebyshev.Class, Noop)),
+            new ReadTarget("Legendre", _ => (NDLegendre.Class, Noop)),
+            new ReadTarget("Laguerre", _ => (NDLaguerre.Class, Noop)),
+            new ReadTarget("Hermite", _ => (NDHermite.Class, Noop)),
+            new ReadTarget("HermiteE", _ => (NDHermiteE.Class, Noop)),
+        };
 
         /// <summary>
         ///     Series-class targets (numpy.polynomial's six classes), built through the class's own public constructor: one

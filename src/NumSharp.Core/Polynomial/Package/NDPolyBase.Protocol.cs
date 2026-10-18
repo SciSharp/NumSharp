@@ -119,7 +119,7 @@ namespace NumSharp
         public bool IsNumber => Kind is PyOperandKind.PyInt or PyOperandKind.PyFloat or PyOperandKind.PyComplex or PyOperandKind.NumPyNumber;
 
         /// <summary><c>str(type(x))</c>: <c>&lt;class 'int'&gt;</c>, <c>&lt;class 'numpy.polynomial.polynomial.Polynomial'&gt;</c>.</summary>
-        public string ClassRepr => Kind == PyOperandKind.Series ? Series.Kind.ClassRepr : "<class '" + TypeName + "'>";
+        public string ClassRepr => Kind == PyOperandKind.Series ? Series.__class__.ToString() : "<class '" + TypeName + "'>";
     }
 
     public abstract partial class NDPolyBase
@@ -144,7 +144,7 @@ namespace NumSharp
                 case null:
                     return new PyOperand(PyOperandKind.None, null, default, null, "NoneType");
                 case NDPolyBase s:
-                    return new PyOperand(PyOperandKind.Series, null, default, s, s.Kind.Name);
+                    return new PyOperand(PyOperandKind.Series, null, default, s, s.__class__.__name__);
                 case PolyNumber p:
                     return OfNumber(p);
                 case NDArray nd:
@@ -365,7 +365,7 @@ namespace NumSharp
                 case PyBinOp.TrueDiv:
                     // "There is no true divide if the rhs is not a Number": raised, not declined.
                     if (!other.IsNumber)
-                        throw new TypeError($"unsupported types for true division: '{Kind.ClassRepr}', '{other.ClassRepr}'");
+                        throw new TypeError($"unsupported types for true division: '{_kind}', '{other.ClassRepr}'");
                     return Quotient(DivModForward(other));
                 case PyBinOp.FloorDiv:
                     return Quotient(DivModForward(other));
@@ -512,7 +512,7 @@ namespace NumSharp
             if (other.Kind != PyOperandKind.Series)
                 return other.Arg;
             var o = other.Series;
-            if (o.Kind != Kind)
+            if (o._kind != _kind)
                 throw new TypeError("Polynomial types differ");
             if (!AllEqual(domain, o.domain))
                 throw new TypeError("Domains differ");

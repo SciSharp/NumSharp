@@ -8,7 +8,7 @@ using NumSharp.Backends.Kernels;
 // NDLegendre.cs — numpy.polynomial.legendre.Legendre
 // =============================================================================
 //
-// A thin class over NDPolyBase (the port of NumPy's ABCPolyBase): its class record (basis Legendre, NumPy's names, the
+// A thin class over NDPolyBase (the port of NumPy's ABCPolyBase): its class object (Class: basis Legendre, NumPy's names, the
 // class attributes), its constructors, the class methods typed with it, the covariant overrides of the members that
 // return a series, and the C# operators declared with the class itself. Every body delegates to NDPolyBase.
 // GENERATED from one template for the six classes; keep them identical but for the record.
@@ -20,22 +20,29 @@ namespace NumSharp
     /// <summary>
     ///     NumPy's <c>numpy.polynomial.legendre.Legendre</c>: a Legendre series: <c>c[0]·P₀(x) + c[1]·P₁(x) + …</c>, with a domain (default <c>[-1, 1]</c>) mapped onto a
     ///     window (default <c>[-1, 1]</c>). Arithmetic (<c>+ - * / %</c>, <see cref="__floordiv__"/>,
-    ///     <see cref="__divmod__"/>, <see cref="__pow__"/>), evaluation (<see cref="NDPolyBase.Call(object)"/>), calculus
+    ///     <see cref="__divmod__"/>, <see cref="__pow__"/>), evaluation (<see cref="NDPolyBase.__call__(object)"/>), calculus
     ///     (<see cref="integ"/>, <see cref="deriv"/>), roots, fitting (<see cref="fit"/>), conversion between bases
     ///     (<see cref="NDPolyBase.convert"/>, <see cref="cast"/>) and printing, all as NumPy 2.4.2 has them.
     /// </summary>
     /// <remarks>
     ///     <para>See <see cref="NDPolyBase"/> for the ownership rule (dispose every series, operator results included) and
-    ///     the C# spelling of NumPy's protocol. NumPy's class attributes are <see cref="default_domain"/>,
-    ///     <see cref="default_window"/> and <see cref="default_maxpower"/>; the class methods (<see cref="identity"/>,
+    ///     the C# spelling of NumPy's protocol. NumPy's class object <c>Legendre</c> is <see cref="Class"/> (also every
+    ///     series' <see cref="NDPolyBase.__class__"/>): the class attributes <c>domain</c>, <c>window</c>, <c>maxpower</c>
+    ///     and <c>basis_name</c> keep NumPy's names there. The class methods (<see cref="identity"/>,
     ///     <see cref="basis"/>, <see cref="fromroots"/>, <see cref="fit"/>, <see cref="cast"/>) are static members.</para>
     ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.legendre.Legendre.html</para>
     /// </remarks>
     public sealed class NDLegendre : NDPolyBase
     {
-        /// <summary>The class record: basis Legendre, NumPy's names, the class attributes and the blank factory.</summary>
-        internal static readonly NDPolyKind Kind = new NDPolyKind(PolyBasis.Legendre, "Legendre", "numpy.polynomial.legendre", "P",
-            typeof(NDLegendre), () => default_domain, () => default_window, () => default_maxpower, () => new NDLegendre());
+        /// <summary>
+        ///     NumPy's class object <c>Legendre</c>: its class attributes under NumPy's names — <c>NDLegendre.Class.domain</c> is
+        ///     NumPy's <c>Legendre.domain</c>, likewise <c>window</c>, <c>maxpower</c> and <c>basis_name</c> — and its
+        ///     <c>__name__</c> / <c>__module__</c>. The same object as <see cref="NDPolyBase.__class__"/> of every Legendre
+        ///     series. Footgun: its attributes are process-wide state, read by every series of the class without its own
+        ///     (see <see cref="NDPolyClass"/>).
+        /// </summary>
+        public static NDPolyClass Class { get; } = new NDPolyClass(PolyBasis.Legendre, "Legendre", "numpy.polynomial.legendre", "P",
+            typeof(NDLegendre), -1.0, 1.0, () => new NDLegendre());
 
         /// <summary>
         ///     NumPy's <c>Legendre(coef, domain=None, window=None, symbol='x')</c>: the series with coefficients
@@ -53,57 +60,14 @@ namespace NumSharp
         /// <exception cref="TypeError"><c>Symbol must be a non-empty string</c> (a null symbol).</exception>
         /// <exception cref="NotSupportedException">Coefficients NumPy keeps as an OBJECT array (None, a Python int past
         ///     uint64, a list holding a non-number).</exception>
-        public NDLegendre(object coef, object domain = null, object window = null, string symbol = "x") : base(Kind)
+        public NDLegendre(object coef, object domain = null, object window = null, string symbol = "x") : base(Class)
         {
             Initialize(coef, domain, window, symbol, coefIsFresh: false);
         }
 
-        /// <summary>A blank instance for <see cref="NDPolyKind.Blank"/>: NDPolyBase fills it in, exactly once.</summary>
-        private NDLegendre() : base(Kind)
+        /// <summary>A blank instance for <see cref="NDPolyClass.Blank"/>: NDPolyBase fills it in, exactly once.</summary>
+        private NDLegendre() : base(Class)
         {
-        }
-
-        // ---------------------------------------------------------------------------------------------
-        //  Class attributes
-        // ---------------------------------------------------------------------------------------------
-
-        /// <summary>The class attribute <c>domain</c> (created on first use).</summary>
-        private static NDArray s_domain;
-
-        /// <summary>The class attribute <c>window</c> (created on first use).</summary>
-        private static NDArray s_window;
-
-        /// <summary>The class attribute <c>maxpower</c> (NumPy's <c>ABCPolyBase.maxpower = 100</c>, a Python int).</summary>
-        private static object s_maxpower = 100L;
-
-        /// <summary>
-        ///     NumPy's class attribute <c>Legendre.domain</c>: <c>[-1, 1]</c> (float64), shared by every series created without
-        ///     a domain — writing into it changes theirs. Assigning replaces it for those series (NumPy's
-        ///     <c>Legendre.domain = ...</c>).
-        /// </summary>
-        /// <exception cref="ArgumentNullException">Assigning null.</exception>
-        public static NDArray default_domain
-        {
-            get => ClassDefault(ref s_domain, -1.0, 1.0);
-            set => SetClassDefault(ref s_domain, value);
-        }
-
-        /// <summary>NumPy's class attribute <c>Legendre.window</c>: <c>[-1, 1]</c> (float64), shared like <see cref="default_domain"/>.</summary>
-        /// <exception cref="ArgumentNullException">Assigning null.</exception>
-        public static NDArray default_window
-        {
-            get => ClassDefault(ref s_window, -1.0, 1.0);
-            set => SetClassDefault(ref s_window, value);
-        }
-
-        /// <summary>
-        ///     NumPy's class attribute <c>Legendre.maxpower</c>: the largest power <see cref="__pow__"/> allows on a series that
-        ///     has no <see cref="NDPolyBase.maxpower"/> of its own — a boxed Python int 100; null is None (no limit).
-        /// </summary>
-        public static object default_maxpower
-        {
-            get => System.Threading.Volatile.Read(ref s_maxpower);
-            set => System.Threading.Volatile.Write(ref s_maxpower, value);
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -166,7 +130,7 @@ namespace NumSharp
         /// <exception cref="ValueError">A domain / window the constructor refuses; an invalid symbol.</exception>
         /// <exception cref="IndexError">A domain or window shorter than two.</exception>
         public static NDLegendre identity(object domain = null, object window = null, string symbol = "x")
-            => (NDLegendre)Identity(Kind, domain, window, symbol);
+            => (NDLegendre)Identity(Class, domain, window, symbol);
 
         /// <summary>
         ///     NumPy's <c>Legendre.basis(deg, domain=None, window=None, symbol='x')</c>: the basis polynomial of degree
@@ -180,7 +144,7 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>deg must be non-negative integer</c>.</exception>
         /// <exception cref="TypeError"><c>int()</c> refuses <paramref name="deg"/>.</exception>
         public static NDLegendre basis(object deg, object domain = null, object window = null, string symbol = "x")
-            => (NDLegendre)BasisOf(Kind, deg, domain, window, symbol);
+            => (NDLegendre)BasisOf(Class, deg, domain, window, symbol);
 
         /// <summary>
         ///     NumPy's <c>Legendre.fromroots(roots, domain=[], window=None, symbol='x')</c>: the series
@@ -195,7 +159,7 @@ namespace NumSharp
         /// <exception cref="ValueError">Empty or non-1-d roots; a domain / window the constructor refuses.</exception>
         /// <exception cref="IndexError">An empty domain array (mapparms' indexing).</exception>
         public static NDLegendre fromroots(object roots, [Optional] object domain, object window = null, string symbol = "x")
-            => (NDLegendre)FromRootsOf(Kind, roots, domain, window, symbol);
+            => (NDLegendre)FromRootsOf(Class, roots, domain, window, symbol);
 
         /// <summary>
         ///     NumPy's <c>Legendre.fit(x, y, deg, domain=None, rcond=None, full=False, w=None, window=None, symbol='x')</c>: the
@@ -218,7 +182,7 @@ namespace NumSharp
         /// <exception cref="MissingBackendException">No LAPACK backend: lstsq needs <c>NumSharp.Interop.OpenBLAS</c>.</exception>
         public static NDLegendre fit(object x, object y, object deg, object domain = null, object rcond = null, bool full = false,
             object w = null, object window = null, string symbol = "x")
-            => (NDLegendre)FitOf(Kind, x, y, deg, domain, rcond, full, w, window, symbol);
+            => (NDLegendre)FitOf(Class, x, y, deg, domain, rcond, full, w, window, symbol);
 
         /// <summary>
         ///     NumPy's <c>Legendre.cast(series, domain=None, window=None)</c>: <paramref name="series"/> converted to this class
@@ -230,7 +194,7 @@ namespace NumSharp
         /// <returns>The converted series.</returns>
         /// <exception cref="AttributeError"><paramref name="series"/> is null.</exception>
         public static NDLegendre cast(NDPolyBase series, object domain = null, object window = null)
-            => (NDLegendre)CastOf(Kind, series, domain, window);
+            => (NDLegendre)CastOf(Class, series, domain, window);
 
         /// <summary>
         ///     NumPy's <c>series, [resid, rank, sv, rcond] = Legendre.fit(..., full=True)</c>: the fitted series and lstsq's

@@ -23,7 +23,7 @@ using NumSharp.Backends.Kernels;
 //
 // The class methods (identity, basis, fromroots, fit, cast, Chebyshev.interpolate) are static members of
 // each concrete class (C# cannot inherit a static that returns the derived type); their bodies are the
-// cores here, keyed by the class record.
+// cores here, keyed by the class object (NDPolyClass).
 //
 // =============================================================================
 
@@ -244,11 +244,11 @@ namespace NumSharp
         /// <returns>The identity series.</returns>
         /// <exception cref="ValueError">The constructor's errors.</exception>
         /// <exception cref="IndexError">A domain or window shorter than two (mapparms' indexing).</exception>
-        private protected static NDPolyBase Identity(NDPolyKind kind, object domain, object window, string symbol)
+        private protected static NDPolyBase Identity(NDPolyClass kind, object domain, object window, string symbol)
         {
             using var scope = NDScope.Open();
-            object d = domain ?? kind.DefaultDomain();
-            object w = window ?? kind.DefaultWindow();
+            object d = domain ?? kind.domain;
+            object w = window ?? kind.window;
             var (off, scl) = NDPolySeries.MapParms(w, d);
             NDArray coef = NDPolySeries.Line(kind.Basis, off, scl);
             var r = kind.Blank();
@@ -270,11 +270,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><c>deg must be non-negative integer</c>; int()'s ValueErrors.</exception>
         /// <exception cref="TypeError">int() refuses <paramref name="deg"/>.</exception>
         /// <exception cref="OverflowException">A degree no list can have (<c>cannot fit 'int' into an index-sized integer</c>).</exception>
-        private protected static NDPolyBase BasisOf(NDPolyKind kind, object deg, object domain, object window, string symbol)
+        private protected static NDPolyBase BasisOf(NDPolyClass kind, object deg, object domain, object window, string symbol)
         {
             using var scope = NDScope.Open();
-            object d = domain ?? kind.DefaultDomain();
-            object w = window ?? kind.DefaultWindow();
+            object d = domain ?? kind.domain;
+            object w = window ?? kind.window;
             BigInteger ideg = PyIntOf(deg, out bool differs);
             if (differs || ideg.Sign < 0)
                 throw new ValueError("deg must be non-negative integer");
@@ -306,7 +306,7 @@ namespace NumSharp
         /// <exception cref="ValueError">as_series' errors for the roots; the constructor's errors.</exception>
         /// <exception cref="OverflowException">A Python-float scale whose power overflows (<c>(34, 'Numerical result out of
         ///     range')</c>, CPython's float power).</exception>
-        private protected static NDPolyBase FromRootsOf(NDPolyKind kind, object roots, object domain, object window, string symbol)
+        private protected static NDPolyBase FromRootsOf(NDPolyClass kind, object roots, object domain, object window, string symbol)
         {
             using var scope = NDScope.Open();
             NDArray r = AsSeries(roots, fresh: false);
@@ -314,10 +314,10 @@ namespace NumSharp
             if (domain is null)
                 d = NDPolySeries.GetDomain(r);
             else if (domain is System.Reflection.Missing || IsEmptyPythonList(domain))
-                d = kind.DefaultDomain();
+                d = kind.domain;
             else
                 d = domain;
-            object w = window ?? kind.DefaultWindow();
+            object w = window ?? kind.window;
             long deg = r.size;
             var (off, scl) = NDPolySeries.MapParms(d, w);
             var rnew = PolyNumber.Binary(BinaryOp.Add, off, PolyNumber.Binary(BinaryOp.Multiply, scl, PolyNumber.FromArray(r)));
@@ -345,7 +345,7 @@ namespace NumSharp
         /// <exception cref="ValueError">The fit's and the constructor's errors.</exception>
         /// <exception cref="TypeError">The fit's argument errors.</exception>
         /// <exception cref="NotSupportedException">No LAPACK backend (lstsq needs <c>NumSharp.Interop.OpenBLAS</c>).</exception>
-        private protected static NDPolyBase FitOf(NDPolyKind kind, object x, object y, object deg, object domain, object rcond,
+        private protected static NDPolyBase FitOf(NDPolyClass kind, object x, object y, object deg, object domain, object rcond,
             bool full, object w, object window, string symbol)
         {
             using var scope = NDScope.Open();
@@ -357,10 +357,10 @@ namespace NumSharp
                 d = gd;
             }
             else if (IsEmptyPythonList(domain))
-                d = kind.DefaultDomain();
+                d = kind.domain;
             else
                 d = domain;
-            object win = window ?? kind.DefaultWindow();
+            object win = window ?? kind.window;
             object xnew = np.polynomial.polyutils.mapdomain(x, d, win);
             NDPolyFitResult res = NDPolyFit.Fit(kind.Basis, xnew, y, deg, rcond, full, w);
             var r = kind.Blank();
@@ -400,12 +400,12 @@ namespace NumSharp
         /// <param name="window">The window, or null for the class default.</param>
         /// <returns>The converted series.</returns>
         /// <exception cref="AttributeError"><paramref name="series"/> is null (<c>'NoneType' object has no attribute 'convert'</c>).</exception>
-        private protected static NDPolyBase CastOf(NDPolyKind kind, NDPolyBase series, object domain, object window)
+        private protected static NDPolyBase CastOf(NDPolyClass kind, NDPolyBase series, object domain, object window)
         {
             if (series is null)
                 throw new AttributeError("'NoneType' object has no attribute 'convert'");
-            object d = domain ?? kind.DefaultDomain();
-            object w = window ?? kind.DefaultWindow();
+            object d = domain ?? kind.domain;
+            object w = window ?? kind.window;
             return series.convert(d, kind.ClrType, w);
         }
 
@@ -427,9 +427,9 @@ namespace NumSharp
         internal static NDPolyBase InterpolateOf(Func<NDArray, object[], object> func, object deg, object domain, object args)
         {
             using var scope = NDScope.Open();
-            var kind = NDChebyshev.Kind;
-            object d = domain ?? kind.DefaultDomain();
-            NDArray clsWindow = kind.DefaultWindow();
+            var kind = NDChebyshev.Class;
+            object d = domain ?? kind.domain;
+            NDArray clsWindow = kind.window;
             // NumPy's lambda: the mapdomain argument is evaluated before the *args unpacking, and both before the call.
             object XFunc(NDArray x, object[] _)
             {

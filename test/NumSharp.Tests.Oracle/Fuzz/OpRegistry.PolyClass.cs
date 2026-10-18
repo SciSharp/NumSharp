@@ -300,9 +300,9 @@ namespace NumSharp.Tests.Fuzz
                 case "__call__":
                 {
                     object x = Arg("x");
-                    // A series point binds the generic Call<TSeries> (a series result), any other point Call(object), as the
-                    // compiler binds them for these runtime types.
-                    return x is NDPolyBase ? ((dynamic)self).Call((dynamic)x) : self.Call(x);
+                    // A series point binds the generic __call__<TSeries> (a series result), any other point __call__(object), as
+                    // the compiler binds them for these runtime types.
+                    return x is NDPolyBase ? ((dynamic)self).__call__((dynamic)x) : self.__call__(x);
                 }
                 case "__len__": return self.__len__();
                 case "__iter__": return PolyClassIterate(self);

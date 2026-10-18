@@ -8,9 +8,10 @@ namespace NumSharp.Tests.Fuzz
     ///     (<c>polyclass.jsonl</c>) does not reach through a key of the same Python name: <c>Dispose</c> (C#'s release,
     ///     with no NumPy counterpart), <c>GetHashCode</c> (which raises, NumPy's <c>__hash__ = None</c>), the operators
     ///     of the base class <see cref="NDPolyBase"/>, which bind only where a series is typed <see cref="NDPolyBase"/>
-    ///     (the tier's registry binds dynamically, so each concrete class's own operators run there), and the
+    ///     (the tier's registry binds dynamically, so each concrete class's own operators run there), the
     ///     numpy.polynomial package's re-exports of the classes (<c>np.polynomial.Chebyshev(...)</c>; the tier's
-    ///     constructor cases call the submodules' factories).
+    ///     constructor cases call the submodules' factories), and the two C# protocol members of the classes' class objects
+    ///     (<see cref="NDPolyClass"/>: <c>ToString()</c>, NumPy's <c>str(cls)</c>, and the conversion to the CLR type).
     /// </summary>
     /// <remarks>
     ///     Every entry builds its series inside the entry and releases them before it returns, except the results it
@@ -58,6 +59,19 @@ namespace NumSharp.Tests.Fuzz
             E(l, "np.polynomial.Laguerre", "coefficients and a domain", f => np.polynomial.Laguerre(f.V3, new object[] { 0.0, 2.0 }));
             E(l, "np.polynomial.Hermite", "coefficients and a domain", f => np.polynomial.Hermite(f.V3, new object[] { 0.0, 2.0 }));
             E(l, "np.polynomial.HermiteE", "coefficients and a domain", f => np.polynomial.HermiteE(f.V3, new object[] { 0.0, 2.0 }));
+
+            // The class objects' two C# protocol members (their attributes are properties, read by the reflective gate):
+            // str(cls) — NumPy's "<class 'numpy.polynomial.chebyshev.Chebyshev'>" — and the conversion to the CLR type that
+            // lets a class object stand where a Type is asked (convert(kind: NDLegendre.Class)). Neither touches an array.
+            E(l, "NDPolyClass.ToString", "str(cls) of the six classes", f =>
+                NDPolynomial.Class.ToString() + NDChebyshev.Class.ToString() + NDLegendre.Class.ToString()
+                + NDLaguerre.Class.ToString() + NDHermite.Class.ToString() + NDHermiteE.Class.ToString());
+            E(l, "NDPolyClass.op_Implicit", "class object -> its CLR Type, and through it convert(kind: ...)", f =>
+            {
+                Type t = NDLegendre.Class;
+                using var p = new NDChebyshev(f.V3);
+                return new object[] { t.Name, p.convert(kind: NDLegendre.Class) };
+            });
 
             // NDPolyBase's own operators: the static type NDPolyBase selects them over the concrete classes' sets.
             E(l, "NDPolyBase.op_Addition", "series + series, series + number, array + series, list + series", f =>

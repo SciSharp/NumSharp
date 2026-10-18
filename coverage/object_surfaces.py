@@ -320,10 +320,6 @@ REVIEWED_PROTOCOL_ADAPTERS: dict[tuple[str, str], tuple[str, str | None, str]] =
     ("poly1d", "__repr__"): ("ToString", "ToString()", "poly1d.ToString() is NumPy's repr: poly1d([...])."),
     ("poly1d", "__call__"): ("Call", None, "poly1d.Call(x) is NumPy's p(x) (poly1d.__call__)."),
     ("vectorize", "__call__"): ("Call", None, "Vectorized.Call(args) is NumPy's vfunc(*args)."),
-    **{(path, "__call__"): ("Call", None, "Call(x) is NumPy's p(x) (ABCPolyBase.__call__): the series at points, or "
-                                          "composed with a series argument.")
-       for path in ("polynomial.polynomial.Polynomial", "polynomial.chebyshev.Chebyshev", "polynomial.legendre.Legendre",
-                    "polynomial.hermite.Hermite", "polynomial.hermite_e.HermiteE", "polynomial.laguerre.Laguerre")},
     ("lib.npyio.NpzFile", "__repr__"): ("ToString", "ToString()", "NpzFile.ToString() is NumPy's repr."),
     ("lib.npyio.NpzFile", "__enter__"): ("Dispose", None,
                                          "C#'s using statement over the IDisposable NpzFile ports `with np.load(f)`."),

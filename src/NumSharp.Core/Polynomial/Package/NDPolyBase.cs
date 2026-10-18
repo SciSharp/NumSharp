@@ -50,19 +50,22 @@ namespace NumSharp
     ///     <see cref="Dispose"/>; until then a getter hands out the stored array itself. Dispose every series, the results
     ///     of operators included (<c>using var r = p * q;</c>): an undisposed one keeps its buffers until the garbage
     ///     collector runs. No <see cref="NDScope"/> reclaims a series (it is not an array).</para>
-    ///     <para><b>C# spelling of NumPy's protocol.</b> <c>p(x)</c> is <see cref="Call(object)"/>; <c>p ** n</c>,
-    ///     <c>p // q</c> and <c>divmod(p, q)</c> are the concrete classes' <c>__pow__</c>, <c>__floordiv__</c> and
-    ///     <c>__divmod__</c> (C# has no such operators); <c>+ - * / %</c>, unary <c>-</c> / <c>+</c> and <c>== !=</c> are
-    ///     operators. NumPy's class attributes <c>Polynomial.domain</c> / <c>window</c> / <c>maxpower</c> are the static
-    ///     <c>default_domain</c> / <c>default_window</c> / <c>default_maxpower</c> (an instance member cannot share a name
-    ///     with a static one).</para>
+    ///     <para><b>C# spelling of NumPy's protocol.</b> Every member NumPy names keeps NumPy's name, case included.
+    ///     <c>p(x)</c> is <see cref="__call__(object)"/>; <c>p ** n</c>, <c>p // q</c> and <c>divmod(p, q)</c> are the
+    ///     concrete classes' <c>__pow__</c>, <c>__floordiv__</c> and <c>__divmod__</c> (C# has no such operators);
+    ///     <c>+ - * / %</c>, unary <c>-</c> / <c>+</c> and <c>== !=</c> are operators. NumPy's class attributes
+    ///     (<c>Polynomial.domain</c>, <c>window</c>, <c>maxpower</c>, <c>basis_name</c>) are members of the class object
+    ///     <see cref="NDPolyClass"/>, reached as <c>NDPolynomial.Class</c> or <see cref="__class__"/>: C# cannot declare a
+    ///     static <c>NDPolynomial.domain</c> beside the instance <c>p.domain</c>. The C# protocol members
+    ///     (<see cref="Dispose"/>, <see cref="Equals(object)"/>, <see cref="GetHashCode"/>, <see cref="ToString()"/>,
+    ///     <see cref="GetEnumerator"/>, the concrete classes' <c>Deconstruct</c>) stand in for Python's.</para>
     ///     <para><b>Not hashable.</b> NumPy sets <c>__hash__ = None</c>: <see cref="GetHashCode"/> raises NumPy's
     ///     <c>TypeError: unhashable type</c>, so a series cannot be a dictionary key — its value can change in place.</para>
     /// </remarks>
     public abstract partial class NDPolyBase : IDisposable, IFormattable
     {
-        /// <summary>The class record (basis, names, class defaults).</summary>
-        private readonly NDPolyKind _kind;
+        /// <summary>The class object (basis, names, class attributes): the same one for every series of the class.</summary>
+        private readonly NDPolyClass _kind;
 
         /// <summary>The coefficients, low degree first (NumPy's <c>self.coef</c>): an array this series owns.</summary>
         private NDArray _coef;
@@ -131,14 +134,22 @@ namespace NumSharp
         ///     Creates a blank series of a class: no coefficients yet. Every path fills it in through
         ///     <see cref="Initialize"/>, which runs NumPy's <c>__init__</c>; only the concrete classes call this.
         /// </summary>
-        /// <param name="kind">The class record.</param>
-        private protected NDPolyBase(NDPolyKind kind)
+        /// <param name="kind">The class object.</param>
+        private protected NDPolyBase(NDPolyClass kind)
         {
             _kind = kind;
         }
 
-        /// <summary>The class record.</summary>
-        internal NDPolyKind Kind => _kind;
+        /// <summary>
+        ///     Python's <c>p.__class__</c> (<c>type(p)</c>): the series' class object — the same object as the class's
+        ///     static <c>Class</c> (<c>ReferenceEquals(p.__class__, NDChebyshev.Class)</c> is NumPy's
+        ///     <c>p.__class__ is Chebyshev</c>). Its members are NumPy's class attributes, so <c>p.__class__.domain</c> is
+        ///     the class default whatever domain the series itself holds; it also converts to the C# type where NumSharp
+        ///     takes a class (<c>q.convert(kind: p.__class__)</c>).
+        /// </summary>
+        /// <remarks>Footgun: assigning through it (<c>p.__class__.maxpower = 5</c>) changes the class, so every series of the
+        ///     class without its own value, as in Python — use <see cref="maxpower"/> to change one series.</remarks>
+        public NDPolyClass __class__ => _kind;
 
         /// <summary>The basis of the class's module functions.</summary>
         internal PolyBasis Basis => _kind.Basis;
@@ -281,8 +292,8 @@ namespace NumSharp
         /// <exception cref="AttributeError">A <see cref="__setstate__"/> dictionary without <c>coef</c>: NumPy's
         ///     <c>'Polynomial' object has no attribute 'coef'</c>.</exception>
         private protected NDArray Coef => _disposed
-            ? throw new ObjectDisposedException(_kind.Name)
-            : _coef ?? throw new AttributeError($"'{_kind.Name}' object has no attribute 'coef'");
+            ? throw new ObjectDisposedException(_kind.__name__)
+            : _coef ?? throw new AttributeError($"'{_kind.__name__}' object has no attribute 'coef'");
 
         /// <summary>Appends an attribute to NumPy's <c>__dict__</c> order the first time it is assigned on the instance.</summary>
         /// <param name="name">The attribute (<c>domain</c>, <c>window</c>, <c>maxpower</c>).</param>
@@ -323,10 +334,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The domain (NumPy's <c>domain</c>): the instance's own array, or the CLASS default (<c>default_domain</c>,
-        ///     shared by every instance created without a domain — writing into it changes the class default, as in
-        ///     NumPy). Assigning stores a view of the given array on this instance and releases the instance's previous one
-        ///     (never the class default; see <see cref="ReleaseReplaced"/>).
+        ///     The domain (NumPy's <c>domain</c>): the instance's own array, or the CLASS attribute (<c>Class.domain</c> of
+        ///     the series' class, read at every access and shared by every instance created without a domain — writing into
+        ///     it changes the class's, as in NumPy). Assigning stores a view of the given array on this instance and releases
+        ///     the instance's previous one (never the class attribute; see <see cref="ReleaseReplaced"/>).
         /// </summary>
         /// <exception cref="ArgumentNullException">Assigning null.</exception>
         /// <exception cref="ObjectDisposedException">The series was disposed.</exception>
@@ -335,7 +346,7 @@ namespace NumSharp
             get
             {
                 ThrowIfDisposed();
-                return _domain ?? _kind.DefaultDomain();
+                return _domain ?? _kind.domain;
             }
             set
             {
@@ -351,9 +362,9 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The window (NumPy's <c>window</c>): the instance's own array, or the class default (<c>default_window</c>).
-        ///     Assigning stores a view of the given array on this instance and releases the instance's previous one (never
-        ///     the class default; see <see cref="ReleaseReplaced"/>).
+        ///     The window (NumPy's <c>window</c>): the instance's own array, or the class attribute (<c>Class.window</c>, read
+        ///     at every access). Assigning stores a view of the given array on this instance and releases the instance's
+        ///     previous one (never the class attribute; see <see cref="ReleaseReplaced"/>).
         /// </summary>
         /// <exception cref="ArgumentNullException">Assigning null.</exception>
         /// <exception cref="ObjectDisposedException">The series was disposed.</exception>
@@ -362,7 +373,7 @@ namespace NumSharp
             get
             {
                 ThrowIfDisposed();
-                return _window ?? _kind.DefaultWindow();
+                return _window ?? _kind.window;
             }
             set
             {
@@ -395,16 +406,17 @@ namespace NumSharp
         /// <summary>The symbol the printers write for the variable (NumPy's read-only <c>symbol</c>, default <c>"x"</c>).</summary>
         /// <exception cref="AttributeError">A state set by <see cref="__setstate__"/> without <c>_symbol</c>: NumPy's
         ///     <c>'Polynomial' object has no attribute '_symbol'</c>.</exception>
-        public string symbol => _symbol ?? throw new AttributeError($"'{_kind.Name}' object has no attribute '_symbol'");
+        public string symbol => _symbol ?? throw new AttributeError($"'{_kind.__name__}' object has no attribute '_symbol'");
 
         /// <summary>
-        ///     The largest power <c>__pow__</c> allows (NumPy's <c>maxpower</c>): the class default (100) unless assigned on
-        ///     this instance; null is NumPy's None (no limit). Any value Python can compare with an int works — NumPy's
-        ///     <c>power &gt; maxpower</c> decides (a float 2.5 allows 2).
+        ///     The largest power <c>__pow__</c> allows (NumPy's <c>maxpower</c>): the class attribute (<c>Class.maxpower</c>,
+        ///     100 unless the class's was assigned) unless assigned on this instance; null is NumPy's None (no limit). Any
+        ///     value Python can compare with an int works — NumPy's <c>power &gt; maxpower</c> decides (a float 2.5 allows 2).
+        ///     Assigning here changes this series only.
         /// </summary>
         public object maxpower
         {
-            get => _hasMaxpower ? _maxpower : _kind.DefaultMaxPower();
+            get => _hasMaxpower ? _maxpower : _kind.maxpower;
             set
             {
                 _maxpower = value;
@@ -419,12 +431,13 @@ namespace NumSharp
         private void ThrowIfDisposed()
         {
             if (_disposed)
-                throw new ObjectDisposedException(_kind.Name);
+                throw new ObjectDisposedException(_kind.__name__);
         }
 
-        /// <summary>The basis letter the default printers write (NumPy's class attribute <c>basis_name</c>): null for the
-        ///     power series, <c>T</c>, <c>P</c>, <c>L</c>, <c>H</c> or <c>He</c> otherwise.</summary>
-        public string basis_name => _kind.BasisName;
+        /// <summary>The basis letter the default printers write (NumPy's class attribute <c>basis_name</c>, read through the
+        ///     series as in Python): null for the power series, <c>T</c>, <c>P</c>, <c>L</c>, <c>H</c> or <c>He</c>
+        ///     otherwise.</summary>
+        public string basis_name => _kind.basis_name;
 
         /// <summary>A view of <paramref name="value"/> that no scope tracks: the object a setter stores.</summary>
         /// <param name="value">The caller's array.</param>
@@ -434,55 +447,6 @@ namespace NumSharp
             var v = value.view();
             NDScope.Detach(v);
             return v;
-        }
-
-        /// <summary>
-        ///     Reads a class attribute <c>domain</c> / <c>window</c> (NumPy's <c>np.array(chebdomain)</c>, a class's own
-        ///     float64 copy of its module's constant), creating it on first use. The array is shared by every instance of the
-        ///     class created without a domain (<c>p.domain</c> returns it itself, NumPy's <c>p.domain is Chebyshev.domain</c>)
-        ///     and lives as long as the process, like the module constants (<see cref="NDPolySeries.Constant"/>): no scope
-        ///     tracks it, and it holds one extra buffer reference, so a caller's <c>Dispose()</c> of the shared object
-        ///     (<c>using var d = p.domain;</c>) cannot free memory every later series reads.
-        /// </summary>
-        /// <param name="slot">The class's static field.</param>
-        /// <param name="lo">The interval's start (-1, or 0 for Laguerre).</param>
-        /// <param name="hi">The interval's end (1).</param>
-        /// <returns>The class attribute.</returns>
-        private protected static NDArray ClassDefault(ref NDArray slot, double lo, double hi)
-            => System.Threading.Volatile.Read(ref slot) ?? CreateClassDefault(ref slot, lo, hi);
-
-        /// <summary>
-        ///     The first-use path of <see cref="ClassDefault"/>: builds and publishes the attribute (a lost first-use race
-        ///     drops its copy). A method of its own because its lambda captures <paramref name="lo"/> and
-        ///     <paramref name="hi"/>: C# builds a captured closure at the entry of the method that declares it, which in
-        ///     <see cref="ClassDefault"/> would allocate on every read.
-        /// </summary>
-        /// <param name="slot">The class's static field.</param>
-        /// <param name="lo">The interval's start.</param>
-        /// <param name="hi">The interval's end.</param>
-        /// <returns>The published attribute (this call's, or the race winner's).</returns>
-        private static NDArray CreateClassDefault(ref NDArray slot, double lo, double hi)
-            => NDPolySeries.Constant(ref slot, () => np.array(new[] { lo, hi }));
-
-        /// <summary>
-        ///     Assigns a class attribute <c>domain</c> / <c>window</c> (NumPy's <c>Chebyshev.domain = np.array([0, 2])</c>): a
-        ///     view of the given array, which every instance without its own domain reads from then on. The view is shared
-        ///     like the first-use attribute, so it holds the same extra buffer reference (a caller disposing it, or the array
-        ///     it views, cannot free what later series read); that reference is never released, as the previous attribute is
-        ///     not released either (instances or callers may still hold it). Assigning the current attribute itself
-        ///     (<c>Chebyshev.domain = Chebyshev.domain</c>) changes nothing, so the attribute keeps its identity as in NumPy.
-        /// </summary>
-        /// <param name="slot">The class's static field.</param>
-        /// <param name="value">The new attribute.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
-        private protected static void SetClassDefault(ref NDArray slot, NDArray value)
-        {
-            if (value is null) throw new ArgumentNullException(nameof(value));
-            if (ReferenceEquals(value, System.Threading.Volatile.Read(ref slot)))
-                return;
-            var shared = Owned(value);
-            shared.Storage.InternalArray.TryAddRef();   // never released: the attribute may be read for the process's life
-            System.Threading.Volatile.Write(ref slot, shared);
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -629,7 +593,7 @@ namespace NumSharp
         /// </summary>
         /// <returns>Never returns.</returns>
         /// <exception cref="TypeError"><c>unhashable type: 'Polynomial'</c> (the class's NumPy name), always.</exception>
-        public override int GetHashCode() => throw new TypeError($"unhashable type: '{_kind.Name}'");
+        public override int GetHashCode() => throw new TypeError($"unhashable type: '{_kind.__name__}'");
 
         /// <summary>NumPy's <c>==</c> (<see cref="Equals(object)"/>); two nulls are equal, null against a series is not.</summary>
         /// <param name="a">One series.</param><param name="b">The other.</param>
@@ -971,7 +935,7 @@ namespace NumSharp
             var start = NDPolySeries.Index(d, 0);
             var stop = NDPolySeries.Index(d, 1);
             NDArray x = Linspace(start, stop, n);
-            NDArray y = Call(x);
+            NDArray y = __call__(x);
             return scope.Returns((x, y));
         }
 
@@ -982,19 +946,19 @@ namespace NumSharp
         /// </summary>
         /// <param name="arg">The point(s): a number (a C# number is a Python scalar; a bool becomes a 0-d bool array, as
         ///     NumPy's mapdomain converts it), an array, or a Python list / tuple. A series argument binds
-        ///     <see cref="Call{TSeries}(TSeries)"/>.</param>
+        ///     <see cref="__call__{TSeries}(TSeries)"/>.</param>
         /// <returns>The values: an array for array points, a 0-d array (NumPy's scalar) for a scalar point.</returns>
         /// <exception cref="ArgumentException">A series passed through an <c>object</c> reference (its result is a series:
-        ///     call <see cref="Call{TSeries}(TSeries)"/> with the series typed as its class).</exception>
+        ///     call <see cref="__call__{TSeries}(TSeries)"/> with the series typed as its class).</exception>
         /// <exception cref="TypeError">None or another object NumPy's object loop refuses (<c>unsupported operand type(s) for
         ///     *: 'float' and 'NoneType'</c>); a str (the multiply ufunc's no-loop error).</exception>
         /// <exception cref="ValueError">A ragged list.</exception>
-        public NDArray Call(object arg)
+        public NDArray __call__(object arg)
         {
             using var scope = NDScope.Open();
             var op = Operand(arg);
             if (op.Kind == PyOperandKind.Series)
-                throw new ArgumentException("a series argument evaluates to a series: call Call<TSeries>(TSeries) with the series typed as its class", nameof(arg));
+                throw new ArgumentException("a series argument evaluates to a series: call __call__<TSeries>(TSeries) with the series typed as its class", nameof(arg));
             var (off, scl) = MapParmsOf(domain, window);
             PolyNumber px;
             switch (op.Kind)
@@ -1034,7 +998,7 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="arg"/> is null.</exception>
         /// <exception cref="TypeError"><c>Domains differ</c> / <c>Windows differ</c> when the recurrence combines two series
         ///     whose domain or window holds a NaN (NumPy's equality check of the domains fails).</exception>
-        public TSeries Call<TSeries>(TSeries arg) where TSeries : NDPolyBase
+        public TSeries __call__<TSeries>(TSeries arg) where TSeries : NDPolyBase
         {
             if (arg is null) throw new ArgumentNullException(nameof(arg));
             using var scope = NDScope.Open();
@@ -1064,9 +1028,10 @@ namespace NumSharp
         ///     <paramref name="kind"/> on <paramref name="domain"/> / <paramref name="window"/> — <c>self(kind.identity(domain,
         ///     window=window, symbol=self.symbol))</c>, NumPy's recurrence run at the target class's identity series.
         /// </summary>
-        /// <param name="domain">The target domain: null for <paramref name="kind"/>'s class default.</param>
-        /// <param name="kind">The target class (<c>typeof(NDChebyshev)</c>, ...): null for this series' class.</param>
-        /// <param name="window">The target window: null for <paramref name="kind"/>'s class default.</param>
+        /// <param name="domain">The target domain: null for <paramref name="kind"/>'s class attribute <c>domain</c>.</param>
+        /// <param name="kind">The target class: <c>typeof(NDChebyshev)</c>, or its class object (<c>NDChebyshev.Class</c>,
+        ///     <c>q.__class__</c>), which converts to the type; null for this series' class.</param>
+        /// <param name="window">The target window: null for <paramref name="kind"/>'s class attribute <c>window</c>.</param>
         /// <returns>A new series of <paramref name="kind"/>.</returns>
         /// <exception cref="AttributeError"><paramref name="kind"/> is not one of the six series classes.</exception>
         /// <exception cref="ValueError">A target domain / window the constructor refuses.</exception>
@@ -1076,9 +1041,9 @@ namespace NumSharp
         public NDPolyBase convert(object domain = null, Type kind = null, object window = null)
         {
             using var scope = NDScope.Open();
-            var k = kind is null ? _kind : NDPolyKind.Of(kind);
-            object d = domain ?? k.DefaultDomain();
-            object w = window ?? k.DefaultWindow();
+            var k = kind is null ? _kind : NDPolyClass.Of(kind);
+            object d = domain ?? k.domain;
+            object w = window ?? k.window;
             using var ident = Identity(k, d, w, symbol);
             return EvaluateAtSeries(ident);
         }

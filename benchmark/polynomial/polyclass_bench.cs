@@ -196,9 +196,9 @@ static Func<object> MakeCall(JsonElement cell)
         case "pow": { var p = S(I("n"), 1); object e = (long)I("e"); return () => p.__pow__(e); }
         case "neg": { var p = S(I("n"), 1); return () => -p; }
         case "eq": { var p = S(I("n"), 1); var q = S(I("n"), 1); return () => p == q; }
-        case "call": { var p = S(I("n"), 1); var x = Vec(I("m"), 5); return () => p.Call(x); }
-        case "call_float": { var p = S(I("n"), 1); double x = D("v"); return () => p.Call(x); }
-        case "compose": { var p = S(I("n"), 1); var q = S(I("m"), 2); return () => p.Call(q); }
+        case "call": { var p = S(I("n"), 1); var x = Vec(I("m"), 5); return () => p.__call__(x); }
+        case "call_float": { var p = S(I("n"), 1); double x = D("v"); return () => p.__call__(x); }
+        case "compose": { var p = S(I("n"), 1); var q = S(I("m"), 2); return () => p.__call__(q); }
         case "deriv": { var p = S(I("n"), 1); return () => p.deriv(); }
         case "integ": { var p = S(I("n"), 1); return () => p.integ(); }
         case "integ_k_lbnd": { var p = S(I("n"), 1); object k = new object[] { 1.0, -1.0 }; return () => p.integ(2, k, 0.5); }

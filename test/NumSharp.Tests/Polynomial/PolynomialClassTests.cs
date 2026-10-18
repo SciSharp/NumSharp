@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using NumSharp.Interop.OpenBLAS;
 
 namespace NumSharp.Tests.Polynomial
@@ -11,13 +13,14 @@ namespace NumSharp.Tests.Polynomial
     ///     <see cref="NDPolynomial"/>, <see cref="NDChebyshev"/>, <see cref="NDLegendre"/>, <see cref="NDLaguerre"/>,
     ///     <see cref="NDHermite"/>, <see cref="NDHermiteE"/>. NumPy 2.4.2's <c>test_classes.py</c> and <c>test_symbol.py</c>
     ///     ported for every class (random coefficients replaced by fixed ones), and the C# spelling of NumPy's protocol pinned
-    ///     (which operator binds for which left operand, <c>Call</c> at a series, the class defaults as statics, disposal,
+    ///     (which operator binds for which left operand, <c>__call__</c> at a series, the class object and its class attributes, disposal,
     ///     pickling). The <c>polyclass</c> oracle tiers hold the byte-level matrix.
     /// </summary>
     /// <remarks>
     ///     <c>[DoNotParallelize]</c>: some tests bind the process-wide OpenBLAS backend (fit and the roots of degree two and
-    ///     more need LAPACK; they go Inconclusive on a host without one) and one assigns a class default. Every expected text
-    ///     and value below was printed by NumPy 2.4.2 for the same call.
+    ///     more need LAPACK; they go Inconclusive on a host without one) and some assign a class attribute
+    ///     (<c>NDLegendre.Class.domain</c>, <c>NDHermite.Class.maxpower</c>, …), which every series of the class reads. Every
+    ///     expected text and value below was printed by NumPy 2.4.2 for the same call.
     /// </remarks>
     [TestClass]
     [DoNotParallelize]
@@ -71,12 +74,12 @@ namespace NumSharp.Tests.Polynomial
         /// <returns>The shared default.</returns>
         private static NDArray ClassDomain(Type t)
         {
-            if (t == typeof(NDPolynomial)) return NDPolynomial.default_domain;
-            if (t == typeof(NDChebyshev)) return NDChebyshev.default_domain;
-            if (t == typeof(NDLegendre)) return NDLegendre.default_domain;
-            if (t == typeof(NDLaguerre)) return NDLaguerre.default_domain;
-            if (t == typeof(NDHermite)) return NDHermite.default_domain;
-            return NDHermiteE.default_domain;
+            if (t == typeof(NDPolynomial)) return NDPolynomial.Class.domain;
+            if (t == typeof(NDChebyshev)) return NDChebyshev.Class.domain;
+            if (t == typeof(NDLegendre)) return NDLegendre.Class.domain;
+            if (t == typeof(NDLaguerre)) return NDLaguerre.Class.domain;
+            if (t == typeof(NDHermite)) return NDHermite.Class.domain;
+            return NDHermiteE.Class.domain;
         }
 
         /// <summary>NumPy's class attribute <c>Poly.window</c>.</summary>
@@ -84,12 +87,12 @@ namespace NumSharp.Tests.Polynomial
         /// <returns>The shared default.</returns>
         private static NDArray ClassWindow(Type t)
         {
-            if (t == typeof(NDPolynomial)) return NDPolynomial.default_window;
-            if (t == typeof(NDChebyshev)) return NDChebyshev.default_window;
-            if (t == typeof(NDLegendre)) return NDLegendre.default_window;
-            if (t == typeof(NDLaguerre)) return NDLaguerre.default_window;
-            if (t == typeof(NDHermite)) return NDHermite.default_window;
-            return NDHermiteE.default_window;
+            if (t == typeof(NDPolynomial)) return NDPolynomial.Class.window;
+            if (t == typeof(NDChebyshev)) return NDChebyshev.Class.window;
+            if (t == typeof(NDLegendre)) return NDLegendre.Class.window;
+            if (t == typeof(NDLaguerre)) return NDLaguerre.Class.window;
+            if (t == typeof(NDHermite)) return NDHermite.Class.window;
+            return NDHermiteE.Class.window;
         }
 
         /// <summary><c>Poly.identity(domain, window, symbol)</c>.</summary>
@@ -206,7 +209,7 @@ namespace NumSharp.Tests.Polynomial
                 Assert.AreEqual(t2, p2.GetType(), $"{t1.Name} -> {t2.Name}");
                 Assert.IsTrue(np.allclose(p2.domain, d2), $"{t1.Name} -> {t2.Name}: domain");
                 Assert.IsTrue(np.allclose(p2.window, w2), $"{t1.Name} -> {t2.Name}: window");
-                Assert.IsTrue(np.allclose(p2.Call(x), p1.Call(x)), $"{t1.Name} -> {t2.Name}: values {p2.Call(x)} vs {p1.Call(x)}");
+                Assert.IsTrue(np.allclose(p2.__call__(x), p1.__call__(x)), $"{t1.Name} -> {t2.Name}: values {p2.__call__(x)} vs {p1.__call__(x)}");
             }
         }
 
@@ -223,7 +226,7 @@ namespace NumSharp.Tests.Polynomial
                 var w2 = Shifted(ClassWindow(t2), 0.09, 0.04);
                 using var p2 = Cast(t2, p1, d2, w2);
                 Assert.IsTrue(np.allclose(p2.domain, d2) && np.allclose(p2.window, w2), $"{t1.Name} -> {t2.Name}");
-                Assert.IsTrue(np.allclose(p2.Call(x), p1.Call(x)), $"{t1.Name} -> {t2.Name}");
+                Assert.IsTrue(np.allclose(p2.__call__(x), p1.__call__(x)), $"{t1.Name} -> {t2.Name}");
             }
         }
 
@@ -242,7 +245,7 @@ namespace NumSharp.Tests.Polynomial
                 var x = np.linspace(d.GetDouble(0), d.GetDouble(1), 11);
                 using var p = Identity(t, d, w);
                 Assert.IsTrue(np.array_equal(p.domain, d) && np.array_equal(p.window, w), t.Name);
-                Assert.IsTrue(np.allclose(p.Call(x), x), t.Name);
+                Assert.IsTrue(np.allclose(p.__call__(x), x), t.Name);
             }
         }
 
@@ -276,8 +279,8 @@ namespace NumSharp.Tests.Polynomial
                 using var p1 = FromRoots(t, r, d, w);
                 Assert.AreEqual(5L, p1.degree(), t.Name);
                 Assert.IsTrue(np.array_equal(p1.domain, d) && np.array_equal(p1.window, w), t.Name);
-                Assert.IsTrue(np.allclose(p1.Call(r), np.zeros(new Shape(5)), 0, 1e-9), $"{t.Name}: {p1.Call(r)}");
-                using var p2 = NDPolynomial.cast(p1, NDPolynomial.default_domain, NDPolynomial.default_window);
+                Assert.IsTrue(np.allclose(p1.__call__(r), np.zeros(new Shape(5)), 0, 1e-9), $"{t.Name}: {p1.__call__(r)}");
+                using var p2 = NDPolynomial.cast(p1, NDPolynomial.Class.domain, NDPolynomial.Class.window);
                 Assert.AreEqual(1.0, p2.coef.GetDouble(5), 1e-9, t.Name);
             }
         }
@@ -292,7 +295,7 @@ namespace NumSharp.Tests.Polynomial
             using var omitted = NDPolynomial.fromroots(L(1, 3));
             using var emptyList = NDPolynomial.fromroots(L(1, 3), L());
             using var none = NDPolynomial.fromroots(L(1, 3), null);
-            Assert.IsTrue(ReferenceEquals(NDPolynomial.default_domain, NDPolynomial.default_domain));
+            Assert.IsTrue(ReferenceEquals(NDPolynomial.Class.domain, NDPolynomial.Class.domain));
             Assert.IsTrue(np.array_equal(omitted.domain, np.array(new[] { -1.0, 1 })));
             Assert.IsTrue(np.array_equal(emptyList.domain, np.array(new[] { -1.0, 1 })));
             Assert.IsTrue(np.array_equal(none.domain, np.array(new[] { 1.0, 3 })));
@@ -316,15 +319,15 @@ namespace NumSharp.Tests.Polynomial
             {
                 using var p = Fit(t, x, y, 3);
                 Assert.IsTrue(np.allclose(p.domain, np.array(new[] { 0.0, 3 })), t.Name);
-                Assert.IsTrue(np.allclose(p.Call(x), y), t.Name);
+                Assert.IsTrue(np.allclose(p.__call__(x), y), t.Name);
                 Assert.AreEqual(3L, p.degree(), t.Name);
 
                 var d = Shifted(ClassDomain(t), 0.1, 0.2);
                 var w = Shifted(ClassWindow(t), 0.05, 0.15);
                 using var pd = Fit(t, x, y, 3, d, window: w);
-                Assert.IsTrue(np.allclose(pd.Call(x), y) && np.allclose(pd.domain, d) && np.allclose(pd.window, w), t.Name);
+                Assert.IsTrue(np.allclose(pd.__call__(x), y) && np.allclose(pd.domain, d) && np.allclose(pd.window, w), t.Name);
                 using var pl = Fit(t, x, y, L(0, 1, 2, 3), d, window: w);
-                Assert.IsTrue(np.allclose(pl.Call(x), y), t.Name);
+                Assert.IsTrue(np.allclose(pl.__call__(x), y), t.Name);
 
                 using var pc = Fit(t, x, y, 3, L());
                 Assert.IsTrue(np.array_equal(pc.domain, ClassDomain(t)) && np.array_equal(pc.window, ClassWindow(t)), t.Name);
@@ -335,7 +338,7 @@ namespace NumSharp.Tests.Polynomial
                 using var p1 = Fit(t, x["::2"], z["::2"], 3);
                 using var p2 = Fit(t, x, z, 3, w: wt);
                 using var p3 = Fit(t, x, z, L(0, 1, 2, 3), w: wt);
-                Assert.IsTrue(np.allclose(p1.Call(x), p2.Call(x)) && np.allclose(p2.Call(x), p3.Call(x)), t.Name);
+                Assert.IsTrue(np.allclose(p1.__call__(x), p2.__call__(x)) && np.allclose(p2.__call__(x), p3.__call__(x)), t.Name);
             }
         }
 
@@ -568,8 +571,8 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     <c>maxpower</c>: the class default (100, NumPy's <c>ABCPolyBase.maxpower</c>), an instance value (any Python number:
-        ///     2.5 allows 2), null for no limit.
+        ///     <c>maxpower</c>: the class attribute (<c>NDPolynomial.Class.maxpower</c>, 100, NumPy's <c>ABCPolyBase.maxpower</c>),
+        ///     an instance value (any Python number: 2.5 allows 2), null for no limit.
         /// </summary>
         [TestMethod]
         public void Maxpower_InstanceValueOverridesTheClassDefault()
@@ -584,7 +587,7 @@ namespace NumSharp.Tests.Polynomial
             using var big = p.__pow__(150);
             Assert.AreEqual(151L, big.__len__());
             using var copy = p.copy();
-            Assert.AreEqual(100L, copy.maxpower, "a derived series reads the class default: NumPy's constructor sets no maxpower");
+            Assert.AreEqual(100L, copy.maxpower, "a derived series reads the class attribute: NumPy's constructor sets no maxpower");
         }
 
         // ---------------------------------------------------------------------------------------------
@@ -646,30 +649,291 @@ namespace NumSharp.Tests.Polynomial
         }
 
         /// <summary>
-        ///     NumPy's object identities: <c>+p is p</c>; a getter returns the stored array; series built without a domain share
-        ///     the class default; assigning the class default reaches them.
+        ///     NumPy's object identities: <c>+p is p</c>; a getter returns the stored array; <c>p.__class__ is Legendre</c>; series
+        ///     built without a domain share the class attribute <c>Legendre.domain</c>; assigning the class attribute reaches them.
         /// </summary>
         [TestMethod]
-        public void ObjectIdentity_PosGettersAndClassDefaults()
+        public void ObjectIdentity_PosGettersAndClassAttributes()
         {
             using var p = new NDLegendre(L(1, 2));
             using var q = new NDLegendre(L(3));
             Assert.IsTrue(ReferenceEquals(+p, p));
             Assert.IsTrue(ReferenceEquals(p.coef, p.coef));
-            Assert.IsTrue(ReferenceEquals(p.domain, q.domain), "both read the class default");
-            Assert.IsTrue(ReferenceEquals(p.domain, NDLegendre.default_domain));
-            var before = NDLegendre.default_domain;
+            Assert.IsTrue(ReferenceEquals(p.__class__, NDLegendre.Class), "p.__class__ is Legendre");
+            Assert.IsTrue(ReferenceEquals(p.domain, q.domain), "both read the class attribute");
+            Assert.IsTrue(ReferenceEquals(p.domain, NDLegendre.Class.domain));
+            var before = NDLegendre.Class.domain;
             try
             {
-                NDLegendre.default_domain = np.array(new[] { 0.0, 4.0 });
+                NDLegendre.Class.domain = np.array(new[] { 0.0, 4.0 });
                 Assert.IsTrue(np.array_equal(p.domain, np.array(new[] { 0.0, 4.0 })), "an instance without a domain reads the new class attribute");
                 using var r = new NDLegendre(L(1), L(5, 6));
                 Assert.IsTrue(np.array_equal(r.domain, np.array(new[] { 5.0, 6.0 })), "an instance domain is its own");
             }
             finally
             {
-                NDLegendre.default_domain = before;
+                NDLegendre.Class.domain = before;
             }
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        //  NumPy's class objects (NDPolyClass) and NumPy's member names
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy 2.4.2's public member names of a series (Chebyshev's): <c>dir(p)</c> minus what every Python object has —
+        ///     a name of <c>object</c>'s kept where the polynomial classes define it themselves, and <c>__class__</c> — with the
+        ///     private <c>_</c> helpers left out (<c>_repr_latex_</c>, IPython's display hook, kept). <c>interpolate</c> is
+        ///     Chebyshev's alone (<see cref="NumPyOnlyChebyshev"/>); the other five classes have the rest, no more.
+        /// </summary>
+        private static readonly string[] NumPySeriesNames =
+        {
+            "__abstractmethods__", "__add__", "__array_ufunc__", "__call__", "__class__", "__dict__", "__divmod__", "__doc__",
+            "__eq__", "__floordiv__", "__format__", "__getstate__", "__hash__", "__init__", "__iter__", "__len__", "__mod__",
+            "__module__", "__mul__", "__ne__", "__neg__", "__pos__", "__pow__", "__radd__", "__rdivmod__", "__repr__",
+            "__rfloordiv__", "__rmod__", "__rmul__", "__rsub__", "__rtruediv__", "__setstate__", "__slots__", "__str__",
+            "__sub__", "__truediv__", "__weakref__", "_repr_latex_", "basis", "basis_name", "cast", "coef", "convert", "copy",
+            "cutdeg", "degree", "deriv", "domain", "fit", "fromroots", "has_samecoef", "has_samedomain", "has_sametype",
+            "has_samewindow", "identity", "integ", "interpolate", "linspace", "mapparms", "maxpower", "roots", "symbol",
+            "trim", "truncate", "window",
+        };
+
+        /// <summary>The NumPy member only Chebyshev has (<c>Chebyshev.interpolate</c>).</summary>
+        private const string NumPyOnlyChebyshev = "interpolate";
+
+        /// <summary>
+        ///     NumPy's members that C# spells with its own syntax, with that spelling (CLR names): the operators — a reflected
+        ///     form (<c>__radd__</c>) is the same C# operator with the series on the right —, the constructors for
+        ///     <c>__init__</c>, and the raising <c>GetHashCode</c> for <c>__hash__ = None</c>.
+        /// </summary>
+        private static readonly Dictionary<string, string> NumPyNamesSpelledByCSharp = new(StringComparer.Ordinal)
+        {
+            ["__add__"] = "op_Addition", ["__radd__"] = "op_Addition",
+            ["__sub__"] = "op_Subtraction", ["__rsub__"] = "op_Subtraction",
+            ["__mul__"] = "op_Multiply", ["__rmul__"] = "op_Multiply",
+            ["__truediv__"] = "op_Division", ["__rtruediv__"] = "op_Division",
+            ["__mod__"] = "op_Modulus", ["__rmod__"] = "op_Modulus",
+            ["__neg__"] = "op_UnaryNegation", ["__pos__"] = "op_UnaryPlus",
+            ["__init__"] = ".ctor",
+            ["__hash__"] = "GetHashCode",
+        };
+
+        /// <summary>
+        ///     NumPy's members of Python's object machinery that NumSharp does not port: the class plumbing
+        ///     (<c>__abstractmethods__</c>, <c>__dict__</c>, <c>__slots__</c>, <c>__weakref__</c>), the docstring
+        ///     (<c>__doc__</c>: NumSharp's are its XML comments), <c>__module__</c> (on the class object instead:
+        ///     <c>p.__class__.__module__</c>) and <c>__array_ufunc__ = None</c> (NumPy's opt-out of ufunc dispatch; NumSharp's
+        ///     ufuncs take no series to begin with).
+        /// </summary>
+        private static readonly HashSet<string> NumPyNamesNotPorted = new(StringComparer.Ordinal)
+        {
+            "__abstractmethods__", "__dict__", "__slots__", "__weakref__", "__doc__", "__module__", "__array_ufunc__",
+        };
+
+        /// <summary>
+        ///     The public members a series class has beyond NumPy's names, each a C# spelling of something NumPy spells
+        ///     otherwise: <c>Class</c> (the class object, NumPy's bare class name <c>Chebyshev</c>), <c>Dispose</c> (the
+        ///     release Python's reference count does), <c>Equals</c> and the <c>==</c> / <c>!=</c> operators (<c>__eq__</c> /
+        ///     <c>__ne__</c>, which keep their names too), <c>ToString</c> (<c>__str__</c>), <c>GetEnumerator</c>
+        ///     (<c>foreach</c>, NumPy's <c>__iter__</c>) and <c>Deconstruct</c> (unpacking a full fit, NumPy's
+        ///     <c>series, [resid, rank, sv, rcond] = fit(..., full=True)</c>).
+        /// </summary>
+        private static readonly HashSet<string> CSharpProtocolNames = new(StringComparer.Ordinal)
+        {
+            "Class", "Dispose", "Equals", "op_Equality", "op_Inequality", "ToString", "GetEnumerator", "Deconstruct",
+        };
+
+        /// <summary>
+        ///     The public member names a C# caller reaches on <paramref name="t"/>: declared or inherited, statics included,
+        ///     operators under their CLR names (<c>op_Addition</c>), the constructors as <c>.ctor</c>; property accessors and
+        ///     <see cref="object"/>'s own members (<c>GetType</c>) left out.
+        /// </summary>
+        /// <param name="t">The type.</param>
+        /// <returns>The names, compared ordinally (case included).</returns>
+        private static HashSet<string> PublicNames(Type t)
+        {
+            const BindingFlags all = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+            return t.GetMembers(all)
+                    .Where(m => m.DeclaringType != typeof(object))
+                    // An accessor (get_domain) is its property's; an operator is special-named too, and kept.
+                    .Where(m => m is not MethodInfo mi || !mi.IsSpecialName || mi.Name.StartsWith("op_", StringComparison.Ordinal))
+                    .Select(m => m.Name)
+                    .ToHashSet(StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        ///     Every public member of the six classes is named as NumPy 2.4.2 names it — case included — or is one of the C#
+        ///     protocol members above, and every NumPy member is there under its own name or its C# spelling (or is listed as
+        ///     not ported). The class object <see cref="NDPolyClass"/> has NumPy's class attributes and Python's class names,
+        ///     and only <c>ToString</c> and the conversion to <see cref="Type"/> beyond them. A PascalCase alias or a renamed
+        ///     member fails here.
+        /// </summary>
+        [TestMethod]
+        public void MemberNames_AreNumPys_CaseIncluded()
+        {
+            foreach (var t in Classes)
+            {
+                var names = PublicNames(t);
+                var numpy = new HashSet<string>(NumPySeriesNames, StringComparer.Ordinal);
+                if (t != typeof(NDChebyshev))
+                    numpy.Remove(NumPyOnlyChebyshev);
+                string cls = NDPolyClass.Of(t).__name__;
+
+                foreach (var n in names)
+                    Assert.IsTrue(numpy.Contains(n) || CSharpProtocolNames.Contains(n) || NumPyNamesSpelledByCSharp.ContainsValue(n),
+                                  $"{t.Name}.{n} is neither a NumPy 2.4.2 member name of {cls} nor a C# protocol member");
+
+                foreach (var n in numpy)
+                {
+                    if (NumPyNamesNotPorted.Contains(n))
+                        continue;
+                    string spelled = NumPyNamesSpelledByCSharp.TryGetValue(n, out var cs) ? cs : n;
+                    Assert.IsTrue(names.Contains(spelled), $"NumPy's {cls}.{n} has no C# member on {t.Name} (looked for {spelled})");
+                }
+            }
+
+            CollectionAssert.AreEquivalent(
+                new[] { "__name__", "__qualname__", "__module__", "domain", "window", "maxpower", "basis_name", "ToString", "op_Implicit" },
+                PublicNames(typeof(NDPolyClass)).ToArray(),
+                "the class object: Python's class names, NumPy's class attributes, str(cls) and the conversion to Type");
+        }
+
+        /// <summary>
+        ///     NumPy's class objects: <c>p.__class__ is Chebyshev</c>; the names NumPy prints for the class
+        ///     (<c>__name__</c>, <c>__qualname__</c>, <c>__module__</c>, <c>str(Chebyshev)</c> =
+        ///     <c>&lt;class 'numpy.polynomial.chebyshev.Chebyshev'&gt;</c>); the class attributes — <c>basis_name</c> (None for
+        ///     the power series), <c>domain</c> / <c>window</c> (float64 <c>[-1, 1]</c>, Laguerre's <c>[0, 1]</c>), which a
+        ///     series without its own returns itself (<c>p.domain is Chebyshev.domain</c>), and <c>maxpower</c> 100 — and the
+        ///     conversion to the C# type. Every value is NumPy 2.4.2's.
+        /// </summary>
+        [TestMethod]
+        public void ClassObject_IsTheSeriesClass_WithNumPysNamesAndAttributes()
+        {
+            var expected = new (Type T, NDPolyClass Cls, string Name, string Module, string BasisName, double Lo)[]
+            {
+                (typeof(NDPolynomial), NDPolynomial.Class, "Polynomial", "numpy.polynomial.polynomial", null, -1.0),
+                (typeof(NDChebyshev), NDChebyshev.Class, "Chebyshev", "numpy.polynomial.chebyshev", "T", -1.0),
+                (typeof(NDLegendre), NDLegendre.Class, "Legendre", "numpy.polynomial.legendre", "P", -1.0),
+                (typeof(NDLaguerre), NDLaguerre.Class, "Laguerre", "numpy.polynomial.laguerre", "L", 0.0),
+                (typeof(NDHermite), NDHermite.Class, "Hermite", "numpy.polynomial.hermite", "H", -1.0),
+                (typeof(NDHermiteE), NDHermiteE.Class, "HermiteE", "numpy.polynomial.hermite_e", "He", -1.0),
+            };
+            foreach (var (t, cls, name, module, basisName, lo) in expected)
+            {
+                using var p = New(t, L(1, 2));
+                Assert.IsTrue(ReferenceEquals(p.__class__, cls), $"{name}: p.__class__ is {name}");
+                Assert.IsTrue(ReferenceEquals(NDPolyClass.Of(t), cls), $"{name}: one class object per class");
+                Assert.AreEqual(name, cls.__name__);
+                Assert.AreEqual(name, cls.__qualname__);
+                Assert.AreEqual(module, cls.__module__);
+                Assert.AreEqual($"<class '{module}.{name}'>", cls.ToString());
+                Assert.AreEqual(basisName, cls.basis_name, name);
+                Assert.AreEqual(basisName, p.basis_name, $"{name}: a series reads the class attribute");
+                Assert.AreEqual(np.float64, cls.domain.dtype, name);
+                Assert.IsTrue(np.array_equal(cls.domain, np.array(new[] { lo, 1.0 })), $"{name}.domain");
+                Assert.IsTrue(np.array_equal(cls.window, np.array(new[] { lo, 1.0 })), $"{name}.window");
+                Assert.IsTrue(ReferenceEquals(p.domain, cls.domain) && ReferenceEquals(p.window, cls.window),
+                              $"{name}: p.domain is {name}.domain");
+                Assert.AreEqual(100L, cls.maxpower, name);
+                Type asType = cls;
+                Assert.AreEqual(t, asType, $"{name}: the class object converts to its C# type");
+            }
+
+            Type none = (NDPolyClass)null;
+            Assert.IsNull(none, "a null class object converts to a null type (convert's 'this series' class')");
+        }
+
+        /// <summary>
+        ///     The class attribute <c>maxpower</c> bounds <c>__pow__</c> on every series of the class without a value of its
+        ///     own, and a series' own value wins over it; None removes the limit. NumPy 2.4.2: with <c>Hermite.maxpower = 2</c>,
+        ///     <c>p ** 3</c> raises <c>ValueError: Power is too large</c>, <c>p ** 2</c> has 3 terms and a series with
+        ///     <c>maxpower = 5</c> raises to 3; with None <c>p ** 3</c> works; the default 100 refuses <c>p ** 101</c>.
+        /// </summary>
+        [TestMethod]
+        public void ClassObject_maxpower_BoundsPowOnSeriesWithoutTheirOwn()
+        {
+            using var p = new NDHermite(L(1, 2));
+            using var q = new NDHermite(L(1, 2));
+            q.maxpower = 5L;
+            try
+            {
+                NDHermite.Class.maxpower = 2L;
+                Assert.AreEqual(2L, p.maxpower, "a series without its own reads the class attribute");
+                Assert.AreEqual("Power is too large", Assert.ThrowsException<ValueError>(() => p.__pow__(3)).Message);
+                using (var squared = p.__pow__(2))
+                    Assert.AreEqual(3L, squared.__len__());
+                using (var cubed = q.__pow__(3))
+                    Assert.AreEqual(4L, cubed.__len__(), "the series' own maxpower wins over the class attribute");
+
+                NDHermite.Class.maxpower = null;
+                using (var free = p.__pow__(3))
+                    Assert.AreEqual(4L, free.__len__(), "None: no limit");
+            }
+            finally
+            {
+                // The class attribute is process-wide: leave NumPy's default for every later test.
+                NDHermite.Class.maxpower = 100L;
+            }
+
+            Assert.AreEqual("Power is too large", Assert.ThrowsException<ValueError>(() => p.__pow__(101)).Message);
+        }
+
+        /// <summary>
+        ///     Assigning the class attribute <c>domain</c> reaches everything that reads it from then on: the class methods
+        ///     (<c>identity</c>, <c>basis</c>), a constructor without a domain, and a series created earlier without one (NumPy
+        ///     2.4.2 gives <c>[0. 2.]</c> for all four after <c>Chebyshev.domain = np.array([0., 2.])</c>). NumSharp stores a
+        ///     VIEW of the assigned array where NumPy stores the array itself: writes into the caller's array still reach the
+        ///     class, and the caller's <c>Dispose()</c> cannot free memory every series reads. Null is refused.
+        /// </summary>
+        [TestMethod]
+        public void ClassObject_domain_AssignmentReachesEveryReaderFromThenOn()
+        {
+            using var earlier = new NDChebyshev(L(1));
+            var original = NDChebyshev.Class.domain;
+            try
+            {
+                var d = np.array(new[] { 0.0, 2.0 });
+                NDChebyshev.Class.domain = d;
+                using var id = NDChebyshev.identity();
+                using var b1 = NDChebyshev.basis(1);
+                using var later = new NDChebyshev(L(1));
+                var expected = np.array(new[] { 0.0, 2.0 });
+                Assert.IsTrue(np.array_equal(id.domain, expected), "identity() reads the class attribute when it runs");
+                Assert.IsTrue(np.array_equal(b1.domain, expected), "basis(1) too");
+                Assert.IsTrue(np.array_equal(later.domain, expected), "a constructor without a domain too");
+                Assert.IsTrue(np.array_equal(earlier.domain, expected), "and a series created earlier without a domain of its own");
+
+                Assert.IsFalse(ReferenceEquals(NDChebyshev.Class.domain, d), "a view of the assigned array (NumPy keeps the array itself)");
+                d.SetDouble(1.5, 1);
+                Assert.AreEqual(1.5, NDChebyshev.Class.domain.GetDouble(1), "writes into the assigned array reach the class attribute");
+                d.Dispose();
+                Assert.AreEqual(1.5, NDChebyshev.Class.domain.GetDouble(1), "the caller's Dispose() frees nothing the class reads");
+                Assert.ThrowsException<ArgumentNullException>(() => NDChebyshev.Class.domain = null);
+            }
+            finally
+            {
+                // Process-wide: every later test reads Chebyshev.domain again.
+                NDChebyshev.Class.domain = original;
+            }
+
+            Assert.IsTrue(np.array_equal(earlier.domain, np.array(new[] { -1.0, 1.0 })), "restored");
+        }
+
+        /// <summary>
+        ///     The class object stands where NumSharp takes a class as a <see cref="Type"/>: <c>p.convert(kind: q.__class__)</c>
+        ///     is NumPy's <c>p.convert(kind=q.__class__)</c>, and <c>kind: NDLegendre.Class</c> NumPy's <c>kind=Legendre</c>
+        ///     (NumPy 2.4.2 prints <c>Legendre([2., 2., 2.], domain=[-1.,  1.], window=[-1.,  1.], symbol='x')</c> for both).
+        /// </summary>
+        [TestMethod]
+        public void ClassObject_StandsForTheClass_InConvert()
+        {
+            using var p = new NDPolynomial(L(1, 2, 3));
+            using var q = new NDLegendre(L(1));
+            using var viaSeries = p.convert(kind: q.__class__);
+            using var viaClass = p.convert(kind: NDLegendre.Class);
+            Assert.AreEqual(typeof(NDLegendre), viaSeries.GetType());
+            Assert.AreEqual("Legendre([2., 2., 2.], domain=[-1.,  1.], window=[-1.,  1.], symbol='x')", viaSeries.__repr__());
+            Assert.IsTrue(viaClass == viaSeries);
         }
 
         /// <summary>NumPy's <c>test_integ</c>: defaults, constants, the lower bound, and the domain scaling.</summary>
@@ -741,9 +1005,9 @@ namespace NumSharp.Tests.Polynomial
                 using var p = New(t, L(1, 2, 3), d, Shifted(ClassWindow(t), 0.05, 0.15));
                 var xtgt = np.linspace(d.GetDouble(0), d.GetDouble(1), 20);
                 var (xres, yres) = p.linspace(20);
-                Assert.IsTrue(np.allclose(xres, xtgt) && np.allclose(yres, p.Call(xtgt)), t.Name);
+                Assert.IsTrue(np.allclose(xres, xtgt) && np.allclose(yres, p.__call__(xtgt)), t.Name);
                 var (x2, y2) = p.linspace(20, L(0, 2));
-                Assert.IsTrue(np.allclose(x2, np.linspace(0, 2, 20)) && np.allclose(y2, p.Call(np.linspace(0, 2, 20))), t.Name);
+                Assert.IsTrue(np.allclose(x2, np.linspace(0, 2, 20)) && np.allclose(y2, p.__call__(np.linspace(0, 2, 20))), t.Name);
             }
         }
 
@@ -758,31 +1022,31 @@ namespace NumSharp.Tests.Polynomial
                 using var src = new NDPolynomial(L(1, 2, 3));
                 using var p = Cast(t, src);
                 var tgt = 1.0 + x * (2.0 + 3.0 * x);
-                Assert.IsTrue(np.allclose(p.Call(x), tgt), t.Name);
+                Assert.IsTrue(np.allclose(p.__call__(x), tgt), t.Name);
                 using var q = New(t, L(1, 2, 3));
-                Assert.IsTrue(np.array_equal(q.Call(L(-1, 0, 2)), q.Call(np.array(new[] { -1, 0, 2 }))), t.Name);
+                Assert.IsTrue(np.array_equal(q.__call__(L(-1, 0, 2)), q.__call__(np.array(new[] { -1, 0, 2 }))), t.Name);
                 // A Python scalar point is a NumPy scalar result (a 0-d array here).
-                Assert.AreEqual(0, q.Call(0.5).ndim, t.Name);
+                Assert.AreEqual(0, q.__call__(0.5).ndim, t.Name);
             }
         }
 
         /// <summary>
         ///     <c>p(q)</c> at a series is a series of q's class with q's symbol (test_symbol.py's <c>test_composition</c>): C#
-        ///     binds the generic <see cref="NDPolyBase.Call{TSeries}(TSeries)"/> for a series argument.
+        ///     binds the generic <see cref="NDPolyBase.__call__{TSeries}(TSeries)"/> for a series argument.
         /// </summary>
         [TestMethod]
         public void Call_AtASeries_IsACompositionOfTheArgumentsClass()
         {
             using var p = new NDPolynomial(L(3, 2, 1), symbol: "t");
             using var q = new NDPolynomial(L(5, 1, 0, -1), symbol: "λ_1");
-            NDPolynomial r = p.Call(q);
+            NDPolynomial r = p.__call__(q);
             Assert.AreEqual("λ_1", r.symbol);
             using var c = new NDChebyshev(L(0, 1));
-            NDChebyshev rc = p.Call(c);
+            NDChebyshev rc = p.__call__(c);
             Assert.AreEqual(typeof(NDChebyshev), rc.GetType());
             var x = np.linspace(-1, 1, 7);
-            Assert.IsTrue(np.allclose(rc.Call(x), p.Call(x)), "Chebyshev's T_1 is x, so p(T_1) evaluates as p");
-            Assert.ThrowsException<ArgumentException>(() => p.Call((object)c), "a series through object: the generic Call names its result type");
+            Assert.IsTrue(np.allclose(rc.__call__(x), p.__call__(x)), "Chebyshev's T_1 is x, so p(T_1) evaluates as p");
+            Assert.ThrowsException<ArgumentException>(() => p.__call__((object)c), "a series through object: the generic __call__ names its result type");
         }
 
         /// <summary>NumPy's <c>test_cutdeg</c> / <c>test_truncate</c> / <c>test_trim</c>.</summary>
@@ -867,7 +1131,7 @@ namespace NumSharp.Tests.Polynomial
                 {
                     using var p = NDChebyshev.interpolate(Powx, deg, L(0, 2), L(t));
                     // NumPy's assert_almost_equal(decimal=11): |difference| < 1.5e-11.
-                    Assert.IsTrue(np.allclose(p.Call(x), np.power(x, t), 0, 1.5e-11), $"deg {deg} t {t}");
+                    Assert.IsTrue(np.allclose(p.__call__(x), np.power(x, t), 0, 1.5e-11), $"deg {deg} t {t}");
                 }
         }
 
@@ -969,11 +1233,11 @@ namespace NumSharp.Tests.Polynomial
         public void Dispose_ReleasesOwnArrays_ThenRefusesUse()
         {
             var p = new NDLaguerre(L(1, 2));
-            var def = NDLaguerre.default_domain;
+            var def = NDLaguerre.Class.domain;
             p.Dispose();
             p.Dispose();
             Assert.ThrowsException<ObjectDisposedException>(() => p.coef);
-            Assert.ThrowsException<ObjectDisposedException>(() => p.Call(0.5));
+            Assert.ThrowsException<ObjectDisposedException>(() => p.__call__(0.5));
             Assert.AreEqual(0.0, def.GetDouble(0), "the class default is the class's, not the series'");
         }
 
@@ -1003,7 +1267,7 @@ namespace NumSharp.Tests.Polynomial
             target.__setstate__(partial);
             Assert.AreEqual(2L, target.__len__());
             Assert.AreEqual("'Polynomial' object has no attribute '_symbol'", Assert.ThrowsException<AttributeError>(() => target.symbol).Message);
-            Assert.IsTrue(np.array_equal(target.domain, NDPolynomial.default_domain), "a missing domain falls back to the class attribute");
+            Assert.IsTrue(np.array_equal(target.domain, NDPolynomial.Class.domain), "a missing domain falls back to the class attribute");
         }
 
         /// <summary>
@@ -1032,7 +1296,7 @@ namespace NumSharp.Tests.Polynomial
 
             // A default-window series: the window it reads is the class attribute, which an assignment never releases.
             var window = p.window;
-            Assert.IsTrue(ReferenceEquals(window, NDPolynomial.default_window));
+            Assert.IsTrue(ReferenceEquals(window, NDPolynomial.Class.window));
             using var w = np.array(new[] { 0.0, 1.0 });
             p.window = w;
             Assert.IsFalse(window.IsDisposed, "the class default is the class's");

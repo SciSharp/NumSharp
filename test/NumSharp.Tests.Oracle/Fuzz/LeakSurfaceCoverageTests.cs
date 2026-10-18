@@ -107,6 +107,10 @@ namespace NumSharp.Tests.Fuzz
             ("NDLaguerre", typeof(NDLaguerre), false),
             ("NDHermite", typeof(NDHermite), false),
             ("NDHermiteE", typeof(NDHermiteE), false),
+            // Their class objects (NDChebyshev.Class, p.__class__): NumPy's class attributes domain / window / maxpower /
+            // basis_name under NumPy's names, __name__ / __module__, the printed <class '...'> and the conversion to the
+            // CLR type. domain / window hand out the process-wide shared arrays (Ownership.SharedArrays).
+            ("NDPolyClass", typeof(NDPolyClass), false),
         };
 
         /// <summary>
@@ -140,6 +144,8 @@ namespace NumSharp.Tests.Fuzz
             ("NDLaguerre", typeof(NDLaguerre)),
             ("NDHermite", typeof(NDHermite)),
             ("NDHermiteE", typeof(NDHermiteE)),
+            // The class object's conversion to its CLR type (convert(kind: NDLegendre.Class) binds the Type parameter).
+            ("NDPolyClass", typeof(NDPolyClass)),
         };
 
         /// <summary>Whether <paramref name="type"/> declares (not inherits) at least one public static <c>op_*</c> member.</summary>
@@ -355,14 +361,16 @@ namespace NumSharp.Tests.Fuzz
 
         /// <summary>
         ///     A series class's C# spellings of NumPy members → the Python names whose polyclass cases invoke them (every
-        ///     other member keeps NumPy's name): the call, <c>foreach</c> (its <c>__iter__</c> case enumerates the series),
-        ///     <c>ToString()</c> and the <c>IFormattable</c> overload (the <c>__str__</c> case compares <c>ToString()</c> with
-        ///     <c>__str__()</c>, the <c>__format__</c> case <c>string.Format</c> with <c>__format__</c>), <c>Equals</c> (what
-        ///     <c>__eq__</c> and <c>==</c> run) and <c>Deconstruct</c> (the full fit's <c>var (series, status) = fit(...)</c>).
+        ///     other member keeps NumPy's name, <c>__call__</c> included): <c>foreach</c> (its <c>__iter__</c> case
+        ///     enumerates the series), <c>ToString()</c> and the <c>IFormattable</c> overload (the <c>__str__</c> case
+        ///     compares <c>ToString()</c> with <c>__str__()</c>, the <c>__format__</c> case <c>string.Format</c> with
+        ///     <c>__format__</c>), <c>Equals</c> (what <c>__eq__</c> and <c>==</c> run) and <c>Deconstruct</c> (the full fit's
+        ///     <c>var (series, status) = fit(...)</c>). Each key must name a live series-class member: the completeness gate
+        ///     lists a key that no longer does as stale, so a member renamed to NumPy's spelling cannot leave its mapping
+        ///     behind.
         /// </summary>
         internal static readonly Dictionary<string, string[]> PolyClassMemberNames = new(StringComparer.Ordinal)
         {
-            ["Call"] = new[] { "__call__" },
             ["GetEnumerator"] = new[] { "__iter__" },
             ["ToString"] = new[] { "__str__", "__format__" },
             ["Equals"] = new[] { "__eq__", "__ne__" },
@@ -472,6 +480,11 @@ namespace NumSharp.Tests.Fuzz
             foreach (var name in RandomOpKeys.Keys)
                 if (!ids.Contains("np.random." + name))
                     stale.Add($"RandomOpKeys entry '{name}' names no np.random member");
+            // A C# spelling of a NumPy member must still exist on the series classes: once a member takes NumPy's own
+            // name (Call became __call__), its mapping would route a vanished name and hide nothing — stale, not harmless.
+            foreach (var name in PolyClassMemberNames.Keys)
+                if (!PolyClassKeyPrefixes.Keys.Any(owner => ids.Contains(owner + "." + name)))
+                    stale.Add($"PolyClassMemberNames entry '{name}' names no series-class member");
             // A module-qualified key ("legendre.leggauss") is a numpy.polynomial submodule's member, "np.polynomial." + key;
             // a class-qualified one ("chebyshev.Chebyshev.fit") a series class's member (PolyClassKeys).
             var polyClassKeys = new HashSet<string>(surface.SelectMany(PolyClassKeys), StringComparer.Ordinal);
