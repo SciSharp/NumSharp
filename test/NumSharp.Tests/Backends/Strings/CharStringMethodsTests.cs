@@ -1078,6 +1078,29 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     An argument OBJECT reaches CPython's conversions through its own slots (NumPy 2.4.2 / CPython 3.12 probes):
+        ///     bytes formatting's <c>%f</c> takes <c>float(a)</c> of a 0-d text array, its <c>%c</c> a 0-d integer array's
+        ///     <c>__index__</c>, its <c>%s</c> refuses a <c>StringDType</c> array's buffer, and an element inside the argument is
+        ///     the Python str it stands for (<c>%r</c> is its repr, not a 0-d array's).
+        /// </summary>
+        [TestMethod]
+        public void ModOperator_ArgumentObjects_FollowCPythonsSlots()
+        {
+            var bytesFormats = np.@char.array(new[] { (object)B("%f"), B("%c"), B("%s") });
+            var zeroText = (NDCharArray)np.array("1.5").view(typeof(NDCharArray));
+            ElementText((NDCharArray)bytesFormats[0] % zeroText).Should().Be("1.500000");
+            ElementText((NDCharArray)bytesFormats[1] % np.array(65L)).Should().Be("A");
+            Action buffer = () => { var _ = (NDCharArray)bytesFormats[2] % T("ab"); };
+            buffer.Should().Throw<ValueError>().Where(e => e.Message == "cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
+
+            var texts = np.@char.array(new[] { "%r", "ab  ", "%x" });
+            ElementText((NDCharArray)texts[0] % (NDCharArray)texts[1]).Should().Be("'ab'");
+            // A 0-d BOOL array has no __index__ (NumPy's array_index takes integer dtypes only): %x refuses it.
+            Action boolIndex = () => { var _ = (NDCharArray)texts[2] % np.array(true); };
+            boolIndex.Should().Throw<TypeError>().Where(e => e.Message == "%x format: an integer is required, not numpy.ndarray");
+        }
+
+        /// <summary>
         ///     Every other left operand has no <c>%</c> for a chararray: a Python number, bool or None is CPython's TypeError,
         ///     an ndarray (or a NumPy scalar) runs <c>np.remainder</c>, whose missing text loop is NumPy's TypeError.
         /// </summary>
