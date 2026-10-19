@@ -236,7 +236,8 @@ namespace NumSharp
         /// <param name="a">The argument.</param>
         /// <returns>A new array (a 0-d one for a scalar).</returns>
         /// <exception cref="TypeError">None (Python's <c>unsupported operand type(s) for +: 'NoneType' and 'float'</c>, the
-        ///     object array's add), or a str / list of strs (the ufunc add's no-loop text for <c>&lt;U…</c> and float64).</exception>
+        ///     object array's add), or text — a str, a list of strs, an S / U / <c>StringDType</c> array — (the ufunc add's
+        ///     no-loop text: <c>dtype('&lt;U2'), dtype('float64')</c>, or <c>StringDType, _PyFloatDType</c>).</exception>
         /// <exception cref="ValueError">A ragged sequence (np.asarray's inhomogeneous-shape text).</exception>
         /// <exception cref="NotSupportedException">Any other object array (NumPy adds 0.0 to Python objects).</exception>
         private static NDArray PlusZero(object a)
@@ -248,7 +249,7 @@ namespace NumSharp
                     throw new TypeError("unsupported operand type(s) for +: 'NoneType' and 'float'");
                 case string:
                     // A 0-d <U array: NumPy's ufunc add has no loop for it with a float64 (the house add raises NumPy's text).
-                    return np.add(np.asanyarray(a), NDArray.Scalar(0.0));
+                    return np.add(np.asanyarray(a), NDArray.PythonLiteral(0.0));
             }
             if (PolySequence.IsSequence(a))
             {
@@ -258,12 +259,14 @@ namespace NumSharp
                     if (nonNumeric.IsObject)
                         throw nonNumeric.Refusal;
                     // A str array: the same no-loop text as a str scalar.
-                    return np.add(np.asanyarray(a), NDArray.Scalar(0.0));
+                    return np.add(np.asanyarray(a), NDArray.PythonLiteral(0.0));
                 }
                 return PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromObject(arr), s_pyZero).ToNDArray();
             }
-            if (a is NDArray nd && nd.typecode == NPTypeCode.String)
-                return np.add(nd, NDArray.Scalar(0.0));
+            // A text array (S, U or StringDType): the ufunc add's no-loop text, whose class-level form (StringDType) names
+            // the WEAK Python float 0.0 as _PyFloatDType.
+            if (a is NDArray nd && Backends.Strings.NDStringUfuncs.IsText(nd))
+                return np.add(nd, NDArray.PythonLiteral(0.0));
             return PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromObject(a), s_pyZero).ToNDArray();
         }
 

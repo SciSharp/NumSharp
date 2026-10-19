@@ -102,7 +102,7 @@ namespace NumSharp
             // and axis checks and the no-axis return above. The bounding box is found on that truth array (the probe), and
             // the slices below cut `filt` itself, so the result stays a view of the text. (The probe is reclaimed with the
             // scope; np.any over the truth array cannot raise, where np.any over the text would take the cast route.)
-            var probe = Backends.Strings.NDStringUfuncs.IsString(filt)
+            var probe = Backends.Strings.NDStringUfuncs.IsText(filt)
                 ? Backends.Strings.NDStringTruth.Truth(filt, Backends.Strings.NDStringTruth.Flavor.Nonzero)
                 : filt;
 

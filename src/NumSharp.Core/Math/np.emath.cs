@@ -305,7 +305,7 @@ namespace NumSharp
                 return x; // complex in -> complex ufunc out; the scan/_tocomplex would be a value-identical no-op
             // Text: NumPy's `x < 0` has no loop for text and a Python int, whatever the size (an empty array included,
             // which the fast scan below would skip).
-            if (Backends.Strings.NDStringUfuncs.IsString(x))
+            if (Backends.Strings.NDStringUfuncs.IsText(x))
                 throw LessThanZeroTextError(x);
             // Fused early-exit scan for the hot contiguous float32/float64 case (no abs/bool temp, one pass);
             // null => not the fast path, so use the composition, whose `x < 0` boolean is layout- and
@@ -335,7 +335,7 @@ namespace NumSharp
         {
             if (x.typecode == NPTypeCode.Complex)
                 return x;
-            if (Backends.Strings.NDStringUfuncs.IsString(x))
+            if (Backends.Strings.NDStringUfuncs.IsText(x))
                 throw new TypeError($"ufunc 'absolute' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
             bool big = Backends.Kernels.EmathDomainScan.AnyAbsGreaterThanOne(x) ?? np.any(np.abs(x) > (NDArray)1);
             return big ? x.astype(np.complex128) : x;
@@ -361,7 +361,7 @@ namespace NumSharp
         {
             if (p.typecode == NPTypeCode.Complex)
                 return p;
-            if (Backends.Strings.NDStringUfuncs.IsString(p))
+            if (Backends.Strings.NDStringUfuncs.IsText(p))
                 throw LessThanZeroTextError(p);
             bool neg = Backends.Kernels.EmathDomainScan.AnyNegative(p) ?? np.any(p < (NDArray)0);
             return neg ? p * 1.0 : p;

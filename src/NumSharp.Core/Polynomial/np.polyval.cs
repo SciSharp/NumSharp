@@ -52,9 +52,11 @@ namespace NumSharp
             // NumPy's Horner loop starts with y = zeros_like(x) and y * x: text in x has no multiply loop. Text in p meets
             // the first add, y * x + pv, whose left side keeps x's dtype; iterating a 1-D p yields NumPy SCALARS, whose
             // descriptor is their own text length (np.str_('a') is <U1, '' too), while an N-D p yields rows of p's dtype.
-            if (Backends.Strings.NDStringUfuncs.IsString(x))
+            // (A StringDType x is named by class; a 1-D StringDType p iterates as Python strs, so its add meets the legacy
+            // resolver with the str's own <U descriptor, as a U p's np.str_ does; an N-D one names the classes.)
+            if (Backends.Strings.NDStringUfuncs.IsText(x))
                 throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", x.dtype, x.dtype);
-            if (Backends.Strings.NDStringUfuncs.IsString(p))
+            if (Backends.Strings.NDStringUfuncs.IsText(p))
                 throw Backends.Strings.NDStringUfuncs.NoLoop("add", x.dtype,
                     p.ndim == 1 ? Backends.Strings.NDStringArrays.ScalarDescr(p.Storage.GetAtIndex(0)) : p.dtype);
 

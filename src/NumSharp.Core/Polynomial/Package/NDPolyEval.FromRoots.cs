@@ -450,7 +450,7 @@ namespace NumSharp
             try
             {
                 if (xo.Kind == RootArgKind.Weak)
-                    xs = owned = OrdinateArray(x);   // the discovered-dtype 0-d array a Python scalar stands for
+                    xs = owned = NDPolySeries.PolyUfuncOperand(x);   // the WEAK 0-d array of the discovered dtype a Python scalar stands for (a Python int names int64 in the legacy text, _PyLongDType in the class-level one)
                 return NDStringUfuncs.BinaryError("subtract", xs, ra, null, null);
             }
             finally

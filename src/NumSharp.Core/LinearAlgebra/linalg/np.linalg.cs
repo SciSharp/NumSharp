@@ -107,14 +107,19 @@ namespace NumSharp
             /// <param name="arrays">The operands to check (any dtype, any layout).</param>
             /// <exception cref="LinAlgError"><c>Array must not contain infs or NaNs</c> — an operand holds ±inf or a NaN
             ///     (a complex one in either component).</exception>
-            /// <exception cref="TypeError">An operand holds fixed-width strings: NumPy's <c>isfinite</c> has no string loop
-            ///     (<c>ufunc 'isfinite' not supported for the input types, ...</c>), raised whatever the operand's size.</exception>
+            /// <exception cref="TypeError">An operand holds text: NumPy's <c>isfinite</c> has no string loop, raised whatever
+            ///     the operand's size — for fixed-width strings the legacy resolver's <c>ufunc 'isfinite' not supported for the
+            ///     input types, ...</c>, for <c>StringDType</c> the dispatcher's <c>ufunc 'isfinite' did not contain a loop with
+            ///     signature matching types &lt;class 'numpy.dtypes.StringDType'&gt; -&gt; None</c>.</exception>
             internal static void AssertFinite(params NDArray[] arrays)
             {
                 foreach (var a in arrays)
                 {
                     // NumPy's isfinite(a) resolves its loop before it reads an element: a string operand (even an empty
                     // one) is refused by the legacy type resolver.
+                    // A StringDType operand puts a new-style DType into the dispatch key: the dispatcher names its class.
+                    if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                        throw Backends.Strings.NDStringUfuncs.VStringNoLoop("isfinite", new[] { Backends.Strings.NDStringUfuncs.UnaryDispatchClass(a) });
                     if (Backends.Strings.NDStringUfuncs.IsString(a))
                         throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("isfinite");
                     bool floaty = a.typecode is NPTypeCode.Half or NPTypeCode.Single
@@ -151,7 +156,7 @@ namespace NumSharp
                     var op = operands[i];
                     if (op is null)
                         continue;
-                    if (first < 0 && Backends.Strings.NDStringUfuncs.IsString(op))
+                    if (first < 0 && Backends.Strings.NDStringUfuncs.IsText(op))
                         first = i;
                     if (op.typecode == NPTypeCode.Complex)
                         complex = true;

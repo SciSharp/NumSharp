@@ -135,7 +135,7 @@ namespace NumSharp
                 // NumPy then calls np.cross, which casts both operands to their promoted dtype and multiplies components
                 // into the result: with text the multiply has no loop, named with the promoted descriptor on both sides
                 // (<U2 beside float64 promotes to <U32).
-                if (Backends.Strings.NDStringUfuncs.IsString(x1) || Backends.Strings.NDStringUfuncs.IsString(x2))
+                if (Backends.Strings.NDStringUfuncs.IsText(x1) || Backends.Strings.NDStringUfuncs.IsText(x2))
                 {
                     var promoted = DTypePromotion.PromoteTypes(x1.dtype, x2.dtype);
                     throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", promoted, promoted);

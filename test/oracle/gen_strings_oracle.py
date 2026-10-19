@@ -16926,6 +16926,87 @@ def gen_strpad():
     _fresh_section("strpad", "_strpad_specs")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Section tsurface: the surface generators re-run with StringDType operands (strings phase 1, P1.7f)
+# ----------------------------------------------------------------------------------------------------------------------
+
+# The surface generators whose U cases section tsurface re-runs with StringDType operands.
+_TSURFACE_GENERATORS = ("gen_refusals", "gen_string_requests", "gen_text_precedence", "gen_shape_decided",
+                        "gen_validation_order", "gen_surface")
+# Cases tsurface leaves out because NumPy 2.4.2 crashes the process on them (a segmentation fault, nothing to record),
+# by the layout they would have had; main prints the count. NumSharp's answers there are unit-tested.
+_TSURFACE_CRASHES = []
+
+
+def _tsurface_operand(pair):
+    """A surface operand as section tsurface uses it: a ``U`` operand becomes a StringDType operand of the same values and
+    shape (a C-ordered copy: the surface cases test NumPy's checks and answers, which a layout does not decide), any other
+    operand stays as it is. An operand that IS its base (``own`` / ``target``: an out or an in-place target whose OWNDATA the
+    case compares) stays its own base; any other becomes a reshaped view of a 1-D base, as ``t_plain`` builds it.
+
+    :param pair: the (base, view) operand.
+    :returns: ``(pair, converted)``: the operand to record and whether it became StringDType.
+    """
+    base, view = pair
+    if view.dtype.kind != "U":
+        return pair, False
+    values = np.asarray(view).astype(TD.build())
+    converted = (values, values) if view is base else t_plain(values)
+    # A read-only operand stays read-only: its refusal is what the case tests (an in-place sort of a read-only array).
+    if not view.flags.writeable:
+        converted[1].flags.writeable = False
+    return converted, True
+
+
+def _tsurface_crashes(op, params):
+    """Whether NumPy 2.4.2 crashes the process on this call once its text operand is StringDType: ``ndarray.byteswap()``
+    (the plan's D14: NumSharp returns a copy) and ``np.place`` (NumPy's StringDType buffer handling in ``PyArray_Place``).
+
+    :param op: the case's op.
+    :param params: the case's params.
+    :returns: True for a call that must not run.
+    """
+    return params.get("name") == "byteswap" or op == "place_arr"
+
+
+def gen_tsurface():
+    """Section tsurface (strings phase 1, P1.7f: "the whole surface with T"): the six surface generators (the refusal table,
+    the string dtype= requests, the precedence of a text call's problems, the shape-decided answers, the validation order,
+    the rest of the surface) re-run with every ``U`` operand replaced by a StringDType operand of the same values and shape;
+    the cases that gained no StringDType operand are left to their own sections. Each call is NumPy's answer over
+    StringDType — a result where NumPy computes (phase 2 computes on StringDType since P2.T), its refusal where it refuses,
+    in NumPy's order. NumPy's crashes (``_tsurface_crashes``) are left out.
+
+    The cases are evaluated in this process: a StringDType operand puts a new-style DType into every ufunc dispatch key,
+    which NumPy resolves through registered loops and promoters only (it never wraps a legacy resolver's answer as a new
+    loop for such a key), so the dispatch cache cannot make one case's answer depend on an earlier case (see
+    ``_fresh_section`` for the keys where it can).
+    """
+    real_add = globals()["add"]
+
+    def tsurface_add(section, op, *, params=None, operands=(), call, phase=1, layout="", mutate=None, note=""):
+        converted = []
+        any_t = False
+        for pair in operands:
+            new, changed = _tsurface_operand(pair)
+            converted.append(new)
+            any_t |= changed
+        if not any_t:
+            return
+        if _tsurface_crashes(op, params or {}):
+            _TSURFACE_CRASHES.append(f"{section}:{op}:{layout}")
+            return
+        real_add("tsurface", op, params=params, operands=converted, call=call, phase=phase, layout=f"{section}:{layout}",
+                 mutate=mutate, note=note)
+
+    globals()["add"] = tsurface_add
+    try:
+        for name in _TSURFACE_GENERATORS:
+            globals()[name]()
+    finally:
+        globals()["add"] = real_add
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
@@ -16933,7 +17014,7 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strcharmeth, gen_strcharlist, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
               gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod,
-              gen_strcodec, gen_tcodec, gen_strout, gen_strpad]
+              gen_strcodec, gen_tcodec, gen_strout, gen_strpad, gen_tsurface]
 
 
 def main():
@@ -16976,6 +17057,8 @@ def main():
     for sec, dropped in _FRESH_DROPPED.items():
         if dropped:
             print(f"  {sec}: {len(dropped)} cases dropped for NumPy 2.4.2's StringDType clear-loop MemoryError")
+    if _TSURFACE_CRASHES:
+        print(f"  tsurface: {len(_TSURFACE_CRASHES)} cases left out because NumPy 2.4.2 crashes on them over StringDType")
     for sec, platform in _FRESH_PLATFORM.items():
         if platform:
             print(f"  {sec}: {len(platform)} cases dropped for a Windows C long overflow text")

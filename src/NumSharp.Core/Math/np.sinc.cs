@@ -117,7 +117,11 @@ namespace NumSharp
         public static NDArray sinc(NDArray x)
         {
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy's sinc starts with pi * x, a float64 times text: multiply has no such loop.
+            // NumPy's sinc starts with pi * x, a Python float times text: multiply has no such loop. A StringDType x puts a
+            // new-style DType into the key, so the dispatcher names the classes (pi is the weak _PyFloatDType); a fixed-width
+            // x meets the legacy resolver, which names float64.
+            if (Backends.Strings.NDStringUfuncs.IsVString(x))
+                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { DTypeRegistry.PyFloat.ToString(), x.dtype.Meta.ToString() });
             if (Backends.Strings.NDStringUfuncs.IsString(x)) throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", np.float64, x.dtype);
             // NumPy's implicit `asanyarray(None)` failure, given a clear identity here.
             if (x is null)

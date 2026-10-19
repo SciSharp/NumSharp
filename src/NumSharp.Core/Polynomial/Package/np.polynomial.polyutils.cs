@@ -192,10 +192,15 @@ namespace NumSharp
         ///     ints, <c>float division by zero</c> once a float is involved — CPython 3.12's texts).</exception>
         /// <exception cref="TypeError">NumPy's bool subtraction (NumPy bool elements).</exception>
         /// <exception cref="OverflowException">A Python int too large (see <see cref="mapparms(object, object)"/>).</exception>
-        /// <exception cref="NotSupportedException">A null or string element.</exception>
+        /// <exception cref="TypeError">A string element (a Python str): Python's subtraction error naming both items' types,
+        ///     in NumPy's order (old's subtraction before new's).</exception>
+        /// <exception cref="NotSupportedException">A null element.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapparms.html</remarks>
         public (object off, object scl) mapparms<T0, T1, T2, T3>((T0, T1) old, (T2, T3) @new)
         {
+            // A string element: the object overload answers it (Python's `old[1] - old[0]` on a str, in Python's order).
+            if (typeof(T0) == typeof(string) || typeof(T1) == typeof(string) || typeof(T2) == typeof(string) || typeof(T3) == typeof(string))
+                return mapparms((object)old, (object)@new);
             if (NDPolySeries.TryMapParmsFast(old, @new, out var off, out var scl))
                 return (off.ToObject(), scl.ToObject());
             using var scope = NDScope.Open();   // array elements leave ufunc intermediates behind
@@ -321,7 +326,7 @@ namespace NumSharp
         /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
         /// <exception cref="OverflowException">Python int overflow.</exception>
         /// <exception cref="ValueError">A ragged tuple / list of points (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="NotSupportedException">A str point, or a list holding one (NumPy's str arrays).</exception>
+        /// <exception cref="NotSupportedException">A list NumPy makes an object array of (None, a Python int past uint64).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polyutils.mapdomain.html</remarks>
         public object mapdomain(object x, object old, object @new)
         {
@@ -337,11 +342,20 @@ namespace NumSharp
                 case NDArray nd:
                     px = PolyNumber.FromArray(nd);
                     break;
+                case string s:
+                    // np.asanyarray('ab'): a 0-d <U array, whose `scl*x` then has no multiply loop (NumPy's TypeError).
+                    px = PolyNumber.FromArray(converted = np.asanyarray(s));
+                    break;
                 default:
                     // `if type(x) not in (int, float, complex) and not isinstance(x, np.generic): x = np.asanyarray(x)`:
                     // FromObject keeps a Python number or NumPy scalar a scalar and converts a typed C# array (whole) or a
                     // Python tuple / list (np.array's nested coercion) to an ndarray — the only way it yields an array
-                    // here, since a caller's NDArray took the case above.
+                    // here, since a caller's NDArray took the case above. A list of strs is NumPy's str array.
+                    if (PolySequence.IsSequence(x))
+                    {
+                        px = PolyNumber.FromArray(converted = PointsSequence(x));
+                        break;
+                    }
                     px = PolyNumber.FromObject(x);
                     if (px.Kind == PolyNumberKind.Array)
                         converted = px.Array;
@@ -371,7 +385,8 @@ namespace NumSharp
         /// <returns>The mapped points (a new array).</returns>
         /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
         /// <exception cref="ValueError">A ragged list (np.array's inhomogeneous-shape text).</exception>
-        /// <exception cref="NotSupportedException">A list holding a str or null (NumPy's str / object arrays).</exception>
+        /// <exception cref="NotSupportedException">A list holding null or a Python int past uint64 (NumPy's object arrays); a
+        ///     list of strs is NumPy's str array, whose <c>scl*x</c> raises NumPy's TypeError.</exception>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
         /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
         /// <exception cref="DivideByZeroException">A zero-length domain of Python numbers.</exception>
@@ -381,8 +396,27 @@ namespace NumSharp
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
             // The conversion is this call's intermediate; the NDArray overload always returns a fresh array.
-            using var xa = PolySequence.ToArray(x);
+            using var xa = PointsSequence(x);
             return mapdomain(xa, old, @new);
+        }
+
+        /// <summary>
+        ///     <c>np.asanyarray(x)</c> of a Python list / tuple of points: np.array's coercion (numeric), or the str array NumPy
+        ///     builds when the items hold strs (whose <c>scl*x</c> then raises NumPy's no-loop TypeError).
+        /// </summary>
+        /// <param name="x">The sequence.</param>
+        /// <returns>A new array (the caller owns it).</returns>
+        /// <exception cref="ValueError">A ragged sequence.</exception>
+        /// <exception cref="NotSupportedException">A sequence NumPy makes an object array of (None, a Python int past uint64).</exception>
+        private static NDArray PointsSequence(object x)
+        {
+            var arr = PolySequence.ToArrayOrNonNumeric(x, out var nonNumeric);
+            if (arr is not null)
+                return arr;
+            if (!nonNumeric.IsObject && NDPolySeries.TryStrArray(x, out var text))
+                return text;
+            throw nonNumeric.Refusal ?? new NotSupportedException(
+                "numpy.polynomial: NumPy builds an object array from these points, a dtype NumSharp does not have");
         }
 
         /// <summary>
@@ -605,6 +639,13 @@ namespace NumSharp
             }
             if (!PolyNumber.IsScalarValue(tol) && tol is not NDArray && !PolySequence.IsArrayLike(tol))
                 throw new TypeError($"'<' not supported between instances of '{(PolySequence.IsSequence(tol) ? "list" : NDPolySeries.PythonTypeName(tol))}' and 'int'");
+            // A text array: `tol < 0` is the less ufunc on text and a Python int, which has no loop (NumPy's TypeError,
+            // raised by the house comparison before any truth value is taken).
+            if (tol is NDArray text && Backends.Strings.NDStringUfuncs.IsText(text))
+            {
+                using var zero = NDArray.PythonLiteral(0L);
+                using var less = np.less(text, zero);
+            }
             return PolyNumber.FromObject(tol);
         }
 

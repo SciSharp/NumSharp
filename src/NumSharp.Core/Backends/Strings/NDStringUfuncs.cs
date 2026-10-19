@@ -198,7 +198,7 @@ namespace NumSharp.Backends.Strings
             // A text out= receives the bool results FORMATTED ('True' / 'False', truncated to its width, NumPy's
             // output cast): the bools are computed into a temporary and cast into out= under where= (the guard
             // already checked the bool → text cast and the broadcast).
-            bool textOut = IsString(@out);
+            bool textOut = IsText(@out);
             if (s_comparisons.Contains(ufunc) && ComparesText(x1.dtype, x2.dtype))
                 return textOut
                     ? NDStringArithmetic.CastInto(@out, where, () => NDStringComparison.Execute(ufunc, x1, x2, null, null))
@@ -828,7 +828,7 @@ namespace NumSharp.Backends.Strings
         {
             bool any = IsStringRequest(dtype);
             foreach (var op in operands)
-                any |= IsString(op);
+                any |= IsText(op);
             if (!any)
                 return;
             throw EinsumError(operands, dtype, casting);
@@ -909,16 +909,22 @@ namespace NumSharp.Backends.Strings
         /// <param name="operands">The operand descriptors, in call order.</param>
         /// <returns>The exception (not thrown).</returns>
         /// <remarks>
-        ///     A NEP 55 <c>StringDType</c> operand prints as its DType CLASS (<c>&lt;class 'numpy.dtypes.StringDType'&gt;</c>),
-        ///     because NumPy's new-style dispatcher, not the legacy type resolver, refuses those operands and names the
-        ///     classes it searched for (<see cref="VStringNoLoop"/>); a fixed-width operand prints as its descriptor. The
-        ///     text sites that reach this helper (a histogram's edge widths, its weights' running total) see both kinds.
+        ///     When any operand is a NEP 55 <c>StringDType</c>, EVERY operand prints as its DType CLASS
+        ///     (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, &lt;class 'numpy.dtypes.StringDType'&gt;)</c>): a new-style DType
+        ///     in the dispatch key means NumPy's dispatcher, not the legacy type resolver, refuses the call, and it names the
+        ///     classes it searched for (<see cref="VStringNoLoop"/>). Without one, the legacy resolver names the descriptors.
+        ///     The text sites that reach this helper (a histogram's edge widths, its weights' running total, diff's and
+        ///     unwrap's subtract, cross's multiply) see both kinds. A Python scalar's abstract class cannot be expressed by a
+        ///     descriptor: those sites use <see cref="VStringNoLoop"/> directly.
         /// </remarks>
         internal static TypeError NoLoop(string ufunc, params DType[] operands)
         {
+            bool classes = false;
+            foreach (var operand in operands)
+                classes |= operand.Meta is VStringDTypeMeta;
             var reprs = new string[operands.Length];
             for (int i = 0; i < reprs.Length; i++)
-                reprs[i] = operands[i].Meta is VStringDTypeMeta ? operands[i].Meta.ToString() : operands[i].ToString(true);
+                reprs[i] = classes ? operands[i].Meta.ToString() : operands[i].ToString(true);
             return new TypeError($"ufunc '{ufunc}' did not contain a loop with signature matching types ({string.Join(", ", reprs)}) -> None");
         }
 

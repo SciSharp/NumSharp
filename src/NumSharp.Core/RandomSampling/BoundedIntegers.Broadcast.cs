@@ -494,6 +494,8 @@ namespace NumSharp
         {
             long n = x.size;
             var values = new ulong[n];
+            // A StringDType array hands out Python strs, whose repr in int()'s error is the plain quoted text.
+            bool numpyStr = !Backends.Strings.NDStringUfuncs.IsVString(x);
             for (long i = 0; i < n; i++)
             {
                 // `int(flat[i])`: flat hands out NumPy scalars, so a U element is an np.str_ (its repr in the error) and an S
@@ -501,7 +503,7 @@ namespace NumSharp
                 object element = x.GetAtIndex(i);
                 Int128 v = element switch
                 {
-                    string text => ClampToInt128(PythonInt.Parse(text, 10, numpyStr: true)),
+                    string text => ClampToInt128(PythonInt.Parse(text, 10, numpyStr)),
                     byte[] bytes => ClampToInt128(PythonInt.ParseBytes(bytes, 10)),
                     _ => PyIntOfElement(element),
                 };

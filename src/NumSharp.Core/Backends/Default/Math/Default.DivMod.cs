@@ -29,7 +29,7 @@ namespace NumSharp.Backends
             // NumPy parses BOTH outputs, then where=, before it resolves the loop: with text involved (a string operand or
             // a string dtype= request) a read-only out of either slot or a non-bool mask is reported first.
             UfuncLoopCode(dtype);
-            if (Strings.NDStringUfuncs.IsString(lhs) || Strings.NDStringUfuncs.IsString(rhs) || Strings.NDStringUfuncs.IsStringRequest(dtype))
+            if (Strings.NDStringUfuncs.IsText(lhs) || Strings.NDStringUfuncs.IsText(rhs) || Strings.NDStringUfuncs.IsStringRequest(dtype))
             {
                 Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out.Quotient, null);
                 Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out.Remainder, where);

@@ -64,7 +64,10 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A stride that addresses elements is not a multiple of the element
         ///     size (NumSharp stores strides in whole elements), <paramref name="dtype"/> has no storage yet
         ///     (datetime64), or <paramref name="dtype"/> is an UNSIZED string (<c>'S'</c>, <c>'U'</c>, <c>np.str_</c>):
-        ///     NumPy builds a zero-width <c>S0</c>/<c>U0</c> array here, which NumSharp's string buffers cannot hold.</exception>
+        ///     NumPy builds a zero-width <c>S0</c>/<c>U0</c> array here, which NumSharp's string buffers cannot hold. With a
+        ///     buffer and <c>StringDType</c> on either side: another dtype over a <c>StringDType</c> array's cells, a
+        ///     <c>StringDType</c> dtype over any other buffer, or an offset that splits a cell (NumPy lays the array
+        ///     anyway; see the remarks).</exception>
         /// <remarks>
         ///     <para>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html. The checks run in NumPy's order
@@ -100,6 +103,15 @@ namespace NumSharp
         ///     <c>SystemError</c> is raised only when that element is read). A string array buffer viewed with another
         ///     string width or class (<c>'&lt;U1'</c> over a <c>'&lt;U2'</c> array) is an alias of its bytes, never its
         ///     elements.
+        ///     </para>
+        ///     <para>
+        ///     <b>StringDType.</b> Without a buffer the array's 16-byte cells are zeroed (every element <c>''</c>, NumPy's
+        ///     <c>NPY_NEEDS_INIT</c>). With a buffer, a <c>StringDType</c> dtype over a <c>StringDType</c> array is NumPy's
+        ///     view of its cells (offset and strides in bytes, whole cells), sharing the array's allocator, with the
+        ///     requested descriptor's NA object and coercion. NumPy also lays any other dtype over a <c>StringDType</c>
+        ///     array's raw cells, and a <c>StringDType</c> array over any bytes; NumSharp refuses both, because a cell of a
+        ///     long text is a reference into its allocator (a writable numeric view could corrupt it, and raw bytes have no
+        ///     allocator). <c>np.frombuffer(a.tobytes(), dtype)</c> reads the same cells as a copy.
         ///     </para>
         /// </remarks>
         public static NDArray ndarray(Shape shape, DType dtype = null, object buffer = null, long offset = 0, long[] strides = null, char order = 'C')
@@ -218,8 +230,11 @@ namespace NumSharp
                 layout = layout.WithFlags(flagsToSet: ArrayFlags.WRITEABLE);
 
             // A string array allocates its descriptor's bytes (the lane alone has no width); a non-native string descriptor
-            // is allocated native, as np.empty allocates it.
-            IArraySlice slice = typeCode == NPTypeCode.String
+            // is allocated native, as np.empty allocates it. A StringDType array allocates zeroed cells and its own
+            // allocator (NumPy's NPY_NEEDS_INIT: every element reads as '').
+            IArraySlice slice = dtype.Meta is VStringDTypeMeta
+                ? VStringArraySlice.Allocate(dtype, size)
+                : typeCode == NPTypeCode.String
                 ? StringArraySlice.Allocate(Backends.Strings.NDStringStorage.AllocationDescr(dtype), size, false)
                 : ArraySlice.Allocate(typeCode, size, false);
             var storage = new UnmanagedStorage(slice, layout);
@@ -277,6 +292,12 @@ namespace NumSharp
 
             if (!Shape.TryElementStrides(byteStrides, dims, itemSize, out long[] elementStrides, out int badAxis))
                 throw StrideSplitsElement(byteStrides, badAxis, itemSize);
+
+            // StringDType on either side of the buffer: NumPy lays any dtype over any bytes, NumSharp lays only a
+            // StringDType view over a StringDType array's cells (sharing their allocator). Raised here, after every check
+            // NumPy makes, as the exact bounds check above is.
+            if (dtype.Meta is VStringDTypeMeta || buf.VStringCells is not null)
+                return NdarrayOverVStringCells(buf, dims, dtype, offset, elementStrides, (long)(upper - lower));
 
             // Every check has passed: from here on the buffer belongs to the result.
             NDArray view = NdarrayViewBytes(buf, dims, dtype, typeCode, offset, elementStrides, (long)lower, (long)(upper - lower));
@@ -360,6 +381,80 @@ namespace NumSharp
                 ? layout.WithFlags(flagsToSet: ArrayFlags.WRITEABLE)
                 : layout.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
 
+            return new NDArray(UnmanagedStorage.OverBuffer(slice, layout, root));
+        }
+
+        /// <summary>
+        ///     The buffer branch when <c>StringDType</c> is on either side: a <c>StringDType</c> <paramref name="dtype"/> over a
+        ///     <c>StringDType</c> array's cells is a VIEW that shares the cells and their allocator (NumPy's answer: a view
+        ///     whose base is the buffer array, writeable when it is); every other pairing is refused.
+        /// </summary>
+        /// <param name="buf">The checked buffer (its pin, if any, is released by the caller on a refusal).</param>
+        /// <param name="dims">The validated dimensions.</param>
+        /// <param name="dtype">The requested element type.</param>
+        /// <param name="offset">The byte offset of the first element.</param>
+        /// <param name="elementStrides">The checked strides, in 16-byte cells for a <c>StringDType</c> request.</param>
+        /// <param name="spanBytes">The number of bytes the array occupies (0 when empty).</param>
+        /// <returns>The <c>StringDType</c> view.</returns>
+        /// <exception cref="NotSupportedException">A non-<c>StringDType</c> dtype over a <c>StringDType</c> array's cells, a
+        ///     <c>StringDType</c> dtype over any other buffer, or an offset that splits a cell.</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why the refusals (divergences from NumPy, which lays any dtype over any bytes).</b> A <c>StringDType</c> cell
+        ///     holds its text inline only up to 15 bytes; a longer text lives in the array's allocator and the cell holds an
+        ///     arena offset or a heap pointer. Reading the cells as numbers is harmless, but a WRITABLE view of them (NumPy's)
+        ///     lets any write turn a cell into a pointer anywhere, and a <c>StringDType</c> array over raw bytes reads cells
+        ///     with no allocator behind them (NumPy reads garbage, or raises <c>MemoryError: Failed to load string</c>, for a
+        ///     long string). The bytes themselves stay reachable as a copy: <c>a.tobytes()</c> is exactly the cells NumPy's
+        ///     view would read.
+        ///     </para>
+        ///     <para>
+        ///     <b>The view's descriptor</b> is the requested one (its <c>na_object</c> and <c>coerce</c>), over the buffer's
+        ///     cells and allocator. NumPy gives the array the requested descriptor's OWN allocator, so a long text written by
+        ///     another descriptor is unreadable there; NumSharp reads every text correctly (a safety divergence).
+        ///     </para>
+        /// </remarks>
+        private static unsafe NDArray NdarrayOverVStringCells(NDBuffer buf, long[] dims, DType dtype, long offset, long[] elementStrides, long spanBytes)
+        {
+            VStringArraySlice cells = buf.VStringCells;
+            if (dtype.Meta is not VStringDTypeMeta)
+                throw new NotSupportedException(
+                    $"np.ndarray cannot read the bytes of a StringDType array as {dtype.ToString(true)}: its 16-byte cells hold " +
+                    "references into the array's allocator, and a writable view of them could corrupt it (NumPy lays the view " +
+                    $"anyway). Read a copy of the cells instead: np.frombuffer(a.tobytes(), \"{dtype.str}\").");
+            if (cells is null)
+                throw new NotSupportedException(
+                    $"np.ndarray cannot lay {dtype.ToString(true)} over a buffer that is not a StringDType array: a StringDType " +
+                    "element is a 16-byte cell whose text can live in its array's allocator, and these bytes have none (NumPy " +
+                    "builds the array anyway and reads garbage, or fails, for a long string). Lay it over a StringDType array, " +
+                    "or build it from text: np.array(values, dtype).");
+
+            const int cellBytes = Backends.Strings.VStringAllocator.SIZEOF_NPY_PACKED_STATIC_STRING;
+            long first = 0;
+            if (spanBytes > 0)
+            {
+                // Element [0, ..., 0] must start on a cell of the buffer array: a misaligned offset would read the halves
+                // of two cells as one (NumPy does, and fails or reads garbage). An empty array reads nothing, so any offset
+                // NumPy accepted stays legal for it.
+                long delta = (long)(buf.Start + offset - (byte*)cells.Address);
+                if (delta % cellBytes != 0)
+                    throw new NotSupportedException(
+                        $"np.ndarray: the byte offset {offset} splits a 16-byte StringDType cell; a StringDType view must start " +
+                        "on a cell of its buffer (NumPy reads the straddled bytes as a cell).");
+                first = delta / cellBytes;
+            }
+
+            // The requested descriptor's NA object and coercion govern the view; the cells and their allocator are the
+            // buffer array's, shared (reference counting forwards to the cells' block either way).
+            VStringArraySlice slice = dtype.Equals(cells.Descr) ? cells : new VStringArraySlice(cells.Cells, cells.Allocator, dtype);
+
+            // Every check has passed: the buffer belongs to the result (its base is the buffer array's owner).
+            UnmanagedStorage root = buf.TakeRoot(NPTypeCode.String, cellBytes, out _);
+            var layout = new Shape(dims, elementStrides, first, slice.Count);
+            // NumPy's WRITEABLE for an array over a buffer: exactly when the buffer is (a stride of 0 does not clear it).
+            layout = buf.Writable
+                ? layout.WithFlags(flagsToSet: ArrayFlags.WRITEABLE)
+                : layout.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
             return new NDArray(UnmanagedStorage.OverBuffer(slice, layout, root));
         }
 

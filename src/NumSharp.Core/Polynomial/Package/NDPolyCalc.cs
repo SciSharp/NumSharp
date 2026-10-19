@@ -99,16 +99,22 @@ namespace NumSharp
         /// <exception cref="ArgumentException">A scl the series cannot absorb — NumPy's UFuncTypeError text
         ///     (<c>Cannot cast ufunc 'multiply' output from dtype('complex128') to dtype('float64') ...</c>).</exception>
         /// <exception cref="IncorrectShapeException">An array scl that does not broadcast with the series.</exception>
-        /// <exception cref="NotSupportedException">A null or string series (object/str arrays in NumPy).</exception>
+        /// <exception cref="TypeError">A text series (S, U or <c>StringDType</c>): NumPy's string-ufunc TypeErrors at
+        ///     <c>c[:1]*0</c> (S / U: the out= kwarg) or at the first <c>c *= scl</c> (a scale that is not an integer).</exception>
+        /// <exception cref="NotSupportedException">A null series (an object array in NumPy), or a text series whose
+        ///     recurrence would read the strings (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>).</exception>
         internal static NDArray Der(PolyBasis basis, object c, int m, object scl, int axis)
         {
             NDArray src = Coefficients(c);
+            bool text = Backends.Strings.NDStringUfuncs.IsText(src);
             NPTypeCode t = PolyTyping.IsIntLike(src.typecode) ? NPTypeCode.Double : src.typecode;
             if (m < 0)
                 throw new ValueError("The order of derivation must be non-negative");
             int iaxis = NormalizeAxis(axis, src.ndim);
             if (m == 0)
-                return KCopyAs(src, t);
+                return text ? np.copy(src, 'K') : KCopyAs(src, t);
+            if (text)
+                return DerText(basis, src, m, scl, iaxis);
 
             Moved(src.Shape, iaxis, out var md, out var ms);
             long n = md[0];
@@ -192,12 +198,15 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">Constants that do not broadcast with the series' columns.</exception>
         /// <exception cref="OverflowException">A Python-int scl / lbnd / constant too large for the series' float dtype
         ///     (<c>int too large to convert to float</c>).</exception>
-        /// <exception cref="NotSupportedException">A null or string series; a str lbnd when an order USES it (NumPy fails
-        ///     there with a str-dtype error; a str lbnd is never read by an order that takes the one-coefficient zero branch,
-        ///     nor at all when <paramref name="m"/> is 0); a None constant of an N-D series.</exception>
+        /// <exception cref="NotSupportedException">A null series; a text series whose recurrence would read the strings
+        ///     (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>, after NumPy's checks, the m == 0 copy, the first
+        ///     <c>c *= scl</c> and an empty series' IndexError); a str lbnd when an order USES it (NumPy fails there with a
+        ///     str-dtype error; a str lbnd is never read by an order that takes the one-coefficient zero branch, nor at all
+        ///     when <paramref name="m"/> is 0); a None constant of an N-D series.</exception>
         internal static NDArray Int(PolyBasis basis, object c, int m, object k, object lbnd, object scl, int axis)
         {
             NDArray src = Coefficients(c);
+            bool text = Backends.Strings.NDStringUfuncs.IsText(src);
             NPTypeCode t = PolyTyping.IsIntLike(src.typecode) ? NPTypeCode.Double : src.typecode;
             var ks = IntegrationConstants(k);
             if (m < 0)
@@ -212,7 +221,9 @@ namespace NumSharp
                 throw new ValueError("scl must be a scalar.");
             int iaxis = NormalizeAxis(axis, src.ndim);
             if (m == 0)
-                return KCopyAs(src, t);
+                return text ? np.copy(src, 'K') : KCopyAs(src, t);
+            if (text)
+                return IntText(basis, src, scl, iaxis);
 
             // k = list(k) + [0] * (cnt - len(k))
             while (ks.Count < m)
@@ -549,6 +560,19 @@ namespace NumSharp
                 throw new TypeError($"ufunc 'add' did not contain a loop with signature matching types " +
                                     $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('<U{Math.Max(1, len)}')) -> None");
             }
+            if (kRaw is TextBytesConstant bytes)
+            {
+                // c[0] + np.bytes_(…): the same no-loop add, the bytes' dtype np.array's — S{len}, S1 for the empty bytes.
+                throw new TypeError($"ufunc 'add' did not contain a loop with signature matching types " +
+                                    $"(dtype('{cm.typecode.AsNumpyDtypeName()}'), dtype('S{Math.Max(1, bytes.Length)}')) -> None");
+            }
+            if (kRaw is NDArray textRow && Backends.Strings.NDStringUfuncs.IsText(textRow))
+            {
+                // A row / 0-d text constant: the add ufunc (in place for an N-D series, the NumPy scalar's add for a 1-D one)
+                // has no loop for the series' dtype and text — the house ufunc raises NumPy's text.
+                using var first = oneD ? PolyNumber.FromScalar(cm.typecode, Ptr(cm)).ToNDArray() : cm[0];
+                using var sum = np.add(first, textRow);
+            }
             if (kRaw is null && oneD)
                 throw new TypeError($"unsupported operand type(s) for +: '{NDPolyBase.ObjectLoopTypeName(PolyNumber.FromScalar(cm.typecode, Ptr(cm)))}' and 'NoneType'");
             var ki = Constant(kRaw);
@@ -685,16 +709,150 @@ namespace NumSharp
         /// </summary>
         /// <param name="c">The argument.</param>
         /// <returns>An array of rank ≥ 1.</returns>
-        /// <exception cref="NotSupportedException">null (an object array in NumPy) or a string (a str array).</exception>
+        /// <exception cref="NotSupportedException">null, or another object NumPy makes an object array of (a Python int past
+        ///     uint64, a sequence holding None).</exception>
+        /// <remarks>A text series (an S / U / <c>StringDType</c> array, a C# string, a <c>string[]</c>, a list of strs) is
+        ///     returned as the str array NumPy builds: {p}der / {p}int run their argument checks on it, in NumPy's order,
+        ///     before <see cref="DerText"/> / <see cref="IntText"/> reach its strings.</remarks>
         private static NDArray Coefficients(object c)
         {
+            if (c is NDArray nd && Backends.Strings.NDStringUfuncs.IsText(nd))
+                return nd.ndim == 0 ? np.expand_dims(nd, 0) : nd;
             var v = NDPolySeries.AsCoefficientArray(c);
-            // A str / object series is refused as soon as it exists, as before the conversion learned to describe one
-            // (U4's argument checks follow the series in this order); the conversion's refusal names the item that made it.
             if (v.NonNumeric)
-                throw v.Refusal ?? new NotSupportedException("a str series makes NumPy build a str array, a dtype NumSharp does not have");
+            {
+                // A str argument is the str array NumPy builds (np.array's discovered width); an object series is refused
+                // as soon as it exists (U4's argument checks follow the series in this order) with the conversion's refusal,
+                // which names the item that made it.
+                if (!v.IsObject && NDPolySeries.TryStrArray(c, out var str))
+                    return str.ndim == 0 ? np.expand_dims(str, 0) : str;
+                throw v.Refusal ?? new NotSupportedException("NumPy builds an object array from this series, a dtype NumSharp does not have");
+            }
             var a = v.Source;
             return a.ndim == 0 ? np.expand_dims(a, 0) : a;
+        }
+
+        /// <summary>
+        ///     {p}der of a text series (S, U or <c>StringDType</c>) once NumPy's argument checks have passed and m &gt; 0:
+        ///     NumPy's statements up to the first one that reads the strings themselves. <c>c = np.array(c, ndmin=1,
+        ///     copy=True)</c> moved to axis 0; for <c>m &gt;= len(c)</c> the result is <c>c[:1]*0</c> — the string multiply
+        ///     ufunc without out=, so S / U raise NumPy's out= kwarg TypeError and <c>StringDType</c> gives empty strings —
+        ///     moved back (hermeder returns it as it is); otherwise the first order's <c>c *= scl</c> runs (the in-place
+        ///     string repeat for an integer scale, NumPy's no-loop TypeError for any other), and then the recurrence would
+        ///     repeat and concatenate the elements, which the polynomial package does not model.
+        /// </summary>
+        /// <param name="basis">The basis (hermeder skips the final moveaxis of the <c>c[:1]*0</c> branch).</param>
+        /// <param name="src">The series (rank &gt;= 1).</param>
+        /// <param name="m">The order (&gt; 0).</param>
+        /// <param name="scl">The scale (null: NumPy's Python int 1).</param>
+        /// <param name="iaxis">The normalized series axis.</param>
+        /// <returns>The <c>c[:1]*0</c> result of a <c>StringDType</c> series of at most <paramref name="m"/> coefficients.</returns>
+        /// <exception cref="TypeError">NumPy's string-ufunc TypeErrors (the out= kwarg, a missing loop).</exception>
+        /// <exception cref="ValueError">An array scale whose broadcast would stretch the series.</exception>
+        /// <exception cref="NotSupportedException">The recurrence would read the strings
+        ///     (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>).</exception>
+        private static NDArray DerText(PolyBasis basis, NDArray src, int m, object scl, int iaxis)
+        {
+            var c = MoveAxisView(np.copy(src, 'K'), iaxis, 0);
+            long n = c.Shape.dimensions[0];
+            if (m >= n)
+            {
+                var product = np.multiply(c[":1"], NDArray.PythonLiteral(0L));
+                return basis != PolyBasis.HermiteE ? MoveAxisView(product, 0, iaxis) : product;
+            }
+            // The first order's `c *= scl`: a string ufunc call whose answer the dtypes decide, so it is made ...
+            np.multiply(c, scl is null ? NDArray.PythonLiteral(1L) : NDPolySeries.PolyUfuncOperand(scl), @out: c);
+            // ... then, for an N-D series, the recurrence's first statement on a row c[j] (decided too: see DerTextFirstRow);
+            // the elements of a 1-D series are Python strs, whose arithmetic is Python's.
+            if (c.ndim > 1)
+                DerTextFirstRow(basis, c, n - 1);
+            throw NDPolySeries.TextArithmeticRefusal(src);
+        }
+
+        /// <summary>
+        ///     The first statement of an order of {p}der on a row of an N-D text series, made as NumPy's ufunc call where the
+        ///     dtypes decide it: Laguerre's <c>-c[j]</c> (no negative loop for any text), and every other basis'
+        ///     <c>j*c[j]</c> (power / Hermite_e <c>n*c[n]</c>, Hermite <c>2n*c[n]</c>, Chebyshev <c>2n*c[n]</c> or
+        ///     <c>4*c[2]</c>, Legendre <c>(2n-1)*c[n]</c> or <c>3*c[2]</c>) — the string multiply without out=, NumPy's out=
+        ///     kwarg TypeError for S / U. A <c>StringDType</c> repeat succeeds, and Chebyshev / Legendre with one coefficient
+        ///     left copy <c>der[0] = c[1]</c> first: both then compute with the strings (the caller's refusal).
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="c">The moved, scaled series (rank &gt;= 2).</param>
+        /// <param name="n">NumPy's <c>n</c> after its decrement (&gt;= 1).</param>
+        /// <exception cref="TypeError">The statement's TypeError.</exception>
+        private static void DerTextFirstRow(PolyBasis basis, NDArray c, long n)
+        {
+            if (basis == PolyBasis.Laguerre)
+            {
+                using var row = c[n];   // the loop's -c[n] (n >= 2), or der[0] = -c[1] (n == 1)
+                using var negated = np.negative(row);
+                return;
+            }
+            if (Backends.Strings.NDStringUfuncs.IsVString(c))
+                return;
+            long j = n, factor;
+            switch (basis)
+            {
+                case PolyBasis.Chebyshev:
+                    if (n == 1) return;
+                    if (n == 2) { j = 2; factor = 4; } else factor = 2 * n;
+                    break;
+                case PolyBasis.Legendre:
+                    if (n == 1) return;
+                    if (n == 2) { j = 2; factor = 3; } else factor = 2 * n - 1;
+                    break;
+                case PolyBasis.Hermite:
+                    factor = 2 * n;
+                    break;
+                default:
+                    factor = n;
+                    break;
+            }
+            using var r = c[j];
+            using var k = NDArray.PythonLiteral(factor);
+            using var product = np.multiply(k, r);
+        }
+
+        /// <summary>
+        ///     {p}int of a text series once NumPy's argument checks have passed and m &gt; 0: the first order's
+        ///     <c>c *= scl</c> (a string ufunc call, decided by dtypes), then NumPy's IndexError for an empty series
+        ///     (<c>tmp[0] = c[0]*0</c> reads <c>c[0]</c>; <c>n == 1 and np.all(c[0] == 0)</c> is never true for text, whose
+        ///     <c>== 0</c> NumPy answers all-False), then the recurrence, which would compute with the strings.
+        /// </summary>
+        /// <param name="basis">The basis (Laguerre's first row statement is a negation).</param>
+        /// <param name="src">The series (rank &gt;= 1).</param>
+        /// <param name="scl">The scale (null: NumPy's Python int 1).</param>
+        /// <param name="iaxis">The normalized series axis.</param>
+        /// <returns>Never returns.</returns>
+        /// <exception cref="TypeError">NumPy's string-ufunc TypeError at <c>c *= scl</c> (a scale that is not an
+        ///     integer), or at an N-D series' first row statement.</exception>
+        /// <exception cref="IndexError">An empty series.</exception>
+        /// <exception cref="NotSupportedException">The recurrence would read the strings
+        ///     (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>).</exception>
+        private static NDArray IntText(PolyBasis basis, NDArray src, object scl, int iaxis)
+        {
+            var c = MoveAxisView(np.copy(src, 'K'), iaxis, 0);
+            np.multiply(c, scl is null ? NDArray.PythonLiteral(1L) : NDPolySeries.PolyUfuncOperand(scl), @out: c);
+            if (c.Shape.dimensions[0] == 0)
+                throw new IndexError("index 0 is out of bounds for axis 0 with size 0");
+            // An N-D series' first statement on the row c[0] — Laguerre's tmp[1] = -c[0] (after the copy tmp[0] = c[0]; no
+            // negative loop for any text), every other basis' tmp[0] = c[0]*0 (the string multiply without out=: NumPy's out=
+            // kwarg TypeError for S / U) — is a ufunc call the dtypes decide; a 1-D series' elements are Python strs.
+            if (c.ndim > 1)
+            {
+                using var row = c[0];
+                if (basis == PolyBasis.Laguerre)
+                {
+                    using var negated = np.negative(row);
+                }
+                else if (!Backends.Strings.NDStringUfuncs.IsVString(c))
+                {
+                    using var zero = NDArray.PythonLiteral(0L);
+                    using var product = np.multiply(row, zero);
+                }
+            }
+            throw NDPolySeries.TextArithmeticRefusal(src);
         }
 
         /// <summary>
@@ -756,6 +914,21 @@ namespace NumSharp
         {
             switch (kRaw)
             {
+                case TextBytesConstant b:
+                {
+                    // np.array(np.bytes_(…)).dtype: S{len}, S1 for the empty bytes.
+                    string other = v.IsComplex64 ? "complex64" : v.Dtype.AsNumpyDtypeName();
+                    throw new TypeError($"ufunc 'subtract' did not contain a loop with signature matching types " +
+                                        $"(dtype('S{Math.Max(1, b.Length)}'), dtype('{other}')) -> None");
+                }
+                case NDArray text when Backends.Strings.NDStringUfuncs.IsText(text):
+                {
+                    // A row (or the 0-d array) of a text constant array: the subtract ufunc with {p}val's value, which has no
+                    // loop for text (NumPy's TypeError, raised by the house ufunc).
+                    var vArray = v.ToNDArray();
+                    using var difference = np.subtract(text, vArray);
+                    return;
+                }
                 case string text:
                 {
                     // np.array(text).dtype: <U{len(text)} counted in code points, <U1 for the empty str.
@@ -772,9 +945,15 @@ namespace NumSharp
         }
 
         /// <summary><c>list(nd)</c>: a 0-d array is not iterable (one constant); rank 1 yields NumPy scalars, rank ≥ 2 row views.</summary>
-        /// <param name="list">The destination (items boxed as <see cref="PolyNumber"/>s).</param><param name="nd">The array.</param>
+        /// <param name="list">The destination (items boxed as <see cref="PolyNumber"/>s; a text array's items as
+        ///     <see cref="TextConstantItems"/> collects them).</param><param name="nd">The array.</param>
         private static void AddArrayItems(List<object> list, NDArray nd)
         {
+            if (Backends.Strings.NDStringUfuncs.IsText(nd))
+            {
+                TextConstantItems(list, nd);
+                return;
+            }
             if (nd.ndim == 0)
             {
                 list.Add(PolyNumber.FromArray(nd));
@@ -795,6 +974,42 @@ namespace NumSharp
                 list.Add(PolyNumber.FromArray(View(nd, dims, strides, s.offset + i * s.strides[0])));
             }
         }
+
+        /// <summary>
+        ///     <c>list(k)</c> of a text array of integration constants, as NumPy's items: a 0-d array is one constant (the
+        ///     array), a 1-D array's elements are strs (a U / <c>StringDType</c> element) or bytes (an S element) — whose
+        ///     <c>k[i] - val</c> converts them to a <c>&lt;U{len}</c> / <c>S{len}</c> array of their own length, exactly as a
+        ///     Python str does —, a 2-D+ array's items are its row views. <see cref="RefuseNonNumericConstant"/> raises each
+        ///     one's TypeError when its order uses it.
+        /// </summary>
+        /// <param name="list">The destination.</param>
+        /// <param name="nd">The text array.</param>
+        private static void TextConstantItems(List<object> list, NDArray nd)
+        {
+            if (nd.ndim == 0)
+            {
+                list.Add(nd);
+                return;
+            }
+            long len = nd.Shape.dimensions[0];
+            for (long i = 0; i < len; i++)
+            {
+                if (nd.ndim > 1)
+                {
+                    list.Add(nd[i]);
+                    continue;
+                }
+                // An element: Python's str (a U / StringDType element reads as a string) or bytes (an S element reads as
+                // its byte[]).
+                object element = nd.GetAtIndex(i);
+                list.Add(element is byte[] b ? new TextBytesConstant(b.Length) : element);
+            }
+        }
+
+        /// <summary>A bytes element of an S array of integration constants (NumPy's <c>np.bytes_</c>): only its length
+        ///     reaches NumPy's error (<c>dtype('S{len}')</c>).</summary>
+        /// <param name="Length">The element's length in bytes.</param>
+        private sealed record TextBytesConstant(int Length);
 
         /// <summary>
         ///     <c>np.ndim(x)</c> for the lbnd/scl checks: 0 for null (the default), a str and every scalar; an NDArray's or

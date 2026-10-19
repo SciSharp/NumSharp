@@ -14,6 +14,10 @@ namespace NumSharp
         ///     For <c>m == 1</c> a single scalar may be given.
         /// </param>
         /// <returns>The antiderivative — always floating (or complex) because of the term-wise division.</returns>
+        /// <exception cref="ValueError">A negative <paramref name="m"/>, or fewer integration constants than
+        ///     <paramref name="m"/>.</exception>
+        /// <exception cref="TypeError">With <paramref name="m"/> above 0: a 0-d <paramref name="p"/> (<c>len() of unsized
+        ///     object</c>), or text, whose division by the exponents has no loop.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.polyint.html</remarks>
         [NDScoped]
         public static NDArray polyint(NDArray p, int m = 1, NDArray k = null)
@@ -21,8 +25,6 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(p, k);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m < 0)
                 throw new ValueError("Order of integral must be positive (see polyder)");
-            // NumPy's integral divides the coefficients by the exponents: divide has no string loop.
-            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 
             // Integration constants: default zeros(m); a length-1 k with m>1 is broadcast to m.
             NDArray kk;
@@ -43,6 +45,16 @@ namespace NumSharp
 
             if (m == 0)
                 return p;
+
+            // NumPy's first integration is p.__truediv__(arange(len(p), 0, -1)): len() of a 0-d array refuses first, then
+            // the division has no loop for text — a StringDType p is named by class beside the int64 exponents, a
+            // fixed-width one meets the legacy resolver.
+            if (p.ndim == 0)
+                throw new TypeError("len() of unsized object");
+            if (Backends.Strings.NDStringUfuncs.IsVString(p))
+                throw Backends.Strings.NDStringUfuncs.VStringNoLoop("divide", new[] { p.dtype.Meta.ToString(), np.int64.Meta.ToString() });
+            if (Backends.Strings.NDStringUfuncs.IsString(p))
+                throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 
             // Integrate once per order: prepend the term-wise integral p / [len, len-1, ..., 1] and
             // append the constant k[i]. Division by the int64 arange floats the whole result.

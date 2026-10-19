@@ -447,6 +447,9 @@ namespace NumSharp
             int n = arraysAndDtypes.Length;
             var allDTypes = new DTypeMeta[n];
             var allDescriptors = new DType[n];
+            // The operands are promoted in the order given: NumPy's PyArray_ResultType takes its descriptors first and its
+            // arrays after, so a caller standing in for one of NumPy's calls passes them in that call's order (the public
+            // np.result_type sorts its arguments the way array_result_type does: InArrayResultTypeOrder).
             for (int i = 0; i < n; i++)
                 ClassifyOperand(arraysAndDtypes[i], out allDTypes[i], out allDescriptors[i]);
 
@@ -481,6 +484,42 @@ namespace NumSharp
              * a result may not yet be set.
              */
             return result ?? commonDType.default_descr();
+        }
+
+        /// <summary>
+        ///     Whether a <c>result_type</c> operand is a DESCRIPTOR in NumPy's split (<c>array_result_type</c>): a dtype, a
+        ///     scalar type, a type code or a dtype string, or a concrete DType class — as opposed to an array, a NumPy scalar
+        ///     or a Python scalar (C# literals and <c>bool</c> / <c>char</c> / <c>Half</c> / <c>decimal</c> values), and the
+        ///     abstract classes those stand for.
+        /// </summary>
+        /// <param name="operand">The operand (null counts as an array, whose classification then refuses it).</param>
+        /// <returns>True for a descriptor operand, which NumPy promotes before every array.</returns>
+        private static bool IsDescriptorOperand(object operand)
+            => operand is DType or NPTypeCode or Type or string || operand is DTypeMeta { _abstract: false };
+
+        /// <summary>
+        ///     NumPy's <c>array_result_type</c> argument split: the descriptors (dtypes, scalar types, type codes, dtype
+        ///     strings, concrete DType classes) first, then the arrays and scalars, each group in call order — the order
+        ///     <c>PyArray_ResultType</c> promotes them in.
+        /// </summary>
+        /// <param name="arraysAndDtypes">The arguments of a <c>np.result_type</c> call.</param>
+        /// <returns>A new array of the same operands in NumPy's promotion order.</returns>
+        /// <remarks>The order never changes a result (the main DType makes the promotion order-independent and
+        ///     <c>common_instance</c> is commutative), but it decides which DType a refusal names:
+        ///     <c>np.result_type(text_array, np.float64)</c> is <c>The DType &lt;class 'numpy.dtypes.Float64DType'&gt; could not
+        ///     be promoted by &lt;class 'numpy.dtypes.StringDType'&gt;. ... The full list of DTypes is: (&lt;class
+        ///     'numpy.dtypes.Float64DType'&gt;, &lt;class 'numpy.dtypes.StringDType'&gt;)</c>.</remarks>
+        internal static object[] InArrayResultTypeOrder(object[] arraysAndDtypes)
+        {
+            var ordered = new object[arraysAndDtypes.Length];
+            int k = 0;
+            foreach (var operand in arraysAndDtypes)
+                if (IsDescriptorOperand(operand))
+                    ordered[k++] = operand;
+            foreach (var operand in arraysAndDtypes)
+                if (!IsDescriptorOperand(operand))
+                    ordered[k++] = operand;
+            return ordered;
         }
 
         /// <summary>

@@ -297,8 +297,8 @@ namespace NumSharp.Tests.Polynomial
 
         /// <summary>
         ///     The degree is checked BEFORE x is converted (NumPy's first two statements), then x: a ragged list is np.array's
-        ///     ValueError, a str / None / object x is refused where NumPy's <c>x + 0.0</c> fails or computes with Python
-        ///     objects (NumSharp has no str / object dtype).
+        ///     ValueError, a str x is NumPy's str array whose <c>x + 0.0</c> has no add loop (NumPy's TypeError), and a None /
+        ///     object x is refused where NumPy's <c>x + 0.0</c> computes with Python objects (NumSharp has no object dtype).
         /// </summary>
         [TestMethod]
         public void Vander_DegreeBeforePoints_PointsRefusedWhereNumPyFails()
@@ -310,7 +310,8 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => L.legvander(new object[] { new object[] { 1, 2 }, new object[] { 3 } }, 2),
                 "setting an array element with a sequence. The requested array has an inhomogeneous shape after 1 dimensions. " +
                 "The detected shape was (2,) + inhomogeneous part.");
-            FluentActions.Invoking(() => L.legvander("abc", 2)).Should().Throw<NotSupportedException>();
+            Raises<TypeError>(() => L.legvander("abc", 2),
+                "ufunc 'add' did not contain a loop with signature matching types (dtype('<U3'), dtype('float64')) -> None");
             FluentActions.Invoking(() => L.legvander((object)null, 2)).Should().Throw<NotSupportedException>();
             FluentActions.Invoking(() => L.legvander(new object[] { 1, null }, 2)).Should().Throw<NotSupportedException>();
             FluentActions.Invoking(() => L.legvander(new object[] { BigInteger.Pow(2, 70) }, 2)).Should().Throw<NotSupportedException>();
@@ -362,7 +363,9 @@ namespace NumSharp.Tests.Polynomial
             Raises<ValueError>(() => C.chebvander2d(0.5, new[] { 1.0, 2.0 }, new[] { 1, 1 }), ragged);
             Raises<TypeError>(() => C.chebvander2d(new[] { 1, 2 }, new[] { 3 }, 2), "object of type 'int' has no len()");
             Raises<ValueError>(() => C.chebvander2d(new[] { 1, 2 }, new[] { 3 }, new[] { 1, 1, 1 }), "Expected 2 dimensions of degrees, got 3");
-            FluentActions.Invoking(() => C.chebvander2d("ab", "cd", new[] { 1, 1 })).Should().Throw<NotSupportedException>();
+            // Text points stack into NumPy's str array, whose `+ 0.0` has no add loop.
+            Raises<TypeError>(() => C.chebvander2d("ab", "cd", new[] { 1, 1 }),
+                "ufunc 'add' did not contain a loop with signature matching types (dtype('<U2'), dtype('float64')) -> None");
 
             // No points: the degrees are still checked, then NumPy's reshape of the empty product fails.
             Raises<ValueError>(() => C.chebvander2d(np.zeros(0), np.zeros(0), new[] { 1, -1 }), "deg must be non-negative");

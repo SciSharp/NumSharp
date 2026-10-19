@@ -526,8 +526,12 @@ namespace NumSharp.Backends
         /// <param name="loop">The loop dtype.</param>
         /// <param name="slot">Receives the element.</param>
         /// <exception cref="ValueError"><paramref name="nd"/> has dimensions (and, for a bool loop, a size other than 1) and
-        ///     the loop is real or bool: "setting an array element with a sequence."</exception>
+        ///     the loop is real or bool: "setting an array element with a sequence."; or <paramref name="nd"/> holds text
+        ///     that does not parse as the loop dtype (the text cast's own texts, e.g. "could not convert string to float:
+        ///     'x'" for a <c>StringDType</c> element).</exception>
         /// <exception cref="TypeError"><paramref name="nd"/> has dimensions and the loop is complex.</exception>
+        /// <exception cref="OverflowException">A text element parses to an integer the integer loop cannot hold (the text
+        ///     cast's range check).</exception>
         private static unsafe void PackArray(NDArray nd, NPTypeCode loop, Span<byte> slot)
         {
             // BOOL_setitem's PyObject_IsTrue takes a one-element array's truth, its element's. With any other size the
@@ -538,6 +542,20 @@ namespace NumSharp.Backends
                 if (loop == NPTypeCode.Complex)
                     throw new TypeError("only 0-dimensional arrays can be converted to Python scalars");
                 throw new ValueError("setting an array element with a sequence.");
+            }
+
+            // A text element (U / S, or a StringDType cell, whose bytes are a reference into its allocator) has no raw
+            // element converter: PyArray_Pack's 0-d case is npy_cast_raw_scalar_item, the descriptor-to-descriptor cast,
+            // which for text PARSES the string (StringDType -> float64 raises "could not convert string to float: 'x'",
+            // '4' gives 4.0). The array's own unsafe astype is that cast, texts included; the one parsed element is then
+            // copied into the slot. The temporary is disposed here: it never escapes the pack.
+            if (Strings.NDStringUfuncs.IsText(nd))
+            {
+                using var parsed = nd.astype(DType.From(loop), true, 'K', "unsafe");
+                byte* q = (byte*)parsed.Address + parsed.Shape.offset * parsed.dtypesize;
+                fixed (byte* d = slot)
+                    Buffer.MemoryCopy(q, d, slot.Length, parsed.dtypesize);
+                return;
             }
 
             // The house converters carry NumPy's (MSVC-pinned) unsafe conversions. The one element sits at the shape's

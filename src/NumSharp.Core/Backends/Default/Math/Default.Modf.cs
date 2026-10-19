@@ -50,7 +50,7 @@ namespace NumSharp.Backends
         {
             // NumPy parses both outputs, then where=, before it resolves the loop: with text involved a read-only out or a
             // non-bool mask is reported first; a string dtype= request is then the no-loop text.
-            if (Strings.NDStringUfuncs.IsString(nd) || Strings.NDStringUfuncs.IsStringRequest(dtype))
+            if (Strings.NDStringUfuncs.IsText(nd) || Strings.NDStringUfuncs.IsStringRequest(dtype))
             {
                 UfuncLoopCode(dtype);
                 Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(outFrac, null);

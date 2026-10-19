@@ -64,9 +64,10 @@ namespace NumSharp.Backends.Strings
 
         /// <summary>
         ///     NumPy's <c>average</c> over a <c>StringDType</c> array once its axis tuple was normalized: without weights
-        ///     <c>a.mean(axis, keepdims)</c> (<see cref="Mean"/>); with weights the result dtype
-        ///     <c>result_type(a.dtype, wgt.dtype)</c> first (no common DType with a number), the shape checks, then the
-        ///     weights' sum with that DESCRIPTOR as <c>dtype=</c> — which the ufunc refuses (a descriptor instance, not a class).
+        ///     <c>a.mean(axis, keepdims)</c> (<see cref="Mean"/>); with weights the shape checks first
+        ///     (<c>_weights_are_valid</c>), then the result dtype <c>result_type(a.dtype, wgt.dtype)</c> (no common DType with
+        ///     a number), then the weights' sum with that DESCRIPTOR as <c>dtype=</c> — which the ufunc refuses (a descriptor
+        ///     instance, not a class).
         /// </summary>
         /// <param name="a">The <c>StringDType</c> array.</param>
         /// <param name="axes">The normalized axes, or null.</param>
@@ -81,10 +82,7 @@ namespace NumSharp.Backends.Strings
         {
             if (weights is null)
                 return Mean("average", a, axes, keepdims, null);
-            // `result_type = np.result_type(a.dtype, wgt.dtype)` (StringDType is not an integer or bool): the SEQUENCE
-            // promotion, whose refusal lists every DType ("could not be promoted by ... The full list of DTypes is: ..."),
-            // not the pairwise promote_types text.
-            DType resultDtype = np.result_type(a.dtype, weights.dtype);
+            // _weights_are_valid: the shape checks run before anything promotes.
             if (!a.Shape.Equals(weights.Shape) && !SameDims(a, weights))
             {
                 if (axes is null)
@@ -95,6 +93,10 @@ namespace NumSharp.Backends.Strings
                 if (!consistent)
                     throw new ValueError("Shape of weights must be consistent with shape of a along specified axis.");
             }
+            // `result_type = np.result_type(a.dtype, wgt.dtype)` (StringDType is not an integer or bool): the SEQUENCE
+            // promotion, whose refusal lists every DType ("could not be promoted by ... The full list of DTypes is: ..."),
+            // not the pairwise promote_types text.
+            DType resultDtype = np.result_type(a.dtype, weights.dtype);
             // `scl = wgt.sum(axis=axis, dtype=result_dtype)`: a dtype= descriptor instance has no loop.
             int? axis = axes is { Length: 1 } ? axes[0] : null;
             using var scl = np.sum(weights, axis, keepdims, resultDtype);

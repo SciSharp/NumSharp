@@ -51,8 +51,12 @@ namespace NumSharp
                 throw new ValueError("Polynomial must be 1d only.");
 
             c_or_r = np.trim_zeros(c_or_r, "f");
+            // NumPy's NX.array([0], dtype=c_or_r.dtype): zero for a number, the text '0' for a string dtype (a Python int
+            // stored into text is its str()), in the input's own descriptor (a StringDType keeps its NA object).
             if (c_or_r.size == 0)
-                c_or_r = np.zeros(new Shape(1), c_or_r.typecode);
+                c_or_r = Backends.Strings.NDStringUfuncs.IsText(c_or_r)
+                    ? np.array(new[] { "0" }).astype(c_or_r.dtype)
+                    : np.zeros(new Shape(1), c_or_r.typecode);
 
             // A FIELD egress: this polynomial owns the array and Dispose releases it. Detach (not Returns):
             // Returns re-tracks the array into the CALLER's ambient scope, which then released the

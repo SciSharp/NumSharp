@@ -676,7 +676,15 @@ namespace NumSharp
             if (obj.size == 1)
             {
                 if (text)
-                    return new TypeError($"'<' not supported between instances of '{(obj.Storage.StringSlice.IsUnicode ? "str" : "bytes")}' and 'int'");
+                {
+                    // `indices.item()` is a Python object: a fixed-width element is a str / bytes, a StringDType element a
+                    // str or its NA object (None; a NaN-like NA is a float, which takes the float route below).
+                    string pyType = Backends.Strings.NDStringUfuncs.IsVString(obj)
+                        ? obj.GetAtIndex(0) switch { null => "NoneType", string => "str", _ => null }
+                        : obj.Storage.StringSlice.IsUnicode ? "str" : "bytes";
+                    if (pyType is not null)
+                        return new TypeError($"'<' not supported between instances of '{pyType}' and 'int'");
+                }
                 if (obj.typecode == NPTypeCode.Complex)
                     return new TypeError("'<' not supported between instances of 'complex' and 'int'");
 

@@ -28,6 +28,13 @@ namespace NumSharp
         public void SetIndices(NDArray values, NDArray[] indices)
         {
             NumSharpException.ThrowIfNotWriteable(Shape);
+            // A StringDType array: the indexer's StringDType scatter (its cells move only through their allocator, and a
+            // non-integer index array is NumPy's IndexError there).
+            if (Storage.IsVString)
+            {
+                this[indices] = values;
+                return;
+            }
             // A fixed-width string array has no element kernel: the scatter runs the string indexing route (whole
             // elements through the unit view, as `this[NDArray[]] = values` does).
             if (typecode == NPTypeCode.String)

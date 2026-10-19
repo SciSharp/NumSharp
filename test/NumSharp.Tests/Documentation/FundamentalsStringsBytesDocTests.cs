@@ -799,7 +799,12 @@ namespace NumSharp.Tests.Documentation
                 .WithMessage("cannot include dtype 'numpy.dtypes.StringDType' in a buffer");
             ((Action)(() => np.frombuffer(new byte[16], "T"))).Should().Throw<ValueError>()
                 .WithMessage("cannot create an OBJECT array from memory buffer");
-            ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<ArgumentException>();
+            // np.ndarray lays StringDType only over StringDType cells (a view, as NumPy's buffer export of them); raw bytes,
+            // another dtype over the cells, or an offset that splits a cell are refused.
+            ((Action)(() => np.ndarray(new Shape(1), np.dtype("T"), new byte[16]))).Should().Throw<NotSupportedException>();
+            ((Action)(() => np.ndarray(new Shape(1), np.float64, t))).Should().Throw<NotSupportedException>();
+            using (var view = np.ndarray(new Shape(1), np.dtypes.StringDType(), t))
+                view.ToString().Should().Be("['a']");
             // The structured path of np.unique along an axis cannot hold StringDType fields (NumPy's TypeError).
             ((Action)(() => np.unique(np.array(new object[,] { { "a", "b" }, { "a", "b" } }, np.dtypes.StringDType()), axis: 0)))
                 .Should().Throw<TypeError>().WithMessage("The axis argument to unique is not supported for dtype StringDType()");

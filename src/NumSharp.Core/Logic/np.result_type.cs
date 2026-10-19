@@ -28,6 +28,11 @@ namespace NumSharp
         /// <c>int64</c> / <c>float64</c> / <c>complex128</c>.
         /// </para>
         /// <para>
+        /// The descriptor arguments are promoted before the arrays and scalars, as NumPy's <c>array_result_type</c> does: the
+        /// result does not depend on it, a refusal's text does (<c>np.result_type(text_array, np.float64)</c> names
+        /// <c>Float64DType</c> as the DType that "could not be promoted by" <c>StringDType</c>).
+        /// </para>
+        /// <para>
         /// The reduction over three or more operands is NumPy's order-independent <c>PyArray_PromoteDTypeSequence</c>
         /// (<c>result_type(i1, i1, f8, i1)</c> is <c>float64</c> in every order). Parametric operands resolve their
         /// <c>common_instance</c> (<c>result_type("M8[s]", "m8[ms]", "m8[us]")</c> is <c>datetime64[us]</c>).
@@ -47,7 +52,9 @@ namespace NumSharp
         {
             if (arrays_and_dtypes == null || arrays_and_dtypes.Length == 0)
                 throw new ValueError("at least one array or dtype is required");
-            return DTypePromotion.ResultType(arrays_and_dtypes);
+            // array_result_type promotes the descriptor arguments before the arrays and scalars: only a refusal's text
+            // shows the order (which DType "could not be promoted by" which, and the list of DTypes).
+            return DTypePromotion.ResultType(DTypePromotion.InArrayResultTypeOrder(arrays_and_dtypes));
         }
 
         /// <summary>

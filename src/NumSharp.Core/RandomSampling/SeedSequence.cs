@@ -353,8 +353,9 @@ namespace NumSharp
                     // The same C-order walk; each element is a string scalar whose words come from its text (U) or its
                     // bytes (S). Every piece is 1-D, so the concatenation is the flat word list.
                     var values = new List<BigInteger>();
+                    bool numpyStr = !Backends.Strings.NDStringUfuncs.IsVString(nd);
                     for (long i = 0; i < nd.size; i++)
-                        AppendTextElement(nd.GetAtIndex(i), values);
+                        AppendTextElement(nd.GetAtIndex(i), values, numpyStr);
                     var textWords = new List<uint>(values.Count);
                     foreach (BigInteger v in values)
                         textWords.AddRange(IntToUint32Array(v));
@@ -495,20 +496,30 @@ namespace NumSharp
         ///     integer word (<c>b'ab'</c> is <c>[97, 98]</c>, an empty element contributes nothing).
         /// </summary>
         /// <param name="element">The element as <see cref="NDArray.GetAtIndex(long)"/> returns it: a <see cref="string"/> for
-        ///     <c>U</c>, a <c>byte[]</c> for <c>S</c>, trailing NULs removed (NumPy's scalar).</param>
+        ///     <c>U</c> and <c>StringDType</c>, a <c>byte[]</c> for <c>S</c>, trailing NULs removed (NumPy's scalar); for a
+        ///     <c>StringDType</c> NA element its NA object (null for None, a double for a NaN-like NA).</param>
         /// <param name="words">The flat key or word list being built (appended to).</param>
-        /// <exception cref="ValueError">A <c>U</c> element that is not a seed literal (<see cref="ParseSeedString"/>).</exception>
+        /// <param name="numpyStr">True for an element of a <c>U</c> array (an <c>np.str_</c> scalar, whose repr NumPy's int()
+        ///     error quotes), false for a <c>StringDType</c> element (a Python str).</param>
+        /// <exception cref="ValueError">A text element that is not a seed literal (<see cref="ParseSeedString"/>).</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> NA element: None has no length (<c>object of type 'NoneType' has no
+        ///     len()</c>), a NaN-like NA is a float (<c>seed must be integer</c>).</exception>
         /// <remarks>
         ///     The trailing-NUL removal is NumPy's: <c>b'a\x00\x00'</c> contributes only <c>[97]</c>, while an EMBEDDED NUL
         ///     stays a word (<c>b'a\x00b'</c> is <c>[97, 0, 98]</c>).
         /// </remarks>
-        private static void AppendTextElement(object element, List<BigInteger> words)
+        private static void AppendTextElement(object element, List<BigInteger> words, bool numpyStr = true)
         {
             if (element is string text)
             {
-                words.Add(ParseSeedString(text, numpyStr: true));
+                words.Add(ParseSeedString(text, numpyStr));
                 return;
             }
+            // A StringDType NA element: _coerce_to_uint32_array(None) takes len(None); a NaN-like NA is a float.
+            if (element is null)
+                throw new TypeError("object of type 'NoneType' has no len()");
+            if (element is double or float)
+                throw new TypeError("seed must be integer");
             foreach (byte b in (byte[])element)
                 words.Add(b);
         }
@@ -656,8 +667,9 @@ namespace NumSharp
                 case NPTypeCode.String:
                     // NumPy keeps the string scalars in the key and coerces them each time; their words are the parsed
                     // value (U) or the bytes (S), so the flat key stores exactly those.
+                    bool keyNumpyStr = !Backends.Strings.NDStringUfuncs.IsVString(nd);
                     for (long i = 0; i < nd.size; i++)
-                        AppendTextElement(nd.GetAtIndex(i), key);
+                        AppendTextElement(nd.GetAtIndex(i), key, keyNumpyStr);
                     return;
                 default:
                     throw new TypeError("seed must be integer");

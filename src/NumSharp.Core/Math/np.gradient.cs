@@ -366,6 +366,14 @@ namespace NumSharp
                 // Text has no arithmetic loop: NumPy's first statement on it is the interior difference f[2:] - f[:-2]
                 // (subtract of two string operands) or, for a non-uniform spacing, a * f[:-2] (float64 coefficients times
                 // text). The checks above (spacing, shape) still come first, as in NumPy.
+                if (Backends.Strings.NDStringUfuncs.IsVString(work))
+                {
+                    // StringDType: a new-style DType in the key, so NumPy's dispatcher names every operand's class.
+                    string t = work.dtype.Meta.ToString();
+                    throw uniform
+                        ? Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract", new[] { t, t })
+                        : Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { np.float64.Meta.ToString(), t });
+                }
                 if (Backends.Strings.NDStringUfuncs.IsString(work))
                     throw uniform
                         ? Backends.Strings.NDStringUfuncs.NoLoop("subtract", work.dtype, work.dtype)

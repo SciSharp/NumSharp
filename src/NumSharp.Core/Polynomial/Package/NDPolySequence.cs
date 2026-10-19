@@ -551,7 +551,7 @@ namespace NumSharp
                 d.Refused ??= new NotSupportedException(o switch
                 {
                     null => "None has no NumSharp equivalent: NumPy would build an object array, a dtype NumSharp does not have",
-                    string => "a Python str operand makes NumPy build a str/object array, a dtype NumSharp does not have",
+                    string => "a Python str item makes NumPy build a str array here, which this numpy.polynomial route computes with (NumPy's arithmetic on the strings), and NumSharp's polynomial package does not model that arithmetic",
                     _ => $"a {o.GetType().Name} item makes NumPy build an object array, a dtype NumSharp does not have",
                 });
                 // A str leaf alone leaves NumPy's dtype a str one; anything else here makes it object.

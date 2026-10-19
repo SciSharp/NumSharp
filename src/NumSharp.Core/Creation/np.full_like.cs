@@ -11,11 +11,13 @@ namespace NumSharp
         ///     Return a full array with the same shape and type as a given array.
         /// </summary>
         /// <param name="a">The shape and data-type of a define these same attributes of the returned array.</param>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value: a scalar, or an array that broadcasts into the result.</param>
         /// <param name="dtype">Overrides the data type of the result.</param>
+        /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of fill_value with the same shape and type as a.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>);
+        ///     or an array fill value that does not broadcast into the result.</exception>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype = null, string device = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, fill_value, dtype, device), static s => full_like(s.a, s.fill_value, s.dtype, s.device))
@@ -25,7 +27,8 @@ namespace NumSharp
         ///     Return a full array with the same shape and type as a given array.
         /// </summary>
         /// <param name="a">The shape and data-type of a define these same attributes of the returned array.</param>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value: a scalar, or an array (an <see cref="NDArray"/> of rank ≥ 1, a C# array) that
+        ///     broadcasts into the result.</param>
         /// <param name="dtype">Overrides the data type of the result.</param>
         /// <param name="order">Memory layout: 'C', 'F', 'A' or 'K' (default, preserves source layout).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
@@ -36,7 +39,8 @@ namespace NumSharp
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="ValueError">A <c>numpy.char.chararray</c> operand with a dtype that is not string data:
         ///     NumPy's finalize error (<c>Can only create a chararray from string
-        ///     data.</c>), before anything is filled.</exception>
+        ///     data.</c>), before anything is filled; or an array fill value that does not broadcast into the result, or
+        ///     whose text does not parse into a numeric result.</exception>
         public static NDArray full_like(NDArray a, object fill_value, DType dtype, char order, string device = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -61,6 +65,10 @@ namespace NumSharp
             // A string result (a's dtype, or a requested one — unsized means one character, NumPy's empty_like) is
             // `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: the copy truncates / converts the value.
             var resultDescr = dtype ?? a.dtype;
+            // A fill value with dimensions broadcasts into empty_like's layout through the same copyto
+            // (np.full_like(f3, [1, 2, 3]) is [1., 2., 3.]; a StringDType fill value is parsed per element).
+            if (IsBroadcastFillValue(fill_value))
+                return FullFromArrayFill(shape, fill_value, resultDescr);
             if (resultDescr.Meta is VStringDTypeMeta)
                 return Backends.Strings.NDVStringMove.Full(shape, fill_value, resultDescr);
             if (Backends.Strings.NDStringStorage.IsString(resultDescr))

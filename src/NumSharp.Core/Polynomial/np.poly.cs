@@ -27,7 +27,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(seq_of_zeros);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             seq_of_zeros = np.atleast_1d(seq_of_zeros);
-            bool text = Backends.Strings.NDStringUfuncs.IsString(seq_of_zeros);
+            bool text = Backends.Strings.NDStringUfuncs.IsText(seq_of_zeros);
             int nd = seq_of_zeros.ndim;
 
             NDArray seq;

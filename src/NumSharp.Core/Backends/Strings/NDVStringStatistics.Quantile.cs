@@ -318,7 +318,11 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">An axis out of bounds.</exception>
         /// <exception cref="ValueError">An empty reduced axis, two or more axes (not reorderable), or the out's checks.</exception>
         /// <exception cref="TypeError">The divide's refusal, or the loop's refusal of an out of another class.</exception>
-        private static NDArray EmptyNanMean(NDArray a, int[] axes, NDArray @out, bool keepdims)
+        /// <remarks>
+        ///     Internal, not private: a fixed-width text q (<see cref="NDStringUfuncs.QuantileTextQAnswer"/>) reaches the same
+        ///     first statement of nanquantile over empty StringDType data.
+        /// </remarks>
+        internal static NDArray EmptyNanMean(NDArray a, int[] axes, NDArray @out, bool keepdims)
         {
             int nd = a.ndim;
             int[] normalized = null;

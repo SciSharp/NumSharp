@@ -425,7 +425,7 @@ namespace NumSharp
         ///     <c>npy_set_invalid_cast_error</c> wording).</exception>
         private static void ThrowIfNotSafeInterpCast(NDArray a, NPTypeCode target)
         {
-            bool refused = Backends.Strings.NDStringUfuncs.IsString(a)
+            bool refused = Backends.Strings.NDStringUfuncs.IsText(a)
                            || (target == NPTypeCode.Double && a.typecode == NPTypeCode.Complex);
             if (refused)
                 throw new InvalidCastException(

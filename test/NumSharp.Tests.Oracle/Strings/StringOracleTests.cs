@@ -711,6 +711,16 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void TextPad() => Run("strpad");
 
         /// <summary>
+        ///     Section tsurface (strings phase 1, P1.7f, "the whole surface with T"): the six surface generators (the refusal
+        ///     table, the string dtype= requests, the precedence of a text call's problems, the shape-decided answers, the
+        ///     validation order, the rest of the surface) re-run with every U operand replaced by a StringDType operand of the
+        ///     same values and shape: NumPy's result where it computes on StringDType, its refusal in its order where it
+        ///     refuses. The calls NumPy 2.4.2 crashes on over StringDType (ndarray.byteswap, np.place) are not recorded.
+        ///     Strict: no route keeps a generic refusal.
+        /// </summary>
+        [TestMethod] public void StringDTypeSurface() => Run("tsurface");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -808,7 +818,7 @@ namespace NumSharp.Tests.Strings
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strcharlist", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
-                "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad",
+                "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad", "tsurface",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)

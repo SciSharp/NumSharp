@@ -40,10 +40,17 @@ namespace NumSharp
             if (dtype is not null)
                 DefaultEngine.ThrowIfNotGeneralDType(dtype);
             bool request = Backends.Strings.NDStringUfuncs.IsStringRequest(dtype);
-            if (!request && !Backends.Strings.NDStringUfuncs.IsString(x1) && !Backends.Strings.NDStringUfuncs.IsString(x2))
+            bool vstring = Backends.Strings.NDStringUfuncs.IsVString(x1) || Backends.Strings.NDStringUfuncs.IsVString(x2);
+            if (!request && !vstring && !Backends.Strings.NDStringUfuncs.IsString(x1) && !Backends.Strings.NDStringUfuncs.IsString(x2))
                 return;
             if (@out is not null)
                 NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+            // A StringDType operand: NumPy's dispatcher (a new-style DType in the key) names every operand's class, and a
+            // string request's class as the output.
+            if (vstring)
+                throw Backends.Strings.NDStringUfuncs.VStringNoLoop(name,
+                    new[] { Backends.Strings.NDStringUfuncs.DispatchClass(x1), Backends.Strings.NDStringUfuncs.DispatchClass(x2) },
+                    request ? dtype.Meta.ToString() : "None");
             throw request
                 ? Backends.Strings.NDStringUfuncs.GufuncDTypeLoopError(name, dtype, x1, x2)
                 : Backends.Strings.NDStringUfuncs.NoLoop(name, x1.dtype, x2.dtype);

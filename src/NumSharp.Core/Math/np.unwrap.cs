@@ -196,8 +196,6 @@ namespace NumSharp
         private static NDArray UnwrapImpl(NDArray p, double? discont, int axis, double period,
                                           bool periodIsInteger, long periodInt)
         {
-            // NumPy's first ufunc call is dd = diff(p, axis): subtract has no string loop.
-            if (Backends.Strings.NDStringUfuncs.IsString(p)) throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", p.dtype, p.dtype);
             if (p is null) throw new ArgumentNullException(nameof(p));
 
             int nd = p.ndim;
@@ -210,6 +208,10 @@ namespace NumSharp
             // normalize_axis_index(axis, nd): valid range is [-nd, nd-1]. NumPy raises
             // AxisError here (via normalize_axis_index) reporting the ORIGINAL axis.
             int ax = Backends.DefaultEngine.check_and_adjust_axis(nd, axis);
+
+            // diff's subtract runs after its rank and axis checks, and has no loop for text: two StringDType operands are
+            // named by class (the dispatcher), two fixed-width ones by descriptor (the legacy resolver).
+            if (Backends.Strings.NDStringUfuncs.IsText(p)) throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", p.dtype, p.dtype);
 
             NPTypeCode tc = p.typecode;
 

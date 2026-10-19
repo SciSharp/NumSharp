@@ -32,6 +32,19 @@ namespace NumSharp
         /// </remarks>
         public NDArray GetIndices(NDArray @out, NDArray[] indices)
         {
+            // A StringDType array: its cells move only through their allocator, so the gather is the indexer's StringDType
+            // route (which also refuses a non-integer index array with NumPy's IndexError); a given out receives the result
+            // through np.copyto.
+            if (Storage.IsVString)
+            {
+                // NDArray[] binds the indexer's params object[] (array covariance): one index array per leading axis.
+                var taken = this[(object[])indices];
+                if (@out is null)
+                    return taken;
+                using (taken)
+                    np.copyto(@out, taken);
+                return @out;
+            }
             if (typecode == NPTypeCode.String)
             {
                 var picked = StringFetchIndices(indices);

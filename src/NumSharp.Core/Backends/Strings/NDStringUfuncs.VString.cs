@@ -881,6 +881,48 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     NumPy's answer for <c>np.vdot</c> with a <c>StringDType</c> operand, in the order of <c>array_vdot</c>: the
+        ///     descriptor lookup, the two flattening reshapes, then <c>OBJECT_vdot</c>'s first product.
+        /// </summary>
+        /// <param name="a">The first operand (the one NumPy's vdot conjugates).</param>
+        /// <param name="b">The second operand.</param>
+        /// <returns>The exception to throw (never null).</returns>
+        /// <exception cref="IncorrectShapeException">Thrown (not returned) when the sizes differ: NumPy flattens
+        ///     <paramref name="b"/> to <paramref name="a"/>'s length through the dims buffer it reuses (<c>cannot reshape array
+        ///     of size 3 into shape (2,)</c>), before any element is read.</exception>
+        /// <remarks>
+        ///     <para>The descriptor lookup first (<see cref="LegacyProductRefusal"/>): a <c>StringDType</c> first operand, or a
+        ///     <c>U</c> one beside it, is the legacy-only refusal.</para>
+        ///     <para>Otherwise NumPy converts both operands to OBJECT arrays and flattens them. <c>OBJECT_vdot</c> then calls
+        ///     <c>a[0].conjugate()</c> — a method <c>str</c>, <c>bytes</c> and <c>None</c> lack (Python's
+        ///     <see cref="AttributeError"/>), and which turns a <c>bool</c> into an <c>int</c> — and multiplies the result by
+        ///     <c>b[0]</c>, which decides by the Python types alone (<see cref="PyMultiplyError"/>). A product that does not
+        ///     raise builds Python objects (a <c>str</c> when an int repeats the text, <c>None</c> for no element), which
+        ///     NumSharp does not have: a <see cref="NotSupportedException"/>.</para>
+        /// </remarks>
+        internal static Exception VStringVdotAnswer(NDArray a, NDArray b)
+        {
+            if (LegacyProductRefusal(a, b) is { } refusal)
+                return refusal;
+            // ap1 = a raveled (its length n resolves the reused dims buffer), ap2 = b reshaped to (n,): a length mismatch is
+            // b's reshape error, raised by the reshape itself.
+            long n = a.size;
+            if (b.size != n)
+                np.reshape(b, new long[] { n });
+            if (n > 0)
+            {
+                string x = PyObjectTypeName(a, 0);
+                if (x is "str" or "bytes" or "NoneType")
+                    return new AttributeError($"'{x}' object has no attribute 'conjugate'");
+                // bool.conjugate() returns an int (bool subclasses int), so the product names 'int'.
+                string message = PyMultiplyError(x == "bool" ? "int" : x, PyObjectTypeName(b, 0));
+                if (message is not null)
+                    return new TypeError(message);
+            }
+            return ObjectArrayRefusal("vdot", a, b);
+        }
+
+        /// <summary>
         ///     NumPy's answer for <c>np.convolve</c> / <c>np.correlate</c> with a <c>StringDType</c> operand once its earlier
         ///     checks passed (for <c>np.convolve</c>: the two emptiness checks, the swap by length and the mode; for
         ///     <c>np.correlate</c>: the mode), in the order of <c>PyArray_Correlate</c> / <c>PyArray_Correlate2</c>.

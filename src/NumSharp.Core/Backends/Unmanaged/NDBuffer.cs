@@ -18,7 +18,9 @@ namespace NumSharp.Backends.Unmanaged
     ///     <b>Accepted buffers</b> (NumPy: any object that exports a contiguous buffer):
     ///     <list type="bullet">
     ///         <item><see cref="NDArray"/> that is C- or F-contiguous (NumPy's <c>ndarray</c>); its bytes are read in
-    ///         memory order, and its writeability carries over.</item>
+    ///         memory order, and its writeability carries over. A <c>StringDType</c> array exports its 16-byte cells and
+    ///         records its element slice (<see cref="VStringCells"/>), which decides what <c>np.ndarray</c> may lay over
+    ///         them.</item>
     ///         <item><see cref="np.MemoryView"/> (<c>ndarray.data</c>, NumPy's <c>memoryview</c>) over such an array.</item>
     ///         <item><see cref="IArraySlice"/>, NumSharp's own raw buffer.</item>
     ///         <item>A <see cref="Array"/> of any rank whose element type holds no references (<c>byte[]</c>,
@@ -66,6 +68,18 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         private readonly IArraySlice _borrowedArcOwner;
 
+        /// <summary>
+        ///     The element slice of a <c>StringDType</c> buffer array (its 16-byte cells, their allocator and its
+        ///     descriptor), or null for every other buffer.
+        /// </summary>
+        /// <remarks>
+        ///     Footgun: the bytes of such a buffer are cells whose text may live in <see cref="VStringArraySlice.Allocator"/>,
+        ///     so they mean something only with that allocator. <c>np.ndarray</c> lays nothing over them but a
+        ///     <c>StringDType</c> view that shares the slice (and with it the allocator); it refuses every other dtype, where
+        ///     NumPy reinterprets the raw cells (a write through such a view could make a cell point anywhere).
+        /// </remarks>
+        internal readonly VStringArraySlice VStringCells;
+
         /// <summary>The pin of a managed <see cref="Array"/> buffer, owned until <see cref="TakeRoot"/>.</summary>
         private GCHandle _pin;
 
@@ -85,13 +99,17 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="writable">Whether the bytes may be written.</param>
         /// <param name="borrowedRoot">The storage that becomes the result's base, or null to build one over the bytes.</param>
         /// <param name="borrowedArcOwner">The slice whose block counts the result's references.</param>
-        private NDBuffer(byte* start, long length, bool writable, UnmanagedStorage borrowedRoot, IArraySlice borrowedArcOwner)
+        /// <param name="vstringCells">The element slice of a <c>StringDType</c> buffer array, or null
+        ///     (<see cref="VStringCells"/>).</param>
+        private NDBuffer(byte* start, long length, bool writable, UnmanagedStorage borrowedRoot, IArraySlice borrowedArcOwner,
+            VStringArraySlice vstringCells = null)
         {
             Start = start;
             Length = length;
             Writable = writable;
             _borrowedRoot = borrowedRoot;
             _borrowedArcOwner = borrowedArcOwner;
+            VStringCells = vstringCells;
         }
 
         /// <summary>Records a managed array pinned here; the pin is this object's until handed over or released.</summary>
@@ -152,8 +170,11 @@ namespace NumSharp.Backends.Unmanaged
                     return FromNDArray(view.obj, !view.@readonly);
 
                 case IArraySlice slice:
-                    // NumSharp's raw buffer: borrowed, writable, and the base is a byte view built over it in TakeRoot.
-                    return new NDBuffer((byte*)slice.Address, slice.BytesLength, writable: true, borrowedRoot: null, borrowedArcOwner: slice);
+                    // NumSharp's raw buffer: borrowed, writable, and the base is a byte view built over it in TakeRoot. A
+                    // StringDType element slice is recorded as such, so np.ndarray applies the same rule to it as to the
+                    // array that holds it (only a StringDType view sharing its allocator).
+                    return new NDBuffer((byte*)slice.Address, slice.BytesLength, writable: true, borrowedRoot: null, borrowedArcOwner: slice,
+                        vstringCells: slice as VStringArraySlice);
 
                 case ArraySegment<byte> segment:
                     // A default segment has no array: it is an empty buffer, as NumPy's b'' is.
@@ -293,14 +314,18 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="nd">The array (C- or F-contiguous).</param>
         /// <param name="writable">Whether the exporter grants a writable buffer.</param>
         /// <returns>The borrowed buffer: base = the array's owner (NumPy collapses the base chain to the first owner),
-        ///     references counted on the array's own slice.</returns>
+        ///     references counted on the array's own slice. A <c>StringDType</c> array exports its 16-byte cells (the bytes
+        ///     NumPy's buffer protocol hands out without a format, <c>tobytes()</c>' bytes) and records its element slice
+        ///     (<see cref="VStringCells"/>).</returns>
         private static NDBuffer FromNDArray(NDArray nd, bool writable)
         {
             var storage = nd.Storage;
-            int itemSize = nd.dtypesize;
+            // ItemBytes is the cell size for a StringDType storage, the element size otherwise (dtypesize refuses a
+            // StringDType array: its elements have no fixed-width bytes of their own).
+            int itemSize = storage.ItemBytes;
             // The first element in memory order: a contiguous array's data starts at its offset, whatever the order.
             byte* start = (byte*)storage.Address + nd.Shape.offset * itemSize;
-            return new NDBuffer(start, nd.size * itemSize, writable, storage._baseStorage ?? storage, storage.InternalArray);
+            return new NDBuffer(start, nd.size * itemSize, writable, storage._baseStorage ?? storage, storage.InternalArray, storage.VStringSlice);
         }
 
         /// <summary>Pins a <see cref="Memory{T}"/> of bytes as a writable buffer.</summary>

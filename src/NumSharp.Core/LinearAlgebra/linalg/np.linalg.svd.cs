@@ -92,7 +92,7 @@ namespace NumSharp
                 {
                     // Text: NumPy's `A == 0` has no string loop, so ndarray.__eq__ answers all-False (a 0-d operand:
                     // Python's False) without reading the text — rank 1, or 0 for an empty operand (all([]) is True).
-                    if (Backends.Strings.NDStringUfuncs.IsString(A))
+                    if (Backends.Strings.NDStringUfuncs.IsText(A))
                         return NDArray.Scalar(A.size == 0 ? 0L : 1L);
                     return NDArray.Scalar(A.TensorEngine.CountNonZero(A) == 0 ? 0L : 1L);
                 }
@@ -143,12 +143,18 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="TypeError">An array or list <paramref name="p"/>: NumPy's <c>p in {2, -2}</c> hashes it
+            ///     (<c>unhashable type: 'numpy.ndarray'</c> / <c>'list'</c>), after the empty-operand check.</exception>
             [NDScoped]
             public static NDArray cond(NDArray x, object p = null)
             {
                 using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
                 if (IsEmpty2d(x))
                     throw new LinAlgError("cond is not defined on empty arrays");
+                // `p is None or p in {2, -2}`: the set membership hashes p, which an ndarray (a typed C# array too, the house
+                // map) and a Python list cannot be — whatever they hold, text included.
+                if (p is NDArray || (p is Array && p is not string) || PolySequenceLike(p))
+                    throw new TypeError($"unhashable type: '{(p is NDArray || p.GetType().IsArray && p.GetType().GetElementType() != typeof(object) ? "numpy.ndarray" : "list")}'");
 
                 NDArray r;
                 if (p is null || IsOrder(p, 2) || IsOrder(p, -2))
@@ -202,6 +208,13 @@ namespace NumSharp
 
             private static bool IsOrder(object p, double value)
                 => p is not null && p is not string && Convert.ToDouble(p) == value;
+
+            /// <summary>Whether <paramref name="p"/> is a Python list for NumPy's purposes (an <c>object[]</c> or another
+            ///     non-array <see cref="System.Collections.IList"/>): unhashable, unlike a tuple.</summary>
+            /// <param name="p">The order argument.</param>
+            /// <returns>True for a list.</returns>
+            private static bool PolySequenceLike(object p)
+                => p is System.Collections.IList && p is not System.Runtime.CompilerServices.ITuple;
 
             /// <summary>
             ///     NumPy's <c>_is_empty_2d</c> — <c>size == 0</c> AND the product of the last two

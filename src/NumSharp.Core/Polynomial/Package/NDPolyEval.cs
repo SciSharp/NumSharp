@@ -82,10 +82,20 @@ namespace NumSharp
         private static NDArray ArrayOf(object a)
         {
             var v = NDPolySeries.AsCoefficientArray(a);
-            // A str / object array is refused as soon as it exists: evaluation computes with it right away (a str series
-            // is not rejected by any check first). The conversion's own refusal names the item that made it.
             if (v.NonNumeric)
-                throw v.Refusal ?? new NotSupportedException("a str argument makes NumPy build a str array, a dtype NumSharp does not have");
+            {
+                // A str argument is the str array NumPy builds (np.array(a, ndmin=1): a Python str is one element), which
+                // the evaluation's text block answers; an object array is refused as soon as it exists — evaluation computes
+                // with it right away — with the conversion's refusal, which names the item that made it.
+                if (!v.IsObject && NDPolySeries.TryStrArray(a, out var str))
+                {
+                    if (str.ndim > 0)
+                        return str;
+                    using (str)
+                        return np.expand_dims(str, 0).copy();
+                }
+                throw v.Refusal ?? new NotSupportedException("NumPy builds an object array from this argument, a dtype NumSharp does not have");
+            }
             return v.Source;
         }
 
@@ -98,10 +108,14 @@ namespace NumSharp
         /// <param name="a">The ordinate (not null, not an NDArray).</param>
         /// <returns>A NEW array the caller owns and must dispose.</returns>
         /// <exception cref="ValueError">A ragged tuple / list.</exception>
-        /// <exception cref="NotSupportedException">A str, a sequence holding a str / null, or a Python int past uint64
-        ///     (NumPy's str / object arrays).</exception>
+        /// <exception cref="NotSupportedException">A sequence holding null, or a Python int past uint64 (NumPy's object
+        ///     arrays).</exception>
+        /// <remarks>A str ordinate is NumPy's 0-d str array (its evaluation then answers through the text block of
+        ///     <see cref="Val(PolyBasis, object, NDArray, bool)"/>).</remarks>
         private static NDArray OrdinateArray(object a)
         {
+            if (a is string s)
+                return np.asanyarray(s);
             if (!PolyNumber.IsScalarValue(a))
                 return ArrayOf(a);
             // Not ArrayOf: that is np.array(a, ndmin=1), which would make the scalar a one-element 1-D array.
@@ -126,10 +140,25 @@ namespace NumSharp
         ///     with <c>x.shape</c> (NumPy's ValueError text, house exception type).</exception>
         /// <exception cref="OverflowException">A Python int in the recurrence does not fit an integer x dtype
         ///     (e.g. lagval with 70 coefficients on int8 x).</exception>
+        /// <exception cref="TypeError">Text points under hermval, or under chebval with a series of other than one or two
+        ///     coefficients: NumPy's first statement <c>x*2</c> / <c>2*x</c> is the string multiply ufunc without out=, whose
+        ///     TypeError S / U points raise.</exception>
+        /// <exception cref="NotSupportedException">A non-empty text series, or text points (an S / U / <c>StringDType</c>
+        ///     array, a Python str), once the recurrence would compute with the strings
+        ///     (<see cref="NDPolySeries.TextArithmeticRefusal(NDArray)"/>).</exception>
         internal static NDArray Val(PolyBasis basis, object x, NDArray c, bool tensor)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (c is null) throw new ArgumentNullException(nameof(c));
+
+            // Text (S, U or StringDType) in the series or the points: NumPy's statements reach the strings, so they run as
+            // NumPy runs them up to the first one that would compute with the strings themselves.
+            bool textC = Backends.Strings.NDStringUfuncs.IsText(c);
+            var textX = x as NDArray;
+            if (textX is not null && !Backends.Strings.NDStringUfuncs.IsText(textX))
+                textX = null;
+            if (textC || textX is not null || x is string)
+                throw ValText(basis, x, textX, c);
 
             NDArray expanded = null, converted = null, convertedX = null;
             try
@@ -319,6 +348,129 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     The <c>{p}val</c> answer when the series or the points are text: NumPy's statements in source order up to the
+        ///     first one that would compute with the strings themselves. Text POINTS meet a statement whose answer the dtypes
+        ///     decide before the series' values are operated on, and that statement is made as the same ufunc call — the
+        ///     string multiply without out= (<c>x*0</c>, <c>0*x</c>, <c>2*x</c>, <c>x*2</c>: NumPy's out= kwarg TypeError for
+        ///     S / U, the string repeat for <c>StringDType</c>), a numeric coefficient times the points, or Laguerre's
+        ///     <c>1 - x</c> / <c>(2*nd - 1) - x</c> (no loop for any text) —; an empty series' first read
+        ///     (<c>c[-1]</c> / <c>c[-2]</c>) is NumPy's IndexError; whatever follows computes with the strings (or, for text
+        ///     COEFFICIENTS, starts with them), which the polynomial package does not model.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="x">The caller's points.</param>
+        /// <param name="textX">The points when they are a text array, else null.</param>
+        /// <param name="c">The series (rank &gt;= 1).</param>
+        /// <returns>The exception to throw (a TypeError of the ufunc calls is raised by the call itself).</returns>
+        /// <exception cref="TypeError">The decided statement on text points (see the summary).</exception>
+        /// <remarks>
+        ///     The statement per basis, for a series of <c>n</c> coefficients (numeric unless stated): power <c>x*0</c> after
+        ///     the <c>c[-1]</c> read; Chebyshev <c>0*x</c> (n = 1), <c>c[1]*x</c> (n = 2), else <c>2*x</c>; Legendre and the
+        ///     probabilists' Hermite <c>0*x</c> (n = 1), else <c>c[-1]*x</c>; Laguerre <c>1 - x</c> (n &lt;= 2), else
+        ///     <c>(2*(n - 1) - 1) - x</c>; physicists' Hermite <c>x*2</c> first of all. Statements that read text coefficients
+        ///     first (a text series with n &gt;= 2 under the bases that operate on them before the points) are not made. Only
+        ///     the operands' dtypes reach NumPy's error text, so a coefficient enters as the strong 0-d / row view
+        ///     <c>c[n - 1]</c> NumPy reads, and an integer constant as a weak Python int.
+        /// </remarks>
+        private static Exception ValText(PolyBasis basis, object x, NDArray textX, NDArray c)
+        {
+            // np.array(c, ndmin=1): a 0-d series is one coefficient.
+            long nc = c.ndim == 0 ? 1 : c.Shape.dimensions[0];
+            bool numericC = !Backends.Strings.NDStringUfuncs.IsText(c);
+            if (textX is not null)
+            {
+                switch (basis)
+                {
+                    case PolyBasis.Power:
+                        // c0 = c[-1] + x*0: the read first.
+                        if (nc == 0)
+                            return EmptySeriesError(basis);
+                        TextPointsStatement(BinaryOp.Multiply, textX, 0, pointsFirst: true);
+                        break;
+                    case PolyBasis.Chebyshev:
+                        if (nc == 1)
+                            TextPointsStatement(BinaryOp.Multiply, textX, 0, pointsFirst: false);     // c0 + c1*x, c1 = 0
+                        else if (nc == 2)
+                        {
+                            if (numericC)
+                                CoefficientTimesTextPoints(c, nc, textX);                            // c0 + c1*x, c1 = c[1]
+                        }
+                        else
+                            TextPointsStatement(BinaryOp.Multiply, textX, 2, pointsFirst: false);     // x2 = 2*x
+                        break;
+                    case PolyBasis.Legendre:
+                    case PolyBasis.HermiteE:
+                        if (nc == 1)
+                            TextPointsStatement(BinaryOp.Multiply, textX, 0, pointsFirst: false);     // c0 + c1*x, c1 = 0
+                        else if (nc >= 2 && numericC)
+                            CoefficientTimesTextPoints(c, nc, textX);                                // c1*x, c1 = c[-1]
+                        break;
+                    case PolyBasis.Laguerre:
+                        if (nc == 1 || nc == 2)
+                            TextPointsStatement(BinaryOp.Subtract, textX, 1, pointsFirst: false);     // c1*(1 - x)
+                        else if (nc >= 3 && numericC)
+                            TextPointsStatement(BinaryOp.Subtract, textX, 2 * (nc - 1) - 1, pointsFirst: false);
+                        break;
+                    case PolyBasis.Hermite:
+                        TextPointsStatement(BinaryOp.Multiply, textX, 2, pointsFirst: true);          // x2 = x*2
+                        break;
+                }
+            }
+            if (nc == 0)
+                return EmptySeriesError(basis);
+            if (!numericC)
+                return NDPolySeries.TextArithmeticRefusal(c);
+            return textX is not null ? NDPolySeries.TextArithmeticRefusal(textX) : NDPolySeries.TextArithmeticRefusal("Python str");
+        }
+
+        /// <summary>
+        ///     One of NumPy's statements between text points and a Python int constant, made as the same ufunc call (the
+        ///     constant a WEAK Python int, as NumPy receives it); a successful call's result (a <c>StringDType</c> repeat) is
+        ///     discarded, since the statements after it compute with the strings.
+        /// </summary>
+        /// <param name="op">Multiply (the string repeat) or subtract (no loop for text).</param>
+        /// <param name="points">The text points.</param>
+        /// <param name="constant">The Python int.</param>
+        /// <param name="pointsFirst">The points are the left operand (<c>x*2</c>) rather than the right (<c>2*x</c>).</param>
+        /// <exception cref="TypeError">NumPy's string-ufunc TypeError for the operands.</exception>
+        private static void TextPointsStatement(BinaryOp op, NDArray points, long constant, bool pointsFirst)
+        {
+            using var k = NDArray.PythonLiteral(constant);
+            NDArray a = pointsFirst ? points : k, b = pointsFirst ? k : points;
+            using var r = op == BinaryOp.Multiply ? np.multiply(a, b) : np.subtract(a, b);
+        }
+
+        /// <summary>
+        ///     <c>c1*x</c> with a numeric coefficient <c>c1 = c[n - 1]</c> (the first statement on the points of a two-term
+        ///     Chebyshev / Legendre / probabilists' Hermite series, and of their longer Legendre / Hermite_e loops): a
+        ///     numeric dtype times text has no loop, so the call raises NumPy's no-loop TypeError, naming the coefficient's
+        ///     dtype (a strong operand, as NumPy's c[1] is) and the points'.
+        /// </summary>
+        /// <param name="c">The numeric series.</param>
+        /// <param name="nc">Its length (&gt;= 2).</param>
+        /// <param name="points">The text points.</param>
+        /// <exception cref="TypeError">Always (numeric times text).</exception>
+        private static void CoefficientTimesTextPoints(NDArray c, long nc, NDArray points)
+        {
+            // c[n - 1] of the series (rank >= 1 here: a 0-d series is one coefficient, which never multiplies the points
+            // first) — a strong 0-d / row view — in the dtype NumPy evaluates with: an integer / bool series is converted to
+            // float64 first (c.astype(np.double) / c + 0.0), so its coefficient meets the points as a float64 (no loop,
+            // where an integer would be the string repeat).
+            using var c1 = c[nc - 1];
+            using var c1Loop = PolyTyping.IsIntLike(c1.typecode) ? c1.astype(np.float64) : null;
+            using var r = np.multiply(c1Loop ?? c1, points);
+        }
+
+        /// <summary>
+        ///     NumPy's error for an EMPTY series: the first element its evaluation reads — <c>c[-1]</c> for the power series,
+        ///     <c>c[-2]</c> for the Clenshaw bases — is out of bounds, whatever the dtypes of the series and the points.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <returns>The exception to throw.</returns>
+        private static IndexError EmptySeriesError(PolyBasis basis)
+            => new IndexError($"index {(basis == PolyBasis.Power ? -1 : -2)} is out of bounds for axis 0 with size 0");
+
         /// <summary>The evaluation proper (x classified, c normalized).</summary>
         /// <param name="basis">The basis.</param>
         /// <param name="xa">x as an array (null when weak).</param>
@@ -336,7 +488,7 @@ namespace NumSharp
         {
             long nc = c.Shape.dimensions[0];
             if (nc == 0)
-                throw new IndexError($"index {(basis == PolyBasis.Power ? -1 : -2)} is out of bounds for axis 0 with size 0");
+                throw EmptySeriesError(basis);
 
             bool coefOperand = c.ndim > 1;
             var xMode = weak ? PolyXMode.Weak : xa.ndim == 0 ? PolyXMode.Shared : PolyXMode.PerPoint;

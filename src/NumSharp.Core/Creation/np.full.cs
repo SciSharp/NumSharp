@@ -51,11 +51,12 @@ namespace NumSharp
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
         /// <param name="shape">Shape of the array, e.g., (2, 3) or 2.</param>
-        /// <param name="fill_value">Fill value (scalar).</param>
+        /// <param name="fill_value">Fill value: a scalar, or an array (an <see cref="NDArray"/> of rank ≥ 1, a C# array) that
+        ///     broadcasts into the result, as NumPy's <c>copyto(a, fill_value, casting='unsafe')</c> broadcasts it.</param>
         /// <param name="dtype">
         ///     The desired dtype for the array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
         ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert implicitly.
-        ///     Default (null) infers from fill_value.
+        ///     Default (null) infers from fill_value (an array fill value gives its own dtype).
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
@@ -65,7 +66,9 @@ namespace NumSharp
         ///     <c>decimal</c>) dtype, for a non-empty shape: Python's <c>int(None)</c>, raised by NumPy's
         ///     <c>copyto(a, None, casting='unsafe')</c> (an empty result converts nothing and returns).</exception>
         /// <exception cref="ValueError"><paramref name="fill_value"/> is null and <paramref name="dtype"/> is a
-        ///     <c>StringDType(coerce=False)</c>.</exception>
+        ///     <c>StringDType(coerce=False)</c>; or an array fill value that does not broadcast into the result (<c>could not
+        ///     broadcast input array from shape (2,) into shape (3,)</c>), or whose text does not parse into a numeric
+        ///     <paramref name="dtype"/>.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.full.html
         ///     <para>A null <paramref name="fill_value"/> is Python's <c>None</c>, filled the way NumPy's
@@ -76,6 +79,10 @@ namespace NumSharp
         public static NDArray full(Shape shape, object fill_value, DType dtype = null, string device = null)
         {
             ValidateDevice(device);
+            // A fill value with dimensions (an NDArray of rank >= 1, a C# array): NumPy's own statements, which broadcast it
+            // into the result (FullFromArrayFill). Without dtype= the result takes the fill value's dtype.
+            if (IsBroadcastFillValue(fill_value))
+                return FullFromArrayFill(shape, fill_value, dtype);
             // StringDType: NumPy's empty + copyto(unsafe) (NDVStringMove.Full).
             if (dtype?.Meta is VStringDTypeMeta)
                 return Backends.Strings.NDVStringMove.Full(shape, fill_value, dtype);
@@ -91,6 +98,74 @@ namespace NumSharp
             // When dtype is explicitly provided, use it; when null, infer from fill_value.
             var typeCode = dtype != null ? dtype.GetTypeCode() : fill_value.GetType().GetTypeCode();
             return WithLaneSharingDescr(FullCore(shape, fill_value, typeCode), dtype);
+        }
+
+        /// <summary>
+        ///     Whether a fill value of <c>np.full</c> / <c>np.full_like</c> has dimensions: an <see cref="NDArray"/> of rank
+        ///     ≥ 1, or a C# array other than <c>byte[]</c> (a <c>byte[]</c> is Python's <c>bytes</c>, one text value).
+        /// </summary>
+        /// <param name="fill_value">The caller's fill value (null is Python's <c>None</c>).</param>
+        /// <returns>True when NumPy's <c>copyto</c> would broadcast the value rather than store one scalar.</returns>
+        /// <remarks>
+        ///     A 0-d array is not one: it stores one element through the scalar rule
+        ///     (<see cref="TryCopytoUnsafeScalarElement"/>), which a text 0-d array reaches too (parsed once).
+        /// </remarks>
+        internal static bool IsBroadcastFillValue(object fill_value)
+            => fill_value is NDArray nd ? nd.ndim > 0 : fill_value is Array && fill_value is not byte[];
+
+        /// <summary>
+        ///     NumPy's <c>np.full</c> / <c>np.full_like</c> for a fill value with dimensions: <c>fill_value =
+        ///     asarray(fill_value)</c> (whose dtype <c>np.full</c> takes when <paramref name="resultDescr"/> is null),
+        ///     <c>a = empty(shape, dtype)</c> (<c>empty_like</c>'s layout for <c>full_like</c>), then
+        ///     <c>copyto(a, fill_value, casting='unsafe')</c> — the value BROADCASTS into the result and each element is cast
+        ///     (a text element parsed into a number, a number formatted into text).
+        /// </summary>
+        /// <param name="shape">The result's layout: dimensions for <c>np.full</c>, <c>empty_like</c>'s layout for
+        ///     <c>np.full_like</c> (a view's layout is re-laid out in C order by the allocation).</param>
+        /// <param name="fill_value">The fill value (<see cref="IsBroadcastFillValue"/> holds).</param>
+        /// <param name="resultDescr">The result's descriptor, or null for the fill value's own.</param>
+        /// <returns>The filled array.</returns>
+        /// <exception cref="ValueError">The fill value does not broadcast into the result (NumPy's copyto text, <c>could not
+        ///     broadcast input array from shape (2,) into shape (3,)</c>), or a text element does not parse into a numeric
+        ///     result (the cast's text).</exception>
+        /// <exception cref="OverflowException">A text element parses to an integer outside an integer result.</exception>
+        /// <remarks>
+        ///     The fill value used to fall to the house scalar conversion, which refused or misread every array of rank
+        ///     ≥ 1 (<c>np.full_like(f3, [1, 2, 3])</c> is <c>[1., 2., 3.]</c> in NumPy). Text results keep their own fill
+        ///     routes, which broadcast the same way. The allocation is disposed when the copy throws.
+        /// </remarks>
+        internal static NDArray FullFromArrayFill(Shape shape, object fill_value, DType resultDescr)
+        {
+            // asarray(fill_value): an NDArray as it is, a C# array converted (np.asanyarray's dtype discovery).
+            NDArray converted = fill_value is NDArray ? null : asanyarray(fill_value);
+            NDArray fill = converted ?? (NDArray)fill_value;
+            try
+            {
+                var descr = resultDescr ?? fill.dtype;
+                // Text results: their routes are NumPy's empty + copyto(unsafe) already, broadcasting included.
+                if (descr.Meta is VStringDTypeMeta)
+                    return Backends.Strings.NDVStringMove.Full(shape, fill, descr);
+                if (Backends.Strings.NDStringStorage.IsString(descr))
+                    return Backends.Strings.NDStringArrays.Full(shape, fill, descr);
+
+                // The allocating constructor runs the dimension guard itself (UnmanagedStorage.Allocate).
+                var result = new NDArray(descr, shape, false);
+                try
+                {
+                    copyto(result, fill, "unsafe");
+                }
+                catch
+                {
+                    // The half-written allocation never reaches the caller.
+                    result.Dispose();
+                    throw;
+                }
+                return WithLaneSharingDescr(result, descr);
+            }
+            finally
+            {
+                converted?.Dispose();
+            }
         }
 
         /// <summary>

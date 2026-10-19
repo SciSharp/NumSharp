@@ -47,13 +47,22 @@ namespace NumSharp
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
         public NDArray this[params NDArray<int>[] selection]
         {
-            get => typecode == NPTypeCode.String
-                // A string element has no element kernel: the gather runs on the unit view (NDArray.Indexing.Strings.cs).
+            // A StringDType array takes the general indexer's StringDType route (its cells move only through their
+            // allocator); a fixed-width string element has no element kernel: the gather runs on the unit view
+            // (NDArray.Indexing.Strings.cs).
+            get => Storage.IsVString
+                ? this[selection.Select(array => (object)array).ToArray()]
+                : typecode == NPTypeCode.String
                 ? StringFetchIndices(selection.Select(array => (NDArray)array).ToArray())
                 : KeepLaneSharingClass(FetchIndices(this, selection.Select(array => (NDArray)array).ToArray(), null, true));
             set
             {
                 ThrowIfNotWriteable();
+                if (Storage.IsVString)
+                {
+                    this[selection.Select(array => (object)array).ToArray()] = value;
+                    return;
+                }
                 if (typecode == NPTypeCode.String)
                 {
                     StringSetIndices(selection.Select(array => (NDArray)array).ToArray(), value);

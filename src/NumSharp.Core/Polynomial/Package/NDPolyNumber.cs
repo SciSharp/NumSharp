@@ -1020,12 +1020,25 @@ namespace NumSharp
         ///     several (<c>The truth value of an array with more than one element is ambiguous…</c>).</exception>
         private static void* SingleElementOf(NDArray a)
         {
+            CheckSingleElement(a);
+            // One element: its offset is the shape's offset (every stride multiplies a zero index).
+            return (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
+        }
+
+        /// <summary>
+        ///     NumPy's precondition for an array's truth value: exactly one element. Also the whole truth-value test of
+        ///     <c>{p}line</c>'s text scale, an all-True comparison result whose truth value only its size decides (a
+        ///     <c>StringDType</c> array has no fixed element size, so no element address is computed here).
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <exception cref="ValueError">Zero elements (<c>The truth value of an empty array is ambiguous…</c>) or
+        ///     several (<c>The truth value of an array with more than one element is ambiguous…</c>).</exception>
+        internal static void CheckSingleElement(NDArray a)
+        {
             if (a.size == 0)
                 throw new ValueError("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
             if (a.size > 1)
                 throw new ValueError("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
-            // One element: its offset is the shape's offset (every stride multiplies a zero index).
-            return (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
         }
 
         // ---------------------------------------------------------------------------------------------

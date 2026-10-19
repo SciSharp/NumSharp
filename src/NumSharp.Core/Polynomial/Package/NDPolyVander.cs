@@ -116,12 +116,14 @@ namespace NumSharp
         /// <param name="deg">The degree: anything <c>operator.index</c> accepts (<see cref="PolyIndexArgument.AsInt"/>).</param>
         /// <returns>A view of shape <c>x.shape + (deg + 1,)</c> (<c>(1, deg + 1)</c> for a scalar), of <c>(x + 0.0).dtype</c>,
         ///     over a new array — NumPy's <c>np.moveaxis</c> result, OWNDATA false.</returns>
-        /// <exception cref="TypeError">A non-integer degree (NumPy's <c>deg must be an integer, received …</c>).</exception>
+        /// <exception cref="TypeError">A non-integer degree (NumPy's <c>deg must be an integer, received …</c>); or text
+        ///     points (S, U or <c>StringDType</c>), whose <c>x + 0.0</c> has no add loop (NumPy's UFuncTypeError text).</exception>
         /// <exception cref="ValueError"><c>deg must be non-negative</c>; a ragged list x; <c>Maximum allowed dimension
         ///     exceeded</c> (deg ≥ 2^63 - 1) or <c>array is too big; …</c> (the matrix's byte count).</exception>
         /// <exception cref="OutOfMemoryException">The matrix cannot be allocated (NumPy's MemoryError).</exception>
-        /// <exception cref="NotSupportedException">A str / null x, or a list holding a str / None / a Python int past uint64 —
-        ///     NumPy builds a str or object array (and its <c>+ 0.0</c> raises or computes with Python objects).</exception>
+        /// <exception cref="NotSupportedException">A null x, or a list holding None / a Python int past uint64 — NumPy builds an
+        ///     object array and its <c>+ 0.0</c> computes with Python objects. (A str x is NumPy's str array: the TypeError
+        ///     above.)</exception>
         internal static NDArray Vander(PolyBasis basis, object x, object deg)
         {
             // 1-2. ideg = pu._as_int(deg, "deg"); if ideg < 0: raise ValueError(...)
@@ -132,8 +134,11 @@ namespace NumSharp
             NDArray converted = null, temp = null;
             try
             {
-                // 3. x = np.array(x, copy=None, ndmin=1) + 0.0 — the + 0.0 happens in the kernel's load stage.
+                // 3. x = np.array(x, copy=None, ndmin=1) + 0.0 — the + 0.0 happens in the kernel's load stage. Text points
+                //    have no add loop with a float: NumPy's refusal of that `+ 0.0`.
                 NDArray xa = Points(x, ref converted);
+                if (Backends.Strings.NDStringUfuncs.IsText(xa))
+                    throw TextPlusZeroError(xa.dtype);
                 NPTypeCode t = LoopType(xa.typecode);
                 long[] pdims = PointDims(xa.Shape);
                 long npts = Count(pdims);
@@ -165,6 +170,48 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's refusal of <c>x + 0.0</c> over text points: the add ufunc has no loop for text and a float. A
+        ///     <c>StringDType</c> operand names DType classes (the Python float as <c>_PyFloatDType</c>); a fixed-width one
+        ///     goes through the legacy resolver, which names descriptors (the Python float as <c>dtype('float64')</c>).
+        /// </summary>
+        /// <param name="text">The text points' descriptor.</param>
+        /// <returns>The exception to throw (NumPy's UFuncTypeError, the house <see cref="TypeError"/>).</returns>
+        private static TypeError TextPlusZeroError(DType text)
+            => text.Meta is VStringDTypeMeta
+                ? Backends.Strings.NDStringUfuncs.VStringNoLoop("add", new[] { text.Meta.ToString(), DTypeRegistry.PyFloat.ToString() })
+                : Backends.Strings.NDStringUfuncs.NoLoop("add", text, DType.Double);
+
+        /// <summary>
+        ///     NumPy's <c>points = tuple(np.asarray(tuple(points)) + 0.0)</c> when a point is text (a text array or a Python
+        ///     str): the stack is a str array of the dtype np.array's discovery promotes the points to (a number turned into
+        ///     text of its width, U over S, <c>StringDType</c> over U), and its <c>+ 0.0</c> has no add loop
+        ///     (<see cref="TextPlusZeroError"/>). Points of different shapes raise the stacking's ragged error first.
+        /// </summary>
+        /// <param name="points">The 2 or 3 points.</param>
+        /// <exception cref="TypeError">A text point among points of one shape (NumPy's no-loop text for the stack).</exception>
+        /// <exception cref="ValueError">Points of different shapes (np.array's inhomogeneous-shape text).</exception>
+        /// <remarks>An OBJECT stack (a Python int past uint64 among the points, or text np.array cannot promote with the
+        ///     others) is left to the caller's stack route, which reproduces NumPy's per-element <c>+ 0.0</c> on it (an
+        ///     OverflowError before a str's TypeError, in element order) or refuses the object array.</remarks>
+        private static void ThrowIfTextPoints(object[] points)
+        {
+            foreach (var p in points)
+                if (p is string || (p is NDArray nd && Backends.Strings.NDStringUfuncs.IsText(nd)))
+                {
+                    DType stack;
+                    try
+                    {
+                        stack = NDPolySeries.PromoteEntries(NDPolySeries.EntryArrays(points));
+                    }
+                    catch (NotSupportedException)
+                    {
+                        return;   // an object stack: the stack route answers it
+                    }
+                    throw TextPlusZeroError(stack);
+                }
+        }
+
+        /// <summary>
         ///     <c>{p}vander2d(x, y, deg)</c> / <c>{p}vander3d(x, y, z, deg)</c> — <c>polyutils._vander_nd_flat</c>: the outer product
         ///     of the per-axis matrices, its degree axes flattened, <c>(a*(dy+1) + b)[*(dz+1) + c]</c> being the column of
         ///     <c>x^a y^b [z^c]</c> (in the basis).
@@ -176,7 +223,8 @@ namespace NumSharp
         /// <returns>A view of shape <c>points.shape + (prod(deg + 1),)</c> over a new array (OWNDATA false), of the stacked
         ///     points' <c>(S + 0.0).dtype</c>.</returns>
         /// <exception cref="TypeError"><c>object of type '…' has no len()</c> / <c>len() of unsized object</c> (a scalar or 0-d
-        ///     deg), or a non-integer degree (<c>deg must be an integer, received …</c>).</exception>
+        ///     deg), or a non-integer degree (<c>deg must be an integer, received …</c>); or text points (a text array, a str,
+        ///     a list of strs) of one shape, whose stack's <c>+ 0.0</c> has no add loop.</exception>
         /// <exception cref="ValueError"><c>Expected {n} dimensions of degrees, got {len}</c>; points of different shapes
         ///     (np.array's inhomogeneous text); <c>deg must be non-negative</c>; <c>Maximum allowed dimension exceeded</c>;
         ///     <c>array is too big; …</c>.</exception>
@@ -187,7 +235,8 @@ namespace NumSharp
         ///     to float</c>, NumPy's OverflowError at its per-element <c>+ 0.0</c> of the object stack).</exception>
         /// <exception cref="NotSupportedException">Points NumPy stacks into a str array, or into an object array it computes
         ///     with as Python objects (non-scalar points holding a Python int past uint64) or fails on (a None / str element) —
-        ///     an object stack of scalars that are all numbers is computed (see the file header).</exception>
+        ///     an object stack of scalars that are all numbers is computed (see the file header); or text points np.array
+        ///     cannot promote with the others (an object stack).</exception>
         internal static NDArray VanderNd(PolyBasis basis, object[] points, object deg)
         {
             int n = points.Length;
@@ -208,6 +257,8 @@ namespace NumSharp
                 byte** srcs = stackalloc byte*[3];
                 long* strides = stackalloc long[3];
                 Span<NPTypeCode> srcTypes = stackalloc NPTypeCode[3];
+                // Text points: NumPy's stack of them is text, and its `+ 0.0` has no loop (ThrowIfTextPoints).
+                ThrowIfTextPoints(points);
                 if (SameShapeArrays(points, out s))
                 {
                     var first = (NDArray)points[0];
@@ -227,12 +278,16 @@ namespace NumSharp
                     stacked = PolySequence.ToArrayOrNonNumeric(PolySequence.MakeTuple(points, n), out var nonNumeric);
                     if (stacked is null)
                     {
+                        // A str stack (a str or a list of strs among the points): its `+ 0.0` has no add loop — NumPy's text
+                        // names the stack's dtype, np.array's promotion of the points (a number turned into text of its width).
+                        if (!nonNumeric.IsObject)
+                            throw TextPlusZeroError(NDPolySeries.PromoteEntries(NDPolySeries.EntryArrays(points)));
                         // An object stack of SCALARS (a Python int past uint64 among them) is numeric again after NumPy's
-                        // per-element `+ 0.0` (see the file header); every other str / object stack is refused — NumPy either
+                        // per-element `+ 0.0` (see the file header); every other object stack is refused — NumPy either
                         // raises at that `+ 0.0` or computes the matrices as Python-object arrays.
-                        if (!nonNumeric.IsObject || nonNumeric.Dims.Length != 1)
+                        if (nonNumeric.Dims.Length != 1)
                             throw nonNumeric.Refusal ?? new NotSupportedException(
-                                "the points stack into a str array (NumPy's `+ 0.0` then raises), a dtype NumSharp does not have");
+                                "the points stack into an object array (NumPy's `+ 0.0` computes with Python objects), a dtype NumSharp does not have");
                         objectPoints = ObjectScalarPoints(points);
                         if (!SameDtype(objectPoints))
                             return MixedDtypeVander(basis, objectPoints, degItems);
@@ -512,17 +567,25 @@ namespace NumSharp
         /// <param name="converted">Receives the array built here (the caller disposes it), untouched for an NDArray.</param>
         /// <returns>The points array.</returns>
         /// <exception cref="ValueError">A ragged list / tuple.</exception>
-        /// <exception cref="NotSupportedException">A str / null x, or a list NumPy makes a str / object array of.</exception>
+        /// <exception cref="NotSupportedException">A null x, or a list NumPy makes an object array of.</exception>
         private static NDArray Points(object x, ref NDArray converted)
         {
             if (x is NDArray nd)
                 return nd;
             var v = NDPolySeries.AsCoefficientArray(x);
-            // NumPy fails at `x + 0.0` on a str array (UFuncTypeError) and computes with Python objects on an object array:
-            // NumSharp has neither dtype, so both are refused here — where NumPy would compute with it.
             if (v.NonNumeric)
+            {
+                // A str x (a C# string, a string[], a list holding strs) is the str array NumPy builds, whose `x + 0.0` the
+                // caller refuses with NumPy's text; an object array (None, a Python int past uint64) is computed with as
+                // Python objects in NumPy, which NumSharp has no dtype for.
+                if (!v.IsObject && NDPolySeries.TryStrArray(x, out var text))
+                {
+                    converted = text;
+                    return text;
+                }
                 throw v.Refusal ?? new NotSupportedException(
-                    "a str x makes NumPy build a str array (its `+ 0.0` then raises), a dtype NumSharp does not have");
+                    "NumPy builds an object array from these points (its `+ 0.0` computes with Python objects), a dtype NumSharp does not have");
+            }
             converted = v.Source;
             return v.Source;
         }

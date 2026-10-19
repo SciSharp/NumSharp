@@ -87,7 +87,7 @@ namespace NumSharp
 
                 // NumPy's `a = a.conjugate()` is next: ndarray.conjugate refuses a non-numeric dtype before svd
                 // checks the rank, so text never reaches the rank check below.
-                if (Backends.Strings.NDStringUfuncs.IsString(a))
+                if (Backends.Strings.NDStringUfuncs.IsText(a))
                     throw new TypeError("cannot conjugate non-numeric dtype");
 
                 // svd's _assert_stacked_2d, and with hermitian=True its eigh route's square check.

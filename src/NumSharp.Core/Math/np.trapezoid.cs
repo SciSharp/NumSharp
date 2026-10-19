@@ -163,16 +163,9 @@ namespace NumSharp
                     : NDMatrixBoundary.Reduced((y, x, dx, axis), static s => trapezoid(s.y, s.x, s.dx, s.axis), axis, false, null);
             if (y is null) throw new ArgumentNullException(nameof(y));
 
-            // NumPy: d = diff(x) when x is given (text: subtract has no loop), else the Python float dx; then
-            // d * (y[1:] + y[:-1]) / 2 — the string add concatenates (doubling the width) and the multiply refuses text.
-            if (Backends.Strings.NDStringUfuncs.IsString(x))
-                throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", x.dtype, x.dtype);
-            if (Backends.Strings.NDStringUfuncs.IsString(y))
-            {
-                var meta = (StringDTypeMeta)y.dtype.Meta;
-                var concatenated = meta.Descr(2L * (y.dtype.itemsize / meta.UnitSize));
-                throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", x is null ? np.float64 : x.dtype, concatenated);
-            }
+            // Text (y or x): NumPy's statements in their order, up to the first refusal (TrapezoidTextAnswer).
+            if (Backends.Strings.NDStringUfuncs.IsText(y) || Backends.Strings.NDStringUfuncs.IsText(x))
+                throw TrapezoidTextAnswer(y, x, axis);
 
             int nd = y.ndim;
             var ops = new TrapezoidOperands();
@@ -320,6 +313,64 @@ namespace NumSharp
             if (ax < 0 || ax >= nd)
                 throw new IndexError("list assignment index out of range");
             return ax;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>trapezoid</c> over text (a string <paramref name="y"/> or <paramref name="x"/>), statement by
+        ///     statement up to the refusal: the spacing (<c>diff(x)</c> for a 1-D x, then <c>shape[axis] = d.shape[0]</c>;
+        ///     <c>diff(x, axis=axis)</c> otherwise; the Python float <c>dx</c> without x), the slices of y
+        ///     (<c>slice1[axis] = ...</c>), <c>y[1:] + y[:-1]</c>, and the multiply by the spacing.
+        /// </summary>
+        /// <param name="y">The values (text unless <paramref name="x"/> is).</param>
+        /// <param name="x">The sample points, or null.</param>
+        /// <param name="axis">The caller's axis.</param>
+        /// <returns>The refusal to throw: the subtract of a text x (diff's), or the multiply of the spacing and the
+        ///     concatenated text — a StringDType y names the classes (the spacing's, <c>_PyFloatDType</c> for dx), a
+        ///     fixed-width y the descriptors (float64 for dx, the concatenation's doubled width).</returns>
+        /// <exception cref="IndexError">Thrown (not returned): the axis is outside y's rank (<see cref="TrapezoidAxis"/>).</exception>
+        /// <exception cref="ValueError">Thrown (not returned): a 0-D N-D-route x (diff's rank check), or a StringDType y
+        ///     whose concatenation meets an NA it cannot add (<c>Cannot add null that is not a nan-like value</c>, which NumPy
+        ///     raises again from its <c>except ValueError</c> retry).</exception>
+        /// <exception cref="AxisError">Thrown (not returned): an N-D x without the axis (diff's <c>normalize_axis_index</c>).</exception>
+        private static Exception TrapezoidTextAnswer(NDArray y, NDArray x, int axis)
+        {
+            int nd = y.ndim;
+            DType spacing = null;   // the spacing array's descriptor; null for the Python float dx
+            if (x is not null)
+            {
+                if (x.ndim == 1)
+                {
+                    // d = diff(x): its subtract refuses text before the reshape reads the axis.
+                    if (Backends.Strings.NDStringUfuncs.IsText(x))
+                        return Backends.Strings.NDStringUfuncs.NoLoop("subtract", x.dtype, x.dtype);
+                    TrapezoidAxis(axis, nd);
+                }
+                else
+                {
+                    // d = diff(x, axis=axis): the rank and axis checks, then the subtract.
+                    DiffAxis(x, axis);
+                    if (Backends.Strings.NDStringUfuncs.IsText(x))
+                        return Backends.Strings.NDStringUfuncs.NoLoop("subtract", x.dtype, x.dtype);
+                }
+                // The difference keeps x's dtype (a bool x's not_equal is bool too).
+                spacing = x.dtype;
+            }
+            int ax = TrapezoidAxis(axis, nd);
+            // y is text here (a numeric y with a text x returned above).
+            if (Backends.Strings.NDStringUfuncs.IsVString(y))
+            {
+                // The concatenation runs for real: an NA it cannot add raises NumPy's ValueError (the retry in NumPy's
+                // except-branch raises it again). Its result is a temporary.
+                var (next, prev) = TrapezoidSlices(y.Shape, ax);
+                using var y1 = new NDArray(y.Storage, next);
+                using var y2 = new NDArray(y.Storage, prev);
+                using var concatenated = np.add(y1, y2);
+                return Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply",
+                    new[] { spacing is null ? DTypeRegistry.PyFloat.ToString() : spacing.Meta.ToString(), y.dtype.Meta.ToString() });
+            }
+            var meta = (StringDTypeMeta)y.dtype.Meta;
+            var doubled = meta.Descr(2L * (y.dtype.itemsize / meta.UnitSize));
+            return Backends.Strings.NDStringUfuncs.NoLoop("multiply", spacing ?? np.float64, doubled);
         }
 
         /// <summary>

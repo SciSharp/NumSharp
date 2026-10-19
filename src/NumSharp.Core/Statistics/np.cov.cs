@@ -52,7 +52,7 @@ namespace NumSharp
 
             // Text (an operand, or a string dtype= request): NumPy's statements run up to the first reduction, which
             // refuses text — or the empty-variables early return, which yields the (0, 0) float64 result.
-            if (Backends.Strings.NDStringUfuncs.IsString(m) || Backends.Strings.NDStringUfuncs.IsString(y) ||
+            if (Backends.Strings.NDStringUfuncs.IsText(m) || Backends.Strings.NDStringUfuncs.IsText(y) ||
                 Backends.Strings.NDStringUfuncs.IsStringRequest(dtype))
                 return CovOfText(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
 
@@ -255,7 +255,7 @@ namespace NumSharp
             {
                 // X = array(m, ndmin=2, dtype=dtype): np.array with a dtype casts unsafely, so text is parsed (a number is
                 // left for the numeric path's own cast).
-                var xm = Backends.Strings.NDStringUfuncs.IsString(m) ? m.astype(dtype, true, 'K', "unsafe") : m;
+                var xm = Backends.Strings.NDStringUfuncs.IsText(m) ? m.astype(dtype, true, 'K', "unsafe") : m;
                 long[] parsedDims = AtLeast2dDims(xm);
                 if (!rowvar && xm.ndim != 1)
                     Array.Reverse(parsedDims);
@@ -263,14 +263,20 @@ namespace NumSharp
                 if (parsedDims[0] == 0)
                     return EmptyCovariance();
                 // y = array(y, ndmin=2, dtype=dtype): the same parse for text y; then the covariance of the numbers.
-                var ym = y is not null && Backends.Strings.NDStringUfuncs.IsString(y) ? y.astype(dtype, true, 'K', "unsafe") : y;
+                var ym = y is not null && Backends.Strings.NDStringUfuncs.IsText(y) ? y.astype(dtype, true, 'K', "unsafe") : y;
                 return cov(xm, ym, rowvar, bias, ddof, fweights, aweights, dtype);
             }
             if (dtype is null)
             {
-                // dtype = result_type(m, y, float64): every array is strong, and text absorbs float64 as 32 characters.
-                var r = y is null ? DTypePromotion.PromoteTypes(m.dtype, np.float64)
-                    : DTypePromotion.PromoteTypes(DTypePromotion.PromoteTypes(m.dtype, y.dtype), np.float64);
+                // dtype = result_type(m, y, float64): every array is strong, and fixed-width text absorbs float64 as 32
+                // characters. StringDType has no common DType with float64: the SEQUENCE promotion refuses it with its own
+                // text, naming the float64 dtype first (NumPy promotes the dtype arguments before the arrays).
+                DType r;
+                if (Backends.Strings.NDStringUfuncs.IsVString(m) || Backends.Strings.NDStringUfuncs.IsVString(y))
+                    r = y is null ? DTypePromotion.ResultType(np.float64, m) : DTypePromotion.ResultType(np.float64, m, y);
+                else
+                    r = y is null ? DTypePromotion.PromoteTypes(m.dtype, np.float64)
+                        : DTypePromotion.PromoteTypes(DTypePromotion.PromoteTypes(m.dtype, y.dtype), np.float64);
                 xd = yd = r;
             }
             else if (dtype.itemsize != 0)
@@ -334,7 +340,7 @@ namespace NumSharp
         [NDScopedCovered] // only caller: CovOfText (the converted copy is scope-reclaimed)
         private static void ConvertTextForCov(NDArray x, DType descr)
         {
-            if (Backends.Strings.NDStringUfuncs.IsString(x) && descr.Meta is StringDTypeMeta && descr.Meta != x.dtype.Meta)
+            if (Backends.Strings.NDStringUfuncs.IsText(x) && descr.Meta is StringDTypeMeta && descr.Meta != x.dtype.Meta)
                 x.astype(descr);
         }
 

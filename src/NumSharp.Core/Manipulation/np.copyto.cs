@@ -311,6 +311,22 @@ namespace NumSharp
                 _ => PyIntDefaultType(value),
             };
 
+            // An int past uint64 is an OBJECT array in NumPy. No Python scalar class has a common DType with text, so the
+            // object keeps its dtype, and object → text is an UNSAFE cast: refused under every other rule (the read-only
+            // destination first, PyArray_AssignRawScalar's order); under 'unsafe' the destination receives its str().
+            if (original == NPTypeCode.Empty && Backends.Strings.NDStringUfuncs.IsText(dst))
+            {
+                DefaultEngine.ValidateWhereMask(@where);
+                NumSharpException.ThrowIfNotWriteable(dst.Shape);
+                if (casting != NPY_CASTING.NPY_UNSAFE_CASTING)
+                    throw new InvalidCastException(
+                        $"Cannot cast scalar from dtype('O') to {dst.dtype.ToString(true)} according to the rule " +
+                        $"'{DTypeCasting.CastingToString(casting)}'");
+                using var digits = np.array(new[] { value.ToString() }).reshape(Shape.NewScalar());
+                CopytoAssignArray(dst, digits, @where, NPY_CASTING.NPY_UNSAFE_CASTING);
+                return;
+            }
+
             NPTypeCode descr = CopytoFindDescrForScalar(original, kind, dst.typecode);
 
             // npy_update_operand_for_scalar: a dtype other than the scalar's own cannot be reached under 'equiv'.
@@ -657,6 +673,18 @@ namespace NumSharp
         private static unsafe void CopytoAssignRawScalar(NDArray dst, byte* srcData, NPTypeCode srcType, NDArray @where, NPY_CASTING casting)
         {
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
+            // A number into a StringDType array: StringDType holds references (PyDataType_REFCHK), so NumPy converts the
+            // value per selected element rather than once up front; the StringDType copy does exactly that over a 0-d array
+            // of the number, after the descriptor rule (every number casts safely; 'no' / 'equiv' refuse) and the mask's
+            // checks. The number's str() is what each element receives.
+            if (dst.Storage.IsVString)
+            {
+                using var number = new NDArray((DType)srcType, Shape.NewScalar(), false);
+                Buffer.MemoryCopy(srcData, (byte*)number.Address, srcType.SizeOf(), srcType.SizeOf());
+                CopytoAssignVStrings(dst, number, @where, casting);
+                return;
+            }
 
             // A number into a fixed-width string array: NumPy's descriptor rule decides first (int64 → <U5 is 'same_kind',
             // so 'safe' raises its TypeError text); an allowed cast formats the number ONCE into one element of the

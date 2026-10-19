@@ -254,11 +254,15 @@ namespace NumSharp.Backends.Strings
             // Two strings of one class ignore the request (handled above); two classes are the promoter's refusal.
             if (s1 && s2)
                 throw new TypeError($"ufunc 'add' cannot use operands with types {d1.ToString(true)} and {d2.ToString(true)}");
-            // The input casts, in input order: text of the requested class stays, everything else is cast to the class.
+            // resolve_descriptors: every operand's descriptor is cast to the loop's DType first (text of the requested class
+            // stays, everything else is cast to the class) — the inputs, then out= (a StringDType out has no size in the
+            // requested class) — and only then are the input casts checked, in input order.
             var c1 = s1 && d1.Meta == req ? d1 : DTypePromotion.CastDescrToDType(d1, req);
+            var c2 = s2 && d2.Meta == req ? d2 : DTypePromotion.CastDescrToDType(d2, req);
+            if (@out is not null && IsVString(@out))
+                DTypePromotion.CastDescrToDType(@out.dtype, req);
             if (!DTypeCasting.CanCastTypeTo(d1, c1, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw InputCastText("add", 0, d1, c1);
-            var c2 = s2 && d2.Meta == req ? d2 : DTypePromotion.CastDescrToDType(d2, req);
             if (!DTypeCasting.CanCastTypeTo(d2, c2, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 throw InputCastText("add", 1, d2, c2);
             var result = Concatenation(c1, c2);
@@ -528,6 +532,11 @@ namespace NumSharp.Backends.Strings
         ///     wiring error when it is a refusal-only guard: <see cref="ComputingLoopMisrouted"/>).</returns>
         internal static Exception ComputeAnswer(string ufunc, NDArray x1, NDArray x2, NDArray @out, NDArray where, DType result)
         {
+            // resolve_descriptors first casts the out= descriptor to the loop's output DType: a StringDType out of a
+            // fixed-width string loop has no size to cast to (cannot cast dtype StringDType() to <class '...BytesDType'>.),
+            // while a bool loop's output takes it (bool is not parametric).
+            if (OutDescrCastError(@out, result) is { } outDescr)
+                return outDescr;
             if (@out is not null && !DTypeCasting.CanCastTypeTo(result, @out.dtype, NPY_CASTING.NPY_SAME_KIND_CASTING))
                 return new ArgumentException(
                     $"Cannot cast ufunc '{ufunc}' output from {result.ToString(true)} to {@out.dtype.ToString(true)} with casting rule 'same_kind'");
@@ -540,6 +549,33 @@ namespace NumSharp.Backends.Strings
                 return copy;
             // The broadcast refusal, or null: every check passed and the loop computes.
             return BroadcastError(x1, x2, @out, where);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_CastDescrToDType(out descriptor, loop output DType)</c> in <c>resolve_descriptors</c>, for a
+        ///     <c>StringDType</c> <c>out=</c> of a loop whose output is another class.
+        /// </summary>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="result">The loop's output descriptor.</param>
+        /// <returns>The <see cref="TypeError"/> of a cast that cannot resolve (<c>cannot cast dtype StringDType() to &lt;class
+        ///     'numpy.dtypes.BytesDType'&gt;.</c>: StringDType to a fixed-width class needs a size NumPy cannot pick), or null
+        ///     (no out, a StringDType loop, or a cast that resolves — any non-parametric output such as bool).</returns>
+        /// <remarks>Only a <c>StringDType</c> out is cast here: every other out of these loops resolves (a fixed-width out
+        ///     to a fixed-width class sizes from its own length, a numeric out to a string class from its kind), so the
+        ///     same-kind check that follows decides those.</remarks>
+        internal static TypeError OutDescrCastError(NDArray @out, DType result)
+        {
+            if (@out is null || !IsVString(@out) || result.Meta == @out.dtype.Meta)
+                return null;
+            try
+            {
+                DTypePromotion.CastDescrToDType(@out.dtype, result.Meta);
+                return null;
+            }
+            catch (TypeError e)
+            {
+                return e;
+            }
         }
 
         /// <summary>
@@ -1445,10 +1481,12 @@ namespace NumSharp.Backends.Strings
         ///     <para>
         ///     An EMPTY 1-D q passes that check. <c>quantile</c> then checks the axes and the method and computes the virtual
         ///     indexes <c>(n - 1) * q</c> — an integer times text, NumPy's string repeat, which refuses without
-        ///     <c>out=</c>. <c>nanquantile</c> first sends empty data to <c>np.nanmean</c> (the add.reduce refusal for text
-        ///     data), then tests text data for NaN (<c>isnan</c> has no text loop), then reaches the same repeat. One residual:
-        ///     when every reduced slice of numeric data is all NaN, NumPy returns an empty result where this reports the
-        ///     repeat's refusal.
+        ///     <c>out=</c>. <c>nanquantile</c> first sends empty data to <c>np.nanmean</c> (the add.reduce refusal for
+        ///     fixed-width text data; for <c>StringDType</c> data its axis check, then add.reduce's
+        ///     <c>zero-size array to reduction operation add which has no identity</c>), then tests text data for NaN
+        ///     (<c>isnan</c> has no fixed-width text loop; <c>StringDType</c>'s passes), then reaches the same repeat. One
+        ///     residual: when every reduced slice of numeric or <c>StringDType</c> data is all NaN, NumPy returns an empty
+        ///     result where this reports the repeat's refusal.
         ///     </para>
         /// </remarks>
         internal static Exception QuantileTextQAnswer(string op, NDArray a, NDArray q, string method, int[] axes)
@@ -1465,9 +1503,21 @@ namespace NumSharp.Backends.Strings
             if (op == "nanquantile")
             {
                 if (a.size == 0)
-                    return IsString(a) ? AddNotCompatible(a.dtype, "reduce") : null;
+                {
+                    if (!IsText(a))
+                        return null;
+                    // np.nanmean of empty StringDType data refuses in every form (its axis check, then add.reduce's
+                    // "zero-size array to reduction operation add which has no identity"), thrown by the StringDType mean
+                    // itself; the disposal only keeps an impossible result from waiting for the finalizer.
+                    if (IsVString(a))
+                        NDVStringStatistics.EmptyNanMean(a, axes, null, false)?.Dispose();
+                    // Fixed-width text: np.nanmean's add.reduce refusal.
+                    return AddNotCompatible(a.dtype, "reduce");
+                }
                 ValidateReduceAxes(op, a.ndim, axes);
-                if (IsString(a))
+                // Fixed-width text has no isnan loop; StringDType data does (its NaN-like NAs) and goes on to the virtual
+                // index below. (IsVString first: IsString refuses a StringDType operand by design.)
+                if (!IsVString(a) && IsString(a))
                     return NotSupportedForInputTypes("isnan");
             }
             else

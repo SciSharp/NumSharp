@@ -91,8 +91,11 @@ namespace NumSharp
         /// <summary>A view of <paramref name="a"/>'s axis 0 (a 0-d array reads as one element).</summary>
         /// <param name="a">The array.</param>
         /// <returns>The view.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> holds text: a numeric view of it has no meaning
+        ///     (<see cref="NDPolySeries.TextArithmeticRefusal"/>; the routes that check text first never get here).</exception>
         public static PolySeriesView Of(NDArray a)
         {
+            ThrowIfText(a);
             byte* p = (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
             if (a.ndim == 0)
                 return new PolySeriesView(a, p, 1, 0, a.typecode, 1, 1, false);
@@ -103,8 +106,10 @@ namespace NumSharp
         /// <param name="a">The 1-D array.</param>
         /// <param name="i">The element index.</param>
         /// <returns>The one-element view.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> holds text (see <see cref="Of"/>).</exception>
         public static PolySeriesView Element(NDArray a, long i)
         {
+            ThrowIfText(a);
             byte* p = (byte*)a.Storage.Address + (a.Shape.offset + i * a.Shape.strides[0]) * a.dtypesize;
             return new PolySeriesView(a, p, 1, 0, a.typecode, 1, 1, false);
         }
@@ -115,10 +120,24 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">A C-contiguous array (not checked).</param>
         /// <returns>The flat view.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> holds text (see <see cref="Of"/>).</exception>
         public static PolySeriesView Flat(NDArray a)
         {
+            ThrowIfText(a);
             byte* p = (byte*)a.Storage.Address + a.Shape.offset * a.dtypesize;
             return new PolySeriesView(a, p, a.size, a.dtypesize, a.typecode, 1, a.size, false);
+        }
+
+        /// <summary>
+        ///     The text backstop of <see cref="Of"/> / <see cref="Element"/> / <see cref="Flat"/>: a text array reaching a
+        ///     numeric view raises the polynomial package's text refusal instead of reading its bytes as numbers.
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> holds text.</exception>
+        private static void ThrowIfText(NDArray a)
+        {
+            if (Backends.Strings.NDStringUfuncs.IsText(a))
+                throw NDPolySeries.TextArithmeticRefusal(a);
         }
 
         /// <summary>A str array of <paramref name="size"/> elements (1-D): passes the size/ndim checks, fails the common type.</summary>
@@ -219,6 +238,12 @@ namespace NumSharp
                     // np.array(None, ndmin=1): a one-element object array.
                     return PolySeriesView.NonNumericArray(s_oneDim, isObject: true,
                         new NotSupportedException("None has no NumSharp equivalent: NumPy builds an object array from it, a dtype NumSharp does not have"));
+                case NDArray text when Backends.Strings.NDStringUfuncs.IsText(text):
+                    // A text array (S, U or StringDType) is NumPy's str array: as_series' empty / not-1-d checks see its
+                    // shape and np.common_type then rejects it ("Coefficient arrays have no common type"); a route that
+                    // computes with it at once raises the text refusal instead (NumPy computes with the strings there).
+                    return PolySeriesView.NonNumericArray(text.ndim == 0 ? s_oneDim : text.Shape.dimensions, isObject: false,
+                        TextArithmeticRefusal(text));
                 case NDArray nd:
                     return PolySeriesView.Of(nd);
                 case string:
@@ -261,6 +286,94 @@ namespace NumSharp
 
         /// <summary>The dims of a one-element 1-D array (shared: <see cref="PolySeriesView.NonNumericArray"/> only reads them).</summary>
         private static readonly long[] s_oneDim = { 1 };
+
+        /// <summary>
+        ///     The refusal of a <c>numpy.polynomial</c> recurrence (<c>{p}der</c>, <c>{p}int</c>, the <c>{p}val</c> family)
+        ///     that reaches the VALUES of a text array (S, U or <c>StringDType</c>): NumPy runs the recurrence on the strings
+        ///     themselves — Python's str repeat and concatenation on the elements (<c>polyder(['ab', 'c', 'de'])</c> is
+        ///     <c>['c', 'dede']</c>), the string ufuncs on the rows, or the TypeError that arithmetic raises at a statement
+        ///     that differs per basis — and the polynomial package does not model that arithmetic.
+        /// </summary>
+        /// <param name="a">The text array.</param>
+        /// <returns>The exception to throw.</returns>
+        /// <remarks>
+        ///     A documented divergence, the object-series policy of the series algebra (U2: CPython's arithmetic on Python
+        ///     objects refuses) applied to text. Everything NumPy decides BEFORE that arithmetic answers exactly: the
+        ///     argument checks of {p}der / {p}int and their <c>m == 0</c> copy, der's <c>c[:1]*0</c> and every order's first
+        ///     <c>c *= scl</c> (string ufunc calls: the out= kwarg TypeError, the no-loop TypeError, the string repeat), the
+        ///     empty series' IndexError; every <c>as_series</c> consumer raises <c>Coefficient arrays have no common type</c>,
+        ///     <c>trimseq</c> returns a text sequence itself, <c>{p}line</c> stacks the text as np.array does, and
+        ///     <c>{p}vander</c>, <c>{p}fit</c>, <c>{p}weight</c>, <c>polyvalfromroots</c>, <c>mapparms</c> and
+        ///     <c>mapdomain</c> raise their first statement's TypeError.
+        /// </remarks>
+        internal static NotSupportedException TextArithmeticRefusal(NDArray a) => TextArithmeticRefusal(a.dtype.ToString(true) + " array");
+
+        /// <summary>
+        ///     <see cref="TextArithmeticRefusal(NDArray)"/> for an operand described in words: <c>"a Python str"</c> for a C#
+        ///     <see cref="string"/>, or a text array's <c>"dtype('&lt;U2') array"</c>.
+        /// </summary>
+        /// <param name="what">The operand's description, completing "numpy.polynomial with a …".</param>
+        /// <returns>The exception to throw.</returns>
+        internal static NotSupportedException TextArithmeticRefusal(string what)
+            => new NotSupportedException(
+                $"numpy.polynomial with a {what}: NumPy runs this recurrence on the strings themselves (Python's str repeat " +
+                "and concatenation on the elements, or the TypeError that arithmetic raises), which NumSharp's polynomial " +
+                "package does not model. Convert the text to numbers first, e.g. a.astype(np.float64).");
+
+        /// <summary>
+        ///     Throws <see cref="TextArithmeticRefusal(NDArray)"/> when <paramref name="a"/> is a text <see cref="NDArray"/>
+        ///     (and the string form when it is a C# <see cref="string"/>, a Python str); any other argument passes.
+        /// </summary>
+        /// <param name="a">A polynomial argument (points, coefficients, a domain, an offset), or null.</param>
+        /// <exception cref="NotSupportedException"><paramref name="a"/> is an S, U or <c>StringDType</c> array, or a
+        ///     string.</exception>
+        internal static void ThrowIfText(object a)
+        {
+            if (a is NDArray nd && Backends.Strings.NDStringUfuncs.IsText(nd))
+                throw TextArithmeticRefusal(nd);
+            if (a is string)
+                throw TextArithmeticRefusal("Python str");
+        }
+
+        /// <summary>
+        ///     The text array NumPy's <c>np.array</c> builds from a str argument that is not already an
+        ///     <see cref="NDArray"/>: a C# <see cref="string"/> (a Python str: a 0-d <c>&lt;U</c> array of its width), a
+        ///     <c>string[]</c>, or a Python tuple / list whose coercion NumPy turns into a str array (np.array's discovered
+        ///     width: <c>['a', 1.0]</c> is <c>&lt;U32</c>).
+        /// </summary>
+        /// <param name="a">The argument; the caller has established (through <see cref="AsCoefficientArray"/>) that NumPy
+        ///     makes a str array of it, not an object array.</param>
+        /// <param name="text">The new array (the caller owns it), or null.</param>
+        /// <returns>True when the house builds that array; false for a sequence form np.array's coercion does not read (the
+        ///     caller keeps its refusal).</returns>
+        internal static bool TryStrArray(object a, out NDArray text)
+        {
+            text = null;
+            switch (a)
+            {
+                case string s:
+                    text = np.asanyarray(s);   // a plain 0-d <U array (np.array of a str is an ndarray, not a Python str)
+                    return true;
+                case string[] strs:
+                    text = np.array(strs);
+                    return true;
+            }
+            if (!PolySequence.IsSequence(a))
+                return false;
+            try
+            {
+                text = np.asanyarray(a);
+            }
+            catch (NotSupportedException)
+            {
+                return false;
+            }
+            if (Backends.Strings.NDStringUfuncs.IsText(text))
+                return true;
+            text.Dispose();
+            text = null;
+            return false;
+        }
 
         /// <summary>
         ///     NumPy's per-array checks in <c>as_series</c>: <c>Coefficient array is empty</c> before
@@ -605,6 +718,9 @@ namespace NumSharp
                     throw new ValueError("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.");
                 throw new ValueError("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()");
             }
+            // A text element is never equal to the int 0 (`'de' != 0` is True), so NumPy's first test returns the sequence.
+            if (Backends.Strings.NDStringUfuncs.IsText(seq))
+                return seq;
             var v = PolySeriesView.Of(seq);
             long k = DirectILKernelGenerator.GetPolyTrimLenKernel(v.Dtype)(v.Ptr, v.Len, v.Stride);
             // +len: NumPy's `return seq` (the same object); -k: its slice `seq[:k]`, a view even when k == len.
@@ -1405,12 +1521,31 @@ namespace NumSharp
         /// <param name="old">The source domain.</param>
         /// <param name="new">The target domain.</param>
         /// <returns><c>(off, scl)</c>, each of NumPy's kind (Python / NumPy scalar / array).</returns>
-        /// <exception cref="IndexError">A domain shorter than 2.</exception>
-        /// <exception cref="TypeError">A domain that is not subscriptable, or a bool subtraction.</exception>
+        /// <exception cref="IndexError">A domain shorter than 2, or a 0-d text domain.</exception>
+        /// <exception cref="TypeError">A domain that is not subscriptable, a bool subtraction, or a text domain's subtraction
+        ///     (<see cref="TextDomainError"/>).</exception>
         /// <exception cref="DivideByZeroException">A zero-length domain given as Python numbers (ZeroDivisionError).</exception>
         /// <exception cref="OverflowException">Python int overflow.</exception>
         public static (PolyNumber Off, PolyNumber Scl) MapParms(object old, object @new)
         {
+            // A text domain: NumPy's `oldlen = old[1] - old[0]`, then `newlen = new[1] - new[0]`, over strings — old's
+            // errors (its index, then its subtraction) first, so a text new waits until old has been subtracted.
+            if (old is NDArray oldText && Backends.Strings.NDStringUfuncs.IsText(oldText))
+                throw TextDomainError(oldText);
+            if (@new is NDArray newText && Backends.Strings.NDStringUfuncs.IsText(newText))
+            {
+                ThrowIfStrItemSubtraction(old);
+                _ = PolyNumber.Binary(BinaryOp.Subtract, Index(old, 1), Index(old, 0));
+                throw TextDomainError(newText);
+            }
+            // A Python str item in a list / tuple domain: Python reads d[1] and d[0], then cannot subtract them — old's
+            // error first, new's once old's subtraction has run.
+            ThrowIfStrItemSubtraction(old);
+            if (HasStrItem(@new))
+            {
+                _ = PolyNumber.Binary(BinaryOp.Subtract, Index(old, 1), Index(old, 0));
+                ThrowIfStrItemSubtraction(@new);
+            }
             // Python lists/tuples of Python numbers: the machine-number lane (it only ever answers "applicable",
             // raising nothing but the ZeroDivisionError Python raises at the same point).
             if (TryMapParmsFast(old, @new, out var laneOff, out var laneScl))
@@ -1419,6 +1554,82 @@ namespace NumSharp
             if (TryMapParmsScalars(old, @new, out var off, out var scl))
                 return (off, scl);
             return MapParmsGeneral(old, @new);
+        }
+
+        /// <summary>Whether a list / tuple domain holds a Python str (a C# string) at index 0 or 1.</summary>
+        /// <param name="d">The domain.</param>
+        /// <returns>True for a two-item (or longer) Python sequence with a str among its first two items.</returns>
+        private static bool HasStrItem(object d)
+            => DomainItems(d, out object d1, out object d0) && (d1 is string || d0 is string);
+
+        /// <summary>
+        ///     Items 1 and 0 of a Python list / tuple domain (Python's <c>d[1]</c>, <c>d[0]</c>), when it has two or more; a
+        ///     typed C# array is an ndarray (not read here), a shorter sequence leaves the index error to <see cref="Index"/>.
+        /// </summary>
+        /// <param name="d">The domain.</param>
+        /// <param name="d1">Receives <c>d[1]</c>.</param>
+        /// <param name="d0">Receives <c>d[0]</c>.</param>
+        /// <returns>True when both items exist.</returns>
+        private static bool DomainItems(object d, out object d1, out object d0)
+        {
+            d1 = d0 = null;
+            switch (d)
+            {
+                case ITuple tup when tup.Length >= 2:
+                    d1 = tup[1];
+                    d0 = tup[0];
+                    return true;
+                case IList list when list.Count >= 2 && !(d is Array arr && arr.GetType().GetElementType() != typeof(object)):
+                    d1 = list[1];
+                    d0 = list[0];
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        ///     Python's <c>d[1] - d[0]</c> when an item of a list / tuple domain is a Python str: str has no subtraction, so
+        ///     CPython raises <c>unsupported operand type(s) for -: '…' and '…'</c> naming both items' types — unless the
+        ///     other item is a NumPy scalar (<see cref="Half"/>, <c>char</c>), whose subtraction converts the str to a 0-d
+        ///     <c>&lt;U</c> array and makes the ufunc call (its no-loop TypeError, operands in Python's order).
+        /// </summary>
+        /// <param name="d">The domain.</param>
+        /// <exception cref="TypeError">A str item meets the subtraction.</exception>
+        private static void ThrowIfStrItemSubtraction(object d)
+        {
+            if (!DomainItems(d, out object d1, out object d0) || (d1 is not string && d0 is not string))
+                return;
+            string t1 = PyOperandTypeName(d1, out bool numpy1), t0 = PyOperandTypeName(d0, out bool numpy0);
+            if (numpy1 || numpy0)
+            {
+                using var r = np.subtract(PolyUfuncOperand(d1), PolyUfuncOperand(d0));
+                return;
+            }
+            throw new TypeError($"unsupported operand type(s) for -: '{t1 ?? PythonTypeName(d1)}' and '{t0 ?? PythonTypeName(d0)}'");
+        }
+
+        /// <summary>
+        ///     NumPy's error for <c>d[1] - d[0]</c> over a text domain <paramref name="d"/>: indexing a 0-d array, or an index
+        ///     past a short axis, raises first; two elements of a 1-D domain are NumPy scalars of the text class (a Python
+        ///     <c>str</c> for <c>StringDType</c>) that Python cannot subtract; two rows of a 2-D+ domain are arrays whose
+        ///     subtract ufunc has no text loop.
+        /// </summary>
+        /// <param name="d">The text domain.</param>
+        /// <returns>The exception to throw.</returns>
+        private static Exception TextDomainError(NDArray d)
+        {
+            if (d.ndim == 0)
+                return new IndexError("too many indices for array: array is 0-dimensional, but 1 were indexed");
+            long n = d.Shape.dimensions[0];
+            if (n < 2)
+                return new IndexError($"index 1 is out of bounds for axis 0 with size {n}");
+            if (d.ndim == 1)
+            {
+                string name = Backends.Strings.NDStringUfuncs.IsVString(d) ? "str" : d.dtype.kind == 'S' ? "numpy.bytes_" : "numpy.str_";
+                return new TypeError($"unsupported operand type(s) for -: '{name}' and '{name}'");
+            }
+            return Backends.Strings.NDStringUfuncs.NoLoop("subtract", d.dtype, d.dtype);
         }
 
         /// <summary>
@@ -1468,6 +1679,9 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A null or string element (see <see cref="PolyNumber.FromObject"/>).</exception>
         public static (PolyNumber Off, PolyNumber Scl) MapParms<T0, T1, T2, T3>(in (T0, T1) old, in (T2, T3) @new)
         {
+            // A str element (Python's tuple of a str): the object overload raises Python's subtraction error in its order.
+            if (typeof(T0) == typeof(string) || typeof(T1) == typeof(string) || typeof(T2) == typeof(string) || typeof(T3) == typeof(string))
+                return MapParms((object)old, (object)@new);
             if (TryMapParmsFast(old, @new, out var off, out var scl))
                 return (off.ToPolyNumber(), scl.ToPolyNumber());
             return MapParmsSlow(old, @new);
@@ -1920,13 +2134,38 @@ namespace NumSharp
         /// <param name="new">The target domain.</param>
         /// <returns>The mapped points, of NumPy's kind.</returns>
         /// <exception cref="IndexError">A domain shorter than 2.</exception>
-        /// <exception cref="TypeError">A domain that is not subscriptable.</exception>
+        /// <exception cref="TypeError">A domain that is not subscriptable, a text domain's subtraction, or text points
+        ///     (their <c>scl * x</c>, after mapparms ran).</exception>
         /// <exception cref="DivideByZeroException">A zero-length Python domain.</exception>
         /// <exception cref="OverflowException">Python int overflow.</exception>
         public static PolyNumber MapDomain(in PolyNumber x, object old, object @new)
         {
             var (off, scl) = MapParms(old, @new);
             return MapDomainWith(x, off, scl);
+        }
+
+        /// <summary>
+        ///     NumPy's refusal of <c>scl * x</c> for text points: the multiply ufunc has no loop for a number and text.
+        ///     <c>StringDType</c> points name DType classes (a Python float scale as <c>_PyFloatDType</c>, a NumPy one as its
+        ///     class); fixed-width points go through the legacy resolver, which names descriptors (a Python float as
+        ///     <c>dtype('float64')</c>).
+        /// </summary>
+        /// <param name="scl">The scale mapparms returned (a Python number, a NumPy scalar or an array).</param>
+        /// <param name="text">The points' text descriptor.</param>
+        /// <returns>The exception to throw (NumPy's UFuncTypeError, the house <see cref="TypeError"/>).</returns>
+        private static TypeError TextScaleError(in PolyNumber scl, DType text)
+        {
+            if (text.Meta is VStringDTypeMeta)
+            {
+                string sclClass = scl.IsPython
+                    ? (scl.Py.Kind switch { PyKind.Float => DTypeRegistry.PyFloat, PyKind.Complex => DTypeRegistry.PyComplex, _ => DTypeRegistry.PyLong }).ToString()
+                    : DType.From(scl.Dtype).Meta.ToString();
+                return Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { sclClass, text.Meta.ToString() });
+            }
+            DType sclDescr = scl.IsPython
+                ? scl.Py.Kind switch { PyKind.Float => DType.Double, PyKind.Complex => DType.Complex, _ => DType.Int64 }
+                : DType.From(scl.Dtype);
+            return Backends.Strings.NDStringUfuncs.NoLoop("multiply", sclDescr, text);
         }
 
         /// <summary>
@@ -1955,6 +2194,7 @@ namespace NumSharp
         /// <returns>The mapped points (an array result laid out as NumPy's).</returns>
         /// <exception cref="IncorrectShapeException">Array operands that do not broadcast.</exception>
         /// <exception cref="OverflowException">A Python int that does not fit its loop dtype.</exception>
+        /// <exception cref="TypeError">Text points: <c>scl * x</c> has no multiply loop (<see cref="TextScaleError"/>).</exception>
         /// <remarks>
         ///     <para><b>The layout, and why it is reached through a transposed view.</b> <c>scl * x</c> and
         ///     <c>off + …</c> are two ufunc calls whose only array operand is x (a NumPy/Python scalar never votes), so
@@ -1974,6 +2214,9 @@ namespace NumSharp
         /// </remarks>
         public static PolyNumber MapDomainWith(in PolyNumber x, in PolyNumber off, in PolyNumber scl, bool xIsComplex64 = false)
         {
+            // Text points (any rank, a 0-d array too): NumPy's `scl * x` has no multiply loop for a number and text.
+            if (x.Kind == PolyNumberKind.Array && Backends.Strings.NDStringUfuncs.IsText(x.Array))
+                throw TextScaleError(scl, x.Array.dtype);
             if (!x.IsNdArray || off.IsNdArray || scl.IsNdArray)
                 return PolyNumber.Binary(BinaryOp.Add, off, PolyNumber.Binary(BinaryOp.Multiply, scl, x));
 
@@ -2519,10 +2762,21 @@ namespace NumSharp
         /// <exception cref="ValueError">An array scale with several elements or none, or entries of inhomogeneous shape.</exception>
         /// <exception cref="TypeError">NumPy's boolean negative (lagline of NumPy bools).</exception>
         /// <exception cref="OverflowException">Python int overflow (hermline's <c>scl / 2</c>, NumPy's weak int ranges).</exception>
-        /// <exception cref="NotSupportedException">An entry NumPy would store in an object array (a Python int beyond
-        ///     uint64, null, a str).</exception>
+        /// <exception cref="NotSupportedException">An entry NumPy would store in an object array: a Python int beyond
+        ///     uint64, null, or — with a text operand — a mix np.array cannot promote (a <c>StringDType</c> entry with a
+        ///     number or an S entry; see <see cref="LinePython"/>).</exception>
         public static NDArray Line(PolyBasis basis, object off, object scl)
         {
+            // A text operand (an S / U / StringDType array, or a C# string — a Python str) or a Python list / tuple:
+            // NumPy's statements treat it as that Python object — `scl != 0` is Python's (a list is never 0) or a text
+            // comparison, `np.array([off, scl])` stacks by np.array's discovery, lagline / hermline run Python's or the
+            // string ufuncs' arithmetic on it — so they run as NumPy runs them, not through PolyNumber's numeric
+            // arithmetic, which reads a list as an ndarray. The scope reclaims the operand arrays and failed intermediates.
+            if (IsLinePythonOperand(off) || IsLinePythonOperand(scl))
+            {
+                using var textScope = NDScope.Open();
+                return textScope.Returns(LinePython(basis, off, scl));
+            }
             // Scalar operands (C# numbers: Python / NumPy scalars) allocate nothing but the result, so the scope
             // (~40 ns of a ~250 ns call) is only opened when an operand is, or converts to, an ndarray — whose
             // conversion and ufunc arithmetic leave intermediates for the scope to reclaim.
@@ -2559,6 +2813,423 @@ namespace NumSharp
                 default:
                     return PolyNumber.MakeArray(o, s);
             }
+        }
+
+        /// <summary>
+        ///     Whether a <c>{p}line</c> operand is a Python object NumPy's statements treat as one rather than as a number or
+        ///     a numeric ndarray: text (an S / U / <c>StringDType</c> array, or a C# string — a Python str) or a Python list /
+        ///     tuple (<see cref="PolySequence.IsSequence"/>: an <c>object[]</c>, a ValueTuple, a jagged or <c>NDArray[]</c>
+        ///     array, any other enumerable; a typed C# array is an ndarray, the house map).
+        /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <returns>True when <see cref="LinePython"/> runs the call.</returns>
+        private static bool IsLinePythonOperand(object a)
+            => a switch
+            {
+                string => true,
+                NDArray nd => Backends.Strings.NDStringUfuncs.IsText(nd),
+                _ => a is not null && PolySequence.IsSequence(a),
+            };
+
+        /// <summary>
+        ///     <c>{p}line(off, scl)</c> with a text or Python-sequence operand, statement for statement:
+        ///     <c>if scl != 0:</c>, then <c>np.array([off, scl])</c> (Laguerre <c>[off + scl, -scl]</c>, physicists' Hermite
+        ///     <c>[off, scl / 2]</c>), else <c>np.array([off])</c> — each statement with Python's semantics for the operand:
+        ///     a list compares unequal to 0 and concatenates, a text array compares unequal to 0 everywhere, a str has
+        ///     CPython's arithmetic, an ndarray NumPy's ufuncs.
+        /// </summary>
+        /// <param name="basis">The basis.</param>
+        /// <param name="off">The offset (text, a list / tuple, a number, or a numeric array).</param>
+        /// <param name="scl">The scale.</param>
+        /// <returns>The stacked array np.array builds (numbers among text become text: <c>polyline(np.array('x'), 1)</c> is
+        ///     <c>&lt;U21</c> <c>['x', '1']</c>; <c>polyline([1], [2])</c> is <c>[[1], [2]]</c>).</returns>
+        /// <exception cref="ValueError">A text / numeric-array <paramref name="scl"/> of several elements or none (NumPy's two
+        ///     truth-value texts), or entries of inhomogeneous shape (<c>polyline(1, [0])</c>: a list is never equal to 0).</exception>
+        /// <exception cref="TypeError">lagline's <c>off + scl</c> / <c>-scl</c> or hermline's <c>scl / 2</c> on a str, a
+        ///     list / tuple or text: CPython's TypeError, or the string ufuncs' for an array.</exception>
+        /// <exception cref="NotSupportedException">Entries np.array stacks into an OBJECT array (a <c>StringDType</c> entry
+        ///     with a number or an S entry, None, a Python int beyond uint64), a dtype NumSharp does not have.</exception>
+        /// <remarks>
+        ///     Every statement here is decided by types, dtypes and shapes, so all of them answer as NumPy: the comparison
+        ///     (Python's <c>list != 0</c> is True; NumPy's <c>!=</c> operator returns all-True for text against a number),
+        ///     np.array's discovery (<see cref="StackLineEntries"/>), and the arithmetic of lagline / hermline.
+        /// </remarks>
+        private static NDArray LinePython(PolyBasis basis, object off, object scl)
+        {
+            if (!LineScaleIsNonzero(scl))
+                return StackLineEntries(off);
+            switch (basis)
+            {
+                case PolyBasis.Laguerre:
+                {
+                    // Python evaluates the list left to right: the sum first, then the negation.
+                    object first = LinePythonAdd(off, scl);
+                    object second = LinePythonNegate(scl);
+                    return StackLineEntries(first, second);
+                }
+                case PolyBasis.Hermite:
+                    return StackLineEntries(off, LinePythonHalf(scl));
+                default:
+                    return StackLineEntries(off, scl);
+            }
+        }
+
+        /// <summary>
+        ///     Python's <c>bool(scl != 0)</c> on the Python-object route: a str and a list / tuple are never equal to an int
+        ///     (Python's comparison), a text array compares unequal to 0 at every element (NumPy's <c>!=</c> operator returns
+        ///     all-True when the comparison ufunc has no text/number loop), so its truth value is that of an all-True array of
+        ///     its size; a number or a numeric array answers as <see cref="PolyNumber.NotZero"/>.
+        /// </summary>
+        /// <param name="scl">The scale.</param>
+        /// <returns>Whether <c>{p}line</c> takes its two-coefficient branch.</returns>
+        /// <exception cref="ValueError">An array with several elements or none (NumPy's two truth-value texts).</exception>
+        private static bool LineScaleIsNonzero(object scl)
+        {
+            switch (scl)
+            {
+                case string:
+                    return true;
+                case NDArray text when Backends.Strings.NDStringUfuncs.IsText(text):
+                    PolyNumber.CheckSingleElement(text);   // NumPy's truth-value texts for a size other than 1
+                    return true;
+                case NDArray:
+                    return PolyNumber.FromObject(scl).NotZero();
+                default:
+                    return (scl is not null && PolySequence.IsSequence(scl)) || PolyNumber.FromObject(scl).NotZero();
+            }
+        }
+
+        /// <summary>
+        ///     lagline's <c>off + scl</c> on the Python-object route: a ufunc add when an operand is an ndarray (a list
+        ///     operand converted by np.asarray; the string concatenation, or NumPy's no-loop / cannot-use-operands TypeError,
+        ///     which the house string ufuncs raise verbatim), else Python's <c>+</c>: str + str and list + list / tuple + tuple
+        ///     concatenate, a NumPy scalar converts its other operand and makes the ufunc call, two numbers add as
+        ///     <see cref="PolyNumber.Binary"/> does, anything else is CPython's TypeError.
+        /// </summary>
+        /// <param name="off">The offset.</param>
+        /// <param name="scl">The scale.</param>
+        /// <returns>The sum: an array, a C# string, an <c>object[]</c> (a concatenated list / tuple) or a boxed
+        ///     <see cref="PolyNumber"/>.</returns>
+        /// <exception cref="TypeError">No addition exists for the operands (NumPy's or CPython's text).</exception>
+        /// <exception cref="NotSupportedException">An operand with no Python type to name (a <c>decimal</c> with a str).</exception>
+        private static object LinePythonAdd(object off, object scl)
+        {
+            if (off is NDArray || scl is NDArray)
+                return np.add(PolyUfuncOperand(off), PolyUfuncOperand(scl));
+            string offType = PyOperandTypeName(off, out bool offNumPyScalar);
+            string sclType = PyOperandTypeName(scl, out bool sclNumPyScalar);
+            if (offType is null || sclType is null)
+                throw TextArithmeticRefusal(off is string || scl is string ? "Python str" : "Python object");
+            bool offSeq = offType is "str" or "list" or "tuple", sclSeq = sclType is "str" or "list" or "tuple";
+            if (!offSeq && !sclSeq)
+                return PolyNumber.Binary(BinaryOp.Add, PolyNumber.FromObject(off), PolyNumber.FromObject(scl));
+            // CPython tries the left operand's add, then the right's reflected add, then the left's concatenation. A NumPy
+            // scalar's add converts the other operand to an array and makes the ufunc call (a str's concatenation is reached
+            // first only when the str is on the left: str + np.float16 is the concatenation error).
+            if (offNumPyScalar || (sclNumPyScalar && offType != "str"))
+                return np.add(PolyUfuncOperand(off), PolyUfuncOperand(scl));
+            if (offType == sclType)
+                return offType == "str" ? (string)off + (string)scl : (object)Concatenate(off, scl);
+            if (offSeq)
+                throw new TypeError($"can only concatenate {offType} (not \"{sclType}\") to {offType}");
+            throw new TypeError($"unsupported operand type(s) for +: '{offType}' and '{sclType}'");
+        }
+
+        /// <summary>The items of two Python lists / tuples, concatenated (<c>[1] + [2]</c> is <c>[1, 2]</c>).</summary>
+        /// <param name="a">The left sequence.</param>
+        /// <param name="b">The right sequence.</param>
+        /// <returns>A new list of the items.</returns>
+        private static object[] Concatenate(object a, object b)
+        {
+            var items = new List<object>();
+            foreach (var seq in new[] { a, b })
+            {
+                if (seq is ITuple tup)
+                    for (int i = 0; i < tup.Length; i++)
+                        items.Add(tup[i]);
+                else
+                    foreach (var item in (IEnumerable)seq)
+                        items.Add(item);
+            }
+            return items.ToArray();
+        }
+
+        /// <summary>
+        ///     lagline's <c>-scl</c>: the negative ufunc for an ndarray (NumPy's no-loop TypeError for text), CPython's
+        ///     <c>bad operand type for unary -: '…'</c> for a str / list / tuple, Python's negation for a number.
+        /// </summary>
+        /// <param name="scl">The scale.</param>
+        /// <returns>The negated scale (an array, or a number boxed as a <see cref="PolyNumber"/>).</returns>
+        /// <exception cref="TypeError">A str, list, tuple or text array has no negation.</exception>
+        private static object LinePythonNegate(object scl)
+        {
+            if (scl is NDArray nd)
+                return np.negative(nd);
+            string type = PyOperandTypeName(scl, out _);
+            if (type is "str" or "list" or "tuple")
+                throw new TypeError($"bad operand type for unary -: '{type}'");
+            return PolyNumber.Negate(PolyNumber.FromObject(scl));
+        }
+
+        /// <summary>
+        ///     hermline's <c>scl / 2</c>: the true-divide ufunc for a text array (NumPy's TypeError), CPython's
+        ///     <c>unsupported operand type(s) for /: '…' and 'int'</c> for a str / list / tuple, Python's division for a number
+        ///     or a numeric array (<see cref="PolyNumber.Binary"/>).
+        /// </summary>
+        /// <param name="scl">The scale.</param>
+        /// <returns>The halved scale (an array, or a number boxed as a <see cref="PolyNumber"/>).</returns>
+        /// <exception cref="TypeError">A str, list, tuple or text array has no division.</exception>
+        private static object LinePythonHalf(object scl)
+        {
+            if (scl is NDArray nd && Backends.Strings.NDStringUfuncs.IsText(nd))
+                return np.true_divide(nd, NDArray.PythonLiteral(2L));
+            string type = scl is NDArray ? null : PyOperandTypeName(scl, out _);
+            if (type is "str" or "list" or "tuple")
+                throw new TypeError($"unsupported operand type(s) for /: '{type}' and 'int'");
+            return PolyNumber.Binary(BinaryOp.Divide, PolyNumber.FromObject(scl), PolyNumber.FromPython(PyScalar.Int(2)));
+        }
+
+        /// <summary>
+        ///     An operand of a ufunc call the polynomial package makes on NumPy's behalf with text around (<c>{p}line</c>'s
+        ///     arithmetic, {p}der / {p}int's <c>c *= scl</c>), as NumPy receives it: an ndarray as is, a Python str as its 0-d
+        ///     <c>&lt;U</c> array, a Python list / tuple as np.asarray makes it (a str array when it holds strs), a Python int /
+        ///     float / complex as a WEAK scalar of NumPy's discovered dtype (an int is int64, uint64 past int64 — never the C#
+        ///     literal's narrower type), a bool as a Python bool, a NumPy scalar (<see cref="Half"/>, <c>char</c>) as its
+        ///     strong 0-d array, a boxed <see cref="PolyNumber"/> by its kind.
+        /// </summary>
+        /// <param name="v">The operand (not null).</param>
+        /// <returns>The array (new unless <paramref name="v"/> is one).</returns>
+        /// <exception cref="ValueError">A ragged list / tuple.</exception>
+        /// <exception cref="NotSupportedException">A Python int beyond uint64, a list NumPy makes an object array of, or an
+        ///     object np.asanyarray cannot read.</exception>
+        internal static NDArray PolyUfuncOperand(object v)
+        {
+            switch (v)
+            {
+                case NDArray nd:
+                    return nd;
+                case PolyNumber p:
+                    return p.Kind == PolyNumberKind.Array ? p.Array : WeakOperandOf(p);
+                case string s:
+                    return NDArray.FromPythonOperand(s);
+            }
+            if (PolySequence.IsSequence(v))
+                return SequenceAsArray(v);
+            return WeakOperandOf(PolyNumber.FromObject(v));
+        }
+
+        /// <summary>
+        ///     <c>np.asarray</c> of a Python list / tuple: np.array's coercion — numeric (<see cref="PolySequence"/>), or the
+        ///     str array NumPy builds when the items hold strs.
+        /// </summary>
+        /// <param name="seq">The sequence.</param>
+        /// <returns>A new array.</returns>
+        /// <exception cref="ValueError">A ragged sequence.</exception>
+        /// <exception cref="NotSupportedException">A sequence NumPy makes an object array of (None, a Python int past uint64,
+        ///     an unknown object, text mixes without a common dtype).</exception>
+        private static NDArray SequenceAsArray(object seq)
+        {
+            var arr = PolySequence.ToArrayOrNonNumeric(seq, out var nonNumeric);
+            if (arr is not null)
+                return arr;
+            if (!nonNumeric.IsObject && TryStrArray(seq, out var text))
+                return text;
+            throw nonNumeric.Refusal ?? new NotSupportedException(
+                "numpy.polynomial: NumPy builds an object array from this sequence, a dtype NumSharp does not have");
+        }
+
+        /// <summary>
+        ///     A scalar-sized <see cref="PolyNumber"/> as a ufunc operand: a Python int / float / complex as a weak 0-d
+        ///     array of its discovered dtype (int64 / uint64 / float64 / complex128 — what NumPy's legacy no-loop text names,
+        ///     with the weak mark its class-level text reads), a Python bool as a Python bool, a NumPy scalar as its strong
+        ///     0-d array.
+        /// </summary>
+        /// <param name="p">The value.</param>
+        /// <returns>A new 0-d array.</returns>
+        /// <exception cref="NotSupportedException">A Python int beyond uint64.</exception>
+        private static NDArray WeakOperandOf(in PolyNumber p)
+        {
+            if (!p.IsPython)
+                return p.ToNDArray();
+            object boxed = p.ToObject();
+            return boxed switch
+            {
+                bool b => NDArray.PythonBoolLiteral(b),
+                long l => NDArray.PythonLiteral(l),
+                ulong u => NDArray.PythonLiteral(u),
+                double d => NDArray.PythonLiteral(d),
+                Complex c => NDArray.PythonLiteral(c),
+                _ => throw new NotSupportedException(
+                    $"numpy.polynomial: the Python int {boxed} does not fit uint64, so NumPy builds an object array from it, a dtype NumSharp does not have"),
+            };
+        }
+
+        /// <summary>
+        ///     The Python type name CPython's error texts give an operand: <c>str</c>, <c>list</c> / <c>tuple</c> (a Python
+        ///     sequence: <see cref="ITuple"/> is a tuple, anything else <see cref="PolySequence.IsSequence"/> takes a list),
+        ///     <c>int</c> / <c>float</c> / <c>complex</c> / <c>bool</c> for a Python number, <c>numpy.float16</c> /
+        ///     <c>numpy.uint16</c> for the NumPy scalars <see cref="Half"/> / <c>char</c> (the house map), null for anything
+        ///     else (a <c>decimal</c>, an object).
+        /// </summary>
+        /// <param name="v">The operand.</param>
+        /// <param name="numpyScalar">Whether it is a NumPy scalar (whose own add converts a sequence operand to an array).</param>
+        /// <returns>The name, or null.</returns>
+        private static string PyOperandTypeName(object v, out bool numpyScalar)
+        {
+            numpyScalar = false;
+            switch (v)
+            {
+                case string:
+                    return "str";
+                case bool:
+                    return "bool";
+                case sbyte or byte or short or ushort or int or uint or long or ulong or BigInteger:
+                    return "int";
+                case float or double:
+                    return "float";
+                case Complex:
+                    return "complex";
+                case Half:
+                    numpyScalar = true;
+                    return "numpy.float16";
+                case char:
+                    numpyScalar = true;
+                    return "numpy.uint16";
+                case PolyNumber p:
+                    return p.Kind == PolyNumberKind.Array ? "numpy.ndarray" : p.IsPython ? PyOperandTypeName(p.ToObject(), out numpyScalar) : PolyNumberScalarName(p, out numpyScalar);
+                case ITuple:
+                    return "tuple";
+            }
+            return v is not null && PolySequence.IsSequence(v) ? "list" : null;
+        }
+
+        /// <summary>The Python type name of a NumPy-scalar <see cref="PolyNumber"/> (<c>numpy.float16</c>, …).</summary>
+        /// <param name="p">A scalar-kind value.</param>
+        /// <param name="numpyScalar">Set true.</param>
+        /// <returns>The name.</returns>
+        private static string PolyNumberScalarName(in PolyNumber p, out bool numpyScalar)
+        {
+            numpyScalar = true;
+            return "numpy." + p.Dtype.AsNumpyDtypeName();
+        }
+
+        /// <summary>
+        ///     <c>np.array([entries…])</c> for <c>{p}line</c>'s list on the Python-object route: every entry an array of one
+        ///     shape (a number or a str is shape <c>()</c>, a list / tuple the shape np.array discovers for it), the dtype
+        ///     np.array's discovery promotes the entries to (<c>promote_types</c> left to right: a number among U / S text
+        ///     turns into text of the width its str needs — int64 21 characters, float64 32, complex128 64, bool 5 — U wins
+        ///     over S, <c>StringDType</c> over U), each entry cast into its row (a number becomes its <c>str()</c>).
+        /// </summary>
+        /// <param name="entries">The list items: arrays, C# strings, Python lists / tuples, numbers (boxed
+        ///     <see cref="PolyNumber"/>s or C# primitives).</param>
+        /// <returns>The new, owning, C-contiguous array.</returns>
+        /// <exception cref="ValueError">Entries of different shapes (NumPy's inhomogeneous-shape text), or a ragged list
+        ///     entry.</exception>
+        /// <exception cref="NotSupportedException">Entries np.array cannot promote (a <c>StringDType</c> entry with a number
+        ///     or an S entry), None, or a Python int beyond uint64: NumPy stacks them into an object array, a dtype NumSharp
+        ///     does not have.</exception>
+        private static NDArray StackLineEntries(params object[] entries)
+        {
+            var arrays = EntryArrays(entries);
+            DType descr = PromoteEntries(arrays);
+            long[] first = arrays[0].Shape.dimensions;
+            var dims = new long[first.Length + 1];
+            dims[0] = arrays.Length;
+            System.Array.Copy(first, 0, dims, 1, first.Length);
+            var stacked = new NDArray(descr, Shape.Adopt(dims), false);
+            for (int i = 0; i < arrays.Length; i++)
+            {
+                // A row view of the result receives the entry through the house cast (a number becomes its str()).
+                using var row = stacked[i];
+                np.copyto(row, arrays[i], casting: "unsafe");
+            }
+            return stacked;
+        }
+
+        /// <summary>
+        ///     The entries of a Python list NumPy hands to np.array, each as the array np.array's discovery sees: a str its 0-d
+        ///     <c>&lt;U</c> array, a list / tuple its coerced array (a str array when it holds strs), a number the 0-d array of
+        ///     its discovered dtype (a Python int is int64), an ndarray itself.
+        /// </summary>
+        /// <param name="entries">The items: arrays, C# strings, Python lists / tuples, numbers (boxed <see cref="PolyNumber"/>s
+        ///     or C# primitives).</param>
+        /// <returns>The arrays, in order (new ones except an entry that is an NDArray).</returns>
+        /// <exception cref="ValueError">A ragged list entry.</exception>
+        /// <exception cref="NotSupportedException">None, a Python int beyond uint64, or a list NumPy makes an object array of.</exception>
+        internal static NDArray[] EntryArrays(object[] entries)
+        {
+            var arrays = new NDArray[entries.Length];
+            for (int i = 0; i < entries.Length; i++)
+                arrays[i] = entries[i] switch
+                {
+                    NDArray nd => nd,
+                    string s => NDArray.FromPythonOperand(s),
+                    PolyNumber p => p.ToNDArray(),
+                    var v when v is not null && PolySequence.IsSequence(v) => SequenceAsArray(v),
+                    var v => PolyNumber.FromObject(v).ToNDArray(),
+                };
+            return arrays;
+        }
+
+        /// <summary>
+        ///     The shape check and dtype discovery of np.array over list entries already converted
+        ///     (<see cref="EntryArrays"/>): every entry of one shape, the dtype <c>promote_types</c> folds them to, left to
+        ///     right.
+        /// </summary>
+        /// <param name="arrays">The entries as arrays (at least one).</param>
+        /// <returns>The stacked array's dtype.</returns>
+        /// <exception cref="ValueError">Entries of different shapes (NumPy's inhomogeneous-shape text).</exception>
+        /// <exception cref="NotSupportedException">Entries np.array cannot promote (a <c>StringDType</c> entry with a number
+        ///     or an S entry): NumPy stacks them into an object array, a dtype NumSharp does not have.</exception>
+        internal static DType PromoteEntries(NDArray[] arrays)
+        {
+            long[] first = arrays[0].Shape.dimensions;
+            for (int i = 1; i < arrays.Length; i++)
+                if (!first.AsSpan().SequenceEqual(arrays[i].Shape.dimensions))
+                    throw LineInhomogeneousError(arrays);
+
+            DType descr = arrays[0].dtype;
+            for (int i = 1; i < arrays.Length; i++)
+            {
+                try
+                {
+                    descr = DTypePromotion.PromoteTypes(descr, arrays[i].dtype);
+                }
+                catch (DTypePromotionError)
+                {
+                    // np.array's coercion falls back to an OBJECT array when the entries do not promote (probed:
+                    // np.array([np.array('x', StringDType()), 1]) holds the 0-d array and the int as objects).
+                    throw new NotSupportedException(
+                        $"numpy.polynomial: NumPy stacks {arrays[0].dtype.ToString(true)} and {arrays[i].dtype.ToString(true)} " +
+                        "entries into an object array (they have no common dtype), a dtype NumSharp does not have");
+                }
+            }
+            return descr;
+        }
+
+        /// <summary>
+        ///     NumPy's array-coercion error for <c>{p}line</c> entries of different shapes: the detected shape is the list
+        ///     length followed by the longest dims prefix every entry shares.
+        /// </summary>
+        /// <param name="arrays">The entries as arrays.</param>
+        /// <returns>The exception to throw.</returns>
+        private static ValueError LineInhomogeneousError(NDArray[] arrays)
+        {
+            long[] common = arrays[0].Shape.dimensions;
+            int len = common.Length;
+            for (int i = 1; i < arrays.Length; i++)
+            {
+                long[] s = arrays[i].Shape.dimensions;
+                int k = 0;
+                while (k < len && k < s.Length && s[k] == common[k]) k++;
+                len = k;
+            }
+            var detected = new long[len + 1];
+            detected[0] = arrays.Length;
+            System.Array.Copy(common, 0, detected, 1, len);
+            string text = detected.Length == 1 ? $"({detected[0]},)" : "(" + string.Join(", ", detected) + ")";
+            return new ValueError("setting an array element with a sequence. The requested array has an inhomogeneous shape " +
+                                  $"after {detected.Length} dimensions. The detected shape was {text} + inhomogeneous part.");
         }
 
         // ---------------------------------------------------------------------------------------------

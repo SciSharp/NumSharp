@@ -600,7 +600,11 @@ namespace NumSharp
                 case DdScalarItem item:
                     return item.Value switch
                     {
-                        string => throw new TypeError("'<' not supported between instances of 'numpy.str_' and 'int'"),
+                        // NumPy hands out a StringDType element as a Python str, a U element as an np.str_.
+                        string => throw new TypeError(
+                            $"'<' not supported between instances of '{(item.Descr.Meta is VStringDTypeMeta ? "str" : "numpy.str_")}' and 'int'"),
+                        // A StringDType element that is the NA object None.
+                        null => throw new TypeError("'<' not supported between instances of 'NoneType' and 'int'"),
                         byte[] => throw new TypeError("'<' not supported between instances of 'numpy.bytes_' and 'int'"),
                         _ => NumericBelowOne(item.Value),
                     };

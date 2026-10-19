@@ -56,6 +56,15 @@ namespace NumSharp
             // Text: NumPy's poly1d trims leading "zeros" of text (empty strings; the trim cannot fail and an all-empty input
             // becomes the text '0') and convolve then refuses any text operand for want of an item size — so after each
             // input's rank check the answer is that refusal, whatever the text holds.
+            // StringDType: poly1d trims each input (leading empty strings; an all-empty input becomes the text '0') and
+            // np.convolve answers the pair — its legacy descriptor lookup refuses a StringDType first operand, or falls back
+            // to an OBJECT product whose first element product decides (np.convolve's StringDType route).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a1) || Backends.Strings.NDStringUfuncs.IsVString(a2))
+            {
+                using var t1 = new poly1d(a1);
+                using var t2 = new poly1d(a2);
+                return np.convolve(t1.coeffs, t2.coeffs, "full");
+            }
             if (Backends.Strings.NDStringUfuncs.IsString(a1) || Backends.Strings.NDStringUfuncs.IsString(a2))
             {
                 if (np.atleast_1d(a1).ndim > 1 || np.atleast_1d(a2).ndim > 1)

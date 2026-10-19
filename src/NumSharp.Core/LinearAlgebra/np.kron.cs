@@ -97,9 +97,10 @@ namespace NumSharp
             // so tile is just direct's scalar multiply plus two extra copy passes — strictly worse. Those
             // route to direct.
             long run = InnerRun(as_, bs, nd);
-            long maxItem = Math.Max(a.dtypesize, b.dtypesize);
             bool simd = IsSimdMultiplyType(a.typecode) && IsSimdMultiplyType(b.typecode);
-            bool useTile = simd && run <= 5 && outSize >= 8192 && outSize * maxItem <= (64L << 20);
+            // The item sizes are read only for the SIMD dtypes: a StringDType operand has no fixed item size (its cells are
+            // 16-byte handles), and text takes the direct path whatever its size.
+            bool useTile = simd && run <= 5 && outSize >= 8192 && outSize * Math.Max(a.dtypesize, b.dtypesize) <= (64L << 20);
 
             if (useTile)
             {
@@ -125,10 +126,14 @@ namespace NumSharp
         /// <summary>
         ///     True for dtypes whose element-wise multiply has a vectorised (SimdFull) path. The
         ///     scalar-path trio Half/Decimal/Complex return false — for them the tile fast-path's SimdFull
-        ///     multiply is no faster than direct's scalar multiply, so its extra copy passes only cost.
+        ///     multiply is no faster than direct's scalar multiply, so its extra copy passes only cost. Text
+        ///     (fixed-width or StringDType) returns false too: its multiply is the string repetition loop or
+        ///     NumPy's refusal, never SimdFull, and a StringDType operand has no fixed item size to bound.
         /// </summary>
+        /// <param name="tc">The operand's type code.</param>
+        /// <returns>True when the tile path's final multiply would run vectorised.</returns>
         private static bool IsSimdMultiplyType(NPTypeCode tc)
-            => tc != NPTypeCode.Half && tc != NPTypeCode.Decimal && tc != NPTypeCode.Complex;
+            => tc != NPTypeCode.Half && tc != NPTypeCode.Decimal && tc != NPTypeCode.Complex && tc != NPTypeCode.String;
 
         /// <summary>
         ///     Length of the innermost coalesced contiguous run of the interleaved (a0,b0,a1,b1,...) layout
