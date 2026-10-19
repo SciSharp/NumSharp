@@ -24,13 +24,19 @@ namespace NumSharp
             // out= loop resolution); the out receives the accumulation itself, or its cast into an S / U out.
             if (Backends.Strings.NDStringUfuncs.VStringReduces("cumsum", arr, axis, typeCode, @out))
                 return Backends.Strings.NDVStringReduction.CumSum(arr, axis, @out);
-            // Fixed-width text (input or out=): add.accumulate's loop on (out, arr) answers after the axis. A U input into a
-            // StringDType out concatenates (the StringDType add promoter pairs StringDType with StrDType; the input is cast
-            // to the default StringDType()); every other combination is NumPy's refusal (ReduceOutError), and without out=
-            // the engine's guard answers (ReduceError).
-            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("cumsum", arr, axis, @out, typeCode)
-                == Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate)
-                return Backends.Strings.NDVStringReduction.CumSumOfCast(arr, axis, @out);
+            // Fixed-width text (input or out=) or a string dtype= request: add.accumulate's loop resolution on (out, arr)
+            // under the request answers after the axis (NDReduceLikeResolution). A U input into a StringDType out concatenates
+            // (the StringDType add promoter pairs StringDType with StrDType; the input is cast to the default StringDType());
+            // a numeric loop over a text operand accumulates in the loop dtype with the text cast around it (the out's text
+            // must parse first, as NumPy's UPDATEIFCOPY copy reads it); everything else is NumPy's refusal, and without out=
+            // or a request the engine's guard answers (ReduceError).
+            switch (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("cumsum", arr, axis, @out, typeCode, out var resolution))
+            {
+                case Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate:
+                    return Backends.Strings.NDVStringReduction.CumSumOfCast(arr, axis, @out);
+                case Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast:
+                    return Backends.Strings.NDTextNumericReduction.Accumulate("add", arr, axis, @out, resolution.Descriptors[0]);
+            }
             // np.cumsum == np.add.accumulate. With an axis argument it preserves the source
             // memory layout (KEEPORDER); ReduceCumAdd now allocates the output in that layout
             // directly (no post-hoc copy needed). axis=None ravels in C-order to a 1-D result.

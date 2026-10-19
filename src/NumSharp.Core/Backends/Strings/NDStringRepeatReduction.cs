@@ -83,6 +83,82 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     <see cref="ReduceNumPy(NDArray, int?, bool, NDArray)"/> into an out whose type is NOT the loop's text: a number
+        ///     (<c>np.matrix([[3, 1, 2]]).prod(axis=1, dtype='U', out=np.zeros((1, 1), 'i8'))</c> is 33) or the other text
+        ///     class (a bytes out of the unicode loop). NumPy's buffered iterator runs the repeat in the loop's text
+        ///     descriptor <paramref name="loopText"/> (the out's dtype cast to the loop's string class: <c>U21</c> for int64,
+        ///     <c>U32</c> for float64, <c>U5</c> for bool): each lane's first count is copied into the out through the
+        ///     counts-to-out cast, the out is read as that text, repeated by the later counts (cut to the text's width), and
+        ///     written back through the text-to-out cast — a parse for a number (<c>'3.0'</c> repeated twice is
+        ///     <c>could not convert string to float: np.str_('3.03.0')</c>).
+        /// </summary>
+        /// <param name="counts">The integer counts.</param>
+        /// <param name="axis">The axis, or null for every axis.</param>
+        /// <param name="keepdims">Whether the out keeps the reduced axis.</param>
+        /// <param name="out">The out (writeable).</param>
+        /// <param name="loopText">The loop's text descriptor (fixed-width <c>S</c> or <c>U</c>).</param>
+        /// <returns><paramref name="out"/> itself.</returns>
+        /// <exception cref="ValueError">The checks of <see cref="ReduceNumPy(NDArray, int?, bool, NDArray)"/>, or a repeated
+        ///     text that does not parse into a numeric out.</exception>
+        /// <exception cref="IncorrectShapeException">The out does not broadcast against the result.</exception>
+        /// <exception cref="OverflowException">A repeat whose size passes <c>2^63 - 1</c>, or an integer text outside the
+        ///     out's integer type.</exception>
+        /// <remarks>
+        ///     NumPy writes the text back at the end of every buffer fill and reads it again at the next, so a lane longer than
+        ///     a fill round-trips through the out's type mid-way. For an integer, float or bool out that round trip leaves a
+        ///     valid repeated text unchanged in value; it changes only WHICH invalid text an error quotes (the fill's partial
+        ///     repetition rather than the whole). NumSharp runs each lane in one pass ([Misaligned] for that quoted text).
+        /// </remarks>
+        internal static NDArray ReduceNumPyThroughText(NDArray counts, int? axis, bool keepdims, NDArray @out, DType loopText)
+        {
+            int nd = counts.ndim;
+            int[] axes = axis is { } a0 && nd > 0 ? new[] { a0 < 0 ? a0 + nd : a0 } : null;
+            if (NDStringUfuncs.VStringNotReorderable("multiply", counts, axes) is { } many)
+                throw many;
+            ReductionArguments.ValidateOperands(counts, ReductionArguments.AxisFlags(nd, axis), keepdims, @out, null, "multiply");
+            if (NDStringUfuncs.VStringNoIdentity("multiply", counts, axes) is { } empty)
+                throw empty;
+            ReduceThroughText(counts, axes is null ? 0 : axes[0], keepdims, @out, loopText);
+            return @out;
+        }
+
+        /// <summary>
+        ///     The computation of <see cref="ReduceNumPyThroughText"/>: the first counts cast into the out, the out read as the
+        ///     loop's text, the lanes folded into that text, the text cast back into the out.
+        /// </summary>
+        /// <param name="counts">The counts (checks done).</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <param name="keepdims">Whether the out keeps the reduced axis.</param>
+        /// <param name="out">The out.</param>
+        /// <param name="loopText">The loop's text descriptor.</param>
+        [NDScoped] // the lane views and the text temporary are this call's own
+        private static void ReduceThroughText(NDArray counts, int axis, bool keepdims, NDArray @out, DType loopText)
+        {
+            if (@out.size == 0)
+                return;
+            int nd = counts.ndim;
+            if (nd == 0)
+            {
+                // One element: the first-element copy alone (the fill's round trip through the loop's text is lossless:
+                // the text descriptor is wide enough for every value of the out's type).
+                np.copyto(@out, counts, casting: "unsafe");
+                return;
+            }
+            NDArray outLanes = keepdims ? @out : np.expand_dims(@out, axis);
+            // PyArray_CopyInitialReduceValues: the first count of every lane, cast from the counts' type into the OUT's.
+            var first = new Slice[nd];
+            for (int d = 0; d < nd; d++)
+                first[d] = d == axis ? new Slice(0, 1) : Slice.All;
+            np.copyto(outLanes, counts[first], casting: "unsafe");
+            if (counts.Shape.dimensions[axis] < 2)
+                return;
+            // The fill's read of the out into the loop's text, the repeat in that text, the write-back through its cast.
+            NDArray text = outLanes.astype(loopText, true, 'K', "unsafe");
+            RunLanes(counts, axis, text);
+            np.copyto(outLanes, text, casting: "unsafe");
+        }
+
+        /// <summary>
         ///     The computation: the first counts cast into the out cells, then each lane's later counts folded into its text.
         /// </summary>
         /// <param name="counts">The counts (checks done).</param>
@@ -109,12 +185,27 @@ namespace NumSharp.Backends.Strings
             for (int d = 0; d < nd; d++)
                 first[d] = d == axis ? new Slice(0, 1) : Slice.All;
             np.copyto(outLanes, counts[first], casting: "unsafe");
-            long n = counts.Shape.dimensions[axis];
-            if (n < 2)
+            if (counts.Shape.dimensions[axis] < 2)
                 return;
+            RunLanes(counts, axis, outLanes);
+        }
+
+        /// <summary>
+        ///     Folds every lane's later counts (index 1 on) into the text its out cell holds — the lane walk shared by the
+        ///     text out and the round trip through the loop's text.
+        /// </summary>
+        /// <param name="counts">The counts.</param>
+        /// <param name="axis">The normalized reduced axis.</param>
+        /// <param name="outLanes">The text cells with the counts' rank (the reduced axis at length 1), each holding its lane's
+        ///     first count's text.</param>
+        [NDScoped] // the int64 counts are this call's own
+        private static void RunLanes(NDArray counts, int axis, NDArray outLanes)
+        {
+            long n = counts.Shape.dimensions[axis];
             // The later counts as the loop reads them: int64 (a uint64 count's bits read as int64 — the fixed-width loop's
             // cast; the StringDType uint64 loop reads the same 64 bits as size_t, which is what the fold does with them).
             NDArray counts64 = counts.typecode == NPTypeCode.Int64 ? counts : counts.astype(np.int64, true, 'K', "unsafe");
+            NDArray @out = outLanes;
             bool vstring = NDStringUfuncs.IsVString(@out);
             var ctx = new RepeatContext
             {

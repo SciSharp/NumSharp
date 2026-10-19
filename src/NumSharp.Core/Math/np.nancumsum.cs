@@ -34,9 +34,14 @@ namespace NumSharp
             // validates the axis (a 0-d input ravels first), then resolves the loop on (out, a): a U input into a
             // StringDType out concatenates (np.cumsum's route), anything else is the verbatim refusal (see
             // NDStringUfuncs.ReduceError / ReduceOutError).
-            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("nancumsum", a, axis, @out, dtype)
-                == Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate)
-                return Backends.Strings.NDVStringReduction.CumSumOfCast(a, axis, @out);
+            switch (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("nancumsum", a, axis, @out, dtype, out var resolution))
+            {
+                case Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate:
+                    return Backends.Strings.NDVStringReduction.CumSumOfCast(a, axis, @out);
+                case Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast:
+                    // A numeric loop over a text operand (np.cumsum's route: _replace_nan leaves text alone).
+                    return Backends.Strings.NDTextNumericReduction.Accumulate("add", a, axis, @out, resolution.Descriptors[0]);
+            }
             // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
             // result (or the caller's @out — untracked, a Returns no-op) is yielded.
             // NumPy: a, mask = _replace_nan(a, 0); return np.cumsum(a, axis, dtype, out). The mask is

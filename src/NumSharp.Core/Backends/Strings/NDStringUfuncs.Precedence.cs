@@ -78,6 +78,16 @@ namespace NumSharp.Backends.Strings
         internal static bool IsStringRequest(DType dtype) => dtype?.Meta is StringDTypeMeta;
 
         /// <summary>
+        ///     True when <paramref name="dtype"/> names text of either kind: a fixed-width class (<see cref="IsStringRequest"/>)
+        ///     or NEP 55 <c>StringDType</c>. The loop resolution of the add / multiply reductions treats both as a text
+        ///     request (a <c>StringDType()</c> INSTANCE is refused by the ufunc's <c>_get_dtype</c> before any loop is looked
+        ///     at, which only the request's own checks can raise).
+        /// </summary>
+        /// <param name="dtype">A <c>dtype=</c> request, or null.</param>
+        /// <returns>True for an <c>S</c>, <c>U</c> or <c>StringDType</c> descriptor.</returns>
+        internal static bool IsTextRequest(DType dtype) => dtype?.Meta is StringDTypeMeta or VStringDTypeMeta;
+
+        /// <summary>
         ///     The part of a ufunc call's argument parsing NumPy finishes before any loop resolution: a read-only
         ///     <c>out=</c>, then a <c>where=</c> mask that is not bool.
         /// </summary>
@@ -784,9 +794,18 @@ namespace NumSharp.Backends.Strings
 
             /// <summary>
             ///     Integer counts into a text out (<c>S</c>, <c>U</c> or <c>StringDType</c>) under <c>multiply.reduce</c>:
-            ///     the string repeat loop run as a reduction (<see cref="NDStringRepeatReduction"/>).
+            ///     the string repeat loop run as a reduction (<see cref="NDStringRepeatReduction"/>). When the loop's text
+            ///     descriptor is not the out's (a numeric out, or the other text class: <see cref="ReduceLikeResolution"/>
+            ///     says which), the repeat runs through that text (<see cref="NDStringRepeatReduction.ReduceNumPyThroughText"/>).
             /// </summary>
             Repeat,
+
+            /// <summary>
+            ///     A NUMERIC loop whose input or out is text: NumPy casts around its numeric add / multiply loop — the text input
+            ///     parsed, the result's <c>str()</c> written into a text out, the out read back at every buffer fill
+            ///     (<see cref="NDTextNumericReduction"/>; the loop descriptor is <see cref="ReduceLikeResolution.Descriptors"/>[0]).
+            /// </summary>
+            NumericCast,
         }
 
         /// <summary>
@@ -853,7 +872,29 @@ namespace NumSharp.Backends.Strings
         ///     checks it in its own order (<see cref="NDStringRepeatReduction.ReduceNumPy"/>, the <c>StringDType</c> sum).
         /// </remarks>
         internal static TextOutReduce ReduceIntoOutRoute(string op, NDArray a, int? axis, NDArray @out, DType dtype = null)
+            => ReduceIntoOutRoute(op, a, axis, @out, dtype, out _);
+
+        /// <summary>
+        ///     <see cref="ReduceIntoOutRoute(string, NDArray, int?, NDArray, DType)"/> reporting the loop resolution a computing
+        ///     route needs (the loop descriptor of <see cref="TextOutReduce.NumericCast"/>, the text descriptor a
+        ///     <see cref="TextOutReduce.Repeat"/> runs through).
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The input.</param>
+        /// <param name="axis">The <c>axis</c> argument, or null.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="resolution">The ported loop resolution when the route used it (a direct add / multiply reduction
+        ///     with text), else null.</param>
+        /// <returns>The text computation, or <see cref="TextOutReduce.None"/>.</returns>
+        /// <exception cref="ValueError">A read-only out.</exception>
+        /// <exception cref="AxisError">The axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal (<see cref="NDReduceLikeResolution.Resolve"/>'s texts).</exception>
+        /// <exception cref="InvalidOperationException">A <c>StringDType</c> input whose reduction computes (a wiring error).</exception>
+        internal static TextOutReduce ReduceIntoOutRoute(string op, NDArray a, int? axis, NDArray @out, DType dtype,
+            out ReduceLikeResolution resolution)
         {
+            resolution = null;
             string ufunc = ReduceUfuncOf(op, out bool accumulate);
             if (@out is not null && ufunc is not null && dtype is null && (IsVString(a) || IsVString(@out)))
             {
@@ -869,6 +910,14 @@ namespace NumSharp.Backends.Strings
                 if (IsVString(a))
                     throw VStringReduceAnswer(op, a, ReducedAxes(a, axis), null, @out) ?? ComputingLoopMisrouted(op);
                 return VStringOutRoute(ufunc, accumulate, a, @out);
+            }
+            if (ResolvesAddMultiply(op, a, @out, dtype))
+            {
+                // A direct add / multiply reduction with text: NumPy's argument checks in its order, then its loop
+                // resolution on (out, input) under the dtype= class, ported (NDReduceLikeResolution).
+                CheckReduceArguments(op, a.ndim, axis, null, @out, dtype);
+                resolution = NDReduceLikeResolution.Resolve(ufunc, accumulate, a.dtype, @out?.dtype, dtype?.Meta);
+                return RouteOf(op, resolution, a, @out);
             }
             if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
             {
@@ -890,6 +939,94 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
+        ///     Whether <paramref name="op"/> is a DIRECT <c>add</c> / <c>multiply</c> reduction or accumulation (<c>np.sum</c>,
+        ///     <c>np.prod</c>, their NaN forms — text holds no NaN —, the cumulative ones, <c>np.trace</c>) whose call touches
+        ///     text (the input, the out, or a string <c>dtype=</c> request) with an <c>out=</c> or a request: the calls
+        ///     <see cref="NDReduceLikeResolution"/> answers. Without either, the engine's own text guard answers (the same
+        ///     loop, no request to override); the statistics (<c>np.mean</c>, <c>np.median</c>, ...) add statements of their own
+        ///     and resolve through their callers.
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The input.</param>
+        /// <param name="out">The out, or null.</param>
+        /// <param name="dtype">The request, or null.</param>
+        /// <returns>True when the ported resolution answers.</returns>
+        private static bool ResolvesAddMultiply(string op, NDArray a, NDArray @out, DType dtype)
+        {
+            if (op is not ("sum" or "prod" or "nansum" or "nanprod" or "cumsum" or "cumprod" or "nancumsum" or "nancumprod"
+                or "cumulative_sum" or "cumulative_prod" or "trace"))
+                return false;
+            if (@out is null && dtype is null)
+                return false;
+            // A StringDType() request counts too: its refusal (the new-style instance check of the request's own checks,
+            // CheckReduceArguments) comes before any loop, so it must not fall through to the numeric engine.
+            return IsText(a) || IsText(@out) || IsTextRequest(dtype);
+        }
+
+        /// <summary>
+        ///     <c>PyUFunc_GenericReduction</c>'s argument checks in NumPy's order: the <c>dtype=</c> class check of a direct
+        ///     <c>ufunc.reduce</c> (<c>_get_dtype</c>), the out's read-only check where the reduction parses <c>out=</c> before
+        ///     the axis, the axis (or tuple), the later class checks, and the out's read-only check of the functions that meet
+        ///     it after the axis.
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="ndim">The input's rank.</param>
+        /// <param name="axis">The integer axis, or null (ignored when <paramref name="axes"/> is given).</param>
+        /// <param name="axes">The tuple axis, or null.</param>
+        /// <param name="out">The out, or null.</param>
+        /// <param name="dtype">The request, or null.</param>
+        /// <exception cref="TypeError">A detailed or new-style <c>dtype=</c>.</exception>
+        /// <exception cref="ValueError">A read-only out, or a repeated axis.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        private static void CheckReduceArguments(string op, int ndim, int? axis, int[] axes, NDArray @out, DType dtype)
+        {
+            bool parsesOutFirst = ParsesOutBeforeAxis(op);
+            PreReduceDTypeCheck(op, dtype);
+            if (@out is not null && parsesOutFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+            if (axes is not null)
+                ValidateReduceAxes(op, ndim, axes);
+            else
+                ValidateReduceAxis(op, ndim, axis);
+            PostReduceDTypeCheck(op, dtype);
+            if (@out is not null && !parsesOutFirst && !@out.Shape.IsWriteable)
+                throw new ValueError("output array is read-only");
+        }
+
+        /// <summary>
+        ///     The computation a ported resolution leads to: a numeric loop over a text operand casts
+        ///     (<see cref="TextOutReduce.NumericCast"/>; without text it is the numeric path, <see cref="TextOutReduce.None"/>,
+        ///     and without an out the caller parses its text input first); a repeat loop repeats; the <c>StringDType</c>
+        ///     concatenation of a <c>U</c> input concatenates its cast.
+        /// </summary>
+        /// <param name="op">The NumPy function name (the wiring error's text).</param>
+        /// <param name="r">The resolution.</param>
+        /// <param name="a">The input.</param>
+        /// <param name="out">The out, or null.</param>
+        /// <returns>The route.</returns>
+        /// <exception cref="InvalidOperationException">A loop that cannot pass NumPy's checks reached here, or a
+        ///     <c>StringDType</c> input whose concatenation its caller routes elsewhere (wiring errors).</exception>
+        private static TextOutReduce RouteOf(string op, ReduceLikeResolution r, NDArray a, NDArray @out)
+        {
+            switch (r.Kind)
+            {
+                case ReduceLoopKind.Numeric:
+                    return @out is not null && (IsText(a) || IsText(@out)) ? TextOutReduce.NumericCast : TextOutReduce.None;
+                case ReduceLoopKind.StringRepeat:
+                case ReduceLoopKind.VStringRepeat:
+                    // Only a reduce with the count second passes NumPy's checks (an accumulation is not uniform; a count-first
+                    // loop's output is text where its first operand is an integer).
+                    return TextOutReduce.Repeat;
+                case ReduceLoopKind.VStringAdd when !IsVString(a):
+                    return TextOutReduce.Concatenate;
+                default:
+                    // The fixed-width concatenation's output is always wider than its first operand, so its equivalence
+                    // check refuses every reduction; a StringDType input concatenates through VStringReduces before this.
+                    throw ComputingLoopMisrouted(ReduceUfuncOf(op, out _));
+            }
+        }
+
+        /// <summary>
         ///     <see cref="ReduceIntoOutRoute(string, NDArray, int?, NDArray, DType)"/> for a tuple <c>axis</c>.
         /// </summary>
         /// <param name="op">The NumPy function name.</param>
@@ -903,7 +1040,27 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">NumPy's loop refusal.</exception>
         /// <exception cref="InvalidOperationException">A computing <c>StringDType</c> input (a wiring error).</exception>
         internal static TextOutReduce ReduceIntoOutRoute(string op, NDArray a, int[] axes, NDArray @out, DType dtype = null)
+            => ReduceIntoOutRoute(op, a, axes, @out, dtype, out _);
+
+        /// <summary>
+        ///     <see cref="ReduceIntoOutRoute(string, NDArray, int[], NDArray, DType)"/> reporting the loop resolution (see the
+        ///     integer-axis overload).
+        /// </summary>
+        /// <param name="op">The NumPy function name.</param>
+        /// <param name="a">The input.</param>
+        /// <param name="axes">The axes, or null.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="resolution">The ported loop resolution when the route used it, else null.</param>
+        /// <returns>The text computation, or <see cref="TextOutReduce.None"/>.</returns>
+        /// <exception cref="ValueError">A read-only out, or an axis that appears twice.</exception>
+        /// <exception cref="AxisError">An axis is out of bounds.</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal.</exception>
+        /// <exception cref="InvalidOperationException">A computing <c>StringDType</c> input (a wiring error).</exception>
+        internal static TextOutReduce ReduceIntoOutRoute(string op, NDArray a, int[] axes, NDArray @out, DType dtype,
+            out ReduceLikeResolution resolution)
         {
+            resolution = null;
             string ufunc = ReduceUfuncOf(op, out bool accumulate);
             if (@out is not null && ufunc is not null && dtype is null && (IsVString(a) || IsVString(@out)))
             {
@@ -917,6 +1074,13 @@ namespace NumSharp.Backends.Strings
                 if (IsVString(a))
                     throw VStringReduceAnswer(op, a, ReducedAxes(a, axes), null, @out) ?? ComputingLoopMisrouted(op);
                 return VStringOutRoute(ufunc, accumulate, a, @out);
+            }
+            if (ResolvesAddMultiply(op, a, @out, dtype))
+            {
+                // The tuple-axis form of the ported resolution (see the integer-axis overload).
+                CheckReduceArguments(op, a.ndim, null, axes ?? Array.Empty<int>(), @out, dtype);
+                resolution = NDReduceLikeResolution.Resolve(ufunc, accumulate, a.dtype, @out?.dtype, dtype?.Meta);
+                return RouteOf(op, resolution, a, @out);
             }
             if (@out is null || ufunc is null || IsStringRequest(dtype) || (!IsString(a) && !IsString(@out)))
             {

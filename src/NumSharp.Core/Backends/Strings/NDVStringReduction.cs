@@ -1151,7 +1151,7 @@ namespace NumSharp.Backends.Strings
         ///     <c>ndim - idim - 1</c> beside the axis value <c>idim</c>, and the non-broadcastable error's "remapped to" lists
         ///     the out's extents in REVERSED axis order (NumPy builds it from <c>axes[ndim - idim - 1]</c>).
         /// </remarks>
-        private static IncorrectShapeException AccumulateIteratorShapeError(NDArray @out, NDArray input)
+        internal static IncorrectShapeException AccumulateIteratorShapeError(NDArray @out, NDArray input)
         {
             int ndim = input.ndim, ondim = @out.ndim;
             long[] outDims = @out.Shape.dimensions ?? Array.Empty<long>();
@@ -1207,7 +1207,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="out">The out array (non-empty).</param>
         /// <param name="ndim">The input's rank.</param>
         /// <returns><paramref name="out"/> itself when it has exactly <paramref name="ndim"/> axes, else a view (owned by the caller).</returns>
-        private static NDArray LeadingAxesView(NDArray @out, int ndim)
+        internal static NDArray LeadingAxesView(NDArray @out, int ndim)
         {
             if (@out.ndim == ndim)
                 return @out;
@@ -1222,7 +1222,7 @@ namespace NumSharp.Backends.Strings
         /// <param name="axis">The axis.</param>
         /// <param name="count">How many leading cells to keep.</param>
         /// <returns>A view (owned by the caller).</returns>
-        private static NDArray AxisPrefixView(NDArray x, int axis, long count)
+        internal static NDArray AxisPrefixView(NDArray x, int axis, long count)
         {
             var slices = new Slice[x.ndim];
             for (int i = 0; i < slices.Length; i++)

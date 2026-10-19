@@ -141,21 +141,27 @@ namespace NumSharp
         /// <summary>
         ///     The text form of <c>add.reduce</c> / <c>multiply.reduce(self, axis, dtype, out, keepdims=True)</c>, the
         ///     reduction NumPy's <c>matrix.sum</c> / <c>matrix.prod</c> (and <c>_mean</c>'s sum) run: when this matrix or
-        ///     <paramref name="out"/> holds text (<c>S</c>, <c>U</c> or <c>StringDType</c>), NumPy resolves a text loop on
-        ///     (out, self) — the <c>StringDType</c> concatenation of a <c>StringDType</c> or <c>U</c> matrix into a
-        ///     <c>StringDType</c> out, the string repeat of integer counts into a text out — or refuses.
+        ///     <paramref name="out"/> holds text (<c>S</c>, <c>U</c> or <c>StringDType</c>), or <paramref name="dtype"/>
+        ///     names a text class, NumPy resolves the reduction's loop on (out, self) under the request
+        ///     (<see cref="NDReduceLikeResolution"/>) and computes or refuses: the <c>StringDType</c> concatenation of a
+        ///     <c>StringDType</c> or <c>U</c> matrix into a <c>StringDType</c> out, the string repeat of integer counts (into a
+        ///     text out, or through the loop's text into a numeric out), or a NUMERIC loop with the text cast around it (a text
+        ///     matrix parsed, the sum's <c>str()</c> written into a text out).
         /// </summary>
         /// <param name="op">The NumPy function whose reduction this is (<c>"sum"</c> or <c>"prod"</c>).</param>
         /// <param name="axis">The axis as the caller passed it, or null for every axis.</param>
-        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request (for <c>_mean</c>'s sum, its implicit float loop), or null.</param>
         /// <param name="out">The out matrix (the kept shape).</param>
-        /// <returns>True when a text loop computed into <paramref name="out"/>; false when no text is involved (the caller's
-        ///     numeric path continues).</returns>
+        /// <returns>True when a loop computed into <paramref name="out"/>; false when no text is involved (the caller's numeric
+        ///     path continues).</returns>
         /// <exception cref="ValueError">A read-only out, an out of the wrong shape, two or more axes for a loop that is not
-        ///     reorderable, or an empty reduction without identity.</exception>
+        ///     reorderable, an empty reduction without identity, or a text that does not parse into the numeric loop (or into
+        ///     a numeric out, from the repeat's text).</exception>
         /// <exception cref="AxisError">The axis is out of bounds.</exception>
-        /// <exception cref="TypeError">NumPy's loop refusal.</exception>
-        /// <exception cref="OverflowException">A repeat past <c>2^63 - 1</c> characters (the repeat's own checks).</exception>
+        /// <exception cref="TypeError">NumPy's loop refusal (its resolved-dtypes, no-loop and mixed-string texts), or a
+        ///     detailed or new-style <c>dtype=</c>.</exception>
+        /// <exception cref="OverflowException">A repeat past <c>2^63 - 1</c> characters, or an integer text outside an
+        ///     integer loop or out.</exception>
         [NDScopedCovered]
         private bool ReduceTextInto(string op, int? axis, DType dtype, NDMatrix @out)
         {
@@ -166,13 +172,24 @@ namespace NumSharp
                 NDVStringReduction.SumNumPy(op, this, NormalizedAxis(axis), keepdims: true, @out);
                 return true;
             }
-            switch (NDStringUfuncs.ReduceIntoOutRoute(op, this, axis, @out, dtype))
+            switch (NDStringUfuncs.ReduceIntoOutRoute(op, this, axis, @out, dtype, out ReduceLikeResolution resolution))
             {
                 case NDStringUfuncs.TextOutReduce.Concatenate:
                     NDVStringReduction.SumNumPyOfCast(this, NormalizedAxis(axis), keepdims: true, @out);
                     return true;
                 case NDStringUfuncs.TextOutReduce.Repeat:
-                    NDStringRepeatReduction.ReduceNumPy(this, axis, keepdims: true, @out);
+                    // The repeat runs in the loop's text descriptor: the out's own when it is that text, else the out's dtype
+                    // cast to the loop's string class (a numeric out reads as U21 / U32 / U5, a bytes out of the unicode loop
+                    // as U), which NumPy's buffered iterator round-trips through.
+                    if (resolution is not null && !resolution.Descriptors[0].Equals(@out.dtype))
+                        NDStringRepeatReduction.ReduceNumPyThroughText(this, axis, keepdims: true, @out, resolution.Descriptors[0]);
+                    else
+                        NDStringRepeatReduction.ReduceNumPy(this, axis, keepdims: true, @out);
+                    return true;
+                case NDStringUfuncs.TextOutReduce.NumericCast:
+                    // A numeric loop over text: the identity first, then the buffered casts of the matrix and the out.
+                    NDTextNumericReduction.Reduce(op == "sum" ? "add" : "multiply", this,
+                        ReductionArguments.AxisFlags(ndim, axis), keepdims: true, @out, resolution.Descriptors[0]);
                     return true;
                 default:
                     return false;
@@ -327,15 +344,15 @@ namespace NumSharp
                     loop = np.float32;
             }
 
-            // Text without an implicit loop (a float, complex or text matrix): _count_reduce_items validates the axis,
-            // then umr_sum's text loop resolution answers; a sum it computed into out (the StringDType concatenation)
-            // meets true_divide(ret, rcount, out=ret), which has no text loop (NumPy's division refusal). An integer, bool
-            // or float16 matrix sums in its implicit loop and casts the sum into a text out: the numeric path below,
-            // whose division refuses the same way.
-            if (loop is null && (NDStringUfuncs.IsText(this) || NDStringUfuncs.IsText(@out)))
+            // Text (a text matrix, a text out, or a text loop request): _count_reduce_items validates the axis, then
+            // umr_sum(arr, axis, loop, out, keepdims) is add.reduce under the loop as its request — the implicit float64 /
+            // float32 loop of an integer, bool or float16 matrix passes as a request too — whose ported loop resolution
+            // computes into out or refuses. A sum it computed meets true_divide(ret, rcount, out=ret, casting='unsafe'):
+            // a numeric out divides, a text out has no divide loop (NumPy's division refusal, after the sum was stored).
+            if (NDStringUfuncs.IsText(this) || NDStringUfuncs.IsText(@out) || NDStringUfuncs.IsTextRequest(loop))
             {
                 long rcount = ReduceCount(axis);
-                if (ReduceTextInto("sum", axis, null, @out))
+                if (ReduceTextInto("sum", axis, loop, @out))
                 {
                     DefaultEngine.DivideByCountLikeNumPy(@out, rcount);
                     return axis is null ? ScalarFrom(@out) : @out;

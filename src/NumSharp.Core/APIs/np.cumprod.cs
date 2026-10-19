@@ -20,9 +20,15 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(arr))
                 return NDMatrixBoundary.Wrapped((arr, axis, typeCode, @out), static s => cumprod(s.arr, s.axis, s.typeCode, s.@out), @out);
-            // Text (input or out=): multiply.accumulate's loop on (out, arr) answers after the axis (ReduceOutError); without
-            // out= the engine's guard answers (ReduceError).
-            // A numeric dtype= over text: NumPy casts the text to that number type first (a parse); the scope reclaims it.
+            // Text (input or out=) or a string dtype= request: multiply.accumulate's loop resolution on (out, arr) under the
+            // request answers FIRST (NDReduceLikeResolution) — an out decides whether the text is parsed at all (an integer
+            // out with text makes NumPy's legacy resolver pick the string repeat loop, which an accumulation refuses). A
+            // numeric loop over a text operand with out= accumulates in the loop dtype with the text cast around it; without
+            // out= the text input is parsed into the requested number type below (the scope reclaims the parse), and without
+            // out= or a request the engine's guard answers (ReduceError).
+            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("cumprod", arr, axis, @out, typeCode, out var resolution)
+                == Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast)
+                return Backends.Strings.NDTextNumericReduction.Accumulate("multiply", arr, axis, @out, resolution.Descriptors[0]);
             if (Backends.Strings.NDStringUfuncs.ParseForNumericReduce("cumprod", arr, axis, typeCode) is { } parsed)
                 arr = parsed;
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis, @out, typeCode);

@@ -80,9 +80,16 @@ namespace NumSharp
             // StringDType add promoter pairs StringDType with StrDType; the diagonal is cast to the default StringDType());
             // text with any other out, a text out for numbers, or a string dtype= request is NumPy's refusal (a numeric
             // input then reads as text of its REQUIRED_STR_LEN).
-            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("trace", diag, diag.ndim - 1, @out, dtype)
-                == Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate)
-                return Backends.Strings.NDVStringReduction.SumNumPyOfCast(diag, diag.ndim - 1, false, @out);
+            switch (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("trace", diag, diag.ndim - 1, @out, dtype, out var resolution))
+            {
+                case Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate:
+                    return Backends.Strings.NDVStringReduction.SumNumPyOfCast(diag, diag.ndim - 1, false, @out);
+                case Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast:
+                    // A numeric loop over a text operand (a text diagonal parsed, a text out written): add.reduce's buffered
+                    // casts, the identity first (NDTextNumericReduction).
+                    return Backends.Strings.NDTextNumericReduction.Reduce("add", diag,
+                        Backends.ReductionArguments.AxisFlags(diag.ndim, diag.ndim - 1), false, @out, resolution.Descriptors[0]);
+            }
 
             // dtype rule: when not specified, the engine Sum's NEP50 promotion applies
             // (signed/bool -> int64, unsigned -> uint64, floats preserved) — the same

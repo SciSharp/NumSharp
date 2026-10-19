@@ -228,5 +228,117 @@ namespace NumSharp.Tests.Backends.Strings
                 "<class 'numpy.dtypes.Float64DType'>) -> <class 'numpy.dtypes.StrDType'>");
             ((string)o.GetAtIndex(0)).Should().Be("2.0");
         }
+
+        // ---------------------------------------------------------------- numeric loops over text (dtype= requests)
+
+        [TestMethod]
+        public void Cumsum_TextInputNumericLoop_ParsesThenCastsIntoTheOut()
+        {
+            // np.cumsum(np.array(['3', '1', '2']), dtype=float, out=np.zeros(3, 'i8')) -> [3, 4, 6]: the float64 loop parses
+            // the text input, the running sums are cast into the int64 out.
+            var o = np.zeros(new Shape(3), np.int64);
+            var r = np.cumsum(U("3", "1", "2"), null, np.float64, o);
+            ReferenceEquals(r, o).Should().BeTrue();
+            o.ToArray<long>().Should().Equal(3L, 4L, 6L);
+        }
+
+        [TestMethod]
+        public void Cumsum_NumericLoopIntoTextOut_ParsesTheOutFirst()
+        {
+            // PyUFunc_Accumulate's UPDATEIFCOPY copy reads the out into the loop dtype before the input is touched: a
+            // zeros-filled text out holds '', which does not parse (the float and the int parser each say so in their words).
+            Action f8 = () => np.cumsum(I(3, 1, 2), null, np.float64, np.zeros(new Shape(3), "U6"));
+            f8.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('')");
+            Action i8 = () => np.cumsum(I(3, 1, 2), null, np.int64, np.full(new Shape(3), "", T));
+            i8.Should().Throw<ValueError>().WithMessage("invalid literal for int() with base 10: ''");
+        }
+
+        [TestMethod]
+        public void Cumprod_BoolLoop_IsLogicalAnd()
+        {
+            // BOOL_multiply is logical_and: np.cumprod([True, False, True], dtype=bool, out=U6) -> ['True', 'False', 'False'],
+            // each running result's str() written into the text out.
+            var o = np.zeros(new Shape(3), "U6");
+            np.cumprod(np.array(new[] { true, false, true }), null, np.@bool, o);
+            Texts(o).Should().Equal("True", "False", "False");
+        }
+
+        [TestMethod]
+        public void Cumsum_StringDTypeRequest_IsTheNewStyleInstanceRefusal()
+        {
+            // A StringDType() request reaches the ufunc's _get_dtype as a new-style INSTANCE, refused before any loop.
+            Action act = () => np.cumsum(np.array(new[] { true, false, true }), null, T, np.zeros(new Shape(3), np.int64));
+            act.Should().Throw<TypeError>().WithMessage(
+                "Cannot pass a new user DType instance to the `dtype` or `signature` arguments of ufuncs. Pass the DType " +
+                "class instead.");
+        }
+
+        [TestMethod]
+        public void Cumprod_TextInputIntegerOut_IsTheRepeatAccumulationRefusal()
+        {
+            // An integer out with text: the legacy multiply resolver picks the string repeat loop whatever the float request,
+            // and an accumulation refuses it (its out would change class) before a single text is parsed.
+            var s = np.array(new[] { "3", "1", "2" }).astype(np.dtype("S"));
+            Action act = () => np.cumprod(s, null, np.float64, np.zeros(new Shape(3), np.int64));
+            act.Should().Throw<TypeError>().WithMessage(
+                "the resolved dtypes are not compatible with multiply.accumulate. Resolved (dtype('int64'), dtype('S1'), " +
+                "dtype('S21'))");
+        }
+
+        [TestMethod]
+        public void Trace_NumericLoops_CastAroundTheReduction()
+        {
+            // The identity first, then the buffered casts: a float64 sum's str() written into a text out, a text diagonal
+            // parsed into the int64 loop and the sum cast into a float64 out.
+            var ou = np.zeros(Shape.Scalar, "U6");
+            np.trace(np.array(new long[,] { { 3, 1 }, { 1, 2 } }), 0, 0, 1, np.float64, ou);
+            ((string)ou.GetAtIndex(0)).Should().Be("5.0");
+            var of = np.zeros(Shape.Scalar, np.float64);
+            np.trace(np.array(new[,] { { "3", "1" }, { "1", "2" } }), 0, 0, 1, np.int64, of);
+            ((double)of.GetAtIndex(0)).Should().Be(5.0);
+        }
+
+        [TestMethod]
+        public void MatrixSumMean_TextMatrixNumericRequest_ParseAndCompute()
+        {
+            var m = (NDMatrix)np.matrix(U("3", "1", "2").reshape(1, 3));
+            var oi = (NDMatrix)np.matrix(np.zeros(new Shape(1, 1), np.int64));
+            m.sum(1, np.float64, oi);
+            ((long)oi.GetAtIndex(0)).Should().Be(6L);
+            // _mean: the bool loop (logical_or of the parsed texts) stores True into the float64 out, which is then divided
+            // by the count of 3.
+            var of = (NDMatrix)np.matrix(np.zeros(new Shape(1, 1), np.float64));
+            m.mean(1, np.@bool, of);
+            ((double)of.GetAtIndex(0)).Should().Be(1.0 / 3.0);
+        }
+
+        [TestMethod]
+        public void MatrixProd_TextRequestNumericOut_RepeatsThroughTheLoopsText()
+        {
+            // An integer matrix under a U request takes the legacy resolver's repeat loop, and an int64 out reads as U21: '3'
+            // repeated by 1, then by 2, is '33', parsed back into the out.
+            var m = (NDMatrix)np.matrix(I(3, 1, 2).reshape(1, 3));
+            var oi = (NDMatrix)np.matrix(np.zeros(new Shape(1, 1), np.int64));
+            m.prod(1, np.dtype("U"), oi);
+            ((long)oi.GetAtIndex(0)).Should().Be(33L);
+            // A float64 out reads as U32: '3.0' repeated twice does not parse back.
+            Action f8 = () => m.prod(1, np.dtype("U"), (NDMatrix)np.matrix(np.zeros(new Shape(1, 1), np.float64)));
+            f8.Should().Throw<ValueError>().WithMessage("could not convert string to float: np.str_('3.03.0')");
+        }
+
+        [TestMethod]
+        public void MatrixMean_TextRequests_FollowTheLegacyResolver()
+        {
+            // An integer matrix's mean under a U request: the out's descriptor takes the first slot (U6), the input is cast to
+            // U21, and the concatenation's output (U27) fails the reduction's equivalence check.
+            var m = (NDMatrix)np.matrix(I(3, 1, 2).reshape(1, 3));
+            Action uOut = () => m.mean(1, np.dtype("U"), (NDMatrix)np.matrix(np.zeros(new Shape(1, 1), "U6")));
+            uOut.Should().Throw<TypeError>().WithMessage(
+                "the resolved dtypes are not compatible with add.reduce. Resolved (dtype('<U6'), dtype('<U21'), dtype('<U27'))");
+            // A U matrix into a bytes out: the legacy addition resolver refuses mixed string classes whatever the request.
+            var mu = (NDMatrix)np.matrix(U("3", "1", "2").reshape(1, 3));
+            Action sOut = () => mu.mean(1, np.float64, (NDMatrix)np.matrix(np.zeros(new Shape(1, 1), "S6")));
+            sOut.Should().Throw<TypeError>().WithMessage("ufunc 'add' cannot use operands with types dtype('S6') and dtype('<U1')");
+        }
     }
 }

@@ -362,7 +362,9 @@ namespace NumSharp
                 NDArray into = target ?? @out;
                 if (!into.Shape.IsWriteable)
                     throw new ValueError("output array is read-only");
+#pragma warning disable NDW012 // not a leak: SumNumPyOfCast returns its out (into), which the caller's out owns
                 Backends.Strings.NDVStringReduction.SumNumPyOfCast(middle, 0, keepdims: false, into);
+#pragma warning restore NDW012
                 DefaultEngine.DivideByCountLikeNumPy(into, middle.size);
             }
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("median", a, (int?)null, @out);

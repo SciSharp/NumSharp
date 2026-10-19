@@ -587,10 +587,84 @@ namespace NumSharp.Backends
         {
             if (IterSize == 0)
                 return;
+            var toLoopIn = Buffered[OpIn] ? new Conversion(inType, loopType) : null;
+            var toLoopOut = Buffered[OpOut] ? new Conversion(outType, loopType) : null;
+            var fromLoopOut = Buffered[OpOut] ? new Conversion(loopType, outType) : null;
+            RunCore(outBase, outType.SizeOf(), toLoopOut, fromLoopOut, inBase, inType.SizeOf(), toLoopIn, maskBase, skipFirst, loop);
+        }
 
+        /// <summary>
+        ///     One run of a buffer copy converted by the CALLER: source pointer and byte stride, destination pointer and byte
+        ///     stride, element count.
+        /// </summary>
+        /// <param name="src">The first source element.</param>
+        /// <param name="srcStrideBytes">The source byte stride.</param>
+        /// <param name="dst">The first destination element.</param>
+        /// <param name="dstStrideBytes">The destination byte stride.</param>
+        /// <param name="n">The element count.</param>
+        internal delegate void Transfer(byte* src, long srcStrideBytes, byte* dst, long dstStrideBytes, long n);
+
+        /// <summary>
+        ///     <see cref="Run{T}(byte*, NPTypeCode, byte*, NPTypeCode, byte*, NPTypeCode, long, in Loop{T})"/> for operands whose
+        ///     buffer copies the caller converts - a text out or input of a numeric loop (NumPy's buffered casts between
+        ///     <c>S</c> / <c>U</c> / <c>StringDType</c> and numbers: a parse into the loop dtype, a <c>str()</c> back), which no
+        ///     <see cref="NPTypeCode"/> cast kernel performs. The schedule is the same: the out is read into its buffer at each
+        ///     fill's start and written back at its end, so a text out round-trips the running value through its text at every
+        ///     fill, exactly as NumPy's iterator does.
+        /// </summary>
+        /// <typeparam name="T">The loop dtype's element type.</typeparam>
+        /// <param name="outBase">The out array's logical element 0.</param>
+        /// <param name="outItemSize">The out array's element size in bytes (a text out's itemsize, 16 for a <c>StringDType</c>
+        ///     cell).</param>
+        /// <param name="outToLoop">The out to loop conversion (used when the out is buffered: built with <c>outCast</c>).</param>
+        /// <param name="loopToOut">The loop to out conversion (used when the out is buffered).</param>
+        /// <param name="inBase">The input's logical element 0.</param>
+        /// <param name="inItemSize">The input's element size in bytes.</param>
+        /// <param name="inToLoop">The input to loop conversion (used when the input is buffered: built with <c>inCast</c>).</param>
+        /// <param name="skipFirst">NumPy's skip count (see the other overload).</param>
+        /// <param name="loop">The loop's forms.</param>
+        /// <exception cref="ArgumentNullException">A buffered operand's conversion is null.</exception>
+        /// <exception cref="Exception">Whatever a conversion raises (a text that does not parse into the loop dtype), at the
+        ///     fill NumPy's iterator raises it in; the fills before it are written back already.</exception>
+        internal void Run<T>(byte* outBase, int outItemSize, Transfer outToLoop, Transfer loopToOut, byte* inBase, int inItemSize,
+            Transfer inToLoop, long skipFirst, in Loop<T> loop) where T : unmanaged
+        {
+            if (IterSize == 0)
+                return;
+            int tSz = Unsafe.SizeOf<T>();
+            var toLoopIn = Buffered[OpIn]
+                ? new Conversion(inToLoop ?? throw new ArgumentNullException(nameof(inToLoop)), inItemSize, tSz)
+                : null;
+            var toLoopOut = Buffered[OpOut]
+                ? new Conversion(outToLoop ?? throw new ArgumentNullException(nameof(outToLoop)), outItemSize, tSz)
+                : null;
+            var fromLoopOut = Buffered[OpOut]
+                ? new Conversion(loopToOut ?? throw new ArgumentNullException(nameof(loopToOut)), tSz, outItemSize)
+                : null;
+            RunCore(outBase, outItemSize, toLoopOut, fromLoopOut, inBase, inItemSize, toLoopIn, null, skipFirst, loop);
+        }
+
+        /// <summary>
+        ///     The walk shared by both <c>Run</c> overloads: the fills, the buffer copies through the given conversions, the
+        ///     reduce double loop, the first-visit skip and the masked runs.
+        /// </summary>
+        /// <typeparam name="T">The loop dtype's element type.</typeparam>
+        /// <param name="outBase">The out array's logical element 0.</param>
+        /// <param name="outSz">The out array's element size in bytes.</param>
+        /// <param name="toLoopOut">The out to loop conversion, or null when the out is not buffered.</param>
+        /// <param name="fromLoopOut">The loop to out conversion, or null when the out is not buffered.</param>
+        /// <param name="inBase">The input's logical element 0.</param>
+        /// <param name="inSz">The input's element size in bytes.</param>
+        /// <param name="toLoopIn">The input to loop conversion, or null when the input is not buffered.</param>
+        /// <param name="maskBase">The mask's logical element 0, or null without a mask.</param>
+        /// <param name="skipFirst">NumPy's skip count.</param>
+        /// <param name="loop">The loop's forms.</param>
+        private void RunCore<T>(byte* outBase, int outSz, Conversion toLoopOut, Conversion fromLoopOut, byte* inBase, int inSz,
+            Conversion toLoopIn, byte* maskBase, long skipFirst, in Loop<T> loop) where T : unmanaged
+        {
             int nd = NDim;
             long C = CoreSize;
-            int outSz = outType.SizeOf(), inSz = inType.SizeOf(), tSz = Unsafe.SizeOf<T>();
+            int tSz = Unsafe.SizeOf<T>();
             bool masked = NOp == 3;
 
             // Scratch per buffered operand, at most one fill (BufferSize elements); pooled, returned on every exit.
@@ -607,9 +681,6 @@ namespace NumSharp.Backends
                 if (masked && Buffered[OpMask])
                     maskBuf = (byte*)SizeBucketedBufferPool.Take(maskBytes);
 
-                var toLoopIn = Buffered[OpIn] ? new Conversion(inType, loopType) : null;
-                var toLoopOut = Buffered[OpOut] ? new Conversion(outType, loopType) : null;
-                var fromLoopOut = Buffered[OpOut] ? new Conversion(loopType, outType) : null;
                 var copyMask = masked && Buffered[OpMask] ? new Conversion(NPTypeCode.Boolean, NPTypeCode.Boolean) : null;
 
                 Span<long> coords = nd <= 32 ? stackalloc long[32] : new long[nd];
@@ -1023,6 +1094,20 @@ namespace NumSharp.Backends
             /// <summary>Destination element size in bytes.</summary>
             private readonly int _dstSize;
 
+            /// <summary>The caller's conversion (a text operand), or null for the dtype kernels above.</summary>
+            private readonly Transfer _custom;
+
+            /// <summary>Wraps a caller's conversion: every run, contiguous or not, goes through it.</summary>
+            /// <param name="custom">The conversion.</param>
+            /// <param name="srcSize">The source element size in bytes.</param>
+            /// <param name="dstSize">The destination element size in bytes.</param>
+            internal Conversion(Transfer custom, int srcSize, int dstSize)
+            {
+                _custom = custom;
+                _srcSize = srcSize;
+                _dstSize = dstSize;
+            }
+
             /// <summary>Picks the kernels for one direction.</summary>
             /// <param name="from">Source dtype.</param>
             /// <param name="to">Destination dtype.</param>
@@ -1048,6 +1133,12 @@ namespace NumSharp.Backends
             /// <param name="n">The element count.</param>
             internal void Run(byte* src, long srcStrideBytes, byte* dst, long dstStrideBytes, long n)
             {
+                // A caller's conversion takes every run as it is (it walks its own strides).
+                if (_custom is not null)
+                {
+                    _custom(src, srcStrideBytes, dst, dstStrideBytes, n);
+                    return;
+                }
                 if (srcStrideBytes == _srcSize && dstStrideBytes == _dstSize)
                 {
                     if (_same)

@@ -31,6 +31,11 @@ namespace NumSharp
             // A numeric dtype= over text: NumPy's _replace_nan leaves text alone (it masks only inexact arrays), and cumprod's
             // cast to the requested number type parses it — so a parsed 'nan' is MULTIPLIED, not replaced by 1 (probed:
             // np.nancumprod(['inf', 'nan'], dtype='f8') is [inf, nan]). The scope reclaims the parsed array.
+            // The loop resolution answers first (np.cumprod's order): a numeric loop over a text operand with out= casts
+            // around the accumulation, without out= the parse below runs.
+            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("nancumprod", a, axis, @out, dtype, out var resolution)
+                == Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast)
+                return Backends.Strings.NDTextNumericReduction.Accumulate("multiply", a, axis, @out, resolution.Descriptors[0]);
             if (Backends.Strings.NDStringUfuncs.ParseForNumericReduce("nancumprod", a, axis, dtype) is { } parsed)
                 return cumprod(parsed, axis, dtype, @out);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nancumprod", a, axis, @out, dtype);
