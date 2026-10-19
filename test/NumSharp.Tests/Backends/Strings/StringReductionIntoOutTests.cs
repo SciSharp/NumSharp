@@ -327,6 +327,28 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         [TestMethod]
+        [Misaligned]
+        public void NumericLoopIntoStringDTypeOut_ComputesWhereNumPyRaisesItsClearLoopMemoryError()
+        {
+            // NumPy 2.4.2 answers a numeric loop reduced into a StringDType out with its own bug, MemoryError("String
+            // deallocation failed in clear loop"): the buffered cast back into the out releases StringDType cells it never
+            // allocated. The string oracle leaves those cases out; NumSharp computes what the call means — here the float64
+            // sum's str() written into the out.
+            var o = np.array("", T);
+            np.trace(np.array(new long[,] { { 3, 1 }, { 1, 2 } }), 0, 0, 1, np.float64, o);
+            ((string)o.GetAtIndex(0)).Should().Be("5.0");
+            // numpy.matrix.mean: the int64 matrix's float64 sum is stored into the StringDType out, then true_divide has no
+            // StringDType loop (NumPy: the MemoryError again).
+            var m = (NDMatrix)np.matrix(I(3, 1, 2).reshape(1, 3));
+            var om = (NDMatrix)np.matrix(np.full(new Shape(1, 1), "", T));
+            Action mean = () => m.mean(1, null, om);
+            mean.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'divide' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, " +
+                "<class 'numpy.dtypes.Int64DType'>) -> None");
+            ((string)om.GetAtIndex(0)).Should().Be("6.0");
+        }
+
+        [TestMethod]
         public void MatrixMean_TextRequests_FollowTheLegacyResolver()
         {
             // An integer matrix's mean under a U request: the out's descriptor takes the first slot (U6), the input is cast to

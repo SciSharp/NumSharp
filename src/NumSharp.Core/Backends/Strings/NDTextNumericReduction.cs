@@ -96,6 +96,10 @@ namespace NumSharp.Backends.Strings
         [NDScoped] // the raveled input, the views, the loop-dtype copies and the accumulation are this call's own
         internal static NDArray Accumulate(string ufunc, NDArray a, int? axis, NDArray @out, DType loop)
         {
+            // The np.* calls below compute the accumulation itself: a chararray or numpy.matrix operand (or out) must not meet
+            // the class rules those functions apply to a USER's call (the boundaries' audits require library code to compute
+            // plain).
+            using var plainRegion = NDCharArrayBoundary.Inside();
             NDArray input = a;
             int ax;
             if (axis is not { } given || a.ndim == 0)

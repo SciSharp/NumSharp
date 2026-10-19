@@ -285,6 +285,10 @@ namespace NumSharp.Tests.Strings
             // Sections strfn / tfn (numpy.strings' P2.5 functions over S / U and StringDType) live in their own partial.
             if (TryInvokeMethods(c.Op, p, ops, out var method))
                 return method;
+            // Sections strout / strpad (reductions, accumulations and statistics with text into out= or under dtype=, the
+            // numpy.matrix reductions, np.pad's mode keywords over text; P2.7) live in their own partial.
+            if (TryInvokeTextOut(c.Op, p, ops, out var textOut))
+                return textOut;
             throw new InvalidOperationException($"the string oracle has no op '{c.Op}'");
         }
 

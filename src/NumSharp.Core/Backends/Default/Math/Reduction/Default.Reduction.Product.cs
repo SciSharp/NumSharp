@@ -31,6 +31,10 @@ namespace NumSharp.Backends
             // The ufunc reduce's axis check, before every shortcut below (empty, 0-d and one-element inputs included).
             ReductionArguments.CheckReduceAxis(arr.ndim, axis_);
             NPTypeCode? typeCode = UfuncLoopCode(dtype);
+            // A bool LOOP (dtype=bool) is NumPy's BOOL_multiply, logical and, over the input's truth values
+            // (Default.Reduction.BoolLoop.cs): the flat product kernels have no bool loop.
+            if (typeCode == NPTypeCode.Boolean)
+                return LogicalProduct(arr, axis_, keepdims);
             var shape = arr.Shape;
 
             if (shape.IsEmpty)

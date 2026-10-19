@@ -32,6 +32,11 @@ namespace NumSharp.Backends
                 return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceCumMul(p, axis_, dtype));
             Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, dtype);
             NPTypeCode? typeCode = dtype?.GetTypeCode();
+            // A bool LOOP (dtype=bool) is NumPy's BOOL_multiply, logical and, over the input's truth values
+            // (Default.Reduction.BoolLoop.cs): the scans have no bool loop, and the input's own dtype gets a NaN or an
+            // imaginary part wrong.
+            if (typeCode == NPTypeCode.Boolean)
+                return LogicalAccumulate(arr, axis_, logicalAnd: true);
             // NumPy: cumprod on boolean arrays treats True as 1 and False as 0, returning int64
             // Convert boolean input to int64 to match NumPy behavior
             if (arr.GetTypeCode == NPTypeCode.Boolean)

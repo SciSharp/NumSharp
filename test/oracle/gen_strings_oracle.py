@@ -34,8 +34,13 @@ Each case records what NumPy 2.4.2 returns for one call:
 Deterministic: no randomness; regenerate with ``python test/oracle/gen_strings_oracle.py`` (needs numpy==2.4.2).
 """
 import codecs
+import concurrent.futures
+import importlib.util
 import json
 import operator
+import os
+import py_compile
+import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -16371,6 +16376,556 @@ def gen_tcodec():
             fn_case(S, "encode", [(arr, arr)], [_Op(0)] + args, f"long:{_t_label(spec)}:{codec}:{handler}")
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Sections strout / strpad: reductions, accumulations and statistics with text into a caller's out= or under a dtype=
+# request, and np.pad over text (strings phase 2, P2.7) -- every case evaluated in a FRESH NumPy process
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Children of the fresh-process sections running at once (each case is its own interpreter; this only bounds the
+# parallelism, leaving a few cores to the rest of the machine).
+FRESH_WORKERS = max(4, (os.cpu_count() or 8) - 4)
+
+# The cases a fresh-process section drops, per section: NumPy 2.4.2 answers them with its own MemoryError ("String
+# deallocation failed in clear loop": a numeric loop reduced into a StringDType out releases cells it never allocated).
+# NumSharp computes the value NumPy means there (StringReductionIntoOutTests pins those answers).
+_FRESH_DROPPED = {}
+# The cases a fresh-process section drops because NumPy's error text is the Windows host's C long text
+# (``_platform_text``: NumSharp pins the LP64 texts, which unit tests cover).
+_FRESH_PLATFORM = {}
+
+
+def _fresh_child(section, specs_name, index):
+    """The entry point of a fresh-process child: evaluates one case in THIS interpreter (which made no other NumPy call)
+    and writes the recorded case to stdout as JSON.
+
+    :param section: the section the case belongs to.
+    :param specs_name: the name of the section's spec-list function.
+    :param index: the case's index in that list.
+    """
+    warnings.simplefilter("ignore")
+    op, params, make, call, layout = globals()[specs_name]()[index]
+    add(section, op, params=params, operands=make(), call=call, phase="compute", layout=layout)
+    sys.stdout.write(json.dumps(CASES[-1], ensure_ascii=True, separators=(",", ":"), allow_nan=False))
+
+
+def _fresh_section(section, specs_name):
+    """Records every case of a spec list, each evaluated in its own interpreter.
+
+    NumPy's ufunc dispatch cache keeps the loop a call resolved for its operation DTypes and hands it to every later call
+    with the same key, so a reduction's answer depends on the calls its process made before: ``np.add.reduce(u, dtype='f8',
+    out=U6)`` raises in a fresh process but computes after ``np.add.reduce(u, dtype='f8', out=f8)`` cached
+    ``(Float64, StrDType, Float64) -> ddd`` (224 of 2,160 request x out probes differ between one shared process and one
+    process per case). NumSharp ports the fresh answer, so each case is evaluated in a process that made no other call:
+    a spawn pool with one task per child. The spec list must be deterministic (the child rebuilds it and takes its case
+    by index) and must not build its operands up front (``make`` does, in the child).
+
+    Each child is a plain ``python -c`` subprocess that imports this file as the module ``gen_strings_oracle`` (its
+    bytecode cached), so a case costs an interpreter start, NumPy's import and this module's top level — about a second
+    (a multiprocessing spawn pool would also re-run the script from source in every child, three times as long).
+
+    :param section: the section the cases belong to.
+    :param specs_name: the name of a module-level function returning ``[(op, params, make, call, layout), ...]``.
+    :raises RuntimeError: a child that failed (its stderr is quoted): a broken spec, not a NumPy error (those are cases).
+    """
+    count = len(globals()[specs_name]())
+    # The children import this file as a module: compile its bytecode once here, because a child never writes it (the
+    # environment may set PYTHONDONTWRITEBYTECODE) and recompiling the whole generator would double each child's cost.
+    source = str(Path(__file__).resolve())
+    py_compile.compile(source, cfile=importlib.util.cache_from_source(source), doraise=True)
+    code = (f"import sys; sys.path.insert(0, {str(HERE)!r}); import gen_strings_oracle as g; "
+            "g._fresh_child(sys.argv[1], sys.argv[2], int(sys.argv[3]))")
+
+    def run(index):
+        proc = subprocess.run([sys.executable, "-c", code, section, specs_name, str(index)], capture_output=True,
+                              text=True, encoding="ascii", errors="replace")
+        if proc.returncode != 0:
+            raise RuntimeError(f"{section} case {index} ({specs_name}) failed in its child:\n{proc.stderr[-3000:]}")
+        return json.loads(proc.stdout)
+
+    with concurrent.futures.ThreadPoolExecutor(FRESH_WORKERS) as pool:
+        results = list(pool.map(run, range(count)))
+    dropped = _FRESH_DROPPED.setdefault(section, [])
+    platform = _FRESH_PLATFORM.setdefault(section, [])
+    for case in results:
+        err = case.get("error")
+        if err is not None and err["type"] == "MemoryError" and "String deallocation failed" in err["text"]:
+            dropped.append(case["layout"])
+            continue
+        if err is not None and _platform_text(err["text"]):
+            platform.append(case["layout"])
+            continue
+        prefix = f"{section}/{case['op']}/"
+        n = _OP_COUNT.get(prefix, 0) + 1
+        _OP_COUNT[prefix] = n
+        case["id"] = f"{prefix}{n}"
+        assert case["id"] not in _IDS
+        _IDS.add(case["id"])
+        CASES.append(case)
+
+
+# Text that a numeric loop parses (digits) and text it cannot (letters).
+_SO_DIGITS = ["3", "1", "2"]
+_SO_LETTERS = ["c", "a", "b"]
+# The 1-D inputs: numbers, and each text class over digits (U / S / T) or letters (Ul / Sl / Tl).
+_SO_NUMERIC = ["i8", "b", "f8"]
+_SO_TEXT = ["U", "S", "T", "Ul", "Sl", "Tl"]
+# The outs (U6 / S6 zeros, a StringDType out of '', int64 / float64 / bool zeros) and the dtype= requests.
+_SO_OUTS = ["U6", "S6", "T", "i8", "f8", "b"]
+_SO_REQUESTS = {"f8": "f8", "i8": "i8", "b": "?", "U": "U", "S": "S", "T": None}
+_SO_TEXT_KINDS = {"U", "S", "T", "Ul", "Sl", "Tl", "U6", "S6"}
+
+
+def _so_text_vals(kind, n=None):
+    """The values of a text input kind: digits for ``U`` / ``S`` / ``T``, letters for ``Ul`` / ``Sl`` / ``Tl``, cycled to
+    ``n`` elements when given."""
+    vals = _SO_DIGITS if len(kind) == 1 else _SO_LETTERS
+    if n is not None:
+        vals = [vals[i % len(vals)] for i in range(n)]
+    return vals
+
+
+def _so_array(kind, vals=None):
+    """A NumPy array of an input kind (the 1-D default values, or ``vals`` for a text kind / numbers for a numeric one)."""
+    if kind == "i8":
+        return np.array(vals if vals is not None else [3, 1, 2], dtype="i8")
+    if kind == "b":
+        return np.array(vals if vals is not None else [True, False, True], dtype="?")
+    if kind == "f8":
+        return np.array(vals if vals is not None else [3.0, 1.0, 2.0], dtype="f8")
+    vals = vals if vals is not None else _so_text_vals(kind)
+    if kind[0] == "U":
+        return np.array(vals, dtype="U")
+    if kind[0] == "S":
+        return np.array([v.encode() for v in vals], dtype="S")
+    return np.array(vals, dtype=TD.build())
+
+
+def _so_operand(arr):
+    """A (base, view) operand of exactly ``arr`` (a StringDType one by value)."""
+    return t_plain(arr) if arr.dtype.kind == "T" else plain(arr)
+
+
+def _so_out(kind, shape, fill=None):
+    """An out of section strout: ``U6`` / ``S6`` zeros, a ``StringDType`` out of '' (``T``), int64 / float64 / bool zeros —
+    or every cell ``fill`` for a text out (an accumulation's out must parse: NumPy reads it into the loop first)."""
+    if kind == "T":
+        return target(np.full(shape, "" if fill is None else fill, dtype=TD.build()))
+    dt = {"U6": "U6", "S6": "S6", "i8": "i8", "f8": "f8", "b": "?", "U12": "U12", "U32": "U32", "U8": "U8",
+          "S8": "S8"}[kind]
+    if fill is not None and kind[0] in "US":
+        return target(np.full(shape, fill if kind[0] == "U" else fill.encode(), dtype=dt))
+    return target(np.zeros(shape, dtype=dt))
+
+
+def _so_req(key):
+    """The ``dtype=`` request of a request key: a dtype string, or the default StringDType for ``T``."""
+    return TD if key == "T" else _SO_REQUESTS[key]
+
+
+def _so_text_case(*kinds):
+    """True when a case touches text: a text input or out kind, or a text request key."""
+    return any(k in _SO_TEXT_KINDS for k in kinds if k is not None)
+
+
+# The 2-D text of the layout cases: digits a numeric loop parses, products that stay small in int64.
+_SO_GRID = ["3", "1", "2", "4", "2", "5", "1", "3", "2", "2", "1", "4"]
+
+
+def _so_grid_view(cls, vk):
+    """A (3, 4) view of ``_SO_GRID`` in text class ``cls``: ``c`` C-ordered, ``t`` the transpose of a (4, 3) array, ``r``
+    rows reversed, ``s`` every second column of a (3, 8) base (whose other columns hold '9')."""
+    if vk == "c":
+        return _so_operand(_so_array(cls, _SO_GRID).reshape(3, 4))
+    if vk == "s":
+        vals = [_SO_GRID[r * 4 + c // 2] if c % 2 == 0 else "9" for r in range(3) for c in range(8)]
+        base = _so_operand(_so_array(cls, vals))[0]
+        return base, base.reshape(3, 8)[:, ::2]
+    base = _so_operand(_so_array(cls, _SO_GRID))[0]
+    return (base, base.reshape(4, 3).T) if vk == "t" else (base, base.reshape(3, 4)[::-1])
+
+
+def _so_np_call(name, a, o=None, dtype=None, axis=None, keepdims=False, q=None, method=None, offset=None, axis1=None,
+                axis2=None, ddof=None):
+    """One NumPy call of op ``o_call``, spelled with the keywords the C# replay passes.
+
+    :param name: the NumPy function.
+    :param a: the input.
+    :param o: the out, or None.
+    :param dtype: the dtype request (a dtype string or a TSpec), or None.
+    :param axis: the axis, or None.
+    :param keepdims: keepdims (only passed when True, for the functions that take it).
+    :param q: percentile / quantile's q.
+    :param method: percentile / quantile's method, or None.
+    :param offset: np.trace's offset, or None.
+    :param axis1: np.trace's axis1, or None.
+    :param axis2: np.trace's axis2, or None.
+    :param ddof: the var / std forms' ddof, or None.
+    :returns: NumPy's result.
+    """
+    kw = {}
+    if o is not None:
+        kw["out"] = o
+    if dtype is not None:
+        kw["dtype"] = sbuild(dtype)
+    if ddof is not None:
+        kw["ddof"] = ddof
+    if keepdims:
+        kw["keepdims"] = True
+    if method is not None:
+        kw["method"] = method
+    if name == "trace":
+        return np.trace(a, offset=offset or 0, axis1=0 if axis1 is None else axis1, axis2=1 if axis2 is None else axis2, **kw)
+    if name in ("percentile", "quantile"):
+        return getattr(np, name)(a, q, axis=axis, **kw)
+    return getattr(np, name)(a, axis=axis, **kw)
+
+
+def _so_call_spec(name, make, *, out=None, dtype=None, axis=None, keepdims=False, q=None, method=None, offset=None,
+                  axis1=None, axis2=None, ddof=None, layout=""):
+    """A spec of op ``o_call``: the params the replay reads, the operand builder, the NumPy call.
+
+    :param name: the NumPy function.
+    :param make: a builder of the operands (the input first, the out at ``out``).
+    :param out: the out's operand index, or None.
+    :returns: ``(op, params, make, call, layout)``.
+    """
+    params = {"name": name}
+    if axis is not None:
+        params["axis"] = axis
+    if out is not None:
+        params["out"] = out
+    if dtype is not None:
+        params["dtype"] = senc(dtype)
+    if keepdims:
+        params["keepdims"] = True
+    if q is not None:
+        params["q"] = q
+    if method is not None:
+        params["method"] = method
+    if offset is not None:
+        params["offset"] = offset
+    if axis1 is not None:
+        params["axis1"] = axis1
+    if axis2 is not None:
+        params["axis2"] = axis2
+    if ddof is not None:
+        params["ddof"] = ddof
+
+    def call(*views):
+        return _so_np_call(name, views[0], views[out] if out is not None else None, dtype, axis, keepdims, q, method,
+                           offset, axis1, axis2, ddof)
+
+    return ("o_call", params, make, call, layout)
+
+
+def _so_matrix_spec(name, make, *, out=None, dtype=None, axis=1, ddof=None, layout=""):
+    """A spec of op ``o_matrix``: ``np.matrix(a).<name>(axis, dtype, out=np.asmatrix(out), ddof)`` (the out a matrix VIEW of
+    the out operand, as a numpy.matrix method needs: it collapses its keepdims result with a matrix member).
+
+    :returns: ``(op, params, make, call, layout)``.
+    """
+    params = {"name": name, "axis": axis}
+    if out is not None:
+        params["out"] = out
+    if dtype is not None:
+        params["dtype"] = senc(dtype)
+    if ddof is not None:
+        params["ddof"] = ddof
+
+    def call(*views):
+        kw = {"axis": axis}
+        if dtype is not None:
+            kw["dtype"] = sbuild(dtype)
+        if out is not None:
+            kw["out"] = np.asmatrix(views[out])
+        if ddof is not None:
+            kw["ddof"] = ddof
+        return getattr(np.matrix(views[0]), name)(**kw)
+
+    return ("o_matrix", params, make, call, layout)
+
+
+def _strout_specs():
+    """The cases of section strout (see ``gen_strout``), in a deterministic order, each with a lazy operand builder."""
+    specs = []
+    # A. Every reduction-style function that takes out=, with no request: a 1-D input of every kind into an out of every
+    #    kind (the text-free combinations are the numeric corpus' business, not this section's).
+    flat = [("cumsum", (3,), {}), ("cumprod", (3,), {}), ("nancumsum", (3,), {}), ("nancumprod", (3,), {}),
+            ("median", (), {}), ("nanmedian", (), {}), ("max", (), {}), ("min", (), {}), ("nanmax", (), {}),
+            ("nanmin", (), {}), ("ptp", (), {}), ("argmax", (), {}), ("argmin", (), {}), ("all", (), {}), ("any", (), {}),
+            ("percentile", (), {"q": 50.0}), ("quantile", (), {"q": 0.5}), ("quantile", (), {"q": 0.5, "method": "lower"})]
+    for name, shape, extra in flat:
+        for ik in _SO_NUMERIC + _SO_TEXT:
+            for ok in _SO_OUTS:
+                if not _so_text_case(ik, ok):
+                    continue
+                specs.append(_so_call_spec(
+                    name, lambda ik=ik, ok=ok, shape=shape: [_so_operand(_so_array(ik)), _so_out(ok, shape)], out=1,
+                    layout=f"A:{name}{':' + extra['method'] if 'method' in extra else ''}:{ik}:out={ok}", **extra))
+    for ik in _SO_NUMERIC + _SO_TEXT:
+        for ok in _SO_OUTS:
+            if not _so_text_case(ik, ok):
+                continue
+            specs.append(_so_call_spec(
+                "trace", lambda ik=ik, ok=ok: [_so_operand(np.stack([_so_array(ik)[:2], _so_array(ik)[1:]])), _so_out(ok, ())],
+                out=1, layout=f"A:trace:{ik}:out={ok}"))
+            for name in ["sum", "prod", "mean", "var", "std", "max", "min"]:
+                specs.append(_so_matrix_spec(
+                    name, lambda ik=ik, ok=ok: [_so_operand(_so_array(ik).reshape(1, 3)), _so_out(ok, (1, 1))], out=1,
+                    layout=f"A:matrix.{name}:{ik}:out={ok}"))
+    # B. dtype= requests into every out: the accumulations, np.trace and the numpy.matrix reductions (every entry point
+    #    that takes both keywords), over every input kind.
+    for ik in _SO_NUMERIC + _SO_TEXT:
+        for rk in _SO_REQUESTS:
+            for ok in _SO_OUTS:
+                if not _so_text_case(ik, rk, ok):
+                    continue
+                req = _so_req(rk)
+                for name in ["cumsum", "cumprod", "nancumsum", "nancumprod"]:
+                    specs.append(_so_call_spec(
+                        name, lambda ik=ik, ok=ok: [_so_operand(_so_array(ik)), _so_out(ok, (3,))], out=1, dtype=req,
+                        layout=f"B:{name}:{ik}:dtype={rk}:out={ok}"))
+                specs.append(_so_call_spec(
+                    "trace", lambda ik=ik, ok=ok: [_so_operand(np.stack([_so_array(ik)[:2], _so_array(ik)[1:]])),
+                                                   _so_out(ok, ())],
+                    out=1, dtype=req, layout=f"B:trace:{ik}:dtype={rk}:out={ok}"))
+                for name in ["sum", "prod", "mean", "var", "std"]:
+                    specs.append(_so_matrix_spec(
+                        name, lambda ik=ik, ok=ok: [_so_operand(_so_array(ik).reshape(1, 3)), _so_out(ok, (1, 1))], out=1,
+                        dtype=req, layout=f"B:matrix.{name}:{ik}:dtype={rk}:out={ok}"))
+    # C. dtype= requests without an out: the reductions, accumulations and statistics that take a request.
+    for ik in _SO_NUMERIC + _SO_TEXT:
+        for rk in _SO_REQUESTS:
+            if not _so_text_case(ik, rk):
+                continue
+            req = _so_req(rk)
+            for name in ["sum", "prod", "cumsum", "cumprod", "nancumsum", "nancumprod"]:
+                specs.append(_so_call_spec(name, lambda ik=ik: [_so_operand(_so_array(ik))], dtype=req,
+                                           layout=f"C:{name}:{ik}:dtype={rk}"))
+            for name in ["mean", "var", "std", "nanmean", "nanvar", "nanstd"]:
+                specs.append(_so_call_spec(name, lambda ik=ik: [_so_operand(_so_array(ik))], dtype=req, axis=0,
+                                           layout=f"C:{name}:{ik}:dtype={rk}"))
+            specs.append(_so_call_spec(
+                "trace", lambda ik=ik: [_so_operand(np.stack([_so_array(ik)[:2], _so_array(ik)[1:]]))], dtype=req,
+                layout=f"C:trace:{ik}:dtype={rk}"))
+    # D. Layouts and shapes: 2-D text along every axis (views and outs that are not C-ordered), np.trace over 3-D, the
+    #    matrix reductions along axis 0 and over every element, the repeat through the loop's text, empty inputs, the
+    #    parse rules, StringDType missing values, and the accumulation iterator's outs.
+    grid = _SO_GRID
+    for cls in ["U", "S", "T"]:
+        g = _so_array(cls, grid)
+        for vk in ["c", "t", "r", "s"]:
+            for name in ["cumsum", "cumprod"]:
+                for rk in ["f8", "i8", "b"]:
+                    for axis in [0, 1, None]:
+                        shape = (12,) if axis is None else (3, 4)
+                        for ok, fill in [("f8", None), ("i8", None), ("U12", "0"), ("U12", None), ("T", "0")]:
+                            specs.append(_so_call_spec(
+                                name, lambda cls=cls, vk=vk, ok=ok, shape=shape, fill=fill: [_so_grid_view(cls, vk),
+                                                                                             _so_out(ok, shape, fill)],
+                                out=1, dtype=_so_req(rk), axis=axis,
+                                layout=f"D:{name}:{cls}:{vk}:dtype={rk}:axis={axis}:out={ok}:{fill}"))
+                    if name == "cumprod" and vk == "t":
+                        # NumSharp's cumprod allocates C order where NumPy's accumulate keeps an F operand's order: the
+                        # numeric gap MX02 (OpenBugs.Matrix.cs), not a text rule; the out= cases above cover the values.
+                        continue
+                    specs.append(_so_call_spec(
+                        name, lambda cls=cls, vk=vk: [_so_grid_view(cls, vk)], dtype=_so_req(rk), axis=1,
+                        layout=f"D:{name}:{cls}:{vk}:dtype={rk}:axis=1:noout"))
+        # Outs that are not C-ordered: a transposed out and a strided out of the accumulation's shape.
+        for ok in ["f8", "U12"]:
+            fill = "0" if ok == "U12" else None
+            specs.append(_so_call_spec(
+                "cumsum", lambda g=g, ok=ok, fill=fill: [_so_operand(g.reshape(3, 4)),
+                                                          (lambda b: (b, b.reshape(4, 3).T))(_so_out(ok, (12,), fill)[0])],
+                out=1, dtype="f8", axis=1, layout=f"D:cumsum:{cls}:outT:{ok}"))
+            specs.append(_so_call_spec(
+                "cumsum", lambda g=g, ok=ok, fill=fill: [_so_operand(g.reshape(3, 4)),
+                                                          (lambda b: (b, b.reshape(3, 8)[:, ::2]))(_so_out(ok, (24,), fill)[0])],
+                out=1, dtype="f8", axis=0, layout=f"D:cumsum:{cls}:outS:{ok}"))
+        # np.trace over 3-D text with offsets, every request, into 1-D outs (and a wrong-shape one).
+        cube = _so_array(cls, [grid[i % 12] for i in range(18)]).reshape(2, 3, 3)
+        for offset in [0, 1, -1]:
+            for rk in ["f8", "i8", "b", "U"]:
+                for ok in ["U8", "T", "f8"]:
+                    specs.append(_so_call_spec(
+                        "trace", lambda cube=cube, ok=ok: [_so_operand(cube), _so_out(ok, (2,))], out=1, dtype=_so_req(rk),
+                        offset=offset, axis1=1, axis2=2, layout=f"D:trace3d:{cls}:{offset}:dtype={rk}:out={ok}"))
+            specs.append(_so_call_spec(
+                "trace", lambda cube=cube: [_so_operand(cube), _so_out("U8", (3,))], out=1, dtype="f8", offset=offset,
+                axis1=1, axis2=2, layout=f"D:trace3d:{cls}:{offset}:wrongout"))
+        # The numpy.matrix reductions along axis 0 and over every element (a scalar result).
+        m23 = _so_array(cls, grid[:6]).reshape(2, 3)
+        for name in ["sum", "prod", "mean", "var", "std"]:
+            for rk in ["f8", "i8", "b", "U"]:
+                for axis, oshape in [(0, (1, 3)), (None, (1, 1))]:
+                    for ok in ["U8", "T", "f8", "i8"]:
+                        specs.append(_so_matrix_spec(
+                            name, lambda m23=m23, ok=ok, oshape=oshape: [_so_operand(m23), _so_out(ok, oshape)], out=1,
+                            dtype=_so_req(rk), axis=axis, layout=f"D:matrix.{name}:{cls}:dtype={rk}:axis={axis}:out={ok}"))
+            if name in ("var", "std"):
+                specs.append(_so_matrix_spec(
+                    name, lambda m23=m23: [_so_operand(m23), _so_out("f8", (1, 3))], out=1, dtype="f8", axis=0, ddof=1,
+                    layout=f"D:matrix.{name}:{cls}:ddof1"))
+    # The repeat through the loop's text: counts reduced by multiply under a text request into numeric and other-class outs
+    # (the out read as U21 / U32 / U5, the repeat cut to that width, parsed back), counts of every sign and width.
+    for counts, cdt in [([3, 1, 2], "i8"), ([1234567890, 3], "i8"), ([1234567, 5], "i8"), ([-1, 25], "i8"),
+                        ([12, 2], "i8"), ([0, 5], "i8"), ([-1, 2], "i8"),
+                        ([2, 3], "u8"), ([2, 3], "i1"), ([7, 1], "i2"), ([True, True], "?")]:
+        for rk in ["U", "S"]:
+            for ok in ["i8", "f8", "b", "U6", "S6", "T"]:
+                specs.append(_so_matrix_spec(
+                    "prod", lambda counts=counts, cdt=cdt, ok=ok: [plain(np.array([counts], dtype=cdt)), _so_out(ok, (1, 1))],
+                    out=1, dtype=_so_req(rk), axis=1, layout=f"D:repeat:{cdt}:{counts}:dtype={rk}:out={ok}"))
+    # Empty inputs: the identity written into a text out, an empty accumulation, an empty matrix axis.
+    for cls in ["U", "S", "T"]:
+        empty = np.zeros(0, dtype=TD.build() if cls == "T" else ("U2" if cls == "U" else "S2"))
+        for ok in ["f8", "U6", "T"]:
+            specs.append(_so_call_spec("cumsum", lambda empty=empty, ok=ok: [_so_operand(empty), _so_out(ok, (0,))], out=1,
+                                       dtype="f8", layout=f"D:empty:cumsum:{cls}:out={ok}"))
+        m03 = np.zeros((0, 3), dtype=empty.dtype)
+        for ok in ["U8", "T", "f8"]:
+            specs.append(_so_matrix_spec("sum", lambda m03=m03, ok=ok: [_so_operand(m03), _so_out(ok, (1, 3))], out=1,
+                                         dtype="f8", axis=0, layout=f"D:empty:matrix.sum:{cls}:out={ok}"))
+            specs.append(_so_matrix_spec("prod", lambda m03=m03, ok=ok: [_so_operand(m03), _so_out(ok, (1, 3))], out=1,
+                                         dtype="i8", axis=0, layout=f"D:empty:matrix.prod:{cls}:out={ok}"))
+            specs.append(_so_call_spec("trace", lambda m03=m03, ok=ok: [_so_operand(m03), _so_out(ok, ())], out=1, dtype="f8",
+                                       layout=f"D:empty:trace:{cls}:out={ok}"))
+    # The parse rules of the numeric loops: Python's float() and int() of the text (signs, spaces, exponents, inf / nan,
+    # a float text under an integer loop).
+    for vals, rk in [(["2.5", "-1", " 3", "1e2", "inf", "nan"], "f8"), (["10", "-3", "+4", " 7 "], "i8"),
+                     (["1", "2.5"], "i8"), (["1", ""], "f8"), (["0x10"], "i8"), (["1_000", "2"], "i8")]:
+        for cls in ["U", "S", "T"]:
+            for ok, fill in [(rk, None), ("U32", "0"), ("T", "0")]:
+                specs.append(_so_call_spec(
+                    "cumsum", lambda vals=vals, cls=cls, ok=ok, fill=fill: [_so_operand(_so_array(cls, vals)),
+                                                                           _so_out(ok, (len(vals),), fill)],
+                    out=1, dtype=rk, layout=f"D:parse:{cls}:{vals}:dtype={rk}:out={ok}"))
+            specs.append(_so_matrix_spec(
+                "sum", lambda vals=vals, cls=cls: [_so_operand(_so_array(cls, vals).reshape(1, -1)), _so_out("U32", (1, 1))],
+                out=1, dtype=rk, layout=f"D:parse:matrix.sum:{cls}:{vals}:dtype={rk}"))
+    # StringDType missing values under a numeric loop (a NaN-like NA, a None NA, a string NA).
+    for spec in [TDNAN, TDN, TDS]:
+        tv = np.array(["3", spec.na, "2"], dtype=spec.build())
+        for rk in ["f8", "i8"]:
+            for ok in ["f8", "T"]:
+                specs.append(_so_call_spec(
+                    "cumsum", lambda tv=tv, ok=ok: [t_plain(tv), _so_out(ok, (3,), "0" if ok == "T" else None)], out=1,
+                    dtype=rk, layout=f"D:na:{_t_label(spec)}:dtype={rk}:out={ok}"))
+            specs.append(_so_call_spec("sum", lambda tv=tv: [t_plain(tv)], dtype=rk, layout=f"D:na:{_t_label(spec)}:sum:{rk}"))
+    # The accumulation iterator's outs: more dimensions, a broadcast input, a wrong shape.
+    for cls in ["U", "T"]:
+        a3 = _so_array(cls)
+        for oshape, axis in [((3, 2), 0), ((1, 3), None), ((2, 3), None), ((4,), None)]:
+            specs.append(_so_call_spec(
+                "cumsum", lambda a3=a3, oshape=oshape: [_so_operand(a3), _so_out("f8", oshape)], out=1, dtype="f8",
+                axis=axis, layout=f"D:iter:{cls}:out{oshape}:axis={axis}"))
+    # np.fft over StringDType: the DTypePromotionError of its float conversion, every transform.
+    for name in ["fft.fft", "fft.ifft", "fft.rfft", "fft.irfft", "fft.hfft", "fft.ihfft", "fft.fft2", "fft.fftn",
+                 "fft.rfftn", "fft.fftshift"]:
+        for spec in [TD, TDN]:
+            tv = np.array([["3", "1"], ["2", "4"]], dtype=spec.build())
+
+            def fft_call(a, name=name):
+                f = np
+                for part in name.split("."):
+                    f = getattr(f, part)
+                return f(a)
+
+            specs.append(("o_fft", {"name": name}, lambda tv=tv: [t_plain(tv)], fft_call, f"F:{name}:{_t_label(spec)}"))
+    return specs
+
+
+def gen_strout():
+    """Section strout: reductions, accumulations and statistics that touch text — a text input, a text out= or a text
+    dtype= request — over every entry point that takes out= or dtype= (np.cumsum / np.cumprod / np.nancumsum /
+    np.nancumprod, np.trace, np.median / np.nanmedian, np.max / np.min and their nan forms, np.ptp, np.argmax / np.argmin,
+    np.all / np.any, np.percentile / np.quantile, np.sum / np.prod, the mean / var / std families, the numpy.matrix
+    reductions), the layouts and shapes their loops walk, the parse rules of a numeric loop over text, the repeat through
+    the loop's text, and np.fft over StringDType. Each case is evaluated in a FRESH process (``_fresh_section``): NumPy's
+    dispatch cache would otherwise hand a later call the loop an earlier one resolved. NumPy's own MemoryError on a
+    numeric loop reduced into a StringDType out is dropped (``_FRESH_DROPPED``)."""
+    _fresh_section("strout", "_strout_specs")
+
+
+def _pad_width_param(w):
+    """A pad width as JSON: an int, a ``[before, after]`` pair, or per-axis pairs."""
+    if isinstance(w, int):
+        return w
+    if isinstance(w[0], int):
+        return list(w)
+    return [list(x) for x in w]
+
+
+def _strpad_specs():
+    """The cases of section strpad (see ``gen_strpad``), in a deterministic order, each with a lazy operand builder."""
+    specs = []
+    arrays = {
+        "U1d": lambda: target(np.array(["ab", "c", "de"])),
+        "S1d": lambda: target(np.array([b"ab", b"c", b"de"])),
+        "T1d": lambda: t_plain(np.array(["ab", "c", "de"], dtype=TD.build())),
+        "TN1d": lambda: t_plain(np.array(["ab", None, "de"], dtype=TDN.build())),
+        "U2d": lambda: plain(np.array([["a", "bb"], ["ccc", "d"]])),
+        "S2d": lambda: plain(np.array([[b"a", b"bb"], [b"ccc", b"d"]])),
+        "T2d": lambda: t_plain(np.array([["a", "bb"], ["ccc", "d"]], dtype=TD.build())),
+        "U0d": lambda: plain(np.array("xy")),
+        "T0d": lambda: t_plain(np.array("xy", dtype=TD.build())),
+        "Uempty": lambda: target(np.zeros(0, "U2")),
+        "Tempty": lambda: t_plain(np.zeros(0, dtype=TD.build())),
+        "Udigits": lambda: target(np.array(["3", "10", "7"])),
+        "i8": lambda: plain(np.array([1, 5, 3])),
+        "f8": lambda: plain(np.array([1.0, 5.0, 3.0])),
+    }
+    widths = {"0": 0, "1": 1, "(0,1)": (0, 1), "(2,0)": (2, 0), "((1,0),(0,2))": ((1, 0), (0, 2))}
+    # (variant label, keywords, whether the variant is about text for a numeric array)
+    modes = {
+        "linear_ramp": [("", {}, False), ("end='x'", {"end_values": "x"}, True), ("end=2.5", {"end_values": 2.5}, False),
+                        ("end=(1,2)", {"end_values": (1, 2)}, False), ("end=True", {"end_values": True}, False),
+                        ("end=[[1,2],['a','b']]", {"end_values": [[1, 2], ["a", "b"]]}, True),
+                        ("end=b'x'", {"end_values": b"x"}, True), ("end='7'", {"end_values": "7"}, True)],
+        "maximum": [("", {}, False), ("stat=1", {"stat_length": 1}, False), ("stat=0", {"stat_length": 0}, False),
+                    ("stat=(1,2)", {"stat_length": (1, 2)}, False)],
+        "minimum": [("", {}, False), ("stat=1", {"stat_length": 1}, False)],
+        "mean": [("", {}, False), ("stat=1", {"stat_length": 1}, False)],
+        "median": [("", {}, False), ("stat=1", {"stat_length": 1}, False)],
+        "edge": [("", {}, False)],
+        "wrap": [("", {}, False)],
+        "reflect": [("", {}, False), ("odd", {"reflect_type": "odd"}, False)],
+        "symmetric": [("", {}, False), ("odd", {"reflect_type": "odd"}, False)],
+        "constant": [("", {}, False), ("cv='z'", {"constant_values": "z"}, True), ("cv=7", {"constant_values": 7}, False),
+                     ("cv=[1,2,3]", {"constant_values": [1, 2, 3]}, False), ("cv=b'z'", {"constant_values": b"z"}, True),
+                     ("cv=(1,'a')", {"constant_values": (1, "a")}, True), ("cv='12'", {"constant_values": "12"}, True)],
+    }
+    for ak, mk in arrays.items():
+        numeric = ak in ("i8", "f8")
+        for wk, w in widths.items():
+            if wk == "((1,0),(0,2))" and ak not in ("U2d", "S2d", "T2d"):
+                continue
+            for mode, variants in modes.items():
+                for vk, kw, about_text in variants:
+                    if numeric and not about_text:
+                        continue
+                    params = {"pad_width": _pad_width_param(w), "mode": mode}
+                    for key, value in kw.items():
+                        params[key] = value if key == "reflect_type" else enc(value)
+
+                    def call(a, w=w, mode=mode, kw=kw):
+                        return np.pad(a, w, mode=mode, **kw)
+
+                    specs.append(("pad_kw", params, lambda mk=mk: [mk()], call,
+                                  f"{ak}:{wk}:{mode}{':' + vk if vk else ''}"))
+    return specs
+
+
+def gen_strpad():
+    """Section strpad: np.pad over text with every mode but 'empty' (whose cells are uninitialized) and its keywords —
+    linear_ramp's end_values (text, numbers, bytes, per-axis pairs), the statistic modes' stat_length, reflect_type, and
+    constant_values (text, numbers, bytes, mixed pairs) — over U / S / StringDType arrays of every rank (0-d, 1-D, 2-D,
+    empty, with missing values) and numeric arrays padded with text. Evaluated in fresh processes like strout: np.pad's
+    linear_ramp and statistic modes run ufuncs over text."""
+    _fresh_section("strpad", "_strpad_specs")
+
+
 GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen_mutation, gen_access, gen_printing,
               gen_refusals, gen_string_requests, gen_text_precedence, gen_shape_decided, gen_validation_order, gen_surface,
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
@@ -16378,7 +16933,7 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
               gen_strcharmeth, gen_strcharlist, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
               gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod,
-              gen_strcodec, gen_tcodec]
+              gen_strcodec, gen_tcodec, gen_strout, gen_strpad]
 
 
 def main():
@@ -16418,6 +16973,12 @@ def main():
     p2 = sum(1 for c in CASES if c["phase"] == 2)
     print(f"wrote {len(CASES)} cases ({errs} NumPy errors, {p2} phase-2) in {len(by_section)} files under {CORPUS_DIR}")
     print("  " + ", ".join(f"{k} {len(v)} ({sizes[k] / 1048576:.1f} MiB)" for k, v in by_section.items()))
+    for sec, dropped in _FRESH_DROPPED.items():
+        if dropped:
+            print(f"  {sec}: {len(dropped)} cases dropped for NumPy 2.4.2's StringDType clear-loop MemoryError")
+    for sec, platform in _FRESH_PLATFORM.items():
+        if platform:
+            print(f"  {sec}: {len(platform)} cases dropped for a Windows C long overflow text")
     if _TITER_DROPPED:
         print(f"  titer: {len(_TITER_DROPPED)} cases dropped for NumPy 2.4.2's StringDType allocated-output MemoryError")
     if _TMA_TRACE_MISMATCH:

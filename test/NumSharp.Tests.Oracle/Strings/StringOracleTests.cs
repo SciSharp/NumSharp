@@ -688,6 +688,29 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void StringDTypeCodec() => Run("tcodec");
 
         /// <summary>
+        ///     Section strout (strings phase 2, P2.7): reductions, accumulations and statistics that touch text — a text input,
+        ///     a text out= or a text dtype= request — through every entry point that takes out= or dtype=: np.cumsum /
+        ///     np.cumprod / np.nancumsum / np.nancumprod, np.trace, np.median / np.nanmedian, np.max / np.min and their nan
+        ///     forms, np.ptp, np.argmax / np.argmin, np.all / np.any, np.percentile / np.quantile, np.sum / np.prod, the mean /
+        ///     var / std families and the numpy.matrix reductions; every input kind (numbers, digits and letters as U / S /
+        ///     StringDType) x every out kind x every request; 2-D text along every axis with views and outs that are not
+        ///     C-ordered; np.trace over 3-D; the matrix reductions along axis 0 and over every element; the repeat through the
+        ///     loop's text; empty inputs (the identity written into a text out); the parse rules of a numeric loop; StringDType
+        ///     missing values; the accumulation iterator's outs; np.fft over StringDType. Every case was evaluated in a fresh
+        ///     NumPy process (NumPy's dispatch cache makes the answer depend on earlier calls); NumPy's own clear-loop
+        ///     MemoryError cases are not recorded. Strict.
+        /// </summary>
+        [TestMethod] public void TextReductionsIntoOut() => Run("strout");
+
+        /// <summary>
+        ///     Section strpad (strings phase 2, P2.7): np.pad over text with every mode but 'empty' and its keywords —
+        ///     linear_ramp's end_values (text, numbers, bytes, per-axis pairs), the statistic modes' stat_length, reflect_type,
+        ///     constant_values (text, numbers, bytes, mixed pairs) — over U / S / StringDType arrays of every rank (0-d, 1-D,
+        ///     2-D, empty, with missing values) and numeric arrays padded with text. Strict.
+        /// </summary>
+        [TestMethod] public void TextPad() => Run("strpad");
+
+        /// <summary>
         ///     Section qfamily with every weighted search of two or more rows FORCED onto NumPy's row-by-row route
         ///     (<c>QuantileWeighted.ForceRowByRowTestHook</c>): the corpus's arrays are small, so they all take the counting
         ///     route, and the row-by-row one (which long rows take) would otherwise run in no test. The answers must still be
@@ -785,7 +808,7 @@ namespace NumSharp.Tests.Strings
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strcharlist", "strsets", "tcomp", "tarith",
                 "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
-                "ttrans", "strmod", "tmod", "strcodec", "tcodec",
+                "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
             foreach (var s in sections)
