@@ -699,10 +699,118 @@ namespace NumSharp.Backends.Strings
             int end = StrtodEnd(s, i);
             if (end == i)
                 return InfNanPrefix(s, i, out value);
-            // The validated run [i, end) is [sign]digits[.digits][e[sign]digits]: .NET's IEEE-correct parser rounds it
+            // The common decimal texts take the exact fast path (one IEEE operation, no general parser); everything else goes
+            // to .NET's IEEE-correct parser, which rounds the validated run [i, end) = [sign]digits[.digits][e[sign]digits]
             // exactly as _Py_dg_strtod does (correctly rounded, exponent overflow to inf, underflow to zero, -0 kept).
-            value = double.Parse(s.Slice(i, end - i), NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (!TryExactDecimal(s, i, end, out value))
+                value = double.Parse(s.Slice(i, end - i), NumberStyles.Float, CultureInfo.InvariantCulture);
             return end;
+        }
+
+        /// <summary>
+        ///     10^0 … 10^22: the powers of ten a double holds exactly (10^22 = 2^22 × 5^22 and 5^22 &lt; 2^53; 10^23 is the
+        ///     first that rounds).
+        /// </summary>
+        private static readonly double[] ExactPowersOfTen =
+        {
+            1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20,
+            1e21, 1e22,
+        };
+
+        /// <summary>
+        ///     Clinger's exact fast path for a run <see cref="StrtodEnd"/> already validated: when the significant digits form
+        ///     an integer <c>w ≤ 2^53</c> and the decimal exponent <c>e</c> (the explicit exponent minus the fraction digits) is
+        ///     within ±22, both <c>w</c> and <c>10^|e|</c> are exact doubles, so the ONE multiply or divide that combines them
+        ///     is the correctly rounded value — the result <c>_Py_dg_strtod</c> (and <see cref="double.Parse(ReadOnlySpan{byte}, NumberStyles, IFormatProvider)"/>)
+        ///     returns, at a fraction of the cost (a 6-digit integer text: ~47 ns through the general parser).
+        /// </summary>
+        /// <param name="s">The text.</param>
+        /// <param name="i">The run's first byte (a sign, a digit or the point).</param>
+        /// <param name="end">The run's end, from <see cref="StrtodEnd"/>.</param>
+        /// <param name="value">Receives the value when the fast path applies.</param>
+        /// <returns>True when <paramref name="value"/> is the correctly rounded value; false for a run outside the exact range
+        ///     (more than 19 significant digits, <c>w &gt; 2^53</c>, <c>|e| &gt; 22</c>), which the general parser must take.</returns>
+        /// <remarks>
+        ///     A zero mantissa is ±0 whatever the exponent (<c>float('-0e5')</c> is <c>-0.0</c>); the sign is applied after the
+        ///     rounding, which is exact because round-to-nearest-even is symmetric. Leading zeros are not significant digits;
+        ///     every digit after the point counts in the exponent, so a long run of trailing fraction zeros simply falls out of
+        ///     the 19-digit window to the general parser. An exponent past 100,000 stops the scan early (it can only mean
+        ///     overflow or underflow, the general parser's case).
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool TryExactDecimal(ReadOnlySpan<byte> s, int i, int end, out double value)
+        {
+            value = 0;
+            int p = i;
+            bool negative = false;
+            byte c = s[p];
+            if (c == '-')
+            {
+                negative = true;
+                p++;
+            }
+            else if (c == '+')
+                p++;
+
+            ulong w = 0;
+            int significant = 0, fraction = 0;
+            bool inFraction = false;
+            for (; p < end; p++)
+            {
+                c = s[p];
+                if (c == '.')
+                {
+                    inFraction = true;
+                    continue;
+                }
+                uint digit = (uint)(c - '0');
+                if (digit > 9)
+                    break;                       // the exponent's 'e' / 'E'
+                if (inFraction)
+                    fraction++;
+                if (w == 0 && digit == 0)
+                    continue;                    // a leading zero is not a significant digit
+                if (++significant > 19)
+                    return false;                // 19 digits always fit a ulong; 20 may not
+                w = w * 10 + digit;
+            }
+
+            long exponent = 0;
+            if (p < end)
+            {
+                // StrtodEnd kept the exponent only with a digit: [eE][sign]digits up to the end.
+                p++;
+                bool negativeExponent = false;
+                c = s[p];
+                if (c == '-')
+                {
+                    negativeExponent = true;
+                    p++;
+                }
+                else if (c == '+')
+                    p++;
+                for (; p < end; p++)
+                {
+                    exponent = exponent * 10 + (s[p] - '0');
+                    if (exponent > 100_000)
+                        return false;
+                }
+                if (negativeExponent)
+                    exponent = -exponent;
+            }
+
+            if (w == 0)
+            {
+                value = negative ? -0.0 : 0.0;
+                return true;
+            }
+            long e10 = exponent - fraction;
+            if (w > 1UL << 53 || e10 < -22 || e10 > 22)
+                return false;
+            double v = w;
+            v = e10 >= 0 ? v * ExactPowersOfTen[e10] : v / ExactPowersOfTen[-e10];
+            value = negative ? -v : v;
+            return true;
         }
 
         /// <summary>
@@ -1082,7 +1190,13 @@ namespace NumSharp.Backends.Strings
         ///     is the identity on ASCII text, so an all-ASCII element (the common case) is parsed from its bytes directly; any
         ///     other is decoded to code points and rewritten first.
         ///     </para>
+        ///     <para>
+        ///     <b>No stack zeroing.</b> <see cref="SkipLocalsInitAttribute"/>: the 512-byte work span is written before any of
+        ///     it is read (the rewrite, then the underscore-free copy), and zeroing it on every element cost more than parsing
+        ///     a short number.
+        ///     </para>
         /// </remarks>
+        [SkipLocalsInit]
         internal static void ParseVStringElement(ReadOnlySpan<byte> utf8, NPTypeCode target, byte* canon)
         {
             int n = utf8.Length;

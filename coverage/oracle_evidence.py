@@ -7,7 +7,7 @@ documented, registry-excused divergence (never a silent one). This module turns 
 per-API evidence, so the dashboard can say "available AND oracle-verified" instead of stopping at
 "available".
 
-Four oracle sources are joined, each replayed by its own test:
+Five oracle sources are joined, each replayed by its own test:
 
 * ``fuzz``   -- ``test/NumSharp.Tests.Oracle/Fuzz/corpus/*.jsonl``, the differential-fuzz corpus
   replayed by the ``FuzzMatrix`` gate (FuzzCorpusTests*, IndexOracleTests).
@@ -15,6 +15,11 @@ Four oracle sources are joined, each replayed by its own test:
   replayed by NpyOracleTests.
 * ``flags``  -- ``test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl`` (FlagsOracleTests).
 * ``layout`` -- ``test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl`` (LayoutParityOracleTests).
+* ``strings`` -- the ``numpy.strings`` contracts of the string oracle,
+  ``test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl`` (StringOracleTests): the cases of every section
+  whose op is a ``numpy.strings`` call (:data:`STRINGS_OPS`). The string oracle gates far more (comparisons, sorting,
+  casts, numpy.char, the numeric functions over text), but those contracts credit APIs the other sources already verify
+  on numbers, so only the ``numpy.strings`` calls are joined.
 
 Contracts are grouped by (source, file, key, variant) while scanning, and each group resolves to one or
 more catalog row ids through ``oracle_map.json`` (the reviewed table) or the automatic namespace rules
@@ -45,7 +50,19 @@ FUZZ_DIR = ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz"
 NPY_ORACLE = ROOT / "test" / "NumSharp.Tests" / "IO" / "corpus" / "npy_oracle.zip"
 FLAGS_ORACLE = ROOT / "test" / "NumSharp.Tests" / "Backends" / "corpus" / "flags_oracle.jsonl"
 LAYOUT_ORACLE = ROOT / "test" / "NumSharp.Tests" / "Backends" / "corpus" / "layout_parity_oracle.jsonl"
+STRINGS_DIR = ROOT / "test" / "NumSharp.Tests.Oracle" / "Strings"
 MAP_SCHEMA_VERSION = 1
+
+# The string-oracle ops the ``strings`` source joins, and how each names its variant: ``str_fn`` carries the
+# numpy.strings function in params.name (``str_fn:find``); ``strings_add`` / ``strings_multiply`` (and the text-count
+# form ``strings_multiply_text``) are np.strings.add / np.strings.multiply. Any other op of the corpus is not a
+# numpy.strings call and is left to the sources that verify it on numbers.
+STRINGS_OPS: dict[str, Callable[[Mapping[str, Any]], str | None]] = {
+    "str_fn": lambda params: None if params.get("name") is None else "str_fn:" + str(params["name"]),
+    "strings_add": lambda params: "strings_add",
+    "strings_multiply": lambda params: "strings_multiply",
+    "strings_multiply_text": lambda params: "strings_multiply",
+}
 
 # Automatic rules never target these kinds: a corpus key names an operation, and landing on a
 # module (np.fft), a class (np.dtype) or a constant (np.r_) is only ever right when a reviewer says so
@@ -87,6 +104,8 @@ SOURCES: tuple[SourceSpec, ...] = (
                "FlagsOracleTests"),
     SourceSpec("layout", "Result-layout parity oracle",
                "test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl", "LayoutParityOracleTests"),
+    SourceSpec("strings", "String oracle (numpy.strings calls)", "test/NumSharp.Tests.Oracle/Strings/corpus",
+               "StringOracleTests"),
 )
 
 
@@ -540,6 +559,76 @@ def _layout_variant(case: Mapping[str, Any]) -> str:
     return family
 
 
+def _replayed_sections(strings_dir: Path) -> set[str]:
+    """Collect the string-oracle sections a replay test names.
+
+    StringOracleTests replays a section through ``Run("<section>")`` (and a few through helpers taking the same literal),
+    so a section file no ``"<section>"`` literal of the replay names is committed NumPy output nothing compares against.
+
+    :param strings_dir: ``test/NumSharp.Tests.Oracle/Strings``.
+    :returns: every quoted lowercase identifier in StringOracleTests*.cs (a superset of the section names; only
+        membership is asked).
+    """
+    literal = re.compile(r'"([a-z][a-z0-9_]*)"')
+    names: set[str] = set()
+    for path in sorted(strings_dir.glob("StringOracleTests*.cs")):
+        names.update(literal.findall(path.read_text(encoding="utf-8-sig")))
+    return names
+
+
+def _scan_strings(strings_dir: Path, groups: dict[tuple, ContractGroup], files: list[dict[str, Any]],
+                  problems: list[str]) -> None:
+    """Scan the numpy.strings contracts of the string oracle into groups (see :data:`STRINGS_OPS`).
+
+    Every section file is read; a case whose op is not a numpy.strings call is skipped. A section that holds such
+    calls but that no replay test names is a problem (its contracts prove nothing), as for the fuzz corpus.
+
+    :param strings_dir: ``test/NumSharp.Tests.Oracle/Strings``.
+    :param groups: group table to fill.
+    :param files: per-file stats list to append to (one entry per section file with a joined contract).
+    :param problems: problem list to append to.
+    """
+    replayed = _replayed_sections(strings_dir)
+    for path in sorted((strings_dir / "corpus").glob("strings_*.jsonl"), key=lambda p: p.name):
+        section = path.name[len("strings_"):-len(".jsonl")]
+        stats = {"source": "strings", "name": path.name, "contracts": 0, "error_contracts": 0, "pin": None,
+                 "keys": set()}
+        pending: list[tuple[str, Mapping[str, Any]]] = []
+        with path.open(encoding="utf-8") as stream:
+            for line_no, line in enumerate(stream, 1):
+                if not line.strip():
+                    continue
+                case = json.loads(line)
+                variant_of = STRINGS_OPS.get(case.get("op"))
+                if variant_of is None:
+                    continue
+                variant = variant_of(case.get("params") or {})
+                if variant is None:
+                    problems.append(f"{path.name}:{line_no} op '{case.get('op')}' lacks the parameter that names "
+                                    "its numpy.strings function.")
+                    continue
+                pending.append((variant, case))
+        if not pending:
+            continue
+        if section not in replayed:
+            problems.append(f"String oracle section {path.name} holds numpy.strings contracts but no replay test "
+                            "(StringOracleTests*.cs) names it; its contracts prove nothing.")
+            continue
+        for variant, case in pending:
+            group = _group(groups, "strings", path.name, variant, None, None)
+            group.cases += 1
+            error = _case_is_error(case)
+            group.errors += int(error)
+            group.dtypes.update(_case_dtypes(case))
+            if case.get("layout"):
+                group.layouts.add(str(case["layout"]))
+            stats["contracts"] += 1
+            stats["error_contracts"] += int(error)
+            stats["keys"].add(variant)
+        stats["keys"] = len(stats["keys"])
+        files.append(stats)
+
+
 @functools.lru_cache(maxsize=4)
 def _load_sources_cached(root: str, map_text: str) -> OracleSources:
     """Memoized body of :func:`load_sources` (the scan parses about 250,000 rows, about 1 s).
@@ -572,12 +661,17 @@ def _load_sources_cached(root: str, map_text: str) -> OracleSources:
                            groups, files, layout_of=lambda case: case.get("recipe"))
     if layout.is_file():
         _scan_jsonl_oracle(layout, "layout", _layout_variant, groups, files)
+    strings = root_path / STRINGS_DIR.relative_to(ROOT)
+    if (strings / "corpus").is_dir():
+        _scan_strings(strings, groups, files, problems)
+    else:
+        problems.append(f"Oracle source {(strings / 'corpus').relative_to(root_path).as_posix()} is missing.")
     ordered = [groups[key] for key in sorted(groups, key=lambda k: (k[0], k[1], k[2], k[3] or ""))]
     return OracleSources(ordered, files, problems)
 
 
 def load_sources(oracle_map: Mapping[str, Any], root: Path = ROOT) -> OracleSources:
-    """Scan all four oracle sources into contract groups.
+    """Scan all five oracle sources into contract groups.
 
     :param oracle_map: the parsed oracle map (decides which fuzz keys group per parameter value).
     :param root: repository root; tests point it at a synthetic tree.
@@ -701,7 +795,7 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
     explicit = _entries(oracle_map["fuzz"]["keys"])
     used_explicit: set[str] = set()
     used_values: set[tuple[str, str]] = set()
-    used_sections: dict[str, set[str]] = {"npy": set(), "flags": set(), "layout": set()}
+    used_sections: dict[str, set[str]] = {"npy": set(), "flags": set(), "layout": set(), "strings": set()}
 
     for group in sources.groups:
         rule = "explicit"
@@ -733,6 +827,10 @@ def join(rows: Iterable[Mapping[str, Any]], sources: OracleSources, oracle_map: 
                 # One template covers every reduction head; record the template as used.
                 ids = [template.format(head=key.split(":", 1)[1]) for template in section.get("reduce:{head}", [])]
                 used_sections["layout"].add("reduce:{head}")
+            elif key not in section and group.source == "strings" and key.startswith("str_fn:"):
+                # One template covers every numpy.strings function the str_fn op calls by name.
+                ids = [template.format(name=key.split(":", 1)[1]) for template in section.get("str_fn:{name}", [])]
+                used_sections["strings"].add("str_fn:{name}")
             else:
                 ids = list(section.get(key, []))
                 if key in section:

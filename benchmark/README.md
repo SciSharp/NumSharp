@@ -2,7 +2,7 @@
 
 Fair, reproducible **NumSharp vs NumPy 2.4.2** performance comparison: an op × dtype × N matrix,
 the complete official LinearAlgebra suite under both **Managed C# and OpenBLAS**, targeted backend
-supplements for routes outside that matrix, and five complementary subsystems that fill axes the
+supplements for routes outside that matrix, and six complementary subsystems that fill axes the
 matrix cannot express.
 
 > **This file is an orientation guide, not the results.** For the numbers, see the **canonical
@@ -172,7 +172,7 @@ would miss most engine/case work. Preserve these old artifacts as evidence; use 
 | `scripts/audit_coverage.py` + `coverage/generated/` | Machine-checkable API benchmark ledger (456/456 benchmarkable compatibility APIs). |
 | [`scenarios.html`](scenarios.html) + `scripts/generate_scenarios_html.py` | Executable 499-title × 15-dtype audit with Comparable, C# BDN, and Python coverage lenses. |
 | `backends/` + `openblas/` | Targeted Managed/OpenBLAS runs using one JSON schema; catches MissingBackendException and NotSupportedException. |
-| `nditer/` `layout/` `operand/` `cast/` `fusion/` | Five appended complementary subsystems. |
+| `nditer/` `layout/` `operand/` `cast/` `fusion/` `strings/` | Six appended complementary subsystems. |
 | `history/` | **Tracked** snapshots — *what we commit and reference*. `latest` → newest. |
 | `results/` | **Gitignored** raw per-run scratch. |
 | `run-benchmarks.ps1` | Legacy Windows-only runner (inverse NS/NPY convention). |
@@ -221,6 +221,7 @@ The remaining subsystem result models are appended as their own `*_results.md` s
 | `operand` | 1-D / scalar / mixed-operand / broadcast layouts. |
 | `cast` | full `astype` src→dst × 8 layouts (no matrix coverage at all). |
 | `fusion` | `np.evaluate` fused vs unfused chains. |
+| `strings` | text computation over `S` / `U` / `StringDType`: comparisons, concatenation and repetition, the reductions, sorting / searching / sets, the `np.strings` functions and the text → number cast, at 1K / 100K (1M for a core set) and stepped views. The NumPy twin writes the arrays, the C# side loads the same files. |
 | `backends` / `openblas` | single-threaded targeted supplements for all 39 backend-sensitive APIs; the complete official LinearAlgebra matrix is measured by both BDN executables. |
 
 ## Outputs & the UI

@@ -303,6 +303,70 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     The max / min lane loads its accumulator once and compares by its first eight bytes first: texts held outside
+        ///     their cells that share those bytes are decided by the rest, a NUL among them leaves the decision to
+        ///     <c>NpyString_cmp</c> (a NUL both texts share ends the bytes, the sizes decide, a tie keeps the first), in-cell and
+        ///     arena texts meet in both orders, and a NaN-like NA that wins <c>maximum</c> ends its lane only (the other lanes,
+        ///     a where= mask that skips the NA, and <c>minimum</c>, which passes NAs over, still see every element). Expected
+        ///     values probed against NumPy 2.4.2; a 4,000-text lane is held to the ordinal order of its ASCII texts.
+        /// </summary>
+        [TestMethod]
+        public void MaxMin_AccumulatorKeyAndNaNStop_AreNumPys()
+        {
+            using (var x = A(T, "ab\0cdefghijklmnopqrst", "ab\0zzzzzzzzzzzzzzzzzz", "ab\0a"))
+            {
+                using (var r = np.max(x))
+                    V(r).Should().Equal("ab\0cdefghijklmnopqrst");
+                using (var r = np.min(x))
+                    V(r).Should().Equal("ab\0a");
+            }
+            using (var y = A(T, "prefix-0000000000-b", "prefix-0000000000-a", "prefix-0000000000-c", "q"))
+            {
+                using (var r = np.max(y))
+                    V(r).Should().Equal("q");
+                using (var r = np.min(y))
+                    V(r).Should().Equal("prefix-0000000000-a");
+            }
+            using (var z = A(T, "zz", "zz" + new string('y', 20), new string('a', 20), "zz" + new string('x', 20)))
+            {
+                using (var r = np.max(z))
+                    V(r).Should().Equal("zz" + new string('y', 20));
+                using (var r = np.min(z))
+                    V(r).Should().Equal(new string('a', 20));
+            }
+
+            using var w = np.array(new object[,] { { "a", double.NaN, "zzz" }, { "m", "b", "c" }, { double.NaN, double.NaN, "q" } }, TNaN);
+            using (var r = np.max(w, axis: 1))
+                V(r).Should().Equal(double.NaN, "m", double.NaN);
+            using (var r = np.min(w, axis: 1))
+                V(r).Should().Equal("a", "b", "q");
+            using (var r = np.max(w, axis: 0))
+                V(r).Should().Equal(double.NaN, double.NaN, "zzz");
+            using var mask = np.array(new[,] { { true, false, true }, { true, true, true }, { false, false, true } });
+            using (var r = np.max(w, axis: 1, initial: "", where: mask))
+                V(r).Should().Equal("zzz", "m", "q");
+            using (var r = np.max(A(TNaN, new string('a', 20), double.NaN, new string('b', 20))))
+                V(r).Should().Equal(double.NaN);
+            using (var r = np.min(A(TNaN, new string('b', 20), double.NaN, new string('a', 20))))
+                V(r).Should().Equal(new string('a', 20));
+            // A string NA is text in a comparison, so an NA accumulator that wins one comparison can still lose a later one.
+            using (var r = np.max(A(TStr, "NA", "A", "zzz")))
+                V(r).Should().Equal("zzz");
+            using (var r = np.max(A(TStr, "NA", "A", "B")))
+                V(r).Should().Equal("NA");
+
+            var rng = new System.Random(3);
+            var texts = Enumerable.Range(0, 4000)
+                .Select(_ => new string(Enumerable.Range(0, rng.Next(1, 41)).Select(_ => (char)('a' + rng.Next(26))).ToArray()))
+                .ToArray();
+            using var lane = np.array(texts, T);
+            using (var r = np.max(lane))
+                V(r).Should().Equal(texts.Max(StringComparer.Ordinal));
+            using (var r = np.min(lane))
+                V(r).Should().Equal(texts.Min(StringComparer.Ordinal));
+        }
+
+        /// <summary>
         ///     <c>np.cumsum</c>: each output is the running concatenation; a NaN-like NA makes every later output the NA, a
         ///     string NA appends its text, a None-like NA raises; along an axis each lane accumulates on its own.
         /// </summary>

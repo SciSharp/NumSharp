@@ -480,6 +480,134 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     The MSD key sort (<see cref="RadixSort.ArgSortU64Msd"/>) leaves the one stable order the LSD passes leave —
+        ///     indices and sorted keys alike — over the key shapes that stress an MSD radix: random 64-bit keys, eight
+        ///     lowercase letters, eight digits, a shared four-byte prefix, short NUL-padded strings, 50 distinct keys repeated
+        ///     (buckets of equal keys), every key equal, keys equal but for one, sorted and reversed input, and one-bit
+        ///     differences at every byte; for lines of 2 to 5,000 keys, around the insertion cutoff and the 4,096-key limit.
+        /// </summary>
+        [TestMethod]
+        public void MsdKeySort_IsTheStableLsdOrder()
+        {
+            var rng = new System.Random(20261019);
+            string[] shapes = { "rand64", "lower8", "digits", "prefix", "short", "few", "equal", "allButOne", "sorted", "reversed", "onebit" };
+            int[] sizes = { 2, 3, 17, 31, 32, 33, 64, 120, 121, 500, 1000, 4096, 5000 };
+            long* hist = stackalloc long[8 * 256];
+            foreach (string shape in shapes)
+            {
+                foreach (int n in sizes)
+                {
+                    var src = new ulong[n];
+                    ulong[] few = Enumerable.Range(0, 50).Select(_ => (ulong)rng.NextInt64()).ToArray();
+                    for (int i = 0; i < n; i++)
+                    {
+                        ulong k = 0;
+                        int len = rng.Next(1, 9);
+                        for (int j = 0; j < 8; j++)
+                        {
+                            int c = shape switch
+                            {
+                                "lower8" => 'a' + rng.Next(26),
+                                "digits" => '0' + rng.Next(10),
+                                "prefix" => j < 4 ? "http"[j] : 'a' + rng.Next(26),
+                                "short" => j < len ? 'a' + rng.Next(26) : 0,
+                                _ => rng.Next(256),
+                            };
+                            k = (k << 8) | (ulong)c;
+                        }
+                        src[i] = shape switch
+                        {
+                            "few" => few[rng.Next(50)],
+                            "equal" => 0x6162636465666768UL,
+                            "allButOne" => i == n / 2 ? 0x6162636465666769UL : 0x6162636465666768UL,
+                            "onebit" => 1UL << rng.Next(64),
+                            _ => k,
+                        };
+                    }
+                    if (shape == "sorted")
+                        Array.Sort(src);
+                    if (shape == "reversed")
+                    {
+                        Array.Sort(src);
+                        Array.Reverse(src);
+                    }
+                    ulong or = 0, and = ulong.MaxValue;
+                    foreach (ulong v in src)
+                    {
+                        or |= v;
+                        and &= v;
+                    }
+                    ulong varying = or ^ and;
+
+                    var k1 = (ulong[])src.Clone();
+                    var k2 = (ulong[])src.Clone();
+                    var kt = new ulong[n];
+                    var x1 = Enumerable.Range(0, n).Select(i => (long)i).ToArray();
+                    var x2 = (long[])x1.Clone();
+                    var xt = new long[n];
+                    long[] lsdIdx, msdIdx;
+                    ulong[] lsdKeys, msdKeys;
+                    fixed (ulong* pk1 = k1, pk2 = k2, pkt = kt)
+                    fixed (long* px1 = x1, px2 = x2, pxt = xt)
+                    {
+                        long* r1 = RadixSort.ArgSortU64(pk1, pkt, px1, pxt, n, hist, varying, out ulong* s1);
+                        lsdIdx = new ReadOnlySpan<long>(r1, n).ToArray();
+                        lsdKeys = new ReadOnlySpan<ulong>(s1, n).ToArray();
+                        long* r2 = RadixSort.ArgSortU64Msd(pk2, pkt, px2, pxt, n, hist, varying, out ulong* s2);
+                        msdIdx = new ReadOnlySpan<long>(r2, n).ToArray();
+                        msdKeys = new ReadOnlySpan<ulong>(s2, n).ToArray();
+                    }
+                    msdIdx.Should().Equal(lsdIdx, $"the stable order of {n} '{shape}' keys");
+                    msdKeys.Should().Equal(lsdKeys, $"the sorted keys of {n} '{shape}' keys");
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The text sorts take the MSD key sort on short lines of byte-packed keys (<c>S</c>, and <c>U</c> text whose units
+        ///     fit a byte), for a line and for the tie runs of its pass, and give the permutations the LSD passes give
+        ///     (<see cref="TextSort.MsdDisabled"/>): distinct strings (the shortcut), prefixed strings (tie runs), categorical
+        ///     strings, bytes, and non-Latin text (a 16-bit packing, which keeps the LSD passes).
+        /// </summary>
+        [TestMethod]
+        [DoNotParallelize]
+        public void MsdRoute_GivesTheLsdPermutation()
+        {
+            var rng = new System.Random(5);
+            string Word(int len, string alphabet) => new string(Enumerable.Range(0, len).Select(_ => alphabet[rng.Next(alphabet.Length)]).ToArray());
+            const string lower = "abcdefghijklmnopqrstuvwxyz";
+            var distinct = U(Enumerable.Range(0, 1000).Select(_ => Word(30, lower)).ToArray());
+            var prefixed = U(Enumerable.Range(0, 3000).Select(_ => "https://example/" + Word(4, lower)).ToArray());
+            var categorical = U(Enumerable.Range(0, 2000).Select(_ => Word(3, "xyz")).ToArray());
+            var bytes = distinct.astype(np.dtype("S30"));
+            var cyrillic = U(Enumerable.Range(0, 1000).Select(_ => Word(12, "абвгдежзий")).ToArray());
+            var inputs = new[] { distinct, prefixed, categorical, bytes, cyrillic };
+
+            long[][] Permutations() => inputs.SelectMany(a => new[] { Ints(np.argsort(a)), Ints(np.argsort(a, kind: "stable")) }).ToArray();
+            NDArray[] Sorted() => inputs.Select(a => np.sort(a)).ToArray();
+
+            long msd = TextSort.MsdRuns;
+            var viaMsd = Permutations();
+            var sortedViaMsd = Sorted();
+            (TextSort.MsdRuns - msd).Should().BeGreaterThan(0, "the byte-packed lines take the MSD key sort");
+            bool saved = TextSort.MsdDisabled;
+            try
+            {
+                TextSort.MsdDisabled = true;
+                long before = TextSort.MsdRuns;
+                Permutations().Should().BeEquivalentTo(viaMsd, o => o.WithStrictOrdering());
+                var sortedViaLsd = Sorted();
+                for (int i = 0; i < inputs.Length; i++)
+                    np.array_equal(sortedViaLsd[i], sortedViaMsd[i]).Should().BeTrue($"the sorted values of input {i}");
+                (TextSort.MsdRuns - before).Should().Be(0, "the hook keeps every key sort on the LSD passes");
+            }
+            finally
+            {
+                TextSort.MsdDisabled = saved;
+            }
+        }
+
+        /// <summary>
         ///     The three heapsort fallbacks (two-ulong records, packed records, prefix-key records with the tail compare)
         ///     leave one permutation on tie-heavy data, where NumPy's sift picks the left child of two equal siblings: every
         ///     element ties on its 8-unit key and the ninth unit takes one of three values.

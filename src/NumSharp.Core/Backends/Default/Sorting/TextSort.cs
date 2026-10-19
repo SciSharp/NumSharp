@@ -183,6 +183,19 @@ namespace NumSharp.Backends.Sorting
         internal static bool TailPortDisabled;
 
         /// <summary>
+        ///     Test hook: when true, a short line of byte-packed keys takes the LSD radix passes instead of
+        ///     <see cref="RadixSort.ArgSortU64Msd"/> (the order is the same). Process-wide; set it only from single-threaded
+        ///     test code and restore it in a <c>finally</c>.
+        /// </summary>
+        internal static bool MsdDisabled;
+
+        /// <summary>
+        ///     Test hook: key sorts (a line's, or a tie run's) that took <see cref="RadixSort.ArgSortU64Msd"/> since the
+        ///     process started. See <see cref="PortRuns"/>.
+        /// </summary>
+        internal static long MsdRuns;
+
+        /// <summary>
         ///     Test hook: block-kernel calls the line driver made since the process started (one per run of lines NDIter hands
         ///     out; a C-contiguous array along its last axis is one call). See <see cref="PortRuns"/>.
         /// </summary>
@@ -1581,7 +1594,7 @@ namespace NumSharp.Backends.Sorting
                     // that hold a varying bit (_varying, computed with the keys).
                     for (long i = 0; i < n; i++)
                         idx[i] = i;
-                    long* x = RadixSort.ArgSortU64(keys, keyTmp, idx, idxTmp, n, Hist, _varying, out ulong* k);
+                    long* x = SortKeys(keys, keyTmp, idx, idxTmp, n, _varying, out ulong* k);
                     // The radix ping-pongs between the two buffers of each block; remember which holds the result.
                     _x = x;
                     _xt = x == idx ? idxTmp : idx;
@@ -1645,7 +1658,7 @@ namespace NumSharp.Backends.Sorting
                     return;
                 }
                 int covered = ComputeKeys(text, stride, _x + s, m, fromUnit, _k + s);
-                long* x = RadixSort.ArgSortU64(_k + s, _kt + s, _x + s, _xt + s, m, Hist, VaryingBits(_k + s, m), out ulong* k);
+                long* x = SortKeys(_k + s, _kt + s, _x + s, _xt + s, m, VaryingBits(_k + s, m), out ulong* k);
                 // A radix that ended in the scratch halves: bring the run's order and keys back to the main buffers.
                 if (x != _x + s)
                     Buffer.MemoryCopy(x, _x + s, m * sizeof(long), m * sizeof(long));
@@ -1775,6 +1788,31 @@ namespace NumSharp.Backends.Sorting
             /// <returns>The units the keys cover (fewer than the packing holds when the element ends first).</returns>
             private int ComputeKeys(byte* text, long stride, long* index, long count, int fromUnit, ulong* keys)
                 => _keyer.ComputeKeys(text, stride, index, count, fromUnit, keys);
+
+            /// <summary>
+            ///     The stable argsort of keys the last <see cref="ComputeKeys"/> call wrote: the MSD radix for a line of at
+            ///     most <see cref="RadixSort.MsdMaxElements"/> keys of one character per byte (the 8-bit packing), the LSD
+            ///     passes (or their insertion fallback) otherwise. Both give the one stable order.
+            /// </summary>
+            /// <param name="keys">The keys (the first buffer of the pair).</param>
+            /// <param name="keyTmp">The second key buffer.</param>
+            /// <param name="idx">The index column, ordered with the keys.</param>
+            /// <param name="idxTmp">The second index buffer.</param>
+            /// <param name="n">The number of keys.</param>
+            /// <param name="varying">The bits in which some two keys differ.</param>
+            /// <param name="sortedKeys">Receives the buffer that holds the sorted keys.</param>
+            /// <returns>The buffer that holds the sorted index column.</returns>
+            /// <remarks>Measured on 1,000 random 40-character strings: the LSD passes took 15.5 µs of a 20.8 µs argsort, which
+            ///     the MSD sort brings to 14.3 µs (NumPy 29.2). A wider packing keeps the LSD passes: a 21-bit unit's high byte
+            ///     barely varies, so the MSD sort would split on almost nothing at its first levels (0.61–0.88× on such
+            ///     keys).</remarks>
+            private long* SortKeys(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp, long n, ulong varying, out ulong* sortedKeys)
+            {
+                if (n > RadixSort.MsdMaxElements || _keyer.LastBits != 8 || MsdDisabled)
+                    return RadixSort.ArgSortU64(keys, keyTmp, idx, idxTmp, n, Hist, varying, out sortedKeys);
+                MsdRuns++;
+                return RadixSort.ArgSortU64Msd(keys, keyTmp, idx, idxTmp, n, Hist, varying, out sortedKeys);
+            }
 
             /// <summary>Runs the gather kernel, or its managed twin on a host without dynamic code.</summary>
             /// <param name="src">See <see cref="TextGatherFunc"/>.</param>

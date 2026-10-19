@@ -11,6 +11,7 @@ models the op/dtype/N matrix cannot express:
   * Operand layouts           (benchmark/operand)   — 1-D / scalar / mixed-operand / broadcast
   * Cast matrix               (benchmark/cast)      — astype src→dst × layout × dtype
   * Fusion gate               (benchmark/fusion)    — np.evaluate fused vs unfused chains
+  * Strings                   (benchmark/strings)   — text computation over S / U / StringDType
   * Backend profiles         (benchmark/backends) — Managed C# / OpenBLAS, merged per exact cell
 Each owns a *_sheet.py driver+renderer; this orchestrator runs them and folds their
 *_results.md into the report. The single entry point for the whole NumSharp-vs-NumPy
@@ -46,7 +47,7 @@ Usage
   python run_benchmark.py --skip-csharp           # NumPy only
   python run_benchmark.py --skip-python           # C# only (reuse existing numpy JSON)
   python run_benchmark.py --skip-nditer          # no NDIter section
-  python run_benchmark.py --skip-layout --skip-cast --skip-fusion   # op matrix (+NDIter) only
+  python run_benchmark.py --skip-layout --skip-cast --skip-fusion --skip-strings   # op matrix (+NDIter) only
   python run_benchmark.py --quick                 # deprecated alias for --depth light
   python run_benchmark.py --no-lock-clock         # leave turbo boost on (default: locked off for the run)
   python run_benchmark.py --no-pin-core           # don't pin C#/NumPy to one performance core
@@ -107,7 +108,8 @@ NPYITER_TSV = NPYITER_DIR / "nditer_results.tsv"
 # *_sheet.py driver+renderer (mirroring nditer): a NumSharp `*_bench.cs` + its
 # NumPy `*_bench.py` twin -> a rendered `*_results.md` section appended to the
 # report. Layout = memory-layout axis (op-matrix is C-contiguous only); Cast =
-# astype src→dst matrix (no op-matrix coverage); Fusion = np.evaluate vs unfused.
+# astype src→dst matrix (no op-matrix coverage); Fusion = np.evaluate vs unfused;
+# Strings = the text dtypes S / U / StringDType, which the op-matrix has none of.
 MATRIX_SUBSYSTEMS = [
     ("layout", HERE / "layout" / "layout_sheet.py", HERE / "layout" / "layout_results.md",
      "Layout suite — reduction / copy / elementwise × memory layout × dtype"),
@@ -117,6 +119,8 @@ MATRIX_SUBSYSTEMS = [
      "Cast matrix — astype src→dst × layout × dtype"),
     ("fusion", HERE / "fusion" / "fusion_sheet.py", HERE / "fusion" / "fusion_results.md",
      "Fusion — np.evaluate vs unfused chains"),
+    ("strings", HERE / "strings" / "strings_sheet.py", HERE / "strings" / "strings_results.md",
+     "Strings — text computation over S / U / StringDType"),
     ("openblas", HERE / "backends" / "backend_profiles.py", HERE / "openblas" / "openblas_results.md",
      "Backend profiles — Managed C# and OpenBLAS"),
 ]
@@ -149,7 +153,7 @@ SUITES = {
 
 ACTIVE_SESSION = None
 CONFIG_FIELDS = ("depth", "dtypes", "suites", "operations", "skip_csharp", "skip_python", "skip_nditer",
-                 "skip_layout", "skip_operand", "skip_cast", "skip_fusion", "skip_openblas", "no_history",
+                 "skip_layout", "skip_operand", "skip_cast", "skip_fusion", "skip_strings", "skip_openblas", "no_history",
                  "rerun", "from_results", "baseline", "regression_percent", "numpy_results")
 
 
@@ -332,7 +336,7 @@ def parser():
     ap.add_argument("--depth", choices=tuple(DEPTHS), default="measure")
     ap.add_argument("--dtypes", help="Comma-separated dtype names or aliases")
     ap.add_argument("--operations", nargs="+", help="Operation title glob(s), e.g. 'np.add*'")
-    for name in ("csharp", "python", "build", "nditer", "layout", "operand", "cast", "fusion", "openblas"):
+    for name in ("csharp", "python", "build", "nditer", "layout", "operand", "cast", "fusion", "strings", "openblas"):
         ap.add_argument(f"--skip-{name}", action="store_true")
     ap.add_argument("--quick", action="store_true", help="Deprecated alias for --depth light")
     ap.add_argument("--no-history", action="store_true")
@@ -570,7 +574,7 @@ def execute(args, raw, directory):
     eligible = (args.depth == "measure" and not args.rerun and not args.operations
                 and set(args.suites) == set(SUITES) and requested == ALL_DTYPES
                 and not any(getattr(args, "skip_" + name) for name in (
-                    "csharp", "python", "nditer", "layout", "operand", "cast", "fusion", "openblas")))
+                    "csharp", "python", "nditer", "layout", "operand", "cast", "fusion", "strings", "openblas")))
     saved["publication_eligible"] = eligible
     if args.skip_python:
         reference = directory / "numpy-reference.json"

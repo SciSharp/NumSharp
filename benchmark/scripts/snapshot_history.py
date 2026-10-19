@@ -12,12 +12,13 @@ rendered sheets.
 A snapshot contains *everything we commit and reference*:
 
     MANIFEST.md            provenance / env / methodology / headline geomeans
-    benchmark-report.md    op-matrix + appended NDIter/Layout/Operand/Cast/Fusion
+    benchmark-report.md    op-matrix + appended NDIter/Layout/Operand/Cast/Fusion/Strings
     benchmark-report.json  unified machine-readable op-matrix results
     benchmark-report.csv   spreadsheet form
     numpy-results.json     raw NumPy timings (merge input)
     nditer_results.md/.tsv + cards/{ops,cat}.png
     layout_results.md/.tsv · operand_results.md/.tsv · cast_results.md/.tsv · fusion_results.md
+    strings_results.md/.tsv
 
 Raw BenchmarkDotNet per-class JSON (~tens of MB) is intentionally NOT persisted
 (regenerable — reproduce with ``python benchmark/run_benchmark.py``).
@@ -63,6 +64,8 @@ SUBSYSTEM_FILES = [
     BENCH / "cast" / "cast_results.md",
     BENCH / "cast" / "cast_results.tsv",
     BENCH / "fusion" / "fusion_results.md",
+    BENCH / "strings" / "strings_results.md",
+    BENCH / "strings" / "strings_results.tsv",
     BENCH / "openblas" / "openblas_results.md",
     BENCH / "openblas" / "openblas_results.tsv",
     BENCH / "openblas" / "openblas_results.managed.json",
@@ -245,7 +248,7 @@ def build_manifest(snap_name, run_ts, head, subject, dirty, dirty_files, env,
           "| `benchmark-report.managed.json` / `.openblas.json` | separate profile measurements using the same schema |",
           "| `numpy-results.json` | raw NumPy timings (merge input) |",
           "| `nditer_results.*` + `cards/` | iterator benchmark sheet + summary cards (ops/cat) |",
-          "| `layout_/operand_/cast_/fusion_/openblas_results.*` | complementary subsystem sheets and targeted backend profiles |", "",
+          "| `layout_/operand_/cast_/fusion_/strings_/openblas_results.*` | complementary subsystem sheets and targeted backend profiles |", "",
           "Raw BenchmarkDotNet per-class JSON (~tens of MB) is **not** persisted here "
           "(regenerable). Reproduce with `python benchmark/run_benchmark.py`."]
     return "\n".join(L) + "\n"

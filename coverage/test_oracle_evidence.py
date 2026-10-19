@@ -55,6 +55,7 @@ def minimal_map(**fuzz_keys) -> dict:
         "npy": {"npy": ["numpy.save", "numpy.load"]},
         "flags": {"read": ["numpy.ndarray.flags"]},
         "layout": {"sort": ["numpy.sort"]},
+        "strings": {"str_fn:{name}": ["numpy.strings.{name}"], "strings_multiply": ["numpy.strings.multiply"]},
     }
 
 
@@ -72,13 +73,17 @@ def case(op: str, **fields) -> dict:
 
 
 def write_tree(root: Path, corpus: dict[str, list[dict]], replay: str | None = None,
-               host_libm: tuple[str, ...] = ()) -> None:
+               host_libm: tuple[str, ...] = (), strings: dict[str, list[dict]] | None = None,
+               strings_replay: str | None = None) -> None:
     """Materialize a synthetic repository tree the scanner can read.
 
     :param root: temporary repository root.
     :param corpus: corpus file name -> contracts.
     :param replay: FuzzCorpusTests.cs body; by default every corpus file is replayed via RunCorpus.
     :param host_libm: files the default replay runs through RunHostLibmCorpus instead.
+    :param strings: string-oracle section name -> contracts; by default one ``strfn`` section with two
+        ``np.strings.find`` calls (one a NumPy error), a ``strings_multiply_text`` call and a case of another op.
+    :param strings_replay: StringOracleTests.cs body; by default every section is replayed via ``Run("<section>")``.
     """
     fuzz = root / "test" / "NumSharp.Tests.Oracle" / "Fuzz"
     (fuzz / "corpus").mkdir(parents=True)
@@ -102,6 +107,23 @@ def write_tree(root: Path, corpus: dict[str, list[dict]], replay: str | None = N
         json.dumps({"recipe": "c1d", "dtype": "int64", "ops": [], "err": None}) + "\n", encoding="utf-8")
     (backends / "layout_parity_oracle.jsonl").write_text(
         json.dumps({"fam": "sort", "key": "c2d_ax-1", "dtype": "int64"}) + "\n", encoding="utf-8")
+    if strings is None:
+        strings = {"strfn": [
+            {"op": "str_fn", "params": {"name": "find"}, "operands": [{"dtype": "<U5"}], "layout": "<U5:c1",
+             "expected": {"dtype": "<i8"}},
+            {"op": "str_fn", "params": {"name": "find"}, "operands": [{"dtype": "|S3"}], "layout": "|S3:c1",
+             "error": {"type": "TypeError", "text": "..."}},
+            {"op": "strings_multiply_text", "params": {}, "operands": [{"dtype": "<U2"}], "expected": {"dtype": "<U4"}},
+            {"op": "ufunc", "params": {"ufunc": "equal"}, "operands": [{"dtype": "<U2"}], "expected": {"dtype": "bool"}},
+        ]}
+    text = root / "test" / "NumSharp.Tests.Oracle" / "Strings"
+    (text / "corpus").mkdir(parents=True)
+    for section, cases in strings.items():
+        (text / "corpus" / f"strings_{section}.jsonl").write_text(
+            "".join(json.dumps(item) + "\n" for item in cases), encoding="utf-8")
+    if strings_replay is None:
+        strings_replay = "\n".join(f'public void S{i}() => Run("{section}");' for i, section in enumerate(strings))
+    (text / "StringOracleTests.cs").write_text(strings_replay, encoding="utf-8")
 
 
 def catalog(*ids: str, kinds: dict[str, str] | None = None, targets: dict[str, str] | None = None,
@@ -115,7 +137,8 @@ def catalog(*ids: str, kinds: dict[str, str] | None = None, targets: dict[str, s
     :returns: rows with the fields the join, classify and status_counts read.
     """
     kinds, targets, statuses = kinds or {}, targets or {}, statuses or {}
-    base = ("numpy.save", "numpy.load", "numpy.ndarray.flags", "numpy.sort")
+    base = ("numpy.save", "numpy.load", "numpy.ndarray.flags", "numpy.sort", "numpy.strings.find",
+            "numpy.strings.multiply")
     return [{"id": row_id, "kind": kinds.get(row_id, "function"), "numsharp_target": targets.get(row_id),
              "origin": "numsharp" if row_id.startswith("numsharp.") else "numpy",
              "status": statuses.get(row_id, "available")}
@@ -153,7 +176,8 @@ class SyntheticJoinTests(unittest.TestCase):
                               rows, minimal_map())
         self.assertEqual([], result.problems)
         self.assertEqual({"numpy.polynomial.chebyshev.chebval", "numsharp.polynomial.chebyshev.chebvalnd",
-                          "numpy.save", "numpy.load", "numpy.ndarray.flags", "numpy.sort"}, set(result.evidence))
+                          "numpy.save", "numpy.load", "numpy.ndarray.flags", "numpy.sort", "numpy.strings.find",
+                          "numpy.strings.multiply"}, set(result.evidence))
 
     def test_param_driven_keys_group_per_value_and_take_value_overrides(self):
         oracle_map = minimal_map(
@@ -280,6 +304,30 @@ class SyntheticJoinTests(unittest.TestCase):
         self.assertEqual(1, result.evidence["numpy.save"].errors)
         self.assertEqual({"flags:read"}, result.evidence["numpy.ndarray.flags"].keys)
         self.assertEqual({"layout:sort"}, result.evidence["numpy.sort"].keys)
+        # The string oracle's numpy.strings calls: str_fn by params.name through the template, the text-count multiply
+        # under strings_multiply; the case of another op (a comparison ufunc) is not a numpy.strings call and is skipped.
+        find = result.evidence["numpy.strings.find"]
+        self.assertEqual({"strings:str_fn:find"}, find.keys)
+        self.assertEqual((2, 1), (find.contracts, find.errors))
+        self.assertEqual({"<U5", "|S3", "<i8"}, find.dtypes, "operand and result dtypes")
+        self.assertEqual({"strings:strings_multiply"}, result.evidence["numpy.strings.multiply"].keys)
+        self.assertNotIn("numpy.equal", result.evidence, "a string-oracle case of another op credits nothing")
+
+    def test_string_oracle_sections_must_be_replayed_and_name_their_function(self):
+        strings = {"strfn": [{"op": "str_fn", "params": {"name": "find"}, "operands": [], "expected": {}}],
+                   "orphan": [{"op": "str_fn", "params": {"name": "find"}, "operands": [], "expected": {}}],
+                   "nameless": [{"op": "str_fn", "params": {}, "operands": [], "expected": {}}],
+                   "other": [{"op": "ufunc", "params": {"ufunc": "equal"}, "operands": [], "expected": {}}]}
+        sources, result = self.join({"a.jsonl": [case("add")]}, catalog("numpy.add"), minimal_map(), strings=strings,
+                                    strings_replay='Run("strfn"); Run("nameless"); Run("other");')
+        problems = "\n".join(result.problems)
+        self.assertIn("String oracle section strings_orphan.jsonl holds numpy.strings contracts but no replay test", problems)
+        self.assertIn("strings_nameless.jsonl:1 op 'str_fn' lacks the parameter that names its numpy.strings function",
+                      problems)
+        self.assertEqual(1, result.evidence["numpy.strings.find"].contracts, "the orphan's contracts must not count")
+        self.assertEqual(["strings_strfn.jsonl"], [item["name"] for item in sources.files if item["source"] == "strings"],
+                         "a section without a numpy.strings call is not a strings file")
+        self.assertIn("oracle_map strings['strings_multiply'] matches no strings oracle contract", problems)
 
     def test_classify_status_counts_csv_and_record_shape(self):
         rows = [
@@ -366,7 +414,7 @@ class CommittedCorpusTests(unittest.TestCase):
         contracts = sum(group.cases for group in self.sources.groups)
         self.assertEqual(contracts, joined, "every scanned group must resolve")
         self.assertGreater(contracts, 250_000)
-        self.assertEqual({"fuzz", "npy", "flags", "layout"}, {group.source for group in self.sources.groups})
+        self.assertEqual({"fuzz", "npy", "flags", "layout", "strings"}, {group.source for group in self.sources.groups})
 
     def test_load_bearing_rows_carry_the_expected_evidence(self):
         chebval = self.evidence("numpy.polynomial.chebyshev.chebval")
@@ -426,6 +474,18 @@ class CommittedCorpusTests(unittest.TestCase):
             self.assertIsNone(evidence.via, f"{row_id} has direct contracts")
             self.assertIn(f"minmax_kwargs:{fn}", evidence.keys)
         self.assertEqual(["numpy.power"], self.labels["power"], "np.power shadows np.random.power")
+        # The string oracle verifies every numpy.strings function by name: the 44 str_fn names (search, strip, pad,
+        # replace, partition, slice, the comparison names, predicates, case maps, translate, mod, codecs over S / U /
+        # StringDType) and np.strings.add / multiply.
+        rows = sorted(row["id"] for row in self.rows if row["id"].startswith("numpy.strings.") and row["id"].count(".") == 2)
+        self.assertEqual(46, len(rows))
+        for row_id in rows:
+            self.assertIn("strings", self.evidence(row_id).sources, f"{row_id} has string-oracle contracts")
+        find = self.evidence("numpy.strings.find")
+        self.assertEqual({"strings:str_fn:find"}, find.keys)
+        self.assertGreater(find.contracts, 1000)
+        self.assertGreater(find.errors, 0)
+        self.assertTrue({"strings_strfn.jsonl", "strings_tfn.jsonl"} <= find.files)
 
     def test_reviewed_aliases_mirror_the_csharp_oracle_gate(self):
         text = (ROOT / "test" / "NumSharp.Tests.Oracle" / "Fuzz" / "OracleSurfaceCoverageTests.cs").read_text(encoding="utf-8")

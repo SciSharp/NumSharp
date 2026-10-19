@@ -41,6 +41,14 @@ namespace NumSharp.Backends.Sorting
         /// <summary>The kernels this keyer used, by (bits class, units, OR flag); filled on first use.</summary>
         private readonly TextSortKeyFunc[] _kernels = new TextSortKeyFunc[4 * 9 * 2];
 
+        /// <summary>
+        ///     The bits per unit of the packing the last <see cref="ComputeKeys"/> call chose: 8 for <c>S</c> and for <c>U</c>
+        ///     text whose units all fit a byte, else 16, 21 or 32. With 8, every key byte is one character, so a radix digit is
+        ///     a character (what <see cref="RadixSort.ArgSortU64Msd"/> needs to split well); a wider packing spreads one unit
+        ///     over bytes whose high parts barely vary.
+        /// </summary>
+        internal int LastBits { get; private set; } = 8;
+
         /// <summary>Creates a keyer for elements of <paramref name="units"/> code units of <paramref name="unit"/> bytes.</summary>
         /// <param name="unit">1 for <c>S</c>, 4 for <c>U</c>.</param>
         /// <param name="units">The element width in code units (0 for a zero-width dtype, which is never keyed).</param>
@@ -79,6 +87,7 @@ namespace NumSharp.Backends.Sorting
             {
                 int r = Math.Min(8, rem);
                 Kernel(8, r, false)(first, stride, index, count, keys, null);
+                LastBits = 8;
                 return r;
             }
 
@@ -86,6 +95,7 @@ namespace NumSharp.Backends.Sorting
             int r8 = Math.Min(8, rem);
             Kernel(8, r8, true)(first, stride, index, count, keys, ors);
             int bits = PackingFor(ors, rem, out int units);
+            LastBits = bits;
             if (bits == 8)
                 return r8;
             Kernel(bits, units, false)(first, stride, index, count, keys, null);

@@ -2,8 +2,8 @@
 name: benchmark
 description: >-
   NumSharp's NumPy-vs-NumSharp performance harness — the op/dtype/N matrix (C# BenchmarkDotNet vs a
-  warm NumPy process), unified Managed/OpenBLAS backend profiles, and five appended subsystems
-  (nditer, layout, operand, cast, fusion), all in
+  warm NumPy process), unified Managed/OpenBLAS backend profiles, and six appended subsystems
+  (nditer, layout, operand, cast, fusion, strings), all in
   the NPY/NS convention. Use this whenever you add a benchmark for an np.* op, wire a C# benchmark to
   its NumPy twin, run the official suite or a subset, read/interpret the ratio matrix or history
   snapshots, add a whole subsystem, or debug a suspicious measurement (the Debug-taint 2x pitfall,
@@ -81,9 +81,9 @@ names to normalize identically or the row shows as "C# not run" / "NumPy only".
   profile publishes `1K / 100K / 10M`; operation-specific physical work remains bounded (LAPACK maps
   those tiers to matrix sides `32 / 96 / 128`). Separate profile JSON files are merged into one
   effective dataset, with `actual_backend: managed` retained for controls that never dispatch to BLAS.
-- **Five appended subsystems** (own result models, appended not merged): `nditer` (iterator machinery),
+- **Six appended subsystems** (own result models, appended not merged): `nditer` (iterator machinery),
   `layout` (op × 8 memory layouts × dtype), `operand` (1-D/scalar/mixed/broadcast), `cast` (astype 15×15 × layout),
-  and `fusion` (`np.evaluate`). Each is a
+  `fusion` (`np.evaluate`) and `strings` (text computation over S / U / StringDType). Each is a
   `*_bench.{cs,py}` pair + a `*_sheet.py` renderer.
 
 ## Playbook — add a benchmark for a new op
@@ -146,4 +146,4 @@ The most common task. Full worked example in **`references/add-benchmark.md`**. 
 
 - `references/add-benchmark.md` — the detailed add-a-benchmark playbook (C# + NumPy twin + join-key rules + smoke).
 - `references/run-and-report.md` — running the official run / subsets, the report + history snapshots, InProcessEmit.
-- `references/subsystems.md` — backend profiles plus the five appended subsystems.
+- `references/subsystems.md` — backend profiles plus the six appended subsystems.

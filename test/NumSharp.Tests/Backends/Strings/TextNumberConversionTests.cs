@@ -318,6 +318,67 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     The text → float parse takes an exact fast path (Clinger's: a mantissa of at most 2^53 combined with an exact
+        ///     power of ten up to 10^22 by one IEEE operation) and the general correctly rounded parser for everything else;
+        ///     both must give <c>float()</c>'s correctly rounded value, bit for bit, signed zeros included. The reference is
+        ///     .NET's IEEE-correct <see cref="double.Parse(string, System.Globalization.NumberStyles, IFormatProvider)"/>
+        ///     (CPython's <c>_Py_dg_strtod</c> is correctly rounded too). Covers the boundaries of the fast path (2^53 and
+        ///     2^53 + 1, 10^22 and 10^23, 19 and 20 significant digits, leading and trailing zeros, ±0 with any exponent) and
+        ///     100,000 random texts around them, through the <c>U</c>, <c>S</c> and <c>StringDType</c> casts.
+        /// </summary>
+        [TestMethod]
+        public void TextToFloat_ExactFastPath_EqualsTheCorrectlyRoundedParse()
+        {
+            var texts = new System.Collections.Generic.List<string>
+            {
+                "9007199254740992", "9007199254740993", "9007199254740995", "-9007199254740993", "1e22", "1e23", "1e-22",
+                "1e-23", "123456789e-22", "9007199254740992e22", "9007199254740992e-22", "0.1", "-0", "-0.0e5", "+.5", "5.",
+                ".5e1", "0000.000123", "1234567890123456789", "12345678901234567890", "4.35", "2.2250738585072014e-308",
+                "1e-0000005", "0e999999", "-0e-999999", "100000000000000000000000", "0.30000000000000004", "1.7976931348623157e308",
+                "17976931348623157e292", "5e-324", "123.456e-3", "1.000000000000000000001", "0.0000000000000000000001e22",
+            };
+            var rng = new System.Random(20261019);
+            var sb = new StringBuilder();
+            for (int i = 0; i < 100_000; i++)
+            {
+                sb.Clear();
+                int r = rng.Next(4);
+                if (r == 1)
+                    sb.Append('-');
+                else if (r == 2)
+                    sb.Append('+');
+                int zeros = rng.Next(3) == 0 ? rng.Next(1, 4) : 0;
+                sb.Append('0', zeros);
+                int digits = rng.Next(1, 21);
+                int point = rng.Next(-1, digits + 1);   // -1: no point
+                for (int k = 0; k < digits; k++)
+                {
+                    if (k == point)
+                        sb.Append('.');
+                    sb.Append((char)('0' + rng.Next(10)));
+                }
+                if (point == digits)
+                    sb.Append('.');
+                if (rng.Next(2) == 0)
+                    sb.Append(rng.Next(2) == 0 ? 'e' : 'E').Append(rng.Next(-30, 31));
+                texts.Add(sb.ToString());
+            }
+
+            long[] expected = texts.Select(t => BitConverter.DoubleToInt64Bits(
+                double.Parse(t, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture))).ToArray();
+            using var u = np.array(texts.ToArray());
+            using var s = u.astype("S");
+            using var vs = u.astype(np.dtypes.StringDType());
+            foreach (var (name, source) in new[] { ("U", u), ("S", s), ("StringDType", vs) })
+            {
+                using var f = source.astype(np.float64);
+                double[] got = f.ToArray<double>();
+                for (int i = 0; i < texts.Count; i++)
+                    BitConverter.DoubleToInt64Bits(got[i]).Should().Be(expected[i], "{0} text '{1}'", name, texts[i]);
+            }
+        }
+
+        /// <summary>
         ///     The integer texts at the C <c>long</c> boundary (LP64 texts, probed against Linux NumPy 2.4.2): 2**63 and
         ///     -2**63-1 do not fit a C long; -2**63 does; a negative value into an unsigned target is out of bounds while it
         ///     fits a C long and "too large" past it; <c>-0</c> is 0 for every unsigned target.

@@ -139,6 +139,8 @@ np.can_cast(np.dtype("U5"), np.dtype("U3"), "safe");         // false - the cast
 
 Views, copies and element movement work on string arrays as on numeric ones: slicing, transposes, reshapes, `copy`, `concatenate`, `take`, boolean masks, `where`, `pad`, `copyto`, `put` and the other indexing routines.
 
+`np.pad` pads text in every mode that moves elements: `constant` (with text, or a number written as text), `edge`, `reflect`, `symmetric`, `wrap` and `empty`. `maximum` and `minimum` pad a `StringDType` array with its extremes; NumPy has no such loop for `S` / `U` and raises. `mean`, `median` and `linear_ramp` compute with numbers and raise NumPy's errors for text.
+
 Casts between string dtypes follow NumPy:
 
 - A narrower width cuts values.
@@ -217,6 +219,7 @@ np.prod(np.array(new[] { "1.5", "2", "4" }), (int?)null, np.float64);   // 12.0 
 - `np.add` with a string `dtype=` writes each number as text, then concatenates.
 - A ufunc with a text `out=` writes each result as text, cut to the width of `out`.
 - A reduction with a numeric `dtype=` parses the text first.
+- A reduction or accumulation into a text `out=` resolves its loop as NumPy does. `np.cumsum` of `U` text into a `StringDType` out concatenates (`['c' 'ca' 'cab']` for `['c', 'a', 'b']`). Integer counts reduced by `prod` into a text out repeat the first count's text. A numeric loop parses a text input and writes its running values into a text out. `np.median` and `np.percentile` into a text out leave NumPy's partial result there before NumPy's refusal.
 
 With `where=`, NumPy also parses the CURRENT text of `out` into the loop's number type before it computes, so a masked-off `'x'` in a float loop raises `ValueError`.
 
@@ -687,6 +690,8 @@ np.evaluate((NDExpr)names + names);   // StringComputationNotSupportedException:
 
 A comparison of text with numbers is "never equal" in NumPy, and in NumSharp: `names == np.array(new[] { 1, 2, 3 })` is `[False False False]`.
 
+`numpy.polynomial` takes text operands the way NumPy does, up to the first statement that computes with the strings themselves. Its checks and the statements before that point raise or answer as in NumPy: `as_series`' common-type refusal, `polyline`'s stacking (`polyline(np.array("x"), 1)` is `['x' '1']`), the derivative's and integral's argument checks, the first statement of the `*val` family and the `x + 0.0` of the Vandermonde and fit functions. NumPy then repeats and concatenates the Python strings (`polyder(['ab', 'c', 'de'])` is `['c' 'dede']`) or raises CPython's `TypeError` from that arithmetic. NumSharp raises `NotSupportedException` there, because its polynomial package does not model Python's string arithmetic.
+
 NumSharp also reports the problems of a call in NumPy's order, before it answers:
 
 1. The `dtype=` request.
@@ -952,7 +957,7 @@ Measured against NumPy 2.4.2 on the same machine (pinned to two cores, 1,000 to 
 | Call | NumSharp |
 |------|----------|
 | `view(another dtype)`, `memoryview` (`.data`), `np.frombuffer(..., "T")` | NumPy's errors: a cell is not raw text |
-| `np.ndarray(shape, "T", buffer: ...)` | `ArgumentException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses |
+| `np.ndarray(shape, "T", buffer: ...)` over raw bytes or a non-`StringDType` array, another dtype over a `StringDType` array's cells, or an offset that splits a cell | `NotSupportedException`. NumPy reads the bytes as cells; a cell holds an arena offset or a heap pointer, so NumSharp refuses. Over another `StringDType` array the call is a view that shares its cells (offsets and strides in 16-byte cells), and without a buffer the array starts with empty strings |
 | `np.fromfile`, `np.fromstring` and `tofile`'s binary mode with `StringDType` | NumPy's errors (`Cannot read into object array`, `OSError` for the binary write) |
 | `np.unique(..., axis: k)` over two or more dimensions | NumPy's `TypeError`: its structured path cannot hold `StringDType` fields |
 | A `np.nanquantile` / `np.nanmedian` row whose result is a `None` NA | `NotSupportedException`. NumPy builds an `object` array, a dtype NumSharp does not have |

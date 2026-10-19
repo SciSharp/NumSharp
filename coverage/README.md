@@ -74,7 +74,7 @@ Generator 1.13.0 introduced the public-module and documentation guards. The audi
 
 ## NumPy-oracle parity evidence
 
-Availability says NumSharp *exposes* an API; the committed NumPy oracles say it *behaves* like NumPy. `oracle_evidence.py` joins the two, row by row, so the artifact reports both. Four sources are joined, each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence:
+Availability says NumSharp *exposes* an API; the committed NumPy oracles say it *behaves* like NumPy. `oracle_evidence.py` joins the two, row by row, so the artifact reports both. Five sources are joined, each replayed against NumSharp in CI and required to be bit-exact or a documented, registry-excused divergence:
 
 | Source | Path | Replayed by |
 |---|---|---|
@@ -82,6 +82,9 @@ Availability says NumSharp *exposes* an API; the committed NumPy oracles say it 
 | `.npy`/`.npz` format oracle | `test/NumSharp.Tests/IO/corpus/npy_oracle.zip` | `NpyOracle` (NpyOracleTests) |
 | Array flags oracle | `test/NumSharp.Tests/Backends/corpus/flags_oracle.jsonl` | FlagsOracleTests |
 | Result-layout parity oracle | `test/NumSharp.Tests/Backends/corpus/layout_parity_oracle.jsonl` | LayoutParityOracleTests |
+| String oracle, its `numpy.strings` calls | `test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl` | StringOracleTests |
+
+The string oracle gates far more than `numpy.strings` (comparisons, sorting, casts, `numpy.char`, the numeric functions over text), but those contracts credit APIs the other sources already verify on numbers, so only its `numpy.strings` calls are joined: the `str_fn` op by its `params.name` (`str_fn:find` → `numpy.strings.find`, one template in `oracle_map.json`'s `strings` section) and `strings_add` / `strings_multiply`. All 46 `numpy.strings` rows carry string-oracle contracts. A section that holds such calls must be named by a `Run("<section>")` of the replay, as a fuzz corpus file must.
 
 **Resolution.** Contracts are grouped by (source, file, key, variant) and each group resolves to catalog rows. A bare fuzz op key walks `np.<key>` → `np.linalg` → `np.fft` → `np.random` → a NumSharp-only `np` row, and the first existing callable/property wins, so `np.trace` shadows `np.linalg.trace`. The generator calls `np.trace`, and the Array-API form has a stricter contract. Module/class/constant rows are never automatic targets (`fft` resolves to `np.fft.fft`, not the module). Dotted keys resolve by namespace (`ndarray.`, `emath.`, `ma.`, the six polynomial bases, falling back to NumSharp-only rows such as `chebvalnd`). Everything else — variant suffixes (`std_ddof`), parameter-driven keys (`out_binary` + `params.ufunc`, `rnd` + `params.dist`, `grnd` + `params.method`), protocols (`get`/`set` attach to `numpy.ndarray`; since generator 1.14.0 a protocol key such as `matrix.__add__` or `ndarray.__len__` resolves to its protocol row through the namespace rules) and the specialized sources' families — is reviewed in `oracle_map.json`.
 

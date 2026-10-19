@@ -334,6 +334,176 @@ namespace NumSharp.Backends.Sorting
         }
 
         /// <summary>
+        ///     The longest line <see cref="ArgSortU64Msd"/> is the better choice for (its callers check it): over 130 to 4,096
+        ///     keys of eight 8-bit units (random bytes, lowercase, digits, a shared four-byte prefix, short NUL-padded strings,
+        ///     50 distinct keys repeated, sorted input) the MSD sort runs 1.15–6.6× faster than the LSD passes; from 8,000 keys
+        ///     on it loses on keys with a shared prefix (0.92× at 8,000, 0.73× at 16,000). Keys whose bytes are not one
+        ///     character each (21-bit units) lose at every size from 1,000 (0.61–0.88×), so the callers keep them on the LSD
+        ///     passes.
+        /// </summary>
+        internal const int MsdMaxElements = 4096;
+
+        /// <summary>The bucket size below which <see cref="ArgSortU64Msd"/> insertion-sorts by the full key.</summary>
+        private const int MsdInsertionMax = 32;
+
+        /// <summary>
+        ///     A stable argsort of 64-bit keys by most-significant-digit radix: the keys are split by their highest varying
+        ///     byte, each bucket by the next one, and a bucket of at most <see cref="MsdInsertionMax"/> keys is
+        ///     insertion-sorted by the full key. The same order as
+        ///     <see cref="ArgSortU64(ulong*, ulong*, long*, long*, long, long*, ulong, out ulong*)"/> (a stable sort of the same
+        ///     keys from the same initial order has one answer), faster on short lines of text keys.
+        /// </summary>
+        /// <param name="keys">The keys; on return they are sorted (the result is in place).</param>
+        /// <param name="keyTmp">Scatter scratch, <paramref name="n"/> slots.</param>
+        /// <param name="idx">The index column, ordered with the keys (element i at slot i on entry); sorted on return.</param>
+        /// <param name="idxTmp">Scatter scratch, <paramref name="n"/> slots.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <param name="hist">Counter scratch of at least 8 · 256 longs (one 256-counter block per digit level).</param>
+        /// <param name="varyingBits">The bits in which some two keys differ (the OR of the keys XOR their AND).</param>
+        /// <param name="sortedKeys">Receives <paramref name="keys"/>.</param>
+        /// <returns><paramref name="idx"/>, which holds the sorted index column.</returns>
+        /// <remarks>
+        ///     <para>
+        ///     <b>Why.</b> The LSD passes cost one counting increment and one scatter per varying byte for EVERY key: eight
+        ///     passes for text keys of eight characters, 16 µs for 1,000 keys. A string sort needs far fewer digit levels than
+        ///     the key has bytes — keys that differ in their first characters are split apart after one or two levels — so the
+        ///     MSD sort does about two scatters per key on such lines (8.8 µs against 16.4 for 1,000 keys of lowercase letters).
+        ///     </para>
+        ///     <para>
+        ///     <b>Digits.</b> A level's digit is the HULL of its byte's varying bits (lowest to highest varying bit), so a byte
+        ///     of lowercase letters (five varying bits) takes 32 counters, not 256; bytes with no varying bit are skipped.
+        ///     </para>
+        ///     <para>
+        ///     <b>The cases where MSD radix degrades,</b> each handled: a bucket whose keys all share the level's digit moves
+        ///     nothing (only the counters are taken) and a bucket whose keys are all equal stops at once, so 50 distinct keys
+        ///     repeated over 2,000 slots no longer descend all eight levels (20.5 µs, against 46.4 µs for the LSD passes and
+        ///     68 µs before that check); the level loop is a tail loop, and the recursion is at most eight deep (one level per
+        ///     key byte).
+        ///     </para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static long* ArgSortU64Msd(ulong* keys, ulong* keyTmp, long* idx, long* idxTmp, long n, long* hist,
+                                            ulong varyingBits, out ulong* sortedKeys)
+        {
+            sortedKeys = keys;
+            if (n <= 1 || varyingBits == 0)
+                return idx;
+            // The digit levels, most significant first: per varying byte, the shift of its lowest varying bit and the
+            // width of the hull up to its highest.
+            int* shifts = stackalloc int[8];
+            int* widths = stackalloc int[8];
+            int levels = 0;
+            for (int b = 7; b >= 0; b--)
+            {
+                uint m = (uint)(varyingBits >> (8 * b)) & 0xFF;
+                if (m == 0)
+                    continue;
+                int lo = System.Numerics.BitOperations.TrailingZeroCount(m);
+                int hi = 31 - System.Numerics.BitOperations.LeadingZeroCount(m);
+                shifts[levels] = 8 * b + lo;
+                widths[levels] = hi - lo + 1;
+                levels++;
+            }
+            MsdRange(keys, keyTmp, idx, idxTmp, 0, n, 0, levels, shifts, widths, hist);
+            return idx;
+        }
+
+        /// <summary>
+        ///     One bucket of <see cref="ArgSortU64Msd"/>: <c>[lo, hi)</c> of the keys, equal on every level before
+        ///     <paramref name="level"/>, ordered stably by the remaining levels.
+        /// </summary>
+        /// <param name="k">The keys.</param>
+        /// <param name="kt">Key scratch.</param>
+        /// <param name="x">The index column.</param>
+        /// <param name="xt">Index scratch.</param>
+        /// <param name="lo">The bucket's first slot.</param>
+        /// <param name="hi">One past its last.</param>
+        /// <param name="level">The first digit level not yet split on.</param>
+        /// <param name="levels">The number of digit levels.</param>
+        /// <param name="shifts">Each level's digit shift.</param>
+        /// <param name="widths">Each level's digit width in bits (at most 8).</param>
+        /// <param name="hist">The counters: level <c>l</c> uses <c>hist[256 l .. 256 l + 256)</c>, so a deeper level never
+        ///     overwrites the bucket bounds a shallower one is still walking.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static void MsdRange(ulong* k, ulong* kt, long* x, long* xt, long lo, long hi, int level, int levels,
+                                     int* shifts, int* widths, long* hist)
+        {
+            for (;;)
+            {
+                long m = hi - lo;
+                if (m <= MsdInsertionMax || level == levels)
+                {
+                    // Stable insertion by the full key (strict '>' keeps equal keys in their order). A bucket that reached
+                    // the last level holds equal keys, which this passes over without a move.
+                    for (long i = lo + 1; i < hi; i++)
+                    {
+                        ulong v = k[i];
+                        if (k[i - 1] <= v)
+                            continue;
+                        long vx = x[i], j = i - 1;
+                        do
+                        {
+                            k[j + 1] = k[j];
+                            x[j + 1] = x[j];
+                            j--;
+                        }
+                        while (j >= lo && k[j] > v);
+                        k[j + 1] = v;
+                        x[j + 1] = vx;
+                    }
+                    return;
+                }
+                int shift = shifts[level];
+                int buckets = 1 << widths[level];
+                ulong mask = (ulong)(buckets - 1);
+                long* c = hist + 256L * level;
+                for (int b = 0; b < buckets; b++)
+                    c[b] = 0;
+                for (long i = lo; i < hi; i++)
+                    c[(k[i] >> shift) & mask]++;
+                if (c[(k[lo] >> shift) & mask] == m)
+                {
+                    // One bucket: nothing moves at this level. When every key of the bucket is the same, no later level can
+                    // reorder it either (repeated keys would otherwise take the counters of every remaining level).
+                    ulong first = k[lo];
+                    long e = lo + 1;
+                    while (e < hi && k[e] == first)
+                        e++;
+                    if (e == hi)
+                        return;
+                    level++;
+                    continue;
+                }
+                // Exclusive prefix into absolute slots; after the stable scatter, c[b] is the end of bucket b.
+                long sum = lo;
+                for (int b = 0; b < buckets; b++)
+                {
+                    long t = c[b];
+                    c[b] = sum;
+                    sum += t;
+                }
+                for (long i = lo; i < hi; i++)
+                {
+                    ulong v = k[i];
+                    long p = c[(v >> shift) & mask]++;
+                    kt[p] = v;
+                    xt[p] = x[i];
+                }
+                Buffer.MemoryCopy(kt + lo, k + lo, m * sizeof(ulong), m * sizeof(ulong));
+                Buffer.MemoryCopy(xt + lo, x + lo, m * sizeof(long), m * sizeof(long));
+                long s = lo;
+                for (int b = 0; b < buckets; b++)
+                {
+                    long e = c[b];
+                    if (e - s > 1)
+                        MsdRange(k, kt, x, xt, s, e, level + 1, levels, shifts, widths, hist);
+                    s = e;
+                }
+                return;
+            }
+        }
+
+        /// <summary>
         ///     The radix passes of <see cref="ArgSortU64(ulong*, ulong*, long*, long*, long, long*, ulong, out ulong*)"/>
         ///     whatever the line's length (no insertion fallback): a counting pass and a stable scatter per varying byte.
         /// </summary>

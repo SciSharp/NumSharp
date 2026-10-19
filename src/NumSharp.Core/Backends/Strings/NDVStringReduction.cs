@@ -720,6 +720,8 @@ namespace NumSharp.Backends.Strings
         private static void MaxMinLane(byte* lane, byte* o, byte* mask, VStringReduceContext ctx)
         {
             long n = ctx.N, stride = ctx.InStride, mstride = ctx.MaskStride;
+            bool isMax = ctx.IsMax;
+            byte* inArena = ctx.In.ArenaBase;
             byte* best = ctx.InitialCell;
             VStringAllocator bestAlloc = ctx.InitialAllocator;
             long i = 0;
@@ -740,24 +742,166 @@ namespace NumSharp.Backends.Strings
                 }
                 i = 1;
             }
+            // The accumulator is loaded once per change, not once per element: in a reduction it changes a handful of times
+            // (a running extreme), while every element meets it.
+            var acc = new ReduceAccumulator(best, bestAlloc);
             for (; i < n; i++)
             {
                 if (mask != null && mask[i * mstride] == 0)
                     continue;
                 byte* x = lane + i * stride;
-                int cmp = Compare(best, bestAlloc, x, ctx.In, ctx);
+                int cmp = CompareWithAccumulator(ref acc, x, inArena, ctx);
                 // NumPy's `(cmp < 0) ^ invert`: maximum keeps the accumulator unless it is less, minimum keeps it only when
                 // it is less; a tie keeps it (the accumulator IS the output).
-                bool keep = ctx.IsMax ? cmp >= 0 : cmp < 0;
+                bool keep = isMax ? cmp >= 0 : cmp < 0;
                 if (cmp != 0 && !keep)
                 {
                     best = x;
                     bestAlloc = ctx.In;
+                    acc = new ReduceAccumulator(best, bestAlloc);
+                }
+                else if (isMax && acc.Na == 1 && ctx.Rule == VStringNARule.NaN)
+                {
+                    // A NaN-like NA accumulator under maximum: _compare puts an NA first operand above everything, so every
+                    // later comparison keeps it — the answer is decided. Only a corrupt later cell could still change the
+                    // outcome (NumPy's load raises), and a cell is corrupt only when it points into an arena its allocator
+                    // does not have; with an arena, no cell can be, so the scan stops.
+                    if (inArena == null)
+                        ThrowOnCorruptCell(lane, mask, i + 1, ref acc, ctx);
+                    break;
                 }
             }
             // The winner duplicated once (the materialized first element is already in place).
             if (best != o)
                 VStringAllocator.FreeAndCopy(bestAlloc, ctx.Out, best, o, ctx.Name);
+        }
+
+        /// <summary>
+        ///     The accumulator of a <c>StringDType</c> max / min lane, loaded once: its cell, allocator, high word (for the
+        ///     short-cell order), load outcome, text and size, and its first eight bytes as a big-endian key when they can
+        ///     decide a comparison alone.
+        /// </summary>
+        private struct ReduceAccumulator
+        {
+            /// <summary>The accumulator's cell (an input cell, the materialized output cell, or the <c>initial=</c> cell).</summary>
+            internal readonly byte* Cell;
+
+            /// <summary>The allocator the cell's text lives in.</summary>
+            internal readonly VStringAllocator Alloc;
+
+            /// <summary>The cell's high word (byte 15 is its flags and short size).</summary>
+            internal readonly ulong High;
+
+            /// <summary>The cell's byte 15.</summary>
+            internal readonly uint Flags;
+
+            /// <summary>True when the text lives in the cell (<see cref="NDVStringArithmetic.ShortOrder"/> can order it against
+            ///     another short cell).</summary>
+            internal readonly bool IsShort;
+
+            /// <summary><see cref="NDVStringCells.Load"/>'s outcome: 0 a text, 1 an NA, -1 a corrupt cell.</summary>
+            internal readonly int Na;
+
+            /// <summary>The first text byte (null for an NA).</summary>
+            internal readonly byte* Text;
+
+            /// <summary>The text size in bytes.</summary>
+            internal readonly long Size;
+
+            /// <summary>The first eight text bytes as a big-endian number (valid when <see cref="KeyDecides"/>).</summary>
+            internal readonly ulong Key;
+
+            /// <summary>
+            ///     True when the text has at least eight bytes and none of the first eight is NUL: then against any text of at
+            ///     least eight bytes whose key differs, <c>strncmp</c> stops at the first differing byte (no shared NUL can
+            ///     come first), so the keys' order IS NumPy's <c>NpyString_cmp</c>.
+            /// </summary>
+            internal readonly bool KeyDecides;
+
+            /// <summary>Loads the accumulator state of a cell.</summary>
+            /// <param name="cell">The cell.</param>
+            /// <param name="alloc">The allocator its text lives in.</param>
+            internal ReduceAccumulator(byte* cell, VStringAllocator alloc)
+            {
+                Cell = cell;
+                Alloc = alloc;
+                High = Unsafe.ReadUnaligned<ulong>(cell + 8);
+                Flags = (uint)(High >> 56);
+                const uint shortFlags = VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA;
+                IsShort = (Flags & VStringAllocator.NPY_STRING_FLAG_MASK) == shortFlags;
+                Na = NDVStringCells.Load(cell, alloc.ArenaBase, out Text, out Size);
+                Key = 0;
+                KeyDecides = false;
+                if (Na == 0 && Size >= 8)
+                {
+                    ulong w = Unsafe.ReadUnaligned<ulong>(Text);
+                    // SWAR zero-byte test: a NUL among the first eight bytes lets a shared NUL end strncmp first.
+                    KeyDecides = ((w - 0x0101_0101_0101_0101UL) & ~w & 0x8080_8080_8080_8080UL) == 0;
+                    Key = System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(w);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     <see cref="Compare"/> with the accumulator as the first operand, its state already loaded: the short-cell order
+        ///     when both texts live in their cells, the eight-byte key when it decides, else NumPy's full
+        ///     <c>NpyString_cmp</c>, the NaN-like NA rule inline, and every other NA or corrupt cell through
+        ///     <see cref="NDVStringArithmetic.CompareCells"/> (which applies the rule or raises).
+        /// </summary>
+        /// <param name="acc">The accumulator.</param>
+        /// <param name="x">The element's cell (an input cell).</param>
+        /// <param name="inArena">The input allocator's arena base.</param>
+        /// <param name="ctx">The context.</param>
+        /// <returns>Negative, zero or positive: the order of the accumulator against the element.</returns>
+        /// <exception cref="ValueError">An NA under the <c>None</c>-like rule.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt cell (NumPy's <c>Failed to load string</c>).</exception>
+        [MethodImpl(MethodImplOptionsConstants.OptimizeAndInline)]
+        private static int CompareWithAccumulator(ref ReduceAccumulator acc, byte* x, byte* inArena, VStringReduceContext ctx)
+        {
+            ulong hb = Unsafe.ReadUnaligned<ulong>(x + 8);
+            uint fb = (uint)(hb >> 56);
+            const uint shortFlags = VStringAllocator.NPY_STRING_INITIALIZED | VStringAllocator.NPY_STRING_OUTSIDE_ARENA;
+            if (acc.IsShort && (fb & VStringAllocator.NPY_STRING_FLAG_MASK) == shortFlags)
+                return NDVStringArithmetic.ShortOrder(acc.Cell, acc.Flags, acc.High, x, fb, hb);
+            int nb = NDVStringCells.Load(x, inArena, out byte* bb, out long sb);
+            if ((acc.Na | nb) == 0)
+            {
+                if (acc.KeyDecides && sb >= 8)
+                {
+                    ulong kb = System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<ulong>(bb));
+                    if (kb != acc.Key)
+                        return acc.Key < kb ? -1 : 1;
+                }
+                return NDVStringCells.Order(acc.Text, acc.Size, bb, sb);
+            }
+            if (acc.Na >= 0 && nb >= 0 && ctx.Rule == VStringNARule.NaN)
+                return acc.Na != 0 ? 1 : -1;
+            return NDVStringArithmetic.CompareCells(acc.Cell, acc.Alloc, x, ctx.In, ctx.Rule, ctx.DefaultText, ctx.DefaultSize);
+        }
+
+        /// <summary>
+        ///     The rest of a lane whose maximum is already a NaN-like NA, when the input allocator has no arena: NumPy's loop
+        ///     still loads every later (selected) element, and an arena cell there is corrupt (<c>Failed to load string</c>).
+        ///     Raises that error at the first such cell, through the same comparison the loop would make.
+        /// </summary>
+        /// <param name="lane">The lane's first cell.</param>
+        /// <param name="mask">The lane's first mask byte, or null.</param>
+        /// <param name="from">The first index left to check.</param>
+        /// <param name="acc">The NA accumulator.</param>
+        /// <param name="ctx">The context.</param>
+        /// <exception cref="OutOfMemoryException">A corrupt cell.</exception>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowOnCorruptCell(byte* lane, byte* mask, long from, ref ReduceAccumulator acc, VStringReduceContext ctx)
+        {
+            long n = ctx.N, stride = ctx.InStride, mstride = ctx.MaskStride;
+            for (long i = from; i < n; i++)
+            {
+                if (mask != null && mask[i * mstride] == 0)
+                    continue;
+                byte* x = lane + i * stride;
+                if (NDVStringCells.Load(x, null, out _, out _) < 0)
+                    CompareWithAccumulator(ref acc, x, null, ctx);
+            }
         }
 
         /// <summary>

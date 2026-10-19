@@ -559,8 +559,18 @@ oracle sections closed the gaps between "NumPy refuses" and "NumPy computes":
   slots (`setitem`, `getitem`, `finalize_descr`, `get_constant`, ArrFuncs, `sort_meth`/`argsort_meth`), the absent classes,
   the collapsed C-integer / long-double classes, the datetime `type` (Stage C) and the asymmetric `M8[1000ms] == M8[s]`.
 
-**Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`); the completion of Stage D phase 1
-(`docs/plans/strings-phase1-completion.md`, owner direction 2026-10-10: NEP 55 `StringDType` and the text ↔ number
-casts are phase 1, text as data for all three string dtypes, not a later phase); Stage D phase 2 (computing on text —
-comparisons, `np.strings`, sorting, `add`/`multiply` loops; planned in `docs/plans/strings-phase2.md`: the techniques,
-measured against NumPy, and eight subphases P2.0–P2.7, of which P2.4 moved to phase 1).
+**Stage D complete (2026-10-19, branch `strings`) — text as data and computing on text for `S`, `U` and NEP 55
+`StringDType`.** Phase 1 (`docs/plans/strings-phase1-completion.md`, the owner's direction of 2026-10-10: `StringDType`
+and the text ↔ number casts belong to it) ended with P1.7f, the whole surface with `T` (`01566b27`): a reflection sweep
+of every `np.*`, module and `NDArray` method with a `StringDType` operand in each array slot ends in 0 generic phase-1
+refusals. Phase 2 (`docs/plans/strings-phase2.md`) ended with P2.7, the switch-over (`52cf04bb`, `6513b2cd`,
+`f44c9579`, `01566b27` and its closing commit): every computation NumPy runs on text computes — the comparisons and
+truth values, concatenation and repetition, the reductions, sorting / searching / sets and the order statistics, all 46
+`numpy.strings` functions, the reductions into a text `out=` with NumPy's loop resolution —, and
+`StringComputationNotSupportedException` is only `np.evaluate`'s refusal of a text operand. Gates: the string oracle
+(`test/oracle/gen_strings_oracle.py`, 64 sections, 266,059 NumPy 2.4.2 cases, every one strict) and the
+`benchmark/strings` subsystem of `run_benchmark.py`. What stays out: NumPy's object arrays (a computation whose NumPy
+result is an object array of Python strings, as in the `numpy.polynomial` recurrences over text, raises
+`NotSupportedException`) and the NumPy 2.4.2 defects the plans list as not reproduced.
+
+**Not yet:** datetime storage/kernels/NaT/ISO (C — `docs/plans/datetime64.md`).

@@ -250,5 +250,11 @@
     "copyk:copy": ["numpy.ndarray.copy"],
     "copyk:astype": ["numpy.ndarray.astype"],
     "reduce:{head}": ["numpy.{head}"]
+  },
+  "strings": {
+    "note": "test/NumSharp.Tests.Oracle/Strings/corpus/strings_<section>.jsonl (the string oracle), replayed by StringOracleTests; only its numpy.strings calls are joined (oracle_evidence.STRINGS_OPS). Variant = str_fn:<name> for the str_fn op (params.name is the numpy.strings function: the search, strip, pad, replace, partition, slice, comparison, predicate, case, translate, mod and codec sections over S / U / StringDType), strings_add for np.strings.add and strings_multiply for np.strings.multiply (with an integer or a text count).",
+    "str_fn:{name}": ["numpy.strings.{name}"],
+    "strings_add": ["numpy.strings.add"],
+    "strings_multiply": ["numpy.strings.multiply"]
   }
 }

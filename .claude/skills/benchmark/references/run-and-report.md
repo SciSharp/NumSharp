@@ -4,7 +4,7 @@
 
 Builds the C# suite, runs each suite through BenchmarkDotNet (per-class JSON, resumable), sweeps warm NumPy across
 the applicable size tiers, runs Managed/OpenBLAS profiles, merges on `(op, dtype, N, scenario)`,
-appends the five complementary subsystems, and archives raw scratch to
+appends the six complementary subsystems, and archives raw scratch to
 `results/<ts>/` (gitignored), and writes the committable `history/<date>_<sha>/` snapshot.
 
 ```bash
