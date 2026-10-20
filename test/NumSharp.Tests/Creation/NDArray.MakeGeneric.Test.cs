@@ -12,9 +12,9 @@ namespace NumSharp.Tests.Creation
             var list = new double[] {1.1, 2.2, 3.3};
             var arrayDouble = np.array(list).MakeGeneric<double>();
 
-            Assert.IsTrue(arrayDouble[0] == 1.1);
-            Assert.IsTrue(arrayDouble[1] == 2.2);
-            Assert.IsTrue(arrayDouble[2] == 3.3);
+            Assert.IsTrue((double)arrayDouble[0] == 1.1);
+            Assert.IsTrue((double)arrayDouble[1] == 2.2);
+            Assert.IsTrue((double)arrayDouble[2] == 3.3);
         }
 
         /// <summary>

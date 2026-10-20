@@ -47,7 +47,7 @@ lists what failed, with the compiler's reason.
 | group | names with a NumPy counterpart | M ● | M ◦ only | X | O | T ● | T ◇ | B ● | B ◐ | L ● | L ◐ | L ◦ | Q | no mark | not compared | NumSharp-only names | of them O | of them T | NumPy names NumSharp lacks |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `np` | 366 | 46 | 108 | 45 | 150 | 6 | 11 | 18 | 0 | 23 | 2 | 1 | 22 | 109 | 0 | 18 | 10 | 8 | 47 |
-| `ndarray` | 57 | 9 | 1 | 5 | 24 | 1 | 4 | 7 | 0 | 4 | 0 | 0 | 10 | 22 | 0 | 83 | 45 | 15 | 3 |
+| `ndarray` | 57 | 9 | 1 | 5 | 22 | 1 | 4 | 7 | 0 | 4 | 0 | 0 | 10 | 24 | 0 | 83 | 45 | 15 | 3 |
 | `np.char` | 53 | 0 | 11 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 1 | 0 | 0 | 0 |
 | `np.dtypes` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 0 | 0 |
@@ -67,8 +67,8 @@ lists what failed, with the compiler's reason.
 | `np.strings` | 46 | 0 | 17 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 27 | 0 | 0 | 0 | 0 | 0 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 2 | 2 | 0 | 1 | 2 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 3 |
-| `np.matrix` | 53 | 10 | 1 | 0 | 19 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 13 | 21 | 0 | 4 | 0 | 0 | 0 |
-| `np.char.chararray` | 60 | 1 | 1 | 1 | 8 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 51 | 0 | 4 | 0 | 0 | 0 |
+| `np.matrix` | 53 | 10 | 1 | 0 | 17 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 13 | 23 | 0 | 4 | 0 | 0 | 0 |
+| `np.char.chararray` | 60 | 1 | 1 | 1 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 1 | 52 | 0 | 4 | 0 | 0 | 0 |
 | `np.ma.MaskedArray` | 59 | 30 | 0 | 1 | 2 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 13 | 25 | 0 | 2 | 1 | 0 | 17 |
 | `np.dtype` | 4 | 1 | 0 | 0 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 5 | 3 | 2 | 0 |
 | `np.nditer` | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 3 | 0 | 0 | 0 |
@@ -88,7 +88,7 @@ lists what failed, with the compiler's reason.
 | `np.random.PCG64DXSM` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | 1287 | 232 | 142 | 89 | 354 | 10 | 17 | 44 | 0 | 31 | 19 | 73 | 77 | 602 | 0 | 168 | 63 | 26 | 96 |
+| **total** | 1287 | 232 | 142 | 89 | 349 | 10 | 17 | 44 | 0 | 31 | 19 | 73 | 77 | 607 | 0 | 168 | 63 | 26 | 96 |
 
 *no mark*: no M (● or ◦), X, O, T, B, L or Q: the name matches NumPy in every respect the table checks.
 
@@ -500,10 +500,10 @@ lists what failed, with the compiler's reason.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `(constructor)` | ● | ● | 11 |  | ● |  |  | `ndarray(shape, dtype=None, buffer=None, offset=0, strides=None, order=None)` | `buffer (C#: fillZeros)`, `offset`, `strides` | `fillZeros`, `size`, `storage`, `values` |  | required parameters only: no overload fits; the closest one wants `UnmanagedStorage` for argument 1 — `new NDArray(new Shape(2))` |
 | `__contains__` |  |  |  |  |  |  |  | `a.__contains__(key, /)` |  |  |  |  |
-| `__getitem__` |  |  | 4 |  |  |  |  | `a.__getitem__(key, /)` |  |  |  |  |
+| `__getitem__` |  |  |  |  |  |  |  | `a.__getitem__(key, /)` |  |  |  |  |
 | `__iter__` |  |  |  |  |  |  |  | `a.__iter__()` |  |  |  |  |
 | `__len__` |  |  |  |  |  |  |  | `a.__len__()` |  |  |  |  |
-| `__setitem__` |  |  | 3 |  |  |  |  | `a.__setitem__(key, value, /)` |  |  |  |  |
+| `__setitem__` |  |  |  |  |  |  |  | `a.__setitem__(key, value, /)` |  |  |  |  |
 | `all` |  |  |  |  |  |  | ● | `a.all(axis=None, out=None, *, keepdims=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 1 |
 | `any` |  |  |  |  |  |  | ● | `a.any(axis=None, out=None, *, keepdims=<no value>, where=<no value>)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int?` for argument 1 |
 | `argmax` |  |  | 3 |  |  |  |  | `a.argmax(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
@@ -1526,7 +1526,7 @@ lists what failed, with the compiler's reason.
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `__getitem__` |  |  | 4 |  |  |  |  | `matrix.__getitem__(index)` |  |  |  |  |
+| `__getitem__` |  |  |  |  |  |  |  | `matrix.__getitem__(index)` |  |  |  |  |
 | `__imul__` |  |  |  |  |  |  |  | `matrix.__imul__(other)` |  |  |  |  |
 | `__ipow__` |  |  |  |  |  |  |  | `matrix.__ipow__(other)` |  |  |  |  |
 | `__iter__` |  |  |  |  |  |  |  | `matrix.__iter__()` |  |  |  |  |
@@ -1534,7 +1534,7 @@ lists what failed, with the compiler's reason.
 | `__pow__` |  |  | 2 |  |  |  |  | `matrix.__pow__(other)` |  |  |  |  |
 | `__rmul__` |  |  |  |  |  |  |  | `matrix.__rmul__(other)` |  |  |  |  |
 | `__rpow__` |  |  |  |  |  |  |  | `matrix.__rpow__(other)` |  |  |  |  |
-| `__setitem__` |  |  | 4 |  |  |  |  | `matrix.__setitem__(key, value, /)` |  |  |  |  |
+| `__setitem__` |  |  |  |  |  |  |  | `matrix.__setitem__(key, value, /)` |  |  |  |  |
 | `all` |  |  | 2 |  |  |  | ● | `matrix.all(axis=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
 | `any` |  |  | 2 |  |  |  | ● | `matrix.any(axis=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
 | `argmax` |  |  |  |  |  |  | ● | `matrix.argmax(axis=None, out=None)` |  |  |  | `axis` as a sequence: no overload fits; the closest one wants `int` for argument 1 |
@@ -1595,7 +1595,7 @@ lists what failed, with the compiler's reason.
 
 | name | M | X | O | T | B | L | Q | NumPy | missing on NumSharp | NumSharp-only parameters | NPTypeCode / Type | compile probe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `__getitem__` |  |  | 4 |  |  |  |  | `chararray.__getitem__(obj)` |  |  |  |  |
+| `__getitem__` |  |  |  |  |  |  |  | `chararray.__getitem__(obj)` |  |  |  |  |
 | `__iter__` |  |  |  |  |  |  |  | `chararray.__iter__()` |  |  |  |  |
 | `argmax` |  |  | 3 |  |  |  |  | `chararray.argmax(axis=None, out=None, *, keepdims=False)` |  |  |  |  |
 | `argmin` |  |  | 3 |  |  |  |  | `chararray.argmin(axis=None, out=None, *, keepdims=False)` |  |  |  |  |

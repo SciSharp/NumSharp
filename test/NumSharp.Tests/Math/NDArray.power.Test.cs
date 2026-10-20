@@ -11,9 +11,9 @@
 
             var nd1 = np.power(nd, 2).MakeGeneric<long>();
 
-            Assert.IsTrue(nd1[0] == 0);
-            Assert.IsTrue(nd1[1] == 1);
-            Assert.IsTrue(nd1[2] == 4);
+            Assert.IsTrue((long)nd1[0] == 0);
+            Assert.IsTrue((long)nd1[1] == 1);
+            Assert.IsTrue((long)nd1[2] == 4);
         }
     }
 }

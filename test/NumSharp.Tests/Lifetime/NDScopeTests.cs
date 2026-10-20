@@ -551,14 +551,14 @@ namespace NumSharp.Tests.Lifetime
             var bb = np.array(new[] { true, false, false }).MakeGeneric<bool>();
             using (NDArray<bool> and = ba & bb)
             {
-                Assert.IsTrue(and[0]);
-                Assert.IsFalse(and[1]);
-                Assert.IsFalse(and[2]);
+                Assert.IsTrue((bool)and[0]);
+                Assert.IsFalse((bool)and[1]);
+                Assert.IsFalse((bool)and[2]);
             }
             using (NDArray<bool> slice = ba["0:2"])
             {
                 Assert.AreEqual(2, slice.size);
-                Assert.IsTrue(slice[0]);
+                Assert.IsTrue((bool)slice[0]);
             }
             ba.Dispose();
             bb.Dispose();

@@ -31,9 +31,14 @@ using NumSharp.Generic;
 // An index with an index array or a mask takes the plain ndarray path. A full integer index stores one element
 // and refuses an array value ("setting an array element with a sequence.").
 //
-// THE C# SETTER TYPE. An indexer has one type for get and set. These indexers are typed NDMatrix so that
-// m[0] * m.T is a matrix product, therefore the value assigned through them is an NDMatrix or a C# number (which
-// converts implicitly to a 0-d matrix). Assign any other value (an NDArray, a list) with __setitem__.
+// THE C# SETTER TYPE. An indexer has one type for get and set. The general indexer (NumPy's one __getitem__) is typed
+// NDMatrix so that m[0] * m.T is a matrix product, therefore the value assigned through it is an NDMatrix or a C# number
+// (which converts implicitly to a 0-d matrix). Assign any other value (an NDArray, a list) with __setitem__. The one other
+// C# form, m[row, column], is typed NDArray: it returns NumPy's scalar (a 0-d array), and its setter takes any NDArray.
+//
+// STATIC, NOT VIRTUAL. The indexer hides NDArray's (virtual) indexer instead of overriding it: the matrix rule applies
+// through an NDMatrix reference, and library code that receives a matrix as an NDArray indexes it as a plain 2-d array
+// (NDMatrixBoundary hands the matrix object itself to the computation it runs with plain-array semantics).
 //
 // =============================================================================
 
@@ -44,31 +49,9 @@ namespace NumSharp
         #region Getters
 
         /// <summary>
-        ///     Row <paramref name="index"/> as a <c>(1, N)</c> matrix (NumPy's <c>m[i]</c>). Assigning writes the
-        ///     row; the value broadcasts against <c>(1, N)</c>.
-        /// </summary>
-        /// <param name="index">The row. A negative value counts from the last row.</param>
-        /// <value>A view: writes to it reach this matrix.</value>
-        /// <exception cref="IndexError"><paramref name="index"/> is out of bounds.</exception>
-        /// <exception cref="ValueError">(set) The matrix is read-only, or the value does not broadcast to the
-        ///     row.</exception>
-        public NDMatrix this[int index]
-        {
-            get => GetBasic(new Slice[] { Slice.Index(index) });
-            set => SetBasic(new Slice[] { Slice.Index(index) }, value);
-        }
-
-        /// <inheritdoc cref="this[int]"/>
-        public NDMatrix this[long index]
-        {
-            get => GetBasic(new Slice[] { Slice.Index(index) });
-            set => SetBasic(new Slice[] { Slice.Index(index) }, value);
-        }
-
-        /// <summary>
         ///     The element at (<paramref name="row"/>, <paramref name="column"/>) as a 0-d <see cref="NDArray"/>,
         ///     NumSharp's scalar (NumPy's <c>m[i, j]</c> returns a scalar, not a matrix). Assigning stores one
-        ///     element.
+        ///     element. Two <see cref="int"/> arguments bind here too (they convert to <see cref="long"/>).
         /// </summary>
         /// <param name="row">The row; negative counts from the end.</param>
         /// <param name="column">The column; negative counts from the end.</param>
@@ -76,13 +59,14 @@ namespace NumSharp
         /// <exception cref="IndexError">An index is out of bounds, or the matrix object does not have two axes.</exception>
         /// <exception cref="ValueError">(set) The matrix is read-only, or the value is an array with one or more
         ///     axes (NumPy's <c>setting an array element with a sequence.</c>).</exception>
-        public NDArray this[int row, int column]
-        {
-            get => new NDArray(ElementView(row, column));
-            set => SetBasic(new Slice[] { Slice.Index(row), Slice.Index(column) }, value);
-        }
-
-        /// <inheritdoc cref="this[int, int]"/>
+        /// <exception cref="TypeError">(set) An array with one or more axes into a complex matrix (NumPy's
+        ///     <c>only 0-dimensional arrays can be converted to Python scalars</c>).</exception>
+        /// <remarks>
+        ///     The one C# form beside the general indexer, kept because its TYPE differs: the general indexer is typed
+        ///     <see cref="NDMatrix"/> (a row, a column, a matrix view), while this element access is typed as the scalar it
+        ///     returns, and it checks both integers inline, so the hot element read allocates no index array. C# prefers it
+        ///     for two integer arguments (a conversion to <see cref="long"/> is better than one to <see cref="object"/>).
+        /// </remarks>
         public NDArray this[long row, long column]
         {
             get => new NDArray(ElementView(row, column));
@@ -90,119 +74,67 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Indexes with Python slice notation (<c>m["1:3, 0"]</c>, <c>m[":, ::-1"]</c>, <c>m["..., 0"]</c>) under
-        ///     the matrix rule: a 1-d selection comes back as a row, or as a column when the second entry is an
-        ///     integer.
-        /// </summary>
-        /// <param name="slice">The comma-separated entries: integers, <c>start:stop:step</c>, <c>...</c>,
-        ///     <c>np.newaxis</c>.</param>
-        /// <value>A view. When every axis is indexed with an integer the result is the 0-d scalar stand-in
-        ///     (prefer <c>m[i, j]</c>, which is typed as a scalar).</value>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
-        /// <exception cref="ValueError">(set) The matrix is read-only, or the value does not broadcast to the
-        ///     selected view.</exception>
-        public new NDMatrix this[string slice]
-        {
-            get => GetBasic(Slice.ParseSlices(slice));
-            set => SetBasic(Slice.ParseSlices(slice), value);
-        }
-
-        /// <summary>
-        ///     Indexes with slice objects (<c>m[Slice.All, 0]</c>, <c>m[new Slice(1, 3)]</c>) under the matrix rule.
-        ///     An <see cref="int"/> and a slice string convert to <see cref="Slice"/>, so <c>m[":", 0]</c> binds here.
-        /// </summary>
-        /// <param name="slices">One entry per axis, with <see cref="Slice.Ellipsis"/> and <see cref="Slice.NewAxis"/>
-        ///     allowed. An index with a new axis returns a matrix object with three axes, as NumPy does.</param>
-        /// <value>A view; the 0-d scalar stand-in when every axis is indexed with an integer.</value>
-        /// <exception cref="ArgumentNullException"><paramref name="slices"/> is <c>null</c>.</exception>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
-        /// <exception cref="ValueError">(set) The matrix is read-only, or the value does not broadcast to the
-        ///     selected view.</exception>
-        public new NDMatrix this[params Slice[] slices]
-        {
-            get => GetBasic(slices);
-            set => SetBasic(slices, value);
-        }
-
-        /// <summary>
-        ///     The general index: integers, slices, slice strings, index arrays, boolean masks and sequences in any
-        ///     mix, under the matrix rule (file header). A boolean matrix from a comparison binds here:
+        ///     NumPy's <c>matrix.__getitem__(index)</c> as the one C# indexer: integers, slices, slice notation, index arrays,
+        ///     boolean masks and sequences in any mix, under the matrix rule (file header): a 1-d selection comes back as a
+        ///     row, or as a column when the second entry is a scalar. A boolean matrix from a comparison is an index too:
         ///     <c>m[m &gt; 5]</c> is a <c>(1, K)</c> row.
         /// </summary>
-        /// <param name="indices">The index entries (NumPy's index tuple).</param>
-        /// <value>A view for an index of integers and slices, a new matrix when an index array or a mask is
-        ///     involved; the 0-d scalar stand-in when the selection has no axis left.</value>
-        /// <exception cref="IndexError">An index is out of bounds, too many entries, or index arrays that do not
-        ///     broadcast together.</exception>
-        /// <exception cref="ValueError">(set) The matrix is read-only, or the value does not fit the selection.</exception>
-        public new NDMatrix this[params object[] indices]
+        /// <param name="key">The index tuple (NumPy's index tuple; a <see cref="Slice"/>[] or <c>object[]</c> passed alone is
+        ///     the tuple itself, a single C# tuple entry is spread). A slice-notation string may hold several entries
+        ///     (<c>m["1:3, 0"]</c>, <c>m["..., 0"]</c>); an index with a new axis returns a matrix object with three axes, as
+        ///     NumPy does.</param>
+        /// <value>A view for an index of integers and slices (<c>m[0]</c> and <c>m[0, ":"]</c> are rows, <c>m[":", 0]</c> a
+        ///     column), a new matrix when an index array or a mask is involved; the 0-d scalar stand-in when the selection has
+        ///     no axis left (prefer <see cref="this[long, long]"/>, which is typed as a scalar).</value>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> or (set) the value is <c>null</c>.</exception>
+        /// <exception cref="IndexError">An index is out of bounds, too many entries, a second ellipsis, or index arrays
+        ///     that do not broadcast together (NumPy's texts, checked before the storage is touched).</exception>
+        /// <exception cref="ValueError">(set) The matrix is read-only (checked first), or the value does not fit the
+        ///     selection (a 1-d value assigned to a COLUMN raises, as in NumPy: a column is <c>(N, 1)</c>).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>The C# setter type.</b> The value assigned through this indexer is an <see cref="NDMatrix"/> or a C# number
+        ///     (which converts implicitly to a 0-d matrix). Assign any other value (an <see cref="NDArray"/>, a list) with
+        ///     <see cref="__setitem__(object, object)"/>.
+        ///     </para>
+        ///     <para>
+        ///     <b>Static, not virtual.</b> This indexer HIDES <see cref="NDArray.this[object[]]"/> instead of overriding it: the
+        ///     matrix rule applies through an <see cref="NDMatrix"/> reference, and through an <see cref="NDArray"/> reference a
+        ///     matrix is indexed as a plain 2-d array, which the library's own code relies on (<see cref="NDMatrixBoundary"/>
+        ///     hands the matrix object itself to the computation it runs with plain-array semantics).
+        ///     </para>
+        ///     <para>
+        ///     <b>Dispatch.</b> An index of integers, slices and slice strings takes the view route (one rule for the row /
+        ///     column shape, NumPy's index errors, and the source's read-only flag kept on the view): the body of the old
+        ///     typed <c>this[int]</c>, <c>this[long]</c>, <c>this[string]</c> and <c>this[params Slice[]]</c>. Any other index
+        ///     runs the plain array's advanced indexing and is shaped by the matrix rule (the old <c>this[NDArray&lt;bool&gt;]</c>
+        ///     and <c>this[params NDArray&lt;int&gt;[]]</c> took the same route).
+        ///     </para>
+        /// </remarks>
+        public new NDMatrix this[params object[] key]
         {
-            // An index of integers and slices takes the same view route as the typed indexers: one rule for the
-            // row / column shape, NumPy's index errors, and the source's read-only flag kept on the view.
             [NDScoped]
-            get => indices is not null && TryAsSlices(indices, out Slice[] slices)
-                ? GetBasic(slices)
-                : FromIndexing(base[indices], this, SelectsColumn(indices), IsScalarArrayIndex(indices));
-            [NDScoped] set => SetItem(indices, value);
+            get
+            {
+                if (key is null)
+                    throw new ArgumentNullException(nameof(key));
+                return TryAsSlices(key, out Slice[] slices)
+                    ? GetBasic(slices)
+                    : FromIndexing(base[key], this, SelectsColumn(key), IsScalarArrayIndex(key));
+            }
+            [NDScoped] set => SetItem(key, value);
         }
 
-        /// <summary>
-        ///     Selects with a boolean mask (NumPy's <c>m[mask]</c>): a mask of the matrix's shape gives the selected
-        ///     elements as ONE ROW <c>(1, K)</c>, a 1-d mask over the rows gives those rows.
-        /// </summary>
-        /// <param name="mask">The mask.</param>
-        /// <value>A new matrix (a copy). Assigning stores into the selected elements through the plain array rule:
-        ///     the value is a scalar or 1-d there, which a 2-d matrix value is not.</value>
-        /// <exception cref="IndexError">The mask's shape does not match.</exception>
-        /// <exception cref="ValueError">(set) The matrix is read-only, or the value count differs from the number
-        ///     of selected elements.</exception>
-        public new NDMatrix this[NDArray<bool> mask]
-        {
-            [NDScoped] get => FromIndexing(base[mask], this, column: false);
-            set => base[mask] = value;
-        }
-
-        /// <summary>
-        ///     Selects with integer index arrays, one per axis (NumPy's <c>m[rows, cols]</c>). A 1-d selection is a
-        ///     row: the second entry is an array, never a scalar.
-        /// </summary>
-        /// <param name="selection">The index arrays.</param>
-        /// <value>A new matrix (a copy).</value>
-        /// <exception cref="IndexError">An index is out of bounds, or the arrays do not broadcast together.</exception>
-        /// <exception cref="ValueError">(set) The matrix is read-only, or the value does not broadcast to the
-        ///     selection.</exception>
-        public new NDMatrix this[params NDArray<int>[] selection]
-        {
-            [NDScoped] get => FromIndexing(base[selection], this, column: false);
-            set => base[selection] = value;
-        }
-
-        /// <summary>Python's <c>m.__getitem__(i)</c>: the same as <c>m[i]</c>.</summary>
-        /// <param name="index">The row.</param>
-        /// <returns>The row as a <c>(1, N)</c> view.</returns>
-        /// <exception cref="IndexError"><paramref name="index"/> is out of bounds.</exception>
-        public new NDMatrix __getitem__(int index) => this[index];
-
-        /// <inheritdoc cref="__getitem__(int)"/>
-        public new NDMatrix __getitem__(long index) => this[index];
-
-        /// <summary>Python's <c>m.__getitem__</c> with slice notation: the same as <c>m[slice]</c>.</summary>
-        /// <param name="slice">The slice notation.</param>
-        /// <returns>The selection under the matrix rule.</returns>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
-        public new NDMatrix __getitem__(string slice) => this[slice];
-
-        /// <summary>Python's <c>m.__getitem__((i, j))</c> with integer entries.</summary>
-        /// <param name="indices">One integer per indexed axis.</param>
-        /// <returns>A row for one integer; the 0-d scalar stand-in for two.</returns>
-        /// <exception cref="IndexError">An index is out of bounds, or more entries than axes.</exception>
-        public new NDMatrix __getitem__(params int[] indices)
-        {
-            var slices = new Slice[indices.Length];
-            for (int i = 0; i < slices.Length; i++)
-                slices[i] = Slice.Index(indices[i]);
-            return GetBasic(slices);
-        }
+        /// <summary>NumPy's <c>matrix.__getitem__(index)</c>: the same as <c>m[index]</c> (see <see cref="this[object[]]"/>).</summary>
+        /// <param name="index">The index as Python passes it: one entry (an integer, slice notation, a <see cref="Slice"/>,
+        ///     an index array, a mask) or the whole index tuple — an <c>object[]</c> / <see cref="Slice"/>[] or a C# tuple. A
+        ///     typed C# array other than <see cref="Slice"/>[] (<c>int[]</c>, <c>bool[]</c>) is ONE entry, NumPy's list.</param>
+        /// <returns>The selection under the matrix rule: a row for one integer, the 0-d scalar stand-in for two.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="index"/> is <c>null</c>.</exception>
+        /// <exception cref="IndexError">An index is out of bounds, more entries than axes, or an invalid index.</exception>
+        /// <remarks>One member, NumPy's signature (it replaced the <c>int</c>, <c>long</c>, <c>string</c> and
+        ///     <c>params int[]</c> forms; coordinates are a tuple: <c>m.__getitem__((1, 2))</c>).</remarks>
+        public new NDMatrix __getitem__(object index) => this[ItemKey(index)];
 
         #endregion
 
@@ -210,8 +142,8 @@ namespace NumSharp
 
         /// <summary>
         ///     Python's <c>m[index] = value</c> for ANY value: an <see cref="NDArray"/>, a C# array, a list or tuple,
-        ///     or a number. Use it where the typed indexers do not accept the value (they take an
-        ///     <see cref="NDMatrix"/> or a number).
+        ///     or a number. Use it where the indexer does not accept the value (it takes an <see cref="NDMatrix"/> or a
+        ///     number).
         /// </summary>
         /// <param name="index">One index entry, or the whole index tuple as an <c>object[]</c> or a C# tuple.</param>
         /// <param name="value">The value. A 1-d value assigned to a COLUMN raises, as in NumPy: a column is
@@ -220,8 +152,11 @@ namespace NumSharp
         /// <exception cref="IndexError">The index is invalid for this matrix.</exception>
         /// <exception cref="ValueError">The matrix is read-only, the value does not broadcast to the selection,
         ///     or an array is assigned to a single element.</exception>
+        /// <remarks>One member (it replaced the <c>int</c>, <c>long</c> and <c>string</c> index forms). It HIDES
+        ///     <see cref="NDArray.__setitem__(object, object)"/>: numpy.matrix inherits ndarray's <c>__setitem__</c>, whose
+        ///     view assignment goes through the subclass's own <c>__getitem__</c>, so the matrix rule applies here.</remarks>
         [NDScoped]
-        public void __setitem__(object index, object value)
+        public new void __setitem__(object index, object value)
         {
             object[] entries = index switch
             {
@@ -231,28 +166,6 @@ namespace NumSharp
             };
             SetItem(entries, AsOperand(value));
         }
-
-        /// <summary>Python's <c>m[i] = value</c> for any value; see <see cref="__setitem__(object, object)"/>.</summary>
-        /// <param name="index">The row.</param>
-        /// <param name="value">The value; it broadcasts against the row <c>(1, N)</c>.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>
-        /// <exception cref="IndexError"><paramref name="index"/> is out of bounds.</exception>
-        /// <exception cref="ValueError">The matrix is read-only, or the value does not broadcast to the row.</exception>
-        [NDScoped]
-        public new void __setitem__(int index, object value) => SetBasic(new Slice[] { Slice.Index(index) }, AsOperand(value));
-
-        /// <inheritdoc cref="__setitem__(int, object)"/>
-        [NDScoped]
-        public new void __setitem__(long index, object value) => SetBasic(new Slice[] { Slice.Index(index) }, AsOperand(value));
-
-        /// <summary>Python's <c>m[slice] = value</c> for any value; see <see cref="__setitem__(object, object)"/>.</summary>
-        /// <param name="slice">The slice notation.</param>
-        /// <param name="value">The value; it broadcasts against the selected view as the matrix shapes it.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="value"/> is <c>null</c>.</exception>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
-        /// <exception cref="ValueError">The matrix is read-only, or the value does not broadcast to the view.</exception>
-        [NDScoped]
-        public new void __setitem__(string slice, object value) => SetBasic(Slice.ParseSlices(slice), AsOperand(value));
 
         #endregion
 

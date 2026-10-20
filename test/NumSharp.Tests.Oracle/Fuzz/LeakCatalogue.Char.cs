@@ -109,12 +109,12 @@ namespace NumSharp.Tests.Fuzz
                 c["1:"] = yz;
                 return c;
             });
-            E(l, "NDCharArray.__getitem__", "an int, a long, a slice string, int[] coordinates", f =>
+            E(l, "NDCharArray.__getitem__", "an int, a long, a slice string, a tuple of coordinates", f =>
             {
                 using var c = np.@char.array(new[,] { { "a ", "b" }, { "c", "d" } });
                 using var row = c.__getitem__(0);
                 using var col = c.__getitem__("::-1");
-                using var element = c.__getitem__(1, 0);
+                using var element = c.__getitem__((1, 0));
                 return c.__getitem__(1L);
             });
             E(l, "NDCharArray.GetEnumerator", "stripped elements of a 1-d chararray, rows of a 2-d one", f =>
@@ -1110,7 +1110,7 @@ namespace NumSharp.Tests.Fuzz
                 var u = np.array(new[,] { { "a b", "c", "x y" }, { "", "d e f", "g" } });
                 return (u, np.@char.split(u));
             }
-            E(l, "NDListArray.Item", "an element (its piece array), slice notation and Slices (views)", f =>
+            E(l, "NDListArray.Item", "an element (the 0-d stand-in of its list), slice notation and Slices (views)", f =>
             {
                 var (u, lists) = Grid();
                 using (u)

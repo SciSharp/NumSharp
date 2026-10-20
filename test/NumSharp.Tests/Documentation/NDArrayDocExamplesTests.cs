@@ -485,13 +485,22 @@ namespace NumSharp.Tests.Documentation
         public void Generic_TypedWrappers()
         {
             NDArray<double> a = np.zeros(10).MakeGeneric<double>();
-            double first = a[0];
+            NDArray<double> head = a["0:3"];
+            head.shape.Should().Equal(3L);
+            double first = (double)a[0];
             first.Should().Be(0.0);
             a[0] = 3.14;
-            a[0].Should().Be(3.14);
+            ((double)a[0]).Should().Be(3.14);
+            ((double)head[0]).Should().Be(3.14, "the typed slice is a view");
 
-            np.zeros(3).AsGeneric<double>()[0].Should().Be(0.0);          // never allocates; returns null on mismatch
-            np.array(new[] { 1, 2, 3 }).AsOrMakeGeneric<double>()[0].Should().Be(1.0); // astype when dtype differs
+            // An untyped value is assigned through an NDArray reference or __setitem__.
+            NDArray u = a;
+            u["1:3"] = np.array(new[] { 1.0, 2.0 });
+            a.__setitem__("3:5", np.array(new[] { 3.0, 4.0 }));
+            a["0:5"].ToArray<double>().Should().Equal(3.14, 1.0, 2.0, 3.0, 4.0);
+
+            ((double)np.zeros(3).AsGeneric<double>()[0]).Should().Be(0.0);          // never allocates; returns null on mismatch
+            ((double)np.array(new[] { 1, 2, 3 }).AsOrMakeGeneric<double>()[0]).Should().Be(1.0); // astype when dtype differs
         }
 
         // ── Saving, Loading, and Interop ───────────────────────────────────────────────────────────

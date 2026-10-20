@@ -37,12 +37,14 @@ namespace NumSharp
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     <b>Element access.</b> A full integer index (one integer per axis, negative values counting from the end) is the
-    ///     element's list as a NEW 1-D array of the input's string class — <c>S</c> / <c>U</c> as wide as its longest piece
-    ///     (at least 1), or <c>StringDType</c> for a <c>StringDType</c> input — which is the closest NumSharp value to NumPy's
-    ///     Python list. A piece that ENDS in a NUL loses it in that array, as every fixed-width element does
-    ///     (<c>np.array(['a\x00'])</c> reads <c>'a'</c> in NumPy too); <see cref="tolist"/> and <see cref="item(long[])"/>
-    ///     keep it. Slice notation and <see cref="Slice"/>s give an <see cref="NDListArray"/> view.
+    ///     <b>Element access.</b> The indexer is NumPy's: a full integer index (one integer per axis, negative values
+    ///     counting from the end) returns the element's LIST as a 0-d <see cref="NDListArray"/> that stands for it
+    ///     (<see cref="IsStandIn"/>), every other index a list array over the selected lists (a view for slices). The list's
+    ///     pieces come out as .NET values from <see cref="item(long[])"/> and <see cref="tolist"/>, every piece exact.
+    ///     Iterating a 1-d list array yields each element's list as a NEW 1-D array of the input's string class —
+    ///     <c>S</c> / <c>U</c> as wide as its longest piece (at least 1), or <c>StringDType</c> for a <c>StringDType</c>
+    ///     input — which is the closest NumSharp value to NumPy's Python list; a piece that ENDS in a NUL loses it in that
+    ///     array, as every fixed-width element does (<c>np.array(['a\x00'])</c> reads <c>'a'</c> in NumPy too).
     ///     </para>
     ///     <para>
     ///     <b>Lifetime.</b> The arrays the type holds are NumSharp arrays: <see cref="Dispose"/> releases them at once (the
@@ -153,72 +155,98 @@ namespace NumSharp
         // =============================================================================================================
 
         /// <summary>
-        ///     The list of one element (a full integer index: one integer per axis, a negative one counting from the end) as a
-        ///     new 1-D array of its pieces — <c>S</c> / <c>U</c> as wide as the longest piece (at least 1), or
-        ///     <c>StringDType</c>.
+        ///     NumPy's indexing of an object array of lists (<c>ndarray.__getitem__</c> / <c>ndarray.__setitem__</c>) as the
+        ///     one C# indexer: every index NumPy takes — integers, slices, slice notation (<c>"1:"</c>, <c>"::-1, 0"</c>), index
+        ///     arrays, boolean masks and sequences, in any mix.
         /// </summary>
-        /// <param name="index">One integer per axis.</param>
-        /// <returns>The pieces, in order (an empty array for an empty list).</returns>
+        /// <param name="key">The index tuple, as for <see cref="NDArray.this[object[]]"/> (a lone string holds the whole
+        ///     index in slice notation; a <see cref="Slice"/>[] or <c>object[]</c> passed alone is the tuple itself).</param>
+        /// <value>
+        ///     GET: a list array over the selected lists — a VIEW for an index of integers and slices (the lists are shared,
+        ///     as a NumPy view shares the pointers), a new array of the same lists for an index array or a mask (NumPy's
+        ///     advanced indexing copies the pointers, not the lists). One integer per axis is NumPy's element access, which
+        ///     returns the LIST itself: a 0-d array marked as its stand-in (<see cref="IsStandIn"/>). Read the list's pieces
+        ///     with <see cref="item(long[])"/> or <see cref="tolist"/>.
+        ///     SET: NumPy's <c>a[index] = value</c> of an object array (see <see cref="SetItem(Slice[], NDListArray)"/>): one
+        ///     integer per axis stores the list a 0-d value stands for, a sub-array or an advanced selection receives a list
+        ///     array's lists by broadcasting.
+        /// </value>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>; SET: a null value (Python's None
+        ///     has no NDListArray form).</exception>
         /// <exception cref="IndexError">An integer outside its axis (NumPy's <c>index 5 is out of bounds for axis 0 with size
-        ///     2</c>), or fewer or more integers than axes (a partial index selects a sub-array: use slice notation, as in
-        ///     <c>lists["0"]</c>, for that).</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF (it has no .NET form).</exception>
-        public NDArray this[params long[] index] => Pieces(Element(index));
-
-        /// <summary>The list of one element as a new 1-D array of its pieces (see <see cref="this[long[]]"/>).</summary>
-        /// <param name="index">One integer per axis.</param>
-        /// <returns>The pieces.</returns>
-        /// <exception cref="IndexError">An integer outside its axis, or not one integer per axis.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        /// <exception cref="SystemError">A <c>U</c> piece holds a code unit above U+10FFFF.</exception>
-        public NDArray this[params int[] index]
+        ///     2</c>), or an invalid index (NumPy's texts).</exception>
+        /// <exception cref="ValueError">SET: a read-only array (<c>assignment destination is read-only</c>, checked before the
+        ///     index), or a value that does not broadcast (<c>could not broadcast input array from shape (3,) into shape
+        ///     (2,)</c>, or NumPy's <c>shape mismatch</c> text for an advanced index).</exception>
+        /// <exception cref="NotSupportedException">SET: an assignment whose NumPy result holds an element that is not a list
+        ///     (an array stored into one element, a list's items stored into a sub-array, a list of the other piece
+        ///     class).</exception>
+        /// <exception cref="ObjectDisposedException">The array or the value was disposed.</exception>
+        /// <remarks>One member, NumPy's signature: it replaced <c>this[string]</c>, <c>this[params Slice[]]</c> and the
+        ///     element forms <c>NDArray this[params long[]]</c> / <c>this[params int[]]</c>, which returned the element's
+        ///     pieces as a new array (iterating a 1-d list array still yields those arrays, see <see cref="GetEnumerator"/>).</remarks>
+        public NDListArray this[params object[] key]
         {
-            get
-            {
-                var wide = new long[index?.Length ?? 0];
-                for (int i = 0; i < wide.Length; i++)
-                    wide[i] = index[i];
-                return this[wide];
-            }
+            get => Index(key);
+            set => SetItem(key, value);
         }
 
         /// <summary>
-        ///     Basic indexing in slice notation (<c>"1:"</c>, <c>"::-1, 0"</c>): GET is a view over the selected lists; SET is
-        ///     NumPy's <c>a[index] = value</c> of an object array (see <see cref="SetItem"/>): one integer per axis stores the
-        ///     list a 0-d <paramref name="slices"/> value stands for, a sub-array receives a list array's lists by
-        ///     broadcasting.
+        ///     The GET of the indexer: the view of a basic index (<see cref="Index(Slice[])"/>), or a list array over the ids an
+        ///     advanced index gathers, marked as the list's stand-in for a full integer index.
         /// </summary>
-        /// <param name="slices">NumPy's slice notation.</param>
-        /// <returns>The view (a 0-d one for one integer per axis).</returns>
-        /// <exception cref="IndexError">An integer outside its axis.</exception>
-        /// <exception cref="ValueError">SET: a read-only array (<c>assignment destination is read-only</c>, checked before the
-        ///     index), or a value that does not broadcast (<c>could not broadcast input array from shape (3,) into shape
-        ///     (2,)</c>).</exception>
-        /// <exception cref="NotSupportedException">SET: an assignment whose NumPy result holds an element that is not a list
-        ///     (see <see cref="SetItem"/>).</exception>
-        /// <exception cref="ArgumentNullException">SET: a null value (Python's None has no NDListArray form).</exception>
+        /// <param name="key">The index tuple.</param>
+        /// <returns>The list array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>.</exception>
+        /// <exception cref="IndexError">The index is invalid for this array.</exception>
         /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray this[string slices]
+        private NDListArray Index(object[] key)
         {
-            get => Index(Slice.ParseSlices(slices));
-            set => SetItem(Slice.ParseSlices(slices), value);
+            ThrowIfDisposed();
+            if (key is null)
+                throw new ArgumentNullException(nameof(key));
+            // An index of integers and slices keeps the old typed indexers' path: one view of the ids.
+            if (NDArray.TryBasicIndex(key, out Slice[] slices))
+                return Index(slices);
+            // An advanced index gathers the ids (NumPy copies the pointers); the gathered array is handed over.
+            var view = Over(Ids[key]);
+            return IsFullIntegerIndex(key) ? view.MarkStandIn() : view;
         }
 
-        /// <summary>Basic indexing with <see cref="Slice"/>s: a view over the selected lists (GET), or NumPy's assignment of
-        ///     lists into them (SET, see <see cref="SetItem"/>).</summary>
-        /// <param name="slices">One slice (or index) per axis, as for an <see cref="NDArray"/>.</param>
-        /// <returns>The view.</returns>
-        /// <exception cref="IndexError">An integer outside its axis.</exception>
-        /// <exception cref="ValueError">SET: a read-only array, or a value that does not broadcast.</exception>
-        /// <exception cref="NotSupportedException">SET: an assignment whose NumPy result holds an element that is not a
-        ///     list.</exception>
-        /// <exception cref="ArgumentNullException">SET: a null value.</exception>
-        /// <exception cref="ObjectDisposedException">The array was disposed.</exception>
-        public NDListArray this[params Slice[] slices]
+        /// <summary>
+        ///     Whether a general index is NumPy's full integer index (<c>index_type == HAS_INTEGER</c>): one entry per axis,
+        ///     each a C# integer, an integer <see cref="Slice"/>, an integer slice-notation string or a 0-d INTEGER array
+        ///     ("a full integer index sees array scalars as part of itself"). Such an index returns the element itself — the
+        ///     list.
+        /// </summary>
+        /// <param name="key">The index tuple (a single C# tuple entry is NumPy's index tuple and is spread).</param>
+        /// <returns>True for a full integer index of this array.</returns>
+        private bool IsFullIntegerIndex(object[] key)
         {
-            get => Index(slices);
-            set => SetItem(slices, value);
+            if (key.Length == 1 && key[0] is System.Runtime.CompilerServices.ITuple tuple)
+                key = PolySequence.Items(tuple);
+            if (key.Length != ndim)
+                return false;
+            foreach (object entry in key)
+            {
+                switch (entry)
+                {
+                    case sbyte or byte or short or ushort or int or uint or long or ulong or char or nint:
+                        break;
+                    case Slice { IsIndex: true, IsEllipsis: false, IsNewAxis: false }:
+                        break;
+                    // The index already succeeded, so the notation parses; "0" is an integer, "1:" is not.
+                    case string notation when new Slice(notation) is { IsIndex: true, IsEllipsis: false, IsNewAxis: false }:
+                        break;
+                    case NDArray { ndim: 0 } zeroD when zeroD.typecode is NPTypeCode.SByte or NPTypeCode.Byte or NPTypeCode.Int16
+                        or NPTypeCode.UInt16 or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64
+                        or NPTypeCode.Char:
+                        break;
+                    default:
+                        return false;
+                }
+            }
+            return true;
         }
 
         /// <summary>
@@ -330,8 +358,9 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Iterates the first axis: for a 1-d array every element's list as the array of its pieces (see
-        ///     <see cref="this[long[]]"/>), for an N-d array every sub-array as an <see cref="NDListArray"/> view.
+        ///     Iterates the first axis: for a 1-d array every element's list as a new 1-D array of its pieces (<c>S</c> /
+        ///     <c>U</c> as wide as the longest piece, or <c>StringDType</c>), for an N-d array every sub-array as an
+        ///     <see cref="NDListArray"/> view.
         /// </summary>
         /// <returns>The enumerator.</returns>
         /// <exception cref="TypeError">A 0-d array (<c>iteration over a 0-d array</c>).</exception>
@@ -351,8 +380,10 @@ namespace NumSharp
             long n = Ids.Shape.dimensions[0];
             for (long i = 0; i < n; i++)
             {
+                // A 1-d array yields each list's pieces (the indexer's element access returns the list's 0-d stand-in
+                // instead); an N-d one yields the sub-array views.
                 if (ndim == 1)
-                    yield return this[i];
+                    yield return Pieces(Element(new[] { i }));
                 else
                     yield return this[Slice.Index(i)];
             }

@@ -386,7 +386,14 @@ namespace NumSharp.Tests.Backends.Strings
             Words(row)[0].Should().Equal("d");
             using var back = r[":, ::-1"];
             back.ToString().Should().Be("[[list(['c']) list(['a', 'b'])]\n [list([]) list(['d'])]]");
-            var pieces = r[0, 0];
+            // One integer per axis returns the LIST (NumPy's lists[0, 0]): a 0-d list array that stands for it.
+            using var element = r[0, 0];
+            element.ndim.Should().Be(0);
+            element.IsStandIn.Should().BeTrue();
+            element.item().Cast<string>().Should().Equal("a", "b");
+            // Iterating a 1-d list array yields each list's pieces as an array of the input's class.
+            using var first = r["0"];
+            var pieces = first.Cast<NDArray>().First();
             pieces.Strs().Should().Equal("a", "b");
             pieces.dtype.str.Should().Be("<U1");
             new Action(() => _ = r[5, 0]).Should().Throw<IndexError>().WithMessage("index 5 is out of bounds for axis 0 with size 2");
@@ -412,16 +419,22 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     A piece that ends in a NUL keeps it in <c>tolist</c> / <c>item</c> (NumPy's Python str), while the 1-D piece
-        ///     array of an element access drops it, as every fixed-width element does — NumPy returns the list itself.
+        ///     The element access returns the LIST, as NumPy's does: its 0-d stand-in, whose <c>item()</c> keeps a piece
+        ///     that ends in a NUL (NumPy's Python str). Iterating a 1-d list array yields each list as a 1-D piece ARRAY
+        ///     instead, which drops the NUL as every fixed-width element does — the divergence that remains (NumPy
+        ///     iterates the lists themselves).
         /// </summary>
         [TestMethod]
         [Misaligned]
-        public void ListArray_ElementAccess_IsAPieceArray_NotAList()
+        public void ListArray_ElementAccess_IsTheList_IterationYieldsPieceArrays()
         {
             using var r = np.@char.split(np.array(new[] { "w\0 x" }));
             r.item(0).Cast<string>().Should().Equal("w\0", "x");
-            r[0].Strs().Should().Equal("w", "x");
+            using var element = r[0];
+            element.ndim.Should().Be(0);
+            element.IsStandIn.Should().BeTrue();
+            element.item().Cast<string>().Should().Equal("w\0", "x");
+            r.Cast<NDArray>().First().Strs().Should().Equal("w", "x");
         }
 
         // ------------------------------------------------------------------ layouts and the search paths

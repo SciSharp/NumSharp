@@ -86,6 +86,126 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's <c>a[key] = value</c> for an object array of lists, for ANY index (the indexer's setter): an index of
+        ///     integers and slices takes the basic assignment (<see cref="SetItem(Slice[], NDListArray)"/>); an advanced index
+        ///     (index arrays, masks, a C# bool, a mix) copies the value's list ids into the selection with NumPy's fancy
+        ///     assignment of the int64 ids (its broadcasting and error texts).
+        /// </summary>
+        /// <param name="key">The index tuple.</param>
+        /// <param name="value">The value: a 0-d list array (one list) or a list array of one or more dimensions.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="value"/> is null.</exception>
+        /// <exception cref="ValueError">A read-only array (checked before the index); a value that does not broadcast to the
+        ///     selection (NumPy's <c>shape mismatch: value array of shape (3,) could not be broadcast to indexing result of
+        ///     shape (2,)</c>, or the boolean-mask texts).</exception>
+        /// <exception cref="IndexError">An index outside the array, or an invalid index.</exception>
+        /// <exception cref="NotSupportedException">NumPy's result holds an element that is not a list: an array stored into
+        ///     one element (a full integer index of 0-d index arrays), a list's items stored into the selection, or a list of
+        ///     the other piece class.</exception>
+        /// <exception cref="ObjectDisposedException">This array or <paramref name="value"/> was disposed.</exception>
+        private void SetItem(object[] key, NDListArray value)
+        {
+            if (key is null)
+                throw new ArgumentNullException(nameof(key));
+            if (NDArray.TryBasicIndex(key, out Slice[] slices))
+            {
+                SetItem(slices, value);
+                return;
+            }
+
+            ThrowIfDisposed();
+            if (value is null)
+                throw new ArgumentNullException(nameof(value), "None stored into an object array of lists has no NDListArray form");
+            value.ThrowIfDisposed();
+            // array_assign_subscript: the writeability before the index is even prepared.
+            NumSharpException.ThrowIfNotWriteable(Ids.Shape, "assignment destination");
+
+            if (IsFullIntegerIndex(key))
+            {
+                // HAS_INTEGER with 0-d index arrays: PyArray_Pack of the value itself into the element, as for the basic
+                // full integer index — a list is stored, an array object would be.
+                if (!value.IsStandIn)
+                    throw new NotSupportedException(
+                        "NumPy stores the array object itself in the element (an ndarray inside an object array), which an " +
+                        "NDListArray cannot hold; assign a list (lists[\"1\"], one element of a list array) to store a list");
+                using var one = NDArray.Scalar(MapOne(value.Heap, value.FlatId(0)));
+                Ids[key] = one;
+                return;
+            }
+
+            if (value.IsStandIn)
+            {
+                AssignListThroughIndex(key, value);
+                return;
+            }
+
+            // An array of lists: its ids (in this heap) assigned through the index, as NumPy copies the pointers.
+            var ids = IdsInThisHeap(value, out bool owned);
+            try
+            {
+                Ids[key] = ids;
+            }
+            finally
+            {
+                if (owned)
+                    ids.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     A Python list assigned through an ADVANCED index (probed on NumPy 2.4.2): NumPy reads it as the SEQUENCE of its
+        ///     items, a 1-D object array of the list's str / bytes items, so it is checked like that array and then refused
+        ///     wherever it would store items, since a list array holds lists.
+        ///     <list type="bullet">
+        ///       <item><description>A lone boolean mask of this array's own shape is <c>array_assign_boolean_subscript</c>: the
+        ///       items must number 1 or one per true element (NumPy's <c>NumPy boolean array indexing assignment cannot
+        ///       assign 3 input values to the 2 output values where the mask is true</c>).</description></item>
+        ///       <item><description>Any other advanced index converts the list against the selection, and a length that does
+        ///       not broadcast is <c>could not broadcast input array from shape (3,) into shape (2,)</c> — not the MapIter
+        ///       <c>shape mismatch</c> text an array value gets.</description></item>
+        ///     </list>
+        ///     A selection of no element stores nothing, so a list that fits it is a no-op.
+        /// </summary>
+        /// <param name="key">The advanced index tuple.</param>
+        /// <param name="value">The 0-d list array standing for the list.</param>
+        /// <exception cref="ValueError">The list's items do not fit the selection (NumPy's texts, above).</exception>
+        /// <exception cref="IndexError">The index is invalid for this array.</exception>
+        /// <exception cref="NotSupportedException">The items would be stored into a non-empty selection.</exception>
+        private void AssignListThroughIndex(object[] key, NDListArray value)
+        {
+            long length = value.Heap.Length(value.FlatId(0));
+            long selected;
+            if (key.Length == 1 && key[0] is NDArray { typecode: NPTypeCode.Boolean } mask && HasShapeOf(mask, Ids))
+            {
+                selected = np.count_nonzero(mask);
+                if (length != 1 && length != selected)
+                    throw new ValueError(
+                        $"NumPy boolean array indexing assignment cannot assign {length} input values to the {selected} output values where the mask is true");
+            }
+            else
+            {
+                // The selection's shape (gathering the ids also raises NumPy's index errors), then the 1-D item sequence's
+                // broadcast against it: its one axis must equal the selection's last axis or be 1.
+                using var selection = Ids[key];
+                long[] dims = selection.Shape.dimensions;
+                long last = dims.Length == 0 ? 1 : dims[dims.Length - 1];
+                if (length != last && length != 1)
+                    throw new ValueError($"could not broadcast input array from shape ({length},) into shape {selection.Shape.ToPythonTuple()}");
+                selected = selection.size;
+            }
+            if (selected > 0)
+                throw new NotSupportedException(
+                    "NumPy assigns a list through an index array as the sequence of its items, so the elements would become the " +
+                    $"{(value.Kind == 'S' ? "bytes" : "str")} items themselves, which an NDListArray (a list array) cannot hold");
+        }
+
+        /// <summary>Whether two arrays have the same dimensions (NumPy's single-mask assignment test).</summary>
+        /// <param name="a">The mask.</param>
+        /// <param name="b">The ids.</param>
+        /// <returns>True when the ranks and every extent agree.</returns>
+        private static bool HasShapeOf(NDArray a, NDArray b)
+            => a.Shape.dimensions.AsSpan().SequenceEqual(b.Shape.dimensions);
+
+        /// <summary>
         ///     A Python list assigned to a sub-array: PyArray_CopyObject discovers it as a sequence up to the destination's
         ///     rank, so a 0-d destination stores the list and any other is given the 1-D array of the list's items.
         /// </summary>

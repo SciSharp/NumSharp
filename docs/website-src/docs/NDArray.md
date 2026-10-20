@@ -518,13 +518,16 @@ np.moveaxis(a, 0, -1);
 
 ## Generic `NDArray<T>`
 
-For type-safe element access, use `NDArray<T>`:
+For a statically typed array, use `NDArray<T>`. Its indexer is NumPy's, like every array's, and the selection comes back typed:
 
 ```csharp
 NDArray<double> a = np.zeros(10).MakeGeneric<double>();
-double first = a[0];                  // T, not NDArray
-a[0] = 3.14;
+NDArray<double> head = a["0:3"];      // a typed view
+double first = (double)a[0];          // an element is a 0-d array: cast it to read the value
+a[0] = 3.14;                          // a double converts to a 0-d NDArray<double>
 ```
+
+Through an `NDArray<T>` variable the indexer's setter takes an `NDArray<T>` or a `T`. To assign an untyped `NDArray`, go through an `NDArray` reference (`NDArray u = a; u["0:3"] = values;`) or `a.__setitem__("0:3", values)`.
 
 Three ways to get a typed wrapper:
 

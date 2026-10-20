@@ -7,10 +7,14 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        ///     Used to perform selection based on a boolean mask.
+        ///     <c>a[mask]</c> (GET) for a lone boolean mask: the selected elements, or the selected sub-arrays of a mask over
+        ///     this array's leading axes, in C order — the body of the old <c>this[NDArray&lt;bool&gt;]</c> indexer, which the
+        ///     indexer (<see cref="this[object[]]"/>) dispatches to.
         /// </summary>
         /// <param name="mask">The boolean mask: of this array's leading dimensions (<c>mask.shape ==
         ///     a.shape[:mask.ndim]</c>, a zero-length mask axis matching any length), or 0-d.</param>
+        /// <returns>A new array of shape <c>(count_true,) + a.shape[mask.ndim:]</c> (a 0-d mask gives <c>(1,)</c> or
+        ///     <c>(0,)</c> + <c>a.shape</c>).</returns>
         /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
         /// <exception cref="IndexError">The mask has more dimensions than this array (<c>too many indices for array: array
         ///     is 1-dimensional, but 2 were indexed</c>), or a mask axis of non-zero length differs from the array axis it
@@ -18,86 +22,98 @@ namespace NumSharp
         ///     corresponding boolean axis is 2</c>) — NumPy's <c>prepare_index</c> texts (<see cref="BooleanIndexError"/>).
         ///     </exception>
         [SuppressMessage("ReSharper", "CoVariantArrayConversion")]
-        public NDArray this[NDArray<bool> mask]
+        private protected NDArray GetMasked(NDArray<bool> mask)
         {
-            get
+            // NumPy boolean indexing (numpy/_core/src/multiarray/mapping.c):
+            // the mask matches a leading PREFIX of arr's shape — mask.ndim <= arr.ndim
+            // and mask.shape == arr.shape[:mask.ndim]. For each True (in C-order) the
+            // trailing sub-tensor arr.shape[mask.ndim:] is gathered. Result:
+            // (count_true,) + arr.shape[mask.ndim:]. This single prefix-match case covers
+            // them all through the unified NDIter gather (DefaultEngine.BooleanMask):
+            //   • full element mask (mask.ndim == arr.ndim)         -> 1-D result;
+            //   • axis-0 row mask / partial mask (mask.ndim < ndim) -> (count,)+trailing;
+            //   • 0-D mask (arr[True]/arr[False], mask.ndim == 0)    -> (1,)/(0,)+arr.shape.
+            // A 1-D length-1 mask is a NORMAL mask (not a 0-D scalar), so it is NOT
+            // special-cased — NumSharp represents true 0-D arrays as ndim 0.
+            if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
             {
-                // NumPy boolean indexing (numpy/_core/src/multiarray/mapping.c):
-                // the mask matches a leading PREFIX of arr's shape — mask.ndim <= arr.ndim
-                // and mask.shape == arr.shape[:mask.ndim]. For each True (in C-order) the
-                // trailing sub-tensor arr.shape[mask.ndim:] is gathered. Result:
-                // (count_true,) + arr.shape[mask.ndim:]. This single prefix-match case covers
-                // them all through the unified NDIter gather (DefaultEngine.BooleanMask):
-                //   • full element mask (mask.ndim == arr.ndim)         -> 1-D result;
-                //   • axis-0 row mask / partial mask (mask.ndim < ndim) -> (count,)+trailing;
-                //   • 0-D mask (arr[True]/arr[False], mask.ndim == 0)    -> (1,)/(0,)+arr.shape.
-                // A 1-D length-1 mask is a NORMAL mask (not a 0-D scalar), so it is NOT
-                // special-cased — NumSharp represents true 0-D arrays as ndim 0.
-                if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
-                {
-                    // A string element has no element kernel: gather on the unit view (the mask covers the same leading
-                    // axes there; the trailing character axis rides along).
-                    // A StringDType element is a cell tied to its allocator: the mask runs on the cell view and the picked
-                    // cells are duplicated (NDVStringMove.Gather).
-                    if (Storage.IsVString)
-                        return Backends.Strings.NDVStringMove.Gather(this, cells => cells[mask]);
-                    if (typecode == NPTypeCode.String)
-                        return TryStringMaskGather(mask, out var masked)
-                            ? masked
-                            : StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
-                    return KeepLaneSharingClass(this.TensorEngine.BooleanMask(this, mask));
-                }
-
-                // The mask does not match a leading prefix of the array shape: NumPy's prepare_index error.
-                throw BooleanIndexError(mask);
+                // A string element has no element kernel: gather on the unit view (the mask covers the same leading
+                // axes there; the trailing character axis rides along).
+                // A StringDType element is a cell tied to its allocator: the mask runs on the cell view and the picked
+                // cells are duplicated (NDVStringMove.Gather).
+                if (Storage.IsVString)
+                    return Backends.Strings.NDVStringMove.Gather(this, cells => cells[mask]);
+                if (typecode == NPTypeCode.String)
+                    return TryStringMaskGather(mask, out var masked)
+                        ? masked
+                        : StringAdvancedGet(u => MaskedUnitRows(u, mask, units => units[mask]), p => p[mask]);
+                return KeepLaneSharingClass(this.TensorEngine.BooleanMask(this, mask));
             }
-            set
+
+            // The mask does not match a leading prefix of the array shape: NumPy's prepare_index error.
+            throw BooleanIndexError(mask);
+        }
+
+        /// <summary>
+        ///     <c>a[mask] = value</c> (SET) for a lone boolean mask — the body of the old <c>this[NDArray&lt;bool&gt;]</c>
+        ///     setter, which the indexer (<see cref="this[object[]]"/>) dispatches to.
+        /// </summary>
+        /// <param name="mask">The boolean mask (the getter's prefix-match contract).</param>
+        /// <param name="value">The value: broadcast to the selection <c>(count_true,) + a.shape[mask.ndim:]</c>; a C#
+        ///     literal is packed as NumPy's Python scalar (range-checked) after the mask's shape is validated.</param>
+        /// <exception cref="ValueError">The array is read-only (checked first), or a 1-D value of the wrong length through a
+        ///     mask of this array's own shape (NumPy's <c>cannot assign 3 input values to the 6 output values where the mask
+        ///     is true</c>), or a value that does not broadcast.</exception>
+        /// <exception cref="TypeError">A value of two or more dimensions through a mask of this array's own shape.</exception>
+        /// <exception cref="IndexError">The mask does not fit this array (<see cref="BooleanIndexError"/>).</exception>
+        /// <exception cref="OverflowException">A C# literal outside this array's integer dtype.</exception>
+        [SuppressMessage("ReSharper", "CoVariantArrayConversion")]
+        private void SetMasked(NDArray<bool> mask, NDArray value)
+        {
+            NumSharpException.ThrowIfNotWriteable(Shape);
+            // NumPy's single boolean subscript of this array's EXACT shape (mapping.c HAS_BOOL ->
+            // array_assign_boolean_subscript) takes a 0-d or 1-D value, and a 1-D value of more than one element
+            // supplies exactly one value per True — checked before anything is written, with NumPy's texts.
+            ThrowIfBooleanSubscriptAssignMismatch(mask, value);
+
+            // Prefix-match (full / axis-0 / partial / 0-D), symmetric with the getter.
+            // The unified NDIter scatter streams value into the selected slots; value
+            // broadcasts to the selection shape (count,)+arr.shape[mask.ndim:] by NumPy
+            // rules (raises on an incompatible value). A 1-D length-1 mask is a normal
+            // mask; a 0-D mask (arr[True]=v / arr[False]=v) assigns all / nothing.
+            if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
             {
-                NumSharpException.ThrowIfNotWriteable(Shape);
-                // NumPy's single boolean subscript of this array's EXACT shape (mapping.c HAS_BOOL ->
-                // array_assign_boolean_subscript) takes a 0-d or 1-D value, and a 1-D value of more than one element
-                // supplies exactly one value per True — checked before anything is written, with NumPy's texts.
-                ThrowIfBooleanSubscriptAssignMismatch(mask, value);
-
-                // Prefix-match (full / axis-0 / partial / 0-D), symmetric with the getter.
-                // The unified NDIter scatter streams value into the selected slots; value
-                // broadcasts to the selection shape (count,)+arr.shape[mask.ndim:] by NumPy
-                // rules (raises on an incompatible value). A 1-D length-1 mask is a normal
-                // mask; a 0-D mask (arr[True]=v / arr[False]=v) assigns all / nothing.
-                if (mask.ndim <= this.ndim && IsPartialShapeMatch(mask))
+                if (Storage.IsVString)
                 {
-                    if (Storage.IsVString)
-                    {
-                        // The mask runs on marks; the marked elements receive the strings (NDArray.Indexing.VString.cs).
-                        VStringAdvancedSet(value, (marks, index) => marks[mask] = index);
-                        return;
-                    }
-                    if (typecode == NPTypeCode.String)
-                    {
-                        StringAdvancedSet(value, (u, v) => u[mask] = v, (p, v) => p[mask] = v);
-                        return;
-                    }
-
-                    // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: the HAS_BOOL assignment converts it
-                    // with PyArray_FromAny into this dtype (PyArray_Pack's range checks: a[mask] = 1000 on int8 raises)
-                    // after the mask's shape was validated above and before anything is written.
-                    var packed = PackForStore(value, typecode, pyArrayPackRoute: false);
-                    try
-                    {
-                        this.TensorEngine.BooleanMaskSet(this, mask, packed);
-                    }
-                    finally
-                    {
-                        if (!ReferenceEquals(packed, value))
-                            packed.Dispose();
-                    }
-
+                    // The mask runs on marks; the marked elements receive the strings (NDArray.Indexing.VString.cs).
+                    VStringAdvancedSet(value, (marks, index) => marks[mask] = index);
+                    return;
+                }
+                if (typecode == NPTypeCode.String)
+                {
+                    StringAdvancedSet(value, (u, v) => u[mask] = v, (p, v) => p[mask] = v);
                     return;
                 }
 
-                // NumPy's assignment runs the same prepare_index as the getter (after the writeability check above).
-                throw BooleanIndexError(mask);
+                // A C# literal (NDArray.WasPythonLiteral) is NumPy's Python scalar: the HAS_BOOL assignment converts it
+                // with PyArray_FromAny into this dtype (PyArray_Pack's range checks: a[mask] = 1000 on int8 raises)
+                // after the mask's shape was validated above and before anything is written.
+                var packed = PackForStore(value, typecode, pyArrayPackRoute: false);
+                try
+                {
+                    this.TensorEngine.BooleanMaskSet(this, mask, packed);
+                }
+                finally
+                {
+                    if (!ReferenceEquals(packed, value))
+                        packed.Dispose();
+                }
+
+                return;
             }
+
+            // NumPy's assignment runs the same prepare_index as the getter (after the writeability check above).
+            throw BooleanIndexError(mask);
         }
 
         /// <summary>

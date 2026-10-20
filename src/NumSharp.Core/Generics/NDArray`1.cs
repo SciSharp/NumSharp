@@ -196,77 +196,98 @@ namespace NumSharp.Generic
             get => (TDType*)Storage.Address;
         }
 
-        public new TDType this[int[] indices]
+        /// <summary>
+        ///     NumPy's <c>ndarray.__getitem__(key)</c> for a typed array: the selection <see cref="NDArray.this[object[]]"/>
+        ///     makes, typed as this array's element type (<c>typed["1:3"]</c>, <c>typed[0]</c>, <c>typed[mask]</c> are all
+        ///     <see cref="NDArray{TDType}"/>). Assigning uses <see cref="NDArray"/>'s setter (NumPy's <c>__setitem__</c>).
+        /// </summary>
+        /// <param name="key">The index tuple, as for <see cref="NDArray.this[object[]]"/>.</param>
+        /// <value>
+        ///     GET: the selection as an <see cref="NDArray{TDType}"/> — a view for an index of integers and slices (a 0-d view
+        ///     for one integer per axis: read the element with a cast, <c>(double)typed[0]</c>, or
+        ///     <see cref="NDArray.GetValue{T}(long[])"/>), a new array for an advanced index.
+        ///     SET (inherited): the value is stored by NumPy's rules. Through an <see cref="NDArray{TDType}"/> variable the
+        ///     value must be an <see cref="NDArray{TDType}"/> or a <typeparamref name="TDType"/> (which converts implicitly
+        ///     to a 0-d array); assign any other value through an <see cref="NDArray"/> reference or
+        ///     <see cref="NDArray.__setitem__(object, object)"/>.
+        /// </value>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> or one of its entries is <c>null</c>.</exception>
+        /// <exception cref="IndexError">The index is invalid for this array (NumPy's texts).</exception>
+        /// <exception cref="InvalidOperationException">An advanced selection came back in another element type (the
+        ///     indexer never changes the element type; the guard keeps a future change from returning a wrongly typed
+        ///     array).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The override is GETTER-ONLY on purpose: C# lets an override narrow its type only when it does not declare a
+        ///     setter (a read-write override must keep <see cref="NDArray"/>, error CS1715), and the setter stays
+        ///     <see cref="NDArray"/>'s. The typed scalar indexers <c>TDType this[params long[]]</c> /
+        ///     <c>TDType this[int[]]</c> are gone with the rule of one NumPy signature: an element is a 0-d array, as for
+        ///     every other array.
+        ///     </para>
+        ///     <para>
+        ///     Virtual dispatch reaches this getter also through an <see cref="NDArray"/> reference: the selection of a typed
+        ///     array is a typed array object at run time, with the same elements and the same view relationship as the
+        ///     untyped selection (the basic index builds ONE typed view of the storage; an advanced index wraps the untyped
+        ///     result's own storage object, so a gather still owns its data, and disposes the untyped wrapper).
+        ///     </para>
+        /// </remarks>
+        public override NDArray<TDType> this[params object[] key]
         {
-            [MethodImpl(Inline)]
             get
             {
-                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
-                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
-
-                return Storage.GetValue<TDType>(indices);
-            }
-            [MethodImpl(Inline)]
-            set
-            {
-                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
-                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
-
-                Storage.SetValue<TDType>(value, indices);
-            }
-        }
-
-        public new TDType this[params long[] indices]
-        {
-            [MethodImpl(Inline)]
-            get
-            {
-                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
-                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
-
-                return Storage.GetValue<TDType>(indices);
-            }
-            [MethodImpl(Inline)]
-            set
-            {
-                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
-                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
-
-                Storage.SetValue<TDType>(value, indices);
+                if (key is null)
+                    throw new ArgumentNullException(nameof(key));
+                if (TryBasicIndex(key, out Slice[] slices))
+                {
+                    UnmanagedStorage view = Storage.GetView(slices);
+                    // A trivial index may hand the storage itself back; the result must be its own object, or a reshape of
+                    // it would relabel this array too.
+                    if (ReferenceEquals(view, Storage))
+                        view = Storage.Alias();
+                    return new NDArray<TDType>(view);
+                }
+                return TypedSelection(key);
             }
         }
 
         /// <summary>
-        /// slicing of generic - overridden on purpose
+        ///     The advanced half of the typed getter: <see cref="NDArray"/>'s selection (a mask, an index array, a bool, a
+        ///     mixed tuple), typed.
         /// </summary>
-        /// <value></value>
-        public new NDArray<TDType> this[string slice]
+        /// <param name="key">The index tuple (not <c>null</c>, not basic).</param>
+        /// <returns>The selection: itself when the untyped indexer already produced a typed array (its general path
+        ///     re-enters this override for a nested tuple), else a typed wrapper over the SAME storage object.</returns>
+        /// <exception cref="IndexError">The index is invalid for this array (NumPy's texts).</exception>
+        /// <exception cref="InvalidOperationException">The selection is not of element type <typeparamref name="TDType"/>.</exception>
+        /// <remarks>
+        ///     The typed wrapper shares the result's storage object instead of aliasing it (<see cref="NDArray.MakeGeneric{T}"/>),
+        ///     because an alias is a view: a fresh gather owns its data (NumPy's <c>flags.owndata</c> is true), and an alias of
+        ///     it would read false. Sharing is safe here: the storage is this call's own result, held by no one else (only a
+        ///     selection that handed back this array's own storage object is aliased). The untyped wrapper is disposed at
+        ///     once: the typed wrapper holds its own counted reference on the data, and <see cref="NDArray.Dispose"/> releases
+        ///     only the wrapper's reference, never the storage object. An explicit dispose, not an <see cref="NDScopedAttribute"/>
+        ///     scope: the untyped wrapper is the only array this method creates. Cost: the second array object, about 0.1 µs
+        ///     on a gather (a typed mask gather 1.02 µs against the untyped 0.91 µs, measured apart).
+        /// </remarks>
+        private NDArray<TDType> TypedSelection(object[] key)
         {
-            // NDScoped: the untyped base view is reclaimed once the yielded typed alias owns the data.
-            [MethodImpl(Inline), NDScoped]
-            get
+            // NDArray's indexer body after its basic-index test (which the caller already ran): the mask path or the general
+            // advanced path, without sorting the key a second time.
+            NDArray result = key.Length == 1 && key[0] is NDArray<bool> mask ? GetMasked(mask) : GetAdvanced(key);
+            if (result is NDArray<TDType> typed)
+                return typed;
+            if (result.typecode != InfoOf<TDType>.NPTypeCode)
             {
-                return base[slice].MakeGeneric<TDType>();
+                DType selected = result.dtype;
+                result.Dispose();
+                throw new InvalidOperationException(
+                    $"An index of an NDArray<{typeof(TDType).Name}> selected an array of dtype {selected}: the indexer keeps the element type.");
             }
-
-            [MethodImpl(Inline)]
-            set
-            {
-                base[slice] = value;
-            }
-        }
-
-        /// <summary>
-        /// slicing of generic - overridden on purpose
-        /// </summary>
-        /// <value></value>
-        public new NDArray<TDType> this[params Slice[] slices]
-        {
-            [MethodImpl(Inline), NDScoped]
-            get { return base[slices].MakeGeneric<TDType>(); }
-
-            [MethodImpl(Inline)]
-            set => base[slices] = value;
+            var wrapped = ReferenceEquals(result.Storage, Storage)
+                ? new NDArray<TDType>(Storage.Alias())
+                : new NDArray<TDType>(result.Storage);
+            result.Dispose();
+            return wrapped;
         }
 
         public new TDType GetAtIndex(long index)
@@ -308,6 +329,22 @@ namespace NumSharp.Generic
 
         [MethodImpl(Inline)]
         public static implicit operator ArraySlice<TDType>(NDArray<TDType> nd) => nd.Array;
+
+        /// <summary>
+        ///     A <typeparamref name="TDType"/> value as a 0-d array of its own type: what lets an element be assigned through
+        ///     a typed variable's indexer (<c>typed[0] = 3.14</c>, <c>mask[m] = false</c>), whose setter value is an
+        ///     <see cref="NDArray{TDType}"/> (see <see cref="this[object[]]"/>).
+        /// </summary>
+        /// <param name="value">The element value.</param>
+        /// <returns>A new writeable 0-d array holding <paramref name="value"/>, its dtype <typeparamref name="TDType"/>'s.</returns>
+        /// <remarks>
+        ///     The array is a plain (STRONG) typed scalar, not NumPy's Python scalar: it already has the destination's type,
+        ///     so a store never range-checks or converts it. Where both this conversion and <see cref="NDArray"/>'s scalar
+        ///     conversions apply, C# prefers this one only for an <see cref="NDArray{TDType}"/> parameter (the typed
+        ///     operators <c>&amp;</c>, <c>|</c>, <c>^</c>), whose results are the same.
+        /// </remarks>
+        [MethodImpl(Inline)]
+        public static implicit operator NDArray<TDType>(TDType value) => new NDArray<TDType>(UnmanagedStorage.Scalar(value));
 
         [MethodImpl(Inline), NDScoped]
         public static explicit operator NDArray<TDType>(TDType[] tArray) { return new NDArray(tArray).MakeGeneric<TDType>(); }

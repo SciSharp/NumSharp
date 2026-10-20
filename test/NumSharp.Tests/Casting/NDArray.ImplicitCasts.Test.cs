@@ -24,7 +24,7 @@ namespace NumSharp.Tests.Casting
 
             for (int idx = 0; idx < 3; idx++)
             for (int jdx = 0; jdx < 2; jdx++)
-                Assert.IsTrue(c[idx, jdx] == a[idx][jdx]);
+                Assert.IsTrue((double)c[idx, jdx] == a[idx][jdx]);
         }
 
         [TestMethod]

@@ -28,7 +28,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | module | C# names | C# overloads | with a NumPy counterpart | identical | more than one overload | closest overload differs | one overload, differs | missing | in another overload only | renamed | extra | slot | C# requires | default | varargs | only null defaults | only policy | not compared | NumSharp-only names | NumPy names absent |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `np` | 384 | 885 | 366 | 112 | 150 | 62 | 27 | 30 | 6 | 18 | 3 | 13 | 20 | 2 | 6 | 13 | 100 | 0 | 18 | 47 |
-| `ndarray` | 140 | 272 | 57 | 27 | 24 | 15 | 6 | 8 | 1 | 2 | 2 | 5 | 9 | 0 | 1 | 0 | 0 | 0 | 83 | 3 |
+| `ndarray` | 140 | 267 | 57 | 29 | 22 | 15 | 6 | 8 | 1 | 2 | 2 | 5 | 9 | 0 | 1 | 0 | 0 | 0 | 83 | 3 |
 | `np.char` | 54 | 54 | 53 | 30 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 12 | 11 | 0 | 1 | 0 |
 | `np.dtypes` | 1 | 2 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `np.emath` | 9 | 9 | 9 | 9 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
@@ -48,8 +48,8 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.strings` | 46 | 53 | 46 | 15 | 3 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 12 | 17 | 0 | 0 | 0 |
 | `np.typing` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `ndarray (NDArray<T>)` | 5 | 21 | 2 | 0 | 2 | 2 | 0 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 |
-| `np.matrix` | 57 | 84 | 53 | 22 | 19 | 17 | 12 | 10 | 0 | 0 | 0 | 3 | 7 | 0 | 1 | 0 | 0 | 0 | 4 | 0 |
-| `np.char.chararray` | 64 | 83 | 60 | 41 | 8 | 4 | 0 | 1 | 0 | 0 | 0 | 1 | 4 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
+| `np.matrix` | 57 | 78 | 53 | 24 | 17 | 17 | 12 | 10 | 0 | 0 | 0 | 3 | 7 | 0 | 1 | 0 | 0 | 0 | 4 | 0 |
+| `np.char.chararray` | 64 | 80 | 60 | 42 | 7 | 4 | 0 | 1 | 0 | 0 | 0 | 1 | 4 | 0 | 0 | 11 | 0 | 0 | 4 | 0 |
 | `np.ma.MaskedArray` | 61 | 64 | 59 | 27 | 2 | 31 | 30 | 30 | 0 | 2 | 0 | 18 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 17 |
 | `np.dtype` | 9 | 19 | 4 | 2 | 2 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `np.nditer` | 11 | 11 | 8 | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
@@ -69,7 +69,7 @@ otherwise), **policy** (missing but excluded by the parity plan §3: `like`, `su
 | `np.random.PCG64DXSM` | 3 | 11 | 3 | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.Philox` | 3 | 12 | 3 | 1 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `np.random.SFC64` | 1 | 8 | 1 | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **total** | 1455 | 2502 | 1287 | 567 | 354 | 297 | 205 | 191 | 8 | 54 | 5 | 60 | 74 | 2 | 12 | 70 | 131 | 0 | 168 | 96 |
+| **total** | 1455 | 2488 | 1287 | 572 | 349 | 297 | 205 | 191 | 8 | 54 | 5 | 60 | 74 | 2 | 12 | 70 | 131 | 0 | 168 | 96 |
 
 *closest overload differs* counts names whose closest overload has a hard difference (missing, in another
 overload only, renamed, extra, slot, C# requires, default, varargs); each kind is counted again in its own
@@ -1431,23 +1431,8 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
 | `view` | `a.view(dtype=<optional>, type=<optional>)` | `NDArray view(DType dtype, Type type)`<br>(+3 more overloads, below) | **C# requires**: `dtype`, `type` |
 | `(constructor)` | `ndarray(shape, dtype=None, buffer=None, offset=0, strides=None, order=None)` | `NDArray (constructor)(DType dtype, Shape shape, bool fillZeros)`<br>(+10 more overloads, below) | **missing**: `offset`, `strides`<br>**in another overload only**: `order`<br>**renamed**: `buffer -> fillZeros`<br>**slot**: `shape: NumPy #0, C# #1`, `dtype: NumPy #1, C# #0`<br>**C# requires**: `dtype` |
 
-### More than one overload (24; NumPy has one signature each)
+### More than one overload (22; NumPy has one signature each)
 
-- `__getitem__`: NumPy `a.__getitem__(key, /)`
-
-  ```csharp
-  NDArray __getitem__(int index)
-  NDArray __getitem__(long index)
-  NDArray __getitem__(string slice)
-  NDArray __getitem__(params int[] indices)
-  ```
-- `__setitem__`: NumPy `a.__setitem__(key, value, /)`
-
-  ```csharp
-  void __setitem__(int index, object value)
-  void __setitem__(long index, object value)
-  void __setitem__(string slice, object value)
-  ```
 - `argmax`: NumPy `a.argmax(axis=None, out=None, *, keepdims=False)`
 
   ```csharp
@@ -1615,9 +1600,9 @@ difference, only those. *not compared*: NumPy states no signature, or the name i
   NDArray (constructor)(DType dtype, Shape shape, bool fillZeros)
   ```
 
-### Identical to NumPy (27)
+### Identical to NumPy (29)
 
-`__contains__`, `__iter__`, `__len__`, `all`, `any`, `byteswap`, `clip`, `compress`, `copy`, `cumprod`, `cumsum`, `diagonal`, `fill`, `flatten`, `max`, `min`, `nonzero`, `put`, `round`, `setflags`, `sort`, `squeeze`, `swapaxes`, `to_device`, `tobytes`, `tolist`, `trace`
+`__contains__`, `__getitem__`, `__iter__`, `__len__`, `__setitem__`, `all`, `any`, `byteswap`, `clip`, `compress`, `copy`, `cumprod`, `cumsum`, `diagonal`, `fill`, `flatten`, `max`, `min`, `nonzero`, `put`, `round`, `setflags`, `sort`, `squeeze`, `swapaxes`, `to_device`, `tobytes`, `tolist`, `trace`
 
 ### NumSharp-only names (15 NumPy-style, 68 PascalCase C# members)
 
@@ -3186,29 +3171,13 @@ PascalCase: `Clone`, `GetAtIndex`
 | `transpose` | `matrix.transpose(*axes)` | `NDMatrix transpose(int[] premute = null)` | **varargs**: `*axes as int[] premute (no params array)` |
 | `view` | `matrix.view(dtype=<optional>, type=<optional>)` | `NDArray view(DType dtype, Type type)`<br>(+2 more overloads, below) | **C# requires**: `dtype`, `type` |
 
-### More than one overload (19; NumPy has one signature each)
+### More than one overload (17; NumPy has one signature each)
 
-- `__getitem__`: NumPy `matrix.__getitem__(index)`
-
-  ```csharp
-  NDMatrix __getitem__(int index)
-  NDMatrix __getitem__(long index)
-  NDMatrix __getitem__(string slice)
-  NDMatrix __getitem__(params int[] indices)
-  ```
 - `__pow__`: NumPy `matrix.__pow__(other)`
 
   ```csharp
   NDMatrix __pow__(int n)
   NDMatrix __pow__(object other)
-  ```
-- `__setitem__`: NumPy `matrix.__setitem__(key, value, /)`
-
-  ```csharp
-  void __setitem__(object index, object value)
-  void __setitem__(int index, object value)
-  void __setitem__(long index, object value)
-  void __setitem__(string slice, object value)
   ```
 - `all`: NumPy `matrix.all(axis=None, out=None)`
 
@@ -3311,9 +3280,9 @@ PascalCase: `Clone`, `GetAtIndex`
   NDArray view(DType dtype, Type type)
   ```
 
-### Identical to NumPy (22)
+### Identical to NumPy (24)
 
-`__imul__`, `__ipow__`, `__iter__`, `__mul__`, `__rmul__`, `__rpow__`, `argpartition`, `byteswap`, `conj`, `conjugate`, `copy`, `diagonal`, `flatten`, `getA`, `getA1`, `getH`, `getI`, `getT`, `getfield`, `squeeze`, `swapaxes`, `to_device`
+`__getitem__`, `__imul__`, `__ipow__`, `__iter__`, `__mul__`, `__rmul__`, `__rpow__`, `__setitem__`, `argpartition`, `byteswap`, `conj`, `conjugate`, `copy`, `diagonal`, `flatten`, `getA`, `getA1`, `getH`, `getI`, `getT`, `getfield`, `squeeze`, `swapaxes`, `to_device`
 
 ### NumSharp-only names (0 NumPy-style, 4 PascalCase C# members)
 
@@ -3346,16 +3315,8 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
 | `rjust` | `chararray.rjust(width, fillchar=' ')` | `NDCharArray rjust(object width, object fillchar = null)` | **null default**: `fillchar: ' ' vs null` |
 | `startswith` | `chararray.startswith(prefix, start=0, end=None)` | `NDArray startswith(object prefix, object start = null, object end = null)` | **null default**: `start: 0 vs null` |
 
-### More than one overload (8; NumPy has one signature each)
+### More than one overload (7; NumPy has one signature each)
 
-- `__getitem__`: NumPy `chararray.__getitem__(obj)`
-
-  ```csharp
-  NDCharArray __getitem__(int index)
-  NDCharArray __getitem__(long index)
-  NDCharArray __getitem__(string slice)
-  NDCharArray __getitem__(params int[] indices)
-  ```
 - `argmax`: NumPy `chararray.argmax(axis=None, out=None, *, keepdims=False)`
 
   ```csharp
@@ -3408,9 +3369,9 @@ PascalCase: `Clone`, `Equals`, `GetEnumerator`, `GetHashCode`
   NDArray view(DType dtype, Type type)
   ```
 
-### Identical to NumPy (41)
+### Identical to NumPy (42)
 
-`__iter__`, `argpartition`, `byteswap`, `capitalize`, `compress`, `copy`, `decode`, `diagonal`, `encode`, `flatten`, `getfield`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `join`, `lower`, `lstrip`, `repeat`, `replace`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `squeeze`, `strip`, `swapaxes`, `swapcase`, `take`, `title`, `to_device`, `translate`, `transpose`, `upper`, `zfill`
+`__getitem__`, `__iter__`, `argpartition`, `byteswap`, `capitalize`, `compress`, `copy`, `decode`, `diagonal`, `encode`, `flatten`, `getfield`, `isalnum`, `isalpha`, `isdecimal`, `isdigit`, `islower`, `isnumeric`, `isspace`, `istitle`, `isupper`, `join`, `lower`, `lstrip`, `repeat`, `replace`, `rpartition`, `rsplit`, `rstrip`, `split`, `splitlines`, `squeeze`, `strip`, `swapaxes`, `swapcase`, `take`, `title`, `to_device`, `translate`, `transpose`, `upper`, `zfill`
 
 ### NumSharp-only names (0 NumPy-style, 4 PascalCase C# members)
 

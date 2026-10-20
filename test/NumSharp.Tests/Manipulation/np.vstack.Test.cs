@@ -18,9 +18,9 @@
 
             Assert.IsTrue(n.size == (n1.size + n2.size));
 
-            Assert.IsTrue(n[0, 0] == 1);
-            Assert.IsTrue(n[1, 0] == 2);
-            Assert.IsTrue(n[1, 2] == 4);
+            Assert.IsTrue((double)n[0, 0] == 1);
+            Assert.IsTrue((double)n[1, 0] == 2);
+            Assert.IsTrue((double)n[1, 2] == 4);
 
             //2D
             n1 = np.array(new double[][] {new double[] {1}, new double[] {2}, new double[] {3}});
@@ -30,12 +30,12 @@
 
             Assert.IsTrue(n.size == (n1.size + n2.size));
 
-            Assert.IsTrue(n[0, 0] == 1);
-            Assert.IsTrue(n[1, 0] == 2);
-            Assert.IsTrue(n[2, 0] == 3);
-            Assert.IsTrue(n[3, 0] == 4);
-            Assert.IsTrue(n[4, 0] == 5);
-            Assert.IsTrue(n[5, 0] == 6);
+            Assert.IsTrue((double)n[0, 0] == 1);
+            Assert.IsTrue((double)n[1, 0] == 2);
+            Assert.IsTrue((double)n[2, 0] == 3);
+            Assert.IsTrue((double)n[3, 0] == 4);
+            Assert.IsTrue((double)n[4, 0] == 5);
+            Assert.IsTrue((double)n[5, 0] == 6);
 
             //3D
             n1 = np.array(new double[][] {new double[] {1}, new double[] {2}, new double[] {3}});
@@ -46,15 +46,15 @@
 
             Assert.IsTrue(n.size == (n1.size + n2.size + n3.size));
 
-            Assert.IsTrue(n[0, 0] == 1);
-            Assert.IsTrue(n[1, 0] == 2);
-            Assert.IsTrue(n[2, 0] == 3);
-            Assert.IsTrue(n[3, 0] == 4);
-            Assert.IsTrue(n[4, 0] == 5);
-            Assert.IsTrue(n[5, 0] == 6);
-            Assert.IsTrue(n[6, 0] == 7);
-            Assert.IsTrue(n[7, 0] == 8);
-            Assert.IsTrue(n[8, 0] == 9);
+            Assert.IsTrue((double)n[0, 0] == 1);
+            Assert.IsTrue((double)n[1, 0] == 2);
+            Assert.IsTrue((double)n[2, 0] == 3);
+            Assert.IsTrue((double)n[3, 0] == 4);
+            Assert.IsTrue((double)n[4, 0] == 5);
+            Assert.IsTrue((double)n[5, 0] == 6);
+            Assert.IsTrue((double)n[6, 0] == 7);
+            Assert.IsTrue((double)n[7, 0] == 8);
+            Assert.IsTrue((double)n[8, 0] == 9);
         }        
     }
 }

@@ -1780,8 +1780,8 @@ reporting the original axis). `num<0` → `ValueError("Number of samples, {num},
   `__getitem__` for an index of integers and slices. So the value is broadcast into the row or COLUMN:
   `m[:, 0] = [7, 8, 9]` raises `could not broadcast input array from shape (3,) into shape (3,1)`. One element
   stores through the dtype's setitem (an array value is refused; bool takes a one-element array's truth value;
-  complex128 raises TypeError). The typed indexers take an `NDMatrix` or a number; `__setitem__(index, object)`
-  takes any value.
+  complex128 raises TypeError). The indexer takes an `NDMatrix` or a number (`m[row, column]` any `NDArray`);
+  `__setitem__(index, object)` takes any value.
 - **`*` and `**`** (`NDMatrix.Operators.cs`): `m * x` is `np.dot(m, asmatrix(x))` (a 1-d `x` becomes a ROW), `x * m`
   is `np.dot(x, m)`; each binary operator has five forms (matrix/matrix, matrix/array, array/matrix,
   matrix/object, object/matrix). Scaling is `np.dot`'s scalar route: the dtype is `promote_types` of both
@@ -4004,14 +4004,15 @@ works as an entry too, so `np.s_[…]` composes into `np.r_[…]`.
   **indexer surface mirrors `NDArray`'s**, because NumPy's `s_` passes ANY index object straight
   through (`np.s_[[1,2]]` is the list, `np.s_[..., mask]` the tuple) — so the contract is
   **`arr[X]` ≡ `arr[np.s_[X]]` for every X**, verified across the whole vocabulary. Three overloads
-  cover what `NDArray`'s three public indexers do, each returning the array type that indexer
-  consumes: `this[string]` and `this[params Slice[]]` → **`Slice[]`** for BASIC expressions (slices,
+  return the two tuple types `NDArray`'s one indexer (`this[params object[] key]`) takes whole:
+  `this[string]` and `this[params Slice[]]` → **`Slice[]`** for BASIC expressions (slices,
   slice strings, integers — `int` and `string` convert implicitly to `Slice`, so `np.s_[0]` and
   `np.s_["1:3", "::2"]` stay here), and `this[params object[]]` → **`object[]`** the moment an entry
   cannot be a `Slice` — an `NDArray` fancy index or boolean mask, `int[]`/`long[]`/`bool[]`, an
   `IList` sequence, or a basic/advanced mix like `np.s_[Slice.All, np.array(new[]{0,2})]`. Both feed
-  `arr[…]` directly, including an `NDArray<T>` (its own indexers do not hide the inherited
-  `this[params object[]]`). **C# divergence:** `s_` and `index_exp` are identical here — NumPy's pair
+  `arr[…]` directly (a `Slice[]` reaches the indexer by array covariance and takes its basic-index
+  body), including an `NDArray<T>` (whose indexer overrides `NDArray`'s and types the result).
+  **C# divergence:** `s_` and `index_exp` are identical here — NumPy's pair
   differs only in `maketuple` (`np.s_[2::2]` is a bare slice, `np.index_exp[2::2]` a 1-tuple), but a
   lone `Slice` and a one-element `Slice[]` are literally the same call in C#. Both are kept so NumPy
   code ports verbatim; `maketuple` is exposed but has no observable effect.
@@ -7076,7 +7077,39 @@ code gives NumPy's text.
   scalar ints) stays coordinate (`HAS_INTEGER`). **Coordinate (element/sub-array) access moved to the
   shim `nd.GetData(int[]/long[])`** (`Backends/NDArray.cs`) — e.g. `nd.GetData(0, 2)`. Internal
   coordinate callers must use `GetData`, not `nd[coordArray]`.
-  The typed `NDArray<T>.this[int[]]` is unaffected — it returns a scalar `T` (inherently coordinate).
+- **ONE indexer per array class, NumPy's `__getitem__(key)` / `__setitem__(key, value)`** (2026-10-20, review R3,
+  `Selection/NDArray.Indexer.OneSignature.Test.cs`). `NDArray` has `public virtual NDArray this[params object[] key]`
+  only; the typed indexers `this[string]`, `this[params Slice[]]`, `this[NDArray<bool>]`, `this[params
+  NDArray<int>[]]` and `this[long*, int]` are gone, and so are `__getitem__(int|long|string|params int[])` and
+  `__setitem__(int|long|string, object)`: one `__getitem__(object key)` and one `__setitem__(object key, object
+  value)` remain (an `object[]` / `Slice[]` / C# tuple key is the index tuple; a typed `int[]` / `bool[]` key is ONE
+  entry, NumPy's list — an index array or a mask, where the removed `params int[]` form read coordinates).
+  - **The dispatch keeps every old call's body** (`TryBasicIndex`, then the mask path, then the general path): a
+    `Slice[]` passed whole, ONE string (slice notation, comma-separated), or entries that are each a `Slice`, a string
+    (ONE slice) or an integer of a type C# converts to `int`/`long` (`sbyte` … `uint`, `long`, `char`, `nint`) take the
+    old view body (`GetView` + `AssignThroughView`); a lone `NDArray<bool>` takes the mask body; everything else the
+    general one. TRAP it encodes: the general path has no `case long` / `case short` for a single entry — C# used to
+    bind those to `this[params Slice[]]` at compile time, so without the pre-dispatch `a[5L]` raised "only integers…".
+    A `ulong` keeps the general path (no implicit conversion to `long`).
+  - **`NDArray<T>` overrides the GETTER only**, returning `NDArray<T>` (C# lets an override narrow its type only without
+    a setter, CS1715); the setter is `NDArray`'s, so through an `NDArray<T>` variable the value must be an `NDArray<T>`
+    or a `T` (`implicit operator NDArray<T>(T)` was added for that: `typed[0] = 3.14`, `mask[m] = false`); assign an
+    untyped value through an `NDArray` reference or `__setitem__`. The typed SCALAR indexers `T this[params long[]]` /
+    `T this[int[]]` are gone: an element is a 0-d view, read it with a cast (`(double)typed[0]`) or, in a hot loop,
+    `GetValue<T>(…)` (the 0-d view costs ~0.38 µs against the old 19 ns direct read). Virtual dispatch reaches the
+    override through an `NDArray` reference too, so a typed array's selection is an `NDArray<T>` object at run time.
+    TRAP: an advanced result must be wrapped over its OWN storage object (`new NDArray<T>(result.Storage)`, then dispose
+    the untyped wrapper), never `MakeGeneric` — an alias reads as a view, so a gather lost `flags.owndata` (found by the
+    strings oracle: `np.ma.flatten_mask` over `S` ends in a typed `nonzero[keep]`). Cost of the typed wrapper: +0.1 µs
+    on a gather (0.91 → 1.02 µs); a typed basic view got faster (one object instead of two, 0.67 → 0.40 µs).
+  - **`NDCharArray` and `NDMatrix` HIDE the indexer (`new`), they do not override it**: their rules (a stripped
+    element; a matrix row / column) apply through their static type, while library code that receives such an object
+    as `NDArray` indexes it as a plain array — `NDMatrixBoundary` hands the matrix object itself to the computation it
+    runs with plain-array semantics (`np.piecewise`'s `x[cond]` would otherwise gather a `(1, K)` matrix). Each has one
+    general indexer; `NDMatrix` keeps `NDArray this[long row, long column]` (typed as the scalar it returns; two `int`
+    arguments bind it). `NDListArray` (not an `NDArray`) has one `NDListArray this[params object[] key]`: a full
+    integer index is the list's 0-d stand-in, an index array / mask gathers the ids (the lists are shared, as NumPy's
+    object pointers), the pieces come from `item()` / `tolist()`; iterating a 1-d list array still yields piece arrays.
 - **Index errors are NumPy's `prepare_index` IndexErrors** (2026-10-08, `Selection/IndexErrors.NumPyPort.Test.cs`): a
   boolean mask with more dimensions than the array is `too many indices for array: array is 1-dimensional, but 2 were
   indexed` (checked first); otherwise the first mask axis of non-zero length that differs is `boolean index did not

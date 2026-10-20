@@ -151,8 +151,8 @@ namespace NumSharp.Tests.Selection
             Assert.IsTrue(n1.GetAtIndex(1) == 3);
 
             n1 = np.amax(n, 1).MakeGeneric<long>();
-            Assert.IsTrue(n1[0] == 1);
-            Assert.IsTrue(n1[1] == 3);
+            Assert.IsTrue((long)n1[0] == 1);
+            Assert.IsTrue((long)n1[1] == 3);
 
             //3D
             /*n = np.arange(24).reshape(4, 3, 2);

@@ -202,71 +202,44 @@ namespace NumSharp
         #region Indexing (__getitem__, __setitem__)
 
         /// <summary>
-        /// Python-compatible __getitem__ method with integer index.
+        ///     NumPy's <c>ndarray.__getitem__(key, /)</c>: the same as <c>a[key]</c> (<see cref="this[object[]]"/>).
         /// </summary>
-        /// <param name="index">Index along the first axis.</param>
-        /// <returns>Element or slice at the given index.</returns>
-        /// <remarks>
-        /// Equivalent to <c>arr[index]</c> in Python.
-        /// Supports negative indexing (-1 = last element).
-        /// </remarks>
-        public NDArray __getitem__(int index) => this[index];
+        /// <param name="key">The index, as Python passes it to <c>__getitem__</c>: one entry (an integer, a slice-notation
+        ///     string such as <c>"1:3"</c> or <c>"..., 0"</c>, a <see cref="Slice"/>, an index array, a mask, a C# bool) or
+        ///     the whole index tuple — an <c>object[]</c> / <see cref="Slice"/>[] (each element an entry) or a C# tuple
+        ///     (<c>a.__getitem__((1, "0:2"))</c>). A typed C# array other than <see cref="Slice"/>[] (<c>int[]</c>,
+        ///     <c>bool[]</c>) is ONE entry, NumPy's list: an index array or a mask.</param>
+        /// <returns>The selection: a view for an index of integers and slices (0-d for one integer per axis), a new array
+        ///     for an advanced index.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c> (NumPy's <c>a[None]</c> is
+        ///     <see cref="Slice.NewAxis"/>).</exception>
+        /// <exception cref="IndexError">The index is invalid for this array (NumPy's <c>prepare_index</c> texts).</exception>
+        /// <remarks>One member, NumPy's signature. An integer array used to bind a <c>params int[]</c> form that read it
+        ///     as COORDINATES (<c>a.__getitem__(1, 2)</c>); NumPy reads a list key as an index array, and so does this
+        ///     member — pass a tuple for coordinates (<c>a.__getitem__((1, 2))</c>).</remarks>
+        public NDArray __getitem__(object key) => this[ItemKey(key)];
 
         /// <summary>
-        /// Python-compatible __getitem__ method with long index.
+        ///     NumPy's <c>ndarray.__setitem__(key, value, /)</c>: stores exactly what <c>a[key] = value</c> stores, for any
+        ///     value kind (the indexer's setter takes an <see cref="NDArray"/>).
         /// </summary>
-        /// <param name="index">Index along the first axis.</param>
-        /// <returns>Element or slice at the given index.</returns>
-        public NDArray __getitem__(long index) => this[index];
-
-        /// <summary>
-        /// Python-compatible __getitem__ method with slice string.
-        /// </summary>
-        /// <param name="slice">Slice specification (e.g., "1:3", "::-1", "..., 0").</param>
-        /// <returns>Sliced view of the array.</returns>
-        /// <remarks>
-        /// Equivalent to <c>arr[slice]</c> in Python.
-        /// Examples:
-        /// <code>
-        /// arr.__getitem__(":3")      // First 3 elements
-        /// arr.__getitem__("1:-1")    // All but first and last
-        /// arr.__getitem__("::-1")    // Reversed
-        /// arr.__getitem__("..., 0")  // All rows, first column
-        /// </code>
-        /// </remarks>
-        public NDArray __getitem__(string slice) => this[slice];
-
-        /// <summary>
-        /// Python-compatible __getitem__ method with params indices.
-        /// </summary>
-        /// <param name="indices">Indices for each dimension.</param>
-        /// <returns>Element or slice at the given indices.</returns>
-        /// <remarks>
-        /// A comma-separated index list is Python's basic (coordinate) indexing —
-        /// <c>arr[1, 2]</c> selects the element at (1,2), <c>arr[1]</c> the sub-array along
-        /// axis 0 — so it resolves through <see cref="GetData(int[])"/>. (A raw <c>int[]</c>
-        /// passed to the <c>this[...]</c> indexer is now FANCY indexing for NumPy parity;
-        /// fancy/list indexing is reached through the array/NDArray overloads instead.)
-        /// </remarks>
-        public NDArray __getitem__(params int[] indices) => GetData(indices);
-
-        /// <summary>
-        /// Python-compatible __setitem__ method with integer index.
-        /// </summary>
-        /// <param name="index">Index along the first axis.</param>
+        /// <param name="key">The index, as for <see cref="__getitem__(object)"/>.</param>
         /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
         ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>.</exception>
+        /// <exception cref="IndexError">The index is invalid for this array (NumPy's texts).</exception>
         /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
         ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
         ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
         /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
-        /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
-        public void __setitem__(int index, object value)
+        /// <exception cref="ValueError">The array is read-only, the value does not broadcast to the selection, or does not
+        ///     parse into its dtype.</exception>
+        public void __setitem__(object key, object value)
         {
             var arr = SetItemValue(value);
             try
             {
-                this[index] = arr;
+                this[ItemKey(key)] = arr;
             }
             finally
             {
@@ -277,56 +250,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Python-compatible __setitem__ method with long index.
+        ///     The indexer's tuple for a <c>__getitem__</c> / <c>__setitem__</c> key: an <c>object[]</c> (a
+        ///     <see cref="Slice"/>[] and an <see cref="NDArray"/>[] by array covariance) is the tuple itself, any other key is
+        ///     one entry (a C# tuple entry is spread by the indexer, as Python reads <c>a[(1, 2)]</c> as <c>a[1, 2]</c>).
         /// </summary>
-        /// <param name="index">Index along the first axis.</param>
-        /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
-        ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
-        /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
-        ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
-        ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
-        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
-        /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
-        public void __setitem__(long index, object value)
+        /// <param name="key">The key Python would pass.</param>
+        /// <returns>The index tuple.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>.</exception>
+        internal static object[] ItemKey(object key) => key switch
         {
-            var arr = SetItemValue(value);
-            try
-            {
-                this[index] = arr;
-            }
-            finally
-            {
-                // The 0-d array made for a C# scalar is this call's own temporary (the store copies from it).
-                if (!ReferenceEquals(arr, value))
-                    arr?.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Python-compatible __setitem__ method with slice string.
-        /// </summary>
-        /// <param name="slice">Slice specification.</param>
-        /// <param name="value">Value to set — an NDArray, a C# scalar (NumPy's Python scalar), a C# array or list, or null
-        ///     (Python's <c>None</c>); see <see cref="SetItemValue"/>.</param>
-        /// <exception cref="TypeError"><paramref name="value"/> is null (Python's <c>None</c>) and this is an integer (or
-        ///     <c>decimal</c>) array: <c>int(None)</c>'s text, after the index's bounds check. A float array stores NaN,
-        ///     complex <c>nan+nanj</c>, bool <c>False</c>, text <c>'None'</c> or a <c>StringDType</c> NA object.</exception>
-        /// <exception cref="OverflowException">A C# integer outside this array's integer dtype (NumPy's OverflowError).</exception>
-        /// <exception cref="ValueError">The value does not broadcast to the selection, or does not parse into its dtype.</exception>
-        public void __setitem__(string slice, object value)
-        {
-            var arr = SetItemValue(value);
-            try
-            {
-                this[slice] = arr;
-            }
-            finally
-            {
-                // The 0-d array made for a C# scalar is this call's own temporary (the store copies from it).
-                if (!ReferenceEquals(arr, value))
-                    arr?.Dispose();
-            }
-        }
+            null => throw new ArgumentNullException(nameof(key)),
+            object[] tuple => tuple,
+            _ => new[] { key },
+        };
 
         /// <summary>
         ///     The value of a <c>__setitem__</c> call as NumPy's <c>ndarray.__setitem__</c> receives it, so that

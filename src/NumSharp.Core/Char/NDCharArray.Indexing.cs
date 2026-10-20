@@ -21,10 +21,13 @@ using NumSharp.Generic;
 // subclass: a chararray view (basic index), a chararray view of the gathered array (index array, mask), or an owning
 // copy (NumPy's HAS_SCALAR_ARRAY: a 0-d integer array next to slices), each after the finalize rule.
 //
-// THE C# TYPE. An indexer has one type for get and set. These are typed NDCharArray so that c["1:3"][0] and c2[0][1]
-// strip like NumPy's chained indexing, therefore the value assigned through them is an NDCharArray or a C# string /
-// byte[] (implicit conversions). Assigning stores through the plain array rule (NumPy's chararray does not override
-// __setitem__). Assign any other value (a number, a plain NDArray) with __setitem__.
+// THE C# TYPE. An indexer has one type for get and set. The one indexer (NumPy's one __getitem__) is typed NDCharArray so
+// that c["1:3"][0] and c2[0][1] strip like NumPy's chained indexing, therefore the value assigned through it is an
+// NDCharArray or a C# string / byte[] (implicit conversions). Assigning stores through the plain array rule (NumPy's
+// chararray does not override __setitem__). Assign any other value (a number, a plain NDArray) with __setitem__.
+//
+// STATIC, NOT VIRTUAL. The indexer hides NDArray's (virtual) indexer instead of overriding it: the chararray rule applies
+// through an NDCharArray reference, and library code that receives a chararray as an NDArray indexes it as a plain array.
 //
 // =============================================================================
 
@@ -32,177 +35,92 @@ namespace NumSharp
 {
     public partial class NDCharArray
     {
-        #region Indexers
+        #region Indexer
 
         /// <summary>
-        ///     Indexes with slice objects (<c>c[Slice.All, 0]</c>, <c>c[new Slice(1, 3)]</c>) or integers
-        ///     (<c>c[0]</c>, <c>c[0, 1]</c> — an <see cref="int"/> converts to an integer <see cref="Slice"/>).
+        ///     NumPy's <c>chararray.__getitem__(obj)</c> as the one C# indexer: every index NumPy takes (integers, slices,
+        ///     slice notation, index arrays, boolean masks, sequences, in any mix), with chararray's rule for the result — an
+        ///     element is stripped of trailing whitespace, an array stays a chararray. A boolean array from a comparison is an
+        ///     index too: <c>c[c != ""]</c>.
         /// </summary>
-        /// <param name="slices">One entry per indexed axis; <see cref="Slice.Ellipsis"/> and <see cref="Slice.NewAxis"/> allowed.</param>
+        /// <param name="key">The index tuple (one entry per C# argument; a <see cref="Slice"/>[] or <c>object[]</c> passed
+        ///     alone is the tuple itself, and a single C# tuple entry is spread). A slice-notation string may hold several
+        ///     comma-separated entries (<c>c[":, ::-1"]</c>, <c>c["0, 1"]</c>); the empty string is NumPy's empty index
+        ///     <c>c[()]</c>.</param>
         /// <value>
-        ///     For an integer per axis: the element as a read-only 0-d stand-in, its trailing whitespace stripped
-        ///     (NumPy's Python <c>str</c> / <c>bytes</c>). Otherwise a chararray VIEW. Assigning stores through the plain
-        ///     array rule (truncated to the element width, <c>S</c> encodes ASCII).
+        ///     GET: the element as a read-only 0-d stand-in, its trailing whitespace stripped (NumPy's Python <c>str</c> /
+        ///     <c>bytes</c>), for a full integer index (one integer or 0-d integer array per axis; for a 0-d chararray the
+        ///     empty index); otherwise a chararray VIEW for an index of integers and slices, a chararray view of the gathered
+        ///     array (OWNDATA false) for an index array or a mask, and an owning chararray copy for NumPy's
+        ///     0-d-integer-array-plus-slices case.
+        ///     SET: stores through the plain array rule (NumPy's chararray does not override <c>__setitem__</c>): truncated to
+        ///     the element width, <c>S</c> encodes ASCII.
         /// </value>
-        /// <exception cref="ArgumentNullException"><paramref name="slices"/> is <c>null</c>.</exception>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes (NumPy's texts).</exception>
-        /// <exception cref="ValueError">(get) The chararray holds data that is not string data and the index selects an
-        ///     array; (set) the chararray is read-only, or the value does not broadcast.</exception>
-        /// <exception cref="SystemError">(get) A <c>U</c> element holds a unit above <c>U+10FFFF</c>.</exception>
-        public new NDCharArray this[params Slice[] slices]
-        {
-            get => GetBasic(slices);
-            set => base[slices] = value;
-        }
-
-        /// <summary>
-        ///     Indexes the first axis with one integer (<c>c[0]</c>, <c>c[-1]</c>): the same result as
-        ///     <c>c[Slice.Index(index)]</c>, without building the index array. The usual element access of a 1-d chararray.
-        /// </summary>
-        /// <param name="index">The index along the first axis; negative counts from the end.</param>
-        /// <value>
-        ///     For a 1-d chararray: the element as a read-only 0-d stand-in, its trailing whitespace stripped (NumPy's Python
-        ///     <c>str</c> / <c>bytes</c>). For more axes: a chararray VIEW of the row. Assigning stores through the plain array
-        ///     rule (truncated to the element width, <c>S</c> encodes ASCII).
-        /// </value>
-        /// <exception cref="IndexError"><paramref name="index"/> is out of bounds (NumPy's text), or the chararray is 0-d.</exception>
-        /// <exception cref="ValueError">(get) The chararray holds data that is not string data and the result is a row;
-        ///     (set) the chararray is read-only, or the value does not broadcast.</exception>
-        /// <exception cref="SystemError">(get) A <c>U</c> element holds a unit above <c>U+10FFFF</c>.</exception>
-        public NDCharArray this[int index]
-        {
-            get => ElementOrRow(index);
-            set => base[Slice.Index(index)] = value;
-        }
-
-        /// <inheritdoc cref="this[int]"/>
-        public NDCharArray this[long index]
-        {
-            get => ElementOrRow(index);
-            set => base[Slice.Index(index)] = value;
-        }
-
-        /// <summary>
-        ///     Indexes with Python slice notation (<c>c["1:3"]</c>, <c>c[":, ::-1"]</c>, <c>c["0, 1"]</c>); the empty string
-        ///     is NumPy's empty index <c>c[()]</c>.
-        /// </summary>
-        /// <param name="slice">The comma-separated entries: integers, <c>start:stop:step</c>, <c>...</c>, <c>np.newaxis</c>.</param>
-        /// <value>The stripped 0-d stand-in for an integer per axis (the empty index of a 0-d chararray included); a
-        ///     chararray view otherwise.</value>
-        /// <exception cref="ArgumentNullException"><paramref name="slice"/> is <c>null</c>.</exception>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
-        /// <exception cref="ValueError">(get) The chararray holds data that is not string data and the index selects an
-        ///     array; (set) the chararray is read-only, or the value does not broadcast.</exception>
-        /// <exception cref="SystemError">(get) A <c>U</c> element holds a unit above <c>U+10FFFF</c>.</exception>
-        public new NDCharArray this[string slice]
-        {
-            get => GetBasic(Slice.ParseSlices(slice));
-            set => base[slice] = value;
-        }
-
-        /// <summary>
-        ///     The general index: integers, slices, slice strings, index arrays, boolean masks and sequences in any mix
-        ///     (NumPy's index tuple). A boolean array from a comparison binds here: <c>c[c != ""]</c>.
-        /// </summary>
-        /// <param name="indices">The index entries. A single C# tuple entry is NumPy's index tuple and is spread.</param>
-        /// <value>
-        ///     The stripped 0-d stand-in for a full integer index (integers and 0-d integer arrays, one per axis). A chararray
-        ///     view for an index of integers and slices; a chararray view of the gathered array (OWNDATA false) for an index
-        ///     array or a mask; an owning chararray copy for NumPy's 0-d-integer-array-plus-slices case.
-        /// </value>
-        /// <exception cref="IndexError">An index is out of bounds, too many entries, or index arrays that do not broadcast
-        ///     together.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <c>null</c>, or an entry is <c>null</c>.</exception>
+        /// <exception cref="IndexError">An index is out of bounds, too many entries, a mask that does not match, or index
+        ///     arrays that do not broadcast together (NumPy's texts).</exception>
         /// <exception cref="ValueError">(get) The chararray holds data that is not string data and the index selects an
         ///     array; (set) the chararray is read-only, or the value does not fit the selection.</exception>
         /// <exception cref="SystemError">(get) A <c>U</c> element holds a unit above <c>U+10FFFF</c>.</exception>
-        public new NDCharArray this[params object[] indices]
+        /// <remarks>
+        ///     <para>
+        ///     <b>The C# type.</b> The indexer has one type for get and set. It is typed <see cref="NDCharArray"/> so that
+        ///     <c>c["1:3"][0]</c> and <c>c2[0][1]</c> strip like NumPy's chained indexing, therefore the value assigned through
+        ///     it is an <see cref="NDCharArray"/> or a C# <see cref="string"/> / <c>byte[]</c> (implicit conversions). Assign
+        ///     any other value (a number, a plain <see cref="NDArray"/>) with <see cref="NDArray.__setitem__(object, object)"/>.
+        ///     </para>
+        ///     <para>
+        ///     <b>Static, not virtual.</b> This indexer HIDES <see cref="NDArray.this[object[]]"/> instead of overriding it:
+        ///     chararray's rule applies through an <see cref="NDCharArray"/> reference, and through an <see cref="NDArray"/>
+        ///     reference a chararray is indexed as a plain array (the library's own code receives chararrays as
+        ///     <see cref="NDArray"/> and relies on that, see <see cref="NDCharArrayBoundary"/>).
+        ///     </para>
+        ///     <para>
+        ///     <b>Dispatch.</b> One integer (a C# integer of any type C# converts to <see cref="long"/>) reads the element
+        ///     straight from the strides for a 1-d S / U chararray (<see cref="ElementOrRow"/>, the body of the old
+        ///     <c>this[int]</c> / <c>this[long]</c>); an index of integers, slices and slice strings selects its view without
+        ///     building an intermediate array (<see cref="GetBasic"/>); any other index goes through the plain array's advanced
+        ///     indexing first, whose result the scope reclaims once the chararray holds its own reference.
+        ///     </para>
+        /// </remarks>
+        public new NDCharArray this[params object[] key]
         {
-            // An index of integers and slices takes the view route of the typed indexers (one scalar rule, NumPy's index
-            // errors); any other entry goes through the plain array's advanced indexing first, whose result the scope
-            // reclaims once the chararray holds its own reference.
             [NDScoped]
             get
             {
-                if (indices is not null && TryAsSlices(indices, out Slice[] slices))
+                if (key is null)
+                    throw new ArgumentNullException(nameof(key));
+                if (key.Length == 1 && TryLoneInteger(key[0], out long index))
+                    return ElementOrRow(index);
+                if (TryAsSlices(key, out Slice[] slices))
                     return GetBasic(slices);
-                NDArray result = base[indices];
-                return IsFullIntegerIndex(indices)
+                NDArray result = base[key];
+                return IsFullIntegerIndex(key)
                     ? ScalarOf(result.Storage, strip: true)
-                    : FromIndexing(result, this, IsScalarArrayIndex(indices));
+                    : FromIndexing(result, this, IsScalarArrayIndex(key));
             }
-            set => base[indices] = value;
-        }
-
-        /// <summary>Selects with a boolean mask (NumPy's <c>c[mask]</c>): the selected elements in C order.</summary>
-        /// <param name="mask">The mask.</param>
-        /// <value>A chararray VIEW of the gathered elements (OWNDATA false, as NumPy's subclass result). Assigning stores
-        ///     into the selected elements.</value>
-        /// <exception cref="IndexError">The mask's shape does not match.</exception>
-        /// <exception cref="ValueError">(get) The chararray holds data that is not string data; (set) the chararray is
-        ///     read-only, or the value count differs from the number of selected elements.</exception>
-        public new NDCharArray this[NDArray<bool> mask]
-        {
-            [NDScoped] get => FromIndexing(base[mask], this, scalarArrayCopy: false);
-            set => base[mask] = value;
-        }
-
-        /// <summary>Selects with integer index arrays, one per axis (NumPy's <c>c[rows, cols]</c>).</summary>
-        /// <param name="selection">The index arrays.</param>
-        /// <value>The stripped 0-d stand-in when every array is 0-d and there is one per axis; otherwise a chararray VIEW of
-        ///     the gathered elements.</value>
-        /// <exception cref="IndexError">An index is out of bounds, or the arrays do not broadcast together.</exception>
-        /// <exception cref="ValueError">(get) The chararray holds data that is not string data; (set) the chararray is
-        ///     read-only, or the value does not broadcast to the selection.</exception>
-        public new NDCharArray this[params NDArray<int>[] selection]
-        {
-            [NDScoped]
-            get
-            {
-                NDArray result = base[selection];
-                return IsFullIntegerIndex(selection)
-                    ? ScalarOf(result.Storage, strip: true)
-                    : FromIndexing(result, this, scalarArrayCopy: false);
-            }
-            set => base[selection] = value;
+            // The plain array rule for every key: NDArray's setter sorts the key the way the typed setters this one
+            // replaced did (one integer and slice notation as basic views, a lone mask as the mask path).
+            set => base[key] = value;
         }
 
         #endregion
 
         #region Python's __getitem__
 
-        /// <summary>Python's <c>c.__getitem__(i)</c>: the same as <c>c[i]</c>.</summary>
-        /// <param name="index">The index along the first axis; negative counts from the end.</param>
-        /// <returns>The stripped 0-d stand-in for a 1-d chararray, a chararray row view otherwise.</returns>
-        /// <exception cref="IndexError"><paramref name="index"/> is out of bounds, or the chararray is 0-d.</exception>
-        /// <exception cref="ValueError">The chararray holds data that is not string data and the result is a row.</exception>
-        public new NDCharArray __getitem__(int index) => ElementOrRow(index);
-
-        /// <inheritdoc cref="__getitem__(int)"/>
-        public new NDCharArray __getitem__(long index) => ElementOrRow(index);
-
-        /// <summary>Python's <c>c.__getitem__</c> with slice notation: the same as <c>c[slice]</c>.</summary>
-        /// <param name="slice">The slice notation.</param>
-        /// <returns>The stripped 0-d stand-in for an integer per axis, a chararray view otherwise.</returns>
-        /// <exception cref="IndexError">An integer is out of bounds, or more entries than axes.</exception>
+        /// <summary>NumPy's <c>chararray.__getitem__(obj)</c>: the same as <c>c[obj]</c> (see <see cref="this[object[]]"/>).</summary>
+        /// <param name="obj">The index as Python passes it: one entry (an integer, slice notation, a <see cref="Slice"/>,
+        ///     an index array, a mask) or the whole index tuple — an <c>object[]</c> / <see cref="Slice"/>[] or a C# tuple. A
+        ///     typed C# array other than <see cref="Slice"/>[] (<c>int[]</c>, <c>bool[]</c>) is ONE entry, NumPy's list.</param>
+        /// <returns>The stripped 0-d stand-in for a full integer index, a chararray (view, gathered view or copy)
+        ///     otherwise.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="obj"/> is <c>null</c>.</exception>
+        /// <exception cref="IndexError">An index is out of bounds, more entries than axes, or an invalid index.</exception>
         /// <exception cref="ValueError">The chararray holds data that is not string data and the result is an array.</exception>
-        public new NDCharArray __getitem__(string slice) => this[slice];
-
-        /// <summary>Python's <c>c.__getitem__((i, j))</c> with integer entries (the coordinates of one element when there is
-        ///     one per axis).</summary>
-        /// <param name="indices">One integer per indexed axis.</param>
-        /// <returns>The stripped 0-d stand-in for an integer per axis, a chararray view of the sub-array otherwise.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="indices"/> is <c>null</c>.</exception>
-        /// <exception cref="IndexError">An index is out of bounds, or more entries than axes.</exception>
-        /// <exception cref="ValueError">The chararray holds data that is not string data and the result is an array.</exception>
-        public new NDCharArray __getitem__(params int[] indices)
-        {
-            if (indices is null)
-                throw new ArgumentNullException(nameof(indices));
-            var slices = new Slice[indices.Length];
-            for (int i = 0; i < slices.Length; i++)
-                slices[i] = Slice.Index(indices[i]);
-            return GetBasic(slices);
-        }
+        /// <exception cref="SystemError">A <c>U</c> element holds a unit above <c>U+10FFFF</c>.</exception>
+        /// <remarks>One member, NumPy's signature (it replaced the <c>int</c>, <c>long</c>, <c>string</c> and
+        ///     <c>params int[]</c> forms; coordinates are a tuple: <c>c.__getitem__((1, 2))</c>).</remarks>
+        public new NDCharArray __getitem__(object obj) => this[ItemKey(obj)];
 
         #endregion
 
@@ -346,17 +264,36 @@ namespace NumSharp
             return true;
         }
 
-        /// <summary><see cref="IsFullIntegerIndex(object[])"/> for index ARRAYS: one 0-d integer array per axis.</summary>
-        /// <param name="selection">The index arrays.</param>
-        /// <returns>True when every array is 0-d and there is one per axis.</returns>
-        private bool IsFullIntegerIndex(NDArray<int>[] selection)
+        /// <summary>
+        ///     Whether one index entry is a C# integer that the old <c>this[int]</c> / <c>this[long]</c> indexers took: an
+        ///     integer of a type C# converts implicitly to <see cref="int"/> or <see cref="long"/> (a <see cref="char"/>
+        ///     included, as C#'s <c>char</c> → <c>int</c> conversion bound it there).
+        /// </summary>
+        /// <param name="entry">The index entry.</param>
+        /// <param name="index">The integer when the result is true.</param>
+        /// <returns>True for such an integer; false for anything else (a <see cref="ulong"/> has no implicit conversion to
+        ///     <see cref="long"/>, so it keeps the general index's handling).</returns>
+        private static bool TryLoneInteger(object entry, out long index)
         {
-            if (selection is null || selection.Length != ndim)
-                return false;
-            foreach (var array in selection)
-                if (array is null || array.ndim != 0)
+            switch (entry)
+            {
+                case int i32:
+                    index = i32;
+                    return true;
+                case long i64:
+                    index = i64;
+                    return true;
+                case nint native:
+                    index = native;
+                    return true;
+                case short or ushort or sbyte or byte or uint or char:
+                    // Each widens to long without loss (a char to its UTF-16 code unit, as C# did).
+                    index = Convert.ToInt64(entry, System.Globalization.CultureInfo.InvariantCulture);
+                    return true;
+                default:
+                    index = 0;
                     return false;
-            return true;
+            }
         }
 
         /// <summary>Whether a 0-d array is an INTEGER scalar to NumPy's indexing (any integer dtype; NumSharp's char too).</summary>

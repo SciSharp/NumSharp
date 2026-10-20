@@ -319,15 +319,21 @@ namespace NumSharp.Tests.Fuzz
             E(l, "NDArray<T>.op_ExclusiveOr", "bool^bool", f => f.GB ^ f.GB);
             E(l, "NDArray<T>.op_Explicit", "T[] -> NDArray<T>", f => (NumSharp.Generic.NDArray<double>)new[] { 1.0, 2.0 });
             E(l, "NDArray<T>.op_Implicit", "NDArray<T> -> ArraySlice<T>", f => { ArraySlice<double> s = f.GM; return Box(s.Count); });
-            E(l, "NDArray<T>.Item", "typed element get/set by int[] and long[] coordinates", f =>
+            E(l, "NDArray<T>.Item", "typed element get/set by int and long coordinates", f =>
             {
-                // The coordinate overloads read and write the TYPED element itself — no NDArray is built —
-                // so a read plus a write-back of the same value on the fixture's wrapper (leaving it
-                // unchanged) must read zero pool traffic.
-                double v = f.GM[new[] { 1, 2 }];
-                f.GM[new[] { 1, 2 }] = v;
-                double w = f.GM[2L, 3L];
-                f.GM[2L, 3L] = w;
+                // An element read is a 0-d typed VIEW of the fixture's buffer (no pooled buffer is taken), and the
+                // write-back of the same value (leaving the fixture unchanged) stores a 0-d array the T value
+                // converts to: both are disposed here, so the entry must read zero pool traffic.
+                double v;
+                using (var e = f.GM[1, 2])
+                    v = (double)e;
+                using (NumSharp.Generic.NDArray<double> back = v)
+                    f.GM[1, 2] = back;
+                double w;
+                using (var e = f.GM[2L, 3L])
+                    w = (double)e;
+                using (NumSharp.Generic.NDArray<double> back = w)
+                    f.GM[2L, 3L] = back;
                 return Box(v + w);
             });
             E(l, "NDArray<T>.Item", "typed slice get (string + Slice[]) and set, on an owned copy", f =>
