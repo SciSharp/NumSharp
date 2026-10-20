@@ -403,6 +403,62 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `amax` (NumPy: `np.ma.amin is np.amin`, no `fill_value`) and `min` / `max` (no `out=`); `NDMatrix.min` / `max` keep
     two overloads each (the typed `NDMatrix` return, the class-wide design pending with the owner); the same rule for
     the other function families.
+- [x] **A4e indexing: one NumPy signature, `__getitem__(key)` / `__setitem__(key, value)`, per array class** (branch
+  `strings`). The owner's request on the R3 census list, 2026-10-20: "Kindly take care of these and incl indexer" — NumPy
+  has `__getitem__(key, /)` and `__setitem__(key, value, /)`; the owner's choices: `NDArray<T>` "override NDArray's (make
+  virtual)", `NDMatrix` "Keep (row, column)", `NDListArray` "One NDListArray indexer", `np.s_` / `flatiter` "skip". Done
+  2026-10-20 (`c32a300c`).
+  - Proof (2026-10-20, `strings` at `2b496b89`): an `[Obsolete(DiagnosticId = "NSCEN")]` census over every project that
+    references Core counted the call sites of each public indexer. `NDArray`: `this[string]` 3,606, `this[params
+    Slice[]]` 2,283, `this[params object[]]` 792, `this[NDArray<bool>]` 265, `this[params NDArray<int>[]]` 0,
+    `this[long*, int]` 0. `NDArray<T>`: the typed scalar `T this[params long[]]` / `T this[int[]]` 193, the typed views
+    31. `NDCharArray` 93 over six indexers, `NDMatrix` 71 over eight, `NDListArray` 82 over four. The dunders:
+    `NDArray.__getitem__` 45 over four forms, `__setitem__` 38 over three, `NDCharArray.__getitem__` 5, `NDMatrix` 0. Every
+    call bound by C#'s static overload choice, so one call could reach different code depending on an argument's static
+    type.
+  - Fix: `NDArray` has one `public virtual NDArray this[params object[] key]`. It sorts the key before any work so each
+    kind runs the body the typed indexer that served it had: `TryBasicIndex` (a `Slice[]` passed whole, ONE string read
+    as slice notation, or entries that are each a `Slice`, a string — one slice — or an integer of a type C# converts to
+    `int` / `long`) takes the view body (`GetView` + `AssignThroughView`), a lone `NDArray<bool>` the mask body
+    (`GetMasked` / `SetMasked`), every other key the general body (`GetAdvanced` / `SetAdvanced`). One `__getitem__(object
+    key)` and one `__setitem__(object key, object value)` (`ItemKey`: an `object[]`, `Slice[]` or C# tuple key is the
+    index tuple, any other key one entry — a typed `int[]` is NumPy's list, an index array). `NDArray<T>` overrides the
+    GETTER, returning `NDArray<T>` for every index (`TypedSelection` wraps an advanced result's own storage object), and
+    gained `implicit operator NDArray<T>(T)` so `typed[0] = 3.14` and `mask[m] = false` keep compiling through the
+    inherited setter. `NDCharArray` and `NDMatrix` hide the indexer (`new`): one general indexer each, `NDMatrix` also
+    `NDArray this[long row, long column]`, and one `__getitem__` each (`NDMatrix` keeps its `__setitem__(object, object)`,
+    now `new`). `NDListArray` has one `NDListArray this[params object[] key]`: a full integer index is the list's 0-d
+    stand-in, an index array or mask gathers the ids (NumPy's object pointers: the lists are shared), the advanced
+    setter copies a list array's ids, and a list assigned through an index array is refused with NumPy's texts. Callers
+    migrated (all in tests and the benchmark project): 109 typed reads to element casts (`(long)n[0, 0] == 0`), 5 typed
+    compound assignments, the doc example, the leak catalogue's typed and chararray entries, two `NDListArray` tests, a
+    0-d `n1[0]` read; the website's `NDArray<T>` section; the signature reports regenerated (`__getitem__` /
+    `__setitem__` identical to NumPy on `ndarray`, `matrix` and `chararray`; 2,502 overloads → 2,488).
+  - Findings: (1) the general path has no single-entry case for `long` / `short` / `char`: C# bound them to
+    `this[params Slice[]]` at compile time, so a key sort without them made `a[5L]` raise "only integers…"; (2) a typed
+    advanced selection must wrap the result's OWN storage object, never `MakeGeneric` — an alias reads as a view, and the
+    strings oracle found it (`strma/ma1/846`, `np.ma.flatten_mask` over `S` ends in a typed `nonzero[keep]`: OWNDATA
+    False != NumPy True); (3) an override may narrow its type only without a setter (CS1715), so `NDArray<T>`'s setter
+    is `NDArray`'s and an untyped value is assigned through an `NDArray` reference or `__setitem__`; (4) overriding in
+    `NDCharArray` / `NDMatrix` would apply their rules inside the library, because `NDMatrixBoundary` hands the matrix
+    object itself to the computation it runs with plain-array semantics (`np.piecewise`'s `x[cond]` would gather a
+    `(1, K)` matrix); (5) NumPy assigns a Python list through an index array of an OBJECT array as the sequence of its
+    items, and its broadcast error is `could not broadcast input array from shape (3,) into shape (2,)` — an array value
+    gets MapIter's `shape mismatch` text, a mask of the array's own shape the boolean-subscript text.
+  - Perf (ns per call, Release, two pinned P-cores, the fastest of 15 batches of 20,000; baseline `2b496b89` against the
+    change, two to three runs each): `a[1]` 657–683 → 713–719, `a[1, 2]` 290–474 → 314–319, `a[1L, 2L]` 323–360 →
+    322–332, `a["1:3"]` 548–584 → 379–406, `a[:, 1]` 338–388 → 315–319, `a[mask]` 913–923 → 937–956, `a[idx]` 832–848 →
+    880–884, `a[1] = 5` 2,224–2,232 → 2,311–2,326, `a["1:3"] = 0` 2,281–2,318 → 2,363–2,374; `typed["1:3"]` 648–699 →
+    395 (one object instead of two); a typed gather +0.11 µs (0.91 → 1.02 µs measured apart: the typed wrapper object);
+    a typed element read 19 → 345–391 (the 0-d view; `GetValue<T>` keeps the direct read).
+  - Gates: `Selection/NDArray.Indexer.OneSignature.Test.cs` (19: one indexer and one dunder per class by reflection,
+    every integer type, slice notation, views and write-through, typed and untyped masks with ownership, writeability
+    first for every key kind, Python's keys for the dunders, `NDArray<T>`'s typed selections, ownership and dispatch
+    through an `NDArray` reference, the static rule of `NDCharArray` / `NDMatrix`, `NDListArray`'s advanced get / set and
+    NumPy's list texts); two planted bugs (the integer types dropped, `MakeGeneric` back) both caught.
+  - Left open: iterating a 1-d `NDListArray` still yields piece arrays where NumPy yields the lists; `flatiter`'s and
+    `np.s_`'s overloads (the owner: skip); the gap map `API_DIFF_GAP.md` follows the regenerated reports at its next
+    refresh.
 - [x] **A5 `np.trapezoid`: an `axis=` outside `y`.** NumPy raises `IndexError: list assignment index out of range`;
   NumSharp raises `ArgumentOutOfRangeException`. Pin: `Trapezoid_AxisOutsideY_RaisesNumPysIndexError`. Done
   2026-10-05 (`f18bc09e`).
@@ -1938,6 +1994,16 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-20**: A4e done on `strings` (indexing is NumPy's one signature per array class: one indexer —
+  `NDArray`'s `this[params object[] key]`, virtual, which sorts the key so every call keeps the body the removed
+  typed indexer gave it; `NDArray<T>`'s getter-only override typing every selection; `NDCharArray` / `NDMatrix`
+  hiding it with one indexer each, `NDMatrix` keeping `m[row, column]`; `NDListArray`'s one indexer with index
+  arrays and masks — and one `__getitem__(key)` / `__setitem__(key, value)`). Found on the way: the general path's
+  missing single-entry `long` / `short` / `char` case (C# had bound them to the `Slice` indexer), and a typed gather
+  that lost `flags.owndata` through `MakeGeneric` (the strings oracle's `strma/ma1/846`). The signature reports
+  regenerated (`__getitem__` / `__setitem__` identical to NumPy on `ndarray`, `matrix` and `chararray`). Commit:
+  `c32a300c`.
 
 - **2026-10-17**: [`API_DIFF_GAP.md`](API_DIFF_GAP.md) written on `strings`: the complete gap map of the second pass
   with explanations and instructions (work packages AD1–AD10, owner decisions OD1–OD11, absent names and modules
