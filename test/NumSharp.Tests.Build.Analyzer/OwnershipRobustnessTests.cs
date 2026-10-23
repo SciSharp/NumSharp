@@ -123,6 +123,44 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(n - 1, r.CountOf("NDW017"), "every member except the one disposed is reported");
         }
 
+        /// <summary>
+        ///     A domain model whose types all reference each other (entities with navigation properties):
+        ///     the "holds NDArrays" answers of a cycle must be memoized, or every type re-walks every path
+        ///     through the graph - exponential in the number of types.
+        /// </summary>
+        private static string DenselyCyclicModel(int n, bool withArray)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < n; i++)
+            {
+                sb.Append("public class M").Append(i).Append(" {");
+                for (int j = 0; j < n; j++)
+                    if (j != i)
+                        sb.Append(" public M").Append(j).Append(" P").Append(j).Append(" { get; set; }");
+                if (withArray && i == n - 1)
+                    sb.Append(" NDArray _x;");
+                sb.AppendLine(" }");
+            }
+            return sb.ToString();
+        }
+
+        [TestMethod]
+        [Timeout(60000)]
+        public async Task DenselyCyclicModelWithoutArrays_CompletesClean()
+        {
+            var r = await Run(DenselyCyclicModel(14, withArray: false));
+            Assert.AreEqual(0, r.Ndw.Length, "types that only reference each other store no NDArray");
+        }
+
+        [TestMethod]
+        [Timeout(60000)]
+        public async Task DenselyCyclicModelWithAnArray_FlagsEveryType()
+        {
+            const int n = 14;
+            var r = await Run(DenselyCyclicModel(n, withArray: true));
+            Assert.AreEqual(n, r.CountOf("NDW016"), "every type reaches the one array through the graph");
+        }
+
         [TestMethod]
         public async Task ManyTypes_Complete()
         {

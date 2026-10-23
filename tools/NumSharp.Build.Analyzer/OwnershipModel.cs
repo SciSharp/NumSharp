@@ -86,11 +86,21 @@ namespace NumSharp.Build.Analyzer
         /// </summary>
         public List<HolderMember> HolderMembersOf(INamedTypeSymbol type)
         {
-            bool cut = false;
-            return HolderMembersOf(type, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default) { type }, ref cut);
+            // A source class/struct that does not hold NDArrays as a whole has no holding member: each of
+            // its storing members feeds the type's own answer. That answer is memoized, so a type unrelated
+            // to NumSharp costs one lookup here instead of a walk of its member graph.
+            if (IsInSource(type) && (type.TypeKind == TypeKind.Class || type.TypeKind == TypeKind.Struct)
+                && !HoldsNDArrays(type))
+                return new List<HolderMember>();
+
+            // The type itself is on the walk's stack: a member that reaches arrays only by coming back to
+            // this type adds nothing. Answers of the cycles through it stay pending and are not memoized.
+            var walk = new Walk();
+            int low = walk.Enter(type);
+            return HolderMembersOf(type, walk, ref low);
         }
 
-        private List<HolderMember> HolderMembersOf(INamedTypeSymbol type, HashSet<ITypeSymbol> visiting, ref bool cut)
+        private List<HolderMember> HolderMembersOf(INamedTypeSymbol type, Walk walk, ref int low)
         {
             var list = new List<HolderMember>();
             bool inSource = IsInSource(type);
@@ -137,7 +147,7 @@ namespace NumSharp.Build.Analyzer
 
                 if (IsBorrowed(reported))
                     continue;
-                if (HoldsCore(memberType, visiting, ref cut))
+                if (HoldsCore(memberType, walk, ref low))
                     list.Add(new HolderMember(reported, memberType));
             }
             return list;
@@ -148,52 +158,96 @@ namespace NumSharp.Build.Analyzer
         /// <summary>Does a value of this type (transitively) hold an NDArray somebody must dispose?</summary>
         public bool HoldsNDArrays(ITypeSymbol t)
         {
-            bool cut = false;
-            return HoldsCore(t, null, ref cut);
+            int low = int.MaxValue;
+            return HoldsCore(t, null, ref low);
         }
 
-        private bool HoldsCore(ITypeSymbol t, HashSet<ITypeSymbol> visiting, ref bool cut)
+        private bool HoldsCore(ITypeSymbol t, Walk walk, ref int low)
         {
             if (t == null)
                 return false;
             if (_holds.TryGetValue(t, out var memo))
                 return memo;
 
-            bool root = visiting == null;
-            if (root)
-                visiting = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-            if (!visiting.Add(t))
+            if (walk == null)
+                walk = new Walk();
+            if (walk.IndexOf(t, out int seen))
             {
-                // A cycle (a type reachable from itself): this occurrence contributes nothing; the
-                // type's answer is decided by its other members. The enclosing answers are then
-                // inexact and must not be memoized — only the ROOT answer is exact (a cycle back to
-                // the root cannot change what the root itself holds).
-                cut = true;
+                // A cycle (a type reachable from itself): this occurrence contributes nothing; the type's
+                // answer is decided by its other members. Every type visited in this walk and not yet
+                // memoized is still on the stack, waiting for the cycle it belongs to.
+                if (seen < low)
+                    low = seen;
                 return false;
             }
 
-            bool localCut = false;
-            bool result = Compute(t, visiting, ref localCut);
-            visiting.Remove(t);
-            if (root || !localCut)
-                _holds[t] = result;
-            if (localCut)
-                cut = true;
+            // Tarjan's strongly connected components over the "stores a value of" graph, so each type is
+            // walked once. "Holds" is the least fixed point of an OR over that graph: a true answer is
+            // exact as soon as it is found, and the types of one cycle (one component) share one answer,
+            // the answer of the type the walk entered the component through. Memoizing only answers that
+            // involved no cycle at all made every type re-walk every path through a model whose types
+            // reference each other - exponential in the number of types.
+            int index = walk.Enter(t);
+            int ownLow = index;
+            bool result = Compute(t, walk, ref ownLow);
+            if (result)
+                _holds[t] = true;
+            if (ownLow == index)
+            {
+                // t is the entry of its component: everything above it on the stack belongs to the
+                // component and reaches t, so it holds exactly when t does.
+                foreach (var member in walk.ExitComponent(t))
+                    _holds[member] = result || _holds.TryGetValue(member, out var held) && held;
+            }
+            if (ownLow < low)
+                low = ownLow;
             return result;
         }
 
-        private bool Compute(ITypeSymbol t, HashSet<ITypeSymbol> visiting, ref bool cut)
+        /// <summary>One <see cref="HoldsCore"/> walk: Tarjan's visit order and the stack of types whose component is still open.</summary>
+        private sealed class Walk
+        {
+            private readonly Dictionary<ITypeSymbol, int> _index = new Dictionary<ITypeSymbol, int>(SymbolEqualityComparer.Default);
+            private readonly Stack<ITypeSymbol> _stack = new Stack<ITypeSymbol>();
+
+            /// <summary>Visits <paramref name="t"/>: gives it the next index and puts it on the stack.</summary>
+            public int Enter(ITypeSymbol t)
+            {
+                int index = _index.Count;
+                _index[t] = index;
+                _stack.Push(t);
+                return index;
+            }
+
+            /// <summary>Whether <paramref name="t"/> was visited in this walk (and so is still on the stack, its answer not memoized).</summary>
+            public bool IndexOf(ITypeSymbol t, out int index) => _index.TryGetValue(t, out index);
+
+            /// <summary>Pops the component entered through <paramref name="entry"/>: the entry and every type above it.</summary>
+            public List<ITypeSymbol> ExitComponent(ITypeSymbol entry)
+            {
+                var component = new List<ITypeSymbol>();
+                ITypeSymbol t;
+                do
+                {
+                    t = _stack.Pop();
+                    component.Add(t);
+                } while (!SymbolEqualityComparer.Default.Equals(t, entry));
+                return component;
+            }
+        }
+
+        private bool Compute(ITypeSymbol t, Walk walk, ref int low)
         {
             switch (t)
             {
                 case IArrayTypeSymbol arr:
-                    return HoldsCore(arr.ElementType, visiting, ref cut);
+                    return HoldsCore(arr.ElementType, walk, ref low);
                 case IPointerTypeSymbol _:
                 case IDynamicTypeSymbol _:
                     return false;
                 case ITypeParameterSymbol tp:
                     foreach (var c in tp.ConstraintTypes)
-                        if (HoldsCore(c, visiting, ref cut))
+                        if (HoldsCore(c, walk, ref low))
                             return true;
                     return false;
             }
@@ -216,7 +270,7 @@ namespace NumSharp.Build.Analyzer
             if (named.IsTupleType)
             {
                 foreach (var e in named.TupleElements)
-                    if (HoldsCore(e.Type, visiting, ref cut))
+                    if (HoldsCore(e.Type, walk, ref low))
                         return true;
                 return false;
             }
@@ -231,7 +285,7 @@ namespace NumSharp.Build.Analyzer
             for (var g = named; g != null; g = g.ContainingType)
                 if (g.IsGenericType)
                     foreach (var arg in g.TypeArguments)
-                        if (HoldsCore(arg, visiting, ref cut))
+                        if (HoldsCore(arg, walk, ref low))
                             return true;
 
             // A declared class/struct: its own storing members, then its base. Only an assembly that
@@ -242,9 +296,9 @@ namespace NumSharp.Build.Analyzer
             if (!IsInSource(named) && !CanNameNDArray(named.ContainingAssembly))
                 return false;
 
-            if (HolderMembersOf(named, visiting, ref cut).Count > 0)
+            if (HolderMembersOf(named, walk, ref low).Count > 0)
                 return true;
-            return named.BaseType != null && HoldsCore(named.BaseType, visiting, ref cut);
+            return named.BaseType != null && HoldsCore(named.BaseType, walk, ref low);
         }
 
         /// <summary>
