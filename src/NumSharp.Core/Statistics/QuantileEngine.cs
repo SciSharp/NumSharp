@@ -262,7 +262,7 @@ namespace NumSharp.Statistics
             {
                 if (!(ignoreNaN && IsFloatTc(a.typecode) && AllNaN(a)))
                     throw new ValueError("q must be a scalar or 1d");
-                return AllNaNSlicesResult(a, axisArr, keepdims, qShape, @out);
+                return AllNaNSlicesResult(a, axisArr, keepdims, qShape, @out, target, legacyOut, prologue.NumPyAxis);
             }
 
             // The method name, where NumPy's `_quantile` looks it up: after the axis and rank checks, before the boolean
@@ -272,7 +272,8 @@ namespace NumSharp.Statistics
             {
                 if (ignoreNaN && IsFloatTc(a.typecode) && AllNaN(a))
                     return AllNaNSlicesResult(a, axisArr, keepdims,
-                        qIsScalar ? Array.Empty<long>() : qShape ?? new long[] { q.Length }, @out);
+                        qIsScalar ? Array.Empty<long>() : qShape ?? new long[] { q.Length }, @out, target, legacyOut,
+                        prologue.NumPyAxis);
                 ParseMethod(methodName);   // throws NumPy's ValueError (or ArgumentNullException for a null name)
             }
             // An integer (or bool) q: 'linear''s virtual index is an integer, which `_quantile` takes ("supports_integers")
@@ -566,8 +567,15 @@ namespace NumSharp.Statistics
             // q over float16 / float32 data (the only case where the computed dtype differs from the data's) gives the
             // data's dtype, every other slice's float64 answer rounded into it. Staged row 0 is NumPy's first slice: the
             // reduced axes are innermost and the kept ones in C order, as np.ndindex walks them.
-            if (nanAware && outTypeCode != a.typecode && FirstRowAllNaN(staged, outerSize, n))
+            bool firstSliceAllNaN = nanAware && FirstRowAllNaN(staged, outerSize, n);
+            if (firstSliceAllNaN && outTypeCode != a.typecode)
                 resultRaw = resultRaw.astype(a.typecode);
+            // The flattened data (or merged axes that keep no axis, or 1-D data) is ONE slice: when it holds only NaN,
+            // NumPy's answer is `_nanquantile_1d`'s `np.full(q.shape, np.nan, dtype=arr1d.dtype)[()]` itself, which for a q
+            // array is a VIEW of that array (`[()]` indexes an array of one or more dimensions as a view): it does not own
+            // its data. (A scalar q's `[()]` is a NumPy scalar, the read-only 0-d result the finish gives.)
+            if (firstSliceAllNaN && outerDims == 0 && qNdim > 0 && outRoute == 0)
+                resultRaw = resultRaw.view();
 
             // The nan forms along an axis return np.apply_along_axis's layout, moved as _nanquantile_ureduce_func moves it (an
             // out receives the values instead). For merged axes with a q of two or more dimensions that move also changes
@@ -612,18 +620,44 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     The nan forms' answer for a q of rank above 2 over data that is NaN everywhere: every slice is
-        ///     <c>np.full(q.shape, np.nan, dtype=arr1d.dtype)</c> (NumPy never reaches the rank check), stacked as
-        ///     <c>np.apply_along_axis</c> stacks them: q's axes first, then the kept axes.
+        ///     The nan forms' answer over data that is NaN everywhere when NumPy never reaches a check that would refuse (a q
+        ///     of rank above 2, an unknown method): every slice is <c>np.full(q.shape, np.nan, dtype=arr1d.dtype)[()]</c>
+        ///     (NumPy's positive NaN, <see cref="FillWithNumPyNaN"/>), stacked as <c>np.apply_along_axis</c> stacks them and
+        ///     moved as <c>_nanquantile_ureduce_func</c> moves them (<see cref="AlongAxisLayout"/>: q's axes first for one
+        ///     reduced axis, NumPy's other order for merged axes with a q of two or more dimensions); the flattened data (or
+        ///     merged axes that keep no axis) is that one array's view.
         /// </summary>
         /// <param name="a">The data (float, all NaN, non-empty).</param>
         /// <param name="axisArr">The reduced axes (already validated), or null for the flattened data.</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
-        /// <param name="qShape">q's dims (rank 3 or more).</param>
-        /// <param name="out">An optional output array of the result's shape.</param>
-        /// <returns>The NaN result in the data's dtype; <paramref name="out"/> itself when one is given.</returns>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
-        private static NDArray AllNaNSlicesResult(NDArray a, int[] axisArr, bool keepdims, long[] qShape, NDArray @out)
+        /// <param name="qShape">q's dims (empty for a scalar q).</param>
+        /// <param name="out">The caller's output array, or null: returned itself once the answer is stored.</param>
+        /// <param name="target">Where the answer is stored when <paramref name="out"/> is given: the prologue's
+        ///     <see cref="UReduced.Target"/> (keepdims' <c>out[(Ellipsis,) + index_out]</c>), or <paramref name="out"/> itself
+        ///     on the legacy route.</param>
+        /// <param name="legacyOut">Whether <paramref name="out"/> takes the legacy result-then-copy rule (a decimal out: no
+        ///     NumPy analog) instead of the nan forms' <c>out[...] = result</c>.</param>
+        /// <param name="numpyAxis">The axis NumPy's <c>_ureduce</c> handed the function (<see cref="UReduced.NumPyAxis"/>),
+        ///     or null for the flattened data.</param>
+        /// <returns>The NaN result in the data's dtype — a view that does not own its data, as NumPy's; a read-only 0-d result
+        ///     for a scalar q over the flattened data (NumPy's scalar); <paramref name="out"/> itself when one is
+        ///     given.</returns>
+        /// <exception cref="ValueError">The store into <paramref name="target"/> fails as NumPy's <c>out[...] = result</c>
+        ///     does: the answer does not broadcast (<c>could not broadcast input array from shape (2,2,3) into shape
+        ///     (3,2,2)</c> — a q-first out along merged axes), or the out is read-only (<c>assignment destination is
+        ///     read-only</c>).</exception>
+        /// <exception cref="ArgumentException">The legacy route only: <paramref name="out"/> does not have the result's
+        ///     shape.</exception>
+        /// <remarks>
+        ///     Until the fix after the np-layer dtype plan's P1a, this filled .NET's NEGATIVE NaN (<c>double.NaN</c> is
+        ///     <c>0xfff8...</c>, Python's <c>np.nan</c> <c>0x7ff8...</c>) into an owning q-first buffer: other bits, other
+        ///     flags, and for merged axes with a q of two or more dimensions another shape (probed 2.4.2: a (2, 1, 3) q over
+        ///     <c>axis=(1, 2)</c> of a (2, 3, 4) array is (3, 2, 2, 1)). It also required an out of exactly the result's
+        ///     shape (an ArgumentException otherwise), where NumPy's store broadcasts: a larger out takes the answer in
+        ///     every row, and a q-first out is NumPy's ValueError.
+        /// </remarks>
+        private static NDArray AllNaNSlicesResult(NDArray a, int[] axisArr, bool keepdims, long[] qShape, NDArray @out,
+            NDArray target, bool legacyOut, int? numpyAxis)
         {
             var dims = new List<long>(qShape);
             if (axisArr != null)
@@ -634,8 +668,46 @@ namespace NumSharp.Statistics
                         dims.Add(a.Shape.dimensions[i]);
             }
             var result = new NDArray(a.typecode, Shape.Adopt(dims.ToArray()));
-            FillWithNaN(result, a.typecode);
-            return FinalizeResult(result, a, axisArr, keepdims, qShape.Length, @out);
+            FillWithNumPyNaN(result, a.typecode);
+            if (numpyAxis is int axis && dims.Count > qShape.Length)
+                // Along an axis (a kept axis exists): np.apply_along_axis's buffer and nanquantile's moveaxis.
+                result = AlongAxisLayout(result, qShape.Length, axis);
+            else if (qShape.Length > 0)
+                // The flattened data: `_nanquantile_1d`'s `np.full(...)[()]`, a view of the array it made.
+                result = result.view();
+            // An out receives the answer the way the kernel route's does (FinishResult's route 3): NumPy's
+            // `out[...] = result` into the prologue's view of it, which broadcasts — a larger out takes the answer in every
+            // row, a q-first out along merged axes is the broadcast ValueError — and a 0-d answer (a scalar q over the
+            // flattened data) is a NumPy scalar, stored by out's setitem. A decimal out keeps the legacy copy (route 4).
+            int outRoute = @out is null ? 0 : legacyOut ? 4 : 3;
+            return FinishResult(result, a, axisArr, keepdims, qShape.Length, @out, target, outRoute, staged: null,
+                keptDims: dims.Count - qShape.Length);
+        }
+
+        /// <summary>
+        ///     Fills <paramref name="result"/> with NumPy's <c>np.nan</c> converted to the dtype, as
+        ///     <c>np.full(shape, np.nan, dtype=...)</c> does: the POSITIVE quiet NaN (float64 <c>0x7ff8000000000000</c>,
+        ///     float32 <c>0x7fc00000</c>, float16 <c>0x7e00</c>). Not <see cref="FillWithNaN"/>: .NET's <c>double.NaN</c> is
+        ///     the negative one, which is right only where NumPy's NaN comes from an x86 division (<c>0 / 0</c>, np.median's
+        ///     empty slice).
+        /// </summary>
+        /// <param name="result">A float16 / float32 / float64 array (the nan forms' all-NaN answers are float only).</param>
+        /// <param name="tc">Its type code.</param>
+        /// <exception cref="NotSupportedException">Another type code (a caller bug: the nan forms reach here only for float
+        ///     data).</exception>
+        private static void FillWithNumPyNaN(NDArray result, NPTypeCode tc)
+        {
+            if (result.size == 0) return;
+            double numpyNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000L);
+            // The conversions keep the NaN's sign (and its quiet bit): (float) gives 0x7fc00000, (Half) 0x7e00.
+            object nan = tc switch
+            {
+                NPTypeCode.Double => numpyNaN,
+                NPTypeCode.Single => (float)numpyNaN,
+                NPTypeCode.Half => (Half)numpyNaN,
+                _ => throw new NotSupportedException($"np.nan has no {tc} value."),
+            };
+            result.Storage.InternalArray.Fill(nan);
         }
 
         /// <summary>keepdims / out= plumbing shared by the normal and empty-axis paths.</summary>

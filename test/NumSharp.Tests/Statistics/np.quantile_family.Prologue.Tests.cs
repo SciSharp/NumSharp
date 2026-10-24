@@ -295,4 +295,87 @@ public class np_quantile_family_Prologue_Tests
         t.shape.Should().Equal(2L, 2L, 3L);
         NDArray.AsStringArray(t).Should().Equal("a", "c", "i", "m", "o", "u", "f", "l", "b", "r", "x", "n");
     }
+
+    /// <summary>
+    ///     The raw bits of every element of a float16 / float32 / float64 array, widened to a long: what the NaN tests
+    ///     compare, because <c>double.NaN.Equals(double.NaN)</c> hides the sign and payload NumPy's answer has.
+    /// </summary>
+    /// <param name="r">The array (any layout).</param>
+    /// <returns>The element bits in C order.</returns>
+    /// <exception cref="NotSupportedException">Another dtype (a test bug: the nan forms answer float data only).</exception>
+    private static long[] FloatBits(NDArray r) => r.typecode switch
+    {
+        NPTypeCode.Double => r.ToArray<double>().Select(BitConverter.DoubleToInt64Bits).ToArray(),
+        NPTypeCode.Single => r.ToArray<float>().Select(f => (long)BitConverter.SingleToInt32Bits(f)).ToArray(),
+        NPTypeCode.Half => r.ToArray<Half>().Select(h => (long)BitConverter.HalfToInt16Bits(h)).ToArray(),
+        _ => throw new NotSupportedException(r.typecode.ToString()),
+    };
+
+    /// <summary>
+    ///     The nan forms over data that is NaN everywhere: every slice is <c>_nanquantile_1d</c>'s
+    ///     <c>np.full(q.shape, np.nan, dtype=arr1d.dtype)[()]</c> — Python's POSITIVE NaN (float64 <c>0x7ff8...</c>, float32
+    ///     <c>0x7fc00000</c>, float16 <c>0x7e00</c>; .NET's <c>double.NaN</c> is the negative one), a view for a q array and a
+    ///     scalar for a 0-d q over the flattened data, stacked and moved along an axis (merged axes with a 3-D q give
+    ///     <c>(3, 2, 2, 1)</c> for <c>axis=(1, 2)</c> of a <c>(2, 3, 4)</c> array) — and NumPy reaches neither the rank check
+    ///     of a 3-D q nor the method lookup. An out takes the answer through <c>out[...] = result</c>, which broadcasts: a
+    ///     larger out takes it in every row, a q-first out along merged axes is the broadcast ValueError. Probed against
+    ///     <c>numpy==2.4.2</c>; NumSharp filled .NET's negative NaN into owning q-first buffers and required an out of the
+    ///     exact shape until this fix.
+    /// </summary>
+    [TestMethod]
+    public void NanForms_AllNaNData_AnswerNumPysPositiveNaN_InNumPysLayout()
+    {
+        double numpyNaN = BitConverter.Int64BitsToDouble(0x7FF8000000000000L);
+        int[] merged = { 1, 2 };
+        foreach (var (dtype, bits) in new[] { ("float64", 0x7FF8000000000000L), ("float32", 0x7FC00000L), ("float16", 0x7E00L) })
+        {
+            using var basis = np.full(new Shape(2, 3, 4), numpyNaN);
+            using var a = basis.astype(np.dtype(dtype));
+            using var q1 = np.array(new[] { 0.25, 0.75 });
+            using var q3 = np.full(new Shape(2, 1, 3), 0.5);
+
+            // The flattened data: one slice, the q array's np.full(...)[()] view, or the scalar of a 0-d q.
+            using (var flat = np.nanquantile(a, q1))
+            {
+                flat.dtype.Should().Be(np.dtype(dtype));
+                flat.shape.Should().Equal(2L);
+                flat.flags.owndata.Should().BeFalse("[()] of a 1-d array is a view ({0})", dtype);
+                FloatBits(flat).Should().AllBeEquivalentTo(bits, dtype);
+            }
+            using (var scalar = np.nanquantile(a, 0.5))
+            {
+                scalar.ndim.Should().Be(0);
+                scalar.flags.writeable.Should().BeFalse("a NumPy scalar ({0})", dtype);
+                FloatBits(scalar).Should().Equal(new[] { bits }, dtype);
+            }
+
+            // Merged axes with a 3-D q: no rank check, NumPy's moved order, a view.
+            using (var moved = np.nanquantile(a, q3, merged))
+            {
+                moved.shape.Should().Equal(new[] { 3L, 2L, 2L, 1L }, dtype);
+                moved.flags.owndata.Should().BeFalse(dtype);
+                FloatBits(moved).Should().AllBeEquivalentTo(bits, dtype);
+            }
+
+            // An unknown method is never looked up; a larger out takes the answer in every row (the same instance back).
+            using (var bogus = np.nanquantile(a, q1, merged, method: "bogus"))
+            {
+                bogus.shape.Should().Equal(new[] { 2L, 2L }, dtype);
+                FloatBits(bogus).Should().AllBeEquivalentTo(bits, dtype);
+            }
+            using var big = np.zeros(new Shape(2, 2, 2), np.dtype(dtype));
+            using (var written = np.nanquantile(a, q1, merged, big, method: "bogus"))
+            {
+                ReferenceEquals(written, big).Should().BeTrue(dtype);
+                FloatBits(big).Should().AllBeEquivalentTo(bits, dtype);
+            }
+
+            // A q-first out along merged axes: the moved (2, 2, 3) answer does not broadcast into (3, 2, 2).
+            using var q2 = np.full(new Shape(3, 2), 0.5);
+            using var qFirst = np.zeros(new Shape(3, 2, 2), np.dtype(dtype));
+            Action refused = () => np.nanquantile(a, q2, merged, qFirst, method: "bogus");
+            refused.Should().Throw<ValueError>()
+                .WithMessage("could not broadcast input array from shape (2,2,3) into shape (3,2,2)", dtype);
+        }
+    }
 }

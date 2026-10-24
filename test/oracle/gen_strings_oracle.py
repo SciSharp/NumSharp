@@ -14428,15 +14428,17 @@ def _qpro_text_q(kind):
     return own(np.zeros(0, dtype="<U1"))
 
 
-def _qpro_out(shape):
-    """A float64 out of ``shape`` (zeros): a view of a 1-D base. An EMPTY out of two or more dimensions is a view in
-    NumPy but an owner in the replay (which rebuilds any view of a zero-size buffer as an owner; a base must be 1-D),
-    so no case of this section lets a call SUCCEED into one: its flags would differ for a reason outside the call.
+def _qpro_out(shape, dtype="float64"):
+    """An out of ``shape`` (zeros): a view of a 1-D base. An EMPTY out of two or more dimensions is a view in NumPy but
+    an owner in the replay (which rebuilds any view of a zero-size buffer as an owner; a base must be 1-D), so no case of
+    this section lets a call SUCCEED into one: its flags would differ for a reason outside the call.
 
     :param shape: the out's shape.
+    :param dtype: the out's dtype: float64 by default; part four gives the data's own, so the NaN NumPy stores keeps its
+        bits through the store (a float16 NaN widened into float64 would look like any positive NaN).
     :returns: the (base, view) pair.
     """
-    return own(np.zeros(shape)) if 0 in tuple(shape) else plain(np.zeros(shape))
+    return own(np.zeros(shape, dtype=dtype)) if 0 in tuple(shape) else plain(np.zeros(shape, dtype=dtype))
 
 
 def _qpro_index_raises(out_shape, nd, ax):
@@ -14469,7 +14471,11 @@ def gen_qprologue():
       the six functions, then the later checks the merge must precede (a bogus method, a 3-D q, a text q, weights);
     * keepdims' out index: ``(2, 3)`` data x 8 kinds x the six functions x an out of too few dimensions (``(3,)``, every
       axis form), outs with a zero-length axis (``(0, 3)``, ``(2, 0)``) and a larger out (``(4, 2, 3)``), each beside a
-      later error (a bogus method, a 3-D q, a list q, a text q, weights).
+      later error (a bogus method, a 3-D q, a list q, a text q, weights);
+    * the axis argument ``_ureduce`` hands on (part three, ``_qpro_merged_axis_argument``): the nan forms' order of q's
+      axes over merged axes;
+    * the nan forms over data that is NaN everywhere (part four, ``_qpro_all_nan_answers``): NumPy's positive NaN, views,
+      the layout, the checks never reached, and the out store.
 
     Left out: numeric ``np.median`` / ``np.nanmedian`` calls whose out PASSES keepdims' index. NumPy then writes
     through ``np.mean(part, axis, out=out)`` (the reduction's out checks) or ``out[...] = result``; NumSharp keeps its
@@ -14556,18 +14562,21 @@ def _qpro_merged_axis_argument():
     the UNnormalized ``-1``, and ``_nanquantile_ureduce_func`` moves q's axes with ``from_ax = [axis + i for i in
     range(q.ndim)]``, so the nan forms return a q of two or more dimensions in another axis order than np.quantile
     (``np.nanquantile(arange(24.).reshape(2, 3, 4), q of shape (3, 2), axis=(1, 2))`` is ``(2, 2, 3)``, np.quantile's
-    ``(3, 2, 2)``). Over ``(2, 3, 4)`` data of the eight kinds plus float64 with NaNs: every merged axis form, one axis
-    and every axis as controls, x np.nanquantile / np.nanpercentile / np.quantile x a 2-D, a 3-D (refused) and a 1-D q;
-    then keepdims, and outs of the result's shape and of q-first order.
+    ``(3, 2, 2)``). Over ``(2, 3, 4)`` data of the eight kinds plus float64 with NaNs and float64 that is NaN everywhere
+    (every slice answers ``np.full(q.shape, nan)``, where a 3-D q is not refused): every merged axis form, one axis and
+    every axis as controls, x np.nanquantile / np.nanpercentile / np.quantile x a 2-D, a 3-D (refused but over the
+    all-NaN data's nan forms) and a 1-D q; then keepdims, and outs of the result's shape and of q-first order.
     """
     q2 = np.array([[0.0, 0.5], [0.25, 1.0], [0.75, 0.1]])
     q3 = np.full((2, 1, 3), 0.5)
     q1 = np.array([0.25, 0.75])
-    for kind in QPRO_KINDS + ["nan"]:
+    for kind in QPRO_KINDS + ["nan", "allnan"]:
         if kind == "nan":
             vals = np.arange(24.0)
             vals[[0, 5, 17]] = np.nan
             data = plain(vals.reshape(2, 3, 4))
+        elif kind == "allnan":
+            data = plain(np.full((2, 3, 4), np.nan))
         else:
             data = _qpro_data(kind, (2, 3, 4))
         # Bool and text take a selection method (the interpolating ones subtract them).
@@ -14582,7 +14591,7 @@ def _qpro_merged_axis_argument():
             # takes, and of q-first order, which it refuses to broadcast into (numbers only: text is refused before).
             _quant(f"axisarg:{kind}:{ax}:q2:kd", data, name="nanquantile", q=plain(q2), qkind="arr", method=method,
                    axis=ax, keepdims=True, section=QPRO)
-            if kind in ("float64", "float32", "int32", "nan"):
+            if kind in ("float64", "float32", "int32", "nan", "allnan"):
                 try:
                     moved = np.nanquantile(np.asarray(data[1]), q2, axis=ax).shape
                 except Exception:  # noqa: BLE001 -- a refused call has no shape; its plain case records the error
@@ -14593,6 +14602,52 @@ def _qpro_merged_axis_argument():
                     if shape is not None:
                         _quant(f"axisarg:{kind}:{ax}:q2:{label}", data, name="nanquantile", q=plain(q2), qkind="arr",
                                method=method, axis=ax, out=_qpro_out(shape), section=QPRO)
+    _qpro_all_nan_answers()
+
+
+def _qpro_all_nan_answers():
+    """Section qprologue, part four: the nan forms' answer over data that is NaN everywhere. Every slice is
+    ``_nanquantile_1d``'s ``np.full(q.shape, np.nan, dtype=arr1d.dtype)[()]``: NumPy's POSITIVE NaN, a view (for a q
+    array) or a scalar, stacked by ``np.apply_along_axis`` and moved by ``from_ax`` along an axis (the order of part three
+    for merged axes) — also where NumPy never reaches the checks that refuse otherwise (a q of rank above 2, an unknown
+    method). Over all-NaN float64 / float32 / float16 ``(2, 3, 4)`` data x the flattened data, every axis, merged pairs,
+    one axis, the empty tuple x a Python float q, 0-d / 1-D / 2-D / 3-D q arrays x np.nanquantile / np.nanpercentile,
+    an unknown method, keepdims, and outs: of the result's shape, of a larger shape the store broadcasts into
+    (``out[...] = result`` accepts it, for the 3-D q and the unknown method too), and of q-first order along merged axes.
+    """
+    qs = (("q0", 0.5, "f"), ("qa0", np.array(0.5), "arr"), ("q1", np.array([0.25, 0.75]), "arr"),
+          ("q2", np.full((3, 2), 0.5), "arr"), ("q3", np.full((2, 1, 3), 0.5), "arr"))
+    for dt in ("float64", "float32", "float16"):
+        data = plain(np.full((2, 3, 4), np.nan, dtype=dt))
+        for ax in (None, (0, 1, 2), (1, 2), (0, 2), 1, ()):
+            for qk, qv, qkind in qs:
+                for fn in ("nanquantile", "nanpercentile"):
+                    scale = 100.0 if fn.endswith("percentile") else 1.0
+                    q = qv * scale if qkind == "f" else plain(np.asarray(qv) * scale)
+                    _quant(f"allnan:{dt}:{ax}:{qk}", data, name=fn, q=q, qkind=qkind, method="linear", axis=ax,
+                           section=QPRO)
+                q = qv if qkind == "f" else plain(np.asarray(qv))
+                _quant(f"allnan:{dt}:{ax}:{qk}:bogus", data, name="nanquantile", q=q, qkind=qkind, method="bogus",
+                       axis=ax, section=QPRO)
+                _quant(f"allnan:{dt}:{ax}:{qk}:kd", data, name="nanquantile", q=q, qkind=qkind, method="linear", axis=ax,
+                       keepdims=True, section=QPRO)
+                # Outs: of the result's own shape (the moved one along merged axes), where the store writes NumPy's NaN;
+                # of that shape behind a new leading axis of 2, which `out[...] = result` broadcasts into (with the
+                # linear method and with the unknown one, whose early answer must store the same way); and of q-first
+                # order along merged axes, where the moved result does not broadcast.
+                shape = np.nanquantile(np.asarray(data[1]), qv, axis=ax).shape
+                if 0 in shape:
+                    continue
+                outs = [("out", shape, "linear"), ("outbig", (2,) + shape, "linear"),
+                        ("outbig:bogus", (2,) + shape, "bogus")]
+                if isinstance(ax, tuple) and len(ax) != 1 and np.ndim(qv) >= 2:
+                    kept = tuple(s for d, s in enumerate(data[1].shape) if d not in ax)
+                    if np.shape(qv) + kept != shape:
+                        outs.append(("outqfirst", np.shape(qv) + kept, "linear"))
+                for label, out_shape, method in outs:
+                    q = qv if qkind == "f" else plain(np.asarray(qv))
+                    _quant(f"allnan:{dt}:{ax}:{qk}:{label}", data, name="nanquantile", q=q, qkind=qkind, method=method,
+                           axis=ax, out=_qpro_out(out_shape, dt), section=QPRO)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
