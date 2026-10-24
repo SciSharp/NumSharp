@@ -48,11 +48,18 @@ and configuration space — with each new case landing as a fixture tag + an in-
   method, static abstract members); `WeaverShapeTests` (every return/egress/body shape on BOTH Release
   and Debug IL, executed, temps reclaimed, results alive; resultless tasks; out carriers; 300-local /
   long-branch bodies; 64-thread parallel execution; values under forced GCs); `WeaverAnalyzerParityTests`
-  (7 fixtures: both resolvers over the same fixtures agree per method, and each matches its own output —
-  the scope local, the NDW012 placement; `InterfaceLattices` adds chains and diamonds with unscoped
-  members at every level and one generic interface under two instantiations, `InterfaceKeys` the
-  instantiation key's edges (`List<int>`/`List<string>`, array ranks, nullable/tuple arguments, a generic
-  base's context), `GetterShapes` the getter gate's shapes); `WeaverInterfaceWalkTests`
+  (9 fixtures: both resolvers over the same fixtures agree per method on the scope walk AND the
+  `[NDScopedExit]` walk, and each matches its own output — the scope local, the `NDScope.Detach` call,
+  the NDW012 placement; `InterfaceLattices` adds chains and diamonds with unscoped members at every level
+  and one generic interface under two instantiations, `InterfaceKeys` the instantiation key's edges
+  (`List<int>`/`List<string>`, array ranks, nullable/tuple arguments, a generic base's context),
+  `GetterShapes` the getter gate's shapes, `InterfaceMapping` the CLR's interface map — an interface
+  listed on a base that does not declare the slot, an explicit implementation beside a same-signature
+  public virtual, re-implementation, explicit-for-one-instantiation — and `DepthBoundary` a 67-level
+  chain straddling the walk's 64-level limit for a method, a getter and an exit parameter at once);
+  `WeaverInterfaceMappingTests` (7: the EXPECTED verdict of every interface-map shape on both layers,
+  weave + NDW012 placement + runtime — the array an unwoven forwarding method keeps survives, an inherited
+  exit argument survives the caller's scope); `WeaverInterfaceWalkTests`
   (the walk's cost and its generic bookkeeping: a 40-deep chain and an 18-level diamond lattice with
   unscoped members everywhere weave in bounded time — the walk without its per-instantiation memory was
   2^k, a minute at 26 levels — and `IBase<int>`/`IBase<string>`/`IBase<U[]>`, nested generic arguments,
@@ -382,6 +389,20 @@ actually yielded, so a gate-clean `[NDScoped]` method could hand back DISPOSED a
   branch — a possibly-aliasing branch makes reclaiming unsafe, mirroring CF-3). Do not "simplify" the
   two to one rule: any-element on conditionals flags mixed ternaries (R2 false positives), and
   every-element on tuples goes silent on `(temp, alias)` drops (real leaks — `np.setops` had one).
+- **Which interface member a method implements is the CLR's interface map, on both layers** (2026-10-24,
+  `WeaverInterfaceMappingTests` + the `InterfaceMapping` parity fixture). The analyzer asks Roslyn's
+  `FindImplementationForInterfaceMember` — of the method's OWN type, also for interfaces listed on a
+  base between the type and its slot (step 2b: Roslyn answers the slot, never the override, so the plain
+  step 2 cannot see them). The weaver matches by name and signature but skips a member the listing type
+  implements explicitly. Do not "simplify" either back to the name match or to the listing base's map:
+  the name match wove forwarding methods beside an explicit implementation (disposing the arrays they
+  keep), and the listing base's map ignores a type that re-implements the interface.
+- **The weaver's interface dedup is per LEVEL of the walk, not per walk.** Within a level the most
+  derived listing type decides; the next level asks its own type's map. A walk-wide memory let an
+  explicit skip at one level hide the base declaration's own implementation one level up.
+- **Both layers stop at the same depth.** The weaver searches a level's interfaces one level deeper than
+  its method; the analyzer therefore searches none at its deepest level (`DepthBoundary` fixture). Change
+  `MaxDepth` or the depth accounting on one side only and the parity test fails at the boundary.
 
 ---
 

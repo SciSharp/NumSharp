@@ -12,9 +12,11 @@ namespace NumSharp.Tests.Build.Analyzer
     ///     interface without remembering what it had searched reached each base interface once per path:
     ///     2^k searches for a chain of k interfaces, for every public virtual method of every
     ///     implementing type. A class implementing a 26-deep chain took a minute to weave, a 40-deep
-    ///     one would never finish. The walk now searches each interface instantiation once per method —
-    ///     keyed by the instantiation as seen from the method's own type, so <c>IFoo&lt;int&gt;</c> and
-    ///     <c>IFoo&lt;string&gt;</c> are still both searched.
+    ///     one would never finish. The walk now searches each interface instantiation once per level of a
+    ///     method's walk (a type and the bases between it and the slot it overrides) — keyed by the
+    ///     instantiation as seen from the method's own type, so <c>IFoo&lt;int&gt;</c> and
+    ///     <c>IFoo&lt;string&gt;</c> are still both searched. Which interface member a method implements is
+    ///     the CLR's interface map, pinned in <see cref="WeaverInterfaceMappingTests"/>.
     /// </summary>
     [TestClass]
     public class WeaverInterfaceWalkTests

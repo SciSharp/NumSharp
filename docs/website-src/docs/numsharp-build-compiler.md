@@ -210,7 +210,20 @@ The rules, all of them what the CLR's own slot resolution implies:
   the member's name and signature, base interfaces of a listed interface included), **explicit**
   interface implementations, covariant-return overrides, and generic instantiations
   (`Derived : Base<int>` matches `Base<T>.M(T)` against `M(int)`). A property-level attribute on a base
-  property reaches its getter override. The declaration may live in **another assembly** - a consumer
+  property reaches its getter override. Which interface member a method implements is the CLR's
+  interface map, not the name alone:
+  - an interface listed on a base that does not declare the slot (`class Stage : StageRoot, IStage { }`)
+    is implemented by the inherited `StageRoot.Run`, so an override below `Stage` runs for calls
+    through `IStage` and inherits;
+  - a member a type implements **explicitly** is what the interface runs, so a public method of the
+    same name and signature beside it - the forwarding shape
+    `NDArray IOp.Apply(NDArray a) => Apply(a);` plus `public virtual NDArray Apply(NDArray a)` -
+    inherits nothing: it is not woven, and an array it keeps survives the call;
+  - a type that lists the interface again re-implements it, and its own map decides for it; an
+    override still inherits through the base declaring its slot when that base implements the
+    interface.
+
+  The declaration may live in **another assembly** - a consumer
   overriding a NumSharp member, or a member of any library that used this weaver, is woven in the
   consumer's build (the weaver walks the base chain through the compile's reference list).
 - **Nearest declaration wins, and an explicit attribute on the override wins over it.** An override

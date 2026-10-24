@@ -46,9 +46,14 @@ namespace NumSharp.Build.Analyzer
     ///     <para>
     ///     From the method outward: its explicit interface implementations, the implicit interface
     ///     implementations at its level (the interface member this type maps onto this very method —
-    ///     <see cref="ITypeSymbol.FindImplementationForInterfaceMember"/>, the CLR's own rule), and the
-    ///     overridden method — recursing into each base declaration so an interface listed on a base,
-    ///     or an attribute two levels up, is still found. A property-level attribute reaches its getter
+    ///     <see cref="ITypeSymbol.FindImplementationForInterfaceMember"/>, the CLR's own rule), the
+    ///     interface members listed on a base between its type and the base declaring the slot it
+    ///     overrides that its type maps onto that slot (the weaver climbing past a base that does not
+    ///     declare the slot), and the overridden method — recursing into each base declaration so an
+    ///     interface listed on a base, or an attribute two levels up, is still found. The walk stops where
+    ///     the weaver's does: past <see cref="MaxDepth"/> levels, and with no interface searched at the
+    ///     deepest level (the weaver searches a level's interfaces one level deeper than its method).
+    ///     A property-level attribute reaches its getter
     ///     (the weaver's getter rule); generic bases and interfaces are matched through Roslyn's
     ///     substituted symbols, and declarations in referenced assemblies (a consumer overriding a
     ///     NumSharp member) are metadata symbols and walk the same way. The walk is ONE routine
@@ -187,6 +192,20 @@ namespace NumSharp.Build.Analyzer
             return Visit(m, k, visited, 0, match);
         }
 
+        /// <summary>
+        ///     One step of the walk: the declarations <paramref name="node"/> reaches directly — its explicit
+        ///     interface implementations, the implicit ones at its level, the interfaces of the bases between
+        ///     its type and the slot it overrides, and the overridden method — in the weaver's order, then the
+        ///     walk on from the overridden method one level deeper. Each declaration is tested once
+        ///     (<paramref name="visited"/>), and the first that passes <paramref name="match"/> is the answer,
+        ///     so the nearest declaration wins.
+        /// </summary>
+        /// <param name="node">The declaration examined at this step (the method itself at depth 0).</param>
+        /// <param name="k">The resolved NumSharp attribute types.</param>
+        /// <param name="visited">The declarations already examined in this walk.</param>
+        /// <param name="depth">The walk's depth; past <see cref="MaxDepth"/> the walk ends, and at <see cref="MaxDepth"/> no interface is searched — the weaver's bounds, so both layers answer alike at the limit.</param>
+        /// <param name="match">The test that makes a declaration the answer.</param>
+        /// <returns>The nearest declaration passing <paramref name="match"/>, or null.</returns>
         private static IMethodSymbol Visit(IMethodSymbol node, KnownTypes k, HashSet<ISymbol> visited, int depth,
             Func<IMethodSymbol, KnownTypes, bool> match)
         {
@@ -207,11 +226,19 @@ namespace NumSharp.Build.Analyzer
             if (node.IsStatic)
                 return null;
 
-            // 2. Implicit interface implementations at this level: the interface members THIS type maps
-            //    onto this very method (a public member whose name and signature match).
+            // The weaver searches the interfaces a type lists ONE level deeper than the method it is
+            // walking (its MatchInterfaces runs at depth + 1 and stops past MaxDepth), so at the deepest
+            // level it walks it searches no interface at all. Steps 2 and 2b keep the same bound: without
+            // it, at the limit this side called a method scoped — and dropped its NDW012 — that the weave
+            // left unwoven (a 67-level override chain whose root class implements a scoped interface
+            // member: the third-most-derived override, found by a parity test on 2026-10-24).
             var type = node.ContainingType;
-            if (type != null && type.TypeKind != TypeKind.Interface && node.DeclaredAccessibility == Accessibility.Public)
+            if (depth < MaxDepth && type != null && type.TypeKind != TypeKind.Interface && node.DeclaredAccessibility == Accessibility.Public)
             {
+                // 2. Implicit interface implementations at this level: the interface members THIS type
+                //    maps onto this very method (a public member whose name and signature match, unless
+                //    the type implements that member explicitly — then the explicit implementation is
+                //    what the interface runs, and FindImplementationForInterfaceMember says so).
                 foreach (var iface in type.AllInterfaces)
                 {
                     foreach (var member in iface.GetMembers(node.Name))
@@ -228,6 +255,15 @@ namespace NumSharp.Build.Analyzer
                             return d;
                     }
                 }
+
+                // 2b. Interfaces listed on a base BETWEEN this type and the base that declares the slot
+                //     this method overrides.
+                if (node.IsOverride && node.OverriddenMethod != null)
+                {
+                    var found = MatchIntermediateBaseInterfaces(node, type, k, visited, match);
+                    if (found != null)
+                        return found;
+                }
             }
 
             // 3. The overridden method — the base declaration continues the walk from ITS level.
@@ -242,6 +278,81 @@ namespace NumSharp.Build.Analyzer
             }
 
             return null;
+        }
+
+        /// <summary>
+        ///     Step 2b of <see cref="Visit"/>: the interface members listed on a base class strictly between
+        ///     <paramref name="type"/> and the base that declares the slot <paramref name="node"/> overrides,
+        ///     that <paramref name="type"/>'s own interface map assigns to that slot. This is the weaver's
+        ///     search of a base that does not declare the slot: <c>class L : R, I { }</c> implements
+        ///     <c>I.M</c> with <c>R.M</c>, so on an instance of <c>class D : L { override M }</c> a call
+        ///     through <c>I</c> runs <c>D.M</c> — and <c>D.M</c> inherits <c>I.M</c>'s attribute.
+        ///     <para>
+        ///     Step 2 cannot see this: Roslyn's <see cref="ITypeSymbol.FindImplementationForInterfaceMember"/>
+        ///     answers <c>R.M</c> (the method in the interface map), never the override, so <c>D.M</c> never
+        ///     equals it. Without this step the analyzer reported NDW012 inside every such override the
+        ///     weaver wove (a parity test, 2026-10-24).
+        ///     </para>
+        ///     <para>
+        ///     The test asks <paramref name="type"/>'s map, not the listing base's: a type that lists the
+        ///     interface again (re-implements it) or implements the member explicitly maps it elsewhere, and
+        ///     then a call through the interface does not run <paramref name="node"/>. Only bases BELOW the
+        ///     slot's declaring type are searched — an interface listed on that type or above is found when
+        ///     step 3 walks on from the base declaration, one level deeper, exactly where the weaver finds it.
+        ///     </para>
+        /// </summary>
+        /// <param name="node">An override (<see cref="IMethodSymbol.IsOverride"/> with a non-null <see cref="IMethodSymbol.OverriddenMethod"/>).</param>
+        /// <param name="type">The type declaring <paramref name="node"/>.</param>
+        /// <param name="k">The resolved NumSharp attribute types.</param>
+        /// <param name="visited">The declarations already examined in this walk; each is tested once.</param>
+        /// <param name="match">The test that makes a declaration the answer.</param>
+        /// <returns>The first interface member found that passes <paramref name="match"/>, or null.</returns>
+        private static IMethodSymbol MatchIntermediateBaseInterfaces(IMethodSymbol node, INamedTypeSymbol type, KnownTypes k,
+            HashSet<ISymbol> visited, Func<IMethodSymbol, KnownTypes, bool> match)
+        {
+            var slot = node.OverriddenMethod.OriginalDefinition;
+            var slotOwner = node.OverriddenMethod.ContainingType?.OriginalDefinition;
+            for (var b = type.BaseType; b != null && !SymbolEqualityComparer.Default.Equals(b.OriginalDefinition, slotOwner); b = b.BaseType)
+            {
+                foreach (var iface in ListedInterfaces(b))
+                {
+                    foreach (var member in iface.GetMembers(node.Name))
+                    {
+                        if (!(member is IMethodSymbol im))
+                            continue;
+                        var impl = type.FindImplementationForInterfaceMember(im) as IMethodSymbol;
+                        if (impl == null || !SymbolEqualityComparer.Default.Equals(impl.OriginalDefinition, slot))
+                            continue;
+                        var d = im.OriginalDefinition;
+                        if (!visited.Add(d))
+                            continue;
+                        if (match(d, k))
+                            return d;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        ///     The interfaces <paramref name="type"/> itself lists — its declared interfaces and their base
+        ///     interfaces, the set the C# compiler writes into the type's metadata and the weaver searches —
+        ///     without those its base classes list.
+        /// </summary>
+        /// <param name="type">The listing type.</param>
+        /// <returns>Each listed interface once, declared interfaces first in declaration order, each followed by its base interfaces.</returns>
+        private static IEnumerable<INamedTypeSymbol> ListedInterfaces(INamedTypeSymbol type)
+        {
+            var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            foreach (var declared in type.Interfaces)
+            {
+                if (seen.Add(declared))
+                    yield return declared;
+                foreach (var inherited in declared.AllInterfaces)
+                    if (seen.Add(inherited))
+                        yield return inherited;
+            }
         }
     }
 }
