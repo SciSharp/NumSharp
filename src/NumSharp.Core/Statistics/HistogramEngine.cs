@@ -208,7 +208,7 @@ namespace NumSharp.Statistics
         ///     weights: its argsort, NumPy's default kind) and searched for every edge (<see cref="SearchSortedInclusive"/>),
         ///     the running total updated in place, and the counts taken as <c>np.diff</c> of the total. It runs wherever no
         ///     shortcut gives NumPy's answer: data, edges or weights of which one is text (<see cref="HistogramTextAnswer"/>),
-        ///     and numeric edges holding a NaN (<see cref="HistogramCumulative"/>).
+        ///     and unweighted numeric data over edges holding a NaN, or over no edge at all (<see cref="HistogramCumulative"/>).
         /// </summary>
         /// <param name="a">The raveled data (text or numbers).</param>
         /// <param name="w">The raveled numeric weights, or null.</param>
@@ -369,9 +369,7 @@ namespace NumSharp.Statistics
         /// <param name="ntype">The result's dtype: int64 without weights, the weights' dtype with them.</param>
         /// <returns>The counts (or summed weights), one per bin; edges holding a NaN can give negative counts (NumPy's
         ///     answer, see <see cref="HistogramCumulativeLoop"/>). Summed weights keep the weights' dtype, wrapping in a
-        ///     narrow integer dtype.</returns>
-        /// <exception cref="IndexError">Complex data with no edges at all: the last edge is read (<c>binEdges["-1"]</c>);
-        ///     the snapshot of P2 found it, to be checked against NumPy.</exception>
+        ///     narrow integer dtype. No edges at all give an empty array (int64 counts, or the weights' dtype).</returns>
         /// <exception cref="ArgumentException">Bool weights with data: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add'
         ///     output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (the in-place update of the
         ///     bool total by the weights' int64 cumulative sum).</exception>
@@ -386,6 +384,12 @@ namespace NumSharp.Statistics
                 // binary-search-and-count pass replaces NumPy's per-block O(n log n) sort. The compare dtype
                 // matches searchsorted's (result_type of samples and edges), so boundary decisions match too.
                 int nb = (int)(binEdges.size - 1);
+
+                // No edges at all (an empty array passes NumPy's checks): NumPy's loop searches nothing and its counts are
+                // np.diff of an empty total, an empty int64 array, whatever the data; the binning would ask for -1 bins.
+                if (nb < 0)
+                    return HistogramCumulativeLoop(raveled, null, binEdges, DType.Int64);
+
                 NPTypeCode cmp = promote_types(raveled.typecode, binEdges.typecode);
 
                 // Binning each sample gives NumPy's counts only while the edges are ordered for the search NumPy runs

@@ -108,6 +108,51 @@ public class np_histogram_cumulative_loop_tests
         => np.histogram(np.array(Twelve), np.array(new[] { 0.0, NaN, 2.0, 9.0, NaN })["::2"]).hist
             .ToArray<long>().Should().Equal(2L, 6L);
 
+    // ── no edges at all ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     An empty edge array passes NumPy's checks (it is 1-D, and nothing decreases); the loop searches nothing, so the
+    ///     counts are <c>np.diff</c> of an empty total: an empty int64 array for any data, and the edges come back as given.
+    /// </summary>
+    [TestMethod]
+    public void EmptyEdges_EmptyCounts()
+    {
+        var edges = np.array(new double[0]);
+        foreach (var data in new[]
+                 {
+                     np.array(Twelve), np.array(Twelve).astype(NPTypeCode.SByte), np.array(Twelve).astype(NPTypeCode.Complex),
+                     np.array(Twelve).astype(NPTypeCode.Decimal), np.array(new double[0]), np.array(5.0),
+                 })
+        {
+            var (h, e) = np.histogram(data, edges);
+            h.typecode.Should().Be(NPTypeCode.Int64, data.dtype.ToString());
+            h.shape.Should().Equal(new long[] { 0 });
+            ReferenceEquals(e, edges).Should().BeTrue();
+        }
+
+        // The double[] form and integer edges agree.
+        np.histogram(np.array(Twelve), new double[0]).hist.shape.Should().Equal(new long[] { 0 });
+        var (hi, ei) = np.histogram(np.array(Twelve), np.array(new long[0]));
+        hi.typecode.Should().Be(NPTypeCode.Int64);
+        ei.typecode.Should().Be(NPTypeCode.Int64);
+    }
+
+    /// <summary>The density of no bins is an empty float64 array; weights give an empty array of their dtype.</summary>
+    [TestMethod]
+    public void EmptyEdges_DensityAndWeights()
+    {
+        var edges = np.array(new double[0]);
+        var d = np.histogram(np.array(Twelve), edges, density: true).hist;
+        d.typecode.Should().Be(NPTypeCode.Double);
+        d.size.Should().Be(0);
+
+        np.histogram(np.array(Twelve), edges, weights: np.ones(new Shape(12), NPTypeCode.Single)).hist.typecode
+            .Should().Be(NPTypeCode.Single);
+        var c = np.histogram(np.array(Twelve), edges, density: true, weights: np.ones(new Shape(12), NPTypeCode.Complex)).hist;
+        c.typecode.Should().Be(NPTypeCode.Complex);
+        c.size.Should().Be(0);
+    }
+
     // ── weights on explicit edges: NumPy's in-place `cum_n += cw[bin_index]` ─────────────────────────────────────────
 
     /// <summary>The explicit edges the weighted probes used: three bins, the weights summing to [2, 2, 4].</summary>
