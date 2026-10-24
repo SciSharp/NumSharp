@@ -189,32 +189,17 @@ namespace NumSharp.Statistics
         /// </remarks>
         private static HistogramResult HistogramTextAnswer(NDArray raveled, NDArray w, NDArray binEdges, bool density)
         {
-            if (w is not null && Backends.Strings.NDStringUfuncs.IsVString(w))
-            {
-                // StringDType weights: cum_n = np.zeros(bin_edges.shape, weights.dtype) holds empty texts, and NumPy's block
-                // loop COMPUTES over them (the weights' cumsum and the in-place add concatenate text), so the counts'
-                // n = np.diff(cum_n) is what refuses — unless a statement before it raises first (a None-like NA in the
-                // data's argsort, the weights' cumsum or the add). Running the statements gives either answer.
-                HistogramCumulativeLoop(raveled, w, binEdges, w.dtype);
-                throw new InvalidOperationException("np.histogram: StringDType weights reached a subtraction NumPy refuses.");
-            }
-            if (w is not null && Backends.Strings.NDStringUfuncs.IsString(w))
-            {
-                // cum_n = np.zeros(bin_edges.shape, weights.dtype) holds text. With data, a block's `sw.cumsum()`
-                // (add.accumulate) refuses it first (the argsort and the gathers before it cannot fail); without data the
-                // loop never runs and n = np.diff(cum_n) refuses the text subtraction.
-                if (raveled.size == 0)
-                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", w.dtype, w.dtype);
-                throw Backends.Strings.NDStringUfuncs.AddNotCompatible(w.dtype, "accumulate");
-            }
-
+            // NumPy's statements decide every answer here, text weights included: cum_n = np.zeros(bin_edges.shape,
+            // weights.dtype) holds text, a block's `sw.cumsum()` (add.accumulate) is the first statement that can refuse
+            // fixed-width text (the argsort and the gathers before it cannot fail), StringDType weights compute through
+            // the cumsum and the in-place add (unless a None-like NA raises in the argsort, the cumsum or the add), and
+            // without data the loop never runs, so n = np.diff(cum_n) refuses the text subtraction.
             NDArray n = HistogramCumulativeLoop(raveled, w, binEdges, w is null ? DType.Int64 : w.dtype);
 
             if (density)
             {
-                // db = np.array(np.diff(bin_edges), float): text edges (StringDType included) have no subtract loop.
-                if (Backends.Strings.NDStringUfuncs.IsText(binEdges))
-                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", binEdges.dtype, binEdges.dtype);
+                // db = np.array(np.diff(bin_edges), float): text edges (StringDType included) have no subtract loop, which
+                // np.diff's subtraction reports.
                 NDArray db = np.diff(binEdges).astype(NPTypeCode.Double);
                 return new HistogramResult(n / db / np.sum(n), binEdges);
             }
@@ -664,12 +649,10 @@ namespace NumSharp.Statistics
                 NDArray x = a;
                 if (range.HasValue)
                 {
-                    // `keep = (a >= first_edge)` compares the data with a Python float: no loop for text, even with no data.
-                    if (textData)
-                        throw new TypeError(
-                            $"ufunc 'greater_equal' did not contain a loop with signature matching types ({a.dtype.Meta}, " +
-                            $"{DTypeRegistry.PyFloat}) -> None");
-                    NDArray keep = (a >= NDArray.Scalar(first)) & (a <= NDArray.Scalar(last));
+                    // `keep = (a >= first_edge)` compares the data with a Python float, which a C# double literal is (weak:
+                    // float16 data compare against the edge rounded to float16): text has no such loop, even with no data,
+                    // and the comparison reports it, naming the Python float's DType.
+                    NDArray keep = (a >= first) & (a <= last);
                     if (!AllTrue(keep))
                         x = a[keep];
                 }
@@ -870,10 +853,14 @@ namespace NumSharp.Statistics
         /// <param name="a">The data (text data reaches only the range checks or the empty default without an error).</param>
         /// <param name="range">The optional outer edges.</param>
         /// <returns>The outer edges.</returns>
-        /// <exception cref="ValueError">A range whose lower edge exceeds its upper one, or a non-finite range or data range.</exception>
-        /// <exception cref="TypeError">Text data with no range and at least one element: <c>a.min()</c> has no text loop
-        ///     (<c>ufunc 'minimum' did not contain a loop with signature matching types (dtype('&lt;U2'), dtype('&lt;U2')) -&gt;
-        ///     None</c>).</exception>
+        /// <exception cref="ValueError">A range whose lower edge exceeds its upper one, or a non-finite range or data range
+        ///     (a StringDType array whose minimum is a NaN-like NA reports its two edges).</exception>
+        /// <exception cref="TypeError">Text data with no range and at least one element: fixed-width text's <c>a.min()</c>
+        ///     has no loop, which np.amin reports (<c>ufunc 'minimum' did not contain a loop with signature matching types
+        ///     (dtype('&lt;U2'), dtype('&lt;U2')) -&gt; None</c>); StringDType's minimum is a str, for which
+        ///     <c>np.isfinite</c> has no loop.</exception>
+        /// <exception cref="InvalidOperationException">Defensive: np.amin reduced fixed-width text (NumPy 2.4.2 has no
+        ///     minimum loop for it, and neither has NumSharp).</exception>
         internal static (double first, double last) GetOuterEdges(NDArray a, (double, double)? range)
         {
             double first, last;
@@ -906,8 +893,9 @@ namespace NumSharp.Statistics
             }
             else if (Backends.Strings.NDStringUfuncs.IsString(a))
             {
-                // `a.min()` is minimum.reduce, which has no text loop.
-                throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", a.dtype, a.dtype);
+                // `a.min()` is minimum.reduce, which has no fixed-width text loop: the reduction reports it.
+                using (np.amin(a)) { }
+                throw new InvalidOperationException($"np.histogram: np.amin reduced {a.dtype} text, which NumPy refuses.");
             }
             else
             {
