@@ -119,7 +119,6 @@ Math/NDArray.ComplexAccessors.cs	1	2
 Math/NDArray.Convolve.cs	4	0
 Math/NDArray.Correlate.cs	4	1
 Math/NDArray.SlidingDot.cs	0	19
-Math/NDArray.positive.cs	1	1
 Math/np.conjugate.cs	0	1
 Math/np.deg2rad.cs	1	0
 Math/np.diff.cs	3	16
@@ -144,7 +143,6 @@ Matrixlib/NDMatrix.cs	0	1
 Operations/Elementwise/NDArray.Equals.cs	2	5
 Operations/Elementwise/NDArray.NOT.cs	1	0
 Operations/Elementwise/NDArray.NotEquals.cs	2	0
-Operations/Elementwise/NDArray.Primitive.cs	1	0
 Operations/Elementwise/NDArray.TextComparison.cs	1	0
 Polynomial/Package/np.polynomial.polyutils.cs	1	1
 Polynomial/np.poly.cs	1	3
