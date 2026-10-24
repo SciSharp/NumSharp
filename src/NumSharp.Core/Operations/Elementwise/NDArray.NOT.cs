@@ -1,46 +1,29 @@
-﻿using System;
-using NumSharp.Backends;
-using NumSharp.Generic;
-using NumSharp.Utilities;
+﻿using NumSharp.Generic;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        // Scope: MakeGeneric<bool>() mints a typed ALIAS over `result`'s storage (its own ARC
-        // ref); the untyped `result` wrapper is then a strand reclaimable only by a future GC +
-        // finalizer pass (measured: one bucketed buffer escaped per `!arr` call). The [NDScoped]
-        // weaver tracks `result`, yields the alias via scope.Returns, and disposes `result` at
-        // exit — the same pattern the typed NDArray<T> &/|/^ operators already carry. `self` is
-        // an input constructed before the scope opens, so it is never tracked (rule R2).
+        /// <summary>
+        ///     NumSharp's <c>!</c> operator: NumPy's <c>np.logical_not(a)</c> as a typed bool array (Python has no <c>!</c>;
+        ///     this is its logical_not).
+        /// </summary>
+        /// <param name="self">The operand (any dtype, any layout).</param>
+        /// <returns>The truth negation, an <see cref="NDArray{T}"/> of bool over np.logical_not's result.</returns>
+        /// <exception cref="TypeError"><paramref name="self"/> holds text: logical_not has no string loop (NumPy's
+        ///     "ufunc 'logical_not' not supported for the input types, ..." text).</exception>
+        /// <remarks>
+        ///     <para>The whole call is np.logical_not's (the np-layer dtype plan, P1c): its text refusal, the bool route
+        ///     (invert) and the comparison with 0 for numbers (a NaN is true, -0.0 false). The operator held a raw scalar
+        ///     loop of its own for C-contiguous operands (<c>x.Equals(default)</c> per element, behind its own text guard),
+        ///     which the comparison kernels outrun: float64 at 100K elements took ~0.5 ms there.</para>
+        ///     <para>Scope: MakeGeneric&lt;bool&gt;() mints a typed ALIAS over the result's storage (its own ARC ref); the
+        ///     untyped result wrapper would then be a strand reclaimable only by a future GC and finalizer pass (measured:
+        ///     one bucketed buffer escaped per <c>!arr</c> call). The [NDScoped] weaver tracks it, yields the alias and
+        ///     disposes the wrapper at exit. <paramref name="self"/> is an input constructed before the scope opens, so it
+        ///     is never tracked.</para>
+        /// </remarks>
         [NDScoped]
-        public static unsafe NDArray<bool> operator !(NDArray self)
-        {
-            // `!` is logical_not, which has no string loop (unlike logical_and/or/xor, it refuses text in NumPy).
-            Backends.Strings.NDStringUfuncs.ThrowIfUnary("logical_not", self);
-            // The raw-buffer fast path below walks self.Address LINEARLY (from[i]), which matches the
-            // logical C-order of the elements ONLY when self is C-contiguous with offset 0. For any
-            // other layout — F-contiguous, transposed, strided, a sliced view with a non-zero offset,
-            // or a broadcast (stride-0) view — the linear read visits the backing buffer in memory
-            // order, not logical order, and the fresh C-contiguous `result` then holds scrambled
-            // values. Route those through the layout-aware logical_not ufunc, which honours strides and
-            // offset (correctness over the raw-loop speed; the contiguous hot path is unchanged).
-            // np.logical_not now returns the untyped NDArray (its out=/where= overload shape); a plain
-            // call still yields a bool array, so re-view it as the typed NDArray<bool> the operator returns.
-            if (!self.Shape.IsContiguous || self.Shape.offset != 0)
-                return np.logical_not(self).MakeGeneric<bool>();
-
-            var result = new NDArray(typeof(bool), Shape.Adopt(self.Shape.dimensions));
-            NpFunc.Invoke(self.GetTypeCode, NotExecute<int>, (nint)self.Address, (nint)result.Address, result.size);
-            return result.MakeGeneric<bool>();
-        }
-
-        private static unsafe void NotExecute<T>(nint fromAddr, nint toAddr, long len) where T : unmanaged, IEquatable<T>
-        {
-            var from = (T*)fromAddr;
-            var to = (bool*)toAddr;
-            for (long i = 0; i < len; i++)
-                *(to + i) = (*(from + i)).Equals(default);
-        }
+        public static NDArray<bool> operator !(NDArray self) => np.logical_not(self).MakeGeneric<bool>();
     }
 }

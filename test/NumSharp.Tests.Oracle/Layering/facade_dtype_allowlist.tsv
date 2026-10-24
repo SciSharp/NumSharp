@@ -141,7 +141,6 @@ Matrixlib/NDMatrix.Operators.cs	0	12
 Matrixlib/NDMatrix.Reductions.cs	15	6
 Matrixlib/NDMatrix.cs	0	1
 Operations/Elementwise/NDArray.Equals.cs	2	5
-Operations/Elementwise/NDArray.NOT.cs	1	0
 Operations/Elementwise/NDArray.NotEquals.cs	2	0
 Operations/Elementwise/NDArray.TextComparison.cs	1	0
 Polynomial/Package/np.polynomial.polyutils.cs	1	1
