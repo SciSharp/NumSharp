@@ -647,8 +647,29 @@ namespace NumSharp
 
         public abstract NDArray Argwhere(NDArray a);
 
+        /// <summary>
+        ///     NumPy's <c>np.count_nonzero(a)</c> (<c>multiarray.count_nonzero</c>), the whole call: the number of elements
+        ///     whose truth value is True (a text element counts when non-empty), 0 for an array with no element.
+        /// </summary>
+        /// <param name="a">The array (any dtype, any layout).</param>
+        /// <returns>The count.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>The public <c>np.count_nonzero</c> only opens the matrix boundary's plain region and calls this (the
+        ///     np-layer dtype plan, P1b).</remarks>
         public abstract long CountNonZero(NDArray a);
 
+        /// <summary>
+        ///     NumPy's <c>np.count_nonzero(a, axis, keepdims=)</c>, the whole call: <c>a_bool.sum(axis=axis, dtype=intp,
+        ///     keepdims=keepdims)</c> over the truth values (text through <c>a != ''</c>), int64 zeros of the reduced shape for
+        ///     an array with no element.
+        /// </summary>
+        /// <param name="a">The array (any dtype, any layout).</param>
+        /// <param name="axis">The counted axis (negative counts from the end; a 0-d array accepts 0 and -1).</param>
+        /// <param name="keepdims">Whether the counted axis stays with length one.</param>
+        /// <returns>The int64 counts, laid out as NumPy's sum allocates them.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range (the axis as given).</exception>
+        /// <remarks>The public <c>np.count_nonzero</c> only opens the matrix boundary's plain region and calls this (the
+        ///     np-layer dtype plan, P1b).</remarks>
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
 
         // Boolean masking

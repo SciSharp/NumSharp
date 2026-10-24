@@ -224,14 +224,16 @@ namespace NumSharp.Backends
         [NDScoped]
         public override long CountNonZero(NDArray nd)
         {
+            // An array with no element counts nothing, before anything reads it (np.count_nonzero's first statement, moved
+            // here by the np-layer dtype plan's P1b: an empty text array never builds its truth array).
+            if (nd.size == 0)
+                return 0;
             // Text: NumPy's count_nonzero reads the strings' truth values (the nonzero route): the stand-in is the truth array.
             if (Strings.NDStringUfuncs.ReduceStandIn("count_nonzero", nd) is { } standIn)
             {
                 using (standIn)
                     return CountNonZero(standIn);
             }
-            if (nd.size == 0)
-                return 0;
 
             // Scalar return — scope only: reclaims the per-dispatch MakeGeneric alias
             // (a fresh wrapper over nd's storage that otherwise strands on the finalizer).
@@ -257,6 +259,28 @@ namespace NumSharp.Backends
             {
                 using (standIn)
                     return CountNonZero(standIn, axis, keepdims);
+            }
+            if (nd.size == 0)
+            {
+                // An array with no element: int64 zeros of the reduced shape (np.count_nonzero's branch, moved here by the
+                // np-layer dtype plan's P1b). The axis is validated as NumPy's sum validates it: an AxisError naming the
+                // axis as given (a wrapping loop used to turn -3 on a 1-D array into axis 0).
+                if (axis < -nd.ndim || axis >= nd.ndim)
+                    throw new AxisError(axis, nd.ndim);
+                if (axis < 0)
+                    axis += nd.ndim;
+
+                var resultShape = Shape.GetAxis(nd.Shape, axis);
+                // np.zeros(shape, int64)'s own allocation (a zero-filled owner), without the call up into np.*.
+                var empty = new NDArray(NPTypeCode.Int64, Shape.Adopt(resultShape), true);
+                if (keepdims)
+                {
+                    var ks = new long[nd.ndim];
+                    for (int d = 0, sd = 0; d < nd.ndim; d++)
+                        ks[d] = (d == axis) ? 1 : resultShape[sd++];
+                    empty.Storage.Reshape(Shape.Adopt(ks));
+                }
+                return empty;
             }
             // Boundary scope: reclaims the cast copy of a failed call and the scalar path's temporaries; the result is yielded.
 
