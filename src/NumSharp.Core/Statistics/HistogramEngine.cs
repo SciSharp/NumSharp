@@ -914,7 +914,28 @@ namespace NumSharp.Statistics
 
             NPTypeCode binType = dtype;
             var edges = new NDArray(binType, Shape.Vector(num), false);
-            int div = num - 1; // histogram always has endpoint=true and num = nbins+1 >= 2, so div >= 1
+            int div = num - 1; // histogram always has endpoint=true and num = nbins + 1, so div >= 0
+
+            if (div == 0)
+            {
+                // num == 1 (zero bins, an estimator whose width came out infinite): NumPy's linspace takes
+                // `step = nan; y = y * delta` (y = [0]), then `y += start`, and sets `y[-1] = stop` only when num > 1. So the
+                // single edge is 0 * delta + start, in the dtype's own arithmetic (float16: each operation through float32,
+                // rounded back), not stop.
+                if (binType == NPTypeCode.Single)
+                {
+                    float start = (float)first, stop = (float)last;
+                    ((float*)edges.Address)[0] = 0f * (stop - start) + start;
+                }
+                else
+                {
+                    Half start = (Half)first, stop = (Half)last;
+                    Half delta = (Half)((float)stop - (float)start);
+                    Half scaled = (Half)(0f * (float)delta);
+                    ((Half*)edges.Address)[0] = (Half)((float)scaled + (float)start);
+                }
+                return edges;
+            }
 
             if (binType == NPTypeCode.Single)
             {

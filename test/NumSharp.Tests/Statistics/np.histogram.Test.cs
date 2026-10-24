@@ -306,6 +306,24 @@ public class np_histogram_Tests
         np.histogram_bin_edges(f64, "scott").ToArray<double>().Should().Equal(-3e154);
     }
 
+    /// <summary>
+    ///     Zero bins have a single edge, and NumPy's linspace makes it the START: with one point it takes
+    ///     <c>step = nan; y = y * delta</c> (0 * delta), adds start, and sets the last point to stop only when there are two
+    ///     or more. The float16 / float32 edges (computed in the data's own width) used to come back as the stop.
+    /// </summary>
+    [TestMethod]
+    public void Estimator_ZeroBins_SingleEdgeIsTheStart()
+    {
+        var f16 = np.array(new[] { -169.5, 166.625, 82.1875, -114.5625, -269.25, -26.0, 66.0 }).astype(NPTypeCode.Half);
+        var e16 = np.histogram_bin_edges(f16, "scott");
+        e16.typecode.Should().Be(NPTypeCode.Half);
+        e16.ToArray<Half>().Should().Equal((Half)(-269.25));
+
+        var e32 = np.histogram_bin_edges(np.array(new[] { -3e19f, 1e19f, 2e19f, 0f }), "scott");
+        e32.typecode.Should().Be(NPTypeCode.Single);
+        e32.ToArray<float>().Should().Equal(-3e19f);
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {
