@@ -48,20 +48,37 @@ and configuration space — with each new case landing as a fixture tag + an in-
   method, static abstract members); `WeaverShapeTests` (every return/egress/body shape on BOTH Release
   and Debug IL, executed, temps reclaimed, results alive; resultless tasks; out carriers; 300-local /
   long-branch bodies; 64-thread parallel execution; values under forced GCs); `WeaverAnalyzerParityTests`
-  (both resolvers over the same fixtures agree per method, and each matches its own output — the scope
-  local, the NDW012 placement; the `InterfaceLattices` fixture adds chains and diamonds with unscoped
-  members at every level and one generic interface under two instantiations); `WeaverInterfaceWalkTests`
+  (7 fixtures: both resolvers over the same fixtures agree per method, and each matches its own output —
+  the scope local, the NDW012 placement; `InterfaceLattices` adds chains and diamonds with unscoped
+  members at every level and one generic interface under two instantiations, `InterfaceKeys` the
+  instantiation key's edges (`List<int>`/`List<string>`, array ranks, nullable/tuple arguments, a generic
+  base's context), `GetterShapes` the getter gate's shapes); `WeaverInterfaceWalkTests`
   (the walk's cost and its generic bookkeeping: a 40-deep chain and an 18-level diamond lattice with
   unscoped members everywhere weave in bounded time — the walk without its per-instantiation memory was
-  2^k, a minute at 26 levels — and `IBase<int>`/`IBase<string>`/`IBase<U[]>` are each still searched,
-  while one instantiation listed twice is searched once); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
+  2^k, a minute at 26 levels — and `IBase<int>`/`IBase<string>`/`IBase<U[]>`, nested generic arguments,
+  array ranks, nullable and tuple arguments are each still searched, while one instantiation listed twice
+  is searched once; a 100-deep chain past the depth limit, explicit implementations of a deep chain, the
+  exit-parameter walk through a deep chain and a diamond lattice, a getter through a lattice);
+  `WeaverGetterGateTests` (8: the getter gate changes cost only — 3,000 plain properties, indexers,
+  static and generic properties, a derived type inheriting from its base's property, a property-level
+  `[NDScopedCovered]` stopping the inheritance, a method named like a getter, three same-named types in
+  three weaves; only an INHERITING getter reads the gate, a getter's own property attribute is found by
+  `CollectTargets`); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
   reference model, weaver AND analyzer); `WeaverCliTests` (the tool PROCESS: exit codes, rsp, `--snk`,
   `--verbose`, NDW001 — unreachable in-process because Cecil resolves through the host's
   TRUSTED_PLATFORM_ASSEMBLIES).
 - **Contract**: NDW012 severity == Warning + enabled-by-default; a real leak is a Warning not an Error;
   gate diagnostics are Errors (`AnalyzerContractTests`).
 - **Harness**: teeth (real leak warns / clean is silent / broken source reported / `[NDScoped]` exempt),
-  non-vacuity floors, per-gate-code presence, NDW013 build test (`AnalyzerBuild`).
+  non-vacuity floors, per-gate-code presence, NDW013 build test (`AnalyzerBuild`); every analyzer run
+  fails on an analyzer exception (AD0001 — Roslyn reports a crash as a diagnostic, so a test expecting
+  "no warning" would otherwise pass on a crashed analyzer); `RunProjectAsync` analyzes a multi-file
+  project sequentially or concurrently, ordering the results so two runs compare equal.
+- **NDW012's pay-for-play exit** (`LeakAnalyzerPayForPlayTests`, 12): a method body without an owned
+  operation ends after one walk, so every place an owned value can hide must still be seen — lambdas,
+  local functions, async lambdas, tuples, owning disposables, constrained generics, every member body
+  kind (accessors, operators, constructors, finalizers, indexers, expression bodies); `nameof`/`typeof`/
+  `default` draw nothing; one leak among hundreds of methods, and concurrent files over shared types.
 
 **Not yet covered:** almost all of the control-flow, escape-nuance, scope-nuance, type-system, and
 configuration space below.
@@ -387,7 +404,9 @@ member or a type. Full semantics: `docs/LEAK_ANALYZER.md` §10.
 | property fuzz | `OwnershipPropertyFuzzTests` (120 seeded types) | NDW016 == non-disposable holder types, NDW017 == undisposed holders, NDW012 == 0, over a 14-template grammar × 3 Dispose shapes |
 | robustness | `OwnershipRobustnessTests` (21) | cycles ± arrays, self-reference, 25-deep chain, disposing chain, generic definition vs `Box<NDArray>`/`Box<int>`, alias, nullable, nested, partial, 300 members, 200 types, static/interface/enum/delegate, no-NumSharp no-op, malformed, unresolved member type, arrays of holders, `Cell<NDArray>`, other-instance helper, a 14-type densely cyclic model with and without an array |
 | cycles & back-references | `OwnershipCycleTests` (20) | the holder rule on cycles, member by member: self-reference / linked-list link, parent pointer + child list + sibling array, NumSharp's `NDScope._parent` and `NDIterator._nestedChild` shapes, every container of the own type, a ring, the `HolderTypeScenarios` cycle pair, a base/derived cycle, a source `NDArray` subclass with a wrapper pointing back, mutual holders, parent/child owner, a gate other than the owner, two routes, two anchors; the model queried in 200 warm-up orders and from 16 threads (identical answers); a 10,000-type chain and 3,000-type random entity models ± an array (no stack overflow) |
-| graph oracle | `OwnershipGraphOracleTests` (2) | 630 seeded random type graphs (cycles, self-references, base types, `List`/array/tuple/`Box`/auto-property edges, borrowed/delegate/comparer/static/computed/scalar non-edges): every type's exact holder set (NDW017 per holder, NDW016's member list) against an independent breadth-first oracle of "reaches an NDArray without passing through the declaring type" |
+| cycle edge cases | `OwnershipCycleTests.EdgeCases.cs` (33) | doubly linked lists, nullable-annotated / jagged / nested / BCL containers of the own type, a tuple carrying an array beside the own type, static/event/computed self-references, explicit backing fields, partial classes, interface-typed links, records, structs; generic trees (unconstrained and `T : NDArray` payloads), a curiously recurring base, another instantiation of the own generic, nested types; `[NDBorrowed]` members and types on a cycle (a type outside it storing the borrowed type proves the model never expands it); several components, every-type-holds rings, base/derived peers; scale: a 2,000-type ring, a 300-spoke star, a 3,000-level inheritance chain, an 8,000-level chain through generic containers (no stack overflow); the message's member names and counts; disposal and contagion through a cycle; unresolved types in a cycle; determinism across files and in a 40-file random project analyzed concurrently vs sequentially |
+| model API | `OwnershipModelApiTests` (8) | the model queried directly: null and array-free answers, every type kind (arrays, pointers, dynamic, type parameters through their constraints, delegates, enums, the non-holding generic families, constructed generics, borrowed, interfaces, tuples, carriers) in any query order, holder members as fresh lists in declaration order with field/property kinds, a type holding only through its base, owning disposables on a cycle, repeated queries |
+| graph oracle | `OwnershipGraphOracleTests` (4) | 630 seeded random type graphs (cycles, self-references, base types, `List`/array/tuple/`Box`/auto-property edges, borrowed/delegate/comparer/static/computed/scalar non-edges): every type's exact holder set (NDW017 per holder, NDW016's member list) against an independent breadth-first oracle of "reaches an NDArray without passing through the declaring type"; 360 more graphs over the extended shapes (pairs, nested lists, dictionary values, jagged arrays, nullable tuples, `Lazy`, sequences, key/value pairs, a pair with an array, generic bases); and 12 graphs of 100–300 types queried in random order straight through the model |
 | contract | `AnalyzerContractTests` | NDW016/NDW017 are Warnings, enabled, anchored help links; the three analyzers own disjoint ids |
 
 **Guardrails added by this pass:**

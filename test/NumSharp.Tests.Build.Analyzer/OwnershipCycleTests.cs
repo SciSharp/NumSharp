@@ -30,7 +30,7 @@ namespace NumSharp.Tests.Build.Analyzer
     ///     </para>
     /// </summary>
     [TestClass]
-    public class OwnershipCycleTests
+    public partial class OwnershipCycleTests
     {
         /// <summary>The usings every snippet of this class is compiled with.</summary>
         private const string H = "using System;\nusing System.Collections.Generic;\nusing NumSharp;\n";
@@ -83,6 +83,19 @@ namespace NumSharp.Tests.Build.Analyzer
         {
             var r = await AnalyzerTestHarness.RunAsync(H + body, name + ".cs");
             Assert.IsTrue(r.CompileErrors.IsEmpty, "snippet must compile:\n" + body + "\n" + string.Join("\n", r.CompileErrors));
+            return Parse(r);
+        }
+
+        /// <summary>
+        ///     Parses the NDW016 member lists and NDW017 members out of an analyzer result — for a run whose
+        ///     compile errors the caller has already judged (a deliberately broken snippet, a multi-file
+        ///     project).
+        /// </summary>
+        /// <param name="r">The analyzer result.</param>
+        /// <returns>The parsed findings.</returns>
+        /// <exception cref="AssertFailedException">An NDW016/NDW017 text no longer matches the parser.</exception>
+        private static Findings Parse(AnalyzerResult r)
+        {
             var f = new Findings { Total = r.Ndw.Length, All = string.Join("\n", r.Ndw.Select(d => d.Id + ": " + d.GetMessage())) };
             foreach (var d in r.Ndw)
             {

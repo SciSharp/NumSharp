@@ -115,6 +115,43 @@ namespace NumSharp.Tests.Build.Analyzer
             "public class Same : IL, IR { public NDArray M(double x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(double x, NDArray a) { var t = a + x; return a.copy(); } }\n" +
             "public class Open<U> : IA, IBase<U[]> { public NDArray M(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray M(U[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(U[] x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n";
 
+        /// <summary>
+        ///     The instantiation key's edges, for both resolvers: arguments that differ only inside a type
+        ///     argument (List&lt;int&gt; / List&lt;string&gt;), array ranks and nesting, nullable and tuple
+        ///     arguments, and an interface listed on a generic base class read in the base's context
+        ///     (IBase&lt;T&gt; from GBase&lt;int&gt;) beside the derived class's own instantiation.
+        /// </summary>
+        private static readonly string InterfaceKeys = Prelude +
+            "public interface IBase<T> { [NDScoped] NDArray M(T x, NDArray a); NDArray Plain(T x, NDArray a); }\n" +
+            "public interface IL1 : IBase<List<int>> { }\npublic interface IL2 : IBase<List<string>> { }\n" +
+            "public class Lists : IL1, IL2 { public NDArray M(List<int> x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(List<string> x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(List<int> x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(List<string> x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IR1 : IBase<int[]> { }\npublic interface IR2 : IBase<int[,]> { }\npublic interface IR3 : IBase<int[][]> { }\n" +
+            "public class Ranks : IR1, IR2, IR3 { public NDArray M(int[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(int[,] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(int[][] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int[,] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int[][] x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IN1 : IBase<int?> { }\npublic interface IN2 : IBase<int> { }\npublic interface IT1 : IBase<(int, string)> { }\npublic interface IT2 : IBase<(string, int)> { }\n" +
+            "public class Specials : IN1, IN2, IT1, IT2 { public NDArray M(int? x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M((int, string) x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M((string, int) x, NDArray a) { var t = a + 1.0; return a.copy(); }" +
+            " public NDArray Plain(int? x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain((int, string) x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain((string, int) x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class GBase<T> : IBase<T> { public virtual NDArray M(T x, NDArray a) { var t = a + 1.0; return a.copy(); } public virtual NDArray Plain(T x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class GDerived : GBase<int>, IBase<string> { public override NDArray M(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M(string x, NDArray a) { var t = a + 1.0; return a.copy(); } public override NDArray Plain(int x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(string x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n";
+
+        /// <summary>
+        ///     Property shapes the weaver's getter gate decides, for both resolvers: a property-level
+        ///     [NDScopedCovered] between a scoped interface property and an override (the opt-out must stop
+        ///     the inheritance on both sides), a derived type with many plain properties overriding a scoped
+        ///     base property, a scoped virtual indexer and its override, a scoped static property, and a scoped
+        ///     property of a generic type.
+        /// </summary>
+        private static readonly string GetterShapes = Prelude +
+            "public interface IRoot { [NDScoped] NDArray V { get; } }\n" +
+            "public class Mid : IRoot { [NDScopedCovered] public virtual NDArray V { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class Leaf : Mid { public override NDArray V { get { var t = np.arange(3) + 2.0; return t.copy(); } } }\n" +
+            "public class PBase { [NDScoped] public virtual NDArray W { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class PDerived : PBase {" + string.Concat(Enumerable.Range(0, 20).Select(i => $" public int A{i} {{ get; set; }}")) +
+            " public override NDArray W { get { var t = np.arange(3) + 2.0; return t.copy(); } } }\n" +
+            "public class Grid { [NDScoped] public virtual NDArray this[int i] { get { var t = np.arange(3) + i; return t.copy(); } } }\n" +
+            "public class SubGrid : Grid { public override NDArray this[int i] { get { var t = np.arange(3) * i; return t.copy(); } } }\n" +
+            "public static class Defaults { [NDScoped] public static NDArray Ramp { get { var t = np.arange(3) + 1.0; return t.copy(); } } }\n" +
+            "public class Holder<T> { [NDScoped] public NDArray Ramp { get { var t = np.arange(3) + 1.0; return t.copy(); } } public T Item { get; set; } }\n";
+
         /// <summary>The fixtures by short name (the DataRow carries only the name, so a failure reads as one line, not a source dump).</summary>
         private static (string Source, string BaseLibrary) Fixture(string name) => name switch
         {
@@ -123,6 +160,8 @@ namespace NumSharp.Tests.Build.Analyzer
             "PropertiesAndCovariance" => (PropertiesAndCovariance, null),
             "CrossAssembly" => (Consumer, BaseLibrary),
             "InterfaceLattices" => (InterfaceLattices, null),
+            "InterfaceKeys" => (InterfaceKeys, null),
+            "GetterShapes" => (GetterShapes, null),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown parity fixture"),
         };
 
@@ -140,6 +179,8 @@ namespace NumSharp.Tests.Build.Analyzer
         [DataRow("PropertiesAndCovariance")]
         [DataRow("CrossAssembly")]
         [DataRow("InterfaceLattices")]
+        [DataRow("InterfaceKeys")]
+        [DataRow("GetterShapes")]
         public async Task BothResolvers_AgreeOnEveryMethod_AndMatchTheirOwnOutputs(string name)
         {
             var (source, baseLibrary) = Fixture(name);
@@ -290,6 +331,44 @@ namespace NumSharp.Tests.Build.Analyzer
             return p.RefKind == RefKind.None ? core : core + "&";
         }
 
+        /// <summary>
+        ///     Cecil's <c>FullName</c> spelling of a type as it appears in a signature: namespace-qualified, nested
+        ///     types joined by '/', generic arguments in angle brackets without spaces, arrays with their rank
+        ///     (Cecil's "0..." lower bounds are stripped from the Cecil side before comparing), type parameters
+        ///     by name. Precise enough to tell <c>List&lt;int&gt;</c> from <c>List&lt;string&gt;</c> and <c>int[,]</c>
+        ///     from <c>int[][]</c>, which <see cref="ParamName"/>'s bare names cannot.
+        /// </summary>
+        /// <param name="t">A parameter type.</param>
+        /// <returns>The Cecil-style full name.</returns>
+        private static string CecilTypeName(ITypeSymbol t) => t switch
+        {
+            IArrayTypeSymbol arr => CecilTypeName(arr.ElementType) + "[" + new string(',', arr.Rank - 1) + "]",
+            IPointerTypeSymbol ptr => CecilTypeName(ptr.PointedAtType) + "*",
+            ITypeParameterSymbol tp => tp.Name,
+            INamedTypeSymbol named when named.IsGenericType => CecilName(named.OriginalDefinition) + "<" + string.Join(",", named.TypeArguments.Select(CecilTypeName)) + ">",
+            INamedTypeSymbol named => CecilName(named),
+            _ => t.MetadataName,
+        };
+
+        /// <summary>A parameter's <see cref="CecilTypeName"/>, with Cecil's '&amp;' for a by-reference parameter.</summary>
+        /// <param name="p">The parameter.</param>
+        /// <returns>The Cecil-style full name of its type.</returns>
+        private static string ParamFullName(IParameterSymbol p)
+        {
+            string core = CecilTypeName(p.Type);
+            return p.RefKind == RefKind.None ? core : core + "&";
+        }
+
+        /// <summary>
+        ///     The Cecil method behind a Roslyn method: same declaring type, name and parameter count; among
+        ///     overloads, the one whose parameter types match by full name, and failing that (a signature the
+        ///     full-name spelling does not cover, such as an <c>in</c> parameter's modreq) by bare name — the
+        ///     original rule, so a fixture that paired before still pairs the same way.
+        /// </summary>
+        /// <param name="module">The woven module.</param>
+        /// <param name="type">The Roslyn declaring type.</param>
+        /// <param name="method">The Roslyn method.</param>
+        /// <returns>The Cecil method, or null when none matches.</returns>
         private static MethodDefinition FindCecil(ModuleDefinition module, INamedTypeSymbol type, IMethodSymbol method)
         {
             var typeName = CecilName(type);
@@ -298,12 +377,20 @@ namespace NumSharp.Tests.Build.Analyzer
                 .ToList();
             if (candidates.Count == 1)
                 return candidates[0];
-            return candidates.FirstOrDefault(m => m.Parameters.Select(p => p.ParameterType.Name).SequenceEqual(method.Parameters.Select(ParamName)));
+            var exact = candidates.FirstOrDefault(m => m.Parameters.Select(p => p.ParameterType.FullName.Replace("0...", "")).SequenceEqual(method.Parameters.Select(ParamFullName)));
+            return exact ?? candidates.FirstOrDefault(m => m.Parameters.Select(p => p.ParameterType.Name).SequenceEqual(method.Parameters.Select(ParamName)));
         }
 
+        /// <summary>
+        ///     The analyzer's inherited declaration spelled the way the weaver's is compared: "Type`arity.Member",
+        ///     a property by its METADATA name — an indexer is "this[]" to Roslyn but "Item" in metadata, where
+        ///     the weaver finds it through its getter <c>get_Item</c>.
+        /// </summary>
+        /// <param name="source">The declaration the analyzer inherited from (a method, or the property of a property-level attribute).</param>
+        /// <returns>The normalized name.</returns>
         private static string SourceName(ISymbol source)
         {
-            var name = source is IPropertySymbol p ? p.Name : source.Name.Replace("get_", "");
+            var name = source is IPropertySymbol p ? p.MetadataName : source.Name.Replace("get_", "");
             return source.ContainingType.MetadataName + "." + name;
         }
 
