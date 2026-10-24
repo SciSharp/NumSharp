@@ -254,6 +254,36 @@ public class np_histogram_Tests
         Eq(es, new double[] { 97, 98.5, 100 });
     }
 
+    /// <summary>
+    ///     int32 data spanning the whole int32 range: NumSharp gives Linux NumPy's answer. NumPy's <c>_unsigned_subtract</c>
+    ///     computes <c>max - min</c> in the unsigned type its table maps the scalar type to, and int32's scalar type is C int
+    ///     on LP64 (in the table: uint32, 2147483655) but C long on Windows (not in the table: a wrapping int32 subtraction,
+    ///     -2147483641), so Windows NumPy 2.4.2 raises "'list' argument must have no negative elements" for bins=10 and
+    ///     "Number of samples, -2147483640, must be non-negative." for the estimators. NumSharp follows the LP64 model, as it
+    ///     does for C long elsewhere. Expected values: NumPy 2.4.2 on Linux.
+    /// </summary>
+    [TestMethod]
+    public void Histogram_Int32FullRange_IsLinuxNumPysAnswer()
+    {
+        var a = np.array(new[] { 3, int.MinValue, 0, int.MinValue, 2, -1, int.MinValue, 0, 7, -2, int.MinValue, -6 });
+        var (h, e) = np.histogram(a);
+        Eq(h, new double[] { 4, 0, 0, 0, 0, 0, 0, 0, 0, 8 });
+        Eq(e, new[] { -2147483648.0, -1932735282.5, -1717986917.0, -1503238551.5, -1288490186.0, -1073741820.5,
+                      -858993455.0, -644245089.5, -429496724.0, -214748358.5, 7.0 });
+
+        var (ha, ea) = np.histogram(a, "auto");
+        Eq(ha, new double[] { 4, 0, 0, 0, 8 });
+        Eq(ea, new[] { -2147483648.0, -1717986917.0, -1288490186.0, -858993455.0, -429496724.0, 7.0 });
+
+        var (hs, es) = np.histogram(a, "sqrt");
+        Eq(hs, new double[] { 4, 0, 0, 8 });
+        Eq(es, new[] { -2147483648.0, -1610612734.25, -1073741820.5, -536870906.75, 7.0 });
+
+        Eq(np.histogram(a, "fd").hist, new double[] { 4, 8 });
+        Eq(np.histogram(a, "scott").hist, new double[] { 4, 8 });
+        Eq(np.histogram(a, "doane").hist, new double[] { 4, 0, 0, 0, 0, 8 });
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {
