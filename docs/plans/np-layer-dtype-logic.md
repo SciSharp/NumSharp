@@ -8,7 +8,8 @@ Write a plan covering how to and answer my questions"
 
 **State:** P0 done (2026-10-24): the two ratchets, the snapshot tool and a three-family pilot (`np.cumsum` / `np.cumprod`,
 `np.median`, `np.angle`), each move byte-identical on the snapshot. The owner answered the decisions of
-[§5](#5-decisions-for-the-owner); P1 is next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+[§5](#5-decisions-for-the-owner); the bug the pilot found got its fix commit (`7a386fdd`, D4); P1 is next. Progress goes
+into the [§9 state log](#9-state-log), newest entry first.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
 helper called one level down, and two families already show the result: `np.sum` and the four sort functions have no
@@ -464,6 +465,19 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-24, the D4 fix after P0.** Commits on `strings`, landed by fast-forward:
+  - `7a386fdd` the empty-operand early return the K3 finding named, in `np.arctan2` and the six float-tier binary
+    ufuncs that shared it (logaddexp, logaddexp2, nextafter, copysign, hypot, heaviside): an empty operand now gets
+    NumPy's loop dtype and broadcast shape, or NumPy's error for shapes that do not broadcast (they returned a clone of
+    the operand). New helper `DefaultEngine.EmptyBinaryResult`. The relayout gap RL07 (the logaddexp half, carved on
+    2026-10-07) is closed and its 40 cases are back in `relayout.jsonl`. The finding's other half, a 0-d operand with a
+    C# literal promoting as if both were weak, is X24 and stays out of this plan.
+  - `9972006f` found on the way: the relayout generator took the matrix-operand tiers as sources, so a regeneration
+    re-drew thousands of variants from other source cases without adding a cell; it skips them now. A full
+    regeneration of the relayout tiers on strings' corpus (-17 / +20 variants, from tiers redrawn after it) is left as a
+    separate step.
+  - NumSharp.Tests net10.0 20,449 passed / 11 skipped and net8.0 20,448 / 11; Oracle net10.0 410 / 2 skipped, 0 failed;
+    the relayout gaps still diverging: 35 / 35 (RL01-RL03).
 - **2026-10-24, P0 done.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward:
   - `4d73fcfc` the ratchets. Their scanner is literal-aware (comments and string contents blanked) and decision-focused,
     so its counts differ from the inventory's grep: R1 starts at 590 text lines (137 files) and 1,131 numeric lines (136
