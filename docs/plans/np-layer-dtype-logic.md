@@ -12,7 +12,8 @@ Write a plan covering how to and answer my questions"
 quantile family's bodies in `QuantileEngine` (`3bce5a9f`), NumPy's one `_ureduce` prologue in every route (`a726b671`,
 Appendix B1 fixed), and the two bugs that work found, fixed per D4 (`1e8eca9e`, `8c2cdbef`). P1b done (2026-10-24) for
 the seven functions it named; its NDMatrix.Reductions item turned out to need the reduction members' `out=` and is
-now P1d. P1c is next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two of the moves fixing a divergence each
+(`a6b25a7e`, `f37f3f17`). P1d is next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
 helper called one level down, and two families already show the result: `np.sum` and the four sort functions have no
@@ -410,7 +411,9 @@ The recommendations as written before the answers:
       `np.ptp` reduce through; move the bodies of `np.nancumsum`, `np.nancumprod`, `np.trace`, `np.ptp`, `np.any`,
       `np.all`, `np.count_nonzero`; route the 14 lines of `NDMatrix.Reductions.cs` through the same members. Done for
       the seven functions ([§9](#9-state-log)); the NDMatrix item is P1d.
-- [ ] **P1c, operators** (K6, 6 lines in 6 files).
+- [x] **P1c, operators** (K6, 6 lines in 6 files). Each operator now calls the member its NumPy twin is: `negative()`
+      `TensorEngine.Negate`, `positive()` and the unary `+` `TensorEngine.Positive`, `!` np.logical_not, `==` / `!=`
+      the internal `DefaultEngine.RichCompareEquality` (array_richcompare). Done ([§9](#9-state-log)).
 - [ ] **P1d, the reduction members' `out=`** (found by P1b). `NDMatrix.Reductions.cs`'s 15 text and 6 numeric lines are
       not in its any / all / ptp members (those hold none) but in the `out=` paths of `matrix.sum` / `prod` / `mean` /
       `var` / `std`, which implement NumPy's reducelike rule themselves (`ReduceTextInto`, `LoopWith`,
@@ -480,6 +483,33 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-24, P1c (operators) done.** Commits on `strings`, developed in a scratch worktree and landed by
+  fast-forward; every move is held to the snapshot of the six operators (2,672 calls: NDArray.negative,
+  NDArray.positive, unary `+`, `!`, `==`, `!=`, the second operand varied):
+  - `96df5d99` the snapshot tool reaches NDArray's operators (a target `NDArray.op_X`) and varies a second array
+    operand (its copy, int32 and float64 ramps, `U5` and StringDType text, a 0-d, a broadcast row, a shape that does
+    not broadcast), which reaches the failed-comparison rule of `==` / `!=`.
+  - `a6b25a7e` (D4) `NDArray.negative()` is `TensorEngine.Negate`, np.negative's member: its own per-dtype loop threw
+    for unsigned and char inputs, where NumPy's negative loops wrap (uint8 `[1, 2, 255]` is `[255, 254, 1]`, probed),
+    and returned an F-ordered copy of a broadcast operand (NumPy: C-ordered). 64 snapshot lines change, all of them
+    those two classes. R1 -1 text / -15 numeric.
+  - `f37f3f17` (D4) the unary `+` and `positive()` are `TensorEngine.Positive`, np.positive's member: `+` of a bool
+    array returned a bool copy where NumPy's positive ufunc has no bool loop (its TypeError, probed for (2,), (0, 3)
+    and 0-d operands), and `+` of an F-ordered array returned a C-ordered copy (NumPy's ufunc output is F). 27 snapshot
+    lines change, all the operator's. R1 -2 text / -1 numeric.
+  - `e322eb1d` `!` is np.logical_not for every operand; its raw scalar loop for C-contiguous operands and its text
+    guard go (pure move; the comparison kernels make it 3.8x-43x faster from 100K elements: float64 43x / 24x, bool
+    10x / 11x-16x, int32 5x / 3.8x-4.1x at 100K / 1M; the commit's summary line says 5x-43x, which its own int32 1M
+    cell contradicts). R1 -1 text.
+  - `33c4807d` `==` / `!=`: NumPy's array_richcompare (the ufunc, or `_failed_comparison_workaround`'s constant where
+    a string operand has no loop) moves into the internal `DefaultEngine.RichCompareEquality` (D1: an operator
+    protocol around a ufunc, so no TensorEngine member); the operators keep C#'s null and uninitialized-array answers.
+    R1 -4 text.
+  - Left in `Operations/Elementwise`: `NDArray.Equals.cs`' 5 numeric lines (array_equal's `CanHoldNaN` switch, P5) and
+    `NDArray.TextComparison.cs`' 1 text line (how a C# string becomes the comparand of `==` with a text array, a value
+    entering storage: P3).
+  - At `33c4807d`: NumSharp.Tests net10.0 20,462 passed / 11 skipped and net8.0 20,461 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed (Layering 6 / 6).
 - **2026-10-24, P1b (reductions with a narrower member) done for its seven functions.** Commits on `strings`, developed in
   a scratch worktree and landed by fast-forward; every move is held to the snapshot (78,450 calls over np.all, np.any,
   NDArray.all, NDArray.any, np.count_nonzero, np.trace, NDArray.trace, np.ptp, np.nancumsum and np.nancumprod;
