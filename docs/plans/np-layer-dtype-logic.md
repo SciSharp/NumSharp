@@ -8,7 +8,9 @@ Write a plan covering how to and answer my questions"
 
 **State:** P0 done (2026-10-24): the two ratchets, the snapshot tool and a three-family pilot (`np.cumsum` / `np.cumprod`,
 `np.median`, `np.angle`), each move byte-identical on the snapshot. The owner answered the decisions of
-[§5](#5-decisions-for-the-owner); the bug the pilot found got its fix commit (`7a386fdd`, D4); P1 is next. Progress goes
+[§5](#5-decisions-for-the-owner); the bug the pilot found got its fix commit (`7a386fdd`, D4). P1a done (2026-10-24): the
+quantile family's bodies in `QuantileEngine` (`3bce5a9f`), NumPy's one `_ureduce` prologue in every route (`a726b671`,
+Appendix B1 fixed), and the two bugs that work found, fixed per D4 (`1e8eca9e`, `8c2cdbef`); P1b is next. Progress goes
 into the [§9 state log](#9-state-log), newest entry first.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
@@ -393,13 +395,15 @@ The recommendations as written before the answers:
 
 ### P1. The deeper place exists (171 text lines, plus the numeric lines of the same functions)
 
-- [ ] **P1a, the quantile family** (K1, 108 lines in 10 files; 6 functions, 32 public overloads). Step 1: the switch
+- [x] **P1a, the quantile family** (K1, 108 lines in 10 files; 6 functions, 32 public overloads). Step 1: the switch
       (StringDType, fixed width, numbers) as `QuantileEngine.Compute`'s first statement, `Compute` gaining `string op`
       for the texts that name the function. No behavior change. Step 2, its own commit: one shared prologue in NumPy's
       order (`_ureduce`: the axes, the keepdims `out` target, the axis merge; then q's rank; then the method), then the
       family core; this fixes the divergence of Appendix B1. The facade keeps only the class statements and the
       normalization of its C# overloads (`q` as `double`, `double[]`, `long` or `NDArray`); q's checks move with the
-      prologue (C1); the `chararray` flag crosses into O as a parameter (C8).
+      prologue (C1); the `chararray` flag crosses into O as a parameter (C8). Done: `3bce5a9f` (step 1, which put the
+      bodies in `QuantileEngine.Quantile` / `NanQuantile` / `NanMedian` rather than in `Compute`), `a726b671` (step 2),
+      and the D4 fixes `1e8eca9e` and `8c2cdbef` ([§9](#9-state-log)).
 - [ ] **P1b, reductions with a narrower member** (K2, 57 lines in 10 files; `np.cumsum` / `np.cumprod` done in the
       pilot). Widen `All`, `Any` and `CountNonZero` (`keepdims=`, `out=`, `where=`), and the members `np.trace` and
       `np.ptp` reduce through; move the bodies of `np.nancumsum`, `np.nancumprod`, `np.trace`, `np.ptp`, `np.any`,
@@ -465,6 +469,43 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-24, P1a (the quantile family) done.** Commits on `strings`, developed in a scratch worktree and landed by
+  fast-forward:
+  - `3bce5a9f` step 1, the pure move: the bodies of np.quantile, np.percentile, np.nanquantile, np.nanpercentile and
+    np.nanmedian into `QuantileEngine.Quantile` / `NanQuantile` / `NanMedian` (`Statistics/QuantileEngine.Functions.cs`,
+    q carried as `QuantileArgument`), statement for statement; the facades keep only the class rules. 340,944 snapshot
+    calls identical; R1 -85 text / -3 numeric lines, six facade files out of the allowlist.
+  - `a726b671` step 2, the shared prologue (Appendix B1): `QuantileEngine.UReduce` (`Statistics/QuantileEngine.UReduce.cs`)
+    is NumPy's `_ureduce` up to the reduction function — the axes, keepdims' out index, the merge of several reduced
+    axes (data and weights alike) — and every route calls it first: the numeric engine, the fixed-width text route, the
+    three StringDType statistics, the weighted branch, the nan forms' `isnan` refusal, the two text-q answers, np.median's
+    text-out route and its chararray path. The copies it replaced disagreed: numeric median / quantile merged with an
+    explicit length after q's rank and the method (B1's data gave an empty result), and the text routes refused before
+    keepdims' out index. A 298-call NumPy probe: 166 matching before, 287 after, the 121 changes all toward NumPy; the
+    snapshot (340,944 calls) is byte-identical, so nothing outside the prologue moved. New oracle section `qprologue`
+    (5,640 cases, strict; 1,217 fail on the parent) and 7 unit tests. R1 -1 text line (np.median.cs), R2 -1 structural
+    call (NDVStringStatistics.Quantile.cs).
+  - `1e8eca9e` the first D4 fix, found by the step-2 probe: np.nanquantile / np.nanpercentile with a q of two or more
+    dimensions over merged axes. NumPy's `_nanquantile_ureduce_func` moves q's axes with
+    `from_ax = [axis + i for i in range(q.ndim)]` on `_ureduce`'s UNnormalized `axis=-1`, so
+    `np.nanquantile(arange(24.).reshape(2, 3, 4), q of shape (3, 2), axis=(1, 2))` is `(2, 2, 3)` where np.quantile gives
+    `(3, 2, 2)`; NumSharp gave np.quantile's order, for numbers and StringDType alike, and an `out=` had to take it.
+    `UReduced.NumPyAxis` carries the axis as NumPy hands it on, and `AlongAxisLayout` follows NumPy's statements
+    (apply_along_axis' buffer, then the move). 686 new `qprologue` cases (part three; 145 fail on the parent); the
+    snapshot changes on exactly the 16 lines that reach it; 2 unit tests.
+  - `8c2cdbef` the second D4 fix, found while probing the first: the nan forms over data that is NaN everywhere. NumPy's
+    `_nanquantile_1d` answers a slice with nothing left by `np.full(q.shape, np.nan, dtype=arr1d.dtype)[()]` before any
+    check (a 3-D q and an unknown method are never looked at): Python's POSITIVE NaN, a view for a q array (a scalar for
+    a 0-d q), stacked and moved along an axis, and the store `out[...] = result` broadcasts. NumSharp's early answer for
+    a 3-D q or an unknown method filled .NET's negative `double.NaN` into an owning q-first buffer and required an out of
+    exactly the result's shape; the kernel route returned an owner over the flattened data. 732 new `qprologue` cases
+    (part three's all-NaN data and part four; 321 fail on the parent); 1 unit test; the snapshot identical.
+  - **Left as they were, with the reason.** np.median / np.nanmedian keep their result-then-copy `out=` rule where the out
+    passes keepdims' index: NumPy writes through `np.mean(part, axis, out=out)`, and NumSharp's np.mean has no `out=`
+    (the engine's `Mean` member lacks it, C2; P1b widens `All`, `Any` and `CountNonZero` only). Numeric np.quantile over
+    an empty reduced axis raises `IndexOutOfRangeException` with NumPy's IndexError text (the house type).
+  - NumSharp.Tests net10.0 20,457 passed / 11 skipped and net8.0 20,456 / 11 at `a726b671`, 20,460 / 11 and 20,459 / 11
+    at `8c2cdbef`; Oracle net10.0 and net8.0 411 / 2 skipped, 0 failed (the Layering ratchets included).
 - **2026-10-24, the D4 fix after P0.** Commits on `strings`, landed by fast-forward:
   - `7a386fdd` the empty-operand early return the K3 finding named, in `np.arctan2` and the six float-tier binary
     ufuncs that shared it (logaddexp, logaddexp2, nextafter, copysign, hypot, heaviside): an empty operand now gets
@@ -591,6 +632,9 @@ Scratch build of `2e872477` against NumPy 2.4.2, 2026-10-22.
 | `median(U3)` | the same ValueError | a TypeError from the closing mean's add.reduce | `np.median`'s text route |
 | `quantile(float64, 0.5)` | the same ValueError | a `(0,)` float64 array | `QuantileEngine.Compute` |
 | `quantile(U3, 0.5)` | the same ValueError | the same ValueError | `QuantileText.Compute` |
+
+**Fixed** by `a726b671` (P1a step 2): every route runs `QuantileEngine.UReduce`, and all four calls raise NumPy's
+ValueError; the oracle section `qprologue` gates the matrix around it.
 
 ### B2. np.angle as NumPy's own statement
 
