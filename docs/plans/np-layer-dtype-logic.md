@@ -13,7 +13,11 @@ quantile family's bodies in `QuantileEngine` (`3bce5a9f`), NumPy's one `_ureduce
 Appendix B1 fixed), and the two bugs that work found, fixed per D4 (`1e8eca9e`, `8c2cdbef`). P1b done (2026-10-24) for
 the seven functions it named; its NDMatrix.Reductions item turned out to need the reduction members' `out=` and is
 now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two of the moves fixing a divergence each
-(`a6b25a7e`, `f37f3f17`). P1d is next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+(`a6b25a7e`, `f37f3f17`). P1d done (2026-10-24): `ReduceAdd`, `ReduceProduct`, `ReduceMean`, `ReduceVar` and `ReduceStd`
+carry NumPy's `out=` (the reducelike loop rule, the reduce prologue, `_mean` / `_var`'s statement order),
+numpy.matrix's reductions hold no text line, and six divergences found on the way got their fix commits (D4); the public
+np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 is
+next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
 helper called one level down, and two families already show the result: `np.sum` and the four sort functions have no
@@ -414,7 +418,7 @@ The recommendations as written before the answers:
 - [x] **P1c, operators** (K6, 6 lines in 6 files). Each operator now calls the member its NumPy twin is: `negative()`
       `TensorEngine.Negate`, `positive()` and the unary `+` `TensorEngine.Positive`, `!` np.logical_not, `==` / `!=`
       the internal `DefaultEngine.RichCompareEquality` (array_richcompare). Done ([§9](#9-state-log)).
-- [ ] **P1d, the reduction members' `out=`** (found by P1b). `NDMatrix.Reductions.cs`'s 15 text and 6 numeric lines are
+- [x] **P1d, the reduction members' `out=`** (found by P1b). `NDMatrix.Reductions.cs`'s 15 text and 6 numeric lines are
       not in its any / all / ptp members (those hold none) but in the `out=` paths of `matrix.sum` / `prod` / `mean` /
       `var` / `std`, which implement NumPy's reducelike rule themselves (`ReduceTextInto`, `LoopWith`,
       `StoreVariance`): the loop is `promote_types(out, a)` without the small-integer widening, text resolves on
@@ -422,7 +426,8 @@ The recommendations as written before the answers:
       `ReduceVar` and `ReduceStd` take no `out=`, and `ReduceAdd`'s `out=` keeps the NEP 50 accumulator (no public
       path reaches it with an out today: np.sum has no `out=` keyword). So the step is: give those members NumPy's
       `out=` (D2), route the matrix members through them, and let np.sum / np.prod / np.mean / np.var / np.std expose
-      `out=` (the api-parameter-parity items).
+      `out=` (the api-parameter-parity items). Done ([§9](#9-state-log)) but for the last part: the facades' `out=`
+      keyword is a signature change, which waits on the owner's one-signature decision.
 
 ### P2. Compositions above the engine (K3, 150 lines in 43 files)
 
@@ -483,6 +488,57 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-24, P1d (the reduction members' `out=`) done.** Commits on `strings`, developed in a scratch worktree and
+  landed by fast-forward. The moves are held to the snapshot of numpy.matrix's reductions (62,742 calls over
+  NDMatrix.sum / prod / mean / var / std), byte-identical each time; each D4 fix changes only the lines it names, and
+  where it changes answers a NumPy twin of the snapshot's lines (`twin_snapshot_lines.py` in the session's scratchpad:
+  the tool's operands, outs and calls, the SHA-256 of the result's bytes) checks them:
+  - `792c8ce3` the snapshot tool reaches numpy.matrix's members (a target `NDMatrix.f`: np.asmatrix of each pool
+    operand, an NDMatrix-typed out made a matrix too, `ddof` varied). Its first run was not deterministic: 42
+    NDMatrix.prod lines in a float16 / complex128 `dtype=` loop changed between two runs of one build, the next fix.
+  - `d84021b8` (D4; matrix gap MX08) np.prod in a cast loop casts the input first (`ReduceProductInCastLoop`, as the
+    add reduction does): the flat float16 / complex128 products read a narrower input as the loop dtype (past the end
+    of an int8 buffer), and the axis kernels saturated a negative integer to 0 in an unsigned loop where NumPy wraps it.
+    A 4,563-call NumPy probe: 485 cells differed before, 21 after (below, "Left"). MX08's 15 cases are back in
+    `matrix.jsonl` (26,819 cases, 114 carved under 7 ids; MX03 had been fixed by `012ac869` without the ledger saying
+    so, corrected in the docs commit).
+  - `157544a2` (D2) `ReduceProduct` / `ReduceMean` / `ReduceVar` / `ReduceStd` take `out=` (breaking for a
+    `TensorEngine` subclass), and numpy.matrix's `out=` paths of prod / mean / var / std move into them statement for
+    statement (`Backends/Default/Math/Reduction/Default.Reduction.Out.cs`: `ReduceIntoOut`, `ReduceTextIntoOut`,
+    `MeanIntoOut`, `VarianceIntoOut`, `StdIntoOut`), stored through NDIter.Copy where the matrix called np.copyto.
+    Snapshot byte-identical. R1 NDMatrix.Reductions.cs 15 text / 6 numeric -> 10 / 3.
+  - `6543726f` (D4) `ReduceAdd`'s `out=` is NumPy's add.reduce with an out operand: the loop `promote_types(out, a)`
+    without NEP 50's widening (int8 [100, 100, 56] summed into a bool out stores False; the member stored True) and the
+    reduce prologue's texts. No public np.* call passed an out to it, so no public answer moved; snapshot byte-identical.
+  - `f1068d9b` matrix.sum's `out=` is that member: the matrix's `ReduceTextInto`, `LoopWith` and `NormalizedAxis` go,
+    and its float16 mean reads `DefaultEngine.MeanIsFloat16Result`. Snapshot byte-identical. R1 NDMatrix.Reductions.cs
+    -> 0 text / 2 numeric (`IsIntegerLike`, which NDMatrix.Methods and NDMatrix.Operators call too: their decisions).
+  - `9826ea5b` (D4) mean / var / std with `out=` check their arguments in NumPy's statement order: `_mean` counts the
+    axis first, `_var` takes the mean and subtracts before its last umr_sum parses the out (the matrix had checked the
+    out first). 1,984 snapshot lines change, every one an out refusal that becomes an earlier statement's (text
+    refusals 1,426, AxisError 176, StringDType's division without a loop 194, its reduction errors 132, the boolean
+    subtract 36, decimal's division by a zero count 20); no value changes.
+  - `87b39e6c` (D4) a char loop of the add / multiply reductions is the uint16 loop of the oracle's proxy
+    (`ReduceInCharLoop`): np.sum / np.prod with `dtype=char` threw flat, np.prod along a non-innermost axis saturated
+    through a double, np.mean's flat char loop did not wrap, and the `out=` rule's char loop threw (numpy.matrix's sum /
+    prod of a char matrix into a bool out, since the class landed). A dtype=uint16 twin: 32 / 32 values identical (9
+    differed). 5 snapshot lines change, those matrix calls; the np.* reductions' snapshot (55,884 calls) is unchanged.
+  - `aa788516` (D4) the accumulations' `out=` loop rule (`AccumulateLoop`): np.cumsum / np.cumprod / np.nancumsum /
+    np.nancumprod with `out=` and no `dtype=` accumulate in `promote_types(out, a)`. Their snapshot (41,616 calls): 105
+    lines change, and the twin agrees on all 105 (on none of the parent's) and on every one of the 1,746 value lines of
+    their float64 / int8 / bool `out=` matrix.
+  - `ac2a75f1` (D4) np.trace's `out=` is the diagonal's add.reduce with that out (`ReduceAdd`): the loop rule and the
+    prologue's texts, where it summed in NEP 50's accumulator and raised its own texts. Its snapshot (23,784 calls): 804
+    lines change (792 texts, 12 values); the twin agrees on all 1,128 modelled `out=` lines, where the parent disagreed
+    on 388. R2: Default.Trace.cs 2 -> 1 structural up-call (the out= store's np.copyto went).
+  - Left: the public `out=` keyword of np.sum / np.prod / np.mean / np.var / np.std (a signature change, waiting on
+    the owner's one-signature decision); the flat float32 np.prod of an F-ordered or reversed array, which multiplies in
+    another order than NumPy's iterator (1 ULP over 12 values, or NaN where its order meets inf before a 0: the 21
+    cells of `d84021b8`'s probe), for its own fix; a reduction into an `out=` of another dtype past `np.getbufsize()`
+    elements, where NumPy carries the partial result through the out's dtype between buffer fills (documented on
+    `ReduceIntoOut`; an accumulation has no such residual, probed).
+  - At `ac2a75f1`: NumSharp.Tests net10.0 20,486 passed / 11 skipped and net8.0 20,485 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed (Layering 6 / 6).
 - **2026-10-24, P1c (operators) done.** Commits on `strings`, developed in a scratch worktree and landed by
   fast-forward; every move is held to the snapshot of the six operators (2,672 calls: NDArray.negative,
   NDArray.positive, unary `+`, `!`, `==`, `!=`, the second operand varied):
