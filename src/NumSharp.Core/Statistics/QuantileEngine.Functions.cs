@@ -116,9 +116,14 @@ namespace NumSharp.Statistics
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
         /// <exception cref="ArgumentException">An unknown method name, or an <paramref name="out"/> of another shape than
         ///     the result (numeric data).</exception>
-        /// <exception cref="IndexError">Text data with an empty reduced axis (NumPy's take).</exception>
+        /// <exception cref="IndexError">keepdims with an <paramref name="out"/> NumPy cannot index (<c>_ureduce</c>'s
+        ///     prologue, any data: <c>too many indices for array ...</c>, or <c>index 0 is out of bounds for axis 0 with
+        ///     size 0</c> at a reduced axis of length 0); text data with an empty reduced axis (NumPy's take).</exception>
         /// <exception cref="IndexOutOfRangeException">Numeric data whose reduced axes hold no element (NumPy's IndexError
         ///     texts).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: the prologue's merge
+        ///     cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape (0,newaxis)</c>), before
+        ///     q's rank, the method and the data's refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a dtype without a real value (complex).</exception>
         /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype (see
         ///     <see cref="Compute"/>).</exception>
@@ -126,8 +131,10 @@ namespace NumSharp.Statistics
         ///     Moved from the sixteen public overloads of <c>np.quantile</c> and <c>np.percentile</c> by the np-layer dtype
         ///     plan's P1a (step 1), statement for statement in each overload's order: the facade's outcome is unchanged
         ///     (the snapshot tool's diff of the move is empty). Where an overload validated q again in a later branch, the
-        ///     check now runs once before the branches; nothing observable happens between the two places. The plan's step
-        ///     2 replaces this prologue with NumPy's shared one (<c>_ureduce</c>'s order).
+        ///     check now runs once before the branches; nothing observable happens between the two places. Since the plan's
+        ///     step 2 every route below q's checks (numeric, text, <c>StringDType</c>, weighted, the text-q answers) starts with
+        ///     NumPy's one <c>_ureduce</c> prologue (<see cref="UReduce"/>), so the axes, keepdims' out index and the merge are
+        ///     reported before anything the reduction function checks (plan Appendix B1).
         /// </remarks>
         internal static NDArray Quantile(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
@@ -201,9 +208,11 @@ namespace NumSharp.Statistics
                     // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check),
                     // before the data or q's rank is looked at.
                     if (Backends.Strings.NDStringUfuncs.IsVString(qArray))
-                        throw Backends.Strings.NDVStringStatistics.QuantileVStringQ(op, a, qArray, method, axes);
+                        throw Backends.Strings.NDVStringStatistics.QuantileVStringQ(op, a, qArray, method, axes, @out,
+                            keepdims);
                     if (Backends.Strings.NDStringUfuncs.IsString(qArray))
-                        throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes);
+                        throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes, @out,
+                            keepdims);
                     return percent
                         ? PercentileOfArray(op, a, qArray, axes, @out, overwrite_input, method, keepdims, weights, chararray)
                         : QuantileOfArray(op, a, qArray, axes, @out, overwrite_input, method, keepdims, weights, chararray);
@@ -333,6 +342,9 @@ namespace NumSharp.Statistics
         /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
         /// <exception cref="ArgumentException">An unknown method name (except over data that is NaN everywhere), or an
         ///     <paramref name="out"/> of another shape.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under keepdims, with an <paramref name="out"/> NumPy cannot
+        ///     index (<c>_ureduce</c>'s prologue: <c>too many indices for array ...</c>, or <c>index 0 is out of bounds for
+        ///     axis 0 with size 0</c> at a reduced axis of length 0) — before the text refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a dtype without a real value (complex).</exception>
         /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
         /// <remarks>
@@ -340,7 +352,10 @@ namespace NumSharp.Statistics
         ///     <c>NanQuantileOfArrayQ</c> / <c>NanPercentileOfArrayQ</c>) by the np-layer dtype plan's P1a (step 1),
         ///     statement for statement in each overload's order. The weighted branch's empty-data answer used to re-enter
         ///     the public overload; it now re-enters this body, which is the same call: the facade's only rule, the
-        ///     <c>numpy.matrix</c> one, cannot apply inside the weighted branch's plain-array region.
+        ///     <c>numpy.matrix</c> one, cannot apply inside the weighted branch's plain-array region. Since the plan's step 2
+        ///     every route runs NumPy's one <c>_ureduce</c> prologue (<see cref="UReduce"/>) after the empty-data answer
+        ///     (NumPy's <c>np.nanmean</c> comes first) and before the reduction function's checks; non-empty data cannot fail
+        ///     its merge.
         /// </remarks>
         internal static NDArray NanQuantile(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
@@ -371,14 +386,15 @@ namespace NumSharp.Statistics
                         return QuantileWeighted.Compute(a, qArray, axes, @out, keepdims, method, weights,
                             (op, a, q, axes, @out, overwrite_input, method, keepdims), NanQuantileWithoutWeights);
                     }
-                    // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
-                    // text itself (NDStringUfuncs.QuantileAnswer). StringDType: np.isnan finds its NaN-like NAs, and NumPy
-                    // computes the quantile of the rest.
+                    // Text: NumPy checks q (above), then _ureduce's prologue (the axes, keepdims' out index), and only then
+                    // meets the text itself — np.isnan's refusal, or np.nanmean's for empty text, which comes before the
+                    // prologue (NanQuantileTextAnswer). StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the
+                    // quantile of the rest.
                     if (Backends.Strings.NDStringUfuncs.IsVString(a))
                         return Backends.Strings.NDVStringStatistics.NanQuantile(op, a, new[] { value },
                             System.Array.Empty<long>(), false, axes, @out, method, keepdims);
                     if (Backends.Strings.NDStringUfuncs.IsString(a))
-                        throw Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, true);
+                        throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, true);
                     return Compute(a, new[] { value }, axes, @out, overwrite_input,
                         default, keepdims, qIsScalar: true,
                         emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
@@ -411,7 +427,7 @@ namespace NumSharp.Statistics
                         return Backends.Strings.NDVStringStatistics.NanQuantile(op, a, values, new long[] { values.Length },
                             false, axes, @out, method, keepdims);
                     if (Backends.Strings.NDStringUfuncs.IsString(a))
-                        throw Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, false);
+                        throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, false);
                     return Compute(a, values, axes, @out, overwrite_input,
                         default, keepdims, qIsScalar: false,
                         emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
@@ -456,8 +472,8 @@ namespace NumSharp.Statistics
             if (Backends.Strings.NDStringUfuncs.IsVString(qArray) || Backends.Strings.NDStringUfuncs.IsString(qArray))
             {
                 var textQ = Backends.Strings.NDStringUfuncs.IsVString(qArray)
-                    ? Backends.Strings.NDVStringStatistics.QuantileVStringQ(op, a, qArray, method, axes)
-                    : Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes);
+                    ? Backends.Strings.NDVStringStatistics.QuantileVStringQ(op, a, qArray, method, axes, @out, keepdims)
+                    : Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes, @out, keepdims);
                 if (textQ is not null)
                     throw textQ;
                 return Compute(a, System.Array.Empty<double>(), axes, @out, overwrite_input, QuantileMethod.Linear,
@@ -479,10 +495,11 @@ namespace NumSharp.Statistics
                     (long[])qArray.Shape.dimensions.Clone(), IsIntegerQuantile(qArray), axes, @out, method, keepdims,
                     QuantileIndexes.IndexDtypeOf(qArray));
             bool qIsScalar = qArray.ndim == 0;
-            // Fixed-width text: NumPy checks the axes and then meets isnan, which has no text loop (q's rank is never
-            // reached), or np.nanmean's add.reduce refusal for empty text (NDStringUfuncs.QuantileAnswer).
+            // Fixed-width text: NumPy runs _ureduce's prologue (the axes, keepdims' out index) and then meets isnan, which
+            // has no text loop (q's rank is never reached), or — for empty text, before the prologue — np.nanmean's
+            // add.reduce refusal (NanQuantileTextAnswer).
             if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, qIsScalar);
+                throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, qIsScalar);
             // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. An integer
             // (or bool) q takes the element at the integer virtual index (integerQ). q's rank (a 2-d q keeps both axes) and
             // the method name are checked inside, in NumPy's order.
@@ -522,9 +539,9 @@ namespace NumSharp.Statistics
             // Text q: NumPy's answer comes from its first statement on q (divide by 100), before the data or q's rank is
             // looked at.
             if (Backends.Strings.NDStringUfuncs.IsVString(qArray))
-                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ(op, a, qArray, method, axes);
+                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ(op, a, qArray, method, axes, @out, keepdims);
             if (Backends.Strings.NDStringUfuncs.IsString(qArray))
-                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes);
+                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes, @out, keepdims);
             // `q = np.true_divide(q, 100)` and `_quantile_is_valid(q)` at any rank.
             double[] fractions = PercentileFractions(qArray);
             // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
@@ -543,10 +560,11 @@ namespace NumSharp.Statistics
                     (long[])qArray.Shape.dimensions.Clone(), false, axes, @out, method, keepdims,
                     QuantileIndexes.PrecisionOf(qArray));
             bool qIsScalar = qArray.ndim == 0;
-            // Fixed-width text: NumPy checks the axes and then meets isnan, which has no text loop (q's rank is never
-            // reached), or np.nanmean's add.reduce refusal for empty text (NDStringUfuncs.QuantileAnswer).
+            // Fixed-width text: NumPy runs _ureduce's prologue (the axes, keepdims' out index) and then meets isnan, which
+            // has no text loop (q's rank is never reached), or — for empty text, before the prologue — np.nanmean's
+            // add.reduce refusal (NanQuantileTextAnswer).
             if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, qIsScalar);
+                throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, qIsScalar);
             // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. q's rank
             // (a 2-d q keeps both axes) and the method name are checked inside, in NumPy's order.
             return Compute(a, fractions, axes, @out, overwrite_input, default, keepdims, qIsScalar,
@@ -570,6 +588,38 @@ namespace NumSharp.Statistics
             (string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out, bool overwrite_input, string method,
                 bool keepdims) s)
             => NanQuantile(s.op, s.a, s.q, s.axes, s.@out, s.overwrite_input, s.method, s.keepdims, null);
+
+        /// <summary>
+        ///     NumPy's answer for <c>np.nanquantile</c> / <c>np.nanpercentile</c> of fixed-width text (<c>S</c> / <c>U</c>) once
+        ///     q passed its checks, in NumPy's order: EMPTY text goes to <c>np.nanmean(a, axis, out=out, keepdims=keepdims)</c>
+        ///     before <c>_ureduce</c> (its add.reduce refusal); other text runs <c>_ureduce</c>'s prologue (the axes, keepdims'
+        ///     out index — an out NumPy cannot index is its IndexError) and then meets <c>np.isnan</c>, which has no text loop.
+        /// </summary>
+        /// <param name="op"><c>nanquantile</c> or <c>nanpercentile</c>.</param>
+        /// <param name="a">The fixed-width text data.</param>
+        /// <param name="method">The method name (never reached by NumPy here; passed to the answer for its contract).</param>
+        /// <param name="axes">The reduced axes as the caller gave them, or null.</param>
+        /// <param name="out">The caller's out, or null.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept.</param>
+        /// <param name="qIsScalar">True when q is a scalar.</param>
+        /// <returns>The exception to throw (<see cref="Backends.Strings.NDStringUfuncs.QuantileAnswer"/>: never null for the
+        ///     nan forms).</returns>
+        /// <exception cref="AxisError">An axis is out of range (thrown).</exception>
+        /// <exception cref="ValueError">An axis repeats (thrown).</exception>
+        /// <exception cref="IndexError">keepdims with an out of too few dimensions, or with a reduced axis of length 0
+        ///     (thrown).</exception>
+        /// <remarks>
+        ///     Non-empty data cannot fail the prologue's merge (a kept axis of length 0 would make it empty). The prologue was
+        ///     missing here until the family shared one (np-layer dtype plan P1a, step 2): keepdims' out index came after
+        ///     the refusal, so NumSharp reported isnan's TypeError where NumPy raises the IndexError.
+        /// </remarks>
+        private static Exception NanQuantileTextAnswer(string op, NDArray a, string method, int[] axes, NDArray @out,
+            bool keepdims, bool qIsScalar)
+        {
+            if (a.size != 0)
+                UReduceChecks(a, axes, @out, keepdims);
+            return Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, qIsScalar);
+        }
 
         /// <summary>
         ///     The text branch shared by every <c>np.quantile</c> / <c>np.percentile</c> overload: NumPy's checks after q's
@@ -601,8 +651,11 @@ namespace NumSharp.Statistics
         /// <exception cref="ValueError">An unknown method (NumPy's text; a ValueError is an <see cref="System.ArgumentException"/>).</exception>
         /// <exception cref="TypeError">An interpolating method (NumPy subtracts the text), an <paramref name="out"/> whose dtype
         ///     does not cast safely to the data's, or keepdims over a 0-d result (NumPy indexes its scalar).</exception>
-        /// <exception cref="IndexError">An empty reduced axis (see <see cref="QuantileText.Compute"/> for the take path's
-        ///     texts).</exception>
+        /// <exception cref="IndexError">keepdims with an <paramref name="out"/> NumPy cannot index (the prologue), or an
+        ///     empty reduced axis (see <see cref="QuantileText.Compute"/> for the take path's texts).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: the prologue's merge
+        ///     cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
+        ///     (0,newaxis)</c>).</exception>
         /// <remarks>A <c>numpy.char.chararray</c> operand of the user's call meets NumPy's
         ///     <c>arr.partition(..., axis=0)</c>, which is <c>chararray.partition(sep)</c>: every check before it, then
         ///     <see cref="TypeError"/> <c>chararray.partition() got an unexpected keyword argument 'axis'</c> for every method
@@ -611,10 +664,10 @@ namespace NumSharp.Statistics
         private static NDArray QuantileOfText(string op, NDArray a, double[] q, long[] qShape, bool qIsInteger, int[] axes,
             NDArray @out, string method, bool keepdims, bool chararray, NPTypeCode qType = NPTypeCode.Double)
         {
-            // _ureduce normalizes the axes before anything else reads them (AxisError, or a repeated axis's ValueError);
-            // QuantileText.Compute then runs the rest in NumPy's order (keepdims' out index, q's rank, the method) — and for
-            // a chararray operand stops at NumPy's arr.partition(..., axis=0), the STRING partition's TypeError.
-            Backends.Strings.NDStringUfuncs.ValidateReduceAxes(op, a.ndim, axes);
+            // QuantileText.Compute runs NumPy's order: _ureduce's prologue (UReduce: the axes, keepdims' out index, the merge),
+            // then q's rank and the method — and for a chararray operand it stops at NumPy's arr.partition(..., axis=0), the
+            // STRING partition's TypeError. (The axes were validated here as well until the family shared one prologue; the
+            // same normalization gave the same errors.)
             return QuantileText.Compute(op, a, q, qShape, qIsInteger, axes, @out, method, keepdims, chararray, qType);
         }
 

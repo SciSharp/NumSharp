@@ -34,6 +34,9 @@ namespace NumSharp
         ///     stores in an OBJECT array (a <c>None</c> NA object picked by <c>np.apply_along_axis</c>): NumSharp has no object
         ///     dtype.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanmedian.html</remarks>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>).</exception>
         public static NDArray nanmedian(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
@@ -73,6 +76,9 @@ namespace NumSharp
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule (NumPy's nanmedian of a matrix calls <c>matrix.sum</c> with <c>keepdims</c> and raises
         ///     TypeError for every axis).</remarks>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>).</exception>
         public static NDArray nanmedian(NDArray a, int[] axis,
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {

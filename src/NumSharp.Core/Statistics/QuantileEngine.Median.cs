@@ -24,11 +24,14 @@ namespace NumSharp.Statistics
         ///     text.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array: a None-like NA in a line of two or more elements, an empty
         ///     reduced axis (the mean's add.reduce has no identity) or a read-only <paramref name="out"/>.</exception>
+        /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index
+        ///     (<c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c>: too few dimensions, or a reduced axis of length 0),
+        ///     for every dtype and before the text refusals.</exception>
         /// <remarks>
         ///     Moved from <c>np.median</c> (<c>Statistics/np.median.cs</c>) by the np-layer dtype plan's P0 pilot, statement for
-        ///     statement and in the same order, so the facade holds no dtype test. NumPy's <c>_ureduce</c> prologue still
-        ///     exists here, in <see cref="QuantileText"/> and in <c>NDVStringStatistics.Median</c>; the plan's P1a gives the
-        ///     family one shared prologue.
+        ///     statement and in the same order, so the facade holds no dtype test. Since the plan's P1a step 2 every route
+        ///     runs NumPy's one <c>_ureduce</c> prologue (<see cref="UReduce"/>) first; until then each route had its own copy,
+        ///     and the copies disagreed (the plan's Appendix B1).
         /// </remarks>
         internal static NDArray Median(NDArray a, int? axis, NDArray @out, bool overwrite_input, bool keepdims)
         {
@@ -43,6 +46,11 @@ namespace NumSharp.Statistics
             // sum INTO the text out, then its division refuses (ThrowMedianIntoTextOut, which always throws).
             if (MedianSumsIntoText(a, @out))
                 ThrowMedianIntoTextOut(a, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims);
+            // Fixed-width text data or a text out: _ureduce's prologue runs before _median's closing mean refuses, so the axis
+            // and keepdims' out index (an out NumPy cannot index is its IndexError) come first. The numeric route runs the
+            // same prologue inside Compute.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || (@out is not null && Backends.Strings.NDStringUfuncs.IsText(@out)))
+                UReduceChecks(a, axis, @out, keepdims);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("median", a, axis, @out);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // NumPy's np.median returns nan for an empty slice (np.quantile/percentile raise);
@@ -72,8 +80,11 @@ namespace NumSharp.Statistics
         /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
         ///     verbatim text); a <c>StringDType</c> array after its sort.</exception>
-        /// <exception cref="IncorrectShapeException">A <c>StringDType</c> array with several reduced axes beside a kept axis
-        ///     of length 0 (NumPy's <c>_ureduce</c> merge cannot resolve its -1).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype (NumPy's
+        ///     <c>_ureduce</c> merge cannot resolve its -1: <c>cannot reshape array of size 0 into shape (0,newaxis)</c>);
+        ///     before the plan's P1a step 2 only a <c>StringDType</c> array raised it (plan Appendix B1).</exception>
+        /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index, for
+        ///     every dtype and before the text refusals.</exception>
         /// <remarks>Moved from <c>np.median</c> by the np-layer dtype plan's P0 pilot, statement for statement.</remarks>
         internal static NDArray Median(NDArray a, int[] axis, NDArray @out, bool overwrite_input, bool keepdims)
         {
@@ -86,6 +97,11 @@ namespace NumSharp.Statistics
             // The closing mean's sum computed into a text out before its division refuses (see the one-axis overload).
             if (MedianSumsIntoText(a, @out))
                 ThrowMedianIntoTextOut(a, axis, @out, keepdims);
+            // Fixed-width text data or a text out: _ureduce's prologue first — the axes, keepdims' out index and the merge of
+            // several axes (a kept axis of length 0 beside them is NumPy's reshape error: plan Appendix B1) — then the
+            // closing mean's refusal.
+            if (Backends.Strings.NDStringUfuncs.IsString(a) || (@out is not null && Backends.Strings.NDStringUfuncs.IsText(@out)))
+                UReduceChecks(a, axis, @out, keepdims);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("median", a, axis, @out);
             return Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
                 QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true,
@@ -116,6 +132,8 @@ namespace NumSharp.Statistics
         ///     an empty input's mean (no identity), or the store into <paramref name="out"/>.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> reduction along a long axis whose row result NumPy
         ///     stores in an OBJECT array: NumSharp has no object dtype.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index (<c>_ureduce</c>'s prologue), before the text refusals.</exception>
         /// <remarks>
         ///     Moved from <c>np.nanmedian</c> (<c>Statistics/np.nanmedian.cs</c>) by the np-layer dtype plan's P1a (step 1),
         ///     statement for statement and in the same order, so the facade holds no dtype test (the move <see cref="Median"/>
@@ -132,6 +150,10 @@ namespace NumSharp.Statistics
                 return Backends.Strings.NDVStringStatistics.NanMedian(a, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims);
             if (a is not null && a.size == 0)
                 Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
+            // Fixed-width text data (not empty: that answered np.nanmean above): _ureduce's prologue — the axes, keepdims'
+            // out index — runs before the NaN test refuses the text.
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                UReduceChecks(a, axis, @out, keepdims);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
             // medianMean selects NumPy's mean-of-middle reduction; emptyReturnsNaN and ignoreNaN are the nan forms' rules.
@@ -160,6 +182,9 @@ namespace NumSharp.Statistics
         /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty text data, its <c>nanmean</c>)
         ///     refuses; a <c>StringDType</c> array's refusals (see the one-axis overload).</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> row result NumPy stores in an OBJECT array.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index (<c>_ureduce</c>'s prologue), before the text refusals. (Data that is
+        ///     not empty never fails the prologue's merge; empty data answers <c>np.nanmean</c> before it.)</exception>
         /// <remarks>Moved from <c>np.nanmedian</c> by the np-layer dtype plan's P1a (step 1), statement for statement.</remarks>
         internal static NDArray NanMedian(NDArray a, int[] axis, NDArray @out, bool overwrite_input, bool keepdims)
         {
@@ -171,6 +196,10 @@ namespace NumSharp.Statistics
                 return Backends.Strings.NDVStringStatistics.NanMedian(a, axis, @out, keepdims);
             if (a is not null && a.size == 0)
                 Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
+            // Fixed-width text data (not empty: that answered np.nanmean above): _ureduce's prologue — the axes, keepdims'
+            // out index — runs before the NaN test refuses the text.
+            if (Backends.Strings.NDStringUfuncs.IsString(a))
+                UReduceChecks(a, axis, @out, keepdims);
             Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
             return Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
                 QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true,
@@ -239,52 +268,25 @@ namespace NumSharp.Statistics
         [NDScoped] // the keepdims view, the merged and partitioned data, the middle slice and the numeric sum are this call's own
         private static void ThrowMedianIntoTextOut(NDArray a, int[] axes, NDArray @out, bool keepdims)
         {
-            int nd = a.ndim;
-            // _ureduce: `axis = _nx.normalize_axis_tuple(axis, nd)` — every axis checked, then the repeats.
-            Backends.Strings.NDStringUfuncs.ValidateReduceAxes("median", nd, axes);
-            int[] reduced = axes is null ? null : NormalizeAxes(axes, nd);
-            NDArray target = @out;
-            if (keepdims)
-            {
-                // `out[(Ellipsis,) + index_out]`: index 0 on every reduced axis (every axis without an axis argument).
-                var index = new Slice[1 + nd];
-                index[0] = Slice.Ellipsis;
-                for (int d = 0; d < nd; d++)
-                    index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
-                target = @out[index];
-            }
+            // _ureduce, the family's one prologue (UReduce): `axis = _nx.normalize_axis_tuple(axis, nd)` (every axis checked,
+            // then the repeats), keepdims' `out[(Ellipsis,) + index_out]` (index 0 on every reduced axis, every axis without an
+            // axis argument), and the merge of several (or no) reduced axes into one trailing axis behind the kept ones
+            // (`a.reshape(a.shape[:nkeep] + (-1,))`; the order inside the merged axis cannot change the middle values).
+            UReduced prologue = UReduce(a, axes, @out, keepdims);
+            NDArray target = prologue.Target;
 
             NDArray data;
             int axis;
-            if (reduced is null)
+            if (prologue.Reduced is null)
             {
                 // `partition(a, kth, axis=None)` ravels the data; the mean then reduces axis 0 of the partition.
                 data = np.ravel(a);
                 axis = 0;
             }
-            else if (reduced.Length == 1)
-            {
-                data = a;
-                axis = reduced[0];
-            }
             else
             {
-                // Several (or no) reduced axes: the kept ones moved to the front, the rest merged into one trailing axis
-                // (`a.reshape(a.shape[:nkeep] + (-1,))`); the order inside the merged axis cannot change the middle values.
-                var keep = new System.Collections.Generic.List<int>();
-                for (int d = 0; d < nd; d++)
-                    if (Array.IndexOf(reduced, d) < 0)
-                        keep.Add(d);
-                var destinations = new int[keep.Count];
-                for (int i = 0; i < destinations.Length; i++)
-                    destinations[i] = i;
-                NDArray moved = np.moveaxis(a, keep.ToArray(), destinations);
-                var merged = new long[keep.Count + 1];
-                for (int d = 0; d < keep.Count; d++)
-                    merged[d] = moved.Shape.dimensions[d];
-                merged[keep.Count] = -1;
-                data = moved.reshape(Shape.Adopt(merged));
-                axis = keep.Count;
+                data = prologue.Data;
+                axis = prologue.Axis.Value;
             }
 
             // _median: the partition indexes (the two central positions for an even length, one for an odd), with -1 added

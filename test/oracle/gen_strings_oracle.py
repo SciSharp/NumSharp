@@ -14359,6 +14359,198 @@ def gen_qprec():
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Section qprologue: _ureduce's prologue of the quantile family (np-layer dtype plan, P1a step 2, 2026-10-24)
+# ----------------------------------------------------------------------------------------------------------------------
+
+QPRO = "qprologue"
+# The data kinds: numbers of three kinds and widths, bool, and the three text kinds (every route of the family).
+QPRO_KINDS = ["float64", "float32", "int32", "uint8", "bool", "<U3", "|S3", "T"]
+QPRO_QFUNCS = ("quantile", "percentile", "nanquantile", "nanpercentile")
+QPRO_MFUNCS = ("median", "nanmedian")
+
+
+def _median_kw(layout, op, *, name="median", axis=None, keepdims=False, out=None, section=None):
+    """Records one ``np.median`` / ``np.nanmedian`` call with NumPy's keywords (op ``median_kw``).
+
+    :param layout: the layout label.
+    :param op: the (base, view) data operand.
+    :param name: ``median`` or ``nanmedian``.
+    :param axis: None, an int or a tuple of ints (an empty tuple included).
+    :param keepdims: keepdims.
+    :param out: an out (base, view) operand, or None.
+    :param section: the section (``QPRO`` by default).
+    """
+    ops = [op]
+    params = {"name": name, "keepdims": keepdims, "axis": list(axis) if isinstance(axis, tuple) else axis}
+    if out is not None:
+        params["out_op"] = len(ops)
+        ops.append(out)
+
+    def call(*views, p=params):
+        kw = {"axis": tuple(p["axis"]) if isinstance(p["axis"], list) else p["axis"], "keepdims": p["keepdims"]}
+        if "out_op" in p:
+            kw["out"] = views[p["out_op"]]
+        return getattr(np, p["name"])(views[0], **kw)
+
+    add(section or QPRO, "median_kw", params=params, operands=ops, layout=layout, mutate=params.get("out_op"),
+        call=call)
+
+
+def _qpro_data(kind, shape):
+    """A data operand of ``kind`` and ``shape``: distinct small numbers, alternating bools, or one-letter text cycling
+    through the alphabet (StringDType through ``t_plain``).
+
+    :param kind: a ``QPRO_KINDS`` entry.
+    :param shape: the shape (an empty one gives an empty array).
+    :returns: the (base, view) pair.
+    """
+    n = int(np.prod(shape))
+    if kind in ("<U3", "|S3", "T"):
+        text = np.array([chr(97 + i % 26) for i in range(n)], dtype="<U3").reshape(shape)
+        if kind == "T":
+            return t_plain(text.astype(TD.build()))
+        return plain(text.astype(kind))
+    vals = np.arange(n, dtype=np.float64).reshape(shape)
+    if kind == "bool":
+        return plain((vals % 2).astype(bool))
+    return plain(vals.astype(kind))
+
+
+def _qpro_text_q(kind):
+    """An EMPTY 1-D text q (``U1`` or StringDType): it passes NumPy's [0, 1] check, so the call reaches the reduction.
+
+    :param kind: ``U`` or ``T``.
+    :returns: the (base, view) pair.
+    """
+    if kind == "T":
+        empty = np.zeros(0, dtype=TD.build())
+        return empty, empty
+    return own(np.zeros(0, dtype="<U1"))
+
+
+def _qpro_out(shape):
+    """A float64 out of ``shape`` (zeros): a view of a 1-D base. An EMPTY out of two or more dimensions is a view in
+    NumPy but an owner in the replay (which rebuilds any view of a zero-size buffer as an owner; a base must be 1-D),
+    so no case of this section lets a call SUCCEED into one: its flags would differ for a reason outside the call.
+
+    :param shape: the out's shape.
+    :returns: the (base, view) pair.
+    """
+    return own(np.zeros(shape)) if 0 in tuple(shape) else plain(np.zeros(shape))
+
+
+def _qpro_index_raises(out_shape, nd, ax):
+    """Whether ``_ureduce``'s keepdims index ``out[(Ellipsis,) + index_out]`` raises for data of rank ``nd`` reduced
+    over ``ax``: an out of fewer than ``nd`` dimensions (too many indices), or a zero-length axis where a reduced axis
+    is taken at 0. The index addresses out's LAST ``nd`` axes (the Ellipsis takes the rest).
+
+    :param out_shape: the out's shape.
+    :param nd: the data's rank.
+    :param ax: None, an int or a tuple of ints (already valid for ``nd``).
+    :returns: True when NumPy raises IndexError there.
+    """
+    if len(out_shape) < nd:
+        return True
+    reduced = set(range(nd)) if ax is None else {a % nd for a in (ax if isinstance(ax, tuple) else (ax,))}
+    lead = len(out_shape) - nd
+    return any(out_shape[lead + d] == 0 for d in reduced)
+
+
+def gen_qprologue():
+    """Section qprologue: NumPy's ``_ureduce`` prologue of ``np.median`` / ``np.nanmedian`` / ``np.quantile`` /
+    ``np.percentile`` / ``np.nanquantile`` / ``np.nanpercentile`` against the checks that follow it (ops ``median_kw``
+    and ``quant_kw``). ``_ureduce`` normalizes the axes, indexes a keepdims ``out`` (``out[(Ellipsis,) + index_out]``)
+    and merges several reduced axes into one (``reshape(kept + (-1,))``) BEFORE the reduction function checks q's rank,
+    the method, the data's dtype (the text refusals, ``isnan``) or a text q; the nan forms send EMPTY data to
+    ``np.nanmean`` before all of it. Every case is phase 1.
+
+    * the merge: data with a zero-length axis (``(0, 3, 4)``, ``(3, 0, 4)``, ``(2, 3, 0)``) of 8 kinds (numbers, bool,
+      ``U``, ``S``, StringDType) x every axis form (None, one axis, pairs in both orders, every axis, the empty tuple) x
+      the six functions, then the later checks the merge must precede (a bogus method, a 3-D q, a text q, weights);
+    * keepdims' out index: ``(2, 3)`` data x 8 kinds x the six functions x an out of too few dimensions (``(3,)``, every
+      axis form), outs with a zero-length axis (``(0, 3)``, ``(2, 0)``) and a larger out (``(4, 2, 3)``), each beside a
+      later error (a bogus method, a 3-D q, a list q, a text q, weights).
+
+    Left out: numeric ``np.median`` / ``np.nanmedian`` calls whose out PASSES keepdims' index. NumPy then writes
+    through ``np.mean(part, axis, out=out)`` (the reduction's out checks) or ``out[...] = result``; NumSharp keeps its
+    documented result-then-copy rule there (``QuantileEngine.Compute``'s remarks: NumSharp's np.mean has no ``out=``),
+    so those cells test that rule, not the prologue. Text data keeps them: its refusal comes right after the prologue.
+    """
+    # --- The merge: a kept axis of length 0 beside several reduced axes.
+    for shape in ((0, 3, 4), (3, 0, 4), (2, 3, 0)):
+        for kind in QPRO_KINDS:
+            label = f"{kind}{shape}"
+            data = _qpro_data(kind, shape)
+            nd = len(shape)
+            axes = [None, 1, (1, 2), (2, 1), (0, 1), (0, 2), tuple(range(nd)), ()]
+            for ax in axes:
+                for fn in QPRO_MFUNCS:
+                    _median_kw(f"{label}:{ax}", data, name=fn, axis=ax)
+                for fn in QPRO_QFUNCS:
+                    q = 50.0 if fn.endswith("percentile") else 0.5
+                    _quant(f"{label}:{ax}", data, name=fn, q=q, method="linear", axis=ax, section=QPRO)
+            # The later checks the merge comes before (each over the failing pair of axes and over the empty tuple).
+            for ax in ((1, 2), (0, 2), (0, 1), ()):
+                _quant(f"{label}:{ax}:bogus", data, name="quantile", q=0.5, method="bogus", axis=ax, section=QPRO)
+                _quant(f"{label}:{ax}:q3d", data, name="quantile", q=plain(np.full((1, 1, 1), 0.5)), qkind="arr",
+                       method="linear", axis=ax, section=QPRO)
+                _quant(f"{label}:{ax}:qlist", data, name="nanquantile", q=[0.25, 0.75], qkind="fl", method="lower",
+                       axis=ax, section=QPRO)
+                for qk in ("U", "T"):
+                    _quant(f"{label}:{ax}:textq{qk}", data, name="quantile", q=_qpro_text_q(qk), qkind="arr",
+                           method="linear", axis=ax, section=QPRO)
+                    _quant(f"{label}:{ax}:nantextq{qk}", data, name="nanquantile", q=_qpro_text_q(qk), qkind="arr",
+                           method="linear", axis=ax, section=QPRO)
+                weights = plain(np.ones(shape))
+                for fn in ("quantile", "nanquantile"):
+                    _quant(f"{label}:{ax}:w", data, name=fn, q=0.5, method="inverted_cdf", axis=ax, weights=weights,
+                           section=QPRO)
+                # A keepdims out of the result's own shape (each reduced axis of length 1; the empty tuple reduces
+                # nothing): the out passes keepdims' index, and the merge's error is the answer.
+                kept = tuple(1 if d in ax else s for d, s in enumerate(shape))
+                _quant(f"{label}:{ax}:kdout", data, name="quantile", q=0.5, method="linear", axis=ax, keepdims=True,
+                       out=_qpro_out(kept), section=QPRO)
+                for fn in QPRO_MFUNCS:
+                    # Empty numeric data under nanmedian is np.nanmean's answer, BEFORE the prologue: it succeeds into
+                    # the empty out (see _qpro_out), so only text data, which nanmean refuses, keeps that cell.
+                    if fn == "nanmedian" and 0 in kept and kind not in ("<U3", "|S3", "T"):
+                        continue
+                    _median_kw(f"{label}:{ax}:kdout", data, name=fn, axis=ax, keepdims=True, out=_qpro_out(kept))
+    # --- keepdims' out index: before every check of the reduction function.
+    for kind in QPRO_KINDS:
+        data = _qpro_data(kind, (2, 3))
+        for ax in (0, 1, -1, None, (0, 1), (1, 0)):
+            for out_shape in ((3,), (0, 3), (2, 0), (4, 2, 3)):
+                label = f"{kind}:{ax}:out{out_shape}"
+                # Numeric median / nanmedian only where the prologue answers (see the docstring's "Left out").
+                if kind in ("<U3", "|S3", "T") or _qpro_index_raises(out_shape, 2, ax):
+                    for fn in QPRO_MFUNCS:
+                        _median_kw(label, data, name=fn, axis=ax, keepdims=True, out=_qpro_out(out_shape))
+                for fn in QPRO_QFUNCS:
+                    q = 50.0 if fn.endswith("percentile") else 0.5
+                    _quant(label, data, name=fn, q=q, method="linear", axis=ax, keepdims=True,
+                           out=_qpro_out(out_shape), section=QPRO)
+                # The later checks keepdims' out index comes before.
+                _quant(f"{label}:bogus", data, name="quantile", q=0.5, method="bogus", axis=ax, keepdims=True,
+                       out=_qpro_out(out_shape), section=QPRO)
+                _quant(f"{label}:q3d", data, name="quantile", q=plain(np.full((1, 1, 1), 0.5)), qkind="arr",
+                       method="linear", axis=ax, keepdims=True, out=_qpro_out(out_shape), section=QPRO)
+                for fn in ("nanquantile", "nanpercentile"):
+                    q = [25.0, 75.0] if fn.endswith("percentile") else [0.25, 0.75]
+                    _quant(f"{label}:qlist", data, name=fn, q=q, qkind="fl", method="lower", axis=ax, keepdims=True,
+                           out=_qpro_out(out_shape), section=QPRO)
+                    _quant(f"{label}:qarr", data, name=fn, q=plain(np.array(q)), qkind="arr", method="lower", axis=ax,
+                           keepdims=True, out=_qpro_out(out_shape), section=QPRO)
+                for qk in ("U", "T"):
+                    for fn in ("quantile", "nanquantile"):
+                        _quant(f"{label}:textq{qk}", data, name=fn, q=_qpro_text_q(qk), qkind="arr", method="linear",
+                               axis=ax, keepdims=True, out=_qpro_out(out_shape), section=QPRO)
+                for fn in ("quantile", "nanquantile"):
+                    _quant(f"{label}:w", data, name=fn, q=0.5, method="inverted_cdf", axis=ax, keepdims=True,
+                           out=_qpro_out(out_shape), weights=plain(np.ones((2, 3))), section=QPRO)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Sections strfn / tfn: numpy.strings' search, strip, pad, replace, partition and slice functions over S / U (strfn) and
 # NEP 55 StringDType (tfn), strings phase 2, P2.5, strict
 # ----------------------------------------------------------------------------------------------------------------------
@@ -17012,7 +17204,7 @@ GENERATORS = [gen_dtypes, gen_creation, gen_astype, gen_views, gen_movement, gen
               gen_strma, gen_striter, gen_strcomp, gen_strarith, gen_strconv, gen_tdtype, gen_tstore, gen_tcreate,
               gen_tmove, gen_tcast, gen_titer, gen_cvtext, gen_promote, gen_storenone, gen_tma, gen_tio,
               gen_strsort, gen_strchar, gen_strsearch, gen_strchararray, gen_strcharops, gen_strcharfn, gen_strcharobj,
-              gen_strcharmeth, gen_strcharlist, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_strfn,
+              gen_strcharmeth, gen_strcharlist, gen_strsets, gen_tcomp, gen_tarith, gen_treduce, gen_tsort, gen_qfamily, gen_qprec, gen_qprologue, gen_strfn,
               gen_tfn, gen_strprop, gen_tprop, gen_strcase, gen_tcase, gen_strtrans, gen_ttrans, gen_strmod, gen_tmod,
               gen_strcodec, gen_tcodec, gen_strout, gen_strpad, gen_tsurface]
 

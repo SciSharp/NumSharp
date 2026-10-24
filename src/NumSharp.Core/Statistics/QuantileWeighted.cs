@@ -280,38 +280,24 @@ namespace NumSharp.Statistics
         /// <exception cref="Exception">The reduction's errors (see <see cref="Compute"/>); the keepdims index of an out of too
         ///     few dimensions; the subscript of a Python object result under keepdims (<c>'float' object is not
         ///     subscriptable</c> for the NaN NA object of an all-NaN <c>StringDType</c> slice).</exception>
+        /// <remarks>
+        ///     The prologue is the quantile family's one copy (<see cref="QuantileEngine.UReduce"/>, since the np-layer dtype
+        ///     plan's P1a step 2); this class had its own until then, with the same order and texts. The merged axis reaches
+        ///     the reduction as a non-negative axis (NumPy passes <c>-1</c>): the functions below normalize either form.
+        /// </remarks>
         [NDScoped]
         private static NDArray UReduce(NDArray a, NDArray q, int[] reduced, NDArray @out, bool keepdims, NDArray wgt,
             bool nan)
         {
             int nd = a.ndim;
-            NDArray target = @out;
-            int? axis = null;
-            if (reduced is not null)
-            {
-                // `kwargs['out'] = out[(Ellipsis,) + index_out]` with every reduced axis taken at 0.
-                if (keepdims && @out is not null)
-                    target = IndexOut(@out, nd, reduced);
-                if (reduced.Length == 1)
-                    axis = reduced[0];
-                else
-                {
-                    // Several axes (or an empty tuple): the kept axes first, the reduced ones merged into one last axis,
-                    // for the data and the weights (`reshape_arr`), and the reduction runs along it.
-                    var keep = new List<int>();
-                    for (int d = 0; d < nd; d++)
-                        if (Array.IndexOf(reduced, d) < 0)
-                            keep.Add(d);
-                    a = MergeReduced(a, keep);
-                    wgt = MergeReduced(wgt, keep);
-                    axis = -1;
-                }
-            }
-            else if (keepdims && @out is not null)
-                // `out[(Ellipsis,) + (0,) * nd]`: every axis is reduced.
-                target = IndexOut(@out, nd, null);
-
-            (NDArray r, bool pyObject) = nan ? NanUreduceFunc(a, q, wgt, axis, target) : (UreduceFunc(a, q, wgt, axis, target), false);
+            // `kwargs['out'] = out[(Ellipsis,) + index_out]` under keepdims (every reduced axis taken at 0, every axis without
+            // an axis argument), then for several axes (or an empty tuple) the kept axes first and the reduced ones merged
+            // into one last axis, the data and the weights alike (`reshape_arr`); the reduction runs along it. The axes were
+            // normalized by Prologue already (with argname "axis"), so normalizing them again here cannot raise.
+            UReduced prologue = QuantileEngine.UReduce(a, reduced, @out, keepdims, wgt);
+            (NDArray r, bool pyObject) = nan
+                ? NanUreduceFunc(prologue.Data, q, prologue.Weights, prologue.Axis, prologue.Target)
+                : (UreduceFunc(prologue.Data, q, prologue.Weights, prologue.Axis, prologue.Target), false);
             if (@out is not null)
                 return @out;
             return keepdims ? KeepdimsResult(r, pyObject, nd, reduced) : r;
@@ -324,8 +310,8 @@ namespace NumSharp.Statistics
         /// <param name="a">The data.</param>
         /// <param name="q">NumPy's q array.</param>
         /// <param name="wgt">The weights (validated, merged like the data).</param>
-        /// <param name="axis">The reduction's axis (non-negative, or -1 for a merged last axis), or null for the flattened
-        ///     data.</param>
+        /// <param name="axis">The reduction's axis (non-negative: the merged last axis arrives as its index; a negative value
+        ///     would count from the end), or null for the flattened data.</param>
         /// <param name="out">The out (or its keepdims view), or null.</param>
         /// <returns>The result (see <see cref="WeightedQuantile"/>).</returns>
         /// <exception cref="ValueError">A q of rank above 2.</exception>
@@ -349,7 +335,7 @@ namespace NumSharp.Statistics
         /// </summary>
         /// <param name="arr">The data (at least one dimension).</param>
         /// <param name="q">NumPy's q array (rank 0 to 2).</param>
-        /// <param name="axis">The reduced axis (non-negative, or -1).</param>
+        /// <param name="axis">The reduced axis (non-negative, or negative counting from the end).</param>
         /// <param name="out">The out (or its keepdims view), or null.</param>
         /// <param name="weights">The weights: the data's shape, or length 1 at every axis but <paramref name="axis"/>.</param>
         /// <returns>The result in the data's dtype (a fresh array, or <paramref name="out"/>); NumPy's scalar (a read-only
@@ -777,7 +763,7 @@ namespace NumSharp.Statistics
         /// <param name="a">The data (not empty).</param>
         /// <param name="q">NumPy's q array.</param>
         /// <param name="wgt">The weights (validated, merged like the data).</param>
-        /// <param name="axis">The reduction's axis (non-negative, or -1 for a merged last axis), or null.</param>
+        /// <param name="axis">The reduction's axis (non-negative: the merged last axis arrives as its index), or null.</param>
         /// <param name="out">The out (or its keepdims view), or null.</param>
         /// <returns>The result and whether it is a Python object (the NaN NA object of an all-NaN <c>StringDType</c> line with
         ///     a scalar q, which NumPy returns as itself, not as an array).</returns>
@@ -993,47 +979,6 @@ namespace NumSharp.Statistics
                 QuantileEngine.StoreNumPyScalar(target, value);
             else
                 np.copyto(target, value, "unsafe");
-        }
-
-        /// <summary>
-        ///     <c>out[(Ellipsis,) + index_out]</c>: the view <c>_ureduce</c> hands the reduction under keepdims, every reduced
-        ///     axis taken at 0 (every axis when <paramref name="reduced"/> is null).
-        /// </summary>
-        /// <param name="out">The caller's out.</param>
-        /// <param name="nd">The data's rank.</param>
-        /// <param name="reduced">The normalized reduced axes, or null.</param>
-        /// <returns>The view.</returns>
-        /// <exception cref="IndexError">An out of fewer than <paramref name="nd"/> dimensions (NumPy's "too many indices"
-        ///     text), or a reduced axis of length 0.</exception>
-        private static NDArray IndexOut(NDArray @out, int nd, int[] reduced)
-        {
-            var index = new Slice[1 + nd];
-            index[0] = Slice.Ellipsis;
-            for (int d = 0; d < nd; d++)
-                index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
-            return @out[index];
-        }
-
-        /// <summary>
-        ///     NumPy's <c>reshape_arr</c>: the kept axes moved to the front (<c>np.moveaxis(a, keep, range(nkeep))</c>), the
-        ///     others merged into one last axis (<c>reshape(shape[:nkeep] + (-1,))</c>), in their original order.
-        /// </summary>
-        /// <param name="x">The data or the weights.</param>
-        /// <param name="keep">The kept axes, increasing.</param>
-        /// <returns>The merged array (a view when the layout allows).</returns>
-        /// <exception cref="IncorrectShapeException">A kept axis of length 0 beside merged ones: the -1 cannot be resolved
-        ///     (<c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
-        private static NDArray MergeReduced(NDArray x, List<int> keep)
-        {
-            var destination = new int[keep.Count];
-            for (int i = 0; i < destination.Length; i++)
-                destination[i] = i;
-            NDArray moved = keep.Count == 0 ? x : np.moveaxis(x, keep.ToArray(), destination);
-            var merged = new long[keep.Count + 1];
-            for (int d = 0; d < keep.Count; d++)
-                merged[d] = moved.Shape.dimensions[d];
-            merged[keep.Count] = -1;
-            return moved.reshape(Shape.Adopt(merged));
         }
 
         /// <summary>

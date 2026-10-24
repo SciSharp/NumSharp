@@ -8,7 +8,8 @@ namespace NumSharp.Tests.Strings
     /// <summary>
     ///     The string oracle's ops for section <c>strsets</c> (<c>gen_strsets</c>, strings phase 2, P2.2 milestone C):
     ///     <c>np.quantile</c> / <c>np.percentile</c> with every q form, axis form, method, keepdims and <c>out=</c> (and
-    ///     section tsort's <c>np.nanquantile</c> / <c>np.nanpercentile</c>). The
+    ///     section tsort's <c>np.nanquantile</c> / <c>np.nanpercentile</c>), plus section qprologue's <c>np.median</c> /
+    ///     <c>np.nanmedian</c> with a tuple axis, keepdims and <c>out=</c> (op <c>median_kw</c>). The
     ///     section's <c>np.unique</c>, Array-API unique, <c>np.isin</c>, set-routine, <c>np.lexsort</c>,
     ///     <c>np.sort_complex</c> and histogram cases replay through the ops of sections strshape and strsurface
     ///     (<c>unique</c>, <c>unique_api</c>, <c>isin</c>, <c>setop</c>, <c>lexsort</c>, <c>sort_complex</c>, <c>hist</c>),
@@ -30,13 +31,47 @@ namespace NumSharp.Tests.Strings
         /// <exception cref="InvalidOperationException">An unknown function name or q kind.</exception>
         private static bool TryInvokeSets(string op, Dictionary<string, JsonElement> p, NDArray[] ops, out object result)
         {
-            if (op != "quant_kw")
+            switch (op)
             {
-                result = null;
-                return false;
+                case "quant_kw":
+                    result = QuantileKeywords(p, ops);
+                    return true;
+                case "median_kw":
+                    result = MedianKeywords(p, ops);
+                    return true;
             }
-            result = QuantileKeywords(p, ops);
-            return true;
+            result = null;
+            return false;
+        }
+
+        /// <summary>
+        ///     One <c>np.median</c> / <c>np.nanmedian</c> call of section qprologue through the overload NumPy's call ports to:
+        ///     no axis or one axis the <see cref="int"/>? overload, a tuple (the empty one included) the <see cref="int"/>[]
+        ///     overload, with NumPy's <c>out=</c> and <c>keepdims=</c>.
+        /// </summary>
+        /// <param name="p">The case parameters: <c>name</c> (<c>median</c> or <c>nanmedian</c>), <c>axis</c> (null, an int
+        ///     or a list of ints), <c>keepdims</c>, and <c>out_op</c> (the out operand, when present).</param>
+        /// <param name="ops">The operands: the data, then the out where <c>out_op</c> names it.</param>
+        /// <returns>The call's result (the out array itself for an <c>out=</c> call).</returns>
+        /// <exception cref="InvalidOperationException">A function name the op does not know (a generator / table
+        ///     mismatch).</exception>
+        private static object MedianKeywords(Dictionary<string, JsonElement> p, NDArray[] ops)
+        {
+            NDArray a = ops[0];
+            bool keepdims = p["keepdims"].GetBoolean();
+            NDArray @out = NullableInt(p, "out_op") is int oi ? ops[oi] : null;
+            JsonElement axisElement = p["axis"];
+            int[] axes = axisElement.ValueKind == JsonValueKind.Array ? axisElement.EnumerateArray().Select(e => e.GetInt32()).ToArray() : null;
+            int? axis = axisElement.ValueKind == JsonValueKind.Number ? axisElement.GetInt32() : null;
+            switch (Str(p, "name"))
+            {
+                case "median":
+                    return axes is not null ? np.median(a, axes, @out, false, keepdims) : np.median(a, axis, @out, false, keepdims);
+                case "nanmedian":
+                    return axes is not null ? np.nanmedian(a, axes, @out, false, keepdims) : np.nanmedian(a, axis, @out, false, keepdims);
+                case var other:
+                    throw new InvalidOperationException($"the string oracle has no median '{other}'");
+            }
         }
 
         /// <summary>

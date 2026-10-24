@@ -187,7 +187,11 @@ namespace NumSharp.Statistics
         /// <exception cref="AxisError">An axis is out of range.</exception>
         /// <exception cref="ValueError">An axis repeats.</exception>
         /// <exception cref="IndexError">keepdims with an out of too few dimensions (NumPy's <c>too many indices for
-        ///     array</c>).</exception>
+        ///     array</c>), or with a reduced axis of length 0 (<c>index 0 is out of bounds for axis 0 with size 0</c>) —
+        ///     np.median's and np.nanmedian's legacy out included (<see cref="UReduce"/> indexes it).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0: <c>_ureduce</c>'s
+        ///     merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
+        ///     (0,newaxis)</c>), before q's rank and the method (the nan forms answer an empty input before it).</exception>
         /// <exception cref="TypeError">Bool data with an interpolating method (NumPy's boolean-subtract text, after the
         ///     partition's validation and the neighbour lookup), unless <paramref name="allowBooleanContinuous"/>.</exception>
         /// <exception cref="IndexOutOfRangeException">An array with no element whose lookup fails (NumPy's IndexError
@@ -234,17 +238,21 @@ namespace NumSharp.Statistics
             if (ignoreNaN && a.size == 0)
                 return BuildEmptyNanResult(a, axisArr, keepdims, @out);
 
-            // _ureduce normalizes the axis BEFORE the reduction function runs, so an out-of-range or repeated axis is
-            // reported before the boolean subtract below (np.quantile(bool, 0.5, axis=5) is NumPy's AxisError).
-            int[] reducedAxes = axisArr != null ? NormalizeAxes(axisArr, a.ndim) : null;
+            // _ureduce runs BEFORE the reduction function, in NumPy's order (UReduce, the family's one prologue): the axes
+            // normalized (an out-of-range or repeated axis is reported before the boolean subtract below:
+            // np.quantile(bool, 0.5, axis=5) is NumPy's AxisError), keepdims' view of out, then the merge of several reduced
+            // axes into one, whose -1 NumPy cannot resolve beside a kept axis of length 0 — np.quantile(zeros((0, 3, 4)), 0.5,
+            // axis=(1, 2)) is NumPy's reshape ValueError here, before q's rank and the method are looked at (the merge used to
+            // come with the staging below, with an explicit length, and gave an empty result: plan Appendix B1).
+            UReduced prologue = UReduce(a, axisArr, @out, keepdims);
 
-            // The out NumPy's reduction writes into: under keepdims, _ureduce's `out[(Ellipsis,) + index_out]` (each reduced
-            // axis taken at 0), indexed right after the axes and before anything else is checked. np.median's out
-            // (np.mean's rules), the NumSharp-only decimal / complex data and a decimal out keep the legacy
-            // result-then-copy rule instead (see the remarks).
+            // The out NumPy's reduction writes into: keepdims' `out[(Ellipsis,) + index_out]` from the prologue (each reduced
+            // axis taken at 0). np.median's out (np.mean's rules), the NumSharp-only decimal / complex data and a decimal out
+            // keep the legacy result-then-copy rule instead (see the remarks): the prologue still indexed the view, so an out
+            // NumPy cannot index is NumPy's IndexError, but the result is copied into the caller's out.
             bool legacyOut = medianMean || a.typecode == NPTypeCode.Decimal || a.typecode == NPTypeCode.Complex
                              || (@out is not null && @out.typecode == NPTypeCode.Decimal);
-            NDArray target = @out is not null && keepdims && !legacyOut ? KeepdimsOutTarget(@out, a.ndim, reducedAxes) : @out;
+            NDArray target = legacyOut ? @out : prologue.Target;
 
             // `_quantile_ureduce_func`'s first statement refuses a q of rank above 2, after the axis checks (and, for the
             // nan forms, after the empty-input return above). The nan forms reach it per slice and only for a slice that
@@ -314,7 +322,8 @@ namespace NumSharp.Statistics
 
             // Only a null axis reduces every axis. An EMPTY tuple reduces none: NumPy's _ureduce keeps every axis and
             // reshapes to `a.shape[:nkeep] + (-1,)`, a new trailing axis of length 1 (the product of no axes), so each
-            // element is its own slice — the multi-axis branch below does exactly that for zero axes.
+            // element is its own slice — the prologue's merge (UReduce) does exactly that for zero axes, and the branch
+            // below stages its data.
             if (axisArr == null)
             {
                 if (a.ndim == 1 && a.Shape.IsContiguous)        staged = a;
@@ -325,38 +334,19 @@ namespace NumSharp.Statistics
             }
             else
             {
-                int[] normalized = reducedAxes;
-
-                if (normalized.Length == 1)
-                {
-                    int axis = normalized[0];
-                    int nd = a.ndim;
-                    if (nd == 1 || axis == nd - 1)
-                        staged = a.Shape.IsContiguous ? a : a.copy();
-                    else
-                        staged = np.moveaxis(a, axis, nd - 1).copy();
-                    n = (int)staged.Shape.dimensions[staged.ndim - 1];
-                    outerSize = 1;
-                    for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
-                }
+                // One reduced axis, or several merged by the prologue into one LAST axis of its data (the kept axes first,
+                // the merged elements in the order of their original axes): that axis moved innermost, the data copied when
+                // it is not a contiguous run already (the kernel only reads it, row by row into its scratch).
+                NDArray data = prologue.Data;
+                int axis = prologue.Axis.Value;
+                int nd = data.ndim;
+                if (nd == 1 || axis == nd - 1)
+                    staged = data.Shape.IsContiguous ? data : data.copy();
                 else
-                {
-                    // Multi-axis: merge the reduction axes into one at the back.
-                    int[] sortedAxis = (int[])normalized.Clone();
-                    Array.Sort(sortedAxis);
-                    int[] keep = Enumerable.Range(0, a.ndim).Where(i => Array.BinarySearch(sortedAxis, i) < 0).ToArray();
-                    int[] dest = Enumerable.Range(0, keep.Length).ToArray();
-                    NDArray moved = np.moveaxis(a, keep, dest);
-                    long reduced = 1;
-                    for (int i = 0; i < normalized.Length; i++) reduced *= a.Shape.dimensions[normalized[i]];
-                    long[] newShape = new long[keep.Length + 1];
-                    for (int i = 0; i < keep.Length; i++) newShape[i] = a.Shape.dimensions[keep[i]];
-                    newShape[keep.Length] = reduced;
-                    staged = moved.reshape(Shape.Adopt(newShape)).copy();
-                    n = (int)staged.Shape.dimensions[staged.ndim - 1];
-                    outerSize = 1;
-                    for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
-                }
+                    staged = np.moveaxis(data, axis, nd - 1).copy();
+                n = (int)staged.Shape.dimensions[staged.ndim - 1];
+                outerSize = 1;
+                for (int i = 0; i < staged.ndim - 1; i++) outerSize *= staged.Shape.dimensions[i];
             }
 
             // ── Output shape: q's shape (if non-scalar) prepended to the reduced shape. ──

@@ -178,7 +178,7 @@ Statistics/np.average.cs	5	44
 Statistics/np.cov.cs	8	7
 Statistics/np.histogram.cs	14	10
 Statistics/np.histogramdd.cs	10	5
-Statistics/np.median.cs	3	0
+Statistics/np.median.cs	2	0
 Statistics/np.nanmean.cs	0	1
 Statistics/np.nanstd.cs	0	1
 Statistics/np.nanvar.cs	0	1

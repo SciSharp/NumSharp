@@ -140,10 +140,13 @@ namespace NumSharp.Backends.Strings
         internal static NDArray Median(NDArray a, int[] axes, NDArray @out, bool keepdims)
         {
             int nd = a.ndim;
-            NDStringUfuncs.ValidateReduceAxes("median", nd, axes);
-            int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
-            NDArray target = KeepdimsOut(@out, keepdims, nd, reduced);
-            NDArray work = MergeReducedAxes(a, reduced, out int? axis);
+            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): the axes (every axis checked, then
+            // the repeats), keepdims' view of out, then several reduced axes merged into one last axis behind the kept ones.
+            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            int[] reduced = prologue.Reduced;
+            NDArray target = prologue.Target;
+            NDArray work = prologue.Data;
+            int? axis = prologue.Axis;
 
             // _median: `part = partition(a, kth, axis=axis)` — StringDType has no selection loop, so NumPy sorts each line
             // (a flattened copy for axis=None); its kth values always lie inside the line (or the array is empty).
@@ -248,10 +251,13 @@ namespace NumSharp.Backends.Strings
             // nanmean is np.mean — whose axis normalization comes first (`_count_reduce_items`).
             if (a.size == 0)
                 return EmptyNanMean(a, axes, @out, keepdims);
-            NDStringUfuncs.ValidateReduceAxes("nanmedian", nd, axes);
-            int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
-            NDArray target = KeepdimsOut(@out, keepdims, nd, reduced);
-            NDArray work = MergeReducedAxes(a, reduced, out int? axis);
+            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): the axes, keepdims' view of out,
+            // the merge of several reduced axes (data that is not empty always merges).
+            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            int[] reduced = prologue.Reduced;
+            NDArray target = prologue.Target;
+            NDArray work = prologue.Data;
+            int? axis = prologue.Axis;
 
             NDArray r;
             if (axis is null || work.ndim == 1)
@@ -378,10 +384,13 @@ namespace NumSharp.Backends.Strings
             int nd = a.ndim;
             if (a.size == 0)
                 return EmptyNanMean(a, axes, @out, keepdims);
-            NDStringUfuncs.ValidateReduceAxes(op, nd, axes);
-            int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
-            NDArray target = KeepdimsOut(@out, keepdims, nd, reduced);
-            NDArray work = MergeReducedAxes(a, reduced, out int? axis);
+            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): the axes, keepdims' view of out,
+            // the merge of several reduced axes (data that is not empty always merges).
+            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            int[] reduced = prologue.Reduced;
+            NDArray target = prologue.Target;
+            NDArray work = prologue.Data;
+            int? axis = prologue.Axis;
             string quantileOp = op == "nanpercentile" ? "percentile" : "quantile";
 
             NDArray r;
@@ -669,15 +678,20 @@ namespace NumSharp.Backends.Strings
         /// <param name="q">The <c>StringDType</c> q.</param>
         /// <param name="method">The method name.</param>
         /// <param name="axes">The <c>axis</c> argument, or null.</param>
+        /// <param name="out">The caller's out, or null: a q that passed reaches <c>_ureduce</c>, whose keepdims index of it
+        ///     comes before q's rank, the method and the virtual index.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept (keepdims' out index).</param>
         /// <returns>The exception to throw, or null when NumPy returns <c>np.nanmean(a, axis)</c> (nanquantile of EMPTY
         ///     numeric data with a q that passed) — the caller computes that.</returns>
         /// <exception cref="Exception">The reductions' and the data's own errors, thrown where NumPy raises them (the axis,
-        ///     the add.reduce of empty text data, a None-like NA in q's minimum).</exception>
+        ///     keepdims' out index, the merge of several axes, the add.reduce of empty text data, a None-like NA in q's
+        ///     minimum).</exception>
         /// <remarks>
         ///     One residual, shared with a fixed-width text q: a nanquantile whose every reduced line of the data is all NaN
         ///     returns NumPy's empty result there, where this reports the virtual index's refusal.
         /// </remarks>
-        internal static Exception QuantileVStringQ(string op, NDArray a, NDArray q, string method, int[] axes)
+        internal static Exception QuantileVStringQ(string op, NDArray a, NDArray q, string method, int[] axes,
+            NDArray @out, bool keepdims)
         {
             if (op is "percentile" or "nanpercentile")
                 // `q = np.true_divide(q, 100)`.
@@ -731,7 +745,9 @@ namespace NumSharp.Backends.Strings
                     // Fixed-width text: np.nanmean's add.reduce refusal.
                     return NDStringUfuncs.AddNotCompatible(a.dtype, "reduce");
                 }
-                NDStringUfuncs.ValidateReduceAxes(op, a.ndim, axes);
+                // _ureduce's prologue (the family's one copy): the axes, keepdims' out index (non-empty data cannot fail the
+                // merge).
+                QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
                 // Fixed-width text has no isnan loop; StringDType text does (its NaN-like NAs), and goes on to the virtual
                 // index of what is left. (IsVString first: IsString refuses a StringDType operand by design.)
                 if (!NDStringUfuncs.IsVString(a) && NDStringUfuncs.IsString(a))
@@ -739,7 +755,9 @@ namespace NumSharp.Backends.Strings
             }
             else
             {
-                NDStringUfuncs.ValidateReduceAxes(op, a.ndim, axes);
+                // _ureduce's prologue: the axes, keepdims' out index, the merge of several axes (a kept axis of length 0
+                // beside them is NumPy's reshape error) — all before q's rank, the method and the virtual index.
+                QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
             }
             // _quantile_ureduce_func: `if q.ndim > 2: raise ValueError("q must be a scalar or 1d")`.
             if (q.ndim > 2)
@@ -835,71 +853,6 @@ namespace NumSharp.Backends.Strings
         // =============================================================================================================
         // _ureduce pieces, Python objects and stores
         // =============================================================================================================
-
-        /// <summary>
-        ///     <c>_ureduce</c>'s keepdims rule for <c>out=</c>: the reduction writes into <c>out[(Ellipsis,) + index_out]</c>,
-        ///     a view with every reduced axis taken at 0 (every axis for <c>axis=None</c>).
-        /// </summary>
-        /// <param name="out">The out array, or null.</param>
-        /// <param name="keepdims">Keep the reduced axes.</param>
-        /// <param name="nd">The input's rank.</param>
-        /// <param name="reduced">The normalized reduced axes, or null.</param>
-        /// <returns>The view, <paramref name="out"/> itself without keepdims, or null.</returns>
-        /// <exception cref="IndexError">An out of too few dimensions for the index.</exception>
-        private static NDArray KeepdimsOut(NDArray @out, bool keepdims, int nd, int[] reduced)
-        {
-            if (@out is null || !keepdims)
-                return @out;
-            var index = new Slice[1 + nd];
-            index[0] = Slice.Ellipsis;
-            for (int d = 0; d < nd; d++)
-                index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
-            return @out[index];
-        }
-
-        /// <summary>
-        ///     <c>_ureduce</c>'s merge: one reduced axis is the reduction's axis; none or several are merged into ONE last axis
-        ///     behind the kept ones (<c>a.reshape(a.shape[:nkeep] + (-1,))</c> after moving the kept axes first); every axis
-        ///     (null) is the flat reduction.
-        /// </summary>
-        /// <param name="a">The input.</param>
-        /// <param name="reduced">The normalized reduced axes, or null.</param>
-        /// <param name="axis">Receives the reduction's axis, or null for the flat reduction.</param>
-        /// <returns>The array the reduction runs on (<paramref name="a"/> itself, or the merged array).</returns>
-        /// <exception cref="IncorrectShapeException">A kept axis of length 0 beside the merged ones: the -1 cannot be
-        ///     resolved (<c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
-        /// <remarks>
-        ///     NumPy moves the kept axes with a loop of <c>swapaxes</c>, which orders the MERGED axes differently from this
-        ///     move; the statistics here sort each merged line, so the order of its elements never shows.
-        /// </remarks>
-        private static NDArray MergeReducedAxes(NDArray a, int[] reduced, out int? axis)
-        {
-            if (reduced is null)
-            {
-                axis = null;
-                return a;
-            }
-            if (reduced.Length == 1)
-            {
-                axis = reduced[0];
-                return a;
-            }
-            int nd = a.ndim;
-            var keep = new List<int>();
-            for (int d = 0; d < nd; d++)
-                if (Array.IndexOf(reduced, d) < 0)
-                    keep.Add(d);
-            var destinations = new int[keep.Count];
-            for (int i = 0; i < destinations.Length; i++)
-                destinations[i] = i;
-            NDArray moved = keep.Count == 0 ? a : np.moveaxis(a, keep.ToArray(), destinations);
-            var merged = new long[keep.Count + 1];
-            for (int d = 0; d < keep.Count; d++)
-                merged[d] = moved.Shape.dimensions[d];
-            merged[keep.Count] = -1;
-            axis = keep.Count;
-            return moved.reshape(Shape.Adopt(merged));
-        }
 
         /// <summary>
         ///     <c>_ureduce</c>'s keepdims rule for the result: <c>r[(Ellipsis,) + index_r]</c>, a new axis at every reduced

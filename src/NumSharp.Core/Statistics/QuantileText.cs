@@ -44,7 +44,8 @@ namespace NumSharp.Statistics
     {
         /// <summary>
         ///     NumPy's take path of <c>_quantile</c> over text, wrapped in <c>_ureduce</c>'s keepdims and out handling, with the
-        ///     checks between them in NumPy's order: the out index (keepdims), q's rank (<c>_quantile_ureduce_func</c>), the
+        ///     checks between them in NumPy's order: <c>_ureduce</c>'s prologue (<see cref="QuantileEngine.UReduce"/>: the
+        ///     axes, the out index under keepdims, the merge of several axes), q's rank (<c>_quantile_ureduce_func</c>), the
         ///     method and the interpolating methods' refusal (<c>_quantile</c>), then the take.
         /// </summary>
         /// <param name="op">The NumPy function name (<c>quantile</c> or <c>percentile</c>), for the refusals' texts.</param>
@@ -53,7 +54,7 @@ namespace NumSharp.Statistics
         /// <param name="qShape">q's shape: empty for a scalar q.</param>
         /// <param name="qIsInteger">True when q is an integer (or bool) array: NumPy's virtual index <c>(n - 1) * q</c> is then
         ///     an integer, and 'linear' takes the take path.</param>
-        /// <param name="axes">The reduced axes (already validated by the caller, as NumPy's <c>_ureduce</c> first does), or
+        /// <param name="axes">The reduced axes as the caller gave them (the prologue normalizes them, NumPy's first check), or
         ///     null for every axis.</param>
         /// <param name="out">An optional output array, or null.</param>
         /// <param name="method">The method name.</param>
@@ -92,6 +93,8 @@ namespace NumSharp.Statistics
         ///     <c>byte indices must be integers or slices, not tuple</c> for <c>S</c>, <c>'float' object is not
         ///     subscriptable</c> / <c>'NoneType' object is not subscriptable</c> for a <c>StringDType</c> NA object: NumPy
         ///     indexes its scalar).</exception>
+        /// <exception cref="AxisError">An axis is out of range (the prologue's first check).</exception>
+        /// <exception cref="ValueError">An axis repeats (<c>repeated axis</c>, the prologue).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> line of two or more elements holding a None-like NA (the sort's
         ///     <c>Cannot compare null that is not a nan-like value</c>), or the unsafe write-back into a numeric
         ///     <paramref name="out"/> that cannot parse a string (<c>could not convert string to float: 'a'</c>).</exception>
@@ -108,24 +111,16 @@ namespace NumSharp.Statistics
             NDArray @out, string method, bool keepdims, bool partitionRaises = false, NPTypeCode qType = NPTypeCode.Double)
         {
             int nd = a.ndim;
-            int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
+            // _ureduce, the family's one prologue (QuantileEngine.UReduce): the axes normalized, keepdims' view of out (the
+            // reduced axes taken at 0, every axis for axis=None), then the merge of several reduced axes into one last axis
+            // behind the kept ones — `a.reshape(a.shape[:nkeep] + (-1,))`, whose -1 NumPy refuses to resolve when a kept axis
+            // is 0 long ("cannot reshape array of size 0 into shape (0,newaxis)"), before q's rank is looked at.
+            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            int[] reduced = prologue.Reduced;
+            NDArray target = prologue.Target;
 
-            // _ureduce: with keepdims, the reduction writes into out[(Ellipsis,) + index_out], a view with the reduced
-            // axes taken at 0 (every axis for axis=None) — indexed before the reduction function runs.
-            NDArray target = @out;
-            if (@out is not null && keepdims)
-            {
-                var index = new Slice[1 + nd];
-                index[0] = Slice.Ellipsis;
-                for (int d = 0; d < nd; d++)
-                    index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
-                target = @out[index];
-            }
-
-            // The data along one axis: _quantile_ureduce_func's flatten (axis=None), the one reduced axis, or _ureduce's
-            // merge of several reduced axes into one last axis behind the kept ones — `a.reshape(a.shape[:nkeep] + (-1,))`,
-            // whose -1 NumPy refuses to resolve when a kept axis is 0 long ("cannot reshape array of size 0 into shape
-            // (0,newaxis)"), before q's rank is looked at.
+            // The data along one axis: _quantile_ureduce_func's flatten (axis=None), else the prologue's data along its
+            // one axis (the reduced axis, or the merged last one).
             NDArray work;
             int axis;
             if (reduced is null)
@@ -133,27 +128,10 @@ namespace NumSharp.Statistics
                 work = a.flatten();
                 axis = 0;
             }
-            else if (reduced.Length == 1)
-            {
-                work = a;
-                axis = reduced[0];
-            }
             else
             {
-                var keep = new List<int>();
-                for (int d = 0; d < nd; d++)
-                    if (Array.IndexOf(reduced, d) < 0)
-                        keep.Add(d);
-                var destinations = new int[keep.Count];
-                for (int i = 0; i < destinations.Length; i++)
-                    destinations[i] = i;
-                NDArray movedKeep = np.moveaxis(a, keep.ToArray(), destinations);
-                var merged = new long[keep.Count + 1];
-                for (int d = 0; d < keep.Count; d++)
-                    merged[d] = movedKeep.Shape.dimensions[d];
-                merged[keep.Count] = -1;
-                work = movedKeep.reshape(Shape.Adopt(merged));
-                axis = keep.Count;
+                work = prologue.Data;
+                axis = prologue.Axis.Value;
             }
 
             // _quantile_ureduce_func: `if q.ndim > 2: raise ValueError("q must be a scalar or 1d")`.

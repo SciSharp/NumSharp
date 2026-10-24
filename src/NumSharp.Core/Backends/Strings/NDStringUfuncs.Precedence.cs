@@ -1466,9 +1466,16 @@ namespace NumSharp.Backends.Strings
         /// <param name="q">The text q.</param>
         /// <param name="method">The method name.</param>
         /// <param name="axes">The axes, or null.</param>
+        /// <param name="out">The caller's out, or null: an empty q reaches <c>_ureduce</c>, whose keepdims index of it
+        ///     comes before the method and the refusals.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept (keepdims' out index).</param>
         /// <returns>The exception to throw, or null when NumPy returns <c>np.nanmean(a, axis)</c> (nanquantile of EMPTY
         ///     numeric data with an empty q) — the caller computes that.</returns>
         /// <exception cref="AxisError">An empty q reaches the reduction's axis check (thrown).</exception>
+        /// <exception cref="ValueError">An empty q reaches the reduction with a repeated axis (thrown).</exception>
+        /// <exception cref="IndexError">An empty q reaches keepdims' index of an out NumPy cannot index (thrown).</exception>
+        /// <exception cref="IncorrectShapeException">An empty q reaches <c>quantile</c>'s merge of several reduced axes
+        ///     beside a kept axis of length 0 (NumPy's reshape ValueError text; thrown).</exception>
         /// <exception cref="ArgumentException">An empty q reaches the method lookup with an unknown method (thrown,
         ///     NumPy's ValueError text).</exception>
         /// <remarks>
@@ -1479,17 +1486,20 @@ namespace NumSharp.Backends.Strings
         ///     any other q takes <c>q.min()</c> (<c>minimum</c> has no text loop).
         ///     </para>
         ///     <para>
-        ///     An EMPTY 1-D q passes that check. <c>quantile</c> then checks the axes and the method and computes the virtual
-        ///     indexes <c>(n - 1) * q</c> — an integer times text, NumPy's string repeat, which refuses without
-        ///     <c>out=</c>. <c>nanquantile</c> first sends empty data to <c>np.nanmean</c> (the add.reduce refusal for
-        ///     fixed-width text data; for <c>StringDType</c> data its axis check, then add.reduce's
-        ///     <c>zero-size array to reduction operation add which has no identity</c>), then tests text data for NaN
+        ///     An EMPTY 1-D q passes that check. <c>quantile</c> then runs <c>_ureduce</c>'s prologue (the axes, keepdims'
+        ///     out index, the merge of several axes: <see cref="NumSharp.Statistics.QuantileEngine.UReduce"/>), checks the
+        ///     method and computes the virtual indexes <c>(n - 1) * q</c> — an integer times text, NumPy's string repeat,
+        ///     which refuses without <c>out=</c>. <c>nanquantile</c> first sends empty data to <c>np.nanmean</c> (the
+        ///     add.reduce refusal for fixed-width text data; for <c>StringDType</c> data its axis check, then add.reduce's
+        ///     <c>zero-size array to reduction operation add which has no identity</c>), runs the same prologue for other
+        ///     data, then tests text data for NaN
         ///     (<c>isnan</c> has no fixed-width text loop; <c>StringDType</c>'s passes), then reaches the same repeat. One
         ///     residual: when every reduced slice of numeric or <c>StringDType</c> data is all NaN, NumPy returns an empty
         ///     result where this reports the repeat's refusal.
         ///     </para>
         /// </remarks>
-        internal static Exception QuantileTextQAnswer(string op, NDArray a, NDArray q, string method, int[] axes)
+        internal static Exception QuantileTextQAnswer(string op, NDArray a, NDArray q, string method, int[] axes,
+            NDArray @out, bool keepdims)
         {
             if (op is "percentile" or "nanpercentile")
                 return NotSupportedForInputTypes("divide");
@@ -1514,7 +1524,9 @@ namespace NumSharp.Backends.Strings
                     // Fixed-width text: np.nanmean's add.reduce refusal.
                     return AddNotCompatible(a.dtype, "reduce");
                 }
-                ValidateReduceAxes(op, a.ndim, axes);
+                // _ureduce's prologue (the family's one copy): the axes, keepdims' out index (non-empty data cannot fail the
+                // merge).
+                NumSharp.Statistics.QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
                 // Fixed-width text has no isnan loop; StringDType data does (its NaN-like NAs) and goes on to the virtual
                 // index below. (IsVString first: IsString refuses a StringDType operand by design.)
                 if (!IsVString(a) && IsString(a))
@@ -1522,7 +1534,9 @@ namespace NumSharp.Backends.Strings
             }
             else
             {
-                ValidateReduceAxes(op, a.ndim, axes);
+                // _ureduce's prologue: the axes, keepdims' out index, the merge of several axes (a kept axis of length 0
+                // beside them is NumPy's reshape error) — all before the method and the virtual index.
+                NumSharp.Statistics.QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
             }
             NumSharp.Statistics.QuantileEngine.ParseMethod(method);
             // `(n - 1) * quantiles` without out=: the string repeat's refusal.

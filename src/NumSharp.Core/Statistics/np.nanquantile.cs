@@ -53,6 +53,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, double q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -112,6 +115,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, double[] q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -181,6 +187,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, double q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -247,6 +256,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, double[] q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -308,6 +320,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, NDArray q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -370,6 +385,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, NDArray q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -428,6 +446,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, long q,
             int? axis = null, NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)
@@ -478,6 +499,9 @@ namespace NumSharp
         /// <exception cref="IndexError">With <paramref name="weights"/> of the reduced axes only, over data with a
         ///     kept axis longer than 1: NumPy 2.4.2's own error (<c>index 1 is out of bounds for axis 0 with size 1</c>),
         ///     reproduced.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under <paramref name="keepdims"/>, with an
+        ///     <paramref name="out"/> NumPy cannot index: <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (empty data
+        ///     answers <c>np.nanmean</c> first), raised before the text refusals (<c>isnan</c>), q's rank and the method.</exception>
         public static NDArray nanquantile(NDArray a, long q, int[] axis,
             NDArray @out = null, bool overwrite_input = false,
             string method = "linear", bool keepdims = false, NDArray weights = null)

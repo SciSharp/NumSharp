@@ -39,6 +39,9 @@ namespace NumSharp
         ///     <para>A <c>StringDType</c> median exists only when the middle elements are NaN-like NAs: NumPy's
         ///     <c>np.float64(nan)</c>, a read-only 0-d float64 here.</para>
         /// </remarks>
+        /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
+        ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
+        ///     raised for every dtype before the text refusals.</exception>
         public static NDArray median(NDArray a,
             int? axis = null, NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
@@ -77,8 +80,6 @@ namespace NumSharp
         /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <exception cref="TypeError">Text data or a text <paramref name="out"/> that NumPy's closing mean refuses (its
         ///     verbatim text); a <c>StringDType</c> array after its sort (the mean's divide refuses the concatenated text).</exception>
-        /// <exception cref="IncorrectShapeException">A <c>StringDType</c> array with several reduced axes beside a kept axis of
-        ///     length 0 (NumPy's <c>_ureduce</c> merge cannot resolve its -1).</exception>
         /// <remarks>A <c>numpy.matrix</c> operand is computed as a plain array and the result is plain: this overload has
         ///     no matrix rule, because NumPy's tuple-axis answer for a matrix is an artifact of matrix semantics inside its
         ///     own Python code (<c>np.median(m, axis=())</c> reduces axis 1).</remarks>
@@ -88,6 +89,12 @@ namespace NumSharp
         ///     checked. With <c>overwrite_input</c> and no axis NumPy partitions the text itself instead: its broadcast error
         ///     for an even length other than 2 (<see cref="IncorrectShapeException"/>), else the closing mean's refusal of
         ///     text.</exception>
+        /// <exception cref="IndexError"><paramref name="keepdims"/> with an <paramref name="out"/> NumPy cannot index:
+        ///     <c>_ureduce</c>'s <c>out[(Ellipsis,) + index_out]</c> (too few dimensions, or a reduced axis of length 0),
+        ///     raised for every dtype before the text refusals.</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0, any dtype:
+        ///     <c>_ureduce</c>'s merge cannot resolve its -1 (NumPy's ValueError <c>cannot reshape array of size 0 into shape
+        ///     (0,newaxis)</c>), raised before the text refusals.</exception>
         public static NDArray median(NDArray a, int[] axis,
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
@@ -124,40 +131,17 @@ namespace NumSharp
         ///     reshape, thrown here).</exception>
         private static Exception MedianOfChararray(NDArray a, int[] axes, NDArray @out, bool overwrite_input, bool keepdims)
         {
-            // _ureduce: `axis = _nx.normalize_axis_tuple(axis, nd)` — every axis checked, then the repeats.
-            Backends.Strings.NDStringUfuncs.ValidateReduceAxes("median", a.ndim, axes);
             int nd = a.ndim;
-            int[] reduced = axes is null ? null : QuantileEngine.NormalizeAxes(axes, nd);
             // The plain view the remaining statements read: no subclass rule may run on them.
             using var region = NDCharArrayBoundary.Inside();
-            if (keepdims && @out is not null)
-            {
-                // `out[(Ellipsis,) + index_out]`: index 0 on every reduced axis (every axis without one), before the call.
-                var index = new Slice[1 + nd];
-                index[0] = Slice.Ellipsis;
-                for (int d = 0; d < nd; d++)
-                    index[1 + d] = reduced is null || Array.IndexOf(reduced, d) >= 0 ? Slice.Index(0) : Slice.All;
-                using var target = @out[index];
-            }
-            if (reduced is not null && reduced.Length > 1)
-            {
-                // The merge of several reduced axes: the kept ones moved to the front, then `reshape(kept + (-1,))`, whose -1
-                // NumPy cannot resolve beside a kept axis of length 0.
-                var keep = new System.Collections.Generic.List<int>();
-                for (int d = 0; d < nd; d++)
-                    if (Array.IndexOf(reduced, d) < 0)
-                        keep.Add(d);
-                var destinations = new int[keep.Count];
-                for (int i = 0; i < destinations.Length; i++)
-                    destinations[i] = i;
-                using var moved = np.moveaxis(a, keep.ToArray(), destinations);
-                var merged = new long[keep.Count + 1];
-                for (int d = 0; d < keep.Count; d++)
-                    merged[d] = moved.Shape.dimensions[d];
-                merged[keep.Count] = -1;
-                using var reshaped = moved.reshape(Shape.Adopt(merged));
-            }
-            if (!overwrite_input || reduced is not null)
+            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): `axis = normalize_axis_tuple(axis,
+            // nd)` (every axis checked, then the repeats), keepdims' `out[(Ellipsis,) + index_out]` (index 0 on every reduced
+            // axis, every axis without one), then the merge of several reduced axes (`reshape(kept + (-1,))`, whose -1 NumPy
+            // cannot resolve beside a kept axis of length 0). Only its errors matter here: the arrays it makes are reclaimed.
+            QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
+            // An axis argument (the empty tuple included) reaches `np.partition(a, kth, axis=...)` or `a.partition(kth,
+            // axis=axis)`, the string partition's keyword refusal; only overwrite_input without one partitions the text.
+            if (!overwrite_input || axes is not null)
                 return NDCharArrayBoundary.PartitionKeywordError();
 
             // `part = a.ravel(); part.partition(kth)`: the string partition of the flattened text around the kth indices

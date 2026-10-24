@@ -567,6 +567,17 @@ namespace NumSharp.Tests.Strings
         [TestMethod] public void QuantilePrecisionAndOut() => Run("qprec");
 
         /// <summary>
+        ///     Section qprologue (the np-layer dtype plan, P1a step 2): NumPy's <c>_ureduce</c> prologue of <c>np.median</c> /
+        ///     <c>np.nanmedian</c> / <c>np.quantile</c> / <c>np.percentile</c> / <c>np.nanquantile</c> /
+        ///     <c>np.nanpercentile</c> — the axes, keepdims' <c>out</c> index, the merge of several reduced axes, whose
+        ///     <c>-1</c> NumPy cannot resolve beside a kept axis of length 0 — against every check that follows it (a bogus
+        ///     method, a 3-D q, a list or array q, a text q, weights, the text refusals, <c>isnan</c>), over numbers, bool,
+        ///     <c>U</c>, <c>S</c> and <c>StringDType</c> data. The family's routes each had their own copy of the prologue,
+        ///     and they disagreed (the plan's Appendix B1). Strict.
+        /// </summary>
+        [TestMethod] public void QuantilePrologue() => Run("qprologue");
+
+        /// <summary>
         ///     Section strfn (strings phase 2, P2.5): numpy.strings' search, strip, pad, replace, partition and slice
         ///     functions over S / U text — str_len (a ufunc with out= / where= / dtype=), find / rfind / index / rindex /
         ///     count, startswith / endswith, strip / lstrip / rstrip, center / ljust / rjust, zfill, expandtabs, replace,
@@ -817,7 +828,7 @@ namespace NumSharp.Tests.Strings
                 "strcomp", "strarith", "strconv", "tdtype", "tstore", "tcreate", "tmove", "tcast", "titer", "cvtext", "promote",
                 "storenone", "tma", "tio", "strsort", "strchar", "strsearch", "strchararray", "strcharops", "strcharfn", "strcharobj",
                 "strcharmeth", "strcharlist", "strsets", "tcomp", "tarith",
-                "treduce", "tsort", "qfamily", "qprec", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
+                "treduce", "tsort", "qfamily", "qprec", "qprologue", "strfn", "tfn", "strprop", "tprop", "strcase", "tcase", "strtrans",
                 "ttrans", "strmod", "tmod", "strcodec", "tcodec", "strout", "strpad", "tsurface",
             };
             var bySection = Cases.GroupBy(c => c.Id.Split('/')[0]).ToDictionary(g => g.Key, g => g.Count());
