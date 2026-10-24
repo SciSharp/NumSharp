@@ -46,6 +46,7 @@ Backends/Default/Math/Reduction/Default.Reduction.Nan.cs	2	0
 Backends/Default/Math/Reduction/Default.Reduction.NanMean.cs	5	1
 Backends/Default/Math/Reduction/Default.Reduction.NanVarStd.cs	18	6
 Backends/Default/Math/Reduction/Default.Reduction.Product.cs	0	1
+Backends/Default/Math/Reduction/Default.Reduction.Ptp.cs	0	1	# PtpOut moved from np.ptp by P1b: np.copyto(out, diff) stores the range into out= until P6 gives the engine its own copy
 Backends/Default/Math/Reduction/Default.Reduction.ScanOut.cs	0	1	# WriteScanToOut moved from np.cumsum by the P0 pilot: np.copyto(out, result, 'unsafe') stores the scan into out= until P6 gives the engine its own copy
 Backends/Default/Math/Reduction/Default.Reduction.VarStd.cs	21	14
 Backends/Default/Sorting/AxisSort.cs	0	1
