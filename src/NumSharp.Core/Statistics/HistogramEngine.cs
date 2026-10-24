@@ -59,6 +59,9 @@ namespace NumSharp.Statistics
             /// <summary>Complex data's outer edges (<see cref="First"/> / <see cref="Last"/> are unused then) — valid only when
             ///     <see cref="Uniform"/> and <see cref="BinDtype"/> is Complex.</summary>
             public readonly ComplexOuterEdges ComplexEdges;
+            /// <summary>True when the outer edges are a range's Python floats rather than the data's own minimum and maximum:
+            ///     NumPy's <c>norm_denom</c> is then their float64 difference (<see cref="ZeroBinsBlockHasNaNIndex"/>).</summary>
+            public readonly bool RangeEdges;
 
             /// <summary>Holds the edges and, for equal-width bins, the parameters of the uniform counting path.</summary>
             /// <param name="edges">The bin edges (nbins + 1 of them).</param>
@@ -69,11 +72,12 @@ namespace NumSharp.Statistics
             /// <param name="binDtype">The dtype the edges are in and the samples are cast to (Half, Single or Double; Complex
             ///     for complex data, whose counting runs <see cref="HistogramUniformComplexData"/>).</param>
             /// <param name="complexEdges">Complex data's outer edges, or the default for every other dtype.</param>
+            /// <param name="rangeEdges">Whether the outer edges are a range's Python floats.</param>
             public BinEdgesResult(NDArray edges, bool uniform, double first, double last, int nbins, NPTypeCode binDtype,
-                ComplexOuterEdges complexEdges = default)
+                ComplexOuterEdges complexEdges = default, bool rangeEdges = false)
             {
                 Edges = edges; Uniform = uniform; First = first; Last = last; NBins = nbins; BinDtype = binDtype;
-                ComplexEdges = complexEdges;
+                ComplexEdges = complexEdges; RangeEdges = rangeEdges;
             }
         }
 
@@ -378,22 +382,30 @@ namespace NumSharp.Statistics
         ///     NumPy's equal-width counting loop when there are no bins: an estimator's <c>int(np.ceil(delta / width))</c> is
         ///     0 when the width is infinite and the range is not (<c>scott</c>'s width is a standard deviation in the data's
         ///     dtype, whose squares overflow once a float16 sample lies 256 or more from the mean, a float32 one about
-        ///     1.8e19, a float64 one about 1.3e154). Every kept sample's index is then 0, which
-        ///     <c>indices[indices == n_equal_bins] -= 1</c> turns into -1, and the block's <c>np.bincount</c> refuses it; with no
-        ///     sample between the outer edges the loop adds nothing and the counts are empty.
+        ///     1.8e19, a float64 one about 1.3e154), or when the outer edges have no width left: data with no spread whose
+        ///     ±0.5 widening rounds back to the value itself (a float16 1026, a float32 1e9, a float64 or integer of 2^53 or
+        ///     more), where scott's np.std is the rounding error of the mean. A kept sample's index is
+        ///     <c>(_unsigned_subtract(tmp_a, first_edge) / norm_denom) * 0</c>: a NaN when the quotient is not finite (a zero
+        ///     <c>norm_denom</c> gives 0 / 0), which <c>astype(np.intp)</c> makes INT64_MIN and the fancy index
+        ///     <c>bin_edges[indices]</c> refuses; else 0, which <c>indices[indices == n_equal_bins] -= 1</c> turns into -1 and
+        ///     the block's <c>np.bincount</c> refuses. With no sample between the outer edges the loop adds nothing and the
+        ///     counts are empty.
         /// </summary>
         /// <param name="raveled">The raveled real data (at least one sample).</param>
         /// <param name="w">The raveled weights, or null (an estimator refuses weights, so this is null in practice).</param>
         /// <param name="be">The equal-width edges (one edge) and the outer edges.</param>
         /// <param name="ntype">The result's dtype.</param>
         /// <returns>The empty counts, when no sample lies between the outer edges.</returns>
-        /// <exception cref="ArgumentException">A sample between the outer edges: np.bincount's refusal of the -1 indices
-        ///     (<c>'list' argument must have no negative elements</c>; NumSharp's np.bincount raises NumPy's ValueError text as
-        ///     an ArgumentException).</exception>
+        /// <exception cref="IndexError">A kept sample of the first block holding one whose quotient is not finite:
+        ///     <c>index -9223372036854775808 is out of bounds for axis 0 with size 1</c>.</exception>
+        /// <exception cref="ArgumentException">Otherwise a sample between the outer edges: np.bincount's refusal of the -1
+        ///     indices (<c>'list' argument must have no negative elements</c>; NumSharp's np.bincount raises NumPy's
+        ///     ValueError text as an ArgumentException).</exception>
         /// <remarks>
         ///     Zero bins come only from an estimator, which ran over the samples between the outer edges and found at least
-        ///     one, so NumPy's answer is in practice always the refusal. The keep mask is the estimator branch's own
-        ///     comparison with the outer edges, so it keeps the same samples.
+        ///     one, so NumPy's answer is in practice always one of the refusals. The keep mask is the estimator branch's own
+        ///     comparison with the outer edges, so it keeps the same samples. Decimal data (no NumPy dtype) skip the quotient
+        ///     and take the bincount refusal.
         /// </remarks>
         private static NDArray HistogramZeroBins(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
         {
@@ -405,6 +417,10 @@ namespace NumSharp.Statistics
             long kept = np.count_nonzero(keep);
             if (kept > 0)
             {
+                // `decrement = tmp_a < bin_edges[indices]` runs before the bincount: a NaN index of that first block is the
+                // first refusal.
+                if (raveled.typecode != NPTypeCode.Decimal && ZeroBinsBlockHasNaNIndex(raveled, keep, be))
+                    throw new IndexError("index -9223372036854775808 is out of bounds for axis 0 with size 1");
                 // indices = f_indices.astype(np.intp) is 0 (a product with n_equal_bins = 0), then -1; np.bincount refuses.
                 using NDArray indices = np.full(Shape.Vector(kept), -1L, np.int64);
                 using NDArray weights = w?[keep];
@@ -413,6 +429,66 @@ namespace NumSharp.Statistics
             }
             return np.zeros(Shape.Vector(0), ntype);
         }
+
+        /// <summary>
+        ///     Whether a kept sample of the first block of <see cref="HistogramBlock"/> samples holding one gets a NaN index
+        ///     from NumPy's <c>f_indices = (_unsigned_subtract(tmp_a, first_edge) / norm_denom) * n_equal_bins</c> with zero
+        ///     bins: the quotient computed in NumPy's dtypes is not finite.
+        /// </summary>
+        /// <param name="raveled">The raveled float16 / float32 / float64 / integer data.</param>
+        /// <param name="keep">The samples between the outer edges (at least one).</param>
+        /// <param name="be">The outer edges, the edges' dtype and whether the outer edges are a range's.</param>
+        /// <returns>True when NumPy's fancy index meets INT64_MIN in that block.</returns>
+        /// <remarks>
+        ///     The dtypes, as NEP 50 gives them: <c>tmp_a.astype(bin_edges.dtype)</c> and its difference with the lower edge
+        ///     are in the edges' dtype (the data's float16 / float32 / float64, float64 for integer data; a range's Python
+        ///     float rounds to it, an integer edge converts to float64). <c>norm_denom</c> is the range's float64 difference,
+        ///     or the data's own edges' (<see cref="DataEdgesDelta"/>). The quotient keeps float16 / float32 only when both
+        ///     operands have it, and is float64 otherwise.
+        /// </remarks>
+        private static bool ZeroBinsBlockHasNaNIndex(NDArray raveled, NDArray keep, BinEdgesResult be)
+        {
+            long len = raveled.size;
+            long firstKept = 0;
+            while (!keep.GetAtIndex<bool>(firstKept))
+                firstKept++;
+            long blockStart = firstKept / HistogramBlock * HistogramBlock;
+            long blockEnd = Math.Min(blockStart + HistogramBlock, len);
+
+            NpScalar normDenom = be.RangeEdges ? NpScalar.Float64(be.Last - be.First) : DataEdgesDelta(raveled);
+            NPTypeCode b = be.BinDtype;
+            double firstEdge = RoundToEdgeDtype(be.First, b);
+            // The samples as float64: exact for float data, tmp_a.astype(float64) for integer data (the edges' dtype then).
+            using NDArray samples = raveled[$"{blockStart}:{blockEnd}"].astype(NPTypeCode.Double);
+            for (long i = blockStart; i < blockEnd; i++)
+            {
+                if (!keep.GetAtIndex<bool>(i))
+                    continue;
+                double x = samples.GetAtIndex<double>(i - blockStart);
+                // _unsigned_subtract(tmp_a, first_edge) in the edges' dtype (half and float32 arithmetic rounded back).
+                double diff = b switch
+                {
+                    NPTypeCode.Half => (double)(Half)((float)x - (float)firstEdge),
+                    NPTypeCode.Single => (float)x - (float)firstEdge,
+                    _ => x - firstEdge,
+                };
+                double quotient = DivideScalars(new NpScalar(diff, b == NPTypeCode.Half || b == NPTypeCode.Single ? b : NPTypeCode.Double), normDenom);
+                if (!double.IsFinite(quotient))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>A value rounded to the edges' dtype (a Python float meeting float16 / float32 data takes its dtype).</summary>
+        /// <param name="value">The value.</param>
+        /// <param name="dtype">Half, Single or Double.</param>
+        /// <returns>The rounded value.</returns>
+        private static double RoundToEdgeDtype(double value, NPTypeCode dtype) => dtype switch
+        {
+            NPTypeCode.Half => (double)(Half)value,
+            NPTypeCode.Single => (float)value,
+            _ => value,
+        };
 
         // ---------------------------------------------------------------------
         //  Slow (arbitrary-edge) path — sort + inclusive searchsorted, cumulative
@@ -671,7 +747,7 @@ namespace NumSharp.Statistics
                 NDArray edges = HistogramLinspace(first, last, nb + 1, computeType, resultType);
                 if (AnyNonIncreasing(edges))
                     throw new ValueError($"Too many bins for data range. Cannot create {nb} finite-sized bins.");
-                return new BinEdgesResult(edges, true, first, last, nb, resultType);
+                return new BinEdgesResult(edges, true, first, last, nb, resultType, rangeEdges: range.HasValue);
             }
 
             return new BinEdgesResult(binEdges, false, 0, 0, 0, NPTypeCode.Double);

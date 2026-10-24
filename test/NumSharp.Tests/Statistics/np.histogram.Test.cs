@@ -464,6 +464,27 @@ public class np_histogram_Tests
             .WithMessage("Unable to allocate 212. PiB for an array with shape (29770864728363688,) and data type float64");
     }
 
+    /// <summary>
+    ///     Data with no spread whose ±0.5 widening rounds back to the value itself (float16 1026, float32 1e9, uint64
+    ///     2^64 - 1e9 - 1 as a float64): scott's nonzero width over a zero <c>delta</c> is 0 bins, and NumPy's index
+    ///     <c>(tmp_a - first_edge) / norm_denom * 0</c> is 0 / 0, a NaN, which <c>astype(np.intp)</c> makes INT64_MIN and
+    ///     <c>bin_edges[indices]</c> refuses (NumPy 2.4.2), before the bincount's refusal of a -1 index. A range of the
+    ///     same value takes the same path (its Python floats widen to the same float64).
+    /// </summary>
+    [TestMethod]
+    public void Estimator_NoSpread_ZeroWidth_IndexError()
+    {
+        const string text = "index -9223372036854775808 is out of bounds for axis 0 with size 1";
+        ((Action)(() => np.histogram(np.full(Shape.Vector(64), (Half)1026), "scott")))
+            .Should().Throw<IndexError>().WithMessage(text);
+        ((Action)(() => np.histogram(np.full(Shape.Vector(10), 1e9f), "scott")))
+            .Should().Throw<IndexError>().WithMessage(text);
+        var u64 = np.full(Shape.Vector(5), 18446744072709551615UL);
+        ((Action)(() => np.histogram(u64, "scott"))).Should().Throw<IndexError>().WithMessage(text);
+        ((Action)(() => np.histogram(u64, "scott", range: (1.8446744072709552e+19, 1.8446744072709552e+19))))
+            .Should().Throw<IndexError>().WithMessage(text);
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {
