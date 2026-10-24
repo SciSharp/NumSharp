@@ -96,6 +96,25 @@ namespace NumSharp.Tests.Build.Analyzer
             "}\n" +
             "public class Leaf : Lib.GBase<int> { public override NDArray Map(int x, NDArray a) { var t = a + x; return a.copy(); } }\n";
 
+        /// <summary>
+        ///     Interface hierarchies the weaver deduplicates its search over (it searches each interface
+        ///     instantiation once per method): a chain and a diamond lattice with unscoped members at every
+        ///     level, one generic interface reached under two instantiations, the same instantiation reached
+        ///     along two paths, and a generic implementer instantiating over its own type parameter. The
+        ///     analyzer resolves through Roslyn's own deduplicated interface set, so the two must agree.
+        /// </summary>
+        private static readonly string InterfaceLattices = Prelude +
+            "public interface IC0 { [NDScoped] NDArray Apply(NDArray a); NDArray M0(NDArray a); }\n" +
+            "public interface IC1 : IC0 { NDArray M1(NDArray a); }\npublic interface IC2 : IC1 { NDArray M2(NDArray a); }\npublic interface IC3 : IC2 { NDArray M3(NDArray a); }\n" +
+            "public class ChainImpl : IC3 { public NDArray Apply(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M0(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M1(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M2(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray M3(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IRoot { [NDScoped] NDArray Run(NDArray a); }\npublic interface IA1 : IRoot { }\npublic interface IB1 : IRoot { }\npublic interface IA2 : IA1, IB1 { }\npublic interface IB2 : IA1, IB1 { }\n" +
+            "public class Lattice : IA2, IB2 { public NDArray Run(NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Other(NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public interface IBase<T> { [NDScoped] NDArray M(T x, NDArray a); NDArray Plain(T x, NDArray a); }\n" +
+            "public interface IA : IBase<int> { }\npublic interface IB : IBase<string> { }\npublic interface IL : IBase<double> { }\npublic interface IR : IBase<double> { }\n" +
+            "public class Both : IA, IB { public NDArray M(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray M(string x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(string x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n" +
+            "public class Same : IL, IR { public NDArray M(double x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(double x, NDArray a) { var t = a + x; return a.copy(); } }\n" +
+            "public class Open<U> : IA, IBase<U[]> { public NDArray M(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray M(U[] x, NDArray a) { var t = a + 1.0; return a.copy(); } public NDArray Plain(int x, NDArray a) { var t = a + x; return a.copy(); } public NDArray Plain(U[] x, NDArray a) { var t = a + 1.0; return a.copy(); } }\n";
+
         /// <summary>The fixtures by short name (the DataRow carries only the name, so a failure reads as one line, not a source dump).</summary>
         private static (string Source, string BaseLibrary) Fixture(string name) => name switch
         {
@@ -103,6 +122,7 @@ namespace NumSharp.Tests.Build.Analyzer
             "Interfaces" => (Interfaces, null),
             "PropertiesAndCovariance" => (PropertiesAndCovariance, null),
             "CrossAssembly" => (Consumer, BaseLibrary),
+            "InterfaceLattices" => (InterfaceLattices, null),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown parity fixture"),
         };
 
@@ -111,6 +131,7 @@ namespace NumSharp.Tests.Build.Analyzer
         [DataRow("Interfaces")]
         [DataRow("PropertiesAndCovariance")]
         [DataRow("CrossAssembly")]
+        [DataRow("InterfaceLattices")]
         public async Task BothResolvers_AgreeOnEveryMethod_AndMatchTheirOwnOutputs(string name)
         {
             var (source, baseLibrary) = Fixture(name);

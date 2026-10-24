@@ -221,8 +221,14 @@ internal sealed class ScopeInheritance
 
     /// <summary>
     ///     The nearest method up <paramref name="m"/>'s override/implementation graph for which
-    ///     <paramref name="carries"/> holds — <paramref name="m"/> itself excluded — or null.
+    ///     <paramref name="carries"/> holds — <paramref name="m"/> itself excluded — or null. Runs for
+    ///     every virtual method of every type the weaver loads (twice: the scope and the exit walks),
+    ///     so its cost is linear in the hierarchy it climbs: each method and each interface
+    ///     instantiation is examined once per walk.
     /// </summary>
+    /// <param name="m">The method whose declarations are searched.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <returns>The nearest declaration passing <paramref name="carries"/>, or null.</returns>
     private static MethodDefinition FindNearest(MethodDefinition m, Func<MethodDefinition, bool> carries)
     {
         // Only a virtual instance method can override or implement anything; everything else is its
@@ -231,7 +237,8 @@ internal sealed class ScopeInheritance
             return null;
 
         var visited = new HashSet<MethodDefinition> { m };
-        return Visit(m, null, m, carries, visited, 0);
+        var searched = new Dictionary<string, int>(StringComparer.Ordinal);
+        return Visit(m, null, m, carries, visited, searched, 0);
     }
 
     /// <summary>
@@ -240,8 +247,17 @@ internal sealed class ScopeInheritance
     ///     base declaration found. <paramref name="signature"/> is the ORIGINAL method (an override
     ///     keeps its base's signature modulo generic instantiation, so it is the comparand at every level).
     /// </summary>
+    /// <param name="node">The declaration examined at this step.</param>
+    /// <param name="nodeContext">The instantiation context of <paramref name="node"/>'s declaring type (null at the method's own level).</param>
+    /// <param name="signature">The original method, the comparand at every level.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <param name="visited">The declarations already examined in this walk (each is tested once).</param>
+    /// <param name="searched">The interface instantiations already searched in this walk, with the shallowest depth each was searched at (see <see cref="MatchInterface"/>).</param>
+    /// <param name="depth">The walk's depth, bounded by <see cref="MaxDepth"/> (a guard against corrupt cyclic metadata).</param>
+    /// <returns>The first declaration passing <paramref name="carries"/>, or null.</returns>
     private static MethodDefinition Visit(MethodDefinition node, GenericContext nodeContext, MethodDefinition signature,
-                                          Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited, int depth)
+                                          Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited,
+                                          Dictionary<string, int> searched, int depth)
     {
         if (depth > MaxDepth)
             return null;
@@ -255,7 +271,7 @@ internal sealed class ScopeInheritance
                 continue;
             if (carries(def))
                 return def;
-            var found = Visit(def, ContextOf(overrideRef.DeclaringType, nodeContext), signature, carries, visited, depth + 1);
+            var found = Visit(def, ContextOf(overrideRef.DeclaringType, nodeContext), signature, carries, visited, searched, depth + 1);
             if (found != null)
                 return found;
         }
@@ -273,7 +289,7 @@ internal sealed class ScopeInheritance
         //    that interface's own bases) implements it.
         if (node.IsPublic)
         {
-            var found = MatchInterfaces(node.DeclaringType, nodeContext, signature, carries, visited, depth + 1);
+            var found = MatchInterfaces(node.DeclaringType, nodeContext, signature, carries, visited, searched, depth + 1);
             if (found != null)
                 return found;
         }
@@ -301,14 +317,14 @@ internal sealed class ScopeInheritance
                     return candidate;
                 // The base declaration continues the walk from ITS level (its own overrides,
                 // interfaces and bases).
-                return Visit(candidate, baseContext, signature, carries, visited, depth + 1);
+                return Visit(candidate, baseContext, signature, carries, visited, searched, depth + 1);
             }
 
             // This base does not declare the slot; it may still LIST an interface the slot implements
             // (the CLR maps an interface listed on a base onto the most derived matching method).
             if (node.IsPublic)
             {
-                var found = MatchInterfaces(baseDef, baseContext, signature, carries, visited, depth + 1);
+                var found = MatchInterfaces(baseDef, baseContext, signature, carries, visited, searched, depth + 1);
                 if (found != null)
                     return found;
             }
@@ -320,12 +336,22 @@ internal sealed class ScopeInheritance
         return null;
     }
 
+    /// <summary>The first declaration passing <paramref name="carries"/> among the interfaces <paramref name="type"/> lists (and their bases).</summary>
+    /// <param name="type">The type whose listed interfaces are searched.</param>
+    /// <param name="typeContext">The instantiation context of <paramref name="type"/>.</param>
+    /// <param name="signature">The original method, the comparand.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <param name="visited">The declarations already examined in this walk.</param>
+    /// <param name="searched">The interface instantiations already searched in this walk.</param>
+    /// <param name="depth">The walk's depth.</param>
+    /// <returns>The first match, or null.</returns>
     private static MethodDefinition MatchInterfaces(TypeDefinition type, GenericContext typeContext, MethodDefinition signature,
-                                                    Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited, int depth)
+                                                    Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited,
+                                                    Dictionary<string, int> searched, int depth)
     {
         foreach (var impl in type.Interfaces)
         {
-            var found = MatchInterface(impl.InterfaceType, typeContext, signature, carries, visited, depth);
+            var found = MatchInterface(impl.InterfaceType, typeContext, signature, carries, visited, searched, depth);
             if (found != null)
                 return found;
         }
@@ -333,11 +359,39 @@ internal sealed class ScopeInheritance
         return null;
     }
 
+    /// <summary>
+    ///     The first declaration passing <paramref name="carries"/> in one listed interface — its member
+    ///     matching <paramref name="signature"/>'s slot, then its base interfaces, depth first.
+    /// </summary>
+    /// <param name="interfaceRef">The interface as the listing type references it.</param>
+    /// <param name="outer">The instantiation context of the listing type.</param>
+    /// <param name="signature">The original method, the comparand.</param>
+    /// <param name="carries">The test that makes a declaration the answer.</param>
+    /// <param name="visited">The declarations already examined in this walk.</param>
+    /// <param name="searched">The interface instantiations already searched in this walk, with the shallowest depth each was searched at; updated here.</param>
+    /// <param name="depth">The walk's depth.</param>
+    /// <returns>The first match, or null.</returns>
     private static MethodDefinition MatchInterface(TypeReference interfaceRef, GenericContext outer, MethodDefinition signature,
-                                                   Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited, int depth)
+                                                   Func<MethodDefinition, bool> carries, HashSet<MethodDefinition> visited,
+                                                   Dictionary<string, int> searched, int depth)
     {
         if (depth > MaxDepth || ScopeWeaver.IsFrameworkType(interfaceRef))
             return null;
+
+        // The C# compiler lists an interface's WHOLE base-interface closure on it (and on every type
+        // implementing it), so the recursion below reaches each base interface once per path through
+        // the hierarchy: 2^k searches for a chain of k interfaces, and a class implementing a 26-deep
+        // chain took a minute to weave. An interface searched before under the same instantiation,
+        // at the same or a shallower depth, found nothing then (the walk would have ended) and finds
+        // nothing now: every candidate it holds is already in `visited`. Skipping it leaves the first
+        // match, and so the result, unchanged.
+        var key = InstantiationKey(interfaceRef, outer);
+        if (key != null)
+        {
+            if (searched.TryGetValue(key, out int searchedAt) && searchedAt <= depth)
+                return null;
+            searched[key] = depth;
+        }
 
         var def = SafeResolve(interfaceRef);
         if (def is null)
@@ -351,12 +405,87 @@ internal sealed class ScopeInheritance
         // Listing an interface implements its base interfaces' members too.
         foreach (var sub in def.Interfaces)
         {
-            var found = MatchInterface(sub.InterfaceType, context, signature, carries, visited, depth + 1);
+            var found = MatchInterface(sub.InterfaceType, context, signature, carries, visited, searched, depth + 1);
             if (found != null)
                 return found;
         }
 
         return null;
+    }
+
+    /// <summary>
+    ///     The identity <see cref="MatchInterface"/> deduplicates on: the interface's full name with every
+    ///     generic argument read through <paramref name="outer"/> down to the terms of the method's own
+    ///     declaring type. Two references reaching one interface DEFINITION under different
+    ///     instantiations (<c>IFoo&lt;int&gt;</c> and <c>IFoo&lt;string&gt;</c> through two generic bases)
+    ///     get different keys and are both searched — their members compare differently against the
+    ///     signature — while the same instantiation reached along two paths gets one key.
+    /// </summary>
+    /// <param name="interfaceRef">The interface as the type listing it references it.</param>
+    /// <param name="outer">The instantiation context of the listing type (null at the method's own level).</param>
+    /// <returns>The key, or null when the type is too deep to key (the caller then searches without deduplicating — never wrong, only slower).</returns>
+    private static string InstantiationKey(TypeReference interfaceRef, GenericContext outer)
+    {
+        var sb = new System.Text.StringBuilder();
+        return AppendInstantiation(sb, interfaceRef, outer, 0) ? sb.ToString() : null;
+    }
+
+    /// <summary>Appends <paramref name="t"/>'s instantiation key, resolving type-level generic parameters through <paramref name="context"/>.</summary>
+    /// <param name="sb">The key being built.</param>
+    /// <param name="t">The type to append.</param>
+    /// <param name="context">The context <paramref name="t"/>'s type-level generic parameters resolve in.</param>
+    /// <param name="depth">Recursion depth, bounded by <see cref="MaxDepth"/>.</param>
+    /// <returns>False when the type nests deeper than <see cref="MaxDepth"/> (no key).</returns>
+    private static bool AppendInstantiation(System.Text.StringBuilder sb, TypeReference t, GenericContext context, int depth)
+    {
+        if (depth > MaxDepth || t is null)
+            return false;
+
+        switch (t)
+        {
+            case GenericParameter gp when gp.Type == GenericParameterType.Type:
+                // A parameter of the level that wrote this reference: the argument the level below
+                // supplied for it, read in THAT level's context; at the method's own level it stays a
+                // parameter (by position — the declaring type's own parameters are one set).
+                if (context?.Args != null && gp.Position < context.Args.Count)
+                    return AppendInstantiation(sb, context.Args[gp.Position], context.Outer, depth + 1);
+                sb.Append('!').Append(gp.Position);
+                return true;
+            case GenericParameter gp:
+                sb.Append("!!").Append(gp.Position);
+                return true;
+            case GenericInstanceType git:
+                sb.Append(git.ElementType.FullName).Append('<');
+                for (int i = 0; i < git.GenericArguments.Count; i++)
+                {
+                    if (i > 0)
+                        sb.Append(',');
+                    if (!AppendInstantiation(sb, git.GenericArguments[i], context, depth + 1))
+                        return false;
+                }
+                sb.Append('>');
+                return true;
+            case ArrayType arr:
+                if (!AppendInstantiation(sb, arr.ElementType, context, depth + 1))
+                    return false;
+                sb.Append('[').Append(arr.Rank).Append(']');
+                return true;
+            case IModifierType mod when t is TypeSpecification modSpec:
+                // modreq/modopt: the modifier is part of the type's identity.
+                if (!AppendInstantiation(sb, modSpec.ElementType, context, depth + 1))
+                    return false;
+                sb.Append(t.MetadataType == MetadataType.RequiredModifier ? " modreq(" : " modopt(")
+                  .Append(mod.ModifierType.FullName).Append(')');
+                return true;
+            case TypeSpecification spec when spec is ByReferenceType || spec is PointerType || spec is PinnedType:
+                if (!AppendInstantiation(sb, spec.ElementType, context, depth + 1))
+                    return false;
+                sb.Append('|').Append(t.MetadataType);
+                return true;
+            default:
+                sb.Append(t.FullName);
+                return true;
+        }
     }
 
     /// <summary>

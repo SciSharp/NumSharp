@@ -49,7 +49,12 @@ and configuration space — with each new case landing as a fixture tag + an in-
   and Debug IL, executed, temps reclaimed, results alive; resultless tasks; out carriers; 300-local /
   long-branch bodies; 64-thread parallel execution; values under forced GCs); `WeaverAnalyzerParityTests`
   (both resolvers over the same fixtures agree per method, and each matches its own output — the scope
-  local, the NDW012 placement); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
+  local, the NDW012 placement; the `InterfaceLattices` fixture adds chains and diamonds with unscoped
+  members at every level and one generic interface under two instantiations); `WeaverInterfaceWalkTests`
+  (the walk's cost and its generic bookkeeping: a 40-deep chain and an 18-level diamond lattice with
+  unscoped members everywhere weave in bounded time — the walk without its per-instantiation memory was
+  2^k, a minute at 26 levels — and `IBase<int>`/`IBase<string>`/`IBase<U[]>` are each still searched,
+  while one instantiation listed twice is searched once); `WeaverHierarchyFuzzTests` (40 seeded random chains + interface vs a
   reference model, weaver AND analyzer); `WeaverCliTests` (the tool PROCESS: exit codes, rsp, `--snk`,
   `--verbose`, NDW001 — unreachable in-process because Cecil resolves through the host's
   TRUSTED_PLATFORM_ASSEMBLIES).
