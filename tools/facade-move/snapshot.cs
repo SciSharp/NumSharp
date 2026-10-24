@@ -323,7 +323,9 @@ static class Snapshot
             case Role.BinsArray:
                 // Explicit edges inside and around the pool's values (-10 .. 13): float64 and int64 edges, edges NumPy refuses
                 // (decreasing, two-dimensional), a 0-d integer count and a 0-d float (not an index), the degenerate empty and
-                // one-edge arrays, edges with a NaN (no comparison is True, so they pass the monotonic check), and text edges.
+                // one-edge arrays, edges with a NaN (no comparison is True, so they pass the monotonic check: an inner NaN
+                // makes NumPy's cumulative counts negative, a NaN last edge counts the NaN samples), repeated edges (an empty
+                // bin inside, an inclusive last bin of zero width), infinite outer edges, and text edges.
                 Add("f64[-2,0,1.5,5]", () => np.array(new[] { -2.0, 0.0, 1.5, 5.0 }));
                 Add("i64[-4,0,2,4]", () => np.array(new long[] { -4, 0, 2, 4 }));
                 Add("decr[5,1]", () => np.array(new[] { 5.0, 1.0 }));
@@ -333,6 +335,10 @@ static class Snapshot
                 Add("empty", () => np.empty(new Shape(0), np.dtype("float64")));
                 Add("one[1.5]", () => np.array(new[] { 1.5 }));
                 Add("nan[0,nan,2]", () => np.array(new[] { 0.0, BitConverter.Int64BitsToDouble(0x7FF8000000000000), 2.0 }));
+                Add("nanlast[0,2,nan]", () => np.array(new[] { 0.0, 2.0, BitConverter.Int64BitsToDouble(0x7FF8000000000000) }));
+                Add("dup[0,1,1,2]", () => np.array(new[] { 0.0, 1.0, 1.0, 2.0 }));
+                Add("dupend[0,1,2,2]", () => np.array(new[] { 0.0, 1.0, 2.0, 2.0 }));
+                Add("inf[-inf,0,inf]", () => np.array(new[] { double.NegativeInfinity, 0.0, double.PositiveInfinity }));
                 Add("U[1,2,10]", () => np.array(new[] { "1", "2", "10" }).astype(np.dtype("U5")));
                 Add("T[a,b]", () => np.array(new[] { "a", "b" }).astype(np.dtype("T")));
                 break;
@@ -438,7 +444,8 @@ static class Snapshot
     private static readonly string[] OutVariantLabels = { "same", "float64", "int8", "bool", "U5", "T", "wrongshape", "readonly" };
 
     /// <summary>The weights= variants, built from the operand (see <see cref="MakeWeights"/>).</summary>
-    private static readonly string[] WeightVariantLabels = { "ones", "negative", "wrongshape", "int", "complex", "U5", "T" };
+    private static readonly string[] WeightVariantLabels =
+        { "ones", "negative", "wrongshape", "int", "complex", "U5", "T", "bool", "int8", "float32", "float16" };
 
     /// <summary>The second-operand variants, built from the operand (see <see cref="MakeOperand2"/>); the first is the
     ///     base.</summary>
@@ -707,7 +714,9 @@ static class Snapshot
     /// <param name="label">The variant: <c>ones</c> / <c>negative</c> (float64), <c>wrongshape</c> (one more axis),
     ///     <c>int</c> (int64 ones), <c>complex</c> (complex128 ones with an imaginary part: np.histogram's complex weights
     ///     path), <c>U5</c> / <c>T</c> (the text "1" in a fixed-width or StringDType array: the text routes of the
-    ///     functions that take weights).</param>
+    ///     functions that take weights), <c>bool</c> / <c>int8</c> / <c>float32</c> / <c>float16</c> (ones in a dtype
+    ///     narrower than the accumulator: NumPy's results keep the weights' dtype, and its in-place accumulations cast
+    ///     back into it, so a bool total refuses the int64 cumulative sum).</param>
     /// <param name="operand">The operand.</param>
     /// <returns>A fresh array.</returns>
     /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
@@ -729,6 +738,10 @@ static class Snapshot
                 return np.array(Enumerable.Repeat(new Complex(1.0, 0.5), (int)size).ToArray()).reshape(shape);
             case "U5": return Text("U5");
             case "T": return Text("T");
+            case "bool": return np.ones(shape, np.dtype("bool"));
+            case "int8": return np.ones(shape, np.dtype("int8"));
+            case "float32": return np.ones(shape, np.dtype("float32"));
+            case "float16": return np.ones(shape, np.dtype("float16"));
             default: throw new ArgumentException("unknown weights variant " + label);
         }
     }
