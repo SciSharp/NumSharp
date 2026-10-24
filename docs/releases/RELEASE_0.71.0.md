@@ -239,6 +239,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `x1.92->x2.34` - short lines of `S` / ASCII `U` text sort their keys by a most-significant-digit radix (up to 4,096 keys): `np.argsort` of 1,000 texts of 20-40 letters x1.92 (was x1.19), `np.sort` x2.34 (x2.00) - `2cd1648b`.
 
 ### 🎯 Parity & Fixes
+- `np.cumsum` / `np.cumprod` with a float16 or complex128 `dtype=` over another input dtype cast the input first, as NumPy does: flat they threw `InvalidProgramException` (float16) or read the input's bytes as complex values past its end (complex128, an access violation that ended the process for a uint64 input), and along an axis they refused the conversion to complex128 - `3f88d53f`.
 - The engine's add reduction (`TensorEngine.ReduceAdd`) into an `out=` of another dtype casts the sum into it, as NumPy does: it wrote the loop dtype's bytes into the out as they were (an int64 sum read back as float64 denormals, a float64 sum written past a float32 out's end), and a flat float sum into an out of its own dtype threw `InvalidCastException` - `adada1fc`.
 - `np.argpartition` / `np.partition` with a `kth` array of another integer dtype (a C# `int` literal converts to an int32 array) return their int64 conversion of it to the pool instead of leaving it to the finalizer - `adada1fc`.
 - `ndarray.tolist()` of a temporary array (any dtype) and `NDArray.AsStringArray` of a temporary `U` array no longer read freed memory: both read the buffer through a raw pointer while they allocate one object per element, and nothing kept the array alive, so a collection during the walk could free it (an access violation over a 200 MB `U500` temporary, reproduced); `AsString`, `GetString` and `item()` / printing of `S` / `U` temporaries had the same shorter window - `41644661`.
@@ -317,6 +318,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - `==` / `!=` of a text array against an array of another class report a shape mismatch with NumPy's ufunc text (`operands could not be broadcast together with shapes (2,) (0,) `), not `np.broadcast`'s - `9068ca99`.
 
 ### 🧰 Testing & Tooling
+- Two layering ratchets and a snapshot tool guard the move of dtype decisions out of the public np.* methods (docs/plans/np-layer-dtype-logic.md): a facade file may not gain a dtype test and an engine file may not gain a call into np.* (each counted per file and pinned in an allowlist that only goes down), and `tools/facade-move/snapshot.cs` records NumSharp's own outcome for every overload of the named functions over 18 dtypes x 13 layouts and every parameter pair, so a refactor can be shown to change nothing - `4d73fcfc`, `0b179445`.
 - Differential-fuzz oracle 116K+ -> 406,172 corpus cases: new tiers for every `numpy.polynomial` unit (139,882 cases), `np.ma` (68,860), `np.evaluate` (29,563), `np.emath`, `ndarray` instance members, and complex128 / Decimal coverage, with a dtype-spread gate (at least 4 dtypes per op) and an applicability gate - `57545200`, `67f8f96e`, `7a262afc`, `e84fd2f1`, `55a2a6a7`, `192f456c`, `1dd23bbe`.
 - The random-API oracle replays every public `np.random` overload against NumPy 2.4.2 by its exact C# signature (493 members, 5 engines x 10 seeds, the full post-call state), with coverage gates and a nightly soak under 10 fresh seeds - `20a5b60d`, `1c7ac693`, `8f70af7c`, `ecdab2fb`.
 - The coverage join credits each API from the oracle contracts that name it, strictly: a new op key or corpus file that resolves to nothing fails the docs build - `fd058f03`.
@@ -357,6 +359,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 - The coverage dashboard credits all 46 `numpy.strings` functions as oracle-verified: the coverage join reads the string oracle's `numpy.strings` calls as a fifth evidence source - `2cd1648b`.
 
 ### 💥 Breaking Changes
+- `TensorEngine.ReduceCumAdd` / `ReduceCumMul` take `out=` (a `TensorEngine` subclass must add the parameter): the engine now carries `np.cumsum`'s / `np.cumprod`'s whole call, text routes and `out=` included - `fe18431f`.
 - `DType` replaces `System.Type` as the dtype currency - `c916c579`, `68a02258`.
   - `NDArray.dtype` returns `DType` (was `Type`), and `np.float64`, `np.int32` and the rest are `DType` descriptors (were `Type`); `DType` -> `Type` is explicit (`a.dtype.type`), and `a.dtype.Name` is `a.dtype.name`.
   - Each dtype parameter takes one `DType`: the `Type` / `NPTypeCode` twins are gone (a `Type`, `NPTypeCode` or dtype string still converts implicitly), and `linspace` / `nancumsum`'s `typeCode:` is `dtype:`.

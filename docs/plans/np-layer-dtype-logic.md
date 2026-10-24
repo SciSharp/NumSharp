@@ -6,8 +6,9 @@ Living plan and state document. Branch `strings`, measured at `2e872477`. Starte
 resides or even inside tensorengine (anywhere inside) Where are the challenges or can we simply move all with no issues?
 Write a plan covering how to and answer my questions"
 
-**State:** analysis and plan. No code has moved. The decisions in [§5](#5-decisions-for-the-owner) are open. Progress
-goes into the [§9 state log](#9-state-log), newest entry first.
+**State:** P0 done (2026-10-24): the two ratchets, the snapshot tool and a three-family pilot (`np.cumsum` / `np.cumprod`,
+`np.median`, `np.angle`), each move byte-identical on the snapshot. The owner answered the decisions of
+[§5](#5-decisions-for-the-owner); P1 is next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
 helper called one level down, and two families already show the result: `np.sum` and the four sort functions have no
@@ -320,6 +321,20 @@ operation class, or the `DType` slots.
 
 ## 5. Decisions for the owner
 
+The owner's answers (2026-10-24), and what they mean for the work:
+
+| # | Answer | Applied as |
+|---|---|---|
+| D1 | "look into it and decide when time comes to impl" | Decided per family when it moves. The pilot: `np.cumsum` / `np.cumprod` widen a `TensorEngine` member (NumPy does them in C); `np.median` moves into the existing internal class `QuantileEngine`; `np.angle`, a NumPy Python function, becomes the internal static `DefaultEngine.Angle`. |
+| D2 | yes | Widen in place: `ReduceCumAdd` / `ReduceCumMul` gained `out=` (`fe18431f`), listed under Breaking Changes. |
+| D3 | "idk, our code is healthy, use it as reference" | The current behavior is the reference: every move is held to NumSharp's own snapshot before and after, and a batch is whatever unit keeps that true (a function's whole body, text and numeric together). |
+| D4 | yes, small bugfix commits | A divergence found on the way gets its own commit (the pilot: `3f88d53f`). |
+| D5 | yes, on `strings` only | R1 / R2 run on `strings`. |
+| D6 | `strings` | Everything lands on `strings`. |
+| D7 | a TODO after the last phase | The class boundary stays in the facades until P7. |
+
+The recommendations as written before the answers:
+
 | # | Decision | Recommendation |
 |---|---|---|
 | D1 | Where an O lives | By NumPy's own split: a C-level operation is a `TensorEngine` member; a Python-level function is an internal operation class that composes members (new ones under `Backends/Default/<Family>/`); values entering storage go to the `DType` slots. The alternative, every function as a public virtual `TensorEngine` member, puts all dtype handling literally inside the engine class but grows its public pluggable surface from 151 members to several hundred and asks a backend author to face NumPy's Python. |
@@ -356,22 +371,24 @@ operation class, or the `DType` slots.
 
 ### P0. Guard rails
 
-- [ ] **R1, facade dtype ratchet.** A source-walking test modeled on `NativeAllocationChokepointTests` (same project,
+- [x] **R1, facade dtype ratchet** (`4d73fcfc`). A source-walking test modeled on `NativeAllocationChokepointTests` (same project,
       same walk): the text pattern and the numeric pattern of [Appendix C](#appendix-c-measurement-commands) over the
       facade files (`np.*.cs` and `NDArray.*.cs` outside `Backends/`, `Matrixlib/NDMatrix*.cs`), with an allowlist of
       file → count. A new file or a higher count fails and prints the line. Allowed C#-only conversions carry a reason.
       The patterns are a heuristic (they miss a dtype comparison written another way); an analyzer rule beside the
       NDW rules of `NumSharp.Build` can replace them once the counts are small.
-- [ ] **R2, up-call ratchet.** The same over `Backends/**`: np.* calls per file, computations and structural calls
+- [x] **R2, up-call ratchet** (`4d73fcfc`). The same over `Backends/**`: np.* calls per file, computations and structural calls
       counted apart.
-- [ ] **S, the snapshot tool** (`tools/facade-move/`, a `dotnet run` script). For a list of np.* names it reflects
+- [x] **S, the snapshot tool** (`0b179445`) (`tools/facade-move/`, a `dotnet run` script). For a list of np.* names it reflects
       every public overload and calls it over a generated matrix: the 15 dtypes and S / U / StringDType × the layouts
       C, F, strided, reversed, broadcast, 0-d, empty × each optional argument's variants, invalid ones included (an
       axis out of range or repeated, an `out` of the wrong shape, dtype or writeability, a refused `dtype=`). It writes
       one outcome per call: dtype, shape, flags and a SHA-256 of the bytes, or the exception type and message. Run on
       the parent and on the child; the diff of a move commit is empty.
-- [ ] **Pilot.** One family of each easy kind, to prove the method before it scales: `np.median` / `np.quantile`
-      (K1 step 1), `np.cumsum` (K2, `ReduceCumAdd` widened with `out=`), `np.angle` (K3, NumPy's own statement).
+- [x] **Pilot.** One family of each easy kind, to prove the method before it scales: `np.median` (K1, `0e77d200`;
+      `np.quantile` went to P1a, see the state log), `np.cumsum` / `np.cumprod` (K2, `ReduceCumAdd` / `ReduceCumMul`
+      widened with `out=`, `fe18431f`), `np.angle` (K3, moved as it is, `21a6cff3`; NumPy's own statement is not a
+      drop-in, see the state log).
 
 ### P1. The deeper place exists (171 text lines, plus the numeric lines of the same functions)
 
@@ -382,18 +399,18 @@ operation class, or the `DType` slots.
       family core; this fixes the divergence of Appendix B1. The facade keeps only the class statements and the
       normalization of its C# overloads (`q` as `double`, `double[]`, `long` or `NDArray`); q's checks move with the
       prologue (C1); the `chararray` flag crosses into O as a parameter (C8).
-- [ ] **P1b, reductions with a narrower member** (K2, 57 lines in 10 files). Widen `ReduceCumAdd` and `ReduceCumMul`
-      (`out=`), `All`, `Any` and `CountNonZero` (`keepdims=`, `out=`, `where=`), and the members `np.trace` and
-      `np.ptp` reduce through; move the bodies of `np.cumsum`, `np.cumprod`, `np.nancumsum`, `np.nancumprod`, `np.trace`,
-      `np.ptp`, `np.any`, `np.all`, `np.count_nonzero`; route the 14 lines of `NDMatrix.Reductions.cs` through the same
-      members.
+- [ ] **P1b, reductions with a narrower member** (K2, 57 lines in 10 files; `np.cumsum` / `np.cumprod` done in the
+      pilot). Widen `All`, `Any` and `CountNonZero` (`keepdims=`, `out=`, `where=`), and the members `np.trace` and
+      `np.ptp` reduce through; move the bodies of `np.nancumsum`, `np.nancumprod`, `np.trace`, `np.ptp`, `np.any`,
+      `np.all`, `np.count_nonzero`; route the 14 lines of `NDMatrix.Reductions.cs` through the same members.
 - [ ] **P1c, operators** (K6, 6 lines in 6 files).
 
 ### P2. Compositions above the engine (K3, 150 lines in 43 files)
 
-For each function: first try NumPy's own composition through engine calls, with a probe, as Appendix B2 did for
-`np.angle`; where it gives NumPy's answer at no cost, the error replay goes away. Otherwise the body moves into an
-operation class and the replay stays there. Order by size: `np.histogram` 16, `np.histogramdd` 9, `np.trapezoid` 8,
+For each function: first move the body as it is into an operation class (a pure move, snapshot-identical). Then try
+NumPy's own composition through engine calls, as its own commit, with the snapshot as the referee: where it gives the
+same answers, the error replay goes away; where it does not, the snapshot names an engine divergence the composition
+was working around, which gets its own fix first (D4). The pilot's `np.angle` is the second case (state log). Order by size: `np.histogram` 16, `np.histogramdd` 9, `np.trapezoid` 8,
 `np.searchsorted` 8, `np.cov` 8, `GufuncGuard` 7, `np.gradient` 6, `np.linalg` 5, `np.array_equal` 5, `np.insert` 5,
 `np.isin` (VString) 5, `np.average` 5, then the files of four lines or fewer.
 
@@ -447,6 +464,40 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-24, P0 done.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward:
+  - `4d73fcfc` the ratchets. Their scanner is literal-aware (comments and string contents blanked) and decision-focused,
+    so its counts differ from the inventory's grep: R1 starts at 590 text lines (137 files) and 1,131 numeric lines (136
+    files), because it also counts `NPTypeCode.String` tests (84 lines the inventory's pattern missed) and every case arm
+    of a dtype switch; R2 at 132 computations and 264 structural calls in 83 files (it also counts module calls such as
+    `np.strings.*`).
+  - `3f88d53f` a bug the snapshot tool found on its first run, fixed per D4: `np.cumsum(uint64 (3, 4),
+    dtype=complex128)` ended the process with an access violation. The flat scan's converting IL kernel combined a
+    float16 / complex128 accumulator with a plain add / mul (invalid IL for float16, the raw bits read as 16-byte complex
+    values past the input for complex128), and the axis path refused the conversion. Now NumPy's cast-first, byte-exact
+    over a 144-case probe; the scan tier gained 1,440 `dtype=` cases (it had none, which is how the bug survived), and the
+    surface gaps SU38 (this bug) and SU39 (fixed by `f44c9579`, whose bookkeeping had been left behind) left the carve.
+  - `0b179445` the snapshot tool, with a pairwise phase added after the first runs: an `out=` sized for one `axis`, a
+    `method` with an array `q`, are where a moved prologue can reorder checks. Two runs of one build are byte-identical.
+  - `fe18431f` K2: `np.cumsum` / `np.cumprod` into widened `ReduceCumAdd` / `ReduceCumMul` (D2). 36,648 snapshot calls
+    identical.
+  - `0e77d200` K1: `np.median` into `QuantileEngine.Median`. 340,944 quantile-family calls identical. Scope change: the
+    pilot named `np.median` / `np.quantile`, but in `np.quantile` (and percentile, nanquantile, nanpercentile) the
+    chararray class decision sits between NumPy's argument checks and the weights branch, in 8 overloads with four forms of
+    `q`: moving it needs P1a's shared prologue, so it went there. The class decision can run first without changing
+    anything (it is a pure type test, and the Kept rule re-enters the function, whose checks then run), which is the
+    shape P1a will use.
+  - `21a6cff3` K3: `np.angle` into `DefaultEngine.Angle`, its `np.arctan2` / `np.multiply` calls into the engine members
+    they forward to, `AngleRealTier` with it (the fused angle node reads it there). 324 calls identical.
+  - **K3 finding.** NumPy's own statement `arctan2(0, z)` (a weak 0) was tried in place of the moved composition, as
+    Appendix B2 suggested. The snapshot rejected it: 162 of 324 lines changed, because the engine's `arctan2` diverges
+    where the composition worked around it. Probed through the public API: `np.arctan2(0, empty int8)` returns int8
+    (NumPy float16; int32 and bool likewise keep their dtype; `DefaultEngine.ATan2` short-circuits an empty operand with
+    `return y.Clone()`, the same pattern as the relayout gap RL07 of logaddexp / logaddexp2), and a 0-d operand with a C#
+    literal promotes as if both were weak (`np.add(0-d float32, 1.5)` is float64, NumPy float32: the known weak-scalar
+    item X24). Appendix B2's probe used 3-element arrays only, which is why it did not show. Lesson for P2: a composition
+    rewrite is its own commit, after the pure move, refereed by the snapshot (§7 P2 says so now).
+  - Every commit: NumSharp.Tests net10.0 20,445 passed / 11 skipped and net8.0 20,444 / 11; Oracle net10.0 410 / 2
+    skipped (net8.0 too for `3f88d53f`), 0 failed.
 - **2026-10-24.** Analysis on `strings` at `2e872477`: the inventory of §2, the challenges of §3, the probes of
   Appendix B. No code moved. Correction of an earlier count given on 2026-10-22 ("15 of the 16 engine reduction members
   lack `out=`"): the engine has 29 reduction and scan members, of which one (`ReduceAdd`) takes `out=`. Waiting for
