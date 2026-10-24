@@ -60,31 +60,10 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            ValidateQuantile(q);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
-            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
-            // values (QuantileWeighted).
-            if (weights is not null)
-            {
-                using var qArray = NDArray.Scalar(q);
-                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights,
-                    (a, q, axis, @out, overwrite_input, method, keepdims),
-                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
-            }
-            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
-            // text itself (NDStringUfuncs.QuantileAnswer).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                // StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the quantile of the rest.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, new[] { q }, System.Array.Empty<long>(), false, axisArr, @out,
-                    method, keepdims);
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, true);
-            return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar: true,
-                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
+            // NumPy's np.nanquantile body (q's checks, the weighted branch, the text routes, the NaN-ignoring quantile) is
+            // QuantileEngine.NanQuantile's: the facade holds only the class rule above.
+            return QuantileEngine.NanQuantile("nanquantile", a, new QuantileArgument(q),
+                axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -140,31 +119,10 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
-            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
-            // values (QuantileWeighted).
-            if (weights is not null)
-            {
-                using var qArray = np.array(q);
-                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights,
-                    (a, q, axis, @out, overwrite_input, method, keepdims),
-                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
-            }
-            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
-            // text itself (NDStringUfuncs.QuantileAnswer).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                // StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the quantile of the rest.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, q, new long[] { q.Length }, false, axisArr, @out, method, keepdims);
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, false);
-            return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar: false,
-                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
+            // NumPy's np.nanquantile body is QuantileEngine.NanQuantile's (a null q is reported there, after the complex
+            // check).
+            return QuantileEngine.NanQuantile("nanquantile", a, new QuantileArgument(q),
+                axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -228,30 +186,9 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            ValidateQuantile(q);
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
-            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
-            // values (QuantileWeighted).
-            if (weights is not null)
-            {
-                using var qArray = NDArray.Scalar(q);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights,
-                    (a, q, axis, @out, overwrite_input, method, keepdims),
-                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
-            }
-            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
-            // text itself (NDStringUfuncs.QuantileAnswer).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                // StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the quantile of the rest.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, new[] { q }, System.Array.Empty<long>(), false, axis, @out, method,
-                    keepdims);
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axis, true);
-            return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: true,
-                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
+            // NumPy's np.nanquantile body is QuantileEngine.NanQuantile's.
+            return QuantileEngine.NanQuantile("nanquantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights);
         }
 
         /// <summary>
@@ -315,30 +252,10 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
-            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
-            // values (QuantileWeighted).
-            if (weights is not null)
-            {
-                using var qArray = np.array(q);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights,
-                    (a, q, axis, @out, overwrite_input, method, keepdims),
-                    static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims));
-            }
-            // Text: NumPy checks q (above), then the axis, the NaN test or the method, and only then meets the
-            // text itself (NDStringUfuncs.QuantileAnswer).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                // StringDType: np.isnan finds its NaN-like NAs, and NumPy computes the quantile of the rest.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, q, new long[] { q.Length }, false, axis, @out, method, keepdims);
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axis, false);
-            return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: false,
-                emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
+            // NumPy's np.nanquantile body is QuantileEngine.NanQuantile's (a null q is reported there, after the complex
+            // check).
+            return QuantileEngine.NanQuantile("nanquantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights);
         }
 
         /// <summary>
@@ -398,8 +315,10 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            return NanQuantileOfArrayQ(a, q, axis.HasValue ? new[] { axis.Value } : null, axis, @out, overwrite_input,
-                method, keepdims, weights);
+            // NumPy's np.nanquantile body is QuantileEngine.NanQuantile's: a null or text q, the range check at any rank,
+            // an integer q's index taken instead of interpolated, a weak C# literal, q's rank, all in NumPy's order.
+            return QuantileEngine.NanQuantile("nanquantile", a, new QuantileArgument(q),
+                axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -456,7 +375,9 @@ namespace NumSharp
             string method = "linear", bool keepdims = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return NanQuantileOfArrayQ(a, q, axis, null, @out, overwrite_input, method, keepdims, weights);
+            // NumPy's np.nanquantile body is QuantileEngine.NanQuantile's (see the one-axis overload).
+            return QuantileEngine.NanQuantile("nanquantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights);
         }
 
         /// <summary>
@@ -565,74 +486,6 @@ namespace NumSharp
             // into the quantile list and never returned, so it is released here.
             using NDArray qArray = NDArray.PythonLiteral(q);
             return nanquantile(a, qArray, axis, @out, overwrite_input, method, keepdims, weights);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>np.nanquantile</c> for a q ARRAY, statement for statement: the complex refusal; a text q answered by
-        ///     its [0, 1] check; <c>_quantile_is_valid(q)</c> at any rank; then the data — StringDType through its NaN-like
-        ///     NAs, fixed-width text refused by <c>isnan</c> after the axis checks, numbers through the engine, which checks
-        ///     q's rank, the method name and the axes in NumPy's order.
-        /// </summary>
-        /// <param name="a">The data.</param>
-        /// <param name="q">The quantiles (any real dtype, any rank; null refused).</param>
-        /// <param name="axisArr">The reduced axes, or null for the flattened data.</param>
-        /// <param name="axis">The single axis when the caller had one (the empty-data answer is <c>np.nanmean(a, axis)</c>),
-        ///     else null.</param>
-        /// <param name="out">An optional output array.</param>
-        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
-        /// <param name="method">The estimation method's name.</param>
-        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
-        /// <param name="weights">NumPy's <c>weights=</c>, or null: checked after q, then NumPy's weighted branch over each
-        ///     line's non-NaN values.</param>
-        /// <returns>The quantiles of the non-NaN values.</returns>
-        /// <exception cref="Exception">The public overloads' errors.</exception>
-        private static NDArray NanQuantileOfArrayQ(NDArray a, NDArray q, int[] axisArr, int? axis, NDArray @out,
-            bool overwrite_input, string method, bool keepdims, NDArray weights)
-        {
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            // Text q: NumPy's answer comes from its [0, 1] check on q, before the data or q's rank is looked at; an empty q
-            // passes it, and only with empty numeric data does NumPy go on (the helper's null), to np.nanmean(a, axis) —
-            // the engine's empty-input answer, which runs before it reads q.
-            if (Backends.Strings.NDStringUfuncs.IsVString(q) || Backends.Strings.NDStringUfuncs.IsString(q))
-            {
-                var textQ = Backends.Strings.NDStringUfuncs.IsVString(q)
-                    ? Backends.Strings.NDVStringStatistics.QuantileVStringQ("nanquantile", a, q, method, axisArr)
-                    : Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("nanquantile", a, q, method, axisArr);
-                if (textQ is not null)
-                    throw textQ;
-                return QuantileEngine.Compute(a, Array.Empty<double>(), axisArr, @out, overwrite_input, QuantileMethod.Linear,
-                    keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true);
-            }
-            double[] qArr = QArrayFromNDArray(q);
-            // `_quantile_is_valid(q)` at any rank (an empty q of rank other than 1 fails its q.min()).
-            ValidateQuantileArray(q, qArr);
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign); empty data then answers
-            // np.nanmean (this call without weights), any other data runs the weighted branch over each line's non-NaN
-            // values (QuantileWeighted).
-            if (weights is not null)
-                return QuantileWeighted.Compute(a, q, axisArr, @out, keepdims, method, weights,
-                    (a, q, axisArr, axis, @out, overwrite_input, method, keepdims),
-                    static s => NanQuantileOfArrayQ(s.a, s.q, s.axisArr, s.axis, s.@out, s.overwrite_input, s.method,
-                        s.keepdims, null));
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                // StringDType data: NumPy validates q (above), then reads the data; q's rank is checked per line, by the
-                // quantile of what is left after the NaN-like NAs are removed.
-                return Backends.Strings.NDVStringStatistics.NanQuantile("nanquantile", a, qArr, (long[])q.Shape.dimensions.Clone(),
-                    IsIntegerQuantile(q), axisArr, @out, method, keepdims, QuantileIndexes.IndexDtypeOf(q));
-            bool qIsScalar = q.ndim == 0;
-            // Fixed-width text: NumPy checks the axes and then meets isnan, which has no text loop (q's rank is never
-            // reached), or np.nanmean's add.reduce refusal for empty text (NDStringUfuncs.QuantileAnswer).
-            if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.QuantileAnswer("nanquantile", a, method, axisArr, qIsScalar);
-            // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. An integer
-            // (or bool) q takes the element at the integer virtual index (integerQ). q's rank (a 2-d q keeps both axes) and
-            // the method name are checked inside the engine, in NumPy's order.
-            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
-                emptyReturnsNaN: true, ignoreNaN: true, weakQ: q.WasPythonLiteral,
-                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), methodName: method,
-                integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
         }
     }
 }

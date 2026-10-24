@@ -4761,7 +4761,7 @@ StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
 milestone C, 2026-10-16; `Manipulation/NDArray.unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
 `Manipulation/np.isin.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/np.{lexsort,
 sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
-`np.quantile.Text.cs`; gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
+`QuantileEngine.Functions.cs` (`QuantileOfText`); gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
 `Backends/Strings/StringSetsTests.cs` (18); plan `docs/plans/strings-phase2.md`):
 - **np.unique.** The flat path (axis None or a 1-D input): with flags, ONE stable text argsort serves every flag
   (return_index needs NumPy's mergesort first occurrences; inverse and counts do not depend on the order of equal strings),

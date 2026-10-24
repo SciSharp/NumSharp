@@ -58,31 +58,17 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            // `q = np.true_divide(q, 100, out=...)` (float64 for a Python number), then `_quantile_is_valid` on the
-            // QUOTIENT: -5e-324 divides to -0.0 and passes.
-            double fraction = PercentileFraction(q);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
+            // a numpy.char.chararray operand: with weights= NumPy's result is empty_like of the chararray, the plain call
+            // kept as a chararray (its checks run inside it, so an invalid argument raises the same error); without
+            // weights the flag goes down, where NumPy's text route meets the STRING partition (QuantileEngine.Quantile).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = NDArray.Scalar(fraction);
-                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, new[] { fraction }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, new[] { fraction }, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar: true, methodName: method);
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.percentile body (q divided by 100 and checked, the weighted branch, the text routes, the numeric
+            // quantile) is QuantileEngine.Quantile's: the facade holds only the class rules above.
+            return QuantileEngine.Quantile("percentile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
+                @out, overwrite_input, method, keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -137,34 +123,14 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            double[] qFracs = new double[q.Length];
-            for (int i = 0; i < q.Length; i++)
-            {
-                qFracs[i] = PercentileFraction(q[i]);
-            }
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = np.array(qFracs);
-                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, qFracs, new long[] { qFracs.Length }, false, axisArr, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, qFracs, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar: false, methodName: method);
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.percentile body is QuantileEngine.Quantile's (a null q is reported there, after the complex check).
+            return QuantileEngine.Quantile("percentile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
+                @out, overwrite_input, method, keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -225,29 +191,13 @@ namespace NumSharp
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            // `q = np.true_divide(q, 100, out=...)` (float64 for a Python number), then `_quantile_is_valid` on the
-            // QUOTIENT: -5e-324 divides to -0.0 and passes.
-            double fraction = PercentileFraction(q);
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = NDArray.Scalar(fraction);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, new[] { fraction }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, new[] { fraction }, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: true, methodName: method);
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.percentile body is QuantileEngine.Quantile's.
+            return QuantileEngine.Quantile("percentile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -309,32 +259,13 @@ namespace NumSharp
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            double[] qFracs = new double[q.Length];
-            for (int i = 0; i < q.Length; i++)
-            {
-                qFracs[i] = PercentileFraction(q[i]);
-            }
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = np.array(qFracs);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, qFracs, new long[] { qFracs.Length }, false, axis, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, qFracs, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: false, methodName: method);
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.percentile body is QuantileEngine.Quantile's (a null q is reported there, after the complex check).
+            return QuantileEngine.Quantile("percentile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -388,46 +319,16 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
-            // data or q's rank is looked at.
-            if (Backends.Strings.NDStringUfuncs.IsVString(q))
-                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ("percentile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
-            if (Backends.Strings.NDStringUfuncs.IsString(q))
-                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("percentile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
-            // Text data: NumPy accepts a q of any rank up to 2 (_quantile_ureduce_func refuses rank 3 and above, after the
-            // range and axis checks), so the text route runs before the numeric path's rank check.
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                // `q = np.true_divide(q, 100)` in q's own dtype (a float32 q stays float32), after the range check.
-                PercentileFractions(q);
-                using var hundred = NDArray.PythonLiteral(100L);
-                using var qArray = np.true_divide(q, hundred);
-                return QuantileWeighted.Compute(a, qArray, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                // np.true_divide(q, 100) is float64 whatever q held: percentile never takes the integer index.
-                return QuantileOfText("percentile", a, PercentileFractions(q), (long[])q.Shape.dimensions.Clone(), false,
-                    axis.HasValue ? new[] { axis.Value } : null, @out, method, keepdims, chararray, QuantileIndexes.PrecisionOf(q));
-            bool qIsScalar = q.ndim == 0;
-            // `np.true_divide(q, 100)` and `_quantile_is_valid` at any rank; q's rank is `_quantile_ureduce_func`'s check,
-            // after the axes, inside the engine (a 2-d q keeps both axes).
-            double[] qArr = PercentileFractions(q);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // weak_q = type(q) in (int, float): only a C# number (its 0-d array marked WasPythonLiteral) keeps float16 /
-            // float32 data's dtype under interpolation; an array q, 0-d included, is a strong float64.
-            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar, weakQ: q.WasPythonLiteral, methodName: method,
-                qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(), qType: QuantileIndexes.PrecisionOf(q));
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.percentile body is QuantileEngine.Quantile's: a null or text q, np.true_divide(q, 100) and the
+            // range check at any rank (a percentile never takes the integer index), a weak C# literal, q's rank, all in
+            // NumPy's order.
+            return QuantileEngine.Quantile("percentile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
+                @out, overwrite_input, method, keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -485,95 +386,13 @@ namespace NumSharp
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            // Text q: NumPy's answer comes from its first statement on q (divide by 100), before the data is looked at.
-            if (Backends.Strings.NDStringUfuncs.IsVString(q))
-                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ("percentile", a, q, method, axis);
-            if (Backends.Strings.NDStringUfuncs.IsString(q))
-                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("percentile", a, q, method, axis);
-            double[] fractions = PercentileFractions(q);
-            // Text data: q's rank is NumPy's check after the axes (rank 3 and above refused), so it runs in the text route;
-            // np.true_divide(q, 100) is float64 whatever q held, so percentile never takes the integer index.
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                // `q = np.true_divide(q, 100)` in q's own dtype (a float32 q stays float32), after the range check.
-                PercentileFractions(q);
-                using var hundred = NDArray.PythonLiteral(100L);
-                using var qArray = np.true_divide(q, hundred);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("percentile", a, fractions, (long[])q.Shape.dimensions.Clone(), false, axis, @out,
-                    method, keepdims, chararray, QuantileIndexes.PrecisionOf(q));
-            // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. q's rank
-            // is checked after the axes, inside the engine (a 2-d q keeps both axes).
-            return QuantileEngine.Compute(a, fractions, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: q.ndim == 0, weakQ: q.WasPythonLiteral, methodName: method,
-                qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone(), qType: QuantileIndexes.PrecisionOf(q));
-        }
-
-        /// <summary>
-        ///     NumPy's <c>q = np.true_divide(q, 100, out=...)</c> followed by <c>_quantile_is_valid(q)</c>, over a q array: the
-        ///     quotients in C order, computed in q's own dtype (a float16 / float32 q divides in float16 / float32 and its
-        ///     quotient is what NumPy's index arithmetic reads; every other q divides in float64), each checked to lie in
-        ///     [0, 1], and an empty q of rank other than 1 refused by the <c>q.min()</c> that NumPy's check takes for it.
-        /// </summary>
-        /// <param name="q">The percentiles (any numeric dtype).</param>
-        /// <returns>The quantiles <c>q / 100</c> in C order (values of q's precision, see
-        ///     <see cref="QuantileIndexes.PrecisionOf"/>).</returns>
-        /// <exception cref="ValueError">A quotient outside [0, 1] (or NaN): <c>Percentiles must be in the range [0,
-        ///     100]</c> — a float16 <c>100.0625</c> divides to <c>1.0009765625</c> and is refused, while a negative value that
-        ///     divides to <c>-0.0</c> passes; an empty q of rank other than 1: <c>zero-size array to reduction operation
-        ///     minimum which has no identity</c>.</exception>
-        private static double[] PercentileFractions(NDArray q)
-        {
-            var fractions = new double[q.size];
-            if (fractions.Length == 0 && q.ndim != 1)
-                throw new ValueError("zero-size array to reduction operation minimum which has no identity");
-            NPTypeCode precision = QuantileIndexes.PrecisionOf(q);
-            for (long i = 0; i < fractions.Length; i++)
-            {
-                // One true_divide in q's dtype: the double quotient rounded once to float16 / float32 is NumPy's (a float16
-                // or float32 division computed in double and rounded is correctly rounded).
-                double fraction = QuantileIndexes.Round(precision, QuantileValueAt(q, i) / 100.0);
-                ValidatePercentileFraction(fraction);
-                fractions[i] = fraction;
-            }
-            return fractions;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>q = np.true_divide(q, 100, out=...)</c> and <c>_quantile_is_valid(q)</c> for one float64 percentile (a
-        ///     Python number, or an element of a list): the quotient, checked to lie in [0, 1].
-        /// </summary>
-        /// <param name="q">The percentile.</param>
-        /// <returns><c>q / 100</c>.</returns>
-        /// <exception cref="ValueError">The quotient is outside [0, 1] (or NaN): "Percentiles must be in the range [0,
-        ///     100]". The check reads the quotient, so a percentile of <c>-5e-324</c> (whose quotient is <c>-0.0</c>)
-        ///     passes, as in NumPy.</exception>
-        private static double PercentileFraction(double q)
-        {
-            double fraction = q / 100.0;
-            ValidatePercentileFraction(fraction);
-            return fraction;
-        }
-
-        /// <summary>NumPy's <c>_quantile_is_valid</c> of one quotient <c>q / 100</c>: inside <c>[0, 1]</c> (NaN is not).</summary>
-        /// <param name="fraction">The quotient.</param>
-        /// <exception cref="ValueError"><paramref name="fraction"/> is outside [0, 1] ("Percentiles must be in the range [0,
-        ///     100]").</exception>
-        private static void ValidatePercentileFraction(double fraction)
-        {
-            if (!(fraction >= 0.0 && fraction <= 1.0))
-                throw new ValueError("Percentiles must be in the range [0, 100]");
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => percentile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.percentile body is QuantileEngine.Quantile's (see the one-axis overload).
+            return QuantileEngine.Quantile("percentile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights, chararray);
         }
     }
 }

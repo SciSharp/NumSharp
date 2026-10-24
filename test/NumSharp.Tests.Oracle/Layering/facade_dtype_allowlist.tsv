@@ -180,12 +180,6 @@ Statistics/np.histogram.cs	14	10
 Statistics/np.histogramdd.cs	10	5
 Statistics/np.median.cs	3	0
 Statistics/np.nanmean.cs	0	1
-Statistics/np.nanmedian.cs	8	0
-Statistics/np.nanpercentile.cs	24	0
-Statistics/np.nanquantile.cs	24	0
 Statistics/np.nanstd.cs	0	1
 Statistics/np.nanvar.cs	0	1
-Statistics/np.percentile.cs	14	0
 Statistics/np.ptp.cs	7	0
-Statistics/np.quantile.Text.cs	1	2
-Statistics/np.quantile.cs	14	1

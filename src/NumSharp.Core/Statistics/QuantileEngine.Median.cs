@@ -93,6 +93,91 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
+        ///     NumPy's <c>np.nanmedian</c> body over one axis (or the flattened data): the text routes in NumPy's order, then
+        ///     the NaN-ignoring median through <see cref="Compute"/>. Like <c>np.median</c>, an even-sized (NaN-free) slice
+        ///     reduces to the MEAN of its two central values (NumPy's mean-of-middle rule, not <c>np.nanquantile(a, 0.5)</c>,
+        ///     which differs by up to 1 ULP); a slice that is entirely NaN, or empty, gives NaN. The facade applies the
+        ///     <c>numpy.matrix</c> rule first and calls this for everything else.
+        /// </summary>
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused as NumPy refuses it, a
+        ///     <c>StringDType</c> array drops its NaN-like NAs and takes the median of the rest).</param>
+        /// <param name="axis">The axis to reduce (negative counts from the end), or null for the flattened data.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="keepdims">Whether the reduced axis is kept with length one.</param>
+        /// <returns>The NaN-ignoring median; <paramref name="out"/> itself when one is given. Over a <c>StringDType</c>
+        ///     array a median exists only for an all-NaN reduction (its NA object, or <c>np.float64(nan)</c>).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Fixed-width text data that NumPy's NaN test (or, for empty data, its <c>nanmean</c>)
+        ///     refuses (its verbatim text); a <c>StringDType</c> array's median, numpy.ma or keepdims refusals.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array: a None-like NA in a sorted line of two or more elements,
+        ///     an empty input's mean (no identity), or the store into <paramref name="out"/>.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> reduction along a long axis whose row result NumPy
+        ///     stores in an OBJECT array: NumSharp has no object dtype.</exception>
+        /// <remarks>
+        ///     Moved from <c>np.nanmedian</c> (<c>Statistics/np.nanmedian.cs</c>) by the np-layer dtype plan's P1a (step 1),
+        ///     statement for statement and in the same order, so the facade holds no dtype test (the move <see cref="Median"/>
+        ///     made in the plan's P0 pilot).
+        /// </remarks>
+        internal static NDArray NanMedian(NDArray a, int? axis, NDArray @out, bool overwrite_input, bool keepdims)
+        {
+            // Text: NumPy sends EMPTY data to np.nanmean(a, axis, out=out) first (whose add.reduce resolves on (out, a));
+            // otherwise its _ureduce normalizes the axis (a 0-d input refuses every axis) and the NaN test refuses text;
+            // see NDStringUfuncs.ReduceError / ReduceOutError.
+            // StringDType: np.nanmean for an empty input, else the NaN-like NAs removed and the median of the rest (numpy.ma's
+            // median along an axis shorter than 600, np.apply_along_axis along a longer one).
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                return Backends.Strings.NDVStringStatistics.NanMedian(a, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims);
+            if (a is not null && a.size == 0)
+                Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
+            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
+            // medianMean selects NumPy's mean-of-middle reduction; emptyReturnsNaN and ignoreNaN are the nan forms' rules.
+            return Compute(a, new[] { 0.5 }, axisArr, @out, overwrite_input,
+                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true,
+                allowBooleanContinuous: true, medianMean: true);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.nanmedian</c> body over SEVERAL axes at once (NumPy's tuple <c>axis</c>): the text routes in
+        ///     NumPy's order, then the NaN-ignoring median through <see cref="Compute"/>, the reduced axes merged into one.
+        ///     The facade computes a <c>numpy.matrix</c> as a plain array.
+        /// </summary>
+        /// <param name="a">The data (bool computes as its 0 / 1 values; text is refused as NumPy refuses it).</param>
+        /// <param name="axis">The axes to reduce (negative values count from the end); null reduces the flattened data, an
+        ///     EMPTY list reduces nothing.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (NumSharp stages a copy anyway).</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The NaN-ignoring median over the reduced axes; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError">An axis repeats; or a <c>StringDType</c> array's errors (see the one-axis
+        ///     overload).</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty text data, its <c>nanmean</c>)
+        ///     refuses; a <c>StringDType</c> array's refusals (see the one-axis overload).</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> row result NumPy stores in an OBJECT array.</exception>
+        /// <remarks>Moved from <c>np.nanmedian</c> by the np-layer dtype plan's P1a (step 1), statement for statement.</remarks>
+        internal static NDArray NanMedian(NDArray a, int[] axis, NDArray @out, bool overwrite_input, bool keepdims)
+        {
+            // Text: NumPy sends EMPTY data to np.nanmean(a, axis, out=out) first (whose add.reduce resolves on (out, a));
+            // otherwise its _ureduce normalizes the tuple (every axis, then repeats) and the NaN test refuses text; see
+            // NDStringUfuncs.ReduceError / ReduceOutError.
+            // StringDType: see the one-axis overload.
+            if (Backends.Strings.NDStringUfuncs.IsVString(a))
+                return Backends.Strings.NDVStringStatistics.NanMedian(a, axis, @out, keepdims);
+            if (a is not null && a.size == 0)
+                Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
+            Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
+            return Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
+                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true,
+                allowBooleanContinuous: true, medianMean: true);
+        }
+
+        /// <summary>
         ///     Whether NumPy's <c>np.median</c> of <paramref name="a"/> into <paramref name="out"/> computes the closing
         ///     mean's SUM into a text out before its division refuses: a number <c>_mean</c> sums in an implicit loop (bool
         ///     and the integers in float64, float16 in float32 — the sum is then cast into the text), or <c>U</c> text into a

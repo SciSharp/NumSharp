@@ -312,4 +312,31 @@ public class np_quantile_family_Weights_Tests
         Action both = () => np.quantile(ca, 0.5, method: "inverted_cdf", weights: cw);
         both.Should().Throw<TypeError>().WithMessage("comparison of non-string arrays");
     }
+
+    /// <summary>
+    ///     A chararray operand with weights: the facade decides the class rule FIRST (a pure type test) and NumPy's checks run
+    ///     inside the plain call the rule makes, so their errors come out unchanged and in NumPy's order — q's range
+    ///     (<c>np.quantile(c, 1.5, ...)</c>, <c>np.percentile(c, 150.0, ...)</c>, a q array holding 2.0) before the weights'
+    ///     method check — and a valid call keeps the class. NumPy 2.4.2's answers for
+    ///     <c>c = np.char.array(['b', 'a', 'c'])</c>, <c>weights=np.ones(3)</c>.
+    /// </summary>
+    [TestMethod]
+    public void Chararray_WithWeights_NumPysChecksRunInsideTheClassRule()
+    {
+        using var ca = np.@char.array(new[] { "b", "a", "c" });
+        using var ones = np.ones(new Shape(3));
+        Action quantileRange = () => np.quantile(ca, 1.5, method: "inverted_cdf", weights: ones);
+        quantileRange.Should().Throw<ValueError>().WithMessage("Quantiles must be in the range [0, 1]");
+        Action percentileRange = () => np.percentile(ca, 150.0, method: "inverted_cdf", weights: ones);
+        percentileRange.Should().Throw<ValueError>().WithMessage("Percentiles must be in the range [0, 100]");
+        using var qArray = np.array(new[] { 0.5, 2.0 });
+        Action arrayRange = () => np.quantile(ca, qArray, method: "inverted_cdf", weights: ones);
+        arrayRange.Should().Throw<ValueError>().WithMessage("Quantiles must be in the range [0, 1]");
+        Action method = () => np.quantile(ca, 0.5, method: "linear", weights: ones);
+        method.Should().Throw<ValueError>().WithMessage("Only method 'inverted_cdf' supports weights. Got: linear.");
+        using var kept = np.quantile(ca, 0.5, method: "inverted_cdf", weights: ones);
+        kept.Should().BeOfType<NDCharArray>();
+        kept.ndim.Should().Be(0);
+        NDArray.AsStringArray(kept).Should().Equal("b");
+    }
 }

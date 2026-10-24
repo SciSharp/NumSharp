@@ -58,29 +58,17 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            ValidateQuantile(q);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
+            // a numpy.char.chararray operand: with weights= NumPy's result is empty_like of the chararray, the plain call
+            // kept as a chararray (its checks run inside it, so an invalid argument raises the same error); without
+            // weights the flag goes down, where NumPy's text route meets the STRING partition (QuantileEngine.Quantile).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = NDArray.Scalar(q);
-                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axisArr, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, new[] { q }, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar: true, methodName: method);
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.quantile body (q's checks, the weighted branch, the text routes, the numeric quantile) is
+            // QuantileEngine.Quantile's: the facade holds only the class rules above.
+            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
+                @out, overwrite_input, method, keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -135,30 +123,14 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = np.array(q);
-                return QuantileWeighted.Compute(a, qArray, axisArr, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axisArr, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, q, axisArr, @out, overwrite_input,
-                default, keepdims, qIsScalar: false, methodName: method);
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.quantile body is QuantileEngine.Quantile's (a null q is reported there, after the complex check).
+            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
+                @out, overwrite_input, method, keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -219,27 +191,13 @@ namespace NumSharp
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            ValidateQuantile(q);
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = NDArray.Scalar(q);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("quantile", a, new[] { q }, System.Array.Empty<long>(), false, axis, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, new[] { q }, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: true, methodName: method);
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.quantile body is QuantileEngine.Quantile's.
+            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -301,28 +259,13 @@ namespace NumSharp
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            for (int i = 0; i < q.Length; i++) ValidateQuantile(q[i]);
-            // Text: NumPy checks q (above), then the axis and the method; the selection methods (and 'linear' with an
-            // integer q) then partition and pick the text, the interpolating ones refuse it (QuantileOfText;
-            // a StringDType array reads the two neighbours before _lerp refuses them).
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                using var qArray = np.array(q);
-                return QuantileWeighted.Compute(a, qArray, axis, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-                return QuantileOfText("quantile", a, q, new long[] { q.Length }, false, axis, @out, method, keepdims, chararray);
-            return QuantileEngine.Compute(a, q, axis, @out, overwrite_input,
-                default, keepdims, qIsScalar: false, methodName: method);
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.quantile body is QuantileEngine.Quantile's (a null q is reported there, after the complex check).
+            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -379,53 +322,15 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            // Text q: NumPy's answer comes from its first statement on q (divide by 100, or the [0, 1] check), before the
-            // data or q's rank is looked at.
-            if (Backends.Strings.NDStringUfuncs.IsVString(q))
-                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ("quantile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
-            if (Backends.Strings.NDStringUfuncs.IsString(q))
-                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("quantile", a, q, method, axis.HasValue ? new[] { axis.Value } : null);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            // Text data: NumPy accepts a q of any rank up to 2 (_quantile_ureduce_func refuses rank 3 and above, after the
-            // range and axis checks), so the text route runs before the numeric path's rank check.
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                ValidateQuantileArray(q, QArrayFromNDArray(q));
-                return QuantileWeighted.Compute(a, q, axisArr, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-            {
-                double[] qText = QArrayFromNDArray(q);
-                ValidateQuantileArray(q, qText);
-                return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axisArr, @out, method, keepdims, chararray, QuantileIndexes.IndexDtypeOf(q));
-            }
-            bool qIsScalar = q.ndim == 0;
-            double[] qArr = QArrayFromNDArray(q);
-            // `_quantile_is_valid(q)` at any rank (an empty q of rank other than 1 fails its q.min()); q's rank is
-            // `_quantile_ureduce_func`'s check, after the axes, inside the engine (a 2-d q keeps both axes).
-            ValidateQuantileArray(q, qArr);
-            // NumPy 2.4: `q = np.asanyarray(q)` whatever q is, so an integer (or bool) q — a Python int or bool among
-            // them, over any data — makes 'linear's virtual index (n - 1) * q an integer, and _quantile then takes the
-            // element there (its "supports_integers" path) instead of interpolating: exactly the 'lower' selection, with
-            // the data's own dtype (np.quantile(int_array, np.array([0, 1])) is an int64 array, not float64, and
-            // np.quantile([1., inf], 1) is inf where the interpolation would make inf - inf) — integerQ. weak_q =
-            // type(q) in (int, float): only a C# number (its 0-d array marked WasPythonLiteral) keeps float16 / float32
-            // data's dtype under interpolation; an array q, 0-d included, is a strong float64. The method name and q's
-            // rank (a 2-d q keeps both axes) are checked inside, in NumPy's order.
-            return QuantileEngine.Compute(a, qArr, axisArr, @out, overwrite_input, default, keepdims, qIsScalar,
-                weakQ: q.WasPythonLiteral, qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(),
-                methodName: method, integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.quantile body is QuantileEngine.Quantile's: a null or text q, the range check at any rank, an
+            // integer q's index taken instead of interpolated, a weak C# literal, q's rank, all in NumPy's order.
+            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
+                @out, overwrite_input, method, keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -485,42 +390,13 @@ namespace NumSharp
         {
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
-            RejectComplexQuantileData(a);
-            if (q is null) throw new ArgumentNullException(nameof(q));
-            // Text q: NumPy's answer comes from its [0, 1] check, before the data or q's rank is looked at.
-            if (Backends.Strings.NDStringUfuncs.IsVString(q))
-                throw Backends.Strings.NDVStringStatistics.QuantileVStringQ("quantile", a, q, method, axis);
-            if (Backends.Strings.NDStringUfuncs.IsString(q))
-                throw Backends.Strings.NDStringUfuncs.QuantileTextQAnswer("quantile", a, q, method, axis);
-            // Text data: q's rank is NumPy's check after the axes (rank 3 and above refused), so it runs in the text route.
-            // weights=: NumPy checks them after q (the method, the axis, their shape and sign) and runs its weighted
-            // branch for every dtype (QuantileWeighted); a chararray operand keeps its class (NumPy's result is
-            // empty_like of the chararray).
-            if (weights is not null)
-            {
-                if (chararray)
-                    return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
-                        static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-                ValidateQuantileArray(q, QArrayFromNDArray(q));
-                return QuantileWeighted.Compute(a, q, axis, @out, keepdims, method, weights);
-            }
-            if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
-            {
-                double[] qText = QArrayFromNDArray(q);
-                ValidateQuantileArray(q, qText);
-                return QuantileOfText("quantile", a, qText, (long[])q.Shape.dimensions.Clone(), IsIntegerQuantile(q),
-                    axis, @out, method, keepdims, chararray, QuantileIndexes.IndexDtypeOf(q));
-            }
-            double[] qArr = QArrayFromNDArray(q);
-            // `_quantile_is_valid(q)` at any rank; q's rank is checked after the axes, inside the engine.
-            ValidateQuantileArray(q, qArr);
-            // An integer (or bool) q: 'linear' takes the element at the integer virtual index (integerQ, see the one-axis
-            // overload). weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong
-            // float64.
-            return QuantileEngine.Compute(a, qArr, axis, @out, overwrite_input, default, keepdims, qIsScalar: q.ndim == 0,
-                weakQ: q.WasPythonLiteral, qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone(),
-                methodName: method, integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
+            // a numpy.char.chararray operand: the weights= rule here, the flag below (see the double-q overload).
+            if (chararray && weights is not null)
+                return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
+                    static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
+            // NumPy's np.quantile body is QuantileEngine.Quantile's (see the one-axis overload).
+            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
+                keepdims, weights, chararray);
         }
 
         /// <summary>
@@ -616,73 +492,5 @@ namespace NumSharp
             using NDArray qArray = NDArray.PythonLiteral(q);
             return quantile(a, qArray, axis, @out, overwrite_input, method, keepdims, weights);
         }
-
-        /// <summary>
-        ///     NumPy's <c>_quantile_is_valid(q)</c> over a q array: a 1-d q of fewer than 10 elements element by element (an
-        ///     empty one passes), any other through <c>q.min() &gt;= 0 and q.max() &lt;= 1</c> — which raises for an empty q of
-        ///     another rank (the reduction has no identity).
-        /// </summary>
-        /// <param name="q">The q array (its rank and size).</param>
-        /// <param name="values">Its values in C order.</param>
-        /// <exception cref="ValueError">A quantile outside [0, 1] (or NaN): <c>Quantiles must be in the range [0, 1]</c>;
-        ///     an empty q of rank other than 1: <c>zero-size array to reduction operation minimum which has no
-        ///     identity</c>.</exception>
-        private static void ValidateQuantileArray(NDArray q, double[] values)
-        {
-            if (values.Length == 0 && q.ndim != 1)
-                throw new ValueError("zero-size array to reduction operation minimum which has no identity");
-            for (int i = 0; i < values.Length; i++)
-                ValidateQuantile(values[i]);
-        }
-
-        /// <summary>NumPy's <c>_quantile_is_valid</c> for one quantile: inside <c>[0, 1]</c> (NaN is not).</summary>
-        /// <param name="q">The quantile.</param>
-        /// <exception cref="ValueError"><paramref name="q"/> is outside [0, 1] ("Quantiles must be in the range [0, 1]").</exception>
-        private static void ValidateQuantile(double q)
-        {
-            if (!(q >= 0.0 && q <= 1.0))
-                throw new ValueError("Quantiles must be in the range [0, 1]");
-        }
-
-        /// <summary>
-        ///     The first statement of np.quantile / np.percentile / np.nanquantile / np.nanpercentile:
-        ///     <c>if a.dtype.kind == "c": raise TypeError("a must be an array of real numbers")</c>. np.median and
-        ///     np.nanmedian do not have it (a complex median sorts lexicographically).
-        /// </summary>
-        /// <param name="a">The data operand (null passes; the caller's own null check reports it).</param>
-        /// <exception cref="TypeError"><paramref name="a"/> is complex.</exception>
-        internal static void RejectComplexQuantileData(NDArray a)
-        {
-            if (a is not null && a.typecode == NPTypeCode.Complex)
-                throw new TypeError("a must be an array of real numbers");
-        }
-
-        /// <summary>A q array's values as doubles, in C order (one value for a 0-d q).</summary>
-        /// <param name="q">The q array (a real dtype).</param>
-        /// <returns>The values.</returns>
-        /// <exception cref="InvalidCastException">A dtype without a real value (complex).</exception>
-        private static double[] QArrayFromNDArray(NDArray q)
-        {
-            if (q.ndim == 0)
-                return new[] { QuantileValueAt(q, 0) };
-            double[] outQ = new double[q.size];
-            for (long i = 0; i < q.size; i++) outQ[i] = QuantileValueAt(q, i);
-            return outQ;
-        }
-
-        /// <summary>
-        ///     One element of a q array as a double, the value NumPy's checks and virtual indexes read (every real dtype
-        ///     converts exactly; <see cref="Half"/> is read by its own conversion, as it has no <see cref="IConvertible"/>).
-        /// </summary>
-        /// <param name="q">The q array.</param>
-        /// <param name="i">The flat index, in C order.</param>
-        /// <returns>The value.</returns>
-        /// <exception cref="InvalidCastException">A dtype without a real value (complex).</exception>
-        private static double QuantileValueAt(NDArray q, long i)
-            => q.GetAtIndex(i) switch
-            {
-                Half h => (double)h,
-                var v => Convert.ToDouble(v),
-            };
     }
 }

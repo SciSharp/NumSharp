@@ -40,20 +40,9 @@ namespace NumSharp
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Reduced((a, axis, @out, overwrite_input, keepdims), static s => nanmedian(s.a, s.axis, s.@out, s.overwrite_input, s.keepdims), axis, keepdims, null);
-            // Text: NumPy sends EMPTY data to np.nanmean(a, axis, out=out) first (whose add.reduce resolves on (out, a));
-            // otherwise its _ureduce normalizes the axis (a 0-d input refuses every axis) and the NaN test refuses text;
-            // see NDStringUfuncs.ReduceError / ReduceOutError.
-            // StringDType: np.nanmean for an empty input, else the NaN-like NAs removed and the median of the rest (numpy.ma's
-            // median along an axis shorter than 600, np.apply_along_axis along a longer one).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                return Backends.Strings.NDVStringStatistics.NanMedian(a, axis.HasValue ? new[] { axis.Value } : null, @out, keepdims);
-            if (a is not null && a.size == 0)
-                Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
-            int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            return QuantileEngine.Compute(a, new[] { 0.5 }, axisArr, @out, overwrite_input,
-                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true,
-                allowBooleanContinuous: true, medianMean: true);
+            // NumPy's np.nanmedian body (the text routes, then the NaN-ignoring median) is QuantileEngine.NanMedian's: the
+            // facade holds only the class rule above.
+            return QuantileEngine.NanMedian(a, axis, @out, overwrite_input, keepdims);
         }
 
         /// <summary>
@@ -88,18 +77,8 @@ namespace NumSharp
             NDArray @out = null, bool overwrite_input = false, bool keepdims = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text: NumPy sends EMPTY data to np.nanmean(a, axis, out=out) first (whose add.reduce resolves on (out, a));
-            // otherwise its _ureduce normalizes the tuple (every axis, then repeats) and the NaN test refuses text; see
-            // NDStringUfuncs.ReduceError / ReduceOutError.
-            // StringDType: see the one-axis overload.
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-                return Backends.Strings.NDVStringStatistics.NanMedian(a, axis, @out, keepdims);
-            if (a is not null && a.size == 0)
-                Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmean", a, axis, @out);
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("nanmedian", a, axis);
-            return QuantileEngine.Compute(a, new[] { 0.5 }, axis, @out, overwrite_input,
-                QuantileMethod.Linear, keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true,
-                allowBooleanContinuous: true, medianMean: true);
+            // NumPy's np.nanmedian body is QuantileEngine.NanMedian's.
+            return QuantileEngine.NanMedian(a, axis, @out, overwrite_input, keepdims);
         }
     }
 }
