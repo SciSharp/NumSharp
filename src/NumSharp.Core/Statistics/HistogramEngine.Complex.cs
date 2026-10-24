@@ -182,7 +182,8 @@ namespace NumSharp.Statistics
                         return 1;
                     if (edges.Strong)
                         throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("ceil");
-                    return (int)Math.Ceiling((edges.Last.Real - edges.First.Real) / width);
+                    // A range's Python floats: the edges' linspace computes in float64 and is cast to complex128.
+                    return EstimatorBinCount((edges.Last.Real - edges.First.Real) / width, NPTypeCode.Double);
                 }
                 case "sqrt":
                 case "sturges":

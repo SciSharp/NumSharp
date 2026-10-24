@@ -595,7 +595,9 @@ namespace NumSharp.Statistics
                         // holds for NumSharp's char too (an unsignedinteger in its scalar hierarchy, the uint16 of the oracle).
                         if (np.issubdtype(a.dtype, np.integer) && width < 1) width = 1;
                         double delta = last - first;
-                        nEqualBins = (int)System.Math.Ceiling(delta / width);
+                        // The edges' linspace computes in float64 for a range's Python floats, else in the data's width.
+                        NPTypeCode linspaceDtype = range.HasValue ? NPTypeCode.Double : FloatPromoteBinType(a.typecode);
+                        nEqualBins = EstimatorBinCount(delta / width, linspaceDtype);
                     }
                     else
                     {
@@ -658,6 +660,102 @@ namespace NumSharp.Statistics
             }
 
             return new BinEdgesResult(binEdges, false, 0, 0, 0, NPTypeCode.Double);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>n_equal_bins = int(np.ceil(delta / width))</c> after an estimator, with what the
+        ///     <c>np.linspace(first_edge, last_edge, n_equal_bins + 1, ...)</c> that follows makes of a count too large to
+        ///     allocate: Python's int() refuses a NaN and an infinity, and np.arange / the allocator refuse a huge edge count.
+        /// </summary>
+        /// <param name="quotient"><c>delta / width</c>.</param>
+        /// <param name="linspaceDtype">The dtype linspace computes the edges in (float64 for Python-number outer edges and
+        ///     integer data, the data's float16 / float32 width for its own outer edges): its arange's dtype.</param>
+        /// <returns>The number of equal-width bins, when the edges can be allocated.</returns>
+        /// <exception cref="ValueError">A NaN quotient (<c>cannot convert float NaN to integer</c>, an infinite delta over an
+        ///     infinite width); an edge count whose float64 value exceeds 2^63 (np.arange's <c>Maximum allowed size
+        ///     exceeded</c>); an edge count whose bytes exceed int64 (<c>array is too big; …</c>).</exception>
+        /// <exception cref="OverflowException">An infinite quotient (<c>cannot convert float infinity to integer</c>).</exception>
+        /// <exception cref="IndexError">An edge count whose float64 value is exactly 2^63: np.arange's length cast wraps to a
+        ///     negative number, the arange is empty, and linspace's <c>y[-1] = stop</c> fails (<c>index -1 is out of bounds
+        ///     for axis 0 with size 0</c>).</exception>
+        /// <exception cref="OutOfMemoryException">An edge count NumSharp's int bin count cannot hold: NumPy's MemoryError for
+        ///     the arange (<c>Unable to allocate 64.0 GiB for an array with shape (8589934593,) and data type float64</c>).
+        ///     NumPy raises it when the memory is not there; with enough memory it allocates and goes on, which NumSharp's
+        ///     histogram (an int bin count) does not.</exception>
+        /// <remarks>
+        ///     Reachable by real data: integer data whose estimated width is clamped to 1 count one bin per unit of their
+        ///     range (int64 nanosecond timestamps clustered in time give billions), and float data with a tiny
+        ///     interquartile range and a far outlier give a count past 2^64. .NET's saturating double-to-int conversion would
+        ///     have turned a NaN into 0 bins and a huge count into int.MaxValue, whose edge count wraps negative.
+        /// </remarks>
+        private static int EstimatorBinCount(double quotient, NPTypeCode linspaceDtype)
+        {
+            double count = Math.Ceiling(quotient);
+            if (double.IsNaN(count))
+                throw new ValueError("cannot convert float NaN to integer");
+            if (double.IsInfinity(count))
+                throw new OverflowException("cannot convert float infinity to integer");
+            if (count < int.MaxValue)
+                return (int)count; // count + 1 edges fit an int
+
+            // np.linspace(..., num=count + 1): its arange(0, num) computes the length as a double, ceils it and checks it
+            // against intp (`_arange_safe_ceil_to_intp`, whose bound (double)NPY_MAX_INTP is 2^63 itself).
+            // The length is Python's `(num - 0) / 1`, a correctly rounded int division (.NET's BigInteger-to-double cast
+            // truncates instead).
+            var edges = new System.Numerics.BigInteger(count) + 1;
+            double length = PyScalar.IntTrueDivide(edges, System.Numerics.BigInteger.One);
+            if (length > 9223372036854775808.0)
+                throw new ValueError("Maximum allowed size exceeded");
+            if (length == 9223372036854775808.0)
+                throw new IndexError("index -1 is out of bounds for axis 0 with size 0");
+
+            // The allocation of length elements: a byte count past intp is "array is too big", anything else NumPy's
+            // MemoryError when the memory is not there.
+            var nbytes = new System.Numerics.BigInteger(length) * linspaceDtype.SizeOf();
+            if (nbytes > long.MaxValue)
+                throw new ValueError(AllocationGuard.TooBigMessage);
+            throw new OutOfMemoryException(
+                $"Unable to allocate {NumPySizeString(nbytes)} for an array with shape ({new System.Numerics.BigInteger(length)},) " +
+                $"and data type {linspaceDtype.AsNumpyDtypeName()}");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_ArrayMemoryError._size_to_string</c>: a byte count in binary units (bytes, KiB, … EiB), with three
+        ///     significant figures in Python's alternate form (<c>'#.3g'</c>: <c>8.00</c>, <c>16.0</c>, <c>149.</c>) below 1000
+        ///     units and every integer digit (<c>'#.0f'</c>) from there on.
+        /// </summary>
+        /// <param name="numBytes">The byte count (positive).</param>
+        /// <returns>The size text, e.g. <c>64.0 GiB</c>.</returns>
+        private static string NumPySizeString(System.Numerics.BigInteger numBytes)
+        {
+            const int log2Step = 10, step = 1024;
+            string[] units = { "bytes", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB" };
+
+            int unitI = (int)(Math.Max(numBytes.GetBitLength() - 1, 1) / log2Step);
+            // n_units = num_bytes / unit_val: Python's int / int, correctly rounded.
+            double nUnits = PyScalar.IntTrueDivide(numBytes, System.Numerics.BigInteger.One << (unitI * log2Step));
+
+            // Ensure the unit is right after rounding (Python's round() is half-to-even).
+            if (Math.Round(nUnits, MidpointRounding.ToEven) == step)
+            {
+                unitI++;
+                nUnits /= step;
+            }
+            // Sizes too large for the units: scale back to the last one.
+            if (unitI >= units.Length)
+            {
+                int newUnitI = units.Length - 1;
+                nUnits *= Math.Pow(2, (unitI - newUnitI) * log2Step);
+                unitI = newUnitI;
+            }
+
+            string unitName = units[unitI];
+            string number = unitI == 0
+                ? Backends.Printing.PrintfFormatter.Format("%.0f", nUnits, Backends.Printing.PercentFormat.PyObject)
+                : Math.Round(nUnits, MidpointRounding.ToEven) < 1000
+                    ? Backends.Printing.PrintfFormatter.Format("%#.3g", nUnits, Backends.Printing.PercentFormat.PyObject)
+                    : Backends.Printing.PrintfFormatter.Format("%#.0f", nUnits, Backends.Printing.PercentFormat.PyObject);
+            return number + " " + unitName;
         }
 
         /// <summary>
