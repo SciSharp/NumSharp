@@ -18,6 +18,13 @@ namespace NumSharp.Backends
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
         /// <returns>The NaN-skipping sum (a read-only 0-d scalar for a full reduction).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the flat and axis kernels read <paramref name="a"/>'s raw address
+        ///     (<see cref="NanReductionElementWise"/>, <see cref="ExecuteNanAxisReduction"/>), and <c>np.nansum(a)</c> reaches
+        ///     them through this method, which opens no scope; the weaver roots <paramref name="a"/> until it returns, so a
+        ///     caller's temporary (<c>np.nansum(a * w, 1)</c>) cannot be collected under the kernel. Without it a collection
+        ///     during the axis kernel returned a sum of other memory or ended the process with an access violation
+        ///     (lifetime gap LT30).</remarks>
+        [NDAnchored]
         public override NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false)
         {
             // StringDType is not inexact: _replace_nan leaves it alone and nansum IS np.sum, which computes.
@@ -77,10 +84,14 @@ namespace NumSharp.Backends
         /// <returns>The NaN-skipping product (a read-only 0-d scalar for a full reduction).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <remarks>
-        ///     A complex input goes to <c>np.prod</c> without the NaN replacement (pre-existing; NumPy replaces a complex
+        ///     <para>A complex input goes to <c>np.prod</c> without the NaN replacement (pre-existing; NumPy replaces a complex
         ///     element with a NaN in either part by <c>1</c>), and a lone complex element skips NumPy's <c>(1+0j) * x</c>
-        ///     — pinned by <c>OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement</c>.
+        ///     — pinned by <c>OpenBugsReductionTests.Prod_OneComplexElement_IsTheIdentityTimesTheElement</c>.</para>
+        ///     <para><see cref="NDAnchoredAttribute"/>: the kernels read <paramref name="a"/>'s raw address and
+        ///     <c>np.nanprod(a)</c> reaches them through this method, which opens no scope; the weaver roots
+        ///     <paramref name="a"/> until it returns (lifetime gap LT30, as <see cref="NanSum"/>).</para>
         /// </remarks>
+        [NDAnchored]
         public override NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false)
         {
             // Text, or a string dtype= request: NumPy's nanprod checks its arguments first (the axis, and the dtype= class where
@@ -184,6 +195,11 @@ namespace NumSharp.Backends
         /// <returns>The reduced array.</returns>
         /// <exception cref="ArgumentException">The reduction is empty (NumPy's ValueError text).</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
+        /// <remarks><see cref="NDAnchoredAttribute"/>: the exact cores and the kernels read <paramref name="a"/>'s raw
+        ///     address, and <c>np.nanmax(a)</c> / <c>np.nanmin(a)</c> reach them through <see cref="NanMax"/> /
+        ///     <see cref="NanMin"/>, which open no scope; the weaver roots <paramref name="a"/> until this returns (lifetime
+        ///     gap LT30, as <see cref="NanSum"/>).</remarks>
+        [NDAnchored]
         private NDArray NanMinMax(NDArray a, int? axis, bool keepdims, MinMaxOp op)
         {
             // nanmax / nanmin are fmax.reduce / fmin.reduce in NumPy: a string array gets the fmax / fmin no-loop text.

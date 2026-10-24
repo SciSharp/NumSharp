@@ -339,8 +339,9 @@ OPS = {
     "all": lambda a, p: np.all(a[0], axis=p.get("axis")),
     "any": lambda a, p: np.any(a[0], axis=p.get("axis")),
     "count_nonzero": lambda a, p: np.count_nonzero(a[0], axis=p.get("axis")),
-    "nansum": lambda a, p: np.nansum(a[0]),
-    "nanmax": lambda a, p: np.nanmax(a[0]),
+    "nansum": lambda a, p: np.nansum(a[0], axis=p.get("axis")),
+    "nanprod": lambda a, p: np.nanprod(a[0], axis=p.get("axis")),
+    "nanmax": lambda a, p: np.nanmax(a[0], axis=p.get("axis")),
     "nanmean": lambda a, p: np.nanmean(a[0]),
     "nanvar": lambda a, p: np.nanvar(a[0]),
     "ptp": lambda a, p: np.ptp(a[0]),
@@ -637,7 +638,12 @@ def _cases():
         ("count_nonzero", [mod("bool", [8 * N], 3)], {}, True, False),
         ("count_nonzero", [mod("bool", [2 * SIDE, 4 * SIDE], 3)], {"axis": 0}, True, False),
         ("nansum", [_F()], {}, True, False),
+        # The nan reductions along an axis (LT30): ExecuteNanAxisReduction reads the input after its last managed use.
+        ("nansum", [mod("float64", [SIDE, 4 * SIDE], 997)], {"axis": 1}, True, False),
+        ("nansum", [mod("float64", [SIDE, 4 * SIDE], 997)], {"axis": 0}, True, False),
+        ("nanprod", [mod("float64", [SIDE, 4 * SIDE], 1, off=1.0)], {"axis": 1}, True, False),
         ("nanmax", [_F()], {}, True, False),
+        ("nanmax", [mod("float64", [SIDE, 4 * SIDE], 997)], {"axis": 1}, True, False),
         ("nanmean", [_F()], {}, True, False),
         ("nanvar", [_F()], {}, True, False),
         ("ptp", [_F()], {}, True, False),
@@ -860,7 +866,7 @@ TARGET_OPS = {"put", "place", "putmask", "put_along_axis", "copyto", "copyto_whe
 #: later use of the operand, the operands it loses). A variant is carved when one of the operands the site loses is
 #: temporary, whether or not a given replay caught it (detection is a race; the code is not). The [OpenBugs] test named
 #: after each id in Fuzz/Lifetime/LifetimeOracleTests.cs replays its cases. Empty since 2026-10-09: every gap below was
-#: fixed. A new site gets the next id (LT30), a rule in ``_site_of`` and an [OpenBugs] test.
+#: fixed. A new site gets the next id (LT31), a rule in ``_site_of`` and an [OpenBugs] test.
 GAPS = {}
 
 #: The FIXED gaps: id -> (the site that lost its operand, what roots the operand now). The 28 sites were drawn from three
@@ -909,6 +915,10 @@ FIXED = {
             "object per element) and NDArray.AsStringArray of a contiguous U array (ReadUcs4 per element) — found by a probe "
             "on 2026-10-18 (an access violation over a temporary 200 MB U500 array), not by this oracle; rooted by "
             "[NDAnchored] on both entry points, on NDArray.AsString / GetString and on StringArraySlice's readers",
+    "LT30": "np.nansum / np.nanprod along an axis: ExecuteNanAxisReduction hands the input's address to the IL axis kernel "
+            "and never reads the operand again (wrong sums, or an access violation in NanReduceContiguousAxis) — found "
+            "by the Oracle's leak sweep on 2026-10-25 (the net8.0 test host ended there once), not by this oracle; "
+            "rooted by [NDAnchored] on DefaultEngine.NanSum, NanProd and NanMinMax (np.nanmax / np.nanmin)",
 }
 
 #: The dtypes np.unique_values and np.unique_counts send through the hash path (UniqueHashSortedInt /
@@ -978,6 +988,9 @@ def _site_of(op, tag, args, params):
         return "LT22" if 0 in t else None      # the kernel is reversed into a copy convolve owns
     if op == "all":
         return "LT26" if "axis" not in params and dt0 == "bool" and 0 in t else None
+    if op in ("nansum", "nanprod", "nanmax"):
+        # The engine members anchor the operand for every route (flat and axis), so every case of theirs pins LT30.
+        return "LT30" if 0 in t else None
     if op in ("unique_counts", "unique_values"):
         # np.unique itself reaches the same hash path but keeps its receiver: the instance unique uses it after the flat
         # call on its return_inverse path, so the JIT reports it live across the call (its cases are in the gate).

@@ -10,10 +10,10 @@ namespace NumSharp.Tests.Lifetime
 {
     /// <summary>
     ///     The OPERAND ROOTS of the woven NumSharp.Core, checked in its IL — the deterministic half of the fix for the lost
-    ///     GC anchors the lifetime oracle found (LT01–LT29, <c>test/NumSharp.Tests.Oracle/Fuzz/Lifetime</c>). Every method
+    ///     GC anchors the lifetime oracle found (LT01–LT30, <c>test/NumSharp.Tests.Oracle/Fuzz/Lifetime</c>). Every method
     ///     that opens an <see cref="NDScope"/> and takes an <see cref="NDArray"/> must call <see cref="NDScope.Anchor"/>
     ///     (the weaver roots its operands), every <see cref="NDAnchoredAttribute"/> method must, and so must the entry point
-    ///     of each of the 29 fixed sites.
+    ///     of each of the 30 fixed sites.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -76,7 +76,7 @@ namespace NumSharp.Tests.Lifetime
         }
 
         /// <summary>
-        ///     The entry point of each of the 29 sites the lifetime oracle found roots its operands: the method that held the
+        ///     The entry point of each of the 30 sites the lifetime oracle found roots its operands: the method that held the
         ///     operand while its kernel ran (or the scoped frame above it) now calls <see cref="NDScope.Anchor"/>.
         /// </summary>
         /// <param name="gap">The fixed gap id (for the failure message).</param>
@@ -128,6 +128,9 @@ namespace NumSharp.Tests.Lifetime
         [DataRow("LT29", "StringArraySlice", "GetIndex", "Int64")]
         [DataRow("LT29", "StringArraySlice", "GetItems", "Int64,Int64,Span`1")]
         [DataRow("LT29", "StringArraySlice", "ToArray", "")]
+        [DataRow("LT30", "DefaultEngine", "NanSum", "NDArray,Nullable`1,Boolean")]
+        [DataRow("LT30", "DefaultEngine", "NanProd", "NDArray,Nullable`1,Boolean")]
+        [DataRow("LT30", "DefaultEngine", "NanMinMax", "NDArray,Nullable`1,Boolean,MinMaxOp")]
         public void FixedSite_RootsItsOperands(string gap, string owner, string name, string signature)
         {
             var type = owner switch
