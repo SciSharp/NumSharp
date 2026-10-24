@@ -907,9 +907,9 @@ namespace NumSharp.Backends.Iteration
             {
                 // np.angle — complex128 → float64 (arctan2(imag, real)); a REAL input takes NumPy's
                 // per-dtype float tier of arctan2(0, x) (bool/int32+/f64→f64, int8/uint8/f16→f16,
-                // int16/uint16/char/f32→f32), reusing np.angle's OWN table so the fused node and the
+                // int16/uint16/char/f32→f32), reusing np.angle's OWN table (DefaultEngine.AngleRealTier) so the fused node and the
                 // library function resolve the dtype identically. Char rides uint16→float32; Decimal→f64.
-                result = childType == NPTypeCode.Complex ? NPTypeCode.Double : np.AngleRealTier(childType);
+                result = childType == NPTypeCode.Complex ? NPTypeCode.Double : DefaultEngine.AngleRealTier(childType);
             }
             else if (IsFloatPromoting(_op))
             {

@@ -125,7 +125,6 @@ Math/NDArray.Correlate.cs	4	1
 Math/NDArray.SlidingDot.cs	0	19
 Math/NDArray.negative.cs	1	15
 Math/NDArray.positive.cs	1	1
-Math/np.angle.cs	3	9
 Math/np.conjugate.cs	0	1
 Math/np.deg2rad.cs	1	0
 Math/np.diff.cs	3	16

@@ -51,7 +51,6 @@ Backends/Default/Sorting/TextDistinct.cs	0	1
 Backends/Default/Sorting/TextSearch.cs	0	1
 Backends/Default/Sorting/VStringDistinct.cs	0	2
 Backends/Default/Sorting/VStringSearch.cs	0	3
-Backends/Iterators/NDExpr.Typing.cs	1	0
 Backends/Iterators/NDIter.Descriptors.cs	0	1
 Backends/Iterators/NDIter.Detach.cs	0	1
 Backends/Iterators/NDIter.cs	0	7
