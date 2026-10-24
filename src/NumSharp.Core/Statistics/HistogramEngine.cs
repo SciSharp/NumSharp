@@ -53,8 +53,12 @@ namespace NumSharp.Statistics
             public readonly double Last;
             /// <summary>Number of equal-width bins — valid only when <see cref="Uniform"/>.</summary>
             public readonly int NBins;
-            /// <summary>The compute/bin dtype B (Half/Single/Double) — valid only when <see cref="Uniform"/>.</summary>
+            /// <summary>The compute/bin dtype B (Half/Single/Double, or Complex for complex data) — valid only when
+            ///     <see cref="Uniform"/>.</summary>
             public readonly NPTypeCode BinDtype;
+            /// <summary>Complex data's outer edges (<see cref="First"/> / <see cref="Last"/> are unused then) — valid only when
+            ///     <see cref="Uniform"/> and <see cref="BinDtype"/> is Complex.</summary>
+            public readonly ComplexOuterEdges ComplexEdges;
 
             /// <summary>Holds the edges and, for equal-width bins, the parameters of the uniform counting path.</summary>
             /// <param name="edges">The bin edges (nbins + 1 of them).</param>
@@ -62,10 +66,14 @@ namespace NumSharp.Statistics
             /// <param name="first">The lower outer edge.</param>
             /// <param name="last">The upper outer edge.</param>
             /// <param name="nbins">The number of equal-width bins.</param>
-            /// <param name="binDtype">The dtype the edges are in and the samples are cast to (Half, Single or Double).</param>
-            public BinEdgesResult(NDArray edges, bool uniform, double first, double last, int nbins, NPTypeCode binDtype)
+            /// <param name="binDtype">The dtype the edges are in and the samples are cast to (Half, Single or Double; Complex
+            ///     for complex data, whose counting runs <see cref="HistogramUniformComplexData"/>).</param>
+            /// <param name="complexEdges">Complex data's outer edges, or the default for every other dtype.</param>
+            public BinEdgesResult(NDArray edges, bool uniform, double first, double last, int nbins, NPTypeCode binDtype,
+                ComplexOuterEdges complexEdges = default)
             {
                 Edges = edges; Uniform = uniform; First = first; Last = last; NBins = nbins; BinDtype = binDtype;
+                ComplexEdges = complexEdges;
             }
         }
 
@@ -124,8 +132,12 @@ namespace NumSharp.Statistics
                 || can_cast(w.typecode, NPTypeCode.Double)
                 || can_cast(w.typecode, NPTypeCode.Complex);
 
+            // Complex data's equal-width counting is NumPy's statements in complex128 (HistogramEngine.Complex.cs); the fused
+            // index kernel of the real dtypes cannot express a complex quotient.
             NDArray n = (be.Uniform && simpleWeights)
-                ? HistogramUniform(raveled, w, be, ntype)
+                ? (be.BinDtype == NPTypeCode.Complex
+                    ? HistogramUniformComplexData(raveled, w, be, ntype)
+                    : HistogramUniform(raveled, w, be, ntype))
                 : HistogramCumulative(raveled, w, binEdges, ntype);
 
             if (density)
@@ -493,6 +505,10 @@ namespace NumSharp.Statistics
             NDArray binEdges = null;
             double first = 0, last = 0;
             bool textData = Backends.Strings.NDStringUfuncs.IsText(a);
+            // Complex data meet the same statements in complex128 (HistogramEngine.Complex.cs): complex outer edges, complex
+            // equal-width edges, and estimators whose complex widths stop at int(np.ceil(...)).
+            bool complexData = a.typecode == NPTypeCode.Complex;
+            ComplexOuterEdges complexEdges = default;
 
             if (bins is string binName)
             {
@@ -500,6 +516,9 @@ namespace NumSharp.Statistics
                     throw new ValueError($"'{binName}' is not a valid estimator for `bins`");
                 if (weights is not null)
                     throw new TypeError("Automated estimation of the number of bins is not supported for weighted data");
+
+                if (complexData)
+                    return ComplexEqualWidthResult(ComplexEstimatorBinCount(a, binName, range, out complexEdges), complexEdges);
 
                 (first, last) = GetOuterEdges(a, range);
 
@@ -559,6 +578,8 @@ namespace NumSharp.Statistics
                 if (count < 1)
                     throw new ValueError("`bins` must be positive, when an integer");
                 nEqualBins = count;
+                if (complexData)
+                    return ComplexEqualWidthResult(count, GetComplexOuterEdges(a, range));
                 (first, last) = GetOuterEdges(a, range);
             }
 
