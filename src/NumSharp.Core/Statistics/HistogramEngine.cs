@@ -300,8 +300,11 @@ namespace NumSharp.Statistics
         /// <param name="be">The equal-width edges and their outer edges, count and dtype.</param>
         /// <param name="ntype">The result's dtype: int64 without weights, the weights' dtype with them.</param>
         /// <returns>The counts (or summed weights), one per bin, in <paramref name="ntype"/>.</returns>
+        /// <exception cref="ArgumentException">Zero bins with a sample between the outer edges: NumPy's np.bincount refusal
+        ///     (<c>'list' argument must have no negative elements</c>, a ValueError in NumPy; NumSharp's np.bincount raises
+        ///     it as an ArgumentException), see <see cref="HistogramZeroBins"/>.</exception>
         /// <remarks>The kernels read raw addresses, so the samples, edges and weights are first made contiguous from their
-        ///     element 0 in the kernel's dtype (<see cref="EnsureContiguousDtype"/>).</remarks>
+        ///     element 0 in the kernel's dtype (<see cref="EnsureContiguousDtype"/>). They assume at least one bin.</remarks>
         private static unsafe NDArray HistogramUniform(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
         {
             long len = raveled.size;
@@ -310,6 +313,11 @@ namespace NumSharp.Statistics
             // Empty input: no samples, all-zero histogram of the right dtype.
             if (len == 0)
                 return np.zeros(Shape.Vector(nbins), ntype);
+
+            // Zero bins: the kernels would count every sample outside the zero-length result (a heap corruption); NumPy's
+            // statements refuse such samples instead.
+            if (nbins == 0)
+                return HistogramZeroBins(raveled, w, be, ntype);
 
             // Cast samples and edges to the compute dtype B, contiguous, matching NumPy's
             // `tmp_a.astype(bin_edges.dtype)` — the index arithmetic then runs bit-for-bit in B.
@@ -364,6 +372,46 @@ namespace NumSharp.Statistics
                 }
             }
             return n;
+        }
+
+        /// <summary>
+        ///     NumPy's equal-width counting loop when there are no bins: an estimator's <c>int(np.ceil(delta / width))</c> is
+        ///     0 when the width is infinite and the range is not (<c>scott</c>'s width is a standard deviation in the data's
+        ///     dtype, whose squares overflow once a float16 sample lies 256 or more from the mean, a float32 one about
+        ///     1.8e19, a float64 one about 1.3e154). Every kept sample's index is then 0, which
+        ///     <c>indices[indices == n_equal_bins] -= 1</c> turns into -1, and the block's <c>np.bincount</c> refuses it; with no
+        ///     sample between the outer edges the loop adds nothing and the counts are empty.
+        /// </summary>
+        /// <param name="raveled">The raveled real data (at least one sample).</param>
+        /// <param name="w">The raveled weights, or null (an estimator refuses weights, so this is null in practice).</param>
+        /// <param name="be">The equal-width edges (one edge) and the outer edges.</param>
+        /// <param name="ntype">The result's dtype.</param>
+        /// <returns>The empty counts, when no sample lies between the outer edges.</returns>
+        /// <exception cref="ArgumentException">A sample between the outer edges: np.bincount's refusal of the -1 indices
+        ///     (<c>'list' argument must have no negative elements</c>; NumSharp's np.bincount raises NumPy's ValueError text as
+        ///     an ArgumentException).</exception>
+        /// <remarks>
+        ///     Zero bins come only from an estimator, which ran over the samples between the outer edges and found at least
+        ///     one, so NumPy's answer is in practice always the refusal. The keep mask is the estimator branch's own
+        ///     comparison with the outer edges, so it keeps the same samples.
+        /// </remarks>
+        private static NDArray HistogramZeroBins(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
+        {
+            // keep = (tmp_a >= first_edge) & (tmp_a <= last_edge) over every block: the first block holding a kept sample
+            // raises, so whether any sample is kept decides the answer.
+            using NDArray first = NDArray.Scalar(be.First);
+            using NDArray last = NDArray.Scalar(be.Last);
+            using NDArray keep = (raveled >= first) & (raveled <= last);
+            long kept = np.count_nonzero(keep);
+            if (kept > 0)
+            {
+                // indices = f_indices.astype(np.intp) is 0 (a product with n_equal_bins = 0), then -1; np.bincount refuses.
+                using NDArray indices = np.full(Shape.Vector(kept), -1L, np.int64);
+                using NDArray weights = w?[keep];
+                bincount(indices, weights, 0);
+                throw new InvalidOperationException("np.histogram: np.bincount accepted negative indices.");
+            }
+            return np.zeros(Shape.Vector(0), ntype);
         }
 
         // ---------------------------------------------------------------------

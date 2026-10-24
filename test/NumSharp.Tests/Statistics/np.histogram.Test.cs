@@ -284,6 +284,28 @@ public class np_histogram_Tests
         Eq(np.histogram(a, "doane").hist, new double[] { 4, 0, 0, 0, 0, 8 });
     }
 
+    /// <summary>
+    ///     scott's width is a standard deviation in the data's dtype; when its squares overflow the width is infinite, the
+    ///     range is not, and <c>int(np.ceil(delta / width))</c> is 0 bins. NumPy's index statements then give every sample
+    ///     the index -1 and its np.bincount refuses them (NumSharp's np.bincount raises that ValueError text as an
+    ///     <see cref="ArgumentException"/>). NumSharp's fused count kernel used to count the samples outside the zero-length
+    ///     result: a heap corruption (STATUS_HEAP_CORRUPTION, found by a random differential against NumPy 2.4.2).
+    /// </summary>
+    [TestMethod]
+    public void Estimator_ScottInfiniteWidth_ZeroBins_BincountRefusal()
+    {
+        const string text = "'list' argument must have no negative elements";
+        var f16 = np.array(new[] { -169.5, 166.625, 82.1875, -114.5625, -269.25, -26.0, 66.0 }).astype(NPTypeCode.Half);
+        var f32 = np.array(new[] { -3e19f, 1e19f, 2e19f, 0f });
+        var f64 = np.array(new[] { -3e154, 1e154, 2e154, 0 });
+        foreach (var a in new[] { f16, f32, f64 })
+            for (int rep = 0; rep < 200; rep++)
+                ((Action)(() => np.histogram(a, "scott"))).Should().Throw<ArgumentException>().WithMessage(text);
+
+        // histogram_bin_edges does not count: the single edge of zero bins comes back.
+        np.histogram_bin_edges(f64, "scott").ToArray<double>().Should().Equal(-3e154);
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {
