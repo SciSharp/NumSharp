@@ -17,8 +17,7 @@ namespace NumSharp.Tests
     // under a gap id (SU1-SU42, the GAPS table of the generator) and replayed by Surface_KnownGaps. This file reproduces
     // the library defects among them through PUBLIC calls, one test per gap (two for SU42):
     //
-    //   * Silent wrong values: np.cumsum / np.cumprod with dtype=complex128 over integers (SU38), np.cumsum with
-    //     dtype=bool (SU39), np.finfo's float32 / float64 minexp, float32 resolution and tiny (SU12-SU14), np.nditer's K
+    //   * Silent wrong values: np.finfo's float32 / float64 minexp, float32 resolution and tiny (SU12-SU14), np.nditer's K
     //     order over an F operand and a broadcast one (SU25) and after remove_multi_index (SU31), np.broadcast.iters
     //     after a step (SU20).
     //   * np.nditer's write-backs (the second pass): a readwrite updateifcopy operand of another dtype is refused without
@@ -56,6 +55,14 @@ namespace NumSharp.Tests
     // Casting/Dragon4PortTests.cs, and the generator's rules for them are dropped. The same regeneration found SU5
     // fixed by 287c3e2e (UnmanagedStorage.GetData clamps a broadcast view's slice to its buffer); its pin below stays as
     // a regression test, its summary opening with "FIXED".
+    //
+    // FIXED 2026-10-24 by the scan accumulator cast (DefaultEngine.ScanElementwiseFlat / ReduceCumAdd, found by the
+    // snapshot tool of docs/plans/np-layer-dtype-logic.md, where the flat uint64 case ended the process with an access
+    // violation): np.cumsum / np.cumprod into a float16 or complex128 dtype= cast the input first, flat and along an
+    // axis, so SU38 is gone. The same regeneration found SU39 (np.cumsum with dtype=bool) fixed by f44c9579 (NumPy's
+    // bool loop, logical or). Both pins below stay as regression tests, their summaries opening with "FIXED"; the full
+    // matrix is in Math/np.cumsum.AccumulatorCast.Test.cs and the scan tier's dtype= cases, and the generator's rules
+    // are dropped.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -510,10 +517,12 @@ namespace NumSharp.Tests
         // ----- np.cumsum / np.cumprod -----
 
         /// <summary>
+        ///     FIXED 2026-10-24 (the scan accumulator cast): NumSharp gives NumPy's answer now, and this test pins it.
         ///     <c>np.cumsum([-3, 4, 1, 2] (int32), dtype=complex128)</c> is <c>[-3, 1, 2, 4]</c> and np.cumprod of it
-        ///     <c>[-3, -12, -12, -24]</c>; NumSharp returns the int32 input's raw bytes read as complex values (gap SU38).
+        ///     <c>[-3, -12, -12, -24]</c>. Before the fix NumSharp read the int32 input's raw bytes as complex values (gap
+        ///     SU38), past the end of the buffer.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU38")]
+        [TestMethod]
         public void Surface_Cumsum_IntegerInputWithComplexDtype_CastsFirst()
         {
             using var a = np.array(new[] { -3, 4, 1, 2 });
@@ -525,10 +534,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.cumsum([1, 1, 0, 2] (int32), dtype=bool)</c> is all True (NumPy's bool add is logical OR); NumSharp
-        ///     stores the running counts 1, 2, 2, 3 into the bool result (gap SU39).
+        ///     FIXED by f44c9579 (NumPy's bool loop for the scans): NumSharp gives NumPy's answer now, and this test pins it.
+        ///     <c>np.cumsum([1, 1, 0, 2] (int32), dtype=bool)</c> is all True (NumPy's bool add is logical OR). Before the
+        ///     fix NumSharp stored the running counts 1, 2, 2, 3 into the bool result (gap SU39).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU39")]
+        [TestMethod]
         public void Surface_Cumsum_BoolDtype_IsLogicalOr()
         {
             using var a = np.array(new[] { 1, 1, 0, 2 });

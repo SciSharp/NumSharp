@@ -2803,6 +2803,57 @@ def gen_scan(ops, dtypes, layout_names):
     return cases
 
 
+# cumsum / cumprod with dtype=: NumPy's add.accumulate / multiply.accumulate cast the input to the loop dtype (a
+# buffered cast) and accumulate there. Until 2026-10-24 NumSharp's scan kernels emitted a plain add / mul for a float16
+# or complex128 accumulator over another input dtype: invalid IL for float16, the raw bits read as complex values for
+# complex128 (an access violation where the 16-byte reads ran past the input) and a refusal along an axis. The plain
+# scan cases above never pass dtype=, which is how that survived. The loops: the two struct accumulators, a converting
+# float64 loop and the bool loop (logical or / and); a loop equal to the input dtype is the plain scan, skipped.
+SCAN_DTYPE_LOOPS = ["float16", "complex128", "float64", "bool"]
+SCAN_DTYPE_LAYOUTS = ["c_contiguous_1d", "c_contiguous_2d", "f_contiguous_2d", "strided_2d_cols", "negstride_1d",
+                      "one_element_1d"]
+
+
+def gen_scan_dtype(dtypes, layout_names, loops):
+    """cumsum / cumprod of every input dtype into every loop of `loops`, flat and along each axis, over `layout_names`.
+
+    A call NumPy refuses (a complex input into a real loop is not same_kind) is skipped, as gen_scan skips them.
+    """
+    cases = []
+    n = 0
+    skipped = 0
+    for ln in layout_names:
+        fn = LAYOUTS[ln]
+        for s in dtypes:
+            base, view = fn(np.dtype(s))
+            operand = describe(base, view)
+            for opname, f in (("cumsum", np.cumsum), ("cumprod", np.cumprod)):
+                for loop in loops:
+                    if loop == s:
+                        continue
+                    for axis in _axes(view.ndim):
+                        try:
+                            with np.errstate(all="ignore"):
+                                r = np.asarray(f(view, axis=axis, dtype=loop))
+                        except Exception:
+                            skipped += 1
+                            continue
+                        cases.append({
+                            "id": f"{opname}/dtype={loop}/{ln}/{s}/axis={axis}/{n}",
+                            "op": opname,
+                            "params": {"axis": axis, "dtype": loop},
+                            "operands": [operand],
+                            "expected": {"dtype": r.dtype.name, "shape": [int(d) for d in r.shape],
+                                         "buffer": np.ascontiguousarray(r).tobytes().hex()},
+                            "layout": ln,
+                            "valueclass": "mixed",
+                        })
+                        n += 1
+    if skipped:
+        print(f"  (skipped {skipped} dtype= scan cases where NumPy raised)")
+    return cases
+
+
 def gen_diff(dtypes, layout_names):
     cases = []
     n = 0
@@ -24193,6 +24244,7 @@ def main():
         cases = gen_scan(SCAN_OPS, SCAN_DTYPES, SCAN_LAYOUTS)
         cases += gen_diff(SCAN_DTYPES, SCAN_LAYOUTS)
         cases += gen_ediff1d(EDIFF_DTYPES, list(LAYOUTS.keys()))        # Group A: ediff1d
+        cases += gen_scan_dtype(SCAN_DTYPES, SCAN_DTYPE_LAYOUTS, SCAN_DTYPE_LOOPS)  # cumsum / cumprod dtype=
         cases += char_tier("scan")
         write_jsonl(os.path.join(corpus_dir, "scan.jsonl"), cases)
     elif mode == "nanscan":

@@ -210,9 +210,14 @@ namespace NumSharp.Tests.Fuzz
                 // array unchanged). tol is the ONLY parameter; the collapse decision is whole-array.
                 case "real_if_close": return np.real_if_close(ops[0], p["tol"].GetDouble());
 
-                // Cumulative scans + finite differences (T11).
-                case "cumsum": return np.cumsum(ops[0], ParseAxis(p));
-                case "cumprod": return np.cumprod(ops[0], ParseAxis(p));
+                // Cumulative scans + finite differences (T11). An optional "dtype" param is the loop dtype (gen_scan_dtype:
+                // NumPy casts the input to it and accumulates there).
+                case "cumsum":
+                    return np.cumsum(ops[0], ParseAxis(p),
+                        p.TryGetValue("dtype", out var cumsumLoop) ? (DType)FuzzCorpus.DtypeToTC(cumsumLoop.GetString()) : null);
+                case "cumprod":
+                    return np.cumprod(ops[0], ParseAxis(p),
+                        p.TryGetValue("dtype", out var cumprodLoop) ? (DType)FuzzCorpus.DtypeToTC(cumprodLoop.GetString()) : null);
                 // NaN-aware cumulative scans (T11b, nanscan.jsonl): NaN treated as 0 (sum) / 1 (prod).
                 case "nancumsum": return np.nancumsum(ops[0], ParseAxis(p));
                 case "nancumprod": return np.nancumprod(ops[0], ParseAxis(p));

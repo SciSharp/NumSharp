@@ -1521,6 +1521,10 @@ def _with_bufsize(n, fn):
 # model of the old double-only formatter are dropped. SU5 (np.apply_along_axis over a stride-0 view at an offset) went
 # with them: 287c3e2e's ClampToBuffer in UnmanagedStorage.GetData fixed it, and the gap replay reported its 4 cases
 # matching.
+# SU38 (np.cumsum / np.cumprod into a complex128 dtype= over an integer input) matches NumPy since 2026-10-24: the scan
+# kernels cast the input to a float16 / complex128 accumulator first (DefaultEngine.ScanElementwiseFlat / ReduceCumAdd).
+# SU39 (np.cumsum(x, dtype=bool)) was fixed by f44c9579 (NumPy's bool loop, logical or); the gap replay reported its
+# case matching. Both rules are dropped.
 GAPS = {
     "SU2": "np.linalg.cross over operands that cannot broadcast raises 'operands could not be broadcast together with "
            "shapes (4,) (5,)'; NumPy's linalg.cross raises broadcast_shapes' 'shape mismatch: objects cannot be "
@@ -1558,10 +1562,6 @@ GAPS = {
     "SU37": "np.cumsum / np.cumprod (the cumulative_* aliases) flatten an N-D input without axis; numpy.cumulative_sum / "
             "cumulative_prod raise ValueError 'For arrays which have more than one dimension ``axis`` argument is "
             "required.'",
-    "SU38": "np.cumsum / np.cumprod of an integer input with dtype=complex128 return the input's raw bytes read as "
-            "complex values (the cast to the accumulator dtype is skipped): silent wrong values",
-    "SU39": "np.cumsum(x, dtype=bool) accumulates counts into the bool result (bytes 2, 3, ...); NumPy's bool add loop is "
-            "logical OR, so the result is True from the first nonzero element on",
 }
 
 def _edge0_model(a, opts):
@@ -1635,10 +1635,6 @@ def _gap_of(case):
             return "SU36"
         if err and err["text"].startswith("For arrays which have more than one dimension"):
             return "SU37"
-        if p.get("dtype") == "complex128":
-            return "SU38"
-        if op == "cumulative_sum" and p.get("dtype") == "bool":
-            return "SU39"
     return None
 
 

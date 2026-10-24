@@ -96,32 +96,49 @@ namespace NumSharp.Backends
             // long-standing C-only output (the old post-hoc copy('F') in np.cumsum) and removes
             // the per-dtype AxisCumSum* tree in favor of one NDIter-driven generic kernel.
             char order = OrderResolver.Resolve('K', shape);
+            // A complex128 accumulator over another dtype: the axis loops have no converting complex kernel (the
+            // complex add loop reads complex operands only, and the legacy kernels refuse the conversion), so NumPy's
+            // buffered cast of the input to the loop dtype is done up front, in the input's own memory order. The
+            // result's layout still follows the original operand: `order` was resolved from its shape above.
+            NDArray complexInput = retTypeCode == NPTypeCode.Complex && arr.GetTypeCode != NPTypeCode.Complex
+                ? arr.astype(NPTypeCode.Complex, true, 'K')
+                : null;
+            if (complexInput is not null)
+                arr = complexInput;
             try
             {
-                return AccumulateAxis(arr, axis, retTypeCode, order);
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                // Defensive fallback to the legacy whole-array axis path. Only reachable if the
-                // NDIter accumulate construction fails for an exotic view; the legacy path
-                // allocates a C-contiguous output, so relay it to F when the source asked for it.
-                System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
-                var ret = new NDArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
-                if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
+                try
                 {
-                    bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.strides[axis] == 1);
-                    var key = new CumulativeAxisKernelKey(arr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
-                    var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
-                    if (kernel != null)
-                    {
-                        fixed (long* inputStrides = arr.Shape.strides)
-                        fixed (long* shapePtr = arr.Shape.dimensions)
-                            kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
-                        return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
-                    }
+                    return AccumulateAxis(arr, axis, retTypeCode, order);
                 }
-                var fb = ExecuteAxisCumSumFallback(arr, ret, axis);
-                return order == 'F' && fb.Shape.NDim > 1 ? fb.copy('F') : fb;
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // Defensive fallback to the legacy whole-array axis path. Only reachable if the
+                    // NDIter accumulate construction fails for an exotic view; the legacy path
+                    // allocates a C-contiguous output, so relay it to F when the source asked for it.
+                    System.Diagnostics.Debug.WriteLine($"[cumsum] AccumulateAxis fallback: {ex.GetType().Name}: {ex.Message}");
+                    var ret = new NDArray(retTypeCode, Shape.Adopt(shape.dimensions), false);
+                    if (DirectILKernelGenerator.Enabled && !shape.IsBroadcasted && shape.IsContiguous && shape.offset == 0)
+                    {
+                        bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.Shape.strides[axis] == 1);
+                        var key = new CumulativeAxisKernelKey(arr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
+                        var kernel = DirectILKernelGenerator.TryGetCumulativeAxisKernel(key);
+                        if (kernel != null)
+                        {
+                            fixed (long* inputStrides = arr.Shape.strides)
+                            fixed (long* shapePtr = arr.Shape.dimensions)
+                                kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
+                            return order == 'F' && ret.Shape.NDim > 1 ? ret.copy('F') : ret;
+                        }
+                    }
+                    var fb = ExecuteAxisCumSumFallback(arr, ret, axis);
+                    return order == 'F' && fb.Shape.NDim > 1 ? fb.copy('F') : fb;
+                }
+            }
+            finally
+            {
+                // The accumulation wrote a fresh result, so the cast copy is no longer needed.
+                complexInput?.Dispose();
             }
         }
 
@@ -221,15 +238,20 @@ namespace NumSharp.Backends
         /// <summary>
         /// Flat (axis=None) cumulative scan shared by cumsum and cumprod.
         /// </summary>
+        /// <param name="arr">The input, any layout. A 0-d or one-element 1-D input is returned cast (or cloned).</param>
+        /// <param name="typeCode">The accumulator dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="op"><see cref="ReductionOp.CumSum"/> or <see cref="ReductionOp.CumProd"/>.</param>
+        /// <returns>A fresh 1-D array of the accumulator dtype holding the running sums or products in C order.</returns>
         /// <remarks>
         /// The IL scan kernel walks the input in C-order via coordinate decode
         /// (<c>EmitScanStridedLoop</c>), so it consumes strided / transposed / sliced /
         /// reversed views directly — there is no need to materialize a contiguous copy first
         /// (the rejected anti-pattern). The combine emits <c>il Add/Mul</c>, which is invalid
         /// for Half/Complex struct arithmetic; those have a valid IL path only when
-        /// same-type-contiguous (a C# helper). So for a non-contiguous Half/Complex (or when IL
-        /// is disabled, or decimal-cumprod which the kernel does not emit) we materialize a
-        /// single C-order copy — the very ravel NumPy itself performs — and run the scalar scan.
+        /// same-type-contiguous (a C# helper). So for a non-contiguous Half/Complex, a Half/Complex
+        /// accumulator over another input dtype (or when IL is disabled, or decimal-cumprod which the
+        /// kernel does not emit) we materialize a single C-order copy — the very ravel NumPy itself
+        /// performs — cast it to the accumulator dtype, and run the scalar scan.
         /// </remarks>
         private unsafe NDArray ScanElementwiseFlat(NDArray arr, NPTypeCode? typeCode, ReductionOp op)
         {
@@ -240,10 +262,14 @@ namespace NumSharp.Backends
 
             if (DirectILKernelGenerator.Enabled)
             {
-                // Half/Complex accumulators cannot be combined with il Add/Mul except via the
-                // same-type-contiguous C# helper, so only let them reach the kernel contiguous.
+                // Half/Complex accumulators cannot be combined with il Add/Mul: the only valid kernel for them is the
+                // same-type contiguous one (a C# helper). A CONVERTING kernel into them emits il add / mul on the
+                // struct, which the JIT rejects for float16 (InvalidProgramException) and runs over the raw bits for
+                // complex128, reading 16 bytes per input element: wrong values, and past the end of the input buffer
+                // (an access violation when it ends at unmapped memory). Those scans take the fallback, which casts the
+                // input to the accumulator dtype first (NumPy's buffered cast to the loop dtype) and accumulates there.
                 bool combineEmittable = retType != NPTypeCode.Half && retType != NPTypeCode.Complex;
-                if (arr.Shape.IsContiguous || combineEmittable)
+                if (combineEmittable || (arr.Shape.IsContiguous && arr.GetTypeCode == retType))
                 {
                     var key = new CumulativeKernelKey(arr.GetTypeCode, retType, op, IsContiguous: arr.Shape.IsContiguous);
                     var kernel = DirectILKernelGenerator.TryGetCumulativeKernel(key);
@@ -265,8 +291,9 @@ namespace NumSharp.Backends
                 }
             }
 
-            // Fallback: IL disabled, or non-contiguous Half/Complex/decimal-cumprod — materialize
-            // a C-order copy (NumPy's ravel) then run the contiguous scalar scan.
+            // Fallback: IL disabled, non-contiguous Half/Complex, a Half/Complex accumulator over another
+            // dtype, or decimal-cumprod — materialize a C-order copy (NumPy's ravel), then the contiguous
+            // scalar scan casts it to the accumulator dtype and accumulates.
             if (!arr.Shape.IsContiguous)
                 arr = arr.copy();
             return op == ReductionOp.CumSum
