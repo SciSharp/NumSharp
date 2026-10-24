@@ -50,6 +50,12 @@ namespace NumSharp.Backends
                 return LogicalProduct(arr, axis_, keepdims);
             var shape = arr.Shape;
 
+            // A char loop (dtype=char) is NumSharp's uint16 proxy, which the multiply kernels have no loop for (the flat
+            // product refused it, the axis product saturated through a double): the product in the uint16 loop, handed back
+            // as char (ReduceInCharLoop). The uninitialized shape keeps its identity answer below.
+            if (typeCode == NPTypeCode.Char && !shape.IsEmpty)
+                return ReduceInCharLoop(arr, axis_, keepdims, product: true);
+
             // A loop dtype that is neither the input's own nor its default accumulator: NumPy's buffered iterator casts every
             // element into the loop before multiply's loop reads it, so the product of the cast copy in its own dtype IS
             // NumPy's (ReduceProductInCastLoop). The routes below read the input as the loop dtype (the flat float16 /

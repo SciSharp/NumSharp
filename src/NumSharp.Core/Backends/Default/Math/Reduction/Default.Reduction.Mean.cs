@@ -52,15 +52,17 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(double.NaN);
 
             var inT = arr.GetTypeCode;
-            // Decimal (no NumPy dtype) and a char loop (NumSharp's, reachable only through dtype=) keep the routes below.
-            bool portable = inT != NPTypeCode.Decimal && meanType != NPTypeCode.Decimal && meanType != NPTypeCode.Char;
+            // Decimal (no NumPy dtype) keeps the routes below.
+            bool portable = inT != NPTypeCode.Decimal && meanType != NPTypeCode.Decimal;
 
             // An integer or bool loop (only through dtype=) is _mean statement for statement on every shape: the sum in the
             // loop (wrapping, or logical OR for bool), the float64 quotient, NumPy's unsafe cast back (an empty slice's
             // 0 / 0 = NaN becomes INT_MIN, or True). The routes below assumed a float result: an empty input returned a
             // float64 NaN or threw InvalidCastException, a flat sum did not wrap, an axis sum read every element as a
-            // double.
-            if (portable && (meanType.IsInteger() || meanType == NPTypeCode.Boolean))
+            // double. A char loop (NumSharp's, reachable only through dtype=) is the uint16 loop of the oracle's proxy,
+            // whose sum ReduceAdd runs (ReduceInCharLoop): the flat char mean summed without wrapping before (21823 for
+            // np.mean([[3, 300, 65535], [100, 2, 65000]], dtype=uint16), NumPy's is 10900).
+            if (portable && (meanType.IsInteger() || meanType == NPTypeCode.Boolean || meanType == NPTypeCode.Char))
                 return MeanLikeNumPy(arr, MeanAxis(axis_, shape.NDim), keepdims, meanType, float16Result: false);
 
             if (shape.size == 0)

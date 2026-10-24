@@ -87,6 +87,11 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(defaultVal);
             }
 
+            // A char loop (dtype=char; no input's accumulator is char) is NumSharp's uint16 proxy, which the add kernels
+            // have no loop for: the sum in the uint16 loop, handed back as char (ReduceInCharLoop).
+            if (loopType == NPTypeCode.Char)
+                return ReduceInCharLoop(arr, axis_, keepdims, product: false);
+
             if (shape.size == 0)
                 return HandleEmptyArrayReduction(arr, axis_, keepdims, typeCode, @out, ReductionOp.Sum);
 

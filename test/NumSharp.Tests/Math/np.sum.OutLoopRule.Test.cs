@@ -64,6 +64,40 @@ namespace NumSharp.Tests.Math
             }
         }
 
+        /// <summary>
+        ///     NumSharp's char has no NumPy dtype; everywhere else it is NumPy's uint16 (the oracle's proxy). A char loop — a
+        ///     char or bool out over char data, since promote_types(bool, char) is char — therefore adds and multiplies as
+        ///     uint16 does, wrapping modulo 2^16: [97, 98, 65535] sums to 194, [3, 300, 100] multiplies to 24464 (90000 mod
+        ///     65536), and [1, 65535] sums to 0, stored into a bool out as False (NumPy's uint16 loop; the NEP 50 accumulator
+        ///     would sum 65536 and store True). The add / multiply kernels have no char loop, so the out= rule's char loop
+        ///     raised NotSupportedException (numpy.matrix's sum / prod of a char matrix into a bool out raised it since the
+        ///     class landed).
+        /// </summary>
+        [TestMethod]
+        public void OutWithoutDtype_ACharLoop_RunsAsUInt16()
+        {
+            DType charType = NPTypeCode.Char;
+            using (var a = np.array(new[] { 'a', 'b', (char)65535 }))
+            using (var o = np.zeros(Shape.Scalar, charType))
+            {
+                var r = a.TensorEngine.ReduceAdd(a, null, false, null, o);
+                ReferenceEquals(r, o).Should().BeTrue();
+                o.GetAtIndex<char>(0).Should().Be((char)194);
+            }
+            using (var a = np.array(new[] { (char)3, (char)300, (char)100 }))
+            using (var o = np.zeros(Shape.Scalar, charType))
+            {
+                a.TensorEngine.ReduceProduct(a, null, false, null, o);
+                o.GetAtIndex<char>(0).Should().Be((char)24464);
+            }
+            using (var a = np.array(new[] { (char)1, (char)65535 }))
+            using (var o = np.ones(Shape.Scalar, np.@bool))
+            {
+                a.TensorEngine.ReduceAdd(a, null, false, null, o);
+                o.GetBoolean().Should().BeFalse();
+            }
+        }
+
         /// <summary>The reduce prologue's checks of out, NumPy's order and texts.</summary>
         [TestMethod]
         public void OutChecks_AreTheReducePrologue()

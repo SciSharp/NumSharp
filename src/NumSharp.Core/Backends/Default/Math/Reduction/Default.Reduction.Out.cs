@@ -59,6 +59,8 @@ namespace NumSharp.Backends
             // NumPy's reduce prologue runs before an element is read; then the out= loop rule (file header).
             string ufunc = op == "sum" ? "add" : "multiply";
             ReductionArguments.Validate(arr, axis, keepdims, @out, null, ufunc);
+            // A char loop (a char or bool out over char data: promote_types(bool, char) is char) is NumSharp's uint16 proxy,
+            // which ReduceAdd / ReduceProduct run themselves (ReduceInCharLoop).
             DType loop = dtype ?? DTypePromotion.PromoteTypes(@out.dtype, arr.dtype);
             NDArray result = op == "sum" ? ReduceAdd(arr, axis, keepdims, loop) : ReduceProduct(arr, axis, keepdims, loop);
             try
