@@ -15,7 +15,8 @@
 //
 // A name "np.f" is every public static overload of np.f; "NDArray.f" every public instance overload declared on NDArray;
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
-// NDArray parameter is the operand.
+// NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
+// np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too.
 // Each output line is "<case id> TAB <outcome>":
 //   case id  = the overload's signature | the operand's label | the varied parameter and its value label
 //   outcome  = ARR class dtype (shape) flags hash [is_out] [OUT hash] [MUTATED in=hash]   for an NDArray result
@@ -29,9 +30,9 @@
 // base value; phase B varies one parameter at a time over its variants, on a reduced operand pool (every dtype x the
 // layouts c2d, f2d, 0d, empty, 3d); phase C varies every PAIR of parameters together on a small pool (8 dtypes x c2d,
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
-// and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2, a second array operand
-// named lhs / rhs / left / right / x / y / other); an overload with a required parameter of another kind is reported once as
-// SKIP.
+// and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
+// operand named lhs / rhs / left / right / x / y / other); an overload with a required parameter of another kind is reported
+// once as SKIP.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -47,7 +48,7 @@ using NumSharp;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: snapshot.cs <out.tsv> <np.name | NDArray.name>...");
+    Console.Error.WriteLine("usage: snapshot.cs <out.tsv> <np.name | NDArray.name | NDArray.op_X | NDMatrix.name>...");
     return 2;
 }
 
@@ -115,20 +116,29 @@ static class Snapshot
     ///     Snapshots every overload of one target.
     /// </summary>
     /// <param name="target"><c>np.name</c> for the public static overloads of <c>np.name</c>, <c>NDArray.name</c> for the
-    ///     public instance overloads declared on NDArray.</param>
+    ///     public instance overloads declared on NDArray (<c>NDArray.op_X</c> for its static operators),
+    ///     <c>NDMatrix.name</c> for the public instance overloads declared on NDMatrix.</param>
     /// <returns>The output lines, overloads ordered by signature.</returns>
     /// <exception cref="ArgumentException">The target names no overload.</exception>
+    /// <remarks>
+    ///     An NDMatrix target is called on <c>np.asmatrix</c> of each pool operand: the matrix members are where numpy.matrix's
+    ///     own reductions live (their <c>out=</c> paths implement NumPy's reducelike rule), and a move of their bodies into the
+    ///     engine is held to this snapshot like any other.
+    /// </remarks>
     public static IEnumerable<string> Run(string target)
     {
         string name = target.Substring(target.IndexOf('.') + 1);
         bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
+        bool onMatrix = target.StartsWith("NDMatrix.", StringComparison.Ordinal);
         // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is.
-        bool instance = onNDArray && !name.StartsWith("op_", StringComparison.Ordinal);
-        var methods = (instance
-                ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDArray))
-                : onNDArray
-                    ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.DeclaringType == typeof(NDArray))
-                    : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
+        bool instance = (onNDArray && !name.StartsWith("op_", StringComparison.Ordinal)) || onMatrix;
+        var methods = (onMatrix
+                ? typeof(NDMatrix).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDMatrix))
+                : instance
+                    ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDArray))
+                    : onNDArray
+                        ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.DeclaringType == typeof(NDArray))
+                        : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
             .Where(m => m.Name == name && !m.IsGenericMethodDefinition)
             .Select(m => (Method: m, Signature: Signature(target, m)))
             .OrderBy(t => t.Signature, StringComparer.Ordinal)
@@ -136,7 +146,7 @@ static class Snapshot
         if (methods.Count == 0)
             throw new ArgumentException($"no public overload named {target}");
         foreach (var (method, signature) in methods)
-            foreach (var line in RunOverload(method, signature, instance))
+            foreach (var line in RunOverload(method, signature, instance, onMatrix))
                 yield return line;
     }
 
@@ -166,7 +176,10 @@ static class Snapshot
     {
         Type t = p.ParameterType;
         string n = p.Name;
-        if (t == typeof(NDArray))
+        // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
+        // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
+        // are unchanged by the NDMatrix support.
+        if (t == typeof(NDArray) || t == typeof(NDMatrix))
             return isFirstArray ? Role.Operand
                 : n == "out" ? Role.Out
                 : n == "weights" ? Role.Weights
@@ -180,8 +193,9 @@ static class Snapshot
         if (n == "axis" && t == typeof(int?)) return Role.Axis;
         if (n == "axis" && t == typeof(int)) return Role.AxisInt;
         if (n == "axis" && t == typeof(int[])) return Role.AxisArray;
-        // np.trace / np.diagonal's integer arguments: varied around their defaults (out of range included).
-        if (n is "offset" or "axis1" or "axis2" && t == typeof(int)) return Role.IntArg;
+        // np.trace / np.diagonal's integer arguments, and numpy.matrix's var / std ddof: varied around their defaults (out of
+        // range included; a ddof past the count makes the divisor 0).
+        if (n is "offset" or "axis1" or "axis2" or "ddof" && t == typeof(int)) return Role.IntArg;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -296,12 +310,14 @@ static class Snapshot
     /// <param name="m">The overload.</param>
     /// <param name="signature">Its stable signature text.</param>
     /// <param name="instance">Whether the operand is the receiver of an instance method.</param>
+    /// <param name="matrix">Whether the receiver is an NDMatrix (np.asmatrix of each pool operand, see
+    ///     <see cref="Call"/>).</param>
     /// <returns>The output lines.</returns>
     /// <remarks>
     ///     Phase C exists because a moved prologue can reorder checks that only meet when two arguments are off their
     ///     defaults together (an <c>out=</c> sized for one <c>axis</c>, a <c>method</c> with an array <c>q</c>).
     /// </remarks>
-    private static IEnumerable<string> RunOverload(MethodInfo m, string signature, bool instance)
+    private static IEnumerable<string> RunOverload(MethodInfo m, string signature, bool instance, bool matrix)
     {
         var ps = m.GetParameters();
         var roles = new Role[ps.Length];
@@ -335,14 +351,14 @@ static class Snapshot
         // phase A: every operand, every other parameter at its base
         foreach (var dt in Dtypes)
             foreach (var layout in Layouts)
-                yield return Call(m, signature, instance, operandIndex, dt, layout, variants, roles, none);
+                yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, none);
 
         // phase B: one parameter varied at a time, on the reduced pool
         for (int p = 0; p < ps.Length; p++)
             for (int v = 1; v <= Count(p); v++)
                 foreach (var dt in Dtypes)
                     foreach (var layout in ReducedLayouts)
-                        yield return Call(m, signature, instance, operandIndex, dt, layout, variants, roles, new[] { (p, v) });
+                        yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, new[] { (p, v) });
 
         // phase C: every pair of parameters varied together, on the small pool
         for (int p1 = 0; p1 < ps.Length; p1++)
@@ -351,7 +367,7 @@ static class Snapshot
                     for (int v2 = 1; v2 <= Count(p2); v2++)
                         foreach (var dt in PairDtypes)
                             foreach (var layout in PairLayouts)
-                                yield return Call(m, signature, instance, operandIndex, dt, layout, variants, roles,
+                                yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles,
                                     new[] { (p1, v1), (p2, v2) });
     }
 
@@ -374,6 +390,9 @@ static class Snapshot
     /// <param name="m">The overload.</param>
     /// <param name="signature">Its signature text.</param>
     /// <param name="instance">Whether the operand is the receiver.</param>
+    /// <param name="matrix">Whether the receiver is an NDMatrix: the pool operand passes through <c>np.asmatrix</c> (a
+    ///     layout it refuses is SKIP), and an <c>out=</c> parameter typed NDMatrix receives <c>np.asmatrix</c> of its
+    ///     variant.</param>
     /// <param name="operandIndex">The operand parameter's index (static overloads), or -1.</param>
     /// <param name="dt">The operand dtype.</param>
     /// <param name="layout">The operand layout.</param>
@@ -386,8 +405,9 @@ static class Snapshot
     ///     null; when that call throws, the operand's shape and dtype stand in. A <c>weights=</c> or <c>where=</c> variant
     ///     is built from the operand.
     /// </remarks>
-    private static string Call(MethodInfo m, string signature, bool instance, int operandIndex, string dt, string layout,
-        List<(string Label, Func<object> Make)>[] variants, Role[] roles, IReadOnlyList<(int Param, int Variant)> assignments)
+    private static string Call(MethodInfo m, string signature, bool instance, bool matrix, int operandIndex, string dt,
+        string layout, List<(string Label, Func<object> Make)>[] variants, Role[] roles,
+        IReadOnlyList<(int Param, int Variant)> assignments)
     {
         var ps = m.GetParameters();
         string varied = assignments.Count == 0
@@ -403,6 +423,10 @@ static class Snapshot
         };
 
         NDArray operand = MakeOperand(dt, layout);
+        // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
+        // (more than two long axes: "shape too large to be a matrix.") has no matrix to call the member on.
+        if (matrix && operand is not null)
+            operand = AsMatrixOrNull(operand);
         if (operand is null)
             return $"{signature}|{dt}/{layout}|{varied}\tSKIP operand unavailable";
         string inBefore = HashOf(operand);
@@ -452,6 +476,11 @@ static class Snapshot
                 }
                 catch { /* the operand's shape stands in */ }
                 outArray = MakeOut(OutVariantLabels[outVariant - 1], new Shape(shape.Dimensions), resultType);
+                // numpy.matrix's out= must be a matrix (NumPy calls out._collapse on it): the matrix view of the variant
+                // is the object passed, so "is_out" and the OUT hash read the same object the member received. A
+                // variant asmatrix refuses (wrongshape grows a third axis) is a SETUP line.
+                if (ps[outParam].ParameterType == typeof(NDMatrix))
+                    outArray = np.asmatrix(outArray);
                 argv[outParam] = outArray;
             }
         }
@@ -557,6 +586,27 @@ static class Snapshot
             default:
                 var values = np.array((special ? Special : Plain).Take(count).ToArray());
                 return values.astype(np.dtype(dt));
+        }
+    }
+
+    /// <summary>
+    ///     The NDMatrix receiver of an NDMatrix target: <c>np.asmatrix</c> of a pool operand, or null when NumPy's
+    ///     matrix refuses that shape.
+    /// </summary>
+    /// <param name="operand">A pool operand (not null).</param>
+    /// <returns>A new matrix view of <paramref name="operand"/> (0-d becomes (1, 1), 1-D (1, N)), or null for an operand
+    ///     with more than two axes longer than one ("shape too large to be a matrix.").</returns>
+    /// <remarks>Only NumPy's ValueError is read as "no matrix": any other exception is a defect of the tool or of
+    ///     np.asmatrix and propagates, so it cannot hide as a SKIP line.</remarks>
+    private static NDArray AsMatrixOrNull(NDArray operand)
+    {
+        try
+        {
+            return np.asmatrix(operand);
+        }
+        catch (ValueError)
+        {
+            return null;
         }
     }
 
