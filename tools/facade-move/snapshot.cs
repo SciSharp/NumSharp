@@ -27,8 +27,8 @@
 // base value; phase B varies one parameter at a time over its variants, on a reduced operand pool (every dtype x the
 // layouts c2d, f2d, 0d, empty, 3d); phase C varies every PAIR of parameters together on a small pool (8 dtypes x c2d,
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
-// and name (axis, out, q, weights, method, dtype, bool flags); an overload with a required parameter of another kind is
-// reported once as SKIP.
+// and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2); an overload with a
+// required parameter of another kind is reported once as SKIP.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -147,7 +147,7 @@ static class Snapshot
         Nullable.GetUnderlyingType(t) is { } u ? u.Name + "?" : t.Name;
 
     /// <summary>The role of a parameter, decided by its type and name.</summary>
-    private enum Role { Operand, Out, Weights, QArray, QDouble, QDoubles, QLong, Axis, AxisInt, AxisArray, DType, Bool, Method, Order, Default, Unsupported }
+    private enum Role { Operand, Out, Weights, Where, QArray, QDouble, QDoubles, QLong, Axis, AxisInt, AxisArray, IntArg, DType, Bool, Method, Order, Default, Unsupported }
 
     /// <summary>
     ///     Classifies a parameter.
@@ -163,6 +163,7 @@ static class Snapshot
             return isFirstArray ? Role.Operand
                 : n == "out" ? Role.Out
                 : n == "weights" ? Role.Weights
+                : n == "where" ? Role.Where
                 : n == "q" ? Role.QArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
         if (n == "q" && t == typeof(double)) return Role.QDouble;
@@ -171,6 +172,8 @@ static class Snapshot
         if (n == "axis" && t == typeof(int?)) return Role.Axis;
         if (n == "axis" && t == typeof(int)) return Role.AxisInt;
         if (n == "axis" && t == typeof(int[])) return Role.AxisArray;
+        // np.trace / np.diagonal's integer arguments: varied around their defaults (out of range included).
+        if (n is "offset" or "axis1" or "axis2" && t == typeof(int)) return Role.IntArg;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -192,6 +195,7 @@ static class Snapshot
         {
             case Role.Out:
             case Role.Weights:
+            case Role.Where:
                 Add("null", () => null);
                 break;
             case Role.QArray:
@@ -227,6 +231,16 @@ static class Snapshot
                 foreach (var a in new[] { 0, 1, -1, 5 })
                     Add(a.ToString(CultureInfo.InvariantCulture), () => a);
                 break;
+            case Role.IntArg:
+            {
+                // The default first (the base value), then values on both sides of it and one out of range.
+                int d0 = p.HasDefaultValue && p.DefaultValue is int di ? di : 0;
+                Add(d0.ToString(CultureInfo.InvariantCulture), () => d0);
+                foreach (var v in p.Name == "offset" ? new[] { 1, -1, 3 } : new[] { 0, 1, 2, -1, 5 })
+                    if (v != d0)
+                        Add(v.ToString(CultureInfo.InvariantCulture), () => v);
+                break;
+            }
             case Role.AxisArray:
                 Add("null", () => null);
                 foreach (var a in new[] { new[] { 0 }, new[] { 1 }, new[] { 0, 1 }, new[] { -1 }, new[] { 0, 0 }, new[] { 1, 2 }, new[] { 9 } })
@@ -301,6 +315,7 @@ static class Snapshot
             Role.Operand => 0,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
+            Role.Where => WhereVariantLabels.Length,
             _ => variants[i].Count - 1,
         };
 
@@ -333,6 +348,9 @@ static class Snapshot
     /// <summary>The weights= variants, built from the operand.</summary>
     private static readonly string[] WeightVariantLabels = { "ones", "negative", "wrongshape", "int" };
 
+    /// <summary>The where= variants, built from the operand (see <see cref="MakeWhere"/>).</summary>
+    private static readonly string[] WhereVariantLabels = { "mask", "row", "allfalse", "false0d", "int", "wrongshape" };
+
     /// <summary>
     ///     Makes one call and renders its outcome.
     /// </summary>
@@ -348,8 +366,8 @@ static class Snapshot
     /// <returns>One output line.</returns>
     /// <remarks>
     ///     An <c>out=</c> variant is sized from the call's result with every OTHER assignment applied and <c>out</c>
-    ///     null; when that call throws, the operand's shape and dtype stand in. A <c>weights=</c> variant is built from
-    ///     the operand.
+    ///     null; when that call throws, the operand's shape and dtype stand in. A <c>weights=</c> or <c>where=</c> variant
+    ///     is built from the operand.
     /// </remarks>
     private static string Call(MethodInfo m, string signature, bool instance, int operandIndex, string dt, string layout,
         List<(string Label, Func<object> Make)>[] variants, Role[] roles, IReadOnlyList<(int Param, int Variant)> assignments)
@@ -362,6 +380,7 @@ static class Snapshot
         {
             Role.Out => OutVariantLabels[v - 1],
             Role.Weights => WeightVariantLabels[v - 1],
+            Role.Where => WhereVariantLabels[v - 1],
             _ => variants[p][v].Label,
         };
 
@@ -386,6 +405,9 @@ static class Snapshot
                         break;
                     case Role.Weights:
                         argv[p] = MakeWeights(WeightVariantLabels[v - 1], operand);
+                        break;
+                    case Role.Where:
+                        argv[p] = MakeWhere(WhereVariantLabels[v - 1], operand);
                         break;
                     default:
                         argv[p] = variants[p][v].Make();
@@ -559,6 +581,36 @@ static class Snapshot
             case "wrongshape": return np.ones(new Shape(shape.Dimensions.Concat(new long[] { 2 }).ToArray()), np.dtype("float64"));
             case "int": return np.ones(shape, np.dtype("int64"));
             default: throw new ArgumentException("unknown weights variant " + label);
+        }
+    }
+
+    /// <summary>
+    ///     Builds a where= mask for an operand: the masks NumPy's reduction accepts and the ones its prologue refuses.
+    /// </summary>
+    /// <param name="label">The variant: <c>mask</c> (bool, the operand's shape, every third element False), <c>row</c>
+    ///     (bool, the operand's last axis only: it broadcasts; one element for a 0-d operand), <c>allfalse</c> (bool, the
+    ///     operand's shape, all False: only identities reach the result), <c>false0d</c> (a 0-d False), <c>int</c> (int64
+    ///     ones of the operand's shape: not a bool mask), <c>wrongshape</c> (bool with one more axis than the
+    ///     operand).</param>
+    /// <param name="operand">The operand.</param>
+    /// <returns>A fresh array.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeWhere(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        NDArray Pattern(long count) =>
+            np.array(Enumerable.Range(0, (int)count).Select(i => i % 3 != 0).ToArray());
+        switch (label)
+        {
+            case "mask": return Pattern(size).reshape(new Shape(dims));
+            case "row": return Pattern(dims.Length == 0 ? 1 : dims[dims.Length - 1]);
+            case "allfalse": return np.zeros(new Shape(dims), np.dtype("bool"));
+            case "false0d": return np.array(false);
+            case "int": return np.ones(new Shape(dims), np.dtype("int64"));
+            case "wrongshape": return np.ones(new Shape(dims.Concat(new long[] { 2 }).ToArray()), np.dtype("bool"));
+            default: throw new ArgumentException("unknown where variant " + label);
         }
     }
 
