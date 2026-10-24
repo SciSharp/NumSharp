@@ -21,7 +21,8 @@ namespace NumSharp.Backends.Kernels
     ///     (±inf included, matching <c>isnan</c>) and drops NaN to the identity, branchlessly, 4× unrolled.
     ///
     ///     Only true C-contiguous float32/float64 operands reach here (dispatched from
-    ///     <c>np._replace_nan_for_scan</c>); Half, Complex and every non-contiguous view take the composed
+    ///     <c>DefaultEngine.ReplaceNanForScan</c>, np.nancumsum / np.nancumprod's <c>_replace_nan</c>); Half, Complex and
+    ///     every non-contiguous view take the composed
     ///     <c>where(isnan(a), val, a)</c> path instead — bit-identical, fully gated, and not on the hot
     ///     path (Half/Complex are scalar-bound by their scan, F-order/strided are the uncommon layouts).
     /// </summary>

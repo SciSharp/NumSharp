@@ -18,31 +18,22 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.nancumprod.html
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumprod: <c>_replace_nan(a, 1)</c> then <c>np.cumprod</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumprod"/>.
+        /// The whole function is <c>DefaultEngine.NanCumProd</c> (the np-layer dtype plan, P1b); this applies the matrix
+        /// rule and calls it.
         /// </remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/>; text a numeric dtype cannot parse.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand or request NumPy's loop resolution refuses.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         [NDScoped]
         public static NDArray nancumprod(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumprod(s.a, s.axis, s.dtype, s.@out), @out);
-            // Text, or a string dtype= request: NumPy's _replace_nan leaves text alone and its accumulate validates the
-            // axis (a 0-d input ravels first), then refuses with its verbatim text; see NDStringUfuncs.ReduceError.
-            // A numeric dtype= over text: NumPy's _replace_nan leaves text alone (it masks only inexact arrays), and cumprod's
-            // cast to the requested number type parses it — so a parsed 'nan' is MULTIPLIED, not replaced by 1 (probed:
-            // np.nancumprod(['inf', 'nan'], dtype='f8') is [inf, nan]). The scope reclaims the parsed array.
-            // The loop resolution answers first (np.cumprod's order): a numeric loop over a text operand with out= casts
-            // around the accumulation, without out= the parse below runs.
-            if (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("nancumprod", a, axis, @out, dtype, out var resolution)
-                == Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast)
-                return Backends.Strings.NDTextNumericReduction.Accumulate("multiply", a, axis, @out, resolution.Descriptors[0]);
-            if (Backends.Strings.NDStringUfuncs.ParseForNumericReduce("nancumprod", a, axis, dtype) is { } parsed)
-                return cumprod(parsed, axis, dtype, @out);
-            Backends.Strings.NDStringUfuncs.ThrowIfReduce("nancumprod", a, axis, @out, dtype);
-            // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
-            // result (or the caller's @out — untracked, a Returns no-op) is yielded.
-            // NumPy: a, mask = _replace_nan(a, 1); return np.cumprod(a, axis, dtype, out).
-            return cumprod(_replace_nan_for_scan(a, 1), axis, dtype, @out);
+            // NumPy's nancumprod is _replace_nan(a, 1) then np.cumprod(a, axis, dtype, out); the whole function, its text
+            // routes included, is the engine's: DefaultEngine.NanCumProd.
+            return DefaultEngine.NanCumProd(a, axis, dtype, @out);
         }
     }
 }

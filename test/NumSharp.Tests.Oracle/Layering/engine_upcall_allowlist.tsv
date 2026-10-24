@@ -44,6 +44,7 @@ Backends/Default/Math/Reduction/Default.Reduction.MinMax.Exact.cs	0	2
 Backends/Default/Math/Reduction/Default.Reduction.MinMax.Keywords.cs	0	10
 Backends/Default/Math/Reduction/Default.Reduction.Nan.cs	2	0
 Backends/Default/Math/Reduction/Default.Reduction.NanMean.cs	5	1
+Backends/Default/Math/Reduction/Default.Reduction.NanScan.cs	1	0	# ReplaceNanForScan moved from np.nancumsum by P1b: np.where(isnan(a), fill, a) replaces the NaNs of a non-contiguous or float16 / complex operand until P6 gives the engine its own select
 Backends/Default/Math/Reduction/Default.Reduction.NanVarStd.cs	18	6
 Backends/Default/Math/Reduction/Default.Reduction.Product.cs	0	1
 Backends/Default/Math/Reduction/Default.Reduction.Ptp.cs	0	1	# PtpOut moved from np.ptp by P1b: np.copyto(out, diff) stores the range into out= until P6 gives the engine its own copy

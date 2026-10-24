@@ -1,5 +1,4 @@
 using NumSharp.Backends;
-using NumSharp.Backends.Kernels;
 
 namespace NumSharp
 {
@@ -19,79 +18,22 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.nancumsum.html
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumsum: <c>_replace_nan(a, 0)</c> then <c>np.cumsum</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumsum"/>.
+        /// The whole function is <c>DefaultEngine.NanCumSum</c> (the np-layer dtype plan, P1b); this applies the matrix
+        /// rule and calls it.
         /// </remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/>; text a numeric loop cannot parse.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand or request NumPy's loop resolution refuses.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         [NDScoped]
         public static NDArray nancumsum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumsum(s.a, s.axis, s.dtype, s.@out), @out);
-            // StringDType is not inexact: _replace_nan leaves it alone and nancumsum IS np.cumsum, which computes.
-            if (Backends.Strings.NDStringUfuncs.VStringReduces("nancumsum", a, axis, dtype, @out))
-                return Backends.Strings.NDVStringReduction.CumSum(a, axis, @out);
-            // Fixed-width text, or a string dtype= request: NumPy's _replace_nan leaves text alone and its accumulate
-            // validates the axis (a 0-d input ravels first), then resolves the loop on (out, a): a U input into a
-            // StringDType out concatenates (np.cumsum's route), anything else is the verbatim refusal (see
-            // NDStringUfuncs.ReduceError / ReduceOutError).
-            switch (Backends.Strings.NDStringUfuncs.ReduceIntoOutRoute("nancumsum", a, axis, @out, dtype, out var resolution))
-            {
-                case Backends.Strings.NDStringUfuncs.TextOutReduce.Concatenate:
-                    return Backends.Strings.NDVStringReduction.CumSumOfCast(a, axis, @out);
-                case Backends.Strings.NDStringUfuncs.TextOutReduce.NumericCast:
-                    // A numeric loop over a text operand (np.cumsum's route: _replace_nan leaves text alone).
-                    return Backends.Strings.NDTextNumericReduction.Accumulate("add", a, axis, @out, resolution.Descriptors[0]);
-            }
-            // Boundary scope: the full-size NaN-replaced copy is reclaimed at exit; the scan
-            // result (or the caller's @out — untracked, a Returns no-op) is yielded.
-            // NumPy: a, mask = _replace_nan(a, 0); return np.cumsum(a, axis, dtype, out). The mask is
-            // discarded by nancumsum (unlike nanmean/nanvar), so we only need the NaN-replaced copy.
-            return cumsum(_replace_nan_for_scan(a, 0), axis, dtype, @out);
-        }
-
-        /// <summary>
-        /// Port of numpy/lib/_nanfunctions_impl.py::_replace_nan for the cumulative scans (the mask is
-        /// not returned because nancumsum/nancumprod discard it). Only <b>inexact</b> dtypes
-        /// (Half/Single/Double/Complex — NumPy's <c>issubclass(dtype.type, np.inexact)</c>) can hold a
-        /// NaN, so those get a fresh array with every NaN replaced by <paramref name="val"/> (0 for the
-        /// sum scan, 1 for the product scan); every other dtype cannot be NaN and passes through
-        /// unchanged (NumPy returns it as-is with mask=None). This is a semantic applicability gate, not
-        /// a per-dtype compute path: the replacement itself is the generic, SIMD <see cref="isnan"/> +
-        /// <see cref="where(NDArray,NDArray,NDArray)"/> pipeline for all four inexact dtypes.
-        /// </summary>
-        /// <remarks>
-        /// Complex NaN is handled exactly as NumPy's <c>np.copyto(a, val, where=np.isnan(a))</c>:
-        /// <see cref="isnan"/> flags an element when EITHER component is NaN and <see cref="where"/>
-        /// overwrites the WHOLE element with <paramref name="val"/> (0+0j / 1+0j), discarding a finite
-        /// imaginary part. The fill scalar is built in <paramref name="a"/>'s own dtype so
-        /// <see cref="where"/> takes its same-dtype fast path and the result keeps <paramref name="a"/>'s
-        /// dtype (a strong int32 0 would otherwise promote float16 → float32 under NEP50).
-        /// </remarks>
-        [NDScopedCovered] // only callers: [NDScoped] nancumsum / nancumprod (the isnan mask + superseded fill are scope-reclaimed)
-        private static NDArray _replace_nan_for_scan(NDArray a, int val)
-        {
-            switch (a.typecode)
-            {
-                case NPTypeCode.Half:
-                case NPTypeCode.Single:
-                case NPTypeCode.Double:
-                case NPTypeCode.Complex:
-                    // Hot path: a fused single-pass SIMD fill for a C-contiguous float32/float64 operand
-                    // (isnan + where would be two passes plus a bool-mask temp — see NanReplace). Every
-                    // other inexact case (Half, Complex, or any non-C-contiguous view — F-order/strided/
-                    // transposed/broadcast/reversed) takes the composed where(isnan(a), val, a) path, which
-                    // is bit-identical and fully gated but reads logical order correctly for those layouts.
-                    if ((a.typecode == NPTypeCode.Single || a.typecode == NPTypeCode.Double)
-                        && a.Shape.IsContiguous && !a.Shape.IsBroadcasted)
-                        return NanReplace.ReplaceContiguousFloat(a, val);
-
-                    NDArray fill = NDArray.Scalar(val);
-                    if (fill.typecode != a.typecode)
-                        fill = fill.astype(a.typecode);   // 0/1 -> (Half)0/1, 0+0j/1+0j — dtype-preserving
-                    return where(isnan(a), fill, a);
-                default:
-                    return a;                             // integer / bool / decimal / char cannot be NaN
-            }
+            // NumPy's nancumsum is _replace_nan(a, 0) then np.cumsum(a, axis, dtype, out); the whole function, its text
+            // routes included, is the engine's: DefaultEngine.NanCumSum.
+            return DefaultEngine.NanCumSum(a, axis, dtype, @out);
         }
     }
 }
