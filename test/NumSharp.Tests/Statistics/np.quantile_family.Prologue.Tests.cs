@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NumSharp.Backends;
 using NumSharp.Statistics;
 
@@ -217,5 +218,81 @@ public class np_quantile_family_Prologue_Tests
         using var q = np.quantile(b, new[] { 0.0, 1.0 }, new[] { 2, 0 });
         q.shape.Should().Equal(2L, 3L);
         q.ToArray<double>().Should().Equal(0, 4, 8, 15, 19, 23);
+    }
+
+    /// <summary>
+    ///     <see cref="UReduced.NumPyAxis"/> is the axis exactly as NumPy's <c>_ureduce</c> hands it on: null without an axis,
+    ///     the normalized axis for one, and the UNnormalized <c>-1</c> for merged axes (the empty tuple included), where
+    ///     <see cref="UReduced.Axis"/> is the merged axis' index.
+    /// </summary>
+    [TestMethod]
+    public void UReduce_NumPyAxis_IsTheArgumentNumPysFunctionReceives()
+    {
+        using var b = np.arange(24.0).reshape(2, 3, 4);
+        using var scope = NDScope.Open();
+        QuantileEngine.UReduce(b, null, null, false).NumPyAxis.Should().BeNull();
+        QuantileEngine.UReduce(b, new[] { -1 }, null, false).NumPyAxis.Should().Be(2);
+        UReduced merged = QuantileEngine.UReduce(b, new[] { 1, 2 }, null, false);
+        merged.NumPyAxis.Should().Be(-1);
+        merged.Axis.Should().Be(1);
+        QuantileEngine.UReduce(b, Array.Empty<int>(), null, false).NumPyAxis.Should().Be(-1);
+    }
+
+    /// <summary>
+    ///     The nan forms with a q of two or more dimensions over merged axes: NumPy's <c>_nanquantile_ureduce_func</c> moves
+    ///     q's axes with <c>from_ax = [axis + i for i in range(q.ndim)]</c> on <c>_ureduce</c>'s <c>-1</c>, so
+    ///     <c>np.nanquantile(arange(24.).reshape(2, 3, 4), q of shape (3, 2), axis=(1, 2))</c> is <c>(2, 2, 3)</c> (q's last
+    ///     axis, the kept axis, q's first), where np.quantile gives <c>(3, 2, 2)</c>; keepdims indexes that result, and an out
+    ///     must take its shape (an out in q-first order is NumPy's broadcast error). StringDType data follows the same
+    ///     statement. A 1-d q and one reduced axis are unaffected. NumSharp returned np.quantile's order until this fix.
+    /// </summary>
+    [TestMethod]
+    public void NanForms_TwoDimensionalQ_OverMergedAxes_KeepNumPysAxisOrder()
+    {
+        using var a = np.arange(24.0).reshape(2, 3, 4);
+        using var q2 = np.array(new[,] { { 0.0, 0.5 }, { 0.25, 1.0 }, { 0.75, 0.1 } });
+        int[] axes = { 1, 2 };
+        double[] expected = { 0.0, 2.75, 8.25, 12.0, 14.75, 20.25, 5.5, 11.0, 1.1, 17.5, 23.0, 13.1 };
+        using (var r = np.nanquantile(a, q2, axes))
+        {
+            r.shape.Should().Equal(2L, 2L, 3L);
+            r.ToArray<double>().Should().Equal(expected);
+            r.flags.owndata.Should().BeFalse("NumPy returns a view of np.apply_along_axis's buffer");
+        }
+        using (var hundred = q2 * 100)
+        using (var p = np.nanpercentile(a, hundred, axes))
+        {
+            p.shape.Should().Equal(2L, 2L, 3L);
+            p.ToArray<double>().Should().Equal(expected);
+        }
+        using (var plain = np.quantile(a, q2, axes))
+            plain.shape.Should().Equal(3L, 2L, 2L);
+        using (var other = np.nanquantile(a, q2, new[] { 0, 2 }))
+        {
+            other.shape.Should().Equal(2L, 3L, 3L);
+            other.ToArray<double>().Should().Equal(0.0, 1.75, 13.25, 4.0, 5.75, 17.25, 8.0, 9.75, 21.25, 7.5, 15.0,
+                0.7000000000000001, 11.5, 19.0, 4.7, 15.5, 23.0, 8.7);
+        }
+        using (var oneD = np.nanquantile(a, new[] { 0.25, 0.75 }, axes))
+            oneD.shape.Should().Equal(2L, 2L);
+        using (var single = np.nanquantile(a, q2, 1))
+            single.shape.Should().Equal(3L, 2L, 2L, 4L);
+        using (var kd = np.nanquantile(a, q2, axes, keepdims: true))
+            kd.shape.Should().Equal(2L, 2L, 3L, 1L, 1L);
+        var moved = np.zeros(new Shape(2, 2, 3));
+        using (var written = np.nanquantile(a, q2, axes, moved))
+        {
+            ReferenceEquals(written, moved).Should().BeTrue();
+            moved.ToArray<double>().Should().Equal(expected);
+        }
+        using var qFirst = np.zeros(new Shape(3, 2, 2));
+        Action refused = () => np.nanquantile(a, q2, axes, qFirst);
+        refused.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (2,2,3) into shape (3,2,2)");
+        using var letters = np.array(Enumerable.Range(0, 24).Select(i => ((char)('a' + i)).ToString()).ToArray());
+        using var shaped = letters.reshape(2, 3, 4);
+        using var text = shaped.astype(np.dtype("T"));
+        using var t = np.nanquantile(text, q2, axes, method: "lower");
+        t.shape.Should().Equal(2L, 2L, 3L);
+        NDArray.AsStringArray(t).Should().Equal("a", "c", "i", "m", "o", "u", "f", "l", "b", "r", "x", "n");
     }
 }

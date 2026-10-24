@@ -14548,6 +14548,51 @@ def gen_qprologue():
                 for fn in ("quantile", "nanquantile"):
                     _quant(f"{label}:w", data, name=fn, q=0.5, method="inverted_cdf", axis=ax, keepdims=True,
                            out=_qpro_out(out_shape), weights=plain(np.ones((2, 3))), section=QPRO)
+    _qpro_merged_axis_argument()
+
+
+def _qpro_merged_axis_argument():
+    """Section qprologue, part three: the axis argument ``_ureduce`` hands the reduction function. For merged axes it is
+    the UNnormalized ``-1``, and ``_nanquantile_ureduce_func`` moves q's axes with ``from_ax = [axis + i for i in
+    range(q.ndim)]``, so the nan forms return a q of two or more dimensions in another axis order than np.quantile
+    (``np.nanquantile(arange(24.).reshape(2, 3, 4), q of shape (3, 2), axis=(1, 2))`` is ``(2, 2, 3)``, np.quantile's
+    ``(3, 2, 2)``). Over ``(2, 3, 4)`` data of the eight kinds plus float64 with NaNs: every merged axis form, one axis
+    and every axis as controls, x np.nanquantile / np.nanpercentile / np.quantile x a 2-D, a 3-D (refused) and a 1-D q;
+    then keepdims, and outs of the result's shape and of q-first order.
+    """
+    q2 = np.array([[0.0, 0.5], [0.25, 1.0], [0.75, 0.1]])
+    q3 = np.full((2, 1, 3), 0.5)
+    q1 = np.array([0.25, 0.75])
+    for kind in QPRO_KINDS + ["nan"]:
+        if kind == "nan":
+            vals = np.arange(24.0)
+            vals[[0, 5, 17]] = np.nan
+            data = plain(vals.reshape(2, 3, 4))
+        else:
+            data = _qpro_data(kind, (2, 3, 4))
+        # Bool and text take a selection method (the interpolating ones subtract them).
+        method = "lower" if kind in ("bool", "<U3", "|S3", "T") else "linear"
+        for ax in ((1, 2), (0, 2), (2, 1), (0, 1), (), 1, (0, 1, 2)):
+            for fn in ("nanquantile", "nanpercentile", "quantile"):
+                scale = 100.0 if fn.endswith("percentile") else 1.0
+                for qk, qv in (("q2", q2), ("q3", q3), ("q1", q1)):
+                    _quant(f"axisarg:{kind}:{ax}:{qk}", data, name=fn, q=plain(qv * scale), qkind="arr", method=method,
+                           axis=ax, section=QPRO)
+            # keepdims (NumPy indexes the moved result with new axes) and an out: of the moved shape, which the store
+            # takes, and of q-first order, which it refuses to broadcast into (numbers only: text is refused before).
+            _quant(f"axisarg:{kind}:{ax}:q2:kd", data, name="nanquantile", q=plain(q2), qkind="arr", method=method,
+                   axis=ax, keepdims=True, section=QPRO)
+            if kind in ("float64", "float32", "int32", "nan"):
+                try:
+                    moved = np.nanquantile(np.asarray(data[1]), q2, axis=ax).shape
+                except Exception:  # noqa: BLE001 -- a refused call has no shape; its plain case records the error
+                    moved = None
+                reduced = ax if isinstance(ax, tuple) else (ax,)
+                kept = tuple(s for d, s in enumerate(data[1].shape) if d not in reduced)
+                for label, shape in (("outmoved", moved), ("outqfirst", q2.shape + kept)):
+                    if shape is not None:
+                        _quant(f"axisarg:{kind}:{ax}:q2:{label}", data, name="nanquantile", q=plain(q2), qkind="arr",
+                               method=method, axis=ax, out=_qpro_out(shape), section=QPRO)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

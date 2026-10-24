@@ -43,6 +43,15 @@ namespace NumSharp.Statistics
         /// </summary>
         internal int? Axis { get; }
 
+        /// <summary>
+        ///     The axis exactly as NumPy's <c>_ureduce</c> hands it to the reduction function (<c>kwargs['axis']</c>): null
+        ///     for <c>axis=None</c>, the one reduced axis normalized, or <c>-1</c> for merged axes (the empty tuple
+        ///     included). Use <see cref="Axis"/> to index; use this where NumPy's reduction function does arithmetic on its
+        ///     axis argument: <c>_nanquantile_ureduce_func</c>'s <c>from_ax = [axis + i for i in range(q.ndim)]</c> runs on
+        ///     the UNnormalized <c>-1</c>, which scrambles q's axes for a q of two or more dimensions.
+        /// </summary>
+        internal int? NumPyAxis => Reduced is null ? null : Reduced.Length == 1 ? Axis : -1;
+
         /// <summary>The reduced axes normalized (<c>normalize_axis_tuple</c>, the caller's order), or null for
         ///     <c>axis=None</c>.</summary>
         internal int[] Reduced { get; }

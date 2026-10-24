@@ -405,14 +405,18 @@ namespace NumSharp.Backends.Strings
             {
                 int ax = axis.Value;
                 r = np.apply_along_axis(row => AsAnyArray(NanQuantile1D(quantileOp, row, q, qShape, qIsInteger, method, qType)), ax, work);
-                // `from_ax = [axis + i for i in range(q.ndim)]; np.moveaxis(result, from_ax, list(range(q.ndim)))`.
+                // `from_ax = [axis + i for i in range(q.ndim)]; np.moveaxis(result, from_ax, list(range(q.ndim)))` with the
+                // axis _ureduce handed the function (prologue.NumPyAxis): the reduced axis, or the UNnormalized -1 for merged
+                // axes, which for a q of two or more dimensions moves q's last axis and the first kept axes to the front
+                // (NumPy 2.4.2's answer, reproduced; QuantileEngine.AlongAxisLayout's remarks).
                 if (qShape.Length != 0)
                 {
+                    int numpyAxis = prologue.NumPyAxis.Value;
                     var from = new int[qShape.Length];
                     var to = new int[qShape.Length];
                     for (int i = 0; i < from.Length; i++)
                     {
-                        from[i] = ax + i;
+                        from[i] = numpyAxis + i;
                         to[i] = i;
                     }
                     r = np.moveaxis(r, from, to);

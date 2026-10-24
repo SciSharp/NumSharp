@@ -569,9 +569,12 @@ namespace NumSharp.Statistics
             if (nanAware && outTypeCode != a.typecode && FirstRowAllNaN(staged, outerSize, n))
                 resultRaw = resultRaw.astype(a.typecode);
 
-            // The nan forms along an axis return np.apply_along_axis's layout (an out receives the values instead).
-            if (ignoreNaN && !legacyOut && axisArr != null && outerDims > 0 && outRoute == 0)
-                resultRaw = AlongAxisLayout(resultRaw, qNdim);
+            // The nan forms along an axis return np.apply_along_axis's layout, moved as _nanquantile_ureduce_func moves it (an
+            // out receives the values instead). For merged axes with a q of two or more dimensions that move also changes
+            // the SHAPE (AlongAxisLayout's remarks), so the out's store `out[...] = result` takes the moved result too.
+            bool movesQAxes = prologue.NumPyAxis == -1 && qNdim >= 2;
+            if (ignoreNaN && !legacyOut && axisArr != null && outerDims > 0 && (outRoute == 0 || (outRoute == 3 && movesQAxes)))
+                resultRaw = AlongAxisLayout(resultRaw, qNdim, prologue.NumPyAxis.Value);
 
             return FinishResult(resultRaw, a, axisArr, keepdims, qNdim, @out, target, outRoute, staged, outerDims);
         }
@@ -1162,29 +1165,52 @@ namespace NumSharp.Statistics
         /// <summary>
         ///     The layout of the nan forms' result along an axis: <c>_nanquantile_ureduce_func</c> calls
         ///     <c>np.apply_along_axis</c>, which fills a C-contiguous buffer of the kept axes followed by q's axes and returns
-        ///     it transposed (q's axes where the reduced axis was), and then moves q's axes first — a view that does not own
-        ///     its data and whose q axes are the innermost in memory (F-ordered for one kept axis and a 1-d q). A scalar q
-        ///     leaves the buffer's C order, still as a view.
+        ///     it transposed (q's axes where the reduced axis was), and then moves q's axes first with
+        ///     <c>np.moveaxis(result, [axis + i for i in range(q.ndim)], range(q.ndim))</c> — a view that does not own its
+        ///     data and whose q axes are the innermost in memory (F-ordered for one kept axis and a 1-d q). A scalar q leaves
+        ///     the buffer's C order, still as a view.
         /// </summary>
         /// <param name="result">The computed result: q's axes, then the kept axes (C-contiguous).</param>
         /// <param name="qNdim">How many leading axes are q's.</param>
-        /// <returns>The same values in NumPy's layout.</returns>
-        private static NDArray AlongAxisLayout(NDArray result, int qNdim)
+        /// <param name="numpyAxis">The axis NumPy's <c>_ureduce</c> handed the function (<see cref="UReduced.NumPyAxis"/>):
+        ///     the reduced axis, or <c>-1</c> for merged axes.</param>
+        /// <returns>The same values in NumPy's layout and, for merged axes with a q of two or more dimensions, NumPy's axis
+        ///     order (see the remarks).</returns>
+        /// <remarks>
+        ///     NumPy computes <c>from_ax</c> from the axis it was handed. For one reduced axis that is the axis itself, so q's
+        ///     axes come first. For merged axes it is <c>_ureduce</c>'s UNnormalized <c>-1</c>: <c>from_ax</c> is <c>[-1, 0,
+        ///     ..., q.ndim - 2]</c>, which for a q of two or more dimensions moves q's LAST axis and the first kept axes to the
+        ///     front instead (<c>np.nanquantile(arange(24.).reshape(2, 3, 4), q of shape (3, 2), axis=(1, 2))</c> is
+        ///     <c>(2, 2, 3)</c> where <c>np.quantile</c> gives <c>(3, 2, 2)</c>; probed 2.4.2). The statements below are NumPy's,
+        ///     so that order is reproduced; a 1-d q is not affected (its one axis is the last).
+        /// </remarks>
+        private static NDArray AlongAxisLayout(NDArray result, int qNdim, int numpyAxis)
         {
             if (qNdim == 0)
                 return result.view();
             int nd = result.ndim;
+            // The data apply_along_axis walks: the kept axes and the one reduced axis (merged axes are one); its
+            // normalize_axis_index of the axis it was handed.
+            int dataNdim = nd - qNdim + 1;
+            int axis = numpyAxis < 0 ? numpyAxis + dataNdim : numpyAxis;
             var front = new int[qNdim];
             var back = new int[qNdim];
+            var atAxis = new int[qNdim];
+            var from = new int[qNdim];
             for (int i = 0; i < qNdim; i++)
             {
                 front[i] = i;
                 back[i] = nd - qNdim + i;
+                atAxis[i] = axis + i;
+                // `from_ax = [axis + i for i in range(q.ndim)]` with the axis AS HANDED (np.moveaxis normalizes it against the
+                // result's rank): -1 for merged axes.
+                from[i] = numpyAxis + i;
             }
-            // apply_along_axis's buffer: the kept axes, then q's, in C order; nanquantile's moveaxis then views it with q's
-            // axes first.
+            // apply_along_axis's buffer: the kept axes, then q's, in C order; it returns the buffer transposed with q's axes
+            // where the reduced axis was (`buff.transpose(buff_permute)`), and nanquantile's moveaxis then views it.
             NDArray buffer = np.moveaxis(result, front, back).copy();
-            return np.moveaxis(buffer, back, front);
+            NDArray applied = np.moveaxis(buffer, back, atAxis);
+            return np.moveaxis(applied, from, front);
         }
 
         /// <summary>
