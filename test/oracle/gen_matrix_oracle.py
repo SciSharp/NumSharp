@@ -1239,6 +1239,11 @@ def gen_text(em):
 #
 # Redrawn 2026-10-12, when branch strings was rebased onto journey4: its fixes made MX06 (a -1 reshape of a broadcast
 # view copies) and MX11 (np.repeat reads an offset view) match NumPy; their rules are dropped.
+#
+# MX08 (np.prod in a cast loop) was fixed 2026-10-24 on strings by the np-layer dtype plan's P1d: the engine's product
+# casts the input into a loop that is neither its dtype nor its accumulator first, as NumPy's buffered iterator does. Its
+# rule is dropped and its 15 cases were moved back into matrix.jsonl as they were (the precedent of 2026-10-12: no
+# regeneration of the tier for a fixed gap).
 GAPS = {
     "MX01": "a[:, index_array]: NumPy returns its transposed MapIter view (F-contiguous for two axes); NumSharp's "
             "fancy getter returns a C-ordered array. Values equal. Library-wide (OpenBugs.FancyIndex.cs).",
@@ -1252,9 +1257,6 @@ GAPS = {
     "MX07": "fancy assignment with two index entries into a C-contiguous view at a non-zero offset "
             "(a[rows, cols] = v, a[:, cols] = v) throws IndexOutOfRangeException: the offsets include the view's "
             "offset and the bound does not. The offset-view class of the array-object oracle.",
-    "MX08": "np.prod in a cast loop: the flat form with dtype=bool throws NotSupportedException, with a "
-            "complex128 or float16 loop over a real operand it returns NaN or garbage, and complex128 -> bool "
-            "along an axis is wrong. Reached through matrix.prod(dtype=...) and matrix.prod(out=...).",
     "MX09": "complex128 np.prod over a reversed view: the sign of a zero part differs (NumPy's npy_cmul visiting "
             "order). The complex Prod gap of the reductions tier.",
     "MX10": "np.dot of an N-D operand with an M-D one (the generic DotNDMD route) computes every dtype in "
@@ -1327,19 +1329,6 @@ def _gap_of(case):
             return "MX07"
 
     if op == "matrix.prod":
-        axis, loop = p.get("axis"), p.get("dtype")
-        if "out" in p and layout.startswith("out:"):
-            # The loop of a reduction with out= is promote_types(out, operand); the cases below name the pairs
-            # where that promotion is the out dtype itself.
-            loop = layout.split(":")[1]
-        if axis is None and loop == "bool" and ("out" not in p or dt == "bool"):
-            return "MX08"
-        if axis is None and loop == "complex128" and dt in ("float32", "int64", "int8"):
-            return "MX08"
-        if axis is None and loop == "float16" and dt == "int8":
-            return "MX08"
-        if axis == 1 and loop == "bool" and "out" not in p and dt == "complex128":
-            return "MX08"
         if layout.startswith("rev:") and dt == "complex128":
             return "MX09"
 

@@ -18,14 +18,17 @@ namespace NumSharp.Tests
     //
     // This file reproduces the gaps through PUBLIC calls on plain arrays, so each can be fixed where it lives:
     //
-    //   * Silent wrong values: np.dot of an N-D operand with an M-D one computes complex128 in float64 (MX10), the
-    //     flat np.prod in a cast loop returns NaN / garbage or throws (MX08).
+    //   * Silent wrong values: np.dot of an N-D operand with an M-D one computes complex128 in float64 (MX10).
     //   * A crash: fancy assignment with two index entries into a C-contiguous view at an offset (MX07).
     //   * Result LAYOUT (values equal): np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04),
     //     np.conjugate of a transposed strided view (MX05).
     //
     // FIXED 2026-10-15 (the numpy.char phase-2 work): ndarray.imag of a real F array is F-ordered (MX03); its pin stays
     // below as a regression test, untagged, its summary opening with "FIXED".
+    //
+    // FIXED 2026-10-24 (the np-layer dtype plan's P1d): np.prod in a cast loop casts the input first (MX08: the flat form
+    // read a narrower input as its float16 / complex128 loop, past the end of the buffer). Its pin moved to
+    // Math/np.prod.CastLoop.Test.cs with the probes of the fix, and the gap's cases are back in matrix.jsonl.
     //
     // Not repeated here, because an older file already pins the same root cause: the fancy getter's result layout
     // (MX01: OpenBugs.FancyIndex.cs, group 2), reshape(-1) of a broadcast view (MX06: OpenBugs.ViewFlags.cs, VF24),
@@ -55,29 +58,6 @@ namespace NumSharp.Tests
             r.shape.Should().Equal(1L, 4L, 4L);
             r.GetAtIndex<Complex>(0).Should().Be(new Complex(32, -8));
             r.GetAtIndex<Complex>(3).Should().Be(new Complex(50, -8));
-        }
-
-        /// <summary>
-        ///     The flat <c>np.prod</c> of an int8 array in a cast loop. NumPy: <c>dtype=bool</c> gives False,
-        ///     <c>dtype=float16</c> gives -0.0, <c>dtype=complex128</c> gives (-0+0j). NumSharp throws
-        ///     NotSupportedException for bool and returns NaN for the two others (gap MX08; the axis forms are
-        ///     right).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX08")]
-        public void Matrix_FlatProd_InACastLoop_ShouldMatchNumPy()
-        {
-            using var a = np.array(new sbyte[,] { { -1, 0, 1, 2 }, { 3, -1, 0, 1 }, { 2, 3, -1, 0 } });
-
-            using var asBool = np.prod(a, dtype: np.@bool);
-            ((bool)asBool).Should().BeFalse();
-
-            using var asHalf = np.prod(a, dtype: np.float16);
-            Half half = asHalf.GetAtIndex<Half>(0);
-            Half.IsNaN(half).Should().BeFalse();
-            ((double)half).Should().Be(0.0);
-
-            using var asComplex = np.prod(a, dtype: np.complex128);
-            asComplex.GetAtIndex<Complex>(0).Should().Be(Complex.Zero);
         }
 
         /// <summary>
