@@ -31,8 +31,9 @@
 // layouts c2d, f2d, 0d, empty, 3d); phase C varies every PAIR of parameters together on a small pool (8 dtypes x c2d,
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
 // and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
-// operand named lhs / rhs / left / right / x / y / other); an overload with a required parameter of another kind is reported
-// once as SKIP.
+// operand named lhs / rhs / left / right / x / y / other, the histogram family's bins as an int, an estimator name, an
+// array or a double[], and its (lower, upper) range); an overload with a required parameter of another kind is reported
+// once as SKIP. A result that is a struct of arrays (np.histogram's HistogramResult) renders each array field.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -164,7 +165,15 @@ static class Snapshot
         Nullable.GetUnderlyingType(t) is { } u ? u.Name + "?" : t.Name;
 
     /// <summary>The role of a parameter, decided by its type and name.</summary>
-    private enum Role { Operand, Operand2, Out, Weights, Where, QArray, QDouble, QDoubles, QLong, Axis, AxisInt, AxisArray, IntArg, DType, Bool, Method, Order, Default, Unsupported }
+    private enum Role
+    {
+        Operand, Operand2, Out, Weights, Where, QArray, QDouble, QDoubles, QLong, Axis, AxisInt, AxisArray, IntArg, DType,
+        Bool, Method, Order,
+        // np.histogram / np.histogram_bin_edges: bins as an int count, an estimator name, an array (edges or a 0-d count)
+        // or a double[] of edges, and the optional (lower, upper) range.
+        Bins, BinsName, BinsArray, BinsDoubles, Range,
+        Default, Unsupported,
+    }
 
     /// <summary>
     ///     Classifies a parameter.
@@ -186,7 +195,13 @@ static class Snapshot
                 : n == "where" ? Role.Where
                 : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" ? Role.Operand2
                 : n == "q" ? Role.QArray
+                : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
+        // The histogram family's bins in its other C# forms, and its range.
+        if (n == "bins" && t == typeof(int)) return Role.Bins;
+        if (n == "bins" && t == typeof(string)) return Role.BinsName;
+        if (n == "bins" && t == typeof(double[])) return Role.BinsDoubles;
+        if (n == "range" && t == typeof((double, double)?)) return Role.Range;
         if (n == "q" && t == typeof(double)) return Role.QDouble;
         if (n == "q" && t == typeof(double[])) return Role.QDoubles;
         if (n == "q" && t == typeof(long)) return Role.QLong;
@@ -290,6 +305,54 @@ static class Snapshot
                 foreach (var o in new[] { "K", "C", "F", "A", "Z" })
                     Add(o, () => p.ParameterType == typeof(char) ? o[0] : o);
                 break;
+            case Role.Bins:
+            {
+                // The default count first, then a single bin, a few bins, and the two counts NumPy refuses.
+                int count0 = p.HasDefaultValue && p.DefaultValue is int dcount ? dcount : 10;
+                Add(count0.ToString(CultureInfo.InvariantCulture), () => count0);
+                foreach (var count in new[] { 1, 3, 0, -2 })
+                    if (count != count0)
+                        Add(count.ToString(CultureInfo.InvariantCulture), () => count);
+                break;
+            }
+            case Role.BinsName:
+                // Every estimator NumPy knows (stone runs a histogram per candidate count), then an unknown name.
+                foreach (var e in new[] { "auto", "fd", "doane", "scott", "stone", "rice", "sturges", "sqrt", "bogus" })
+                    Add(e, () => e);
+                break;
+            case Role.BinsArray:
+                // Explicit edges inside and around the pool's values (-10 .. 13): float64 and int64 edges, edges NumPy refuses
+                // (decreasing, two-dimensional), a 0-d integer count and a 0-d float (not an index), the degenerate empty and
+                // one-edge arrays, edges with a NaN (no comparison is True, so they pass the monotonic check), and text edges.
+                Add("f64[-2,0,1.5,5]", () => np.array(new[] { -2.0, 0.0, 1.5, 5.0 }));
+                Add("i64[-4,0,2,4]", () => np.array(new long[] { -4, 0, 2, 4 }));
+                Add("decr[5,1]", () => np.array(new[] { 5.0, 1.0 }));
+                Add("2d", () => np.array(new[] { 0.0, 1.0, 2.0, 3.0 }).reshape(new Shape(2, 2)));
+                Add("0d_i3", () => np.array(3L));
+                Add("0d_f2.5", () => np.array(2.5));
+                Add("empty", () => np.empty(new Shape(0), np.dtype("float64")));
+                Add("one[1.5]", () => np.array(new[] { 1.5 }));
+                Add("nan[0,nan,2]", () => np.array(new[] { 0.0, BitConverter.Int64BitsToDouble(0x7FF8000000000000), 2.0 }));
+                Add("U[1,2,10]", () => np.array(new[] { "1", "2", "10" }).astype(np.dtype("U5")));
+                Add("T[a,b]", () => np.array(new[] { "a", "b" }).astype(np.dtype("T")));
+                break;
+            case Role.BinsDoubles:
+                Add("[-2,0,1.5,5]", () => new[] { -2.0, 0.0, 1.5, 5.0 });
+                Add("[]", () => Array.Empty<double>());
+                Add("[3,1]", () => new[] { 3.0, 1.0 });
+                Add("[1]", () => new[] { 1.0 });
+                break;
+            case Role.Range:
+                // No range first, then ranges inside, around and outside the data, and the ones NumPy refuses (a lower
+                // edge above the upper one, a NaN or infinite bound); a zero-width range widens by 0.5 on both sides.
+                Add("null", () => null);
+                Add("(0,1)", () => ((double, double)?)(0.0, 1.0));
+                Add("(-1,10)", () => ((double, double)?)(-1.0, 10.0));
+                Add("(1,0)", () => ((double, double)?)(1.0, 0.0));
+                Add("(nan,1)", () => ((double, double)?)(BitConverter.Int64BitsToDouble(0x7FF8000000000000), 1.0));
+                Add("(0,inf)", () => ((double, double)?)(0.0, double.PositiveInfinity));
+                Add("(2,2)", () => ((double, double)?)(2.0, 2.0));
+                break;
             case Role.Default:
                 Add("default", () => p.DefaultValue is DBNull ? null : p.DefaultValue);
                 break;
@@ -374,8 +437,8 @@ static class Snapshot
     /// <summary>The out= variants, built from the base call's result.</summary>
     private static readonly string[] OutVariantLabels = { "same", "float64", "int8", "bool", "U5", "T", "wrongshape", "readonly" };
 
-    /// <summary>The weights= variants, built from the operand.</summary>
-    private static readonly string[] WeightVariantLabels = { "ones", "negative", "wrongshape", "int" };
+    /// <summary>The weights= variants, built from the operand (see <see cref="MakeWeights"/>).</summary>
+    private static readonly string[] WeightVariantLabels = { "ones", "negative", "wrongshape", "int", "complex", "U5", "T" };
 
     /// <summary>The second-operand variants, built from the operand (see <see cref="MakeOperand2"/>); the first is the
     ///     base.</summary>
@@ -641,18 +704,31 @@ static class Snapshot
     /// <summary>
     ///     Builds a weights= array for an operand.
     /// </summary>
-    /// <param name="label">The variant: ones, negative, wrongshape, int.</param>
+    /// <param name="label">The variant: <c>ones</c> / <c>negative</c> (float64), <c>wrongshape</c> (one more axis),
+    ///     <c>int</c> (int64 ones), <c>complex</c> (complex128 ones with an imaginary part: np.histogram's complex weights
+    ///     path), <c>U5</c> / <c>T</c> (the text "1" in a fixed-width or StringDType array: the text routes of the
+    ///     functions that take weights).</param>
     /// <param name="operand">The operand.</param>
     /// <returns>A fresh array.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
     private static NDArray MakeWeights(string label, NDArray operand)
     {
         var shape = new Shape(operand.Shape.Dimensions);
+        long size = 1;
+        foreach (long d in shape.Dimensions) size *= d;
+        NDArray Text(string dt) => size == 0
+            ? np.empty(shape, np.dtype(dt))
+            : np.array(Enumerable.Repeat("1", (int)size).ToArray()).astype(np.dtype(dt)).reshape(shape);
         switch (label)
         {
             case "ones": return np.ones(shape, np.dtype("float64"));
             case "negative": return np.ones(shape, np.dtype("float64")) * -1.0;
             case "wrongshape": return np.ones(new Shape(shape.Dimensions.Concat(new long[] { 2 }).ToArray()), np.dtype("float64"));
             case "int": return np.ones(shape, np.dtype("int64"));
+            case "complex":
+                return np.array(Enumerable.Repeat(new Complex(1.0, 0.5), (int)size).ToArray()).reshape(shape);
+            case "U5": return Text("U5");
+            case "T": return Text("T");
             default: throw new ArgumentException("unknown weights variant " + label);
         }
     }
@@ -750,6 +826,17 @@ static class Snapshot
             case IEnumerable e:
                 return "LIST[" + string.Join("; ", e.Cast<object>().Select(o => Render(o, outArray))) + "]";
             default:
+                // A struct of arrays (np.histogram's HistogramResult, np.unique's result structs): each public array field
+                // in declaration order, so the arrays the call returns are in the line. Its ToString would only name the
+                // type, which would hide every value from the snapshot.
+                var arrayFields = result.GetType().IsValueType
+                    ? result.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance)
+                        .OrderBy(fi => fi.MetadataToken).ToArray()
+                    : Array.Empty<FieldInfo>();
+                if (arrayFields.Length > 0
+                    && arrayFields.All(fi => typeof(NDArray).IsAssignableFrom(fi.FieldType) || fi.FieldType == typeof(NDArray[])))
+                    return "STRUCT " + result.GetType().Name + "(" +
+                           string.Join("; ", arrayFields.Select(fi => fi.Name + "=" + Render(fi.GetValue(result), outArray))) + ")";
                 return "VAL " + result.GetType().Name + " " + Convert.ToString(result, CultureInfo.InvariantCulture);
         }
     }
