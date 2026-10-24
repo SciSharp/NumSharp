@@ -38,9 +38,30 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Element-wise equal comparison (==).
-        /// Supports all 12 dtypes and broadcasting.
+        ///     NumPy's <c>a == b</c> (<c>array_richcompare</c>): the elementwise equal ufunc over the broadcast operands, as a
+        ///     typed bool array — NOT a reference or value-equality test. Where the ufunc has no loop for a string operand
+        ///     (text against numbers, two string classes that do not compare) the answer is False everywhere instead of an
+        ///     error, as NumPy's operator gives it.
         /// </summary>
+        /// <param name="lhs">The left operand; null compares as C# null (see remarks).</param>
+        /// <param name="rhs">The right operand; null compares as C# null.</param>
+        /// <returns>
+        ///     The bool comparison in the broadcast shape; a 0-d bool for a null operand; an empty bool array of
+        ///     <paramref name="lhs"/>'s shape when <paramref name="lhs"/> is uninitialized (has no shape at all).
+        /// </returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's ValueError text).</exception>
+        /// <remarks>
+        ///     <para>Footgun: <c>if (a == b)</c> does not compile into an equality test — the result is an array. Use
+        ///     <see cref="array_equal(NDArray, bool)"/> (or <c>np.all(a == b)</c>) for one bool, and <see cref="object.ReferenceEquals"/>
+        ///     for identity.</para>
+        ///     <para>The null answers are C#'s protocol, not NumPy's (Python's <c>None</c> becomes an object array there):
+        ///     two nulls are a 0-d True, one null a 0-d False. They and the uninitialized-array answer stay here; the
+        ///     comparison itself is <see cref="Backends.DefaultEngine.RichCompareEquality"/>, the engine's (the np-layer
+        ///     dtype plan, P1c).</para>
+        ///     <para>Not scoped: the engine returns a bool-typed result that <c>AsGeneric</c> passes through, so this hot path
+        ///     mints no temporary to reclaim. On the rare null and uninitialized answers MakeGeneric aliases a fresh untyped
+        ///     array, which is left to the finalizer, as before.</para>
+        /// </remarks>
         public static NDArray<bool> operator ==(NDArray lhs, NDArray rhs)
         {
             if (lhs is null && rhs is null)
@@ -55,19 +76,9 @@ namespace NumSharp
             if (lhs.Shape.IsEmpty)
                 return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
-            // A string operand: two strings of one class compare their text. For
-            // any other pair the equal ufunc has no loop, and NumPy's `==` operator answers
-            // False everywhere instead of raising (_failed_comparison_workaround): a constant of the broadcast shape.
-            if (lhs.typecode == NPTypeCode.String || rhs.typecode == NPTypeCode.String)
-            {
-                var constant = Backends.Strings.NDStringUfuncs.FailedComparison(lhs, rhs, notEqual: false);
-                if (constant is not null)
-                    return constant;
-                // Two strings of one class: the equal ufunc compares their text — an empty broadcast result compares
-                // nothing (the engine's string guard returns that result), any other runs the string comparison.
-            }
-
-            return lhs.TensorEngine.Compare(lhs, rhs).AsGeneric<bool>();
+            // NumPy's array_richcompare: the equal ufunc, or _failed_comparison_workaround's False constant where it has
+            // no loop for a string operand — the engine's (DefaultEngine.RichCompareEquality).
+            return Backends.DefaultEngine.RichCompareEquality(lhs, rhs, notEqual: false);
         }
 
         /// <summary>
