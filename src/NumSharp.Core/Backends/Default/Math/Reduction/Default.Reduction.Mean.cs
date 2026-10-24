@@ -150,7 +150,7 @@ namespace NumSharp.Backends
             // axis in memory order, which ReduceAdd's flat engine walks in NumPy's logical order.
             if (portable && shape[axis2] != 1)
                 return MeanLikeNumPy(arr, axis2, keepdims, typeCode ?? (inputTc == NPTypeCode.Half ? NPTypeCode.Single : meanType),
-                                     float16Result: !typeCode.HasValue && inputTc == NPTypeCode.Half);
+                                     float16Result: MeanIsFloat16Result(arr, dtype));
 
             // B2: Complex mean axis is handled by the NDIter REDUCE path (ExecuteAxisReduction
             // → ExecuteAxisReductionNDIter), which runs a one-pass complex Sum kernel then
@@ -216,6 +216,20 @@ namespace NumSharp.Backends
                     return double.NaN;
             }
         }
+
+        /// <summary>
+        ///     NumPy's <c>is_float16_result</c> of <c>_mean</c>: a float16 input without <c>dtype=</c> is summed in float32
+        ///     and its mean ends with <c>arr.dtype.type(ret)</c> — a CONVERSION, which allocates the result (for numpy.matrix
+        ///     a new matrix that owns its data) and, for a scalar, rounds the float64 quotient once into float16. Every other
+        ///     mean ends with the <c>true_divide</c> ufunc's output, which a subclass wraps as a view.
+        /// </summary>
+        /// <param name="arr">The averaged array.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <returns>True when NumPy's mean of <paramref name="arr"/> ends with the float16 conversion.</returns>
+        /// <remarks>The class statement of numpy.matrix's <c>mean</c> reads it (an owning matrix or a wrapped view), so the
+        ///     dtype rule stays here with <c>_mean</c>'s other statements.</remarks>
+        internal static bool MeanIsFloat16Result(NDArray arr, DType dtype)
+            => dtype is null && arr.GetTypeCode == NPTypeCode.Half;
 
         /// <summary>
         ///     np.mean's axis check: <c>_count_reduce_items</c> normalizes the axis against the operand's rank before

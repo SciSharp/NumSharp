@@ -1,6 +1,5 @@
 using System;
 using NumSharp.Backends;
-using NumSharp.Backends.Strings;
 
 // =============================================================================
 // NDMatrix.Reductions.cs — matrix.sum / mean / prod / std / var / any / all / max / min / argmax / argmin / ptp
@@ -40,7 +39,10 @@ using NumSharp.Backends.Strings;
 // (ufunc_object.c reducelike_promote_and_resolve: the operand dtypes it promotes are (out, arr, out)), and it does
 // not widen small integers when out is given. So the loop is promote_types(out.dtype, arr.dtype): an int8 matrix
 // summed into an int8 out wraps in int8, into a bool out it sums in int8 and stores the truth value, into a
-// float64 out a float32 matrix is summed in float64. The result reaches out with an UNSAFE cast.
+// float64 out a float32 matrix is summed in float64. The result reaches out with an UNSAFE cast. That rule, the text
+// routes into out and _mean / _var / _std's statements around it are the engine's out= forms (TensorEngine.ReduceAdd /
+// ReduceProduct / ReduceMean / ReduceVar / ReduceStd, DefaultEngine's Default.Reduction.Out.cs since the np-layer
+// dtype plan's P1d): the members below call them with keepdims=True and read the scalar of axis=None from out.
 //
 // SCALARS. axis=None is `...(keepdims=True)[0, 0]`: the reduction always runs in its ARRAY form and the scalar is
 // read from the (1, 1) result. That matters where NumPy's array and scalar branches differ: a float16 mean rounds
@@ -93,14 +95,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The loop of a reduction that was given <c>out=</c> and no <c>dtype=</c>: NumPy promotes the dtype
-        ///     of <paramref name="out"/> with the operand's (file header), without the small-integer widening.
-        /// </summary>
-        /// <param name="out">The destination.</param>
-        /// <returns><c>np.promote_types(out.dtype, this.dtype)</c>.</returns>
-        private DType LoopWith(NDArray @out) => np.promote_types(@out.dtype, dtype);
-
-        /// <summary>
         ///     NumPy's <c>_align(axis)</c> for a reduction that drops the axis (<c>argmax</c>, <c>argmin</c>,
         ///     <c>ptp</c>): the 1-d result as a row for axis 0, as a column for axis 1.
         /// </summary>
@@ -129,69 +123,6 @@ namespace NumSharp
 
             return axis == 0 ? row : row.T;
         }
-
-        /// <summary>
-        ///     The text form of <c>add.reduce</c> / <c>multiply.reduce(self, axis, dtype, out, keepdims=True)</c>, the
-        ///     reduction NumPy's <c>matrix.sum</c> / <c>matrix.prod</c> (and <c>_mean</c>'s sum) run: when this matrix or
-        ///     <paramref name="out"/> holds text (<c>S</c>, <c>U</c> or <c>StringDType</c>), or <paramref name="dtype"/>
-        ///     names a text class, NumPy resolves the reduction's loop on (out, self) under the request
-        ///     (<see cref="NDReduceLikeResolution"/>) and computes or refuses: the <c>StringDType</c> concatenation of a
-        ///     <c>StringDType</c> or <c>U</c> matrix into a <c>StringDType</c> out, the string repeat of integer counts (into a
-        ///     text out, or through the loop's text into a numeric out), or a NUMERIC loop with the text cast around it (a text
-        ///     matrix parsed, the sum's <c>str()</c> written into a text out).
-        /// </summary>
-        /// <param name="op">The NumPy function whose reduction this is (<c>"sum"</c> or <c>"prod"</c>).</param>
-        /// <param name="axis">The axis as the caller passed it, or null for every axis.</param>
-        /// <param name="dtype">The <c>dtype=</c> request (for <c>_mean</c>'s sum, its implicit float loop), or null.</param>
-        /// <param name="out">The out matrix (the kept shape).</param>
-        /// <returns>True when a loop computed into <paramref name="out"/>; false when no text is involved (the caller's numeric
-        ///     path continues).</returns>
-        /// <exception cref="ValueError">A read-only out, an out of the wrong shape, two or more axes for a loop that is not
-        ///     reorderable, an empty reduction without identity, or a text that does not parse into the numeric loop (or into
-        ///     a numeric out, from the repeat's text).</exception>
-        /// <exception cref="AxisError">The axis is out of bounds.</exception>
-        /// <exception cref="TypeError">NumPy's loop refusal (its resolved-dtypes, no-loop and mixed-string texts), or a
-        ///     detailed or new-style <c>dtype=</c>.</exception>
-        /// <exception cref="OverflowException">A repeat past <c>2^63 - 1</c> characters, or an integer text outside an
-        ///     integer loop or out.</exception>
-        [NDScopedCovered]
-        private bool ReduceTextInto(string op, int? axis, DType dtype, NDMatrix @out)
-        {
-            // A StringDType matrix: its loop resolution (a dtype= request, an out of another class or multiply have no
-            // loop: refused there), then the concatenation into out.
-            if (NDStringUfuncs.VStringReduces(op, this, axis, dtype, @out, loopOnly: true))
-            {
-                NDVStringReduction.SumNumPy(op, this, NormalizedAxis(axis), keepdims: true, @out);
-                return true;
-            }
-            switch (NDStringUfuncs.ReduceIntoOutRoute(op, this, axis, @out, dtype, out ReduceLikeResolution resolution))
-            {
-                case NDStringUfuncs.TextOutReduce.Concatenate:
-                    NDVStringReduction.SumNumPyOfCast(this, NormalizedAxis(axis), keepdims: true, @out);
-                    return true;
-                case NDStringUfuncs.TextOutReduce.Repeat:
-                    // The repeat runs in the loop's text descriptor: the out's own when it is that text, else the out's dtype
-                    // cast to the loop's string class (a numeric out reads as U21 / U32 / U5, a bytes out of the unicode loop
-                    // as U), which NumPy's buffered iterator round-trips through.
-                    if (resolution is not null && !resolution.Descriptors[0].Equals(@out.dtype))
-                        NDStringRepeatReduction.ReduceNumPyThroughText(this, axis, keepdims: true, @out, resolution.Descriptors[0]);
-                    else
-                        NDStringRepeatReduction.ReduceNumPy(this, axis, keepdims: true, @out);
-                    return true;
-                case NDStringUfuncs.TextOutReduce.NumericCast:
-                    // A numeric loop over text: the identity first, then the buffered casts of the matrix and the out.
-                    NDTextNumericReduction.Reduce(op == "sum" ? "add" : "multiply", this,
-                        ReductionArguments.AxisFlags(ndim, axis), keepdims: true, @out, resolution.Descriptors[0]);
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        /// <summary>The axis counted from the front (a validated axis), or null for every axis.</summary>
-        /// <param name="axis">The axis as the caller passed it, already validated.</param>
-        /// <returns>The non-negative axis, or null.</returns>
-        private int? NormalizedAxis(int? axis) => axis is { } ax ? (ax < 0 ? ax + ndim : ax) : null;
 
         #endregion
 
@@ -236,16 +167,10 @@ namespace NumSharp
                 return FromWrapped(TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype), this);
             }
 
-            // Text (this matrix or out): add.reduce's text loop resolution answers — the concatenation computes into
-            // out, everything else is NumPy's refusal.
-            if (ReduceTextInto("sum", axis, dtype, @out))
-                return axis is null ? ScalarFrom(@out) : @out;
-
-            // NumPy's reduce prologue runs before an element is read; the loop and the unsafe store are the
-            // file header's out= rule.
-            ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "add");
-            NDArray total = TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype ?? LoopWith(@out));
-            np.copyto(@out, total, casting: "unsafe");
+            // add.reduce(self, axis, dtype, out, keepdims=True) is the engine's out= route: the text loop resolution (the
+            // concatenation computes into out, everything else is NumPy's refusal), the reduce prologue, the loop
+            // promote_types(out, self) when dtype is null (the file header's out= rule), the unsafe store.
+            TensorEngine.ReduceAdd(this, axis, keepdims: true, dtype, @out);
             return axis is null ? ScalarFrom(@out) : @out;
         }
 
@@ -315,8 +240,9 @@ namespace NumSharp
                 if (axis is null)
                     return Collapse(kept);
                 // _mean ends a float16 mean with `arr.dtype.type(ret)`, a conversion that allocates the matrix;
-                // every other mean is the true_divide ufunc's result, which the matrix wraps.
-                return dtype is null && typecode == NPTypeCode.Half ? From(kept, this) : FromWrapped(kept, this);
+                // every other mean is the true_divide ufunc's result, which the matrix wraps. Which one ran is _mean's
+                // own rule (is_float16_result), the engine's.
+                return DefaultEngine.MeanIsFloat16Result(this, dtype) ? From(kept, this) : FromWrapped(kept, this);
             }
 
             // _mean(self, axis, dtype, out, keepdims=True) is the engine's out= route: umr_sum(arr, axis, dtype, out,

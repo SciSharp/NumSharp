@@ -138,7 +138,7 @@ Matrixlib/NDMatrix.Construction.cs	0	8
 Matrixlib/NDMatrix.Indexing.cs	0	3
 Matrixlib/NDMatrix.Methods.cs	0	1
 Matrixlib/NDMatrix.Operators.cs	0	12
-Matrixlib/NDMatrix.Reductions.cs	10	3
+Matrixlib/NDMatrix.Reductions.cs	0	2
 Matrixlib/NDMatrix.cs	0	1
 Operations/Elementwise/NDArray.Equals.cs	0	5
 Operations/Elementwise/NDArray.TextComparison.cs	1	0
