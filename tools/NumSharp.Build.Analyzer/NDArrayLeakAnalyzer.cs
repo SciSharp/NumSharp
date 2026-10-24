@@ -302,6 +302,13 @@ namespace NumSharp.Build.Analyzer
                 if (!(_ctx.OwningSymbol is IMethodSymbol method) || method.IsImplicitlyDeclared)
                     return;
 
+                // Pay-for-play: every report needs a value of an owned type — pass 1 an owning local, which
+                // only an owned-type value makes owning, pass 2 a producer of one — so a body without a
+                // single such operation (the whole of a project that never names NDArray) ends after one
+                // walk, before the attribute and inheritance checks and the three walks below.
+                if (!AnyOwnedValue(_ctx.OperationBlocks))
+                    return;
+
                 // Exempt: a method the author has already marked scope-covered — a
                 // [NDScoped]/[NDScopedAsync] boundary (the weaver reclaims every transient it
                 // constructs), or an [NDScopedCovered] (an analyzer-only assertion that this helper
@@ -647,11 +654,48 @@ namespace NumSharp.Build.Analyzer
             ///     NDArray / NDArray[] / a tuple with one / an INDArrayCarrier struct, and — ownership
             ///     being contagious — an NDArray-owning DISPOSABLE (a consumer's holder class, NumSharp's
             ///     np.nditer iterator) or a rank-1 array of them.
+            ///     <para>
+            ///     Asked for every operation of every method body, NDArray-free code included, so the answer
+            ///     is memoized per type in the compilation's <see cref="OwnershipModel.OwnedValueTypes"/>
+            ///     (it depends only on the type): an operation costs one lookup, not the interface scans
+            ///     below.
+            ///     </para>
             /// </summary>
+            /// <param name="t">The type of a value; null answers false.</param>
+            /// <returns>True when a value of the type is one this method must reclaim.</returns>
             private bool IsOwnedNDArrayType(ITypeSymbol t)
             {
                 if (t == null)
                     return false;
+                var memo = _model.OwnedValueTypes;
+                if (memo.TryGetValue(t, out var owned))
+                    return owned;
+                owned = ComputeIsOwnedNDArrayType(t);
+                memo[t] = owned;
+                return owned;
+            }
+
+            /// <summary>
+            ///     Whether any operation of the body has an owned type (<see cref="IsOwnedNDArrayType"/>) —
+            ///     the necessary condition for any NDW012 in it: an owning local is one assigned an
+            ///     owned-type value, and a leaking expression is an owned-type producer.
+            /// </summary>
+            /// <param name="blocks">The body's operation blocks.</param>
+            /// <returns>False when the body can report nothing.</returns>
+            private bool AnyOwnedValue(ImmutableArray<IOperation> blocks)
+            {
+                foreach (var block in blocks)
+                    foreach (var op in block.DescendantsAndSelf())
+                        if (IsOwnedNDArrayType(op.Type))
+                            return true;
+                return false;
+            }
+
+            /// <summary>The uncached <see cref="IsOwnedNDArrayType"/>: the classification itself.</summary>
+            /// <param name="t">A non-null type.</param>
+            /// <returns>True when a value of the type is one this method must reclaim.</returns>
+            private bool ComputeIsOwnedNDArrayType(ITypeSymbol t)
+            {
                 if (TypeHelpers.IsNDArrayCarrying(t, _k))          // NDArray / NDArray[]
                     return true;
                 if (t.IsTupleType && ((INamedTypeSymbol)t).TupleElements.Any(e => IsOwnedNDArrayType(e.Type)))

@@ -64,6 +64,20 @@ namespace NumSharp.Build.Analyzer
             new ConcurrentDictionary<IAssemblySymbol, bool>(SymbolEqualityComparer.Default);
 
         /// <summary>
+        ///     The leak analyzer's per-type memo of "is a value of this type an owned NDArray carrier"
+        ///     (<c>NDArrayLeakAnalyzer</c>'s <c>IsOwnedNDArrayType</c>). That test runs for EVERY operation
+        ///     of EVERY method body in a project that references NumSharp — NDArray-free code included —
+        ///     and costs two base-chain walks and three scans of the type's <c>AllInterfaces</c> (about thirty
+        ///     generic-math interfaces for an <c>int</c>), while a compilation has only thousands of distinct
+        ///     types: unmemoized it was most of NDW012's time on a large project that never names NDArray.
+        ///     The answer is a pure function of the type within one compilation, so whichever callback
+        ///     computes it first stores the one answer every other callback reads. Lives here because the
+        ///     model is the analyzer's per-compilation state.
+        /// </summary>
+        internal ConcurrentDictionary<ITypeSymbol, bool> OwnedValueTypes { get; } =
+            new ConcurrentDictionary<ITypeSymbol, bool>(SymbolEqualityComparer.Default);
+
+        /// <summary>
         ///     Serializes the walks that decide new components. Two concurrent walks over overlapping
         ///     types would each assign their own <see cref="Component"/> object to the types they share,
         ///     and <see cref="HolderMembersOf"/> relies on the members of one component sharing one
