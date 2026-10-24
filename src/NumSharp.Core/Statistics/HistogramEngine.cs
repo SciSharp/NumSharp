@@ -146,7 +146,7 @@ namespace NumSharp.Statistics
         /// <summary>
         ///     NumPy's cumulative histogram path when the data, the edges or the weights are text — the only path text
         ///     reaches (text data never gets equal-width edges, text weights are never "simple", text edges are an explicit
-        ///     array): the block loop of <see cref="HistogramCumulativeText"/>, then the optional density.
+        ///     array): the block loop of <see cref="HistogramCumulativeLoop"/>, then the optional density.
         /// </summary>
         /// <param name="raveled">The raveled data.</param>
         /// <param name="w">The raveled weights, or null.</param>
@@ -175,7 +175,7 @@ namespace NumSharp.Statistics
                 // loop COMPUTES over them (the weights' cumsum and the in-place add concatenate text), so the counts'
                 // n = np.diff(cum_n) is what refuses — unless a statement before it raises first (a None-like NA in the
                 // data's argsort, the weights' cumsum or the add). Running the statements gives either answer.
-                HistogramCumulativeText(raveled, w, binEdges, w.dtype);
+                HistogramCumulativeLoop(raveled, w, binEdges, w.dtype);
                 throw new InvalidOperationException("np.histogram: StringDType weights reached a subtraction NumPy refuses.");
             }
             if (w is not null && Backends.Strings.NDStringUfuncs.IsString(w))
@@ -188,7 +188,7 @@ namespace NumSharp.Statistics
                 throw Backends.Strings.NDStringUfuncs.AddNotCompatible(w.dtype, "accumulate");
             }
 
-            NDArray n = HistogramCumulativeText(raveled, w, binEdges, w is null ? DType.Int64 : w.dtype);
+            NDArray n = HistogramCumulativeLoop(raveled, w, binEdges, w is null ? DType.Int64 : w.dtype);
 
             if (density)
             {
@@ -202,17 +202,20 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     NumPy's cumulative histogram loop, statement for statement, for data, edges or weights of which one is text:
-        ///     per block of 65536 samples, the block sorted (with weights: its argsort, NumPy's default kind) and searched for
-        ///     every edge (<see cref="SearchSortedInclusive"/>), the running total updated in place, and the counts taken as
-        ///     <c>np.diff</c> of the total.
+        ///     NumPy's cumulative histogram loop, statement for statement: per block of 65536 samples, the block sorted (with
+        ///     weights: its argsort, NumPy's default kind) and searched for every edge (<see cref="SearchSortedInclusive"/>),
+        ///     the running total updated in place, and the counts taken as <c>np.diff</c> of the total. It runs wherever no
+        ///     shortcut gives NumPy's answer: data, edges or weights of which one is text (<see cref="HistogramTextAnswer"/>),
+        ///     and numeric edges holding a NaN (<see cref="HistogramCumulative"/>).
         /// </summary>
         /// <param name="a">The raveled data (text or numbers).</param>
         /// <param name="w">The raveled numeric weights, or null.</param>
         /// <param name="binEdges">The edges (text or numbers, at least as NumPy's monotonic check left them).</param>
         /// <param name="ntype">NumPy's <c>ntype</c>: int64 (intp) without weights, the weights' descriptor with them (a
         ///     <c>StringDType</c> one included: its running total holds texts, and the final <c>np.diff</c> refuses it).</param>
-        /// <returns>The counts (or summed weights), one per bin: <c>np.diff(cum_n)</c>.</returns>
+        /// <returns>The counts (or summed weights), one per bin: <c>np.diff(cum_n)</c>. They can be NEGATIVE: they are
+        ///     differences of search positions, which only increase along edges that are ordered the way the search compares
+        ///     them.</returns>
         /// <exception cref="UnicodeDecodeError">A search converts <c>S</c> text holding a byte that is not ASCII to a <c>U</c>
         ///     common descriptor.</exception>
         /// <remarks>
@@ -220,6 +223,11 @@ namespace NumSharp.Statistics
         ///     Every search runs in the text descriptor common to the block and the edges (np.searchsorted's rule): numeric
         ///     edges are searched as their text, and a numeric block — sorted as numbers — is searched as its text with
         ///     NumPy's exact binary search, whatever order the text has.
+        ///     </para>
+        ///     <para>
+        ///     A NaN edge passes NumPy's monotonic check (no comparison with it is True), and the search places it after every
+        ///     number (NaN sorts last): an inner NaN edge makes the next count negative (edges <c>[0, nan, 2]</c> over twelve
+        ///     samples, eight of them at least 0: <c>[8, -5]</c>), and a NaN last edge counts the NaN samples in the last bin.
         ///     </para>
         ///     <para>
         ///     The weighted form argsorts each block with the DEFAULT kind on purpose: NumPy's introsort decides the order of
@@ -230,7 +238,7 @@ namespace NumSharp.Statistics
         ///     survive.</para>
         /// </remarks>
         [NDScoped]
-        private static NDArray HistogramCumulativeText(NDArray a, NDArray w, NDArray binEdges, DType ntype)
+        private static NDArray HistogramCumulativeLoop(NDArray a, NDArray w, NDArray binEdges, DType ntype)
         {
             long len = a.size;
             // cum_n = np.zeros(bin_edges.shape, ntype)
@@ -355,9 +363,10 @@ namespace NumSharp.Statistics
         /// </summary>
         /// <param name="raveled">The raveled numeric data.</param>
         /// <param name="w">The raveled numeric weights, or null for counts.</param>
-        /// <param name="binEdges">The explicit (monotonic) edges.</param>
+        /// <param name="binEdges">The explicit edges (NumPy's monotonic check passed them, which a NaN edge does).</param>
         /// <param name="ntype">The result's dtype: int64 without weights, the weights' dtype with them.</param>
-        /// <returns>The counts (or summed weights), one per bin.</returns>
+        /// <returns>The counts (or summed weights), one per bin; edges holding a NaN can give negative counts (NumPy's
+        ///     answer, see <see cref="HistogramCumulativeLoop"/>).</returns>
         /// <exception cref="IndexError">Complex data with no edges at all: the last edge is read (<c>binEdges["-1"]</c>);
         ///     the snapshot of P2 found it, to be checked against NumPy.</exception>
         private static NDArray HistogramCumulative(NDArray raveled, NDArray w, NDArray binEdges, NPTypeCode ntype)
@@ -372,6 +381,15 @@ namespace NumSharp.Statistics
                 // matches searchsorted's (result_type of samples and edges), so boundary decisions match too.
                 int nb = (int)(binEdges.size - 1);
                 NPTypeCode cmp = promote_types(raveled.typecode, binEdges.typecode);
+
+                // Binning each sample gives NumPy's counts only while the edges are ordered for the search NumPy runs
+                // instead. A NaN edge is not: it passes the monotonic check, the search places it after every number,
+                // and NumPy's counts become differences that can be negative, or count the NaN samples under a NaN last
+                // edge. Such edges run NumPy's statements themselves. Decimal data search in decimal, where a NaN edge
+                // has no value (NumPy has no decimal dtype to follow), so they keep the binning.
+                if (cmp != NPTypeCode.Decimal && EdgesHoldNaN(binEdges))
+                    return HistogramCumulativeLoop(raveled, null, binEdges, DType.Int64);
+
                 var searchKernel = DirectILKernelGenerator.GetHistogramSearchCountKernel(cmp);
                 if (searchKernel != null)
                 {
@@ -942,6 +960,27 @@ namespace NumSharp.Statistics
             long m = edges.size;
             if (m < 2) return false;
             return np.any(edges[$"0:{m - 1}"] > edges[$"1:{m}"]);
+        }
+
+        /// <summary>
+        ///     True when a float or complex edge array holds a NaN (a complex edge with a NaN part): edges NumPy's monotonic
+        ///     check accepts, but whose counts only NumPy's cumulative statements give (<see cref="HistogramCumulativeLoop"/>).
+        /// </summary>
+        /// <param name="edges">The 1-D numeric edges.</param>
+        /// <returns>False for the integer, bool, char and decimal dtypes, which hold no NaN, without reading them.</returns>
+        private static bool EdgesHoldNaN(NDArray edges)
+        {
+            switch (edges.typecode)
+            {
+                case NPTypeCode.Half:
+                case NPTypeCode.Single:
+                case NPTypeCode.Double:
+                case NPTypeCode.Complex:
+                    using (NDArray nan = np.isnan(edges))
+                        return np.any(nan);
+                default:
+                    return false;
+            }
         }
 
         /// <summary>True when any adjacent pair is non-increasing (edges collapsed by too many bins over a tiny range).</summary>
