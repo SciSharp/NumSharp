@@ -137,6 +137,8 @@ internal sealed class ScopeInheritance
         => declaration is { Inherited: true } d ? $" (inherited from {d.Source.DeclaringType.FullName}::{d.Source.Name})" : "";
 
     /// <summary>The scope-family attributes <paramref name="m"/> itself carries — on the method, or (for a getter) on its property.</summary>
+    /// <param name="m">The method asked about.</param>
+    /// <returns>The attributes' kinds, <see cref="ScopeKind.None"/> when it carries none.</returns>
     public static ScopeKind OwnScopeKinds(MethodDefinition m)
     {
         var kinds = KindsOf(m.CustomAttributes);
@@ -145,14 +147,64 @@ internal sealed class ScopeInheritance
 
         // A property-level attribute resolves to the GETTER (CollectTargets' rule; a setter carries
         // nothing from it — NDW006 covers the setter-only case at the declaration).
-        if (m.IsGetter)
-        {
-            foreach (var p in m.DeclaringType.Properties)
-                if (ReferenceEquals(p.GetMethod, m))
-                    return KindsOf(p.CustomAttributes);
-        }
+        if (PropertyOfGetter(m) is { } p)
+            return KindsOf(p.CustomAttributes);
 
         return ScopeKind.None;
+    }
+
+    /// <summary>
+    ///     Per declaring type, its getters mapped to their properties — or <see cref="NoScopedProperty"/>
+    ///     when no property of the type carries a scope-family attribute, the case of nearly every type.
+    ///     <para>
+    ///     Two costs this avoids, both quadratic in a type's property count and both paid for every type
+    ///     the weaver loads, scoped or not, because <see cref="OwnScopeKinds"/> is asked for every method:
+    ///     the scan of the type's properties once per getter it replaced, and Mono.Cecil's own first read
+    ///     of accessor semantics (<c>MethodDefinition.IsGetter</c>, <c>PropertyDefinition.GetMethod</c>),
+    ///     which finds each accessor's property by a linear search (<c>MetadataReader.GetMember</c>) —
+    ///     1.0 s for a class of 20,000 auto-properties, 10 s for 50,000 (a generated resource or DTO
+    ///     class). Property attributes are read without semantics, so a type with no scope-attributed
+    ///     property never pays either; a type that has one pays Cecil's read once. Keyed weakly by the
+    ///     type, so a map dies with the module it describes.
+    ///     </para>
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TypeDefinition, Dictionary<MethodDefinition, PropertyDefinition>> s_getterOwners = new();
+
+    /// <summary>The shared answer for a type none of whose properties carries a scope-family attribute: no getter inherits anything from its property.</summary>
+    private static readonly Dictionary<MethodDefinition, PropertyDefinition> NoScopedProperty = new();
+
+    /// <summary>
+    ///     The property whose getter <paramref name="method"/> is — the first such property, as the scan it
+    ///     replaces answered — when the method's declaring type has any scope-attributed property;
+    ///     otherwise null (no property-level attribute can reach the method, so whether it is a getter
+    ///     does not matter).
+    /// </summary>
+    /// <param name="method">Any method; a non-getter answers null.</param>
+    /// <returns>The owning property, or null.</returns>
+    private static PropertyDefinition PropertyOfGetter(MethodDefinition method)
+    {
+        var owners = s_getterOwners.GetValue(method.DeclaringType, static type =>
+        {
+            bool anyScoped = false;
+            foreach (var p in type.Properties)
+                if (KindsOf(p.CustomAttributes) != ScopeKind.None)
+                {
+                    anyScoped = true;
+                    break;
+                }
+            if (!anyScoped)
+                return NoScopedProperty;
+
+            // MethodDefinition keeps reference equality, so the map answers exactly the ReferenceEquals
+            // scan it replaces; on malformed metadata naming one getter twice the first property wins, as
+            // the scan's first match did.
+            var map = new Dictionary<MethodDefinition, PropertyDefinition>();
+            foreach (var p in type.Properties)
+                if (p.GetMethod != null && !map.ContainsKey(p.GetMethod))
+                    map.Add(p.GetMethod, p);
+            return map;
+        });
+        return owners.TryGetValue(method, out var property) ? property : null;
     }
 
     // ----------------------------------------------------------------- the walk
