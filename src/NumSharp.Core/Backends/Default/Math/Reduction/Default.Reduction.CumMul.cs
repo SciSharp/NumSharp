@@ -9,7 +9,62 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     NumPy's <c>np.cumprod</c> (<c>np.multiply.accumulate</c>): the running products along
+        ///     NumPy's <c>np.cumprod</c> (<c>np.multiply.accumulate</c>), the whole call: the running products along
+        ///     <paramref name="axis_"/> (or along the flattened array when it is null), stored into <paramref name="out"/>
+        ///     when one is given.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The accumulated axis (negative values count from the end), or null for the flattened array. A
+        ///     0-d input is treated as 1-D (NumPy's <c>PyArray_CheckAxis</c>), so only 0 and -1 address it.</param>
+        /// <param name="dtype">The accumulator dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of the result's shape (any layout and dtype; the result is stored
+        ///     with unsafe casting), or null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array of the accumulator dtype: the input's
+        ///     shape with an axis, 1-D for the flattened form (a 0-d input gives shape (1,)).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before every shortcut (empty,
+        ///     0-d and one-element inputs included).</exception>
+        /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
+        ///     multiply loop accumulates text). A numeric loop over text with an <paramref name="out"/> accumulates in the
+        ///     loop dtype with the text cast around it.</exception>
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, or a
+        ///     read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape (NumPy's
+        ///     <c>provided out is the wrong size for the accumulation.</c>).</exception>
+        /// <remarks>
+        ///     The statements are np.cumprod's, in its order (moved from <c>APIs/np.cumprod.cs</c> by the np-layer dtype
+        ///     plan's P0 pilot): multiply.accumulate's loop resolution on (out, arr) answers FIRST for text or a string
+        ///     request, then a numeric <paramref name="dtype"/> over text parses the text, then NumPy's refusal for what is
+        ///     left, then the accumulation (<see cref="CumProdCore"/>) and the <paramref name="out"/> store
+        ///     (<see cref="WriteScanToOut"/>).
+        /// </remarks>
+        public override NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null)
+        {
+            // Text (input or out=) or a string dtype= request: multiply.accumulate's loop resolution on (out, arr) under the
+            // request answers FIRST (NDReduceLikeResolution) — an out decides whether the text is parsed at all (an integer
+            // out with text makes NumPy's legacy resolver pick the string repeat loop, which an accumulation refuses). A
+            // numeric loop over a text operand with out= accumulates in the loop dtype with the text cast around it.
+            if (Strings.NDStringUfuncs.ReduceIntoOutRoute("cumprod", arr, axis_, @out, dtype, out var resolution)
+                == Strings.NDStringUfuncs.TextOutReduce.NumericCast)
+                return Strings.NDTextNumericReduction.Accumulate("multiply", arr, axis_, @out, resolution.Descriptors[0]);
+            // Without out= the text input is parsed into the requested number type; the parse is a temporary of this call,
+            // released when it returns (the accumulation always allocates its own result, so nothing aliases it). Without
+            // out= or a request the guard below answers (ReduceError).
+            NDArray parsed = Strings.NDStringUfuncs.ParseForNumericReduce("cumprod", arr, axis_, dtype);
+            try
+            {
+                if (parsed is not null)
+                    arr = parsed;
+                Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, @out, dtype);
+                return WriteScanToOut(CumProdCore(arr, axis_, dtype), @out);
+            }
+            finally
+            {
+                parsed?.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     The accumulation of <see cref="ReduceCumMul"/> without its <c>out=</c> prologue: the running products along
         ///     <paramref name="axis_"/>, or along the flattened array when it is null.
         /// </summary>
         /// <param name="arr">The array.</param>
@@ -23,13 +78,13 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
         ///     multiply loop accumulates text).</exception>
         /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number.</exception>
-        public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null)
+        private unsafe NDArray CumProdCore(NDArray arr, int? axis_, DType dtype)
         {
             // Text, or a string dtype= request: NumPy's cumprod checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text.
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.
             if (Strings.NDStringUfuncs.ParseForNumericReduce("cumprod", arr, axis_, dtype) is { } parsed)
-                return Strings.NDStringUfuncs.ReduceParsed(parsed, p => ReduceCumMul(p, axis_, dtype));
+                return Strings.NDStringUfuncs.ReduceParsed(parsed, p => CumProdCore(p, axis_, dtype));
             Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, dtype);
             NPTypeCode? typeCode = dtype?.GetTypeCode();
             // A bool LOOP (dtype=bool) is NumPy's BOOL_multiply, logical and, over the input's truth values
@@ -42,7 +97,7 @@ namespace NumSharp.Backends
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
                 var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
-                var cum = ReduceCumMul(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
+                var cum = CumProdCore(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
                 int64Arr.Dispose();
                 return cum;
             }

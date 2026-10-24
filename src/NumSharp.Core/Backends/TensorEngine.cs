@@ -52,8 +52,47 @@ namespace NumSharp
         #region Reduction
 
         public abstract NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
-        public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null);
-        public abstract NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null);
+        /// <summary>
+        ///     NumPy's <c>np.cumsum</c> (<c>np.add.accumulate</c>), the whole call: the running sums along
+        ///     <paramref name="axis_"/> (the flattened array when null), stored into <paramref name="out"/> when given.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The accumulated axis (negative counts from the end), or null for the flattened array.</param>
+        /// <param name="dtype">The loop / result dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
+        ///     null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given, else a fresh array.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand or request NumPy's loop resolution refuses.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>, or text a numeric loop cannot parse.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <remarks>
+        ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan): the public
+        ///     <c>np.cumsum</c> only applies the matrix boundary and calls this. <paramref name="out"/> was added to the
+        ///     contract in 0.71.0 (a breaking change for a subclass, decision D2 of that plan).
+        /// </remarks>
+        public abstract NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.cumprod</c> (<c>np.multiply.accumulate</c>), the whole call: the running products along
+        ///     <paramref name="axis_"/> (the flattened array when null), stored into <paramref name="out"/> when given.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The accumulated axis (negative counts from the end), or null for the flattened array.</param>
+        /// <param name="dtype">The loop / result dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
+        ///     null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given, else a fresh array.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="TypeError">A text operand or request NumPy's loop resolution refuses.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>, or text a numeric dtype cannot parse.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <remarks>
+        ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan): the public
+        ///     <c>np.cumprod</c> only applies the matrix boundary and calls this. <paramref name="out"/> was added to the
+        ///     contract in 0.71.0 (a breaking change for a subclass, decision D2 of that plan).
+        /// </remarks>
+        public abstract NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null);
         public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
 
         // NaN-aware reductions

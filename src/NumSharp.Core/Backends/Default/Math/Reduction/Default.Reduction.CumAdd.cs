@@ -9,7 +9,63 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     NumPy's <c>np.cumsum</c> (<c>np.add.accumulate</c>): the running sums along
+        ///     NumPy's <c>np.cumsum</c> (<c>np.add.accumulate</c>), the whole call: the running sums along
+        ///     <paramref name="axis_"/> (or along the flattened array when it is null), stored into <paramref name="out"/>
+        ///     when one is given.
+        /// </summary>
+        /// <param name="arr">The array.</param>
+        /// <param name="axis_">The accumulated axis (negative values count from the end), or null for the flattened array. A
+        ///     0-d input is treated as 1-D (NumPy's <c>PyArray_CheckAxis</c>), so only 0 and -1 address it.</param>
+        /// <param name="dtype">The accumulator dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of the result's shape (any layout and dtype; the result is stored
+        ///     with unsafe casting), or null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array of the accumulator dtype: the input's
+        ///     shape with an axis, 1-D for the flattened form (a 0-d input gives shape (1,)).</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before every shortcut (empty,
+        ///     0-d and one-element inputs included).</exception>
+        /// <exception cref="TypeError">Fixed-width text (input or <paramref name="out"/>), or a string
+        ///     <paramref name="dtype"/>, where NumPy's loop resolution refuses: its verbatim text. A <c>StringDType</c> input
+        ///     computes (the concatenations), and a numeric loop over text with an <paramref name="out"/> accumulates in the
+        ///     loop dtype with the text cast around it.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only (<c>output array is read-only</c>, checked
+        ///     first), or text that a numeric loop must parse does not parse.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape (NumPy's
+        ///     <c>provided out is the wrong size for the accumulation.</c>).</exception>
+        /// <remarks>
+        ///     <para>The statements are np.cumsum's, in its order (moved from <c>APIs/np.cumsum.cs</c> by the np-layer dtype
+        ///     plan's P0 pilot): the StringDType route, then add.accumulate's loop resolution on (out, arr) for text (an
+        ///     <paramref name="out"/> or a string <paramref name="dtype"/> decides it), then the accumulation
+        ///     (<see cref="CumSumCore"/>) and the <paramref name="out"/> store (<see cref="WriteScanToOut"/>).</para>
+        ///     <para><see cref="CumSumCore"/> repeats the StringDType check without <paramref name="out"/>, as the engine did
+        ///     before the move, so a StringDType input with a numeric <paramref name="out"/> still concatenates and then
+        ///     casts the text into it.</para>
+        /// </remarks>
+        public override NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null)
+        {
+            // StringDType: add.accumulate computes (strings plan D18) once NumPy's checks passed (the axis, the dtype= and
+            // out= loop resolution); the out receives the accumulation itself, or its cast into an S / U out.
+            if (Strings.NDStringUfuncs.VStringReduces("cumsum", arr, axis_, dtype, @out))
+                return Strings.NDVStringReduction.CumSum(arr, axis_, @out);
+            // Fixed-width text (input or out=) or a string dtype= request: add.accumulate's loop resolution on (out, arr)
+            // under the request answers after the axis (NDReduceLikeResolution). A U input into a StringDType out concatenates
+            // (the StringDType add promoter pairs StringDType with StrDType; the input is cast to the default StringDType());
+            // a numeric loop over a text operand accumulates in the loop dtype with the text cast around it (the out's text
+            // must parse first, as NumPy's UPDATEIFCOPY copy reads it); everything else is NumPy's refusal, and without out=
+            // or a request the guard in CumSumCore answers (ReduceError).
+            switch (Strings.NDStringUfuncs.ReduceIntoOutRoute("cumsum", arr, axis_, @out, dtype, out var resolution))
+            {
+                case Strings.NDStringUfuncs.TextOutReduce.Concatenate:
+                    return Strings.NDVStringReduction.CumSumOfCast(arr, axis_, @out);
+                case Strings.NDStringUfuncs.TextOutReduce.NumericCast:
+                    return Strings.NDTextNumericReduction.Accumulate("add", arr, axis_, @out, resolution.Descriptors[0]);
+            }
+            // np.cumsum == np.add.accumulate. With an axis argument it preserves the source memory layout (KEEPORDER);
+            // CumSumCore allocates the output in that layout directly. axis=None ravels in C-order to a 1-D result.
+            return WriteScanToOut(CumSumCore(arr, axis_, dtype), @out);
+        }
+
+        /// <summary>
+        ///     The accumulation of <see cref="ReduceCumAdd"/> without its <c>out=</c> prologue: the running sums along
         ///     <paramref name="axis_"/>, or along the flattened array when it is null.
         /// </summary>
         /// <param name="arr">The array.</param>
@@ -22,7 +78,7 @@ namespace NumSharp.Backends
         ///     0-d and one-element inputs included).</exception>
         /// <exception cref="TypeError">Fixed-width text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim
         ///     text). A <c>StringDType</c> input computes (the concatenations).</exception>
-        public override unsafe NDArray ReduceCumAdd(NDArray arr, int? axis_, DType dtype = null)
+        private unsafe NDArray CumSumCore(NDArray arr, int? axis_, DType dtype)
         {
             // Text, or a string dtype= request: NumPy's cumsum checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text (fixed width) or computes on the text (StringDType).
@@ -41,7 +97,7 @@ namespace NumSharp.Backends
             if (arr.GetTypeCode == NPTypeCode.Boolean)
             {
                 var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
-                var cum = ReduceCumAdd(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
+                var cum = CumSumCore(int64Arr, axis_, (typeCode ?? NPTypeCode.Int64).AsType());
                 int64Arr.Dispose();
                 return cum;
             }

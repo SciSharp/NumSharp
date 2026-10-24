@@ -3,8 +3,6 @@
 # with a reason in a fourth column. After a drop, rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>text<TAB>numeric[<TAB># reason]
 APIs/np.count_nonzero.cs	1	0
-APIs/np.cumprod.cs	5	0
-APIs/np.cumsum.cs	7	0
 APIs/np.evaluate.cs	2	0
 APIs/np.finfo.cs	1	11
 APIs/np.flatiter.cs	1	1
