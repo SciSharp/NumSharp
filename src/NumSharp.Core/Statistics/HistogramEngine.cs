@@ -102,6 +102,8 @@ namespace NumSharp.Statistics
         /// <exception cref="TypeError">See <see cref="GetBinEdges"/> and <see cref="HistogramTextAnswer"/>.</exception>
         /// <exception cref="UnicodeDecodeError">A text search converts <c>S</c> text holding a byte that is not ASCII to a
         ///     <c>U</c> common descriptor (<see cref="HistogramTextAnswer"/>).</exception>
+        /// <exception cref="ArgumentException">Bool weights over data on explicit edges: the in-place update of the bool total
+        ///     (<see cref="HistogramCumulative"/>, <see cref="HistogramCumulativeLoop"/>).</exception>
         internal static HistogramResult Histogram(NDArray a, object bins, (double, double)? range, bool density, NDArray weights)
         {
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
@@ -366,9 +368,13 @@ namespace NumSharp.Statistics
         /// <param name="binEdges">The explicit edges (NumPy's monotonic check passed them, which a NaN edge does).</param>
         /// <param name="ntype">The result's dtype: int64 without weights, the weights' dtype with them.</param>
         /// <returns>The counts (or summed weights), one per bin; edges holding a NaN can give negative counts (NumPy's
-        ///     answer, see <see cref="HistogramCumulativeLoop"/>).</returns>
+        ///     answer, see <see cref="HistogramCumulativeLoop"/>). Summed weights keep the weights' dtype, wrapping in a
+        ///     narrow integer dtype.</returns>
         /// <exception cref="IndexError">Complex data with no edges at all: the last edge is read (<c>binEdges["-1"]</c>);
         ///     the snapshot of P2 found it, to be checked against NumPy.</exception>
+        /// <exception cref="ArgumentException">Bool weights with data: NumPy's UFuncTypeError <c>Cannot cast ufunc 'add'
+        ///     output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (the in-place update of the
+        ///     bool total by the weights' int64 cumulative sum).</exception>
         private static NDArray HistogramCumulative(NDArray raveled, NDArray w, NDArray binEdges, NPTypeCode ntype)
         {
             long len = raveled.size;
@@ -424,7 +430,11 @@ namespace NumSharp.Statistics
                     // cw = [0, cumsum(sorted weights)]; cum_n += cw[bin_index].
                     NDArray cw = np.concatenate((zero, np.cumsum(sw)));
                     NDArray binIndex = SearchSortedInclusive(sa, binEdges);
-                    cumN = cumN + np.take(cw, binIndex);
+                    // In place, as NumPy's `+=`: the total keeps the weights' dtype (ntype), so narrow integer weights
+                    // wrap in their own dtype, and bool weights refuse the int64 cumulative sum under same_kind
+                    // ("Cannot cast ufunc 'add' output from dtype('int64') to dtype('bool') ..."), even when the edges
+                    // leave nothing to add.
+                    np.add(cumN, np.take(cw, binIndex), @out: cumN);
                 }
             }
 

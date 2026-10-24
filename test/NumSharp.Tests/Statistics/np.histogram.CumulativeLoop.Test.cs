@@ -107,4 +107,97 @@ public class np_histogram_cumulative_loop_tests
     public void NaNEdge_StridedEdges()
         => np.histogram(np.array(Twelve), np.array(new[] { 0.0, NaN, 2.0, 9.0, NaN })["::2"]).hist
             .ToArray<long>().Should().Equal(2L, 6L);
+
+    // ── weights on explicit edges: NumPy's in-place `cum_n += cw[bin_index]` ─────────────────────────────────────────
+
+    /// <summary>The explicit edges the weighted probes used: three bins, the weights summing to [2, 2, 4].</summary>
+    private static NDArray Edges() => np.array(new[] { -2.0, 0.0, 1.5, 5.0 });
+
+    /// <summary>
+    ///     The summed weights keep the weights' dtype: NumPy's total is <c>np.zeros(..., weights.dtype)</c> and every block
+    ///     is added into it in place, whatever the cumulative sum's own dtype (int64 for every integer and bool).
+    /// </summary>
+    [TestMethod]
+    public void Weights_TotalKeepsTheWeightsDtype()
+    {
+        foreach (var (dtype, expected) in new[]
+                 {
+                     (NPTypeCode.SByte, NPTypeCode.SByte), (NPTypeCode.Byte, NPTypeCode.Byte),
+                     (NPTypeCode.Int16, NPTypeCode.Int16), (NPTypeCode.UInt64, NPTypeCode.UInt64),
+                     (NPTypeCode.Half, NPTypeCode.Half), (NPTypeCode.Single, NPTypeCode.Single),
+                 })
+        {
+            var h = np.histogram(np.array(Twelve), Edges(), weights: np.ones(new Shape(12), dtype)).hist;
+            h.typecode.Should().Be(expected, dtype.ToString());
+            h.astype(NPTypeCode.Double).ToArray<double>().Should().Equal(new[] { 2.0, 2.0, 4.0 }, dtype.ToString());
+        }
+    }
+
+    /// <summary>An int8 total wraps in int8: 300 weights of 1 in one bin are <c>[44, 0]</c> (300 - 256).</summary>
+    [TestMethod]
+    public void Weights_Int8TotalWraps()
+    {
+        var h = np.histogram(np.zeros(new Shape(300)), np.array(new[] { -1.0, 0.5, 2.0 }),
+            weights: np.ones(new Shape(300), NPTypeCode.SByte)).hist;
+        h.typecode.Should().Be(NPTypeCode.SByte);
+        h.ToArray<sbyte>().Should().Equal((sbyte)44, (sbyte)0);
+    }
+
+    /// <summary>
+    ///     Bool weights: the bool total cannot take the int64 cumulative sum under same_kind, so NumPy raises its
+    ///     UFuncTypeError (NumSharp's house type for it is <see cref="ArgumentException"/>, the text is NumPy's) — even over
+    ///     empty edges, where nothing is added.
+    /// </summary>
+    [TestMethod]
+    public void Weights_Bool_RefusesTheInt64CumulativeSum()
+    {
+        const string text = "Cannot cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'";
+        var w = np.ones(new Shape(12), NPTypeCode.Boolean);
+        ((Action)(() => np.histogram(np.array(Twelve), Edges(), weights: w))).Should().Throw<ArgumentException>().WithMessage(text);
+        ((Action)(() => np.histogram(np.array(Twelve), new[] { -2.0, 0.0, 1.5, 5.0 }, weights: w)))
+            .Should().Throw<ArgumentException>().WithMessage(text);
+        ((Action)(() => np.histogram(np.array(Twelve), np.array(new double[0]), weights: w)))
+            .Should().Throw<ArgumentException>().WithMessage(text);
+    }
+
+    /// <summary>
+    ///     Without data the loop never runs: the totals stay zeros of the weights' dtype and <c>np.diff</c> of a bool total
+    ///     is its <c>not_equal</c> (<c>[False, False, False]</c>); an int8 one is <c>[0, 0, 0]</c> int8.
+    /// </summary>
+    [TestMethod]
+    public void Weights_NoData_ZerosOfTheWeightsDtype()
+    {
+        var hb = np.histogram(np.array(new double[0]), Edges(), weights: np.ones(new Shape(0), NPTypeCode.Boolean)).hist;
+        hb.typecode.Should().Be(NPTypeCode.Boolean);
+        hb.ToArray<bool>().Should().Equal(false, false, false);
+
+        var hi = np.histogram(np.array(new double[0]), Edges(), weights: np.ones(new Shape(0), NPTypeCode.SByte)).hist;
+        hi.typecode.Should().Be(NPTypeCode.SByte);
+        hi.ToArray<sbyte>().Should().Equal((sbyte)0, (sbyte)0, (sbyte)0);
+    }
+
+    /// <summary>
+    ///     Equal-width bins take NumPy's bincount path, where the weights are cast to the total's dtype per block before the
+    ///     add, so bool weights work there (a logical-or total: <c>[True, True, True]</c>) and int8 stays int8.
+    /// </summary>
+    [TestMethod]
+    public void Weights_EqualWidthBins_CastPerBlock()
+    {
+        var hb = np.histogram(np.array(Twelve), 3, weights: np.ones(new Shape(12), NPTypeCode.Boolean)).hist;
+        hb.typecode.Should().Be(NPTypeCode.Boolean);
+        hb.ToArray<bool>().Should().Equal(true, true, true);
+
+        var hi = np.histogram(np.array(Twelve), 3, weights: np.ones(new Shape(12), NPTypeCode.SByte)).hist;
+        hi.typecode.Should().Be(NPTypeCode.SByte);
+        hi.ToArray<sbyte>().Should().Equal((sbyte)4, (sbyte)4, (sbyte)4);
+    }
+
+    /// <summary>The density divides the int8 total by float64 widths: <c>[0.125, 1/6, 1/7]</c>.</summary>
+    [TestMethod]
+    public void Weights_Int8_Density()
+    {
+        var h = np.histogram(np.array(Twelve), Edges(), density: true, weights: np.ones(new Shape(12), NPTypeCode.SByte)).hist;
+        h.typecode.Should().Be(NPTypeCode.Double);
+        h.ToArray<double>().Should().Equal(0.125, 2.0 / 12.0, 4.0 / 28.0);
+    }
 }

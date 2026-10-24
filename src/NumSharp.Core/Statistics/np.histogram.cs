@@ -179,6 +179,9 @@ namespace NumSharp
         /// <param name="weights">Optional per-sample weights (same shape as <paramref name="a"/>).</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
         /// <exception cref="ValueError">The edges are not 1-D or not monotonically increasing.</exception>
+        /// <exception cref="ArgumentException">Bool <paramref name="weights"/> over data: NumPy's UFuncTypeError <c>Cannot
+        ///     cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (NumPy adds the
+        ///     weights' int64 cumulative sum into a bool total in place).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, NDArray bins, (double, double)? range = null, bool density = false, NDArray weights = null)
@@ -196,6 +199,10 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density instead of raw counts.</param>
         /// <param name="weights">Optional per-sample weights.</param>
         /// <returns>A <see cref="HistogramResult"/> carrying the histogram values and the bin edges.</returns>
+        /// <exception cref="ValueError">The edges are not monotonically increasing.</exception>
+        /// <exception cref="ArgumentException">Bool <paramref name="weights"/> over data: NumPy's UFuncTypeError <c>Cannot
+        ///     cast ufunc 'add' output from dtype('int64') to dtype('bool') with casting rule 'same_kind'</c> (NumPy adds the
+        ///     weights' int64 cumulative sum into a bool total in place).</exception>
         /// <remarks>Scoped (<c>[NDScoped]</c>; <see cref="HistogramResult"/> is an <see cref="INDArrayCarrier"/>): the raveled input and weights, the per-sample bin indices, the bincount/cumulative scratch and the density quotients are reclaimed; only the histogram and its edges leave.</remarks>
         [NDScoped]
         public static HistogramResult histogram(NDArray a, double[] bins, (double, double)? range = null, bool density = false, NDArray weights = null)
