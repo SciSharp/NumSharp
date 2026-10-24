@@ -40,7 +40,7 @@ namespace NumSharp.Statistics
     ///               the first cache miss.</item>
     ///       </list>
     /// </summary>
-    internal static class QuantileEngine
+    internal static partial class QuantileEngine
     {
         internal static bool IsDiscrete(QuantileMethod m) =>
             m == QuantileMethod.Lower ||
