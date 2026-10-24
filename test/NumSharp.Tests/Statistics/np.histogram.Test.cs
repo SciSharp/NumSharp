@@ -386,6 +386,84 @@ public class np_histogram_Tests
             .WithMessage("array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.");
     }
 
+    /// <summary>
+    ///     stone in NumPy's dtypes: its candidate widths <c>ptp_x / nbins</c> and the width it returns keep the peak-to-peak
+    ///     value's float16 / float32 dtype, so <c>int(np.ceil(delta / width))</c> divides in that dtype, and jhat comes from
+    ///     NumPy's <c>p_k = hist / n</c> and its dot product, the first minimum winning (Python's min). NumSharp computed it
+    ///     in double from the sum of squared counts over n² and got other counts: 101 bins for the float16 samples below
+    ///     (NumPy 2.4.2), 14 for the float32 ones, 17 for the float64 ones (it picked 3), and NumPy's "Too many bins" for
+    ///     64 bins between two float16 samples 1/16 apart (it asked for 66).
+    /// </summary>
+    [TestMethod]
+    public void Estimator_Stone_InNumPysDtypes()
+    {
+        var (h16, e16) = np.histogram(np.array(new[] { (Half)231.0, (Half)471.5, (Half)230.0 }), "stone");
+        h16.size.Should().Be(101);
+        h16.GetAtIndex<long>(0).Should().Be(2);
+        h16.GetAtIndex<long>(100).Should().Be(1);
+        e16.typecode.Should().Be(NPTypeCode.Half);
+        e16.GetAtIndex<Half>(1).Should().Be((Half)232.375);
+        e16.GetAtIndex<Half>(3).Should().Be((Half)237.125);
+        e16.GetAtIndex<Half>(101).Should().Be((Half)471.5);
+
+        var (h32, e32) = np.histogram(np.array(new[] { -2247.27197265625f, -2084.80615234375f, 154.9859161376953f }), "stone");
+        Eq(h32, new double[] { 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 });
+        e32.typecode.Should().Be(NPTypeCode.Single);
+        e32.GetAtIndex<float>(1).Should().Be(-2075.68212890625f);
+        e32.GetAtIndex<float>(3).Should().Be(-1732.50244140625f);
+
+        var f64 = np.array(new[] { -293.8699097337545, -881.0695740733971, 1348.384654520067, 688.6263416669709,
+                                   -232.47424791786034, -330.9475469634296 });
+        var (h64, e64) = np.histogram(f64, "stone");
+        Eq(h64, new double[] { 1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 });
+        e64.GetAtIndex<double>(1).Should().Be(-749.9252076855463);
+        e64.GetAtIndex<double>(3).Should().Be(-487.63647490984465);
+
+        ((Action)(() => np.histogram(np.array(new[] { (Half)(-1.515625), (Half)(-1.5791015625) }), "stone")))
+            .Should().Throw<ValueError>().WithMessage("Too many bins for data range. Cannot create 64 finite-sized bins.");
+    }
+
+    /// <summary>
+    ///     doane over float16 data with a range: the edges' linspace computes in float64 from the range's Python floats and
+    ///     rounds to float16, and the width's dtypes are NumPy's: 5 bins for the three samples below (NumPy 2.4.2), where
+    ///     NumSharp's double arithmetic gave 4.
+    /// </summary>
+    [TestMethod]
+    public void Estimator_Doane_Float16Range_InNumPysDtypes()
+    {
+        var a = np.array(new[] { (Half)0.0027332305908203125, (Half)0.0026264190673828125, (Half)0.0033740997314453125 });
+        var (h, e) = np.histogram(a, "doane", range: (0.0026000219202041673, 0.0034103449204022267));
+        Eq(h, new double[] { 2, 0, 0, 0, 1 });
+        e.typecode.Should().Be(NPTypeCode.Half);
+        e.GetAtIndex<Half>(0).Should().Be((Half)0.0025997161865234375);
+        e.GetAtIndex<Half>(1).Should().Be((Half)0.0027618408203125);
+        e.GetAtIndex<Half>(5).Should().Be((Half)0.00341033935546875);
+    }
+
+    /// <summary>
+    ///     Data with no spread: <c>_get_outer_edges</c> widens the edges by 0.5 in the data's own dtype, and scott's np.std
+    ///     is the rounding error of the mean, a nonzero width. NumPy 2.4.2: three float16 3.3 get 212 bins (all three in
+    ///     bin 106, the float16 width and quotient), six float16 0.7 ask for 1066 bins the float16 edges cannot hold, three
+    ///     float64 0.1 for 29770864728363688 edges (NumPy's MemoryError). NumSharp's double width gave other counts.
+    /// </summary>
+    [TestMethod]
+    public void Estimator_NoSpread_WidenedEdgesInTheDataDtype()
+    {
+        var (h, e) = np.histogram(np.full(Shape.Vector(3), (Half)3.3), "scott");
+        h.size.Should().Be(212);
+        h.GetAtIndex<long>(106).Should().Be(3);
+        Flat(np.sum(h))[0].Should().Be(3);
+        e.typecode.Should().Be(NPTypeCode.Half);
+        e.GetAtIndex<Half>(0).Should().Be((Half)2.80078125);
+        e.GetAtIndex<Half>(1).Should().Be((Half)2.8046875);
+        e.GetAtIndex<Half>(212).Should().Be((Half)3.80078125);
+
+        ((Action)(() => np.histogram(np.full(Shape.Vector(6), (Half)0.7), "scott")))
+            .Should().Throw<ValueError>().WithMessage("Too many bins for data range. Cannot create 1066 finite-sized bins.");
+        ((Action)(() => np.histogram(np.full(Shape.Vector(3), 0.1), "scott"))).Should().Throw<OutOfMemoryException>()
+            .WithMessage("Unable to allocate 212. PiB for an array with shape (29770864728363688,) and data type float64");
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {

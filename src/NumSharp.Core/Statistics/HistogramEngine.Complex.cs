@@ -176,8 +176,8 @@ namespace NumSharp.Statistics
                     throw new InvalidOperationException("np.histogram: np.percentile accepted complex data.");
                 case "scott":
                 {
-                    // np.std of complex data is real, so the width is real.
-                    double width = EstimateBinWidth("scott", x, 0, 0, range);
+                    // np.std of complex data is real (float64), so the width is real.
+                    double width = ScottWidth(x).Value;
                     if (width == 0)
                         return 1;
                     if (edges.Strong)

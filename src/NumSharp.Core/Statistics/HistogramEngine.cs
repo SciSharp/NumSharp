@@ -584,20 +584,35 @@ namespace NumSharp.Statistics
                         x = a[keep];
                 }
 
+                // The edges' linspace computes in float64 for a range's Python floats, else in the data's width.
+                NPTypeCode linspaceDtype = range.HasValue ? NPTypeCode.Double : FloatPromoteBinType(a.typecode);
                 if (x.size == 0)
                     nEqualBins = 1;
-                else
+                else if (a.typecode == NPTypeCode.Decimal)
                 {
+                    // NumPy has no decimal dtype: decimal data keep NumSharp's own estimators, in double.
                     double width = EstimateBinWidth(binName, x, first, last, range);
                     if (width > 0)
+                        nEqualBins = EstimatorBinCount((last - first) / width, linspaceDtype);
+                    else
+                        nEqualBins = 1; // e.g. FD when the IQR is zero
+                }
+                else
+                {
+                    // width = _hist_bin_selectors[bin_name](a, (first_edge, last_edge)), in NumPy's dtypes.
+                    NpScalar width = EstimateWidthNumPy(binName, x, range);
+                    if (width.IsTruthy)
                     {
                         // Integer data never gets a sub-unit bin width: NumPy's `np.issubdtype(a.dtype, np.integer)`, which
-                        // holds for NumSharp's char too (an unsignedinteger in its scalar hierarchy, the uint16 of the oracle).
-                        if (np.issubdtype(a.dtype, np.integer) && width < 1) width = 1;
-                        double delta = last - first;
-                        // The edges' linspace computes in float64 for a range's Python floats, else in the data's width.
-                        NPTypeCode linspaceDtype = range.HasValue ? NPTypeCode.Double : FloatPromoteBinType(a.typecode);
-                        nEqualBins = EstimatorBinCount(delta / width, linspaceDtype);
+                        // holds for NumSharp's char too (an unsignedinteger in its scalar hierarchy, the uint16 of the oracle);
+                        // the width is then the Python int 1.
+                        if (np.issubdtype(a.dtype, np.integer) && width.Value < 1)
+                            width = new NpScalar(1, NPTypeCode.UInt64);
+                        // delta = _unsigned_subtract(last_edge, first_edge): a range's Python floats subtract in float64, the
+                        // data's own edges in the data's dtype (an integer data's exact difference; with no spread, the
+                        // ±0.5 widening's difference).
+                        NpScalar delta = range.HasValue ? NpScalar.Float64(last - first) : DataEdgesDelta(a);
+                        nEqualBins = EstimatorBinCount(DivideScalars(delta, width), linspaceDtype);
                     }
                     else
                     {
