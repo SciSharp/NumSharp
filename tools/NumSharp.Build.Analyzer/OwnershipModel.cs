@@ -48,7 +48,10 @@ namespace NumSharp.Build.Analyzer
     /// </summary>
     internal sealed class OwnershipModel
     {
+        /// <summary>The NumSharp symbols of the compilation (NDArray, the carrier and disposable interfaces, the attributes).</summary>
         private readonly KnownTypes _k;
+
+        /// <summary>The compilation's own assembly, which <see cref="CanNameNDArray"/> accepts without scanning its references.</summary>
         private readonly IAssemblySymbol _sourceAssembly;
 
         /// <summary>
@@ -60,6 +63,11 @@ namespace NumSharp.Build.Analyzer
         private readonly ConcurrentDictionary<ITypeSymbol, Component> _components =
             new ConcurrentDictionary<ITypeSymbol, Component>(SymbolEqualityComparer.Default);
 
+        /// <summary>
+        ///     Per assembly, whether its types can name NDArray at all (see <see cref="CanNameNDArray"/>):
+        ///     a metadata type from an assembly that cannot is never expanded, which keeps the walk out of the
+        ///     framework's and other libraries' type graphs.
+        /// </summary>
         private readonly ConcurrentDictionary<IAssemblySymbol, bool> _canNameNDArray =
             new ConcurrentDictionary<IAssemblySymbol, bool>(SymbolEqualityComparer.Default);
 
@@ -645,15 +653,30 @@ namespace NumSharp.Build.Analyzer
             /// <summary>Whether every type of the component holds NDArrays.</summary>
             public readonly bool Holds;
 
+            /// <summary>The component's types, indexed by <see cref="_position"/>; null for a single-type or a non-holding component, which no dominator question reaches.</summary>
             private readonly ITypeSymbol[] _types;
+
+            /// <summary>Each type's index into <see cref="_types"/>, <see cref="_inside"/> and <see cref="_anchors"/>.</summary>
             private readonly Dictionary<ITypeSymbol, int> _position;
+
+            /// <summary>Per type, the indexes of the component's types it stores (its successors inside the component).</summary>
             private readonly int[][] _inside;
+
+            /// <summary>Per type, whether it holds by itself or stores a holding type outside the component — the roots of the reversed walk.</summary>
             private readonly bool[] _anchors;
+
+            /// <summary>Taken only to build the dominator tree, once; every later question reads the published numbers without it.</summary>
             private readonly object _treeLock = new object();
 
-            // The dominator tree's depth-first entry and exit numbers per type: a dominates b exactly when
-            // a's interval contains b's. Null until the first Dominates question.
+            /// <summary>
+            ///     The dominator tree's depth-first ENTRY number per type: a dominates b exactly when a's
+            ///     interval [<see cref="_enter"/>, <see cref="_exit"/>] contains b's. Null until the first
+            ///     <see cref="Dominates"/> question; written LAST when the tree is built (a volatile write),
+            ///     so a reader that sees it non-null also sees <see cref="_exit"/>.
+            /// </summary>
             private int[] _enter;
+
+            /// <summary>The dominator tree's depth-first EXIT number per type (see <see cref="_enter"/>).</summary>
             private int[] _exit;
 
             /// <summary>Creates a component.</summary>
@@ -929,9 +952,19 @@ namespace NumSharp.Build.Analyzer
 
         // ------------------------------------------------------------------ helpers
 
+        /// <summary>Whether <paramref name="t"/> is IDisposable or IAsyncDisposable itself.</summary>
+        /// <param name="t">The type asked about.</param>
+        /// <returns>True for exactly those two interfaces.</returns>
         private bool IsDisposableInterface(ITypeSymbol t)
             => Eq(t, _k.IDisposable) || Eq(t, _k.IAsyncDisposable);
 
+        /// <summary>
+        ///     Whether <paramref name="t"/> declares a public, parameterless, instance <c>Dispose()</c> — the
+        ///     pattern <c>using</c> accepts on a <c>ref struct</c>, which could not implement IDisposable
+        ///     before C# 13 (<see cref="IsDisposable"/> asks it only for ref-like types).
+        /// </summary>
+        /// <param name="t">The type asked about (its own members only, not its bases').</param>
+        /// <returns>True when such a method is declared.</returns>
         private static bool HasPatternDispose(ITypeSymbol t)
         {
             foreach (var m in t.GetMembers("Dispose"))
@@ -941,6 +974,13 @@ namespace NumSharp.Build.Analyzer
             return false;
         }
 
+        /// <summary>
+        ///     Whether types of <paramref name="asm"/> can name NDArray: it is NumSharp itself, the
+        ///     compilation's own assembly, or it references NumSharp. A metadata type of any other assembly
+        ///     cannot store an NDArray in a field, so the walk does not expand it. Memoized per assembly.
+        /// </summary>
+        /// <param name="asm">The assembly asked about; null answers false.</param>
+        /// <returns>True when its types can name NDArray.</returns>
         private bool CanNameNDArray(IAssemblySymbol asm)
         {
             if (asm == null)
@@ -964,6 +1004,9 @@ namespace NumSharp.Build.Analyzer
             return result;
         }
 
+        /// <summary>The generic family of <paramref name="named"/> as <see cref="NonHoldingGenericFamilies"/> keys it: namespace plus metadata name (<c>System.Collections.Generic.IComparer`1</c>).</summary>
+        /// <param name="named">Any named type; a constructed generic answers for its definition.</param>
+        /// <returns>The key.</returns>
         private static string FamilyKey(INamedTypeSymbol named)
         {
             var def = named.OriginalDefinition;
@@ -972,6 +1015,10 @@ namespace NumSharp.Build.Analyzer
             return prefix + def.MetadataName;
         }
 
+        /// <summary>Symbol equality that treats an unresolved <paramref name="b"/> (a NumSharp symbol the compilation lacks) as never equal.</summary>
+        /// <param name="a">The symbol asked about.</param>
+        /// <param name="b">The known symbol; null answers false even when <paramref name="a"/> is null.</param>
+        /// <returns>True when both are the same symbol.</returns>
         private static bool Eq(ISymbol a, ISymbol b)
             => b != null && SymbolEqualityComparer.Default.Equals(a, b);
     }

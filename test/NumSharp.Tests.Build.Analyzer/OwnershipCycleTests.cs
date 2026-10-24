@@ -32,24 +32,53 @@ namespace NumSharp.Tests.Build.Analyzer
     [TestClass]
     public class OwnershipCycleTests
     {
+        /// <summary>The usings every snippet of this class is compiled with.</summary>
         private const string H = "using System;\nusing System.Collections.Generic;\nusing NumSharp;\n";
 
+        /// <summary>
+        ///     NDW016's text up to its member list. The list is the point of these tests: the exact-match gate
+        ///     of the fixture tests compares line and id only, so a member wrongly added to or dropped from
+        ///     the list is visible nowhere else.
+        /// </summary>
         private static readonly Regex Ndw016Members = new Regex(@"^'(?<type>[^']+)' stores NDArrays in (?<list>.*?) but implements neither", RegexOptions.Compiled);
+
+        /// <summary>NDW017's text: the disposable type and the one holder member it never disposes.</summary>
         private static readonly Regex Ndw017Member = new Regex(@"^'(?<type>[^']+)' implements .*? but never disposes '(?<member>[^']+)'", RegexOptions.Compiled);
+
+        /// <summary>A quoted name inside a member list.</summary>
         private static readonly Regex Quoted = new Regex(@"'([^']+)'", RegexOptions.Compiled);
 
         /// <summary>The NDW016 member list and the NDW017 members of every type, keyed by type name.</summary>
         private sealed class Findings
         {
+            /// <summary>Each NDW016's member names, comma-joined in the message's order, by declaring type.</summary>
             public readonly Dictionary<string, string> Ndw016 = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            /// <summary>The members each type's NDW017s name (one diagnostic per member), by declaring type.</summary>
             public readonly Dictionary<string, SortedSet<string>> Ndw017 = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+
+            /// <summary>How many NDW diagnostics of any id the snippet drew; pins that nothing else fired.</summary>
             public int Total;
+
+            /// <summary>Every diagnostic as "id: message", one per line — the failure message's evidence.</summary>
             public string All;
 
+            /// <summary>The members <paramref name="type"/>'s NDW016 names, comma-joined.</summary>
+            /// <param name="type">The declaring type's name.</param>
+            /// <returns>The member list, or null when the type drew no NDW016 (distinct from an empty list).</returns>
             public string Members16(string type) => Ndw016.TryGetValue(type, out var list) ? list : null;
+
+            /// <summary>The members <paramref name="type"/>'s NDW017s name, sorted and comma-joined.</summary>
+            /// <param name="type">The declaring type's name.</param>
+            /// <returns>The member list; empty when the type drew no NDW017.</returns>
             public string Members17(string type) => Ndw017.TryGetValue(type, out var set) ? string.Join(",", set) : "";
         }
 
+        /// <summary>Compiles a snippet with every analyzer and parses its NDW016/NDW017 member lists.</summary>
+        /// <param name="body">The C# declarations, compiled after <see cref="H"/>.</param>
+        /// <param name="name">The file name (without extension) the snippet is compiled as.</param>
+        /// <returns>The parsed findings.</returns>
+        /// <exception cref="AssertFailedException">The snippet does not compile, or an NDW016/NDW017 text no longer matches the parser.</exception>
         private static async Task<Findings> Analyze(string body, string name)
         {
             var r = await AnalyzerTestHarness.RunAsync(H + body, name + ".cs");
@@ -79,6 +108,10 @@ namespace NumSharp.Tests.Build.Analyzer
 
         // ---------------------------------------------------------------- back-references are not holders
 
+        /// <summary>
+        ///     A node's link to the next node of its own type reaches NDArrays only through the node itself,
+        ///     so NDW016 names <c>_v</c> alone. PR #632's commit listed <c>'_next' and '_v'</c>.
+        /// </summary>
         [TestMethod]
         public async Task SelfReference_LinkedListLink_IsNotAHolder()
         {
@@ -86,6 +119,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual("_v", f.Members16("Node"), "the link to the next node of the same type reaches arrays only through Node itself:\n" + f.All);
         }
 
+        /// <summary>
+        ///     A disposable node that disposes its own array draws nothing: its link to the next node is not
+        ///     an array it owns, and an NDW017 on it (PR #632's commit drew one) would demand that every node
+        ///     dispose the rest of the list.
+        /// </summary>
         [TestMethod]
         public async Task SelfReference_DisposableThatDisposesItsArray_IsClean()
         {
@@ -93,6 +131,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, f.Total, "disposing the node's own array is the whole job; the link is not its array:\n" + f.All);
         }
 
+        /// <summary>
+        ///     A tree node's parent pointer, child list and sibling array, all of its own type, draw nothing
+        ///     once the node disposes its own data. An NDW017 on <c>_parent</c> would tell a child to dispose
+        ///     its parent.
+        /// </summary>
         [TestMethod]
         public async Task ParentBackPointer_AndChildrenOfTheSameType_AreNotHolders()
         {
@@ -102,6 +145,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, f.Total, "a parent pointer, a child list and a sibling array of the node's own type all reach arrays only through TreeNode:\n" + f.All);
         }
 
+        /// <summary>
+        ///     NumSharp's own NDScope shape, a list of tracked arrays plus a link to the parent scope, is
+        ///     clean. On PR #632's commit this shape gave NumSharp.Core's build an NDW017 on
+        ///     <c>NDScope._parent</c>.
+        /// </summary>
         [TestMethod]
         public async Task NDScopeShape_ParentScope_IsNotAHolder()
         {
@@ -113,6 +161,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, f.Total, f.All);
         }
 
+        /// <summary>
+        ///     NumSharp's np.nditer iterator shape, an operand plus a nested child iterator of the same type,
+        ///     is clean. On PR #632's commit it gave NumSharp.Core an NDW017 on
+        ///     <c>NDIterator._nestedChild</c>.
+        /// </summary>
         [TestMethod]
         public async Task NDIteratorShape_NestedChild_IsNotAHolder()
         {
@@ -121,6 +174,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, f.Total, f.All);
         }
 
+        /// <summary>
+        ///     Every container of the declaring type (a source generic box, a list, one- and two-dimensional
+        ///     arrays, a tuple, a dictionary value, a Lazy) leads back to the type, so only the type's own
+        ///     array is a holder; the unconstrained <c>Box&lt;T&gt;</c> itself draws nothing.
+        /// </summary>
         [TestMethod]
         public async Task ContainersOfTheOwnType_AreNotHolders()
         {
@@ -132,6 +190,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(1, f.Total, "Box<T> stores an unconstrained T, so Node's warning is the only one:\n" + f.All);
         }
 
+        /// <summary>
+        ///     In a ring A → B → C → A where only C stores an array, A's and B's members lead forward to it
+        ///     and are holders, while C's <c>_a</c> reaches arrays only by coming back to C, so C, which
+        ///     disposes its array, draws no NDW017.
+        /// </summary>
         [TestMethod]
         public async Task Ring_TheMemberClosingTheRing_IsNotAHolder()
         {
@@ -143,6 +206,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(2, f.Total, f.All);
         }
 
+        /// <summary>
+        ///     The HolderTypeScenarios fixture's cycle pair, member by member. The fixture states that B's
+        ///     back-reference adds nothing, but its exact-match gate compares lines and ids, never the member
+        ///     list in a message, so PR #632's regression on this very pair passed there.
+        /// </summary>
         [TestMethod]
         public async Task CycleWithArrayFixture_BackReference_AddsNothing()
         {
@@ -154,6 +222,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual("_x", f.Members16("CycleWithArrayB"), f.All);
         }
 
+        /// <summary>
+        ///     A base type with a member of its own derived type. A base type is an edge, so Derived holds
+        ///     only through Base and <c>Base._d</c> comes back to Base: NDW016 names <c>_a</c> alone, and
+        ///     Derived, which declares nothing, draws nothing.
+        /// </summary>
         [TestMethod]
         public async Task BaseTypeCycle_DerivedMemberOfTheBase_IsNotAHolder()
         {
@@ -164,6 +237,12 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.IsNull(f.Members16("Derived"), "Derived declares no member of its own:\n" + f.All);
         }
 
+        /// <summary>
+        ///     A source subclass of NDArray holds by itself but keeps its member edges: its member of a
+        ///     wrapper that only points back at it is not a holder (the NDW017s name <c>_extra</c> alone),
+        ///     while the wrapper's member of the subclass is one, a MyArray being an NDArray. Without the
+        ///     member edges the wrapper would look like an outside holder and <c>_w</c> would be reported.
+        /// </summary>
         [TestMethod]
         public async Task SourceNDArraySubclass_WrapperPointingBack_IsNotAHolder()
         {
@@ -179,6 +258,11 @@ namespace NumSharp.Tests.Build.Analyzer
 
         // ---------------------------------------------------------------- members that hold on their own
 
+        /// <summary>
+        ///     Two types that point at each other and each store an array of their own: each member holds
+        ///     through the OTHER type's own array, so both are holders. Being on a cycle never hides a
+        ///     holder by itself.
+        /// </summary>
         [TestMethod]
         public async Task MutualReferences_EachHoldingItsOwnArray_AreHolders()
         {
@@ -187,6 +271,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual("_a,_y", f.Members16("B"), "A holds _x on its own, not through B:\n" + f.All);
         }
 
+        /// <summary>
+        ///     A child's back-reference to an owner that stores arrays itself IS a holder: the owner's arrays
+        ///     do not come back through the child. The author settles this one with [NDBorrowed]; the rule
+        ///     must not hide it just because the reference closes a cycle.
+        /// </summary>
         [TestMethod]
         public async Task ParentChild_ChildsOwnerHoldingArraysDirectly_IsAHolder()
         {
@@ -199,6 +288,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual("", f.Members17("Parent"), f.All);
         }
 
+        /// <summary>
+        ///     T ↔ A, where A also stores a holding G: T's <c>_a</c> reaches G without T (a holder), A's
+        ///     <c>_t</c> reaches arrays only through A (not a holder). The type a route must avoid is each
+        ///     member's own declaring type, not one fixed type of the cycle.
+        /// </summary>
         [TestMethod]
         public async Task GateOtherThanTheOwner_DecidesThroughTheRestOfTheCycle()
         {
@@ -211,6 +305,12 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual("_x", f.Members16("G"), f.All);
         }
 
+        /// <summary>
+        ///     The cycle T → L → J → T, with T also reaching a holder outside it (T → R → K): a member is a
+        ///     holder exactly when its type reaches arrays along SOME route that avoids the member's
+        ///     declaring type. T's <c>_l</c> has none (L's only route runs back through T); L's <c>_j</c>
+        ///     and J's <c>_t</c> have one.
+        /// </summary>
         [TestMethod]
         public async Task TwoRoutes_OneThroughTheOwnerOneNot_IsAHolder()
         {
@@ -225,6 +325,11 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual("_k", f.Members16("R"), f.All);
         }
 
+        /// <summary>
+        ///     A ring T → A → B → T in which both T and B store arrays: every member is a holder, each one
+        ///     reaching the OTHER array without passing through its declaring type. Two anchors inside one
+        ///     cycle give the dominator tree two roots below its virtual root.
+        /// </summary>
         [TestMethod]
         public async Task SecondAnchorInsideTheCycle_KeepsTheMemberAHolder()
         {
@@ -239,6 +344,12 @@ namespace NumSharp.Tests.Build.Analyzer
 
         // ---------------------------------------------------------------- order independence (the model, directly)
 
+        /// <summary>
+        ///     The model the order tests query: a tree with a parent pointer, a three-type ring, a base/derived
+        ///     cycle, a parent/child pair whose child's owner holds by itself, the two-route cycle, and a
+        ///     self-referencing type that holds nothing — one of each shape whose answer an order-dependent
+        ///     memo could flip.
+        /// </summary>
         private const string OrderModel =
             "using System;\nusing System.Collections.Generic;\nusing NumSharp;\n" +
             "public class TreeNode { TreeNode _parent; List<TreeNode> _children; NDArray _data; }\n" +
@@ -248,6 +359,13 @@ namespace NumSharp.Tests.Build.Analyzer
             "public class T { L _l; R _r; }\npublic class L { J _j; }\npublic class J { T _t; }\npublic class R { K _k; }\npublic class K { NDArray _x; }\n" +
             "public class Free { int _n; string _s; Free _self; }\n";
 
+        /// <summary>Compiles <see cref="OrderModel"/> for direct <see cref="OwnershipModel"/> queries, outside any analyzer callback.</summary>
+        /// <returns>
+        ///     The compilation, its resolved NumSharp types, the source types ordered by name (what a snapshot
+        ///     reads), and every type the walks can meet — the source types plus their field and base types —
+        ///     for the warm-up orders to draw from.
+        /// </returns>
+        /// <exception cref="AssertFailedException">The model does not compile, or NumSharp's types cannot be resolved from it.</exception>
         private static (CSharpCompilation comp, KnownTypes known, INamedTypeSymbol[] types, ITypeSymbol[] allTypes) BuildOrderModel()
         {
             var tree = CSharpSyntaxTree.ParseText(SourceText.From(OrderModel), path: "order_model.cs");
@@ -271,6 +389,10 @@ namespace NumSharp.Tests.Build.Analyzer
             return (comp, known, types, all.Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToArray());
         }
 
+        /// <summary>Every answer the model gives about <paramref name="types"/>, in one comparable string.</summary>
+        /// <param name="model">The model to read (reading may complete its memo).</param>
+        /// <param name="types">The types to report, in a fixed order.</param>
+        /// <returns>"Name+:holder,holder " per type, '+' when it holds NDArrays and '-' when it does not.</returns>
         private static string Snapshot(OwnershipModel model, INamedTypeSymbol[] types)
         {
             var sb = new StringBuilder();
@@ -280,6 +402,13 @@ namespace NumSharp.Tests.Build.Analyzer
             return sb.ToString();
         }
 
+        /// <summary>
+        ///     The model gives the same answers whatever it was asked before: after each of 200 random warm-up
+        ///     orders (member types first, owners first, mixed with HolderMembersOf) every answer equals the
+        ///     cold baseline. Master fails this: it memoized a whole-graph answer that HolderMembersOf
+        ///     trusted, so whether <c>TreeNode._parent</c> was a holder depended on whether something, such
+        ///     as a Dispose body elsewhere, had asked about TreeNode first.
+        /// </summary>
         [TestMethod]
         public void HolderMembers_DoNotDependOnWhatWasAskedFirst()
         {
@@ -307,6 +436,11 @@ namespace NumSharp.Tests.Build.Analyzer
             }
         }
 
+        /// <summary>
+        ///     Sixteen threads query one fresh model in random orders, 25 rounds: every thread's answers equal
+        ///     the single-threaded ones. The analyzers share one model per compilation and fill it from
+        ///     concurrent callbacks, so a reader must never see a half-decided component.
+        /// </summary>
         [TestMethod]
         public void ConcurrentQueries_AgreeWithTheSingleThreadedAnswers()
         {
@@ -333,6 +467,11 @@ namespace NumSharp.Tests.Build.Analyzer
 
         // ---------------------------------------------------------------- the walk's stack
 
+        /// <summary>
+        ///     A 10,000-level chain of types completes and flags every level. A recursive walk overflowed the
+        ///     thread's stack, which ends the compiler PROCESS rather than failing one analyzer: at 2,000
+        ///     levels on master and at 1,500 on PR #632's commit.
+        /// </summary>
         [TestMethod]
         [Timeout(180000)]
         public async Task VeryDeepChain_DoesNotOverflowTheStack()
@@ -355,6 +494,10 @@ namespace NumSharp.Tests.Build.Analyzer
         ///     reference, one collection, one reference), wired at random: a large strongly connected
         ///     model, the shape a real domain model has.
         /// </summary>
+        /// <param name="count">How many entity types to declare.</param>
+        /// <param name="seed">The wiring's random seed.</param>
+        /// <param name="arrayHolder">The index of the one entity that also stores an NDArray; -1 for none.</param>
+        /// <returns>The declarations, one class per line.</returns>
         private static string RandomEntityModel(int count, int seed, int arrayHolder)
         {
             var rng = new Random(seed);
@@ -372,6 +515,11 @@ namespace NumSharp.Tests.Build.Analyzer
             return sb.ToString();
         }
 
+        /// <summary>
+        ///     A random 3,000-entity model that stores no NDArray completes and draws nothing. A model of this
+        ///     shape and size overflowed the stack on master and on PR #632's commit alike (the PR's commit
+        ///     already at 2,000 entities): a project that never uses NDArray lost its build.
+        /// </summary>
         [TestMethod]
         [Timeout(180000)]
         public async Task LargeCyclicEntityModel_WithoutArrays_CompletesClean()
@@ -381,6 +529,10 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.AreEqual(0, r.Ndw.Length, "a model that stores no NDArray draws nothing");
         }
 
+        /// <summary>
+        ///     The same model with an NDArray in one entity: most entities reach it through the random wiring,
+        ///     so more than half and at most all of them draw NDW016, and the analysis completes.
+        /// </summary>
         [TestMethod]
         [Timeout(180000)]
         public async Task LargeCyclicEntityModel_WithOneArray_FlagsTheTypesThatReachIt()

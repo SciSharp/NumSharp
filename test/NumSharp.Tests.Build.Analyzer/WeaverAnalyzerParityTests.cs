@@ -126,6 +126,14 @@ namespace NumSharp.Tests.Build.Analyzer
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown parity fixture"),
         };
 
+        /// <summary>
+        ///     For every method of the named fixture, the weaver's and the analyzer's resolvers agree on the
+        ///     scope kind, on whether it was inherited and on the declaration it came from; the weave puts a
+        ///     scope local exactly where the weaver's resolver sees a target, and NDW012 lands only in
+        ///     methods the weave left alone. A divergence would be a silent leak or warning noise.
+        /// </summary>
+        /// <param name="name">The fixture's short name (see <see cref="Fixture"/>).</param>
+        /// <exception cref="AssertFailedException">The fixture does not compile or weave, or any method diverges.</exception>
         [DataTestMethod]
         [DataRow("Chains")]
         [DataRow("Interfaces")]

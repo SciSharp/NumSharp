@@ -26,34 +26,112 @@ namespace NumSharp.Tests.Build.Analyzer
     [TestClass]
     public class OwnershipGraphOracleTests
     {
-        private enum Shape { Direct, List, Array, Tuple, Box, AutoProperty, NDArray, Borrowed, Func, Comparer, Static, Scalar, Computed }
-
-        private sealed class Member
+        /// <summary>
+        ///     How a generated member relates to its target type. The first six are EDGES (a value of the
+        ///     target is stored, so the target's arrays become the member's), <see cref="Shape.NDArray"/> is an
+        ///     array member, and the last six store no value of the target (all but <see cref="Shape.Scalar"/>
+        ///     still name it) — each a rule of the model the oracle must agree with.
+        /// </summary>
+        private enum Shape
         {
-            public string Name;
-            public string Declaration;
-            public int Target = -1;   // the graph type the member's type contains, when it is an edge
-            public bool Edge;         // carries ownership of Target
-            public bool Array;        // an NDArray member
+            /// <summary>A field of the target type.</summary>
+            Direct,
+
+            /// <summary>A <c>List&lt;T&gt;</c> of the target (a collection's elements are stored).</summary>
+            List,
+
+            /// <summary>An array of the target.</summary>
+            Array,
+
+            /// <summary>A tuple with the target as an element.</summary>
+            Tuple,
+
+            /// <summary>A source <c>Box&lt;T&gt;</c> of the target (a user generic whose field stores a T).</summary>
+            Box,
+
+            /// <summary>An auto-property of the target type (its backing field stores one).</summary>
+            AutoProperty,
+
+            /// <summary>An NDArray field: holds by itself.</summary>
+            NDArray,
+
+            /// <summary>An <c>[NDBorrowed]</c> field of the target: never owned.</summary>
+            Borrowed,
+
+            /// <summary>A <c>Func&lt;T&gt;</c>: a delegate stores no value of T.</summary>
+            Func,
+
+            /// <summary>An <c>IComparer&lt;T&gt;</c>: a non-holding generic family.</summary>
+            Comparer,
+
+            /// <summary>A static field: not per-instance state.</summary>
+            Static,
+
+            /// <summary>An <c>int</c> field: mentions no type of the graph.</summary>
+            Scalar,
+
+            /// <summary>A computed (expression-bodied) property: no backing field.</summary>
+            Computed
         }
 
+        /// <summary>One generated member and the facts the oracle reads about it.</summary>
+        private sealed class Member
+        {
+            /// <summary>The member's name as declared (and as diagnostics quote it).</summary>
+            public string Name;
+
+            /// <summary>Its C# declaration.</summary>
+            public string Declaration;
+
+            /// <summary>The graph type the member's type contains, when it is an edge; -1 otherwise.</summary>
+            public int Target = -1;
+
+            /// <summary>True when the member stores values of <see cref="Target"/> (an ownership edge).</summary>
+            public bool Edge;
+
+            /// <summary>True for an NDArray member, which holds by itself.</summary>
+            public bool Array;
+        }
+
+        /// <summary>One generated class.</summary>
         private sealed class GraphType
         {
+            /// <summary>The class name, prefixed per graph so that graphs compiled together share no type.</summary>
             public string Name;
+
+            /// <summary>True when the class itself implements IDisposable (with a Dispose that disposes nothing).</summary>
             public bool DeclaresDisposable;
+
+            /// <summary>The index of its base class in the graph, -1 for none; always a lower index, so inheritance is acyclic.</summary>
             public int Base = -1;
+
+            /// <summary>Its members in declaration order.</summary>
             public readonly List<Member> Members = new List<Member>();
         }
 
+        /// <summary>A generated graph: its seed, its types, and their C# source.</summary>
         private sealed class Graph
         {
+            /// <summary>The seed that reproduces it.</summary>
             public int Seed;
+
+            /// <summary>Its classes, indexed as members and bases refer to them.</summary>
             public GraphType[] Types;
+
+            /// <summary>The C# declarations of <see cref="Types"/>.</summary>
             public string Source;
         }
 
+        /// <summary>Every member shape, drawn uniformly.</summary>
         private static readonly Shape[] Shapes = (Shape[])Enum.GetValues(typeof(Shape));
 
+        /// <summary>Generates one random graph of classes: members of every <see cref="Shape"/> pointing at random classes (cycles and self-references included), acyclic base classes, random IDisposable.</summary>
+        /// <param name="seed">The random seed; the same seed gives the same graph.</param>
+        /// <param name="prefix">Prefixed to every class name, unique per graph.</param>
+        /// <param name="minTypes">The fewest classes.</param>
+        /// <param name="maxTypes">The most classes.</param>
+        /// <param name="maxMembers">The most members per class (each has between 0 and this many).</param>
+        /// <returns>The graph with its source.</returns>
         private static Graph Generate(int seed, string prefix, int minTypes, int maxTypes, int maxMembers)
         {
             var rng = new Random(seed);
@@ -116,6 +194,10 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         /// <summary>The oracle: does a value of graph type <paramref name="start"/> reach a stored NDArray without passing through <paramref name="avoid"/>?</summary>
+        /// <param name="types">The graph.</param>
+        /// <param name="start">The index of the type the search starts from.</param>
+        /// <param name="avoid">The index of the type no path may pass through (or start at); -1 for none.</param>
+        /// <returns>True when some type reachable from <paramref name="start"/> along edges and base classes, avoiding <paramref name="avoid"/>, declares an NDArray member.</returns>
         private static bool ReachesArraysAvoiding(GraphType[] types, int start, int avoid)
         {
             if (start == avoid)
@@ -143,6 +225,10 @@ namespace NumSharp.Tests.Build.Analyzer
             return false;
         }
 
+        /// <summary>The members of type <paramref name="i"/> the rule calls holders: its NDArrays, and each edge whose target reaches arrays without passing through type <paramref name="i"/>.</summary>
+        /// <param name="types">The graph.</param>
+        /// <param name="i">The index of the declaring type.</param>
+        /// <returns>The holder names, sorted ordinally.</returns>
         private static SortedSet<string> ExpectedHolders(GraphType[] types, int i)
         {
             var set = new SortedSet<string>(StringComparer.Ordinal);
@@ -152,6 +238,10 @@ namespace NumSharp.Tests.Build.Analyzer
             return set;
         }
 
+        /// <summary>Whether type <paramref name="i"/> is IDisposable, itself or through a base class — which decides between NDW017 (one per holder) and NDW016 (one listing the holders).</summary>
+        /// <param name="types">The graph.</param>
+        /// <param name="i">The index of the type.</param>
+        /// <returns>True when the type or a base class declares IDisposable.</returns>
         private static bool EffectivelyDisposable(GraphType[] types, int i)
         {
             for (int t = i; t >= 0; t = types[t].Base)
@@ -160,12 +250,23 @@ namespace NumSharp.Tests.Build.Analyzer
             return false;
         }
 
+        /// <summary>NDW016's text up to its member list.</summary>
         private static readonly Regex Ndw016 = new Regex(@"^'(?<type>[^']+)' stores NDArrays in (?<list>.*?) but implements neither", RegexOptions.Compiled);
+
+        /// <summary>NDW017's text: the disposable type and the one holder it never disposes.</summary>
         private static readonly Regex Ndw017 = new Regex(@"^'(?<type>[^']+)' implements .*? but never disposes '(?<member>[^']+)'", RegexOptions.Compiled);
+
+        /// <summary>A quoted name inside a member list.</summary>
         private static readonly Regex Quoted = new Regex(@"'([^']+)'", RegexOptions.Compiled);
+
+        /// <summary>The count NDW016 appends when it names only the first three holders.</summary>
         private static readonly Regex More = new Regex(@"and (\d+) more$", RegexOptions.Compiled);
 
         /// <summary>Compiles the graphs together (they share no type), runs the analyzers, and compares every type with the oracle.</summary>
+        /// <param name="graphs">The graphs to compile as one file.</param>
+        /// <param name="label">The file name and the prefix of every failure message.</param>
+        /// <returns>How many holders the oracle expected across the batch (the non-vacuity count).</returns>
+        /// <exception cref="AssertFailedException">The source does not compile, a diagnostic other than NDW016/NDW017 fires, or any type's holder set differs from the oracle's.</exception>
         private static async Task<int> CheckBatch(List<Graph> graphs, string label)
         {
             var source = new StringBuilder("using System;\nusing System.Collections.Generic;\nusing NumSharp;\npublic class Box<T> { public T Value; }\n");
@@ -239,6 +340,11 @@ namespace NumSharp.Tests.Build.Analyzer
             return holders;
         }
 
+        /// <summary>
+        ///     600 random graphs of 2 to 8 classes: every class's holder set matches the oracle. The test also
+        ///     counts the edges the rule excludes (a member that reaches arrays only through its own type)
+        ///     and requires more than 50 of them, so it cannot pass by generating only the easy cases.
+        /// </summary>
         [TestMethod]
         [Timeout(300000)]
         public async Task RandomGraphs_HolderSets_MatchTheIndependentOracle()
@@ -266,6 +372,10 @@ namespace NumSharp.Tests.Build.Analyzer
             Assert.IsTrue(backReferences > 50, $"the generator must produce members that hold only through their owner (got {backReferences})");
         }
 
+        /// <summary>
+        ///     30 random graphs of 15 to 40 classes: larger strongly connected components with several anchors
+        ///     each, where the dominator tree has real depth, and the holder sets still match the oracle.
+        /// </summary>
         [TestMethod]
         [Timeout(300000)]
         public async Task LargerRandomGraphs_HolderSets_MatchTheIndependentOracle()
@@ -283,6 +393,9 @@ namespace NumSharp.Tests.Build.Analyzer
         }
 
         /// <summary>The oracle's plain reachability (no type avoided), for the non-vacuity count.</summary>
+        /// <param name="types">The graph.</param>
+        /// <param name="start">The index of the type the search starts from.</param>
+        /// <returns>True when a value of the type reaches a stored NDArray by any route.</returns>
         private static bool ReachesArrays(GraphType[] types, int start) => ReachesArraysAvoiding(types, start, -1);
     }
 }
