@@ -58,7 +58,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">The array.</param>
         /// <param name="axis_">The accumulated axis (negative counts from the end), or null for the flattened array.</param>
-        /// <param name="dtype">The loop / result dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="dtype">The loop / result dtype (<c>dtype=</c>), or null: then the loop is
+        ///     <c>promote_types(out.dtype, arr.dtype)</c> when <paramref name="out"/> is given (no NEP 50 widening), NEP 50's
+        ///     accumulator of the input otherwise.</param>
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
         ///     null for a fresh result.</param>
         /// <returns><paramref name="out"/> itself when given, else a fresh array.</returns>
@@ -79,7 +81,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">The array.</param>
         /// <param name="axis_">The accumulated axis (negative counts from the end), or null for the flattened array.</param>
-        /// <param name="dtype">The loop / result dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="dtype">The loop / result dtype (<c>dtype=</c>), or null: then the loop is
+        ///     <c>promote_types(out.dtype, arr.dtype)</c> when <paramref name="out"/> is given (no NEP 50 widening), NEP 50's
+        ///     accumulator of the input otherwise.</param>
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
         ///     null for a fresh result.</param>
         /// <returns><paramref name="out"/> itself when given, else a fresh array.</returns>

@@ -16,7 +16,9 @@ namespace NumSharp.Backends
         /// <param name="arr">The array.</param>
         /// <param name="axis_">The accumulated axis (negative values count from the end), or null for the flattened array. A
         ///     0-d input is treated as 1-D (NumPy's <c>PyArray_CheckAxis</c>), so only 0 and -1 address it.</param>
-        /// <param name="dtype">The accumulator dtype (<c>dtype=</c>), or null for NEP 50's accumulator of the input.</param>
+        /// <param name="dtype">The accumulator dtype (<c>dtype=</c>), or null: then the loop is
+        ///     <c>promote_types(out.dtype, arr.dtype)</c> when <paramref name="out"/> is given (no NEP 50 widening:
+        ///     <see cref="AccumulateLoop"/>), NEP 50's accumulator of the input otherwise.</param>
         /// <param name="out">NumPy's <c>out=</c>: an array of the result's shape (any layout and dtype; the result is stored
         ///     with unsafe casting), or null for a fresh result.</param>
         /// <returns><paramref name="out"/> itself when given; otherwise a fresh array of the accumulator dtype: the input's
@@ -55,7 +57,8 @@ namespace NumSharp.Backends
                 if (parsed is not null)
                     arr = parsed;
                 Strings.NDStringUfuncs.ThrowIfReduce("cumprod", arr, axis_, @out, dtype);
-                return WriteScanToOut(CumProdCore(arr, axis_, dtype), @out);
+                // With out= and no dtype= the loop is promote_types(out, arr), without NEP 50's widening (AccumulateLoop).
+                return WriteScanToOut(CumProdCore(arr, axis_, AccumulateLoop(arr, dtype, @out)), @out);
             }
             finally
             {
