@@ -10,11 +10,14 @@ namespace NumSharp.Backends
         ///     NumPy's <c>PyArray_Trace</c>: <c>add.reduce(diagonal(a, offset, axis1, axis2), axis=-1, dtype=dtype,
         ///     out=out)</c>. A 2-D or 3-D operand without <paramref name="dtype"/> or <paramref name="out"/> takes the fused
         ///     kernel (<see cref="TryTraceFast"/>, one strided walk of the diagonal accumulating in the promoted dtype); every
-        ///     other call reads the diagonal view (<see cref="Diagonal"/>), runs the text routes, and sums a contiguous copy
-        ///     of it. Moved from the public <c>np.trace</c> by the np-layer dtype plan's P1b, statement for statement; the
-        ///     public function keeps the matrix boundary's plain region.
+        ///     other call reads the diagonal view (<see cref="Diagonal"/>) and runs the text routes; then an
+        ///     <paramref name="out"/> takes the add reduction with an out operand (<see cref="ReduceAdd"/>: the reduce
+        ///     prologue's checks and the loop <c>dtype ?? promote_types(out, diagonal)</c>), and a call without one sums a
+        ///     contiguous copy of the diagonal. Moved from the public <c>np.trace</c> by the np-layer dtype plan's P1b,
+        ///     statement for statement; the public function keeps the matrix boundary's plain region. The out= route is
+        ///     NumPy's since P1d (it summed in NEP 50's accumulator and raised its own texts for a misshapen out).
         /// </remarks>
-        [NDScoped] // reclaims the diagonal view, its contig copy and the natural result on the out= path
+        [NDScoped] // reclaims the diagonal view and the contig copy (the out= route's own intermediates are ReduceAdd's)
         public override NDArray Trace(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null,
             NDArray @out = null)
         {
@@ -54,6 +57,14 @@ namespace NumSharp.Backends
                         ReductionArguments.AxisFlags(diag.ndim, diag.ndim - 1), false, @out, resolution.Descriptors[0]);
             }
 
+            // out=: the diagonal's add.reduce WITH an out operand (ReduceAdd -> ReduceIntoOut): the reduce prologue checks
+            // out in NumPy's order and texts (read-only first, then the rank, then the length), and the loop is
+            // dtype ?? promote_types(out, diag) without NEP 50's widening, stored with an unsafe cast (an int8 diagonal
+            // [100, 100, 56] into a bool out wraps to 0 and stores False). The text routes above already answered a text
+            // operand, so only numbers reach it.
+            if (@out is not null)
+                return ReduceAdd(diag, diag.ndim - 1, keepdims: false, dtype, @out);
+
             // dtype rule: when not specified, the engine Sum's NEP50 promotion applies
             // (signed/bool -> int64, unsigned -> uint64, floats preserved) — the same
             // split the 2-D/3-D fast path's TraceTypeInfo encodes.
@@ -76,8 +87,7 @@ namespace NumSharp.Backends
                 // - N-D diagonal (3+D source) → axis=-1 reduces along the appended
                 //   diag axis, leaving the source's non-axis1/axis2 axes intact.
                 int? sumAxis = diagContig.ndim == 1 ? (int?)null : -1;
-                var result = a.TensorEngine.Sum(diagContig, axis: sumAxis, dtype: sumDtype.AsType(), keepdims: false);
-                return TraceOut(result, @out);
+                return a.TensorEngine.Sum(diagContig, axis: sumAxis, dtype: sumDtype.AsType(), keepdims: false);
             }
             finally
             {
@@ -214,35 +224,5 @@ namespace NumSharp.Backends
             NPTypeCode.Complex => 16,
             _ => throw new NotSupportedException($"Trace result dtype {code} has no size mapping")
         };
-
-        /// <summary>
-        ///     The trace's <c>out=</c> store: <paramref name="out"/> must have the natural result's shape, receives it with
-        ///     unsafe casting, and is returned itself (NumPy's <c>PyArray_GenericReduceFunction</c> contract).
-        /// </summary>
-        /// <param name="result">The natural result.</param>
-        /// <param name="out">The caller's out, or null.</param>
-        /// <returns><paramref name="result"/> when <paramref name="out"/> is null, else <paramref name="out"/> after the
-        ///     store.</returns>
-        /// <exception cref="ArgumentException"><paramref name="out"/>'s shape is not the result's ("output array does not
-        ///     match result of trace").</exception>
-        /// <remarks>Moved from <c>np.trace</c>'s <c>DispatchOut</c> by the np-layer dtype plan's P1b. The store still goes
-        ///     through <c>np.copyto</c>, a structural call into the facade that the plan's P6 replaces with an engine copy;
-        ///     the up-call ratchet pins it with that reason.</remarks>
-        private static NDArray TraceOut(NDArray result, NDArray @out)
-        {
-
-            if (@out is null)
-                return result;
-
-            // out= dispatch: shape check + unsafe-cast writeback. NumPy's
-            // PyArray_GenericReduceFunction enforces this too.
-            if (!@out.Shape.Equals(result.Shape))
-                throw new ArgumentException(
-                    $"output array does not match result of trace: expected shape {result.Shape}, got {@out.Shape}",
-                    nameof(@out));
-
-            np.copyto(@out, result, casting: "unsafe");
-            return @out;
-        }
     }
 }

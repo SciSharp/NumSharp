@@ -28,7 +28,11 @@ namespace NumSharp
         /// <param name="out">
         ///     Optional output array. Shape must equal the natural reduction
         ///     output; values are copied with unsafe casting and the method
-        ///     returns <paramref name="out"/> itself.
+        ///     returns <paramref name="out"/> itself. Without
+        ///     <paramref name="dtype"/> the sum runs in
+        ///     <c>promote_types(out.dtype, a.dtype)</c> with no widening, as
+        ///     NumPy's add.reduce does once an out is given: an int8 diagonal
+        ///     [100, 100, 56] into a bool out wraps to 0 and stores False.
         /// </param>
         /// <returns>
         ///     Sum along the diagonal. 2-D input → 0-d scalar. N-D input →
@@ -45,14 +49,16 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError"><paramref name="a"/> has fewer than two dimensions, or the two axes are the same
-        ///     axis ("axis1 and axis2 cannot be the same").</exception>
+        ///     axis ("axis1 and axis2 cannot be the same"); a read-only <paramref name="out"/> ("output array is
+        ///     read-only") or one of the wrong rank ("output parameter for reduction operation add has the wrong number of
+        ///     dimensions: ...").</exception>
         /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
         ///     first).</exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="TypeError">NumPy's loop resolution refuses text: a text operand with another out class, a
         ///     text out for numbers, a string <paramref name="dtype"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape ("output array does
-        ///     not match result of trace").</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/>'s length does not broadcast against the
+        ///     diagonal (NumPy's "operands could not be broadcast together with remapped shapes" text).</exception>
         [NDScoped] // the boundary of the plain region and the engine call (the engine reclaims its own temporaries)
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,

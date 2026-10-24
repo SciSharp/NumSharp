@@ -805,20 +805,25 @@ namespace NumSharp
         /// <param name="offset">The diagonal's offset from the main one.</param>
         /// <param name="axis1">The first axis of the 2-D sub-arrays.</param>
         /// <param name="axis2">The second axis of the 2-D sub-arrays.</param>
-        /// <param name="dtype">The sum's dtype (<c>dtype=</c>), or null for NEP 50's accumulator of
-        ///     <paramref name="a"/> (signed integers and bool to int64, unsigned integers to uint64).</param>
+        /// <param name="dtype">The sum's dtype (<c>dtype=</c>), or null: then the loop is
+        ///     <c>promote_types(out.dtype, a.dtype)</c> when <paramref name="out"/> is given (no NEP 50 widening), NEP 50's
+        ///     accumulator of <paramref name="a"/> otherwise (signed integers and bool to int64, unsigned integers to
+        ///     uint64).</param>
         /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
-        ///     null for a fresh result.</param>
+        ///     null for a fresh result: the add reduction's out operand, checked by the reduce prologue (read-only first,
+        ///     then its rank, then its length).</param>
         /// <returns><paramref name="out"/> itself when given; otherwise the sums: a read-only 0-d result (NumPy's scalar)
         ///     for 2-D <paramref name="a"/>, <paramref name="a"/>'s shape without the two axes otherwise.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="ValueError"><see cref="Diagonal"/>'s refusals; a StringDType diagonal that cannot be reduced
-        ///     (empty: no identity; an NA under the None-like rule); a read-only or misshapen text-route out.</exception>
+        ///     (empty: no identity; an NA under the None-like rule); a read-only <paramref name="out"/> ("output array is
+        ///     read-only") or one of the wrong rank ("output parameter for reduction operation add has the wrong number of
+        ///     dimensions: ...").</exception>
         /// <exception cref="AxisError">An axis is out of range.</exception>
         /// <exception cref="TypeError">NumPy's loop resolution refuses text: a text operand with another out class, a
         ///     text out for numbers, a string <paramref name="dtype"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape ("output array does
-        ///     not match result of trace").</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/>'s length does not broadcast against the
+        ///     diagonal (NumPy's "operands could not be broadcast together with remapped shapes" text).</exception>
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b): the public <c>np.trace</c> opens the matrix boundary's
         ///     plain region and calls this.</remarks>
         public abstract NDArray Trace(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null,

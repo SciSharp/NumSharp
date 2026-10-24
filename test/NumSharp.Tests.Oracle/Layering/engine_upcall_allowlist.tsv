@@ -7,7 +7,7 @@ Backends/Default/Indexing/Default.Argwhere.cs	0	2
 Backends/Default/Indexing/Default.BooleanMask.cs	0	2
 Backends/Default/Indexing/Default.FlatNonZero.cs	0	2
 Backends/Default/Indexing/Default.NonZero.cs	1	2
-Backends/Default/Indexing/Default.Trace.cs	0	2	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum and np.copyto(out, result, 'unsafe') for out= until P6 gives the engine its own copies
+Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
 Backends/Default/LinearAlgebra/LinAlgEmpty.cs	7	25
 Backends/Default/Logic/Default.AllClose.cs	2	0
 Backends/Default/Logic/Default.IsClose.cs	6	0
