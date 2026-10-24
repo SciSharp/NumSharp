@@ -13,7 +13,9 @@
 //   dotnet run --no-cache -c Release tools/facade-move/snapshot.cs -- <out.tsv> np.cumsum np.cumprod NDArray.cumsum ...
 //   diff <parent.tsv> <child.tsv>
 //
-// A name "np.f" is every public static overload of np.f; "NDArray.f" every public instance overload declared on NDArray.
+// A name "np.f" is every public static overload of np.f; "NDArray.f" every public instance overload declared on NDArray;
+// "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
+// NDArray parameter is the operand.
 // Each output line is "<case id> TAB <outcome>":
 //   case id  = the overload's signature | the operand's label | the varied parameter and its value label
 //   outcome  = ARR class dtype (shape) flags hash [is_out] [OUT hash] [MUTATED in=hash]   for an NDArray result
@@ -27,8 +29,9 @@
 // base value; phase B varies one parameter at a time over its variants, on a reduced operand pool (every dtype x the
 // layouts c2d, f2d, 0d, empty, 3d); phase C varies every PAIR of parameters together on a small pool (8 dtypes x c2d,
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
-// and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2); an overload with a
-// required parameter of another kind is reported once as SKIP.
+// and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2, a second array operand
+// named lhs / rhs / left / right / x / y / other); an overload with a required parameter of another kind is reported once as
+// SKIP.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -117,11 +120,15 @@ static class Snapshot
     /// <exception cref="ArgumentException">The target names no overload.</exception>
     public static IEnumerable<string> Run(string target)
     {
-        bool instance = target.StartsWith("NDArray.", StringComparison.Ordinal);
         string name = target.Substring(target.IndexOf('.') + 1);
+        bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
+        // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is.
+        bool instance = onNDArray && !name.StartsWith("op_", StringComparison.Ordinal);
         var methods = (instance
                 ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDArray))
-                : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
+                : onNDArray
+                    ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.DeclaringType == typeof(NDArray))
+                    : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
             .Where(m => m.Name == name && !m.IsGenericMethodDefinition)
             .Select(m => (Method: m, Signature: Signature(target, m)))
             .OrderBy(t => t.Signature, StringComparer.Ordinal)
@@ -147,7 +154,7 @@ static class Snapshot
         Nullable.GetUnderlyingType(t) is { } u ? u.Name + "?" : t.Name;
 
     /// <summary>The role of a parameter, decided by its type and name.</summary>
-    private enum Role { Operand, Out, Weights, Where, QArray, QDouble, QDoubles, QLong, Axis, AxisInt, AxisArray, IntArg, DType, Bool, Method, Order, Default, Unsupported }
+    private enum Role { Operand, Operand2, Out, Weights, Where, QArray, QDouble, QDoubles, QLong, Axis, AxisInt, AxisArray, IntArg, DType, Bool, Method, Order, Default, Unsupported }
 
     /// <summary>
     ///     Classifies a parameter.
@@ -164,6 +171,7 @@ static class Snapshot
                 : n == "out" ? Role.Out
                 : n == "weights" ? Role.Weights
                 : n == "where" ? Role.Where
+                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
         if (n == "q" && t == typeof(double)) return Role.QDouble;
@@ -197,6 +205,10 @@ static class Snapshot
             case Role.Weights:
             case Role.Where:
                 Add("null", () => null);
+                break;
+            case Role.Operand2:
+                // The base is the operand's own copy (MakeOperand2 "same"); the variants follow from the operand.
+                Add("same", () => null);
                 break;
             case Role.QArray:
                 Add("0.5", () => np.array(0.5));
@@ -316,6 +328,7 @@ static class Snapshot
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
+            Role.Operand2 => Operand2VariantLabels.Length - 1,
             _ => variants[i].Count - 1,
         };
 
@@ -347,6 +360,10 @@ static class Snapshot
 
     /// <summary>The weights= variants, built from the operand.</summary>
     private static readonly string[] WeightVariantLabels = { "ones", "negative", "wrongshape", "int" };
+
+    /// <summary>The second-operand variants, built from the operand (see <see cref="MakeOperand2"/>); the first is the
+    ///     base.</summary>
+    private static readonly string[] Operand2VariantLabels = { "same", "int32", "float64", "U5", "T", "0d", "row", "badshape" };
 
     /// <summary>The where= variants, built from the operand (see <see cref="MakeWhere"/>).</summary>
     private static readonly string[] WhereVariantLabels = { "mask", "row", "allfalse", "false0d", "int", "wrongshape" };
@@ -381,6 +398,7 @@ static class Snapshot
             Role.Out => OutVariantLabels[v - 1],
             Role.Weights => WeightVariantLabels[v - 1],
             Role.Where => WhereVariantLabels[v - 1],
+            Role.Operand2 => Operand2VariantLabels[v],
             _ => variants[p][v].Label,
         };
 
@@ -393,7 +411,9 @@ static class Snapshot
         try
         {
             for (int i = 0; i < ps.Length; i++)
-                argv[i] = i == operandIndex ? operand : variants[i][0].Make();
+                argv[i] = i == operandIndex ? operand
+                    : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
+                    : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
             foreach (var (p, v) in assignments)
             {
@@ -408,6 +428,9 @@ static class Snapshot
                         break;
                     case Role.Where:
                         argv[p] = MakeWhere(WhereVariantLabels[v - 1], operand);
+                        break;
+                    case Role.Operand2:
+                        argv[p] = MakeOperand2(Operand2VariantLabels[v], operand);
                         break;
                     default:
                         argv[p] = variants[p][v].Make();
@@ -581,6 +604,41 @@ static class Snapshot
             case "wrongshape": return np.ones(new Shape(shape.Dimensions.Concat(new long[] { 2 }).ToArray()), np.dtype("float64"));
             case "int": return np.ones(shape, np.dtype("int64"));
             default: throw new ArgumentException("unknown weights variant " + label);
+        }
+    }
+
+    /// <summary>
+    ///     Builds a second array operand for an operand (the right side of an operator, the other array of a binary
+    ///     function): a copy of it and arrays that differ in dtype class, rank or shape.
+    /// </summary>
+    /// <param name="label">The variant: <c>same</c> (a copy of the operand), <c>int32</c> / <c>float64</c> (a ramp of the
+    ///     operand's shape), <c>U5</c> / <c>T</c> (text of the operand's shape: a text operand compares as text, a number
+    ///     meets NumPy's failed-comparison rule), <c>0d</c> (an int64 0-d 2), <c>row</c> (the last axis only: it
+    ///     broadcasts), <c>badshape</c> (seven elements, which no operand of this pool broadcasts against).</param>
+    /// <param name="operand">The operand.</param>
+    /// <returns>A fresh array.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeOperand2(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        NDArray Ramp(string dt, long count) =>
+            np.array(Enumerable.Range(0, (int)count).Select(i => (double)(i % 4)).ToArray()).astype(np.dtype(dt));
+        NDArray Text(string dt, long count) => count == 0
+            ? np.empty(new Shape(0), np.dtype(dt))
+            : np.array(Enumerable.Range(0, (int)count).Select(i => (i % 3).ToString(CultureInfo.InvariantCulture)).ToArray()).astype(np.dtype(dt));
+        switch (label)
+        {
+            case "same": return operand.copy();
+            case "int32": return Ramp("int32", size).reshape(new Shape(dims));
+            case "float64": return Ramp("float64", size).reshape(new Shape(dims));
+            case "U5": return Text("U5", size).reshape(new Shape(dims));
+            case "T": return Text("T", size).reshape(new Shape(dims));
+            case "0d": return np.array(2L);
+            case "row": return Ramp("int32", dims.Length == 0 ? 1 : dims[dims.Length - 1]);
+            case "badshape": return Ramp("int32", 7);
+            default: throw new ArgumentException("unknown second-operand variant " + label);
         }
     }
 
