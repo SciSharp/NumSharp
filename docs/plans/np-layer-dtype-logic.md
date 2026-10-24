@@ -10,8 +10,9 @@ Write a plan covering how to and answer my questions"
 `np.median`, `np.angle`), each move byte-identical on the snapshot. The owner answered the decisions of
 [§5](#5-decisions-for-the-owner); the bug the pilot found got its fix commit (`7a386fdd`, D4). P1a done (2026-10-24): the
 quantile family's bodies in `QuantileEngine` (`3bce5a9f`), NumPy's one `_ureduce` prologue in every route (`a726b671`,
-Appendix B1 fixed), and the two bugs that work found, fixed per D4 (`1e8eca9e`, `8c2cdbef`); P1b is next. Progress goes
-into the [§9 state log](#9-state-log), newest entry first.
+Appendix B1 fixed), and the two bugs that work found, fixed per D4 (`1e8eca9e`, `8c2cdbef`). P1b done (2026-10-24) for
+the seven functions it named; its NDMatrix.Reductions item turned out to need the reduction members' `out=` and is
+now P1d. P1c is next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
 helper called one level down, and two families already show the result: `np.sum` and the four sort functions have no
@@ -404,11 +405,21 @@ The recommendations as written before the answers:
       prologue (C1); the `chararray` flag crosses into O as a parameter (C8). Done: `3bce5a9f` (step 1, which put the
       bodies in `QuantileEngine.Quantile` / `NanQuantile` / `NanMedian` rather than in `Compute`), `a726b671` (step 2),
       and the D4 fixes `1e8eca9e` and `8c2cdbef` ([§9](#9-state-log)).
-- [ ] **P1b, reductions with a narrower member** (K2, 57 lines in 10 files; `np.cumsum` / `np.cumprod` done in the
+- [x] **P1b, reductions with a narrower member** (K2, 57 lines in 10 files; `np.cumsum` / `np.cumprod` done in the
       pilot). Widen `All`, `Any` and `CountNonZero` (`keepdims=`, `out=`, `where=`), and the members `np.trace` and
       `np.ptp` reduce through; move the bodies of `np.nancumsum`, `np.nancumprod`, `np.trace`, `np.ptp`, `np.any`,
-      `np.all`, `np.count_nonzero`; route the 14 lines of `NDMatrix.Reductions.cs` through the same members.
+      `np.all`, `np.count_nonzero`; route the 14 lines of `NDMatrix.Reductions.cs` through the same members. Done for
+      the seven functions ([§9](#9-state-log)); the NDMatrix item is P1d.
 - [ ] **P1c, operators** (K6, 6 lines in 6 files).
+- [ ] **P1d, the reduction members' `out=`** (found by P1b). `NDMatrix.Reductions.cs`'s 15 text and 6 numeric lines are
+      not in its any / all / ptp members (those hold none) but in the `out=` paths of `matrix.sum` / `prod` / `mean` /
+      `var` / `std`, which implement NumPy's reducelike rule themselves (`ReduceTextInto`, `LoopWith`,
+      `StoreVariance`): the loop is `promote_types(out, a)` without the small-integer widening, text resolves on
+      (out, a), the result is stored with an unsafe cast. No engine member carries that: `ReduceProduct`, `ReduceMean`,
+      `ReduceVar` and `ReduceStd` take no `out=`, and `ReduceAdd`'s `out=` keeps the NEP 50 accumulator (no public
+      path reaches it with an out today: np.sum has no `out=` keyword). So the step is: give those members NumPy's
+      `out=` (D2), route the matrix members through them, and let np.sum / np.prod / np.mean / np.var / np.std expose
+      `out=` (the api-parameter-parity items).
 
 ### P2. Compositions above the engine (K3, 150 lines in 43 files)
 
@@ -469,6 +480,37 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-24, P1b (reductions with a narrower member) done for its seven functions.** Commits on `strings`, developed in
+  a scratch worktree and landed by fast-forward; every move is held to the snapshot (78,450 calls over np.all, np.any,
+  NDArray.all, NDArray.any, np.count_nonzero, np.trace, NDArray.trace, np.ptp, np.nancumsum and np.nancumprod;
+  23,136 more over np.trace / np.diagonal for the diagonal move), byte-identical each time:
+  - `6da76c63` the snapshot tool varies `where=` (six masks built from the operand, two NumPy refuses) and the int
+    `offset` / `axis1` / `axis2` of np.trace and np.diagonal.
+  - `0349955e` np.all / np.any (D1: ufunc.reduce, C → engine members). `TensorEngine.All` / `Any(nd, int? axis,
+    keepdims)` widened in place (keepdims, a null axis for every axis), the tuple members made abstract, and two new
+    members carry NumPy's whole call (axis, out=, keepdims, where=): DefaultEngine's LogicalReduceNumPy, the facades'
+    two bodies merged on `reduceAll`. R1 -4 text / -1 numeric; R2 pins the out= store (np.copyto).
+  - `a7ab4d99` np.count_nonzero: the empty-array statements into `DefaultEngine.CountNonZero` (the engine already began
+    with the facade's text stand-in). R1 -1 text.
+  - `199feaaf` np.trace (D1: PyArray_Trace, C → `TensorEngine.Trace`) and np.diagonal's view (`TensorEngine.Diagonal`,
+    PyArray_Diagonal), which the moved trace reads without calling up. R1 -7 text / -7 numeric; R2 pins the
+    np.ascontiguousarray of the diagonal and the out= store.
+  - `e23fa183` np.ptp (D1: `_methods._ptp`, Python → the internal `DefaultEngine.Ptp`, as np.angle's), its np.amax /
+    np.amin calls now the engine members they reached (`ReduceAMax` / `ReduceAMin`). R1 -7 text; R2 pins the store.
+  - `ea479759` np.nancumsum / np.nancumprod (D1: Python → internal `DefaultEngine.NanCumSum` / `NanCumProd`), their
+    np.cumsum / np.cumprod / np.isnan calls now `ReduceCumAdd` / `ReduceCumMul` / `IsNan`. R1 -12 text / -7 numeric; R2
+    pins np.where (no engine select exists yet).
+  - `01b898c9` the facades the moves reduced to one call document every exception it raises.
+  - **Not done here: NDMatrix.Reductions.** Its dtype lines are the `out=` paths of matrix.sum / prod / mean / var / std,
+    which need the reduction members' `out=` with NumPy's reducelike loop rule (the plan assumed they sat in any / all
+    / ptp): now step P1d. Found on the way: `ReduceAdd`'s `out=` keeps the NEP 50 accumulator where NumPy's add.reduce
+    with an out and no dtype= runs `promote_types(out, a)` (NumPy: an int8 [100, 100, 56] summed into a bool out is
+    False, the int8 sum wrapping to 0; the engine member stores True, probed). No public path passes an out to it
+    today (np.sum has no `out=`), so it is P1d's to fix, not a D4 commit.
+  - The engine up-calls the moves pinned (R2, with reasons): the out= stores through np.copyto (all, trace, ptp), the
+    np.ascontiguousarray before trace's sum, np.where in the NaN scans. P6 replaces them.
+  - Every commit: NumSharp.Tests net10.0 20,460 passed / 11 skipped and net8.0 20,459 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed (Layering 6 / 6).
 - **2026-10-24, P1a (the quantile family) done.** Commits on `strings`, developed in a scratch worktree and landed by
   fast-forward:
   - `3bce5a9f` step 1, the pure move: the bodies of np.quantile, np.percentile, np.nanquantile, np.nanpercentile and

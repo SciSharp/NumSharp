@@ -365,6 +365,7 @@ One optional companion package ships for the first time, co-versioned with **Num
 
 ### 💥 Breaking Changes
 - `TensorEngine.ReduceCumAdd` / `ReduceCumMul` take `out=` (a `TensorEngine` subclass must add the parameter): the engine now carries `np.cumsum`'s / `np.cumprod`'s whole call, text routes and `out=` included - `fe18431f`.
+- `TensorEngine.All` / `Any(nd, axis)` become `All` / `Any(nd, int? axis, bool keepdims = false)` (a null axis reduces every axis), the tuple forms `All` / `Any(nd, int[] axis, keepdims)` are abstract, and new abstract `All` / `Any(a, axis, out, keepdims, where)` members carry `np.all`'s / `np.any`'s whole call; new abstract `Diagonal(a, offset, axis1, axis2)` and `Trace(a, offset, axis1, axis2, dtype, out)` carry `np.diagonal` / `np.trace` (a `TensorEngine` subclass must implement them) - `0349955e`, `199feaaf`.
 - `DType` replaces `System.Type` as the dtype currency - `c916c579`, `68a02258`.
   - `NDArray.dtype` returns `DType` (was `Type`), and `np.float64`, `np.int32` and the rest are `DType` descriptors (were `Type`); `DType` -> `Type` is explicit (`a.dtype.type`), and `a.dtype.Name` is `a.dtype.name`.
   - Each dtype parameter takes one `DType`: the `Type` / `NPTypeCode` twins are gone (a `Type`, `NPTypeCode` or dtype string still converts implicitly), and `linspace` / `nancumsum`'s `typeCode:` is `dtype:`.
