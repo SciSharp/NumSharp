@@ -360,9 +360,10 @@ weaver now gives every method that opens a scope — `[NDScoped]`, or a hand-wri
 at entry and passed to `NDScope.Anchor` (a no-code `GC.KeepAlive`) before every return. An unscoped
 entry point that hands an operand's address to a kernel carries `[NDAnchored]`, which weaves the same
 roots without a scope (np.copyto, `NDIter.Copy` / `CopyAs`, `TensorEngine.Inner`,
-`DefaultEngine.ReduceAMax` / `ReduceAMin` / `MaxMinNumPy` / `All` / `Any`, `ToArray` /
-`ToJaggedArray` / `ToMuliDimArray`). That closed all 28 gaps below (LT29, found by a probe, was closed the same way on
-2026-10-18). A new site is fixed the same way —
+`DefaultEngine.ReduceAMax` / `ReduceAMin` / `MaxMinNumPy` / `All` / `Any` / `NanSum` / `NanProd` / `NanMinMax`,
+`ToArray` / `ToJaggedArray` / `ToMuliDimArray`). That closed all 28 gaps below (LT29, found by a probe, was closed the
+same way on 2026-10-18, and LT30, found by the leak sweep's access violation, on 2026-10-25). A new site is fixed the
+same way —
 scope or anchor its entry point — never with a hand-placed `GC.KeepAlive` (np.nonzero, np.argwhere,
 np.flatnonzero, np.unravel_index and np.ravel_multi_index keep the ones they had before).
 
@@ -389,14 +390,14 @@ once (`RequireOptimizedBuild`, before any child starts). CI runs Release; a loca
 
 **Gate versus gaps.** `Fuzz/Lifetime/corpus/` (its own directory: the generic sweeps of
 `Fuzz/corpus/` replay every top-level file through the ordinary schema) holds `lifetime.jsonl` — the
-`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 353 calls held to ZERO divergences (8
-repetitions; about 20 s per framework). 111 of them PIN a fixed gap (`pin` = its old id, `FIXED` in the
+`[FuzzMatrix]` gate `LifetimeOracleTests.Lifetime`, 357 calls held to ZERO divergences (8
+repetitions; about 20 s per framework). 117 of them PIN a fixed gap (`pin` = its old id, `FIXED` in the
 generator): a call that reaches a fixed site keeps every variant (each operand temporary alone, then all
 of them), so a red gate names the gap and the operand it loses again (`FIXED gaps regressed: LT07, …`).
 `Lifetime_CorpusContract` checks in-process that every op key has a C# body, that every fixed gap
-LT01–LT29 still has pinned cases, and that every OPEN gap has its own test. `lifetime_gaps.jsonl`
+LT01–LT30 still has pinned cases, and that every OPEN gap has its own test. `lifetime_gaps.jsonl`
 holds the carved cases of OPEN gaps (`GAPS`, empty since 2026-10-09); `Lifetime_KnownGaps`
-(`[OpenBugs]`) replays them at 48 repetitions and is inconclusive while none is open. The 28 fixed
+(`[OpenBugs]`) replays them at 48 repetitions and is inconclusive while none is open. The 30 fixed
 gaps, each with the method that lost the operand and what roots it now:
 
 | Gap | Call | Lost operand(s) — the method that reads them |
@@ -430,6 +431,7 @@ gaps, each with the method that lost the operand and what roots it now:
 | LT27 | `NDArray.ToMuliDimArray<T>()` | the receiver |
 | LT28 | `np.unique_values` / `np.unique_counts` (integer family, complex) | the receiver — the hash path's `ExtractKeysOnly` (`np.unique` keeps it) |
 | LT29 | `ndarray.tolist()` (every dtype), `NDArray.AsStringArray` of a contiguous `U` array; also `AsString`, `GetString` and the `S` / `U` slice readers | the receiver / argument — `IArraySlice.GetItems` and `NDStringCodec.ReadUcs4` read through a raw pointer while they allocate one object per element (found by a probe on 2026-10-18: an access violation over a temporary 200 MB `U500` array, not by this gate) |
+| LT30 | `np.nansum` / `np.nanprod` along an axis (and their flat routes, `np.nanmax` / `np.nanmin`) | the input — `ExecuteNanAxisReduction` hands its address to the IL axis kernel and never reads the operand again (found on 2026-10-25 by the leak sweep, whose net8.0 run ended in an access violation in `NanReduceContiguousAxis`, not by this gate) |
 
 **What roots them now.** The `[NDScoped]` weave of the entry point for LT01, LT02, LT05, LT06, LT12–LT17,
 LT19–LT21, LT23–LT25 and LT28 (np.take, np.put, the along-axis pair, the scans, nancumsum, searchsorted,
@@ -439,7 +441,8 @@ LT07), scoped helpers the public overloads delegate to; `NDArray.convolve` / `ND
 (LT22); np.copyto's `[NDAnchored]` (LT08, LT09), with `NDIter.Copy` / `CopyAs` (every cast) and
 np.linalg.norm's scope; `DefaultEngine.MaxMinNumPy` / `ReduceAMax` (LT10, LT11); np.dot's scope and
 `TensorEngine.Inner` (LT18); `DefaultEngine.All` (LT26); `ToMuliDimArray` (LT27); `[NDAnchored]` on
-`tolist`, `AsStringArray`, `AsString`, `GetString` and `StringArraySlice.GetIndex` / `GetItems` / `ToArray` (LT29). Two deterministic
+`tolist`, `AsStringArray`, `AsString`, `GetString` and `StringArraySlice.GetIndex` / `GetItems` / `ToArray` (LT29);
+`[NDAnchored]` on `DefaultEngine.NanSum` / `NanProd` / `NanMinMax` (LT30). Two deterministic
 gates back the race-based one: `OperandRootsTests` (NumSharp.Tests) reads the woven IL — every method
 that opens a scope and takes an NDArray calls `NDScope.Anchor`, so does every `[NDAnchored]` method and
 the entry point of each fixed site — and `WeaverOperandRootTests` (Build.Analyzer) pins the transform.

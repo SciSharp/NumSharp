@@ -488,6 +488,77 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-25, P2's first family: np.histogram / np.histogram_bin_edges moved, and the divergences behind the move
+  fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot
+  (41,604 calls at the move, 58,356 once `38dda739` added the cumulative path's variants), a NumPy twin of its lines
+  (`twin_histogram.py` in the session's scratchpad: the tool's operands, bins, ranges and weights rebuilt in NumPy, each
+  result's SHA-256), an A/B verdict per fix (`ab_verdict.py`: fixed / still-differ / regressed against the parent's
+  snapshot), and random differentials for what the snapshot's fixed operands cannot reach (`rand_hist_gen.py` and its
+  successors: NumPy 2.4.2's raw bits or error text, Linux NumPy's answers for int32):
+  - `adaaa190` the snapshot tool reaches the histogram family's arguments (bins as a count, an estimator, an array or a
+    `double[]`; the range; complex, `U5` and StringDType weights; a struct-of-arrays result rendered field by field).
+  - `ba939e91` the move (D1: NumPy writes these functions in Python, so an internal operation class): every private
+    member of np.histogram.cs into `Statistics/HistogramEngine.cs`, statement for statement; the eight overloads open the
+    matrix boundary's plain region and make one call. 41,604 calls byte-identical; R1 np.histogram.cs 14 text / 10
+    numeric lines -> out of the allowlist. The twin at the move: 39,546 of 40,710 comparable lines agreed.
+  - `38dda739` the snapshot tool: explicit edges with a NaN last edge, repeated and infinite edges, bool / int8 /
+    float32 / float16 weights (NumPy's cumulative path keeps their dtype through an in-place add).
+  - `f0a6e3ee` (D4) explicit edges holding a NaN count as NumPy's cumulative loop does (`HistogramCumulativeLoop`:
+    argsort, searchsorted, `cum_n +=`, np.diff). **Correction of its subject:** binning each sample gave `[3, 5]` for
+    `bins=[0, nan, 2]` over the twelve samples, not `[2, 0]` (the snapshot's hash a9928084ac1eb583 is int64 `[3, 5]`,
+    found by a hash search after the commit).
+  - `0ca6504e` (D4) weights on explicit edges add into their total in place (`cum_n += cw[bin_index]`): the weights'
+    dtype, an int8 total wrapping, bool weights refused. **Correction of its subject:** the widened sum it replaced was
+    int64 for bool and the signed integers and uint64 for the unsigned ones (np.cumsum's dtype), not "int64 for every
+    integer", and float16 / float32 weights already kept their dtype (its listed float16 / float32 cases did not change).
+  - `16f72407` (D4) an empty array of edges gives NumPy's empty histogram (it raised "negative dimensions are not
+    allowed").
+  - `2e153994` (D4) the estimators clamp a char sample's width to 1 (`np.issubdtype(a.dtype, np.integer)`, which holds
+    for NumSharp's char).
+  - `782fee4e` int32 data spanning the whole int32 range pin Linux NumPy's answer: NumSharp follows the LP64 model (C
+    long is int64), and Windows NumPy's `_unsigned_subtract` leaves int32 (its C long there) signed and raises.
+  - `98ea7bcf` (D4) complex data meet NumPy's equal-width statements in complex128 (complex edges, the complex index
+    arithmetic, the estimators stopping where NumPy's complex values meet real-only code).
+  - `6bcc8e92` (D4) zero estimator bins no longer reach the fused count kernels, which wrote one slot before a zero-length
+    result (STATUS_HEAP_CORRUPTION, the process killed at a later case of the random differential).
+  - `5f7a8311` (D4) the single edge of zero float16 / float32 bins is linspace's start.
+  - `12240c9c` (D4) an estimator's bin count goes through `int(np.ceil(delta / width))` and np.linspace's allocation:
+    NumPy's errors for a NaN or infinite quotient and for an edge count too large to allocate (MemoryError with NumPy's
+    `_size_to_string`, "array is too big", np.arange's IndexError at 2^63, "Maximum allowed size exceeded").
+  - `ce0418dd` (D4) the estimators compute in NumPy's dtypes (NEP 50 per statement: a float16 / float32 peak-to-peak
+    value, rice's and scott's widths and stone's candidate widths in the data's dtype, stone's jhat from `p_k = hist / n`,
+    Python's first minimum, and data with no spread widening by ±0.5 in the data's dtype).
+  - `dde4d2ef` (D4) zero bins over outer edges with no width left (a float32 1e9 widens to itself) raise NumPy's
+    IndexError (index INT64_MIN: 0 / 0 in the index statement) before the bincount refusal.
+  - `94c8fe87` (D4) float16 / float32 data over a range divide by the range's float64 `norm_denom`, a strong np.float64
+    (`DirectILKernelGenerator.Histogram.Range.cs`); a range narrower than the dtype's spacing then gives NumPy's
+    IndexError. `5b80f8ea` takes those kernels' privatized accumulators from the buffer pool (the Oracle's native
+    allocation chokepoint gate refused a raw allocation site).
+  - Evidence at `5b80f8ea`: the twin agrees on 57,252 of 57,262 comparable snapshot lines (1,094 decimal lines have no
+    NumPy dtype); the 10 left are the six int32 lines above and four char lines with text edges (NumSharp's char compares
+    with text; the twin's uint16 proxy cannot). Random differentials: 30,000 random cases, 29,909 identical; 20,000
+    small-sample estimator cases, 24,898 no-spread cases, 20,000 narrow-range cases and 400 large range cases, all
+    identical.
+  - **Findings, not P2's.** (1) np.argsort's tie order: NumPy's default kind is introsort (x86-simd-sort for 32 / 64-bit
+    lanes on AVX2 / AVX-512), NumSharp's a stable radix sort, so equal keys come out in another order; the cumulative
+    path sums its weights in that order (`cw = np.cumsum(sw)`), and the 91 random cases still differing are all
+    explicit-edge weighted cases a last bit apart. (2) np.bincount raises NumPy's ValueError text as an
+    ArgumentException (its own convention); the histogram's refusals inherit it. (3) stone's `p_k.dot(p_k)` is cblas
+    ddot in NumPy; without the OpenBLAS backend the managed np.dot can differ in the last bit on 16 bins or more. (4)
+    NumSharp's histogram takes an int bin count, so an edge count NumPy could allocate on a large machine raises
+    NumPy's MemoryError text here. (5) float16 histograms without a range run the fused kernel's three software float16
+    roundings per sample: 0.63x NumPy at 10M (the range kernel's one rounding runs 0.85x-0.97x; float32 over a range
+    went from 5.4x / 2.4x to 4.1x / 1.8x NumPy at 100K / 10M, a float64 division per sample). (6) `b7a42363`, a lost GC
+    anchor (lifetime gap LT30): the net8.0 Oracle run of these commits aborted once with an access violation in
+    np.nansum's axis kernel, a race the next run did not repeat; a probe with tiered compilation off reproduced it
+    (np.nansum(temporary, axis) wrong in 7 of 300 calls, np.nanprod's the same access violation), and `[NDAnchored]` on
+    `DefaultEngine.NanSum` / `NanProd` / `NanMinMax` closed it (0 of 300 over the whole nan family), with lifetime-gate
+    pins and IL-guard rows.
+  - Left for this family: the text routes' replayed answers (`HistogramTextAnswer` decides some answers from sizes and
+    dtypes alone) against NumPy's own composition through engine calls, the plan's step 2, its own commit with the
+    snapshot as the referee; np.histogramdd / np.histogram2d next.
+  - At `b7a42363`: NumSharp.Tests net10.0 20,527 passed / 11 skipped and net8.0 20,526 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed.
 - **2026-10-24, P1d (the reduction members' `out=`) done.** Commits on `strings`, developed in a scratch worktree and
   landed by fast-forward. The moves are held to the snapshot of numpy.matrix's reductions (62,742 calls over
   NDMatrix.sum / prod / mean / var / std), byte-identical each time; each D4 fix changes only the lines it names, and
