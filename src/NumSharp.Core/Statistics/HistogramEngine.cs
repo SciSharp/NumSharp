@@ -60,7 +60,9 @@ namespace NumSharp.Statistics
             ///     <see cref="Uniform"/> and <see cref="BinDtype"/> is Complex.</summary>
             public readonly ComplexOuterEdges ComplexEdges;
             /// <summary>True when the outer edges are a range's Python floats rather than the data's own minimum and maximum:
-            ///     NumPy's <c>norm_denom</c> is then their float64 difference (<see cref="ZeroBinsBlockHasNaNIndex"/>).</summary>
+            ///     NumPy's <c>norm_denom</c> is then their float64 difference, so float16 / float32 data count with a float64
+            ///     quotient (<see cref="DirectILKernelGenerator.GetHistogramRangeCountKernel"/>), and zero bins test it for a
+            ///     NaN index (<see cref="ZeroBinsBlockHasNaNIndex"/>).</summary>
             public readonly bool RangeEdges;
 
             /// <summary>Holds the edges and, for equal-width bins, the parameters of the uniform counting path.</summary>
@@ -307,6 +309,9 @@ namespace NumSharp.Statistics
         /// <exception cref="ArgumentException">Zero bins with a sample between the outer edges: NumPy's np.bincount refusal
         ///     (<c>'list' argument must have no negative elements</c>, a ValueError in NumPy; NumSharp's np.bincount raises
         ///     it as an ArgumentException), see <see cref="HistogramZeroBins"/>.</exception>
+        /// <exception cref="IndexError">Zero bins whose quotient is not finite (<see cref="HistogramZeroBins"/>); float16 /
+        ///     float32 data over a range narrower than the dtype's spacing, whose float64 quotient passes the edges
+        ///     (<c>index 3 is out of bounds for axis 0 with size 3</c>, the first such sample).</exception>
         /// <remarks>The kernels read raw addresses, so the samples, edges and weights are first made contiguous from their
         ///     element 0 in the kernel's dtype (<see cref="EnsureContiguousDtype"/>). They assume at least one bin.</remarks>
         private static unsafe NDArray HistogramUniform(NDArray raveled, NDArray w, BinEdgesResult be, NPTypeCode ntype)
@@ -323,6 +328,11 @@ namespace NumSharp.Statistics
             if (nbins == 0)
                 return HistogramZeroBins(raveled, w, be, ntype);
 
+            // float16 / float32 data over a range: NumPy's norm_denom is the range's float64 difference, a strong operand, so
+            // the quotient is float64 (DirectILKernelGenerator.Histogram.Range.cs); the data's own outer edges keep it in the
+            // data's width.
+            bool rangeQuotient = be.RangeEdges && (be.BinDtype == NPTypeCode.Half || be.BinDtype == NPTypeCode.Single);
+
             // Cast samples and edges to the compute dtype B, contiguous, matching NumPy's
             // `tmp_a.astype(bin_edges.dtype)` — the index arithmetic then runs bit-for-bit in B.
             NDArray aB = EnsureContiguousDtype(raveled, be.BinDtype);
@@ -334,7 +344,9 @@ namespace NumSharp.Statistics
                 // Unweighted: ONE fused pass — compute each index and increment its count directly.
                 // No int64 indices array, no separate bincount. Integer counts are order-independent.
                 NDArray counts = np.zeros(Shape.Vector(nbins), NPTypeCode.Int64);
-                var countKernel = DirectILKernelGenerator.GetHistogramCountKernel(be.BinDtype);
+                var countKernel = rangeQuotient
+                    ? DirectILKernelGenerator.GetHistogramRangeCountKernel(be.BinDtype)
+                    : DirectILKernelGenerator.GetHistogramCountKernel(be.BinDtype);
                 countKernel((void*)aB.Address, len, (void*)edgesB.Address, be.First, be.Last, nbins, (long*)counts.Address);
                 return counts;
             }
@@ -347,7 +359,9 @@ namespace NumSharp.Statistics
             NDArray wReal = EnsureContiguousDtype(complexWeights ? np.real(w) : w, NPTypeCode.Double);
             NDArray wImag = complexWeights ? EnsureContiguousDtype(np.imag(w), NPTypeCode.Double) : null;
 
-            var wkernel = DirectILKernelGenerator.GetHistogramWeightedKernel(be.BinDtype);
+            var wkernel = rangeQuotient
+                ? DirectILKernelGenerator.GetHistogramRangeWeightedKernel(be.BinDtype)
+                : DirectILKernelGenerator.GetHistogramWeightedKernel(be.BinDtype);
             int elemB = DirectILKernelGenerator.GetTypeSize(be.BinDtype);
             byte* aBase = (byte*)aB.Address;
             double* wrBase = (double*)wReal.Address;

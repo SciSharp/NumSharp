@@ -485,6 +485,51 @@ public class np_histogram_Tests
             .Should().Throw<IndexError>().WithMessage(text);
     }
 
+    /// <summary>
+    ///     float16 / float32 data over a range: NEP 50 rounds the range's Python floats to the data's dtype where they meet
+    ///     the data, but <c>norm_denom</c> is their float64 difference, so a kept sample's index is a float64 quotient that
+    ///     can pass the bin count when the range is narrower than the dtype's spacing; the fancy index into the edges then
+    ///     refuses it (NumPy 2.4.2). NumSharp computed the quotient from the rounded edges and counted the samples.
+    /// </summary>
+    [TestMethod]
+    public void Histogram_NarrowFloatRange_IndexPassesTheEdges_IndexError()
+    {
+        var f16 = np.array(new[] { (Half)10080, (Half)10064 });
+        (double, double) range = (10066.283933623668, 10076.727203988607);
+        ((Action)(() => np.histogram(f16, 2, range: range)))
+            .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 0 with size 3");
+        ((Action)(() => np.histogram(f16, "sturges", range: range)))
+            .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 0 with size 3");
+        ((Action)(() => np.histogram(f16, 2, range: range, weights: np.array(new[] { 0.5, 2.0 }))))
+            .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 0 with size 3");
+
+        var f32 = np.array(new[] { 1e8f, 1e8f + 16 });
+        ((Action)(() => np.histogram(f32, 2, range: (1e8 + 3.9, 1e8 + 12.1))))
+            .Should().Throw<IndexError>().WithMessage("index 3 is out of bounds for axis 0 with size 3");
+    }
+
+    /// <summary>
+    ///     float16 / float32 data over a range with weights: the float64 quotient path sums each block's weights in float64
+    ///     and folds them into the result in the weights' dtype, complex weights part by part (NumPy 2.4.2's answers).
+    /// </summary>
+    [TestMethod]
+    public void Histogram_FloatRange_Weighted()
+    {
+        var (h, e) = np.histogram(np.array(new[] { 0.5f, 1.25f, 2.75f, 3.0f }), 3, range: (0.0, 3.0),
+            weights: np.array(new[] { 1.5, 2.0, 0.25, 4.0 }));
+        Eq(h, new double[] { 1.5, 2.0, 4.25 });
+        h.typecode.Should().Be(NPTypeCode.Double);
+        e.typecode.Should().Be(NPTypeCode.Single);
+
+        var (hc, ec) = np.histogram(np.array(new[] { (Half)0.5, (Half)1.25, (Half)2.75, (Half)3.0 }), 3, range: (0.0, 3.0),
+            weights: np.array(new[] { new Complex(1, 2), new Complex(2, 0), new Complex(0, 0.25), new Complex(4, 0) }));
+        hc.typecode.Should().Be(NPTypeCode.Complex);
+        hc.GetAtIndex<Complex>(0).Should().Be(new Complex(1, 2));
+        hc.GetAtIndex<Complex>(1).Should().Be(new Complex(2, 0));
+        hc.GetAtIndex<Complex>(2).Should().Be(new Complex(4, 0.25));
+        ec.typecode.Should().Be(NPTypeCode.Half);
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {
