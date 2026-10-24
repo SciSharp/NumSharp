@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Statistics;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp
@@ -266,10 +267,10 @@ namespace NumSharp
                     // Fewer than two text edges have nothing to compare; two or more are compared by the string greater kernel.
                     if (Backends.Strings.NDStringUfuncs.IsText(earr))
                     {
-                        if (earr.size > 1 && TextEdgesDecrease(earr))
+                        if (earr.size > 1 && HistogramEngine.TextEdgesDecrease(earr))
                             throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
                     }
-                    else if (AnyDecreasing(edges[i]))
+                    else if (HistogramEngine.AnyDecreasing(edges[i]))
                         throw new ValueError($"`bins[{i}]` must be monotonically increasing, when an array");
                 }
                 else if (spec is NDArray earr0 && earr0.ndim > 1)
@@ -284,7 +285,7 @@ namespace NumSharp
                     // A text sample's column is the STACKED text column: its min() names that dtype (<U32 beside float64).
                     if (textSample && !ri.HasValue && N > 0)
                         throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", stacked, stacked);
-                    (double smin, double smax) = GetOuterEdges(cols[i], ri);
+                    (double smin, double smax) = HistogramEngine.GetOuterEdges(cols[i], ri);
                     int nb = DdOperatorIndex(spec, i);
                     // histogramdd calls `np.linspace(smin, smax, n+1)` WITHOUT a dtype, so the edges take
                     // result_type(smin, smax, n+1) — which, unlike np.histogram, has NO array to keep it strong.
@@ -294,8 +295,8 @@ namespace NumSharp
                     // So a ranged or empty float32/float16 column yields float64 edges — matching NumPy (a
                     // float32-column-with-strong-endpoints keeps float32). Compute AND result are the same dtype here.
                     bool weakEndpoints = ri.HasValue || N == 0;
-                    NPTypeCode edgeType = weakEndpoints ? NPTypeCode.Double : FloatPromoteBinType(cols[i].typecode);
-                    edges[i] = HistogramLinspace(smin, smax, nb + 1, edgeType, edgeType);
+                    NPTypeCode edgeType = weakEndpoints ? NPTypeCode.Double : HistogramEngine.FloatPromoteBinType(cols[i].typecode);
+                    edges[i] = HistogramEngine.HistogramLinspace(smin, smax, nb + 1, edgeType, edgeType);
                 }
 
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)
@@ -339,8 +340,8 @@ namespace NumSharp
                 var searchIdx = DirectILKernelGenerator.GetHistogramSearchIndexKernel(cmp);
                 if (searchIdx != null)
                 {
-                    NDArray colC = EnsureContiguousDtype(cols[i], cmp);
-                    NDArray edgeC = EnsureContiguousDtype(edges[i], cmp);
+                    NDArray colC = HistogramEngine.EnsureContiguousDtype(cols[i], cmp);
+                    NDArray edgeC = HistogramEngine.EnsureContiguousDtype(edges[i], cmp);
                     var ncnt = new NDArray(NPTypeCode.Int64, Shape.Vector(N), fillZeros: false);
                     unsafe { searchIdx((void*)colC.Address, N, (void*)edgeC.Address, (int)edges[i].size, (long*)ncnt.Address); }
                     Ncount[i] = ncnt;
