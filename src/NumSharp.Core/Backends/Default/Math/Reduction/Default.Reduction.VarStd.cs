@@ -20,23 +20,25 @@ namespace NumSharp.Backends
         /// <param name="dtype">NumPy's <c>dtype=</c>: the loop of both sums (an integer or bool input defaults to
         /// float64, every other input to its own dtype), so it decides the result dtype.</param>
         /// <param name="takeSqrt">True for <c>np.std</c> (the square root of the variance, NumPy's <c>_std</c>).</param>
-        /// <param name="outDtype">The dtype of NumPy's <c>out=</c> array, or null when the call has none. NumPy hands
-        /// <c>out</c> to its LAST statement only, <c>umr_sum(x, axis, dtype, out, keepdims)</c>, where a reduction
-        /// without <c>dtype=</c> resolves its loop from <c>out</c> and the operand together: the sum of the squared
-        /// deviations then runs in <c>promote_types(out.dtype, x.dtype)</c>. So a float32 input with a float64
-        /// <c>out</c> sums float32 squares in float64. It has no effect with <paramref name="dtype"/> or for an
-        /// integer / bool input (their loop is fixed before).</param>
-        /// <param name="sumOnly">Return the sum of the squared deviations and stop: no division, no square root.
-        /// Use it with <paramref name="outDtype"/>, where NumPy stores that sum into <c>out</c> first and divides
-        /// <c>out</c> in place (so the division runs on the value as <c>out</c>'s dtype holds it).</param>
-        /// <returns>The variance or standard deviation: a read-only 0-d scalar when the result has no dimensions,
-        /// otherwise a fresh array. Its dtype is the deviation sum's — the input's float dtype, float64 for an integer,
-        /// bool or complex128 input, <paramref name="dtype"/>, or the promotion <paramref name="outDtype"/> causes.
-        /// With <paramref name="sumOnly"/>: that sum, as the reduction returned it.</returns>
+        /// <param name="out">NumPy's <c>out=</c> of <c>_var</c>, or null when the call has none (the variance only: a
+        /// standard deviation's square root of out is its caller's, <see cref="StdIntoOut"/>). NumPy hands <c>out</c> to
+        /// its LAST statement only, <c>umr_sum(x, axis, dtype, out, keepdims)</c>: that statement parses it (read-only,
+        /// rank, shape: the reduce prologue) after the mean and <c>x = arr - arrmean</c>, whose errors therefore come
+        /// first, and without <c>dtype=</c> resolves its loop from <c>out</c> and <c>x</c> together, so the sum of the
+        /// squared deviations runs in <c>promote_types(out.dtype, x.dtype)</c> (a float32 input with a float64 <c>out</c>
+        /// sums float32 squares in float64; an integer / bool input's loop is fixed before). The sum is stored into
+        /// <c>out</c> with an unsafe cast and <c>out</c> is divided in place, so the division runs on the value as
+        /// <c>out</c>'s dtype holds it.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the variance or standard deviation: a read-only 0-d
+        /// scalar when the result has no dimensions, else a fresh array. Its dtype is the deviation sum's — the input's
+        /// float dtype, float64 for an integer, bool or complex128 input, or <paramref name="dtype"/>.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand, a 0-d operand included (NumPy
         /// normalizes the axis before any arithmetic, unlike <c>ufunc.reduce</c>).</exception>
         /// <exception cref="TypeError">A bool input with <c>dtype=bool</c>: NumPy's boolean-subtract TypeError, raised by
-        /// <c>arr - mean</c>.</exception>
+        /// <c>arr - mean</c> (before <paramref name="out"/> is parsed); or text NumPy's mean refuses.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the
+        /// reduce prologue's texts).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
         /// <exception cref="ArgumentException"><c>np.std</c> with an integer or bool <paramref name="dtype"/> and a result
         /// that has dimensions: NumPy's <c>sqrt</c> output-cast UFuncTypeError (a 0-d result casts instead).</exception>
         /// <remarks>
@@ -71,7 +73,7 @@ namespace NumSharp.Backends
         ///     </para>
         /// </remarks>
         internal NDArray VarStdNumPy(NDArray arr, int? axis_, bool keepdims, int ddof, DType dtype, bool takeSqrt,
-            DType outDtype = null, bool sumOnly = false)
+            NDArray @out = null)
         {
             // StringDType: _var computes the keepdims sum and then meets NumPy's division (or, for a 0-d input, Python's
             // division and `arr - arrmean`): NDVStringStatistics.Var. _std calls _var first, so the answers are var's.
@@ -123,13 +125,25 @@ namespace NumSharp.Backends
                 : DeviationSquare.Real;
             NPTypeCode sqT = square == DeviationSquare.Modulus ? NPTypeCode.Double : xT;
 
+            // out=: NumPy's last statement, umr_sum(x, axis, dtype, out, keepdims), parses out (the reduce prologue: its
+            // read-only check, its rank, its shape) — after the mean's sum above, whose refusals have run, and after
+            // x = subtract(arr, arrmean), whose two-bool refusal the routes below raise inside their fused pass. That one is
+            // raised here first, so an error of x comes before an error of out on every route (probed 2.4.2:
+            // np.var(bool, dtype=bool, out=read-only) is the boolean-subtract TypeError).
+            if (@out is not null)
+            {
+                if (xT == NPTypeCode.Boolean)
+                    throw BooleanSubtractError();
+                ReductionArguments.Validate(arr, axis_, keepdims, @out, null, "add");
+            }
+
             // The loop of the LAST sum, umr_sum(x, axis, dtype, out, keepdims). It is `loop` again, except that an
             // out= without dtype= joins the resolution (reducelike_promote_and_resolve promotes out's dtype with the
             // operand's): a wider out widens this one sum, a narrower or equal one changes nothing.
             DType sumLoop = loop;
-            if (sumLoop is null && outDtype is not null)
+            if (sumLoop is null && @out is not null)
             {
-                DType promoted = np.promote_types(outDtype, (DType)sqT);
+                DType promoted = np.promote_types(@out.dtype, (DType)sqT);
                 if (promoted.GetTypeCode() != sqT)
                     sumLoop = promoted;
             }
@@ -181,9 +195,22 @@ namespace NumSharp.Backends
                 }
             }
 
-            // out= callers store this sum into out and divide out in place, as NumPy's `out=ret` does.
-            if (sumOnly)
-                return ret;
+            // out=: the sum stored into out with an unsafe cast (the prologue above proved out has its exact shape), then
+            // true_divide(out, max(rcount - ddof, 0), out=out, casting='unsafe') — the division runs on the value as out's
+            // dtype holds it. The sum is this call's intermediate (a read-only 0-d one for a flat reduction): disposed.
+            if (@out is not null)
+            {
+                try
+                {
+                    NDIter.Copy(@out, ret);
+                }
+                finally
+                {
+                    ret.Dispose();
+                }
+                DivideByCountLikeNumPy(@out, Math.Max(rcount - ddof, 0));
+                return @out;
+            }
 
             // ret / max(rcount - ddof, 0). A 0-d result is NumPy's scalar: computed on a writeable copy, handed out read-only.
             bool scalarResult = ret.ndim == 0;
@@ -194,6 +221,19 @@ namespace NumSharp.Backends
                 SqrtLikeNumPy(ret, scalarResult);
             return scalarResult ? ret.MarkReductionScalar() : ret;
         }
+
+        /// <summary>
+        ///     NumPy's refusal of <c>bool - bool</c> at <c>_var</c>'s <c>x = arr - arrmean</c> (the subtract ufunc has no bool
+        ///     loop; the same verbatim text <see cref="Subtract"/> raises).
+        /// </summary>
+        /// <returns>A new <see cref="TypeError"/> to throw.</returns>
+        /// <remarks>
+        ///     <see cref="VarStdNumPy"/> raises it itself when its <c>out=</c> is parsed: the fused deviation routes raise the
+        ///     subtraction's refusal only inside their pass, after the out's checks, where NumPy raises it before.
+        /// </remarks>
+        private static TypeError BooleanSubtractError() => new TypeError(
+            "numpy boolean subtract, the `-` operator, is not supported, " +
+            "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
 
         /// <summary>
         ///     Whether a flat reduction of the fused deviation child over <paramref name="arr"/> walks the same element order

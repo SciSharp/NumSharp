@@ -174,9 +174,9 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">NumPy's refusal for text: no add loop, or no division loop for a text out (raised AFTER
         ///     the sum was stored, as NumPy's division meets the stored sum).</exception>
         /// <remarks>
-        ///     The order of the checks follows the matrix member this was moved from: with text involved (the input, the out
-        ///     or the loop request) the axis is counted first, then the text routes; otherwise the reduce prologue (out's
-        ///     read-only check first) runs before the count.
+        ///     NumPy's order: <c>_count_reduce_items</c> normalizes the axis first (an axis out of bounds is the AxisError
+        ///     even with a read-only out, probed 2.4.2), then <c>umr_sum</c> parses out (the reduce prologue, or the text
+        ///     routes' own checks).
         /// </remarks>
         private NDArray MeanIntoOut(NDArray arr, int? axis, bool keepdims, DType dtype, NDArray @out)
         {
@@ -208,8 +208,9 @@ namespace NumSharp.Backends
                 }
             }
 
-            ReductionArguments.Validate(arr, axis, keepdims, @out, null, "add");
+            // _count_reduce_items before umr_sum parses out=: the axis first.
             long count = ReduceItemCount(arr, axis);
+            ReductionArguments.Validate(arr, axis, keepdims, @out, null, "add");
             NDArray total = ReduceAdd(arr, axis, keepdims, loop ?? DTypePromotion.PromoteTypes(@out.dtype, arr.dtype));
             try
             {
@@ -244,7 +245,13 @@ namespace NumSharp.Backends
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
         /// <exception cref="TypeError">A text out for a float or complex input without <paramref name="dtype"/> (the last
-        ///     sum's add loop on (out, x) has none), or the refusals the mean's own reduction raises for a text input.</exception>
+        ///     sum's add loop on (out, x) has none), the refusals the mean's own reduction raises for a text input, or the
+        ///     boolean-subtract refusal of a bool input in a bool loop.</exception>
+        /// <remarks>
+        ///     NumPy's order, which an error makes visible: the axis (<c>_count_reduce_items</c>), the mean's errors (a text
+        ///     input), <c>x = arr - arrmean</c>'s (two bools), and only then out's (its read-only check, its rank and shape)
+        ///     in the last <c>umr_sum</c> (probed 2.4.2). <see cref="VarStdNumPy"/> parses out at that point itself.
+        /// </remarks>
         private NDArray VarianceIntoOut(NDArray arr, int? axis, bool keepdims, int ddof, DType dtype, NDArray @out)
         {
             // _var's last statement, ret = umr_sum(x, axis, dtype, out, keepdims): without dtype= a float or complex input
@@ -265,24 +272,12 @@ namespace NumSharp.Backends
                     : Strings.NDStringUfuncs.ReduceOutError("add", deviations, @out.dtype, accumulate: false);
             }
 
-            ReductionArguments.Validate(arr, axis, keepdims, @out, null, "add");
-
-            // _var: ret = umr_sum(x, axis, dtype, out, keepdims) — the sum of the squared deviations, whose loop out joins —
-            // then ret = true_divide(ret, max(rcount - ddof, 0), out=ret, casting='unsafe').
-            NDArray squares = VarStdNumPy(arr, axis, keepdims, ddof, dtype, takeSqrt: false, outDtype: @out.dtype, sumOnly: true);
-            try
-            {
-                // The prologue proved out has the sum's exact shape: an element copy with NumPy's unsafe cast.
-                NDIter.Copy(@out, squares);
-            }
-            finally
-            {
-                // VarStdNumPy hands the uninitialized-shape sentinel back as the operand itself: never dispose a caller's array.
-                if (!ReferenceEquals(squares, arr))
-                    squares.Dispose();
-            }
-            DivideByCountLikeNumPy(@out, Math.Max(ReduceItemCount(arr, axis) - ddof, 0));
-            return @out;
+            // _var: ret = umr_sum(x, axis, dtype, out, keepdims) — the sum of the squared deviations, whose loop out joins,
+            // stored into out — then ret = true_divide(ret, max(rcount - ddof, 0), out=ret, casting='unsafe'). VarStdNumPy
+            // runs those statements with out, parsing out where NumPy's last umr_sum does (after the axis, the mean and the
+            // deviations). The uninitialized-shape sentinel (an NDArray without a shape) comes back as the operand itself,
+            // out untouched.
+            return VarStdNumPy(arr, axis, keepdims, ddof, dtype, takeSqrt: false, @out: @out);
         }
 
         /// <summary>
