@@ -48,6 +48,11 @@ namespace NumSharp
         ///     axis ("axis1 and axis2 cannot be the same").</exception>
         /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
         ///     first).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="TypeError">NumPy's loop resolution refuses text: a text operand with another out class, a
+        ///     text out for numbers, a string <paramref name="dtype"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape ("output array does
+        ///     not match result of trace").</exception>
         [NDScoped] // the boundary of the plain region and the engine call (the engine reclaims its own temporaries)
         public static NDArray trace(
             NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1,

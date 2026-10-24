@@ -9,8 +9,11 @@ namespace NumSharp
         /// Counts the number of non-zero values in the array.
         /// </summary>
         /// <param name="a">The array for which to count non-zeros.</param>
-        /// <returns>Number of non-zero values in the array.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
+        /// <returns>Number of non-zero values in the array (a text element counts when non-empty); 0 for an empty
+        ///     array.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html — the count is the engine's
+        ///     (<c>TensorEngine.CountNonZero</c>).</remarks>
         public static long count_nonzero(NDArray a)
         {
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)

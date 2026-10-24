@@ -11,8 +11,12 @@ namespace NumSharp
         ///     Test whether all array elements evaluate to True.
         /// </summary>
         /// <param name="a">Input array or object that can be converted to an array.</param>
-        /// <returns>True if all elements evaluate to True (non-zero).</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        /// <returns>True if all elements evaluate to True (non-zero); True for an empty array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF (NumPy's bool cast of the
+        ///     text).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the reduction is the engine's
+        ///     (<c>TensorEngine.All</c>).</remarks>
         public static bool all(NDArray a)
         {
             if (a is null)
@@ -26,8 +30,13 @@ namespace NumSharp
         /// <param name="nd">Input array or object that can be converted to an array.</param>
         /// <param name="axis">Axis along which a logical AND reduction is performed.</param>
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
-        /// <returns>A new boolean ndarray is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        /// <returns>A new boolean ndarray is returned; a 0-d one (a 1-D input reduced) is read-only, NumPy's
+        ///     scalar.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d array accepts 0 and -1).</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the reduction is the engine's
+        ///     (<c>TensorEngine.All(nd, axis, keepdims)</c>); this marks a 0-d result as NumPy's scalar.</remarks>
         [NDScoped] // boundary for the engine reduction tree (reshape/chained-axis temps); the reduced result is yielded
         public static NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
         {
@@ -47,8 +56,14 @@ namespace NumSharp
         /// <param name="axis">Tuple of axes along which a logical AND reduction is performed.
         ///     An empty array returns the input cast to bool (no reduction).</param>
         /// <param name="keepdims">If True, the reduced axes are left in the result as dimensions with size one.</param>
-        /// <returns>A new boolean ndarray is returned.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        /// <returns>A new boolean ndarray is returned; a 0-d one (every axis reduced) is read-only, NumPy's
+        ///     scalar.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> or <paramref name="axis"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range (the first one, in the tuple's order).</exception>
+        /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the reduction is the engine's
+        ///     (<c>TensorEngine.All(nd, axis, keepdims)</c>).</remarks>
         // See the tuple-axis out=/where= overload: a bare null axis goes to the int? overload instead.
         [OverloadResolutionPriority(-1)]
         [NDScoped] // boundary for the engine multi-axis tree (axis-run reshape view, chained single-axis intermediates)
@@ -72,7 +87,10 @@ namespace NumSharp
         /// <param name="keepdims">If True, the result is broadcast-compatible with the input
         ///     (every dimension becomes size 1). Otherwise the result is a 0-d array.</param>
         /// <returns>A new boolean ndarray.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html — the engine's axis=None form
+        ///     (<c>TensorEngine.All(nd, null, keepdims)</c>): a fresh, writeable owner, a 0-d one included.</remarks>
         public static NDArray<bool> all(NDArray nd, bool keepdims)
         {
             if (nd is null)
