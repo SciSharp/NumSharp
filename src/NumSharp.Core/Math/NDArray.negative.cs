@@ -6,121 +6,20 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// Numerical negative, element-wise.
-        /// Returns -x for each element (negates ALL values, not just positive).
+        ///     Numerical negative, element-wise: NumPy's <c>np.negative(x)</c> (the <c>-x</c> operator), a fresh array of
+        ///     every element negated in the input's dtype. Unsigned integers wrap (<c>-1</c> of uint8 is 255), as NumPy's
+        ///     loops do.
         /// </summary>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.negative.html</remarks>
-        public NDArray negative()
-        {
-            // NumPy rejects boolean negative (np.negative(bool) / unary -): there
-            // is no negative loop for the bool dtype, even for empty arrays. Use
-            // the `~` operator (np.invert) or np.logical_not for a boolean flip.
-            if (this.GetTypeCode == NPTypeCode.Boolean)
-                throw new TypeError(
-                    "The numpy boolean negative, the `-` operator, is not supported, " +
-                    "use the `~` operator or the logical_not function instead.");
-
-            // negative has no string loop (NumPy's class-named UFuncTypeError).
-            Backends.Strings.NDStringUfuncs.ThrowIfUnary("negative", this);
-
-            if (this.size == 0)
-                return this.Clone();
-
-            var @out = TensorEngine.Cast(this, (Type)(dtype ?? this.dtype), copy: true);
-
-            var len = @out.size;
-
-            unsafe
-            {
-                switch (@out.GetTypeCode)
-                {
-                    // NPTypeCode.Boolean is rejected up-front (see guard above);
-                    // NumPy has no boolean negative loop.
-                    // %foreach supported_numericals_signed,supported_numericals_signed_lowercase%
-	                // case NPTypeCode.#1:
-	                // {
-                        // var out_addr = (#2*)@out.Address;
-                        // for (int i = 0; i < len; i++)
-                            // out_addr[i] = (#2)(-out_addr[i]);
-                        // return @out;
-	                // }
-	                // %
-                    // %foreach supported_numericals_unsigned,supported_numericals_unsigned_lowercase,supported_numericals_unsigned_defaultvals
-	                // case NPTypeCode.#1:
-	                // default:
-		                // throw new NotSupportedException();
-	                case NPTypeCode.SByte:
-	                {
-                        var out_addr = (sbyte*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = (sbyte)(-out_addr[i]);
-                        return @out;
-	                }
-	                case NPTypeCode.Int16:
-	                {
-                        var out_addr = (short*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = (short)(-out_addr[i]);
-                        return @out;
-	                }
-	                case NPTypeCode.Int32:
-	                {
-                        var out_addr = (int*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Int64:
-	                {
-                        var out_addr = (long*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Double:
-	                {
-                        var out_addr = (double*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Single:
-	                {
-                        var out_addr = (float*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Half:
-	                {
-                        var out_addr = (Half*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Complex:
-	                {
-                        var out_addr = (System.Numerics.Complex*)@out.Address;
-                        for (long i = 0; i < len; i++)
-                            out_addr[i] = -out_addr[i];
-                        return @out;
-	                }
-	                case NPTypeCode.Byte:
-	                case NPTypeCode.UInt16:
-	                case NPTypeCode.UInt32:
-	                case NPTypeCode.UInt64:
-	                case NPTypeCode.Char:
-	                default:
-		                throw new NotSupportedException();
-                }
-            }
-        }
+        /// <returns>A fresh array of the input's dtype and shape, laid out as NumPy's ufunc allocates it (an F-ordered
+        ///     input gives an F-ordered result).</returns>
+        /// <exception cref="TypeError">A bool array (NumPy's "The numpy boolean negative, the `-` operator, is not
+        ///     supported, ..." text), or text: negative has no string loop (NumPy's class-named UFuncTypeError).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.negative.html — the whole call is the engine's
+        ///     <see cref="TensorEngine.Negate"/>, as for <c>np.negative</c> and the unary <c>-</c> operator. Until the
+        ///     np-layer dtype plan's P1c this member negated a C-ordered copy with its own per-dtype loop, which threw
+        ///     <see cref="NotSupportedException"/> for the unsigned integers and char where NumPy wraps.
+        /// </remarks>
+        public NDArray negative() => TensorEngine.Negate(this);
     }
 }
