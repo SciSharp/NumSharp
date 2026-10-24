@@ -524,8 +524,9 @@ namespace NumSharp.Statistics
                     double width = EstimateBinWidth(binName, x, first, last, range);
                     if (width > 0)
                     {
-                        // Integer data never gets a sub-unit bin width.
-                        if (a.typecode.IsInteger() && width < 1) width = 1;
+                        // Integer data never gets a sub-unit bin width: NumPy's `np.issubdtype(a.dtype, np.integer)`, which
+                        // holds for NumSharp's char too (an unsignedinteger in its scalar hierarchy, the uint16 of the oracle).
+                        if (np.issubdtype(a.dtype, np.integer) && width < 1) width = 1;
                         double delta = last - first;
                         nEqualBins = (int)System.Math.Ceiling(delta / width);
                     }

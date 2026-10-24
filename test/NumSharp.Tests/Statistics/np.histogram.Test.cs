@@ -233,6 +233,27 @@ public class np_histogram_Tests
         }
     }
 
+    /// <summary>
+    ///     NumSharp's char is an unsignedinteger (its scalar hierarchy; the oracle's uint16), so NumPy's
+    ///     <c>np.issubdtype(a.dtype, np.integer) and width &lt; 1</c> clamps its estimated width to 1 as for uint16: the
+    ///     codes 97..100 in twelve samples get NumPy's uint16 answer for every estimator (sqrt got 4 bins, auto / sturges /
+    ///     rice / doane 5 and stone 100 without the clamp; fd and scott estimate a width of at least 1 anyway).
+    /// </summary>
+    [TestMethod]
+    public void Estimators_CharData_ClampWidthLikeUInt16()
+    {
+        var chars = np.broadcast_to(np.array(new[] { 'd', 'b', 'c', 'a' }).reshape(1, 4), new Shape(3, 4));
+        foreach (var est in new[] { "auto", "fd", "sturges", "sqrt", "rice", "doane", "stone" })
+        {
+            var (h, e) = np.histogram(chars, est);
+            Eq(h, new double[] { 3, 3, 6 });
+            Eq(e, new double[] { 97, 98, 99, 100 });
+        }
+        var (hs, es) = np.histogram(chars, "scott");
+        Eq(hs, new double[] { 6, 6 });
+        Eq(es, new double[] { 97, 98.5, 100 });
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {
