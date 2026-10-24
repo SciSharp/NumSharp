@@ -629,6 +629,16 @@ stores NDArrays but is **not yet disposable** still counts as a holder - its own
 to make it disposable first. Marking a disposable type `[NDBorrowed]` (it owns unmanaged state of its
 own but only borrows its arrays) stops the contagion at that type.
 
+**Back-references.** A member whose type holds NDArrays only by coming back to the declaring type is
+not a holder: a parent pointer (`Node _parent`), the link of a linked list (`Node _next`), a collection
+of the type's own instances (`List<Node> _children`), or a reference into a cycle of types that reaches
+arrays only through this one. The analyzer cannot tell an owning link from a non-owning one, so it never
+asks a type to dispose instances of itself (that would ask a child to dispose its parent); dispose
+owned children yourself. A member whose type reaches arrays another way - a child that stores arrays of
+its own, an owner that stores arrays the child does not - is a holder, cycle or not; mark it
+`[NDBorrowed]` when it does not own them. The answer depends only on the types, never on the order the
+compiler happens to analyze them in, and a model of any size is analyzed in one pass over its types.
+
 <a id="ndw017"></a>
 
 ### NDW017 - a disposable type never disposes an NDArray-holding member

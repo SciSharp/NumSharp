@@ -380,15 +380,27 @@ member or a type. Full semantics: `docs/LEAK_ANALYZER.md` §10.
 | contagion (NDW012) | `ContagionScenarios.cs` (9 tagged) | dropped/dead/factory/discarded holder instance, holder array literal, `np.nditer` dropped / walked by foreach, produced NDArray walked by foreach, temp handed to `np.nditer`; clean: using/dispose/return/store/sink/using-statement/`close()`/using-then-foreach, `[NDBorrowed]` disposable, non-disposable wrapper, NDArray[] foreach, alias foreach, `[NDScoped]` twin |
 | metamorphic | `OwnershipMetamorphicTests` (19 pairs) | IDisposable turns 016→017, dispose call →clean, IAsyncDisposable, `[NDBorrowed]` member/type, static, computed, carrier, ref-struct pattern, chain resolving one level at a time, contagion stopping at `[NDBorrowed]`, `using` a dropped holder, holder non-disposable moves the verdict to the type, `close()`, foreach-over-produced until `using`, helper reachability, override of inherited Dispose, foreach-dispose of a collection |
 | property fuzz | `OwnershipPropertyFuzzTests` (120 seeded types) | NDW016 == non-disposable holder types, NDW017 == undisposed holders, NDW012 == 0, over a 14-template grammar × 3 Dispose shapes |
-| robustness | `OwnershipRobustnessTests` (19) | cycles ± arrays, self-reference, 25-deep chain, disposing chain, generic definition vs `Box<NDArray>`/`Box<int>`, alias, nullable, nested, partial, 300 members, 200 types, static/interface/enum/delegate, no-NumSharp no-op, malformed, unresolved member type, arrays of holders, `Cell<NDArray>`, other-instance helper |
+| robustness | `OwnershipRobustnessTests` (21) | cycles ± arrays, self-reference, 25-deep chain, disposing chain, generic definition vs `Box<NDArray>`/`Box<int>`, alias, nullable, nested, partial, 300 members, 200 types, static/interface/enum/delegate, no-NumSharp no-op, malformed, unresolved member type, arrays of holders, `Cell<NDArray>`, other-instance helper, a 14-type densely cyclic model with and without an array |
+| cycles & back-references | `OwnershipCycleTests` (20) | the holder rule on cycles, member by member: self-reference / linked-list link, parent pointer + child list + sibling array, NumSharp's `NDScope._parent` and `NDIterator._nestedChild` shapes, every container of the own type, a ring, the `HolderTypeScenarios` cycle pair, a base/derived cycle, a source `NDArray` subclass with a wrapper pointing back, mutual holders, parent/child owner, a gate other than the owner, two routes, two anchors; the model queried in 200 warm-up orders and from 16 threads (identical answers); a 10,000-type chain and 3,000-type random entity models ± an array (no stack overflow) |
+| graph oracle | `OwnershipGraphOracleTests` (2) | 630 seeded random type graphs (cycles, self-references, base types, `List`/array/tuple/`Box`/auto-property edges, borrowed/delegate/comparer/static/computed/scalar non-edges): every type's exact holder set (NDW017 per holder, NDW016's member list) against an independent breadth-first oracle of "reaches an NDArray without passing through the declaring type" |
 | contract | `AnalyzerContractTests` | NDW016/NDW017 are Warnings, enabled, anchored help links; the three analyzers own disjoint ids |
 
 **Guardrails added by this pass:**
 - **The hand-off rule is type-gated.** An argument counts as a hand-off of a holder only when the
   argument's OWN type holds NDArrays and it is not a call result — `Log(x.size)` on a loop element and
   `Log(_a.ToString())` are not disposals. Dropping the gate silently cleared `ForeachWithoutDispose`.
-- **Only root `HoldsNDArrays` answers are memoized when a cycle cut them.** A nested answer computed
-  while its type was on the visiting stack may be inexact; memoizing it turned a real holder clean.
+- **"Holds" is decided per strongly connected component, by one iterative pass.** The first design
+  memoized only answers whose walk cut no cycle, so a domain model whose types reference each other
+  re-walked every path (321 s of analyzer time on one consumer project, PR #632) and its recursion
+  overflowed the stack at a few thousand types (a dead compiler process); memoizing a cut answer had
+  turned a real holder clean. Now Tarjan's algorithm, with its own stack and no early exit, decides
+  every component exactly, once, under one lock (the components must be exact: "outside the owner's
+  component" is read as "cannot reach the owner").
+- **A member that holds only through its owner is not a holder.** Inside the owner's component the
+  question is "does the owner dominate the member type" on the component's reversed edges (rooted at
+  the types that hold by themselves or through something outside): parent pointers, linked-list links
+  and the owner's own `List<Self>` stay clean (NumSharp's `NDScope._parent`), and the answer no longer
+  depends on what another callback memoized first — the first design's answer did.
 - **Metadata types are consulted, never reported**, and only from assemblies that can name NDArray.
 - **`INDArrayCarrier` types are exempt from NDW016/NDW017 on purpose** — they are the transient result
   vocabulary the scope yields through; demanding IDisposable there contradicts the carrier contract.
