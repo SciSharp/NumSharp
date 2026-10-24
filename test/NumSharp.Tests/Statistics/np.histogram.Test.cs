@@ -530,6 +530,28 @@ public class np_histogram_Tests
         ec.typecode.Should().Be(NPTypeCode.Half);
     }
 
+    /// <summary>
+    ///     float16 / float32 data over a range with enough samples for the range count kernel's privatized accumulators
+    ///     (4096 samples or more, at least four per bin): ten thousand values <c>(i² mod 9973) / 9973</c> in 7 bins over
+    ///     (0.15, 0.85), NumPy 2.4.2's counts.
+    /// </summary>
+    [TestMethod]
+    public void Histogram_FloatRange_ManySamples()
+    {
+        var values = new double[10000];
+        for (int i = 0; i < values.Length; i++)
+            values[i] = (double)((long)i * i % 9973) / 9973;
+        var f64 = np.array(values);
+
+        var (h32, e32) = np.histogram(f64.astype(NPTypeCode.Single), 7, range: (0.15, 0.85));
+        Eq(h32, new double[] { 996, 1028, 970, 944, 970, 1028, 996 });
+        e32.GetAtIndex<float>(3).Should().Be(0.44999998807907104f);
+
+        var (h16, e16) = np.histogram(f64.astype(NPTypeCode.Half), 7, range: (0.15, 0.85));
+        Eq(h16, new double[] { 994, 1030, 968, 940, 974, 1028, 1002 });
+        e16.GetAtIndex<Half>(3).Should().Be((Half)0.449951171875);
+    }
+
     [TestMethod]
     public void Estimator_IntegerBinWidthAtLeastOne()
     {

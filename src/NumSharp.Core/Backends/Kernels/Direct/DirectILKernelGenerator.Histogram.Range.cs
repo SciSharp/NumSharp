@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged.Pooling;
 
 // =============================================================================
 // DirectILKernelGenerator.Histogram.Range.cs — the equal-width index kernels for float16 / float32 data counted over a
@@ -72,7 +73,8 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         ///     The count loop over a range for one dtype (float or Half), with the privatized accumulators of
-        ///     <see cref="HistogramCountBody{T}"/> (four round-robin count buffers merged at the end).
+        ///     <see cref="HistogramCountBody{T}"/> (four round-robin count buffers merged at the end; the three extra ones
+        ///     come from <see cref="SizeBucketedBufferPool"/> zeroed and go back to it, an exception included).
         /// </summary>
         /// <typeparam name="T">float or Half: the JIT folds the other branch away.</typeparam>
         /// <param name="samplesP">The contiguous samples in the dtype.</param>
@@ -91,9 +93,10 @@ namespace NumSharp.Backends.Kernels
             double nd = last - first;
             bool privatize = nbins <= HistCountPrivMaxBins && count >= HistCountPrivMinLen && count >= (long)nbins * 4;
             long* a1 = null, a2 = null, a3 = null;
+            long extraBytes = (long)nbins * 3 * sizeof(long);
             if (privatize)
             {
-                long* ex = (long*)System.Runtime.InteropServices.NativeMemory.AllocZeroed((nuint)((long)nbins * 3 * sizeof(long)));
+                long* ex = (long*)SizeBucketedBufferPool.TakeZeroed(extraBytes);
                 a1 = ex; a2 = ex + nbins; a3 = ex + 2 * nbins;
             }
             try
@@ -162,8 +165,9 @@ namespace NumSharp.Backends.Kernels
             }
             finally
             {
-                // The refusal of a sample's index leaves through here too: the accumulators are freed either way.
-                if (privatize) System.Runtime.InteropServices.NativeMemory.Free(a1);
+                // The refusal of a sample's index leaves through here too: the accumulators go back either way, with the
+                // size they were taken with (the pool's contract).
+                if (privatize) SizeBucketedBufferPool.Return((IntPtr)a1, extraBytes);
             }
         }
 
