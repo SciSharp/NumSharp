@@ -609,6 +609,27 @@ namespace NumSharp
         /// <exception cref="ValueError">An argument repeats an axis, or the two have different lengths.</exception>
         public abstract NDArray MoveAxis(NDArray nd, int[] source, int[] destination);
         public abstract NDArray RollAxis(NDArray nd, int axis, int start = 0);
+
+        /// <summary>
+        ///     NumPy's <c>np.diagonal(a, offset, axis1, axis2)</c> (<c>PyArray_Diagonal</c>): a READ-ONLY view of the
+        ///     diagonals of the 2-D sub-arrays spanned by <paramref name="axis1"/> and <paramref name="axis2"/>, appended as
+        ///     the last axis; no element is read or copied.
+        /// </summary>
+        /// <param name="a">The array (at least 2-D).</param>
+        /// <param name="offset">The diagonal's offset from the main one: positive above it (along
+        ///     <paramref name="axis2"/>), negative below (along <paramref name="axis1"/>).</param>
+        /// <param name="axis1">The first axis of the 2-D sub-arrays (negative counts from the end).</param>
+        /// <param name="axis2">The second axis of the 2-D sub-arrays.</param>
+        /// <returns>A read-only view sharing <paramref name="a"/>'s storage: <paramref name="a"/>'s shape without the two
+        ///     axes, the diagonal (of length 0 when the offset leaves none) as the last axis.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> has fewer than two dimensions ("diag requires an array of at
+        ///     least two dimensions"), or the two axes are the same axis ("axis1 and axis2 cannot be the same").</exception>
+        /// <exception cref="AxisError">An axis is out of range: "axis1: axis …" / "axis2: axis …" (axis1 checked
+        ///     first).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b): the public <c>np.diagonal</c> applies the class
+        ///     boundaries and calls this, and <see cref="Trace"/> reads its diagonal through it.</remarks>
+        public abstract NDArray Diagonal(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1);
         public abstract NDArray Cast(NDArray x, Type dtype, bool copy);
 
         #endregion
@@ -671,6 +692,34 @@ namespace NumSharp
         /// <remarks>The public <c>np.count_nonzero</c> only opens the matrix boundary's plain region and calls this (the
         ///     np-layer dtype plan, P1b).</remarks>
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.trace(a, offset, axis1, axis2, dtype, out)</c> (<c>PyArray_Trace</c>), the whole call: the sums
+        ///     along the diagonals <see cref="Diagonal"/> returns, <c>add.reduce</c> over its last axis with
+        ///     <paramref name="dtype"/> and <paramref name="out"/>.
+        /// </summary>
+        /// <param name="a">The array (at least 2-D; any dtype, text included).</param>
+        /// <param name="offset">The diagonal's offset from the main one.</param>
+        /// <param name="axis1">The first axis of the 2-D sub-arrays.</param>
+        /// <param name="axis2">The second axis of the 2-D sub-arrays.</param>
+        /// <param name="dtype">The sum's dtype (<c>dtype=</c>), or null for NEP 50's accumulator of
+        ///     <paramref name="a"/> (signed integers and bool to int64, unsigned integers to uint64).</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
+        ///     null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the sums: a read-only 0-d result (NumPy's scalar)
+        ///     for 2-D <paramref name="a"/>, <paramref name="a"/>'s shape without the two axes otherwise.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><see cref="Diagonal"/>'s refusals; a StringDType diagonal that cannot be reduced
+        ///     (empty: no identity; an NA under the None-like rule); a read-only or misshapen text-route out.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="TypeError">NumPy's loop resolution refuses text: a text operand with another out class, a
+        ///     text out for numbers, a string <paramref name="dtype"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape ("output array does
+        ///     not match result of trace").</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b): the public <c>np.trace</c> opens the matrix boundary's
+        ///     plain region and calls this.</remarks>
+        public abstract NDArray Trace(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null,
+            NDArray @out = null);
 
         // Boolean masking
         public abstract NDArray BooleanMask(NDArray arr, NDArray mask);

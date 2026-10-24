@@ -68,7 +68,6 @@ Indexing/np.select.cs	3	10
 Indexing/np.take.FancyAxis.cs	0	1
 Indexing/np.take.cs	3	4
 Indexing/np.take_along_axis.cs	1	9
-Indexing/np.trace.cs	7	7
 Indexing/np.unravel_index.cs	0	2
 LinearAlgebra/linalg/np.linalg.arrayapi.cs	2	0
 LinearAlgebra/linalg/np.linalg.cs	5	15
