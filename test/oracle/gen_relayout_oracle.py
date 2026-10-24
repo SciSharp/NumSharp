@@ -779,6 +779,8 @@ def _predicted_kind(tname, nd, size):
 # 2026-10-12, when branch strings was rebased onto journey4: its fixes made RL04, RL05 and RL06 match NumPy, so their
 # rules are dropped and their 104 cases moved back into relayout.jsonl at the positions the generator gave them (a
 # regeneration on the merged corpus surveys strings' tiers too and is a separate step).
+# 2026-10-24: arctan2 and the float-tier binary ufuncs broadcast an empty operand and allocate the loop dtype, so RL07
+# matches NumPy; its rule is dropped and its 40 cases moved back into relayout.jsonl the same way.
 GAPS = {
     "RL01": "np.searchsorted / ndarray.searchsorted read a C-contiguous v (operand 1) or sorter (operand 2) at a "
             "non-zero offset from the owner's start (WRONG indices); np.digitize passes its x as searchsorted's v, and "
@@ -791,9 +793,6 @@ GAPS = {
     "RL03": "np.ldexp reads a C-contiguous mantissa x1 already of the result dtype, or an int32 / int64 exponent x2, at "
             "a non-zero offset from the owner's start (WRONG values): MaterializeContiguous passes such an operand "
             "through np.ascontiguousarray unchanged and the kernel reads .Address without Shape.offset (VA05, x1 too)",
-    "RL07": "np.logaddexp / np.logaddexp2 return a CLONE of an empty operand (either position) without broadcasting or "
-            "promoting it: no error where NumPy raises 'operands could not be broadcast together', and the empty "
-            "operand's own dtype (int32, uint8) where NumPy's float loop gives float64 / float16",
 }
 
 # The kinds whose first element sits past the buffer's start by an EXTRA offset (kind_of): the operands a kernel
@@ -865,10 +864,14 @@ def _gap_of(case, misread):
 
 
 def _empty_gap(case, op, pos):
-    """The gap of a variant whose moved operand is EMPTY, by emulating the NumSharp early return that skips the ufunc
-    machinery for an empty operand (RL07): the variant is carved exactly when NumPy's outcome differs from what that
-    early return produces. (RL06, the comparison operators' empty-left early return, was fixed with the strings
-    rebase of 2026-10-12: the operators broadcast an empty operand like the ufuncs.)
+    """The gap of a variant whose moved operand is EMPTY: the place for a rule that emulates a NumSharp early return
+    skipping the ufunc machinery for an empty operand, carving the variant exactly when NumPy's outcome differs from
+    what that early return produces. No such gap is open. RL06 (the comparison operators' empty-left early return)
+    was fixed with the strings rebase of 2026-10-12, when the operators started to broadcast an empty operand like the
+    ufuncs. RL07 (np.logaddexp / np.logaddexp2 returning a clone of an empty operand) was fixed on 2026-10-24, when
+    arctan2 and the float-tier binary ufuncs started to broadcast an empty operand and allocate the loop dtype
+    (DefaultEngine.EmptyBinaryResult); its emulation modelled the old early return, so it would have kept carving
+    cases that now match NumPy, and it is gone.
 
     Parameters:
         case: the finished variant case.
@@ -876,16 +879,8 @@ def _empty_gap(case, op, pos):
         pos: the position of the emptied operand.
 
     Returns:
-        "RL07" or None.
+        None (no empty-operand gap is open).
     """
-    emptied = case["operands"][pos]
-    truth = ("err", case["error"]["type"], case["error"]["text"]) if case.get("expects_throw") \
-        else ("ok", {k: v for k, v in case["expected"].items() if k != "kind"})
-    if op in ("logaddexp", "logaddexp2"):
-        # DefaultEngine.LogAddExp: `if (x1.size == 0) return x1.Clone(); if (x2.size == 0) return x2.Clone();`.
-        first_empty = next(d for d in case["operands"] if 0 in d["shape"])
-        early = ("ok", {"dtype": first_empty["dtype"], "shape": first_empty["shape"], "buffer": ""})
-        return "RL07" if early != truth else None
     return None
 
 

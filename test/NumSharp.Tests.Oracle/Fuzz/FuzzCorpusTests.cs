@@ -1392,9 +1392,10 @@ namespace NumSharp.Tests.Fuzz
             ["shape_args.jsonl"] = 500,    // 537: 12 shape-taking fns x every C# shape form
             ["array_args.jsonl"] = 320,    // 335: 55 secondary-operand positions x up to 9 layouts
             // The relayout tiers (gen_relayout_oracle.py, 2026-10-07): existing cases with one operand moved into an
-            // ndarray kind its (op, position, dtype class) cell lacked. Delivered counts (the 179 carved gaps live in
-            // corpus/gaps/relayout_gaps.jsonl):
-            ["relayout.jsonl"] = 14000,    // 14,964 variants of the portable tiers, 19 kinds
+            // ndarray kind its (op, position, dtype class) cell lacked. Delivered counts (the carved gaps live in
+            // corpus/gaps/relayout_gaps.jsonl: 179 at delivery, 75 after the strings rebase of 2026-10-12 returned
+            // RL04-RL06's 104 cases, 35 since RL07's 40 returned on 2026-10-24):
+            ["relayout.jsonl"] = 14000,    // 15,108 variants of the portable tiers, 19 kinds (14,964 at delivery)
             ["relayout_host.jsonl"] = 1600, // 1,728 variants of the host-libm tiers
             // The surface tier (gen_surface_oracle.py, 2026-10-08): the APIs the coverage inventory listed as available
             // but unproven. Delivered count (the 223 carved gaps live in corpus/gaps/surface_gaps.jsonl; 986 at delivery,

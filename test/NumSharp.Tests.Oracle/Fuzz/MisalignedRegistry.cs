@@ -472,7 +472,7 @@ namespace NumSharp.Tests.Fuzz
             //     answer changes when its 0-d operands are weak (gen_relayout_oracle._upstream_residual), so
             //     a difference left in a relayout case with a 0-d operand is not this divergence. The blanket
             //     matches ANY dtype difference of such a case, and it hid np.logaddexp returning its empty int32
-            //     operand where NumPy returns float64 (gap RL07).
+            //     operand where NumPy returns float64 (gap RL07, fixed 2026-10-24).
             if (kind == DivergenceKind.Dtype && c.Operands.Length >= 2 && c.Operands.Any(o => o.Shape.Length == 0)
                 && !IsRelayoutCase(c) && !IsMatrixOperandCase(c))
                 return "NEP50 weak-scalar: 0-D operand promoted weakly (NumPy promotes 0-D arrays fully)";

@@ -30,6 +30,10 @@ namespace NumSharp.Tests
     // broadcast an empty left operand like the ufuncs (RL06). Their pins stay below as regression tests, untagged, each
     // summary opening with "FIXED"; the generator's rules for RL04-RL06 are dropped.
     //
+    // FIXED 2026-10-24: np.logaddexp / np.logaddexp2 (and arctan2, nextafter, copysign, hypot, heaviside, which shared
+    // the early return) broadcast an empty operand and allocate the loop dtype (RL07); its pin is untagged the same
+    // way, and the generator's RL07 rule is dropped.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
     // the cases return to the gate.
@@ -164,13 +168,16 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.logaddexp</c> / <c>np.logaddexp2</c> with an EMPTY operand: NumPy's float loop gives an int32 input a
-        ///     float64 result (<c>logaddexp(zeros((0,5), int32), array(0))</c> is float64 <c>(0, 5)</c>), raises
+        ///     FIXED 2026-10-24 (the float-tier ufuncs and arctan2 broadcast an empty operand and allocate the loop dtype,
+        ///     <c>DefaultEngine.EmptyBinaryResult</c>): NumSharp gives NumPy's answer now, and this test pins it. Before the
+        ///     fix: <c>np.logaddexp</c> / <c>np.logaddexp2</c> with an EMPTY operand: NumPy's float loop gives an int32
+        ///     input a float64 result (<c>logaddexp(zeros((0,5), int32), array(0))</c> is float64 <c>(0, 5)</c>), raises
         ///     <c>ValueError: operands could not be broadcast together with shapes (0,5) (4,5)</c> for float32
         ///     <c>(0,5)</c> with <c>(4,5)</c>, and broadcasts <c>(0,1)</c> with <c>(0,5)</c> to <c>(0, 5)</c>; NumSharp
-        ///     returns a clone of the empty operand in all three (gap RL07).
+        ///     returned a clone of the empty operand in all three (gap RL07). The other five ufuncs that shared the
+        ///     early return are pinned in <c>Math/np.floattier.EmptyOperand.Test.cs</c>.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL07")]
+        [TestMethod]
         public void Relayout_Logaddexp_EmptyOperand_ShouldBroadcastAndPromote()
         {
             using var empty32 = np.zeros(new Shape(0, 5), np.int32);

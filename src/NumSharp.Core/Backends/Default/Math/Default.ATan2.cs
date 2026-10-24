@@ -59,12 +59,12 @@ namespace NumSharp.Backends
                     y.GetTypeCode, x.GetTypeCode, loopType, @out, where);
             }
 
-            // Handle empty array
-            if (y.size == 0)
-                return y.Clone();
-
-            if (x.size == 0)
-                return x.Clone();
+            // An empty operand: NumPy still broadcasts the operands (its error for shapes that do not broadcast) and
+            // allocates the result in the loop dtype (np.arctan2(0, empty int8) is float16, of the broadcast shape). The
+            // kernels need no call for zero elements. This returned a clone of the empty operand: its own dtype and
+            // shape, and no broadcast check.
+            if (y.size == 0 || x.size == 0)
+                return EmptyBinaryResult(y, x, typeCode ?? PromoteATan2Binary(y, x));
 
             // Execute using IL kernel infrastructure
             // ATan2 is a binary operation: atan2(y, x)
@@ -131,6 +131,28 @@ namespace NumSharp.Backends
             }
 
             return result;
+        }
+
+        /// <summary>
+        ///     The result of a binary float-tier ufunc (<see cref="ATan2"/> and the <c>ExecuteFloatTierBinary</c> family:
+        ///     logaddexp, logaddexp2, nextafter, copysign, hypot, heaviside) when an operand is EMPTY: NumPy still
+        ///     broadcasts the operands and allocates the result in the loop dtype; no element is computed.
+        /// </summary>
+        /// <param name="a">The first operand.</param>
+        /// <param name="b">The second operand.</param>
+        /// <param name="loopType">The resolved loop dtype, which is the result's dtype.</param>
+        /// <returns>A fresh empty array of <paramref name="loopType"/> and the operands' broadcast shape.</returns>
+        /// <exception cref="IncorrectShapeException">The shapes do not broadcast (NumPy's <c>operands could not be broadcast
+        ///     together with shapes (0,3) (2,) </c>, raised by <see cref="Broadcast(Shape, Shape)"/>).</exception>
+        /// <remarks>
+        ///     The callers used to return a clone of the empty operand: its own dtype (an integer for an integer input,
+        ///     where NumPy's loop is float16 / float32 / float64), its own shape (a (0, 1) operand against a (5,) one gave
+        ///     (0, 1), NumPy (0, 5)) and no broadcast error.
+        /// </remarks>
+        private static NDArray EmptyBinaryResult(NDArray a, NDArray b, NPTypeCode loopType)
+        {
+            var (shape, _) = Broadcast(a.Shape, b.Shape);
+            return new NDArray(loopType, shape.Clean(), false);
         }
 
         /// <summary>

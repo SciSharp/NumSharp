@@ -92,10 +92,11 @@ namespace NumSharp.Backends
                     x1.GetTypeCode, x2.GetTypeCode, loopType, @out, where);
             }
 
-            if (x1.size == 0)
-                return x1.Clone();
-            if (x2.size == 0)
-                return x2.Clone();
+            // An empty operand: NumPy still broadcasts the operands (its error for shapes that do not broadcast) and
+            // allocates the result in the loop dtype (np.hypot(empty int8, empty int8) is float16). This returned a clone
+            // of the empty operand: its own dtype and shape, and no broadcast check (the relayout tier's gap RL07).
+            if (x1.size == 0 || x2.size == 0)
+                return EmptyBinaryResult(x1, x2, typeCode ?? PromoteATan2Binary(x1, x2));
 
             return ExecuteFloatTierBinaryPlain(x1, x2, op, typeCode);
         }
