@@ -113,26 +113,5 @@ namespace NumSharp.Backends
                 return iter.ExecuteReducing<ComplexAllKernel, bool>(default, true);
             }
         }
-
-        /// <summary>
-        /// Test whether all array elements along a given axis evaluate to True.
-        /// </summary>
-        /// <param name="nd">Input array</param>
-        /// <param name="axis">Axis along which to reduce</param>
-        /// <returns>Array of bools with the axis dimension removed</returns>
-        /// <exception cref="AxisError">A string array with an out-of-bounds <paramref name="axis"/> (a 0-d one accepts 0 and
-        ///     -1).</exception>
-        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF (NumPy's bool cast of the text).</exception>
-        public override NDArray<bool> All(NDArray nd, int axis)
-        {
-            // Text: NumPy's all checks the axis (a 0-d input accepts 0 and -1), then reads the strings' truth values
-            // through the bool cast: the stand-in is the truth array, reduced below.
-            if (Strings.NDStringUfuncs.ReduceStandIn("all", nd, (int?)axis) is { } standIn)
-            {
-                using (standIn)
-                    return All(standIn, axis, keepdims: false);
-            }
-            return All(nd, axis, keepdims: false);
-        }
     }
 }

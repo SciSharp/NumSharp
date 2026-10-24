@@ -375,10 +375,201 @@ namespace NumSharp
         public abstract NDArray LeftShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray RightShift(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
+        /// <summary>
+        ///     NumPy's <c>np.all(a)</c> over every element: <c>logical_and.reduce</c> of the elements' truth values (a text
+        ///     element reads true when non-empty), True for an empty array (the identity).
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <returns>Whether every element is true.</returns>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF (NumPy's bool cast of the
+        ///     text).</exception>
         public abstract bool All(NDArray nd);
-        public abstract NDArray<bool> All(NDArray nd, int axis);
+
+        /// <summary>
+        ///     <c>np.all</c> along one axis, or over every axis when <paramref name="axis"/> is null: the boolean reduction
+        ///     without <c>out=</c> or <c>where=</c>, a fresh array the caller may wrap as NumPy's scalar.
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end; a 0-d array accepts 0 and -1), or null for
+        ///     every axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns>The bool result, laid out as NumPy's reduction allocates it. Over every axis it is a fresh, writeable
+        ///     owner (a 0-d array without <paramref name="keepdims"/>); the public <c>np.all</c> overloads decide whether a
+        ///     0-d result becomes NumPy's read-only scalar.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks><paramref name="keepdims"/> and the null axis were added to the contract in 0.71.0 (the np-layer dtype
+        ///     plan's P1b, decision D2: widened in place; the member took one <c>int</c> axis before).</remarks>
+        public abstract NDArray<bool> All(NDArray nd, int? axis, bool keepdims = false);
+
+        /// <summary>
+        ///     <c>np.all</c> over a tuple of axes: every axis checked, then a repeat refused, then the boolean reduction
+        ///     (an EMPTY tuple reduces nothing and returns the truth values in the input's shape).
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axes (negative values count from the end).</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns>The bool result, a fresh array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> or <paramref name="axis"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range (the first one, in the tuple's order).</exception>
+        /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>Abstract since 0.71.0 (the np-layer dtype plan's P1b): <see cref="DefaultEngine"/> had it as its own
+        ///     member, which the public <c>np.all</c> reached by a type test.</remarks>
+        public abstract NDArray<bool> All(NDArray nd, int[] axis, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.all(a, axis, out, keepdims, *, where)</c>, the whole call: <c>logical_and.reduce(a, axis, bool,
+        ///     out, keepdims=keepdims, where=where)</c> — the reduce prologue in NumPy's order, the text truth route, the masked
+        ///     reduction and the <c>out=</c> store.
+        /// </summary>
+        /// <param name="a">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axis, or null for every axis (NumPy's <c>axis=None</c>).</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of the result's shape and any dtype that receives the bool result
+        ///     with unsafe casting, or null for a fresh result.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask that broadcasts to <paramref name="a"/>'s shape (masked-off
+        ///     elements count as True, the identity), or null for no mask.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh bool array, read-only when 0-d (NumPy's
+        ///     scalar).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only (<c>output array is read-only</c>, checked
+        ///     first), has the wrong rank, or cannot hold the result; or <paramref name="where"/> has more axes than
+        ///     <paramref name="a"/> or would make it stretch (NumPy's reduction-iterator texts).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text: the
+        ///     mask must cast to bool under the <c>safe</c> rule); or <paramref name="out"/> does not have the result's
+        ///     shape.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
+        ///     against <paramref name="a"/>.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>
+        ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan, P1b): the public
+        ///     <c>np.all</c> only applies the matrix boundary and calls this. New in 0.71.0. A bare <c>null</c> axis is
+        ///     ambiguous with the tuple member below: pass a typed <c>int?</c>.
+        /// </remarks>
+        public abstract NDArray All(NDArray a, int? axis, NDArray @out, bool keepdims = false, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.all</c> with a tuple <paramref name="axis"/>, the whole call: the reduce prologue (every axis,
+        ///     then a repeat), the text truth route, the masked reduction and the <c>out=</c> store.
+        /// </summary>
+        /// <param name="a">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axes (an empty tuple reduces nothing).</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null for a fresh result.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or null.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the fresh bool array, read-only when 0-d.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="axis"/> is null.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask with more axes than
+        ///     <paramref name="a"/>, or an axis that appears twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array, or <paramref name="out"/> does
+        ///     not have the result's shape.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
+        ///     against <paramref name="a"/>.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b).</remarks>
+        public abstract NDArray All(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.any(a)</c> over every element: <c>logical_or.reduce</c> of the elements' truth values (a text
+        ///     element reads true when non-empty), False for an empty array (the identity).
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <returns>Whether any element is true.</returns>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF (NumPy's bool cast of the
+        ///     text).</exception>
         public abstract bool Any(NDArray nd);
-        public abstract NDArray<bool> Any(NDArray nd, int axis);
+
+        /// <summary>
+        ///     <c>np.any</c> along one axis, or over every axis when <paramref name="axis"/> is null: the boolean reduction
+        ///     without <c>out=</c> or <c>where=</c>, a fresh array the caller may wrap as NumPy's scalar.
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end; a 0-d array accepts 0 and -1), or null for
+        ///     every axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns>The bool result, laid out as NumPy's reduction allocates it. Over every axis it is a fresh, writeable
+        ///     owner (a 0-d array without <paramref name="keepdims"/>); the public <c>np.any</c> overloads decide whether a
+        ///     0-d result becomes NumPy's read-only scalar.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks><paramref name="keepdims"/> and the null axis were added to the contract in 0.71.0 (the np-layer dtype
+        ///     plan's P1b, decision D2: widened in place; the member took one <c>int</c> axis before).</remarks>
+        public abstract NDArray<bool> Any(NDArray nd, int? axis, bool keepdims = false);
+
+        /// <summary>
+        ///     <c>np.any</c> over a tuple of axes: every axis checked, then a repeat refused, then the boolean reduction
+        ///     (an EMPTY tuple reduces nothing and returns the truth values in the input's shape).
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axes (negative values count from the end).</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns>The bool result, a fresh array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> or <paramref name="axis"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range (the first one, in the tuple's order).</exception>
+        /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>Abstract since 0.71.0 (the np-layer dtype plan's P1b): <see cref="DefaultEngine"/> had it as its own
+        ///     member, which the public <c>np.any</c> reached by a type test.</remarks>
+        public abstract NDArray<bool> Any(NDArray nd, int[] axis, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.any(a, axis, out, keepdims, *, where)</c>, the whole call: <c>logical_or.reduce(a, axis, bool,
+        ///     out, keepdims=keepdims, where=where)</c> — the reduce prologue in NumPy's order, the text truth route, the masked
+        ///     reduction and the <c>out=</c> store.
+        /// </summary>
+        /// <param name="a">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axis, or null for every axis (NumPy's <c>axis=None</c>).</param>
+        /// <param name="out">NumPy's <c>out=</c>: an array of the result's shape and any dtype that receives the bool result
+        ///     with unsafe casting, or null for a fresh result.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask that broadcasts to <paramref name="a"/>'s shape (masked-off
+        ///     elements count as False, the identity), or null for no mask.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh bool array, read-only when 0-d (NumPy's
+        ///     scalar).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only (<c>output array is read-only</c>, checked
+        ///     first), has the wrong rank, or cannot hold the result; or <paramref name="where"/> has more axes than
+        ///     <paramref name="a"/> or would make it stretch (NumPy's reduction-iterator texts).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array (NumPy's TypeError text: the
+        ///     mask must cast to bool under the <c>safe</c> rule); or <paramref name="out"/> does not have the result's
+        ///     shape.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
+        ///     against <paramref name="a"/>.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>
+        ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan, P1b): the public
+        ///     <c>np.any</c> only applies the matrix boundary and calls this. New in 0.71.0. A bare <c>null</c> axis is
+        ///     ambiguous with the tuple member below: pass a typed <c>int?</c>.
+        /// </remarks>
+        public abstract NDArray Any(NDArray a, int? axis, NDArray @out, bool keepdims = false, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.any</c> with a tuple <paramref name="axis"/>, the whole call: the reduce prologue (every axis,
+        ///     then a repeat), the text truth route, the masked reduction and the <c>out=</c> store.
+        /// </summary>
+        /// <param name="a">The array (any dtype, any layout).</param>
+        /// <param name="axis">The reduced axes (an empty tuple reduces nothing).</param>
+        /// <param name="out">NumPy's <c>out=</c>, or null for a fresh result.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or null.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the fresh bool array, read-only when 0-d.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> or <paramref name="axis"/> is null.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask with more axes than
+        ///     <paramref name="a"/>, or an axis that appears twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not a bool array, or <paramref name="out"/> does
+        ///     not have the result's shape.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="where"/> or <paramref name="out"/> does not broadcast
+        ///     against <paramref name="a"/>.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b).</remarks>
+        public abstract NDArray Any(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray where = null);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         public abstract NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         // Predicate ufuncs — same single-member rule as the comparisons above

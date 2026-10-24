@@ -10,6 +10,7 @@ Backends/Default/Indexing/Default.NonZero.cs	1	2
 Backends/Default/LinearAlgebra/LinAlgEmpty.cs	7	25
 Backends/Default/Logic/Default.AllClose.cs	2	0
 Backends/Default/Logic/Default.IsClose.cs	6	0
+Backends/Default/Logic/Default.LogicalReduction.Keywords.cs	0	1	# WriteLogicalToOut moved from np.all by P1b: np.copyto(out, reduced, 'unsafe') stores the bool result into out= until P6 gives the engine its own copy
 Backends/Default/Logic/Default.LogicalReduction.cs	1	2
 Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1
 Backends/Default/Math/BLAS/Default.MatMul.2D2D.cs	0	1

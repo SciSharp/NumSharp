@@ -9,17 +9,65 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public NDArray<bool> All(NDArray nd, int axis, bool keepdims)
-            => ReduceLogicalAxis(nd, axis, keepdims, reduceAll: true);
+        /// <inheritdoc/>
+        /// <remarks>One axis runs <see cref="ReduceLogicalAxis"/>; a null axis is <see cref="ReduceLogicalEveryAxis"/>
+        ///     (the form <c>np.all(a, keepdims)</c> calls).</remarks>
+        public override NDArray<bool> All(NDArray nd, int? axis, bool keepdims = false)
+            => axis is int one
+                ? ReduceLogicalAxis(nd, one, keepdims, reduceAll: true)
+                : ReduceLogicalEveryAxis(nd, keepdims, reduceAll: true);
 
-        public NDArray<bool> Any(NDArray nd, int axis, bool keepdims)
-            => ReduceLogicalAxis(nd, axis, keepdims, reduceAll: false);
+        /// <inheritdoc/>
+        /// <remarks>One axis runs <see cref="ReduceLogicalAxis"/>; a null axis is <see cref="ReduceLogicalEveryAxis"/>
+        ///     (the form <c>np.any(a, keepdims)</c> calls).</remarks>
+        public override NDArray<bool> Any(NDArray nd, int? axis, bool keepdims = false)
+            => axis is int one
+                ? ReduceLogicalAxis(nd, one, keepdims, reduceAll: false)
+                : ReduceLogicalEveryAxis(nd, keepdims, reduceAll: false);
 
-        public NDArray<bool> All(NDArray nd, int[] axis, bool keepdims)
+        /// <inheritdoc/>
+        public override NDArray<bool> All(NDArray nd, int[] axis, bool keepdims = false)
             => ReduceLogicalMultiAxis(nd, axis, keepdims, reduceAll: true);
 
-        public NDArray<bool> Any(NDArray nd, int[] axis, bool keepdims)
+        /// <inheritdoc/>
+        public override NDArray<bool> Any(NDArray nd, int[] axis, bool keepdims = false)
             => ReduceLogicalMultiAxis(nd, axis, keepdims, reduceAll: false);
+
+        /// <summary>
+        ///     <c>np.all</c> / <c>np.any</c> over every axis without <c>out=</c> or <c>where=</c>: the flat reduction's answer
+        ///     as a fresh bool array, 0-d, or of <paramref name="nd"/>'s rank with every axis of length one under
+        ///     <paramref name="keepdims"/>.
+        /// </summary>
+        /// <param name="nd">The array (any dtype, any layout).</param>
+        /// <param name="keepdims">Whether every reduced axis stays with length one.</param>
+        /// <param name="reduceAll">True for <c>all</c> (logical_and), false for <c>any</c> (logical_or).</param>
+        /// <returns>A fresh, writeable bool array that owns its buffer, as NumPy's reduction result does; a 0-d one is not
+        ///     marked as NumPy's scalar (the public overload that wants the scalar marks it).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="SystemError">A <c>U</c> array holding a unit above U+10FFFF (the bool cast of the text).</exception>
+        /// <remarks>Moved from the public <c>np.all(NDArray, bool keepdims)</c> / <c>np.any(NDArray, bool keepdims)</c>
+        ///     overloads by the np-layer dtype plan's P1b, unchanged; the flat <see cref="All(NDArray)"/> /
+        ///     <see cref="Any(NDArray)"/> decide the value (their text route included).</remarks>
+        private NDArray<bool> ReduceLogicalEveryAxis(NDArray nd, bool keepdims, bool reduceAll)
+        {
+            if (nd is null)
+                throw new ArgumentNullException(nameof(nd));
+
+            bool scalar = reduceAll ? All(nd) : Any(nd);
+            Shape shape = Shape.Scalar;
+            if (keepdims && nd.ndim > 0)
+            {
+                var dims = new long[nd.ndim];
+                for (int i = 0; i < dims.Length; i++) dims[i] = 1;
+                shape = Shape.Adopt(dims);
+            }
+            // A typed array allocated directly owns its buffer, as NumPy's result does (a MakeGeneric wrapper over a
+            // temporary 0-d array reported OWNDATA False).
+            var result = new NDArray<bool>(shape, fillZeros: !scalar);
+            if (scalar)
+                result.Storage.InternalArray.Fill(true);
+            return result;
+        }
 
         [NDScoped]
         private NDArray<bool> ReduceLogicalAxis(NDArray nd, int axis, bool keepdims, bool reduceAll)

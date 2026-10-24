@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Generic;
@@ -35,23 +34,9 @@ namespace NumSharp
             if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
 
-            if (nd.TensorEngine is DefaultEngine defaultEngine)
-            {
-                var reduced = defaultEngine.All(nd, axis, keepdims);
-                reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
-                return reduced;
-            }
-
-            var result = nd.TensorEngine.All(nd, axis);
-            if (keepdims && nd.ndim > 0)
-            {
-                axis = DefaultEngine.NormalizeAxis(axis, nd.ndim);
-                var dims = (long[])nd.Shape.dimensions.Clone();
-                dims[axis] = 1;
-                result.Storage.Reshape(Shape.Adopt(dims));
-            }
-
-            return result;
+            var reduced = nd.TensorEngine.All(nd, axis, keepdims);
+            reduced.MarkReductionScalar(); // 1-D input reduced to 0-d -> numpy scalar (read-only)
+            return reduced;
         }
 
         /// <summary>
@@ -74,32 +59,9 @@ namespace NumSharp
             if (axis is null)
                 throw new ArgumentNullException(nameof(axis));
 
-            if (nd.TensorEngine is DefaultEngine defaultEngine)
-            {
-                var reduced = defaultEngine.All(nd, axis, keepdims);
-                reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
-                return reduced;
-            }
-
-            // Fallback for non-default engines: chain single-axis reductions.
-            if (axis.Length == 0)
-                return DefaultEngine.CastToBoolPreservingShape(nd);
-
-            var normalized = axis.Select(a => DefaultEngine.NormalizeAxis(a, nd.ndim)).ToArray();
-            Array.Sort(normalized);
-
-            NDArray<bool> result = null;
-            NDArray current = nd;
-            for (int i = normalized.Length - 1; i >= 0; i--)
-            {
-                result = all(current, normalized[i], keepdims: true);
-                current = result;
-            }
-
-            if (!keepdims)
-                result = SqueezeAxes(result, normalized);
-
-            return result;
+            var reduced = nd.TensorEngine.All(nd, axis, keepdims);
+            reduced.MarkReductionScalar(); // every axis reduced away -> numpy scalar (read-only)
+            return reduced;
         }
 
         /// <summary>
@@ -116,20 +78,8 @@ namespace NumSharp
             if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
 
-            bool scalar = all(nd);
-            Shape shape = Shape.Scalar;
-            if (keepdims && nd.ndim > 0)
-            {
-                var dims = new long[nd.ndim];
-                for (int i = 0; i < dims.Length; i++) dims[i] = 1;
-                shape = Shape.Adopt(dims);
-            }
-            // A typed array allocated directly owns its buffer, as NumPy's result does (a MakeGeneric wrapper over a
-            // temporary 0-d array reported OWNDATA False).
-            var result = new NDArray<bool>(shape, fillZeros: !scalar);
-            if (scalar)
-                result.Storage.InternalArray.Fill(true);
-            return result;
+            // Every axis (NumPy's axis=None): the engine's flat answer as a fresh, writeable owner of the keepdims shape.
+            return nd.TensorEngine.All(nd, (int?)null, keepdims);
         }
 
         /// <summary>
@@ -162,7 +112,7 @@ namespace NumSharp
         ///     <para>https://numpy.org/doc/stable/reference/generated/numpy.all.html</para>
         /// </remarks>
         /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
-        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
+        [NDScoped] // the boundary of the matrix rule and the engine call (the engine reclaims its own temporaries)
         public static NDArray all(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false, NDArray @where = null)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -171,25 +121,10 @@ namespace NumSharp
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
-            // NumPy's reduce prologue, in NumPy's order (read-only out, mask dtype, axis, out rank, iterator
-            // shapes), before any work. Without out= and where= it can raise nothing the reduction below does
-            // not raise itself, so the plain call skips it.
-            if (@out is not null || @where is not null)
-                ReductionArguments.Validate(a, axis, keepdims, @out, @where, "logical_and");
-            // Text: after NumPy's reduce prologue its logical_and.reduce reads the strings' truth values (the next
-            // phase; the mask route below would otherwise compare text with 0) — except over an EMPTY input, which reads
-            // none: the call then runs on a bool stand-in of the same shape, whose numeric path gives NumPy's identity
-            // result, keepdims shape, out= write and where= handling.
-            if (Backends.Strings.NDStringUfuncs.ReduceStandIn("all", a, axis) is { } standIn)
-            {
-                using (standIn)
-                    return all(standIn, axis, @out, keepdims, @where);
-            }
-
-            NDArray<bool> reduced = ReduceAllWithWhere(a, axis, keepdims, @where);
-            // A fresh 0-d result is a numpy SCALAR (np.bool_) at the boundary: read-only
-            // (PyArray_Return semantics); out= returns the writeable out array itself.
-            return @out is null ? reduced.MarkReductionScalar() : WriteToOut(reduced, @out);
+            // np.all IS np.logical_and.reduce(a, axis, bool, out, keepdims=, where=), and NumPy's whole call (the
+            // reduce prologue, the text truth route, the masked reduction, the out= store) is the engine's:
+            // DefaultEngine.All.
+            return a.TensorEngine.All(a, axis, @out, keepdims, @where);
         }
 
         /// <summary>
@@ -218,7 +153,7 @@ namespace NumSharp
         // lower priority hands that literal to the int? overload (NumPy's axis=None). An int[] argument fits only
         // the int[] overloads, so they still bind it.
         [OverloadResolutionPriority(-1)]
-        [NDScoped] // reclaims the where-mask effective array and the reduced temp on the out= path
+        [NDScoped] // the boundary of the engine call (the engine reclaims its own temporaries)
         public static NDArray all(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray @where = null)
         {
             if (a is null)
@@ -226,94 +161,8 @@ namespace NumSharp
             if (axis is null)
                 throw new ArgumentNullException(nameof(axis));
 
-            // NumPy's reduce prologue for a tuple axis (see the int-axis overload).
-            if (@out is not null || @where is not null)
-                ReductionArguments.Validate(a, axis, keepdims, @out, @where, "logical_and");
-            // Text: after NumPy's reduce prologue its logical_and.reduce reads the strings' truth values (the next
-            // phase; the mask route below would otherwise compare text with 0) — except over an EMPTY input, which reads
-            // none: the call then runs on a bool stand-in of the same shape, whose numeric path gives NumPy's identity
-            // result, keepdims shape, out= write and where= handling.
-            if (Backends.Strings.NDStringUfuncs.ReduceStandIn("all", a, axis) is { } standIn)
-            {
-                using (standIn)
-                    return all(standIn, axis, @out, keepdims, @where);
-            }
-
-            NDArray effective = @where is null ? a : ApplyWhereForAll(a, @where);
-            NDArray<bool> reduced = all(effective, axis, keepdims);
-            return @out is null ? reduced : WriteToOut(reduced, @out);
-        }
-
-        // === shared helpers (also used by np.any) ===
-
-        private static NDArray<bool> ReduceAllWithWhere(NDArray a, int? axis, bool keepdims, NDArray @where)
-        {
-            NDArray effective = @where is null ? a : ApplyWhereForAll(a, @where);
-
-            if (!axis.HasValue)
-                return all(effective, keepdims);
-
-            return all(effective, axis.Value, keepdims);
-        }
-
-        // Builds the effective bool array under a where= mask for `all`:
-        //   identity is True, so elements with mask=False contribute True.
-        //   effective[i] = !mask[i] | bool(a[i])
-        [NDScopedCovered] // only callers: the [NDScoped] out=/where= np.all overloads (the !mask and ToBool temps are scope-reclaimed)
-        private static NDArray ApplyWhereForAll(NDArray a, NDArray @where)
-        {
-            NDArray<bool> maskBool = ToBool(@where);
-            NDArray<bool> aBool = ToBool(a);
-            // (!maskBool) | aBool — broadcasting is handled by the operators.
-            return !maskBool | aBool;
-        }
-
-        // For np.any: effective[i] = mask[i] & bool(a[i]) (identity is False).
-        [NDScopedCovered] // only callers: the [NDScoped] out=/where= np.any overloads (the ToBool temps are scope-reclaimed)
-        internal static NDArray ApplyWhereForAny(NDArray a, NDArray @where)
-        {
-            NDArray<bool> maskBool = ToBool(@where);
-            NDArray<bool> aBool = ToBool(a);
-            return maskBool & aBool;
-        }
-
-        // Convert any-dtype NDArray to NDArray<bool> using NumPy truthiness (non-zero = True).
-        internal static NDArray<bool> ToBool(NDArray nd)
-        {
-            if (nd.GetTypeCode == NPTypeCode.Boolean)
-                return nd.MakeGeneric<bool>();
-            return nd != 0;
-        }
-
-        // Write a boolean result into the user-supplied `out` array. `out`'s dtype is preserved
-        // (NumPy lets out=float receive 0.0/1.0). Shape must match the reduction's natural output.
-        internal static NDArray WriteToOut(NDArray<bool> reduced, NDArray @out)
-        {
-            if (@out is null)
-                throw new ArgumentNullException(nameof(@out));
-            if (!@out.Shape.Equals(reduced.Shape))
-                throw new ArgumentException(
-                    $"output shape mismatch: expected {reduced.Shape}, got {@out.Shape}",
-                    nameof(@out));
-
-            np.copyto(@out, reduced, casting: "unsafe");
-            return @out;
-        }
-
-        internal static NDArray<bool> SqueezeAxes(NDArray<bool> arr, int[] reducedAxes)
-        {
-            var axesSet = new System.Collections.Generic.HashSet<int>(reducedAxes);
-            var newDims = new System.Collections.Generic.List<long>(arr.ndim - reducedAxes.Length);
-            long[] shape = arr.Shape.dimensions;
-            for (int d = 0; d < shape.Length; d++)
-            {
-                if (!axesSet.Contains(d))
-                    newDims.Add(shape[d]);
-            }
-
-            Shape newShape = newDims.Count == 0 ? Shape.Scalar : Shape.Adopt(newDims.ToArray());
-            arr.Storage.Reshape(newShape);
-            return arr;
+            // NumPy's whole call with a tuple axis is the engine's too (see the int? overload).
+            return a.TensorEngine.All(a, axis, @out, keepdims, @where);
         }
     }
 }

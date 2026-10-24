@@ -82,8 +82,6 @@ LinearAlgebra/np.cross.cs	2	0
 LinearAlgebra/np.dot.cs	1	1
 LinearAlgebra/np.einsum.Contract.cs	1	4
 LinearAlgebra/np.kron.cs	1	0
-Logic/np.all.cs	2	1
-Logic/np.any.cs	2	0
 Logic/np.array_equal.cs	6	0
 Logic/np.array_equiv.cs	3	0
 Logic/np.can_cast.cs	1	80
