@@ -54,7 +54,8 @@ Outputs (../NumSharp.Tests.Oracle/Fuzz/corpus/):
                           layout-invariance verdict
 
 Excluded sources: the stateful random tiers, the index_* / ma_* / decimal_* schemas, the backend-pinned tiers, the
-array-object tiers (they own their layouts), np.evaluate trees and iterator traces (no single NumPy call),
+array-object tiers (they own their layouts), the numpy.matrix tiers (matrix.jsonl, and the matrix-operand tiers,
+which re-emit other tiers' cases), np.evaluate trees and iterator traces (no single NumPy call),
 np.frombuffer (its operand stands for Python bytes), and every operand of dtype char or decimal (no NumPy analog).
 Run it after every other generator: its sources are their files.
 
@@ -89,7 +90,15 @@ GAP_DIR = os.path.join(CORPUS, "gaps")
 # array-object tiers, and the corpora this generator writes.
 # "surface": gen_surface_oracle.py crosses its own APIs with the ndarray kinds already, and its params are vehicle
 # encodings (a function menu, view recipes, option dicts) that no plain NumPy call reproduces.
-SKIP_PREFIXES = ("index_", "ma_", "decimal_", "random_", "generator_", "relayout", "surface")
+# "matrix": matrix.jsonl holds numpy.matrix members, and the matrix-operand tiers (matrix_operand*.jsonl) are other
+# tiers' cases re-emitted with one operand typed as a matrix. Rebuilding an operand drops the matrix flag, so they add
+# no cell: a cell is filled from the first qualifying source in file order, and matrix_operand* sorts before most of
+# the tiers it was drawn from, so as sources they only re-draw cells from other source cases. A regeneration run after
+# gen_matrix_operand_oracle.py (2026-10-24 probe) named a matrix-operand source for 2,895 of 15,564 portable and 431
+# of 1,310 host variants, over the same 16,874 (op, kind, position, dtype class) cells but 18 that turned into error
+# cases: thousands of changed variants for nothing. gen_matrix_operand_oracle.py skips this generator's files the
+# same way, so neither derived tier sources the other and the order the two run in does not matter.
+SKIP_PREFIXES = ("index_", "ma_", "decimal_", "random_", "generator_", "relayout", "surface", "matrix")
 SKIP_FILES = {"view_flags.jsonl", "out_flags.jsonl", "shape_args.jsonl", "matmul_parity.jsonl",
               "linalg_parity.jsonl", "polyalgebra_parity.jsonl", "polyroots_parity.jsonl", "evaluate.jsonl",
               "iter.jsonl", "random_smoke.jsonl"}

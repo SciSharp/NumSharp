@@ -1834,8 +1834,11 @@ error). One variant fills a cell; an emptied operand fills two (one where the ot
 NumPy raises "could not be broadcast"). The view buffers hold the sentinel 7 wherever the view does not reach, so a
 kernel that reads outside the view sees a value the operand never holds. Variants keep the source's op key, params and
 valueclass, so they replay through the same `OpRegistry` entry. Excluded: the random streams, the `index_*` / `ma_*` /
-`decimal_*` schemas, the backend-pinned and array-object tiers, np.evaluate and iterator traces, char / decimal
-operands, and np.frombuffer (its operand stands for Python `bytes`; the replay passes NumSharp a `byte[]`).
+`decimal_*` schemas, the backend-pinned and array-object tiers, the numpy.matrix tiers (`matrix.jsonl`, and the
+matrix-operand tiers, which re-emit other tiers' cases with a matrix operand: skipped since 2026-10-24, when a
+regeneration after them re-drew thousands of variants from other source cases and gained no cell), np.evaluate and
+iterator traces, char / decimal operands, and np.frombuffer (its operand stands for Python `bytes`; the replay passes
+NumSharp a `byte[]`).
 
 | File | Cases | Replayed by |
 |---|---|---|
