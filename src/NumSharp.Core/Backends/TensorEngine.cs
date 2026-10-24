@@ -93,7 +93,34 @@ namespace NumSharp
         ///     contract in 0.71.0 (a breaking change for a subclass, decision D2 of that plan).
         /// </remarks>
         public abstract NDArray ReduceCumMul(NDArray arr, int? axis_, DType dtype = null, NDArray @out = null);
-        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.mean</c> (<c>_methods._mean</c>), the whole call: the add reduction divided by the count of the
+        ///     reduced elements, stored into <paramref name="out"/> when given.
+        /// </summary>
+        /// <param name="arr">The array to average (any dtype, any layout).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. Unlike a ufunc
+        ///     reduction, a 0-d array takes no axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
+        /// <param name="dtype">The loop of the sum (<c>dtype=</c>), or null: float64 for a bool or integer input, float32 for
+        ///     float16 (with a float16 result), the input's own dtype otherwise.</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null for a fresh result. NumPy stores the
+        ///     SUM into it (in <c>promote_types(out, arr)</c> when <paramref name="dtype"/> is null and the input is not a bool,
+        ///     integer or float16 one) and then divides it in place, both with an unsafe cast: an integer out holds truncated
+        ///     values.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
+        ///     reduction.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (NumPy's
+        ///     reduce prologue texts), or text a numeric loop must parse does not parse.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        /// <exception cref="TypeError">A text operand, out or request NumPy's loop resolution refuses.</exception>
+        /// <remarks>
+        ///     The engine owns NumPy's whole call, dtype decisions included (the np-layer dtype plan). <paramref name="out"/>
+        ///     was added to the contract in 0.71.0 (P1d, decision D2: a breaking change for a subclass); numpy.matrix's
+        ///     <c>mean(out=)</c> runs through it.
+        /// </remarks>
+        public abstract NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
 
         // NaN-aware reductions
         public abstract NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false);
@@ -642,9 +669,81 @@ namespace NumSharp
         public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
         public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false);
         public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false);
-        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
-        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null);
-        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null);
+        /// <summary>
+        ///     NumPy's <c>np.prod</c> (<c>np.multiply.reduce</c>), the whole call: the product over <paramref name="axis_"/>
+        ///     (every axis when null), stored into <paramref name="out"/> when given.
+        /// </summary>
+        /// <param name="arr">The array (any dtype, any layout).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d input accepts
+        ///     0 and -1 (ufunc.reduce's backward-compatibility rule).</param>
+        /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null: NEP 50's accumulator of the input without
+        ///     <paramref name="out"/>, <c>promote_types(out, arr)</c> with it (no small-integer widening then).</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape that receives it with unsafe casting, or
+        ///     null for a fresh result.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, NumPy's read-only scalar for a full
+        ///     reduction.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (NumPy's
+        ///     reduce prologue texts), or text a numeric loop must parse does not parse.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        /// <exception cref="TypeError">Text, or a string request: NumPy's refusal (no multiply loop reduces text into itself;
+        ///     integer counts into a text out repeat).</exception>
+        /// <remarks>
+        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2: a
+        ///     breaking change for a subclass); numpy.matrix's <c>prod(out=)</c> runs through it.
+        /// </remarks>
+        public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.std</c> (<c>_methods._std</c>), the whole call: the square root of <see cref="ReduceVar"/>, stored
+        ///     into <paramref name="out"/> when given.
+        /// </summary>
+        /// <param name="arr">The operand (any dtype, any layout).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
+        /// <param name="ddof">Delta degrees of freedom (null is 0): the divisor is <c>max(n - ddof, 0)</c>.</param>
+        /// <param name="dtype">The loop of both sums (an integer or bool input defaults to float64, every other input to its
+        ///     own dtype).</param>
+        /// <param name="out">NumPy's <c>out=</c>: a FLOAT or complex array of the result's shape, or null. NumPy hands it to
+        ///     the variance's last sum (whose loop it joins), divides it in place and takes the square root in place.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d scalar when the result
+        ///     has no dimensions.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c>, or text NumPy's loop resolution refuses.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (with a result that has dimensions)
+        ///     or <paramref name="out"/>: NumPy's <c>sqrt</c> output-cast error under <c>same_kind</c>.</exception>
+        /// <remarks>
+        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2);
+        ///     numpy.matrix's <c>std(out=)</c> runs through it.
+        /// </remarks>
+        public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.var</c> (<c>_methods._var</c>), the whole call: the mean of the squared deviations from the mean,
+        ///     divided by <c>max(n - ddof, 0)</c>, stored into <paramref name="out"/> when given.
+        /// </summary>
+        /// <param name="arr">The operand (any dtype, any layout).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay in the result with length 1.</param>
+        /// <param name="ddof">Delta degrees of freedom (null is 0).</param>
+        /// <param name="dtype">The loop of both sums (an integer or bool input defaults to float64, every other input to its
+        ///     own dtype); it decides the result dtype.</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null. NumPy hands it to its LAST sum only
+        ///     (the squared deviations', whose loop is <c>promote_types(out, x)</c> without <paramref name="dtype"/>), then
+        ///     divides it in place.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d scalar when the result
+        ///     has no dimensions.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is outside the operand (a 0-d operand included).</exception>
+        /// <exception cref="TypeError">A bool input with <c>dtype=bool</c>, a text out for a float or complex input, or text
+        ///     NumPy's loop resolution refuses.</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape.</exception>
+        /// <remarks>
+        ///     <paramref name="out"/> was added to the contract in 0.71.0 (the np-layer dtype plan's P1d, decision D2);
+        ///     numpy.matrix's <c>var(out=)</c> runs through it.
+        /// </remarks>
+        public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, DType dtype = null, NDArray @out = null);
 
         #endregion
 

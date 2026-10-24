@@ -14,14 +14,27 @@ namespace NumSharp.Backends
         /// <param name="axis_">The reduced axis (negative values count from the end), or null for every axis. A 0-d input
         ///     accepts 0 and -1 (NumPy's backward-compatibility rule) and nothing else.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
-        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the accumulator of the input.</param>
-        /// <returns>The product (a read-only 0-d scalar for a full reduction).</returns>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the accumulator of the input (for
+        ///     <c>promote_types(out, arr)</c> when <paramref name="out"/> is given).</param>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null for a fresh result: NumPy's
+        ///     <c>multiply.reduce</c> with an out operand (<see cref="ReduceIntoOut"/>) — the text routes, the reduce
+        ///     prologue, the out= loop rule, the unsafe store.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the product (a read-only 0-d scalar for a full
+        ///     reduction).</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
         /// <exception cref="TypeError">Text, or a string <paramref name="dtype"/>: NumPy's refusal (its verbatim text; no
         ///     multiply loop reduces text into itself).</exception>
-        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number.</exception>
-        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
+        /// <exception cref="ValueError">A numeric <paramref name="dtype"/> over text that does not parse as that number, or
+        ///     a read-only / misshapen <paramref name="out"/> (the reduce prologue's texts).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        public override NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
         {
+            // out=: multiply.reduce with an out operand, whose checks and loop differ from the plain call's (the text routes
+            // into out, the reduce prologue on (out, arr), promote_types(out, arr) as the loop). It computes the product
+            // through this method again, without out.
+            if (@out is not null)
+                return ReduceIntoOut("prod", arr, axis_, keepdims, dtype, @out);
+
             // Text, or a string dtype= request: NumPy's prod checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text.
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.

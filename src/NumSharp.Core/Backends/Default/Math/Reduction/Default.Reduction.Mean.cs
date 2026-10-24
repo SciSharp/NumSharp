@@ -18,10 +18,23 @@ namespace NumSharp.Backends
         /// <param name="keepdims">When true the reduced axes stay in the result with length 1.</param>
         /// <param name="dtype">The dtype the sum is computed in and the mean returned in; null selects float64 for bool /
         /// integers / char and the input's own dtype for float16 / float32 / float64 / complex128 / decimal.</param>
-        /// <returns>The mean: a read-only 0-d scalar for a full reduction without keepdims, otherwise a fresh array.</returns>
+        /// <param name="out">NumPy's <c>out=</c>, an array of the result's shape, or null for a fresh result:
+        /// <c>_mean</c> with an out (<see cref="MeanIntoOut"/>) — the sum stored into it, then divided in place, both with an
+        /// unsafe cast.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the mean: a read-only 0-d scalar for a full reduction
+        /// without keepdims, a fresh array else.</returns>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range (every axis is, for a 0-d input).</exception>
-        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only or does not have the result's shape (the reduce
+        /// prologue's texts).</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not broadcast against the input.</exception>
+        /// <exception cref="TypeError">Text NumPy's loop resolution refuses (a text out has no division loop).</exception>
+        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null, NDArray @out = null)
         {
+            // out=: _mean with an out argument stores the SUM into out and divides out in place (MeanIntoOut), a route of its
+            // own; the plain call below allocates its result.
+            if (@out is not null)
+                return MeanIntoOut(arr, axis_, keepdims, dtype, @out);
+
             // StringDType: _mean computes the sum (umr_sum, with its loop's checks and NA rules) and then meets NumPy's
             // division of what it holds (an ndarray, or the 0-d sum's Python object): NDVStringStatistics.Mean.
             if (Strings.NDStringUfuncs.VStringReduces("mean", arr, axis_, dtype))

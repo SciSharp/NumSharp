@@ -130,14 +130,6 @@ namespace NumSharp
             return axis == 0 ? row : row.T;
         }
 
-        /// <summary>The number of elements a reduction over <paramref name="axis"/> combines into one result
-        ///     element (NumPy's <c>_count_reduce_items</c>).</summary>
-        /// <param name="axis">The axis, or <c>null</c> for all elements.</param>
-        /// <returns>The count.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        private long ReduceCount(int? axis)
-            => axis is null ? size : Shape.dimensions[DefaultEngine.NormalizeAxis(axis.Value, ndim)];
-
         /// <summary>
         ///     The text form of <c>add.reduce</c> / <c>multiply.reduce(self, axis, dtype, out, keepdims=True)</c>, the
         ///     reduction NumPy's <c>matrix.sum</c> / <c>matrix.prod</c> (and <c>_mean</c>'s sum) run: when this matrix or
@@ -285,15 +277,10 @@ namespace NumSharp
                 return FromWrapped(TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype), this);
             }
 
-            // Text (this matrix or out): multiply.reduce's text loop resolution answers — integer counts into a text out
-            // repeat the out's first count, everything else is NumPy's refusal.
-            if (ReduceTextInto("prod", axis, dtype, @out))
-                return axis is null ? ScalarFrom(@out) : @out;
-
-            // NumPy's reduce prologue runs before an element is read; the loop is the file header's out= rule.
-            ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "multiply");
-            NDArray product = TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype ?? LoopWith(@out));
-            np.copyto(@out, product, casting: "unsafe");
+            // multiply.reduce(self, axis, dtype, out, keepdims=True) is the engine's out= route: the text loop resolution
+            // (integer counts into a text out repeat, everything else is NumPy's refusal), the reduce prologue, the loop
+            // promote_types(out, self) when dtype is null (the file header's out= rule), the unsafe store.
+            TensorEngine.ReduceProduct(this, axis, keepdims: true, dtype, @out);
             return axis is null ? ScalarFrom(@out) : @out;
         }
 
@@ -332,39 +319,10 @@ namespace NumSharp
                 return dtype is null && typecode == NPTypeCode.Half ? From(kept, this) : FromWrapped(kept, this);
             }
 
-            // _mean: ret = umr_sum(arr, axis, dtype, out, keepdims); ret = true_divide(ret, rcount, out=ret,
-            // casting='unsafe'). The sum's loop is dtype=, else float64 for integers and bool, float32 for
-            // float16, else the reduce rule for a missing dtype with an out (file header).
-            DType loop = dtype;
-            if (loop is null)
-            {
-                if (typecode == NPTypeCode.Boolean || IsIntegerLike(typecode))
-                    loop = np.float64;
-                else if (typecode == NPTypeCode.Half)
-                    loop = np.float32;
-            }
-
-            // Text (a text matrix, a text out, or a text loop request): _count_reduce_items validates the axis, then
-            // umr_sum(arr, axis, loop, out, keepdims) is add.reduce under the loop as its request — the implicit float64 /
-            // float32 loop of an integer, bool or float16 matrix passes as a request too — whose ported loop resolution
-            // computes into out or refuses. A sum it computed meets true_divide(ret, rcount, out=ret, casting='unsafe'):
-            // a numeric out divides, a text out has no divide loop (NumPy's division refusal, after the sum was stored).
-            if (NDStringUfuncs.IsText(this) || NDStringUfuncs.IsText(@out) || NDStringUfuncs.IsTextRequest(loop))
-            {
-                long rcount = ReduceCount(axis);
-                if (ReduceTextInto("sum", axis, loop, @out))
-                {
-                    DefaultEngine.DivideByCountLikeNumPy(@out, rcount);
-                    return axis is null ? ScalarFrom(@out) : @out;
-                }
-            }
-
-            ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "add");
-            long count = ReduceCount(axis);
-            NDArray total = TensorEngine.ReduceAdd(this, axis, keepdims: true, loop ?? LoopWith(@out));
-            np.copyto(@out, total, casting: "unsafe");
-            // The division runs ON out: the sum as out's dtype holds it, divided by the strong int64 count.
-            DefaultEngine.DivideByCountLikeNumPy(@out, count);
+            // _mean(self, axis, dtype, out, keepdims=True) is the engine's out= route: umr_sum(arr, axis, dtype, out,
+            // keepdims) stores the sum into out (dtype=, else float64 for integers and bool, float32 for float16, else the
+            // reduce rule for a missing dtype with an out), then true_divide(out, rcount, out=out, casting='unsafe').
+            TensorEngine.ReduceMean(this, axis, keepdims: true, dtype, @out);
             return axis is null ? ScalarFrom(@out) : @out;
         }
 
@@ -409,7 +367,9 @@ namespace NumSharp
                 return axis is null ? Collapse(kept) : FromWrapped(kept, this);
             }
 
-            StoreVariance(axis, dtype, @out, ddof);
+            // _var(self, axis, dtype, out, ddof, keepdims=True) is the engine's out= route: out joins the last sum only,
+            // then is divided in place.
+            TensorEngine.ReduceVar(this, axis, keepdims: true, ddof, dtype, @out);
             return axis is null ? ScalarFrom(@out) : @out;
         }
 
@@ -454,54 +414,10 @@ namespace NumSharp
                 return axis is null ? Collapse(kept) : FromWrapped(kept, this);
             }
 
-            // _std: ret = _var(..., out=out); ret = um.sqrt(ret, out=ret). The ufunc itself refuses an integer or
-            // bool out (its loop is a float one that same_kind cannot cast back), after the variance is in out.
-            StoreVariance(axis, dtype, @out, ddof);
-            np.sqrt(@out, @out: @out);
+            // _std(self, axis, dtype, out, ddof, keepdims=True) is the engine's out= route: _var into out, then
+            // sqrt(out, out=out), whose ufunc refuses an integer or bool out after the variance is in it.
+            TensorEngine.ReduceStd(this, axis, keepdims: true, ddof, dtype, @out);
             return axis is null ? ScalarFrom(@out) : @out;
-        }
-
-        /// <summary>The variance of this matrix stored into <paramref name="out"/> with NumPy's reduce checks
-        ///     and an unsafe cast (the shared body of <see cref="var(int?, DType, NDMatrix, int)"/> and
-        ///     <see cref="std(int?, DType, NDMatrix, int)"/> with an out).</summary>
-        /// <param name="axis">The axis, or <c>null</c>.</param>
-        /// <param name="dtype">The requested dtype, or <c>null</c>.</param>
-        /// <param name="out">The destination matrix.</param>
-        /// <param name="ddof">Delta degrees of freedom.</param>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="ValueError"><paramref name="out"/> is read-only or misshapen.</exception>
-        /// <exception cref="NotSupportedException">The matrix is bound to an engine that is not NumSharp's
-        ///     <see cref="DefaultEngine"/> (the out= form needs its sum-only variance).</exception>
-        [NDScopedCovered]
-        private void StoreVariance(int? axis, DType dtype, NDMatrix @out, int ddof)
-        {
-            // _var's last statement, ret = umr_sum(x, axis, dtype, out, keepdims): without dtype= a float or complex
-            // matrix keeps its deviations' float dtype (a complex one's (x * conj(x)).real is float64), and a text out
-            // meets add.reduce's loop resolution on (out, x), which has no loop. NumPy validated the axis first
-            // (_count_reduce_items), the mean and the deviations cannot fail, and umr_sum parses out= (its read-only
-            // check) before it resolves the loop. (An integer or bool matrix sums in float64 and the division refuses
-            // the text out; a text matrix is refused by the mean's own reduction; both run below.)
-            if (dtype is null && NDStringUfuncs.IsText(@out) && (typecode.IsFloatingPoint() || typecode == NPTypeCode.Complex))
-            {
-                ReduceCount(axis);
-                if (!@out.Shape.IsWriteable)
-                    throw new ValueError("output array is read-only");
-                DType deviations = typecode == NPTypeCode.Complex ? np.float64 : this.dtype;
-                throw NDStringUfuncs.IsVString(@out)
-                    ? NDStringUfuncs.VStringNoLoop("add", new[] { NDStringUfuncs.DispatchClass(@out), deviations.Meta.ToString() })
-                    : NDStringUfuncs.ReduceOutError("add", deviations, @out.dtype, accumulate: false);
-            }
-
-            ReductionArguments.Validate(this, axis, keepdims: true, @out, null, "add");
-            if (TensorEngine is not DefaultEngine engine)
-                throw new NotSupportedException("matrix.var / matrix.std with out= need NumSharp's DefaultEngine.");
-
-            // _var: ret = umr_sum(x, axis, dtype, out, keepdims) — the sum of the squared deviations, whose loop
-            // out joins — then ret = true_divide(ret, max(rcount - ddof, 0), out=ret, casting='unsafe').
-            NDArray squares = engine.VarStdNumPy(this, axis, keepdims: true, ddof, dtype, takeSqrt: false,
-                outDtype: @out.dtype, sumOnly: true);
-            np.copyto(@out, squares, casting: "unsafe");
-            DefaultEngine.DivideByCountLikeNumPy(@out, Math.Max(ReduceCount(axis) - ddof, 0));
         }
 
         #endregion
