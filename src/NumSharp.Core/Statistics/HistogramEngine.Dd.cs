@@ -143,9 +143,8 @@ namespace NumSharp.Statistics
                     // `np.ndim(bins[i]) == 0`: `if bins[i] < 1: raise`, the outer edges, then `operator.index(bins[i])`.
                     if (DdScalarBinBelowOne(spec))
                         throw new ValueError($"`bins[{i}]` must be positive, when an integer");
-                    // A text sample's column is the STACKED text column: its min() names that dtype (<U32 beside float64).
-                    if (textSample && !ri.HasValue && N > 0)
-                        throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", stacked, stacked);
+                    // A text sample's column is the STACKED text column (CastColumnsToStacked), so the outer edges' a.min()
+                    // (np.amin, in GetOuterEdges) names that dtype when its minimum loop refuses (<U32 beside float64).
                     if (cols[i].typecode == NPTypeCode.Complex)
                     {
                         // A complex column: NumPy's same statements in complex128. `_get_outer_edges` gives the column's
@@ -176,9 +175,8 @@ namespace NumSharp.Statistics
                 }
 
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)
-                // `dedges[i] = np.diff(edges[i])`: text edges have no subtract loop (any length — even an empty diff resolves it).
-                if (Backends.Strings.NDStringUfuncs.IsText(edges[i]))
-                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", edges[i].dtype, edges[i].dtype);
+                // `dedges[i] = np.diff(edges[i])`: text edges have no subtract loop, and np.diff's subtraction refuses them at
+                // any length (an empty difference resolves the loop too).
                 dedges[i] = np.diff(edges[i]);
             }
 
