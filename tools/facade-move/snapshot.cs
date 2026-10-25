@@ -917,16 +917,19 @@ static class Snapshot
             }
             case Role.BinsObjects:
             {
+                // Every arm is cast to object: uncast, the switch's natural type is NDArray (the best common type of int,
+                // double, string, bool, double[] and NDArray through NumSharp's implicit conversions), which turned each C#
+                // scalar into a 0-d array and the double[] into a 1-D one — not the Python scalars these variants stand for.
                 object First() => label switch
                 {
-                    "mixed" => 3,
-                    "float" => 2.0,
-                    "text" => "a",
-                    "bool" => true,
-                    "0d" => np.array(3L),
-                    "doubles" => new[] { -2.0, 0.0, 1.5, 5.0 },
-                    "wronglen" => 3,
-                    "null" => null,
+                    "mixed" => (object)3,
+                    "float" => (object)2.0,
+                    "text" => (object)"a",
+                    "bool" => (object)true,
+                    "0d" => (object)np.array(3L),
+                    "doubles" => (object)new[] { -2.0, 0.0, 1.5, 5.0 },
+                    "wronglen" => (object)3,
+                    "null" => (object)null,
                     _ => throw new ArgumentException("unknown object[] bins variant " + label),
                 };
                 int count = label == "wronglen" ? d + 1 : d;
