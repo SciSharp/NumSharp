@@ -162,7 +162,6 @@ Sorting_Searching_Counting/np.lexsort.cs	2	0
 Sorting_Searching_Counting/np.nanargmax.cs	2	15
 Sorting_Searching_Counting/np.sort_complex.cs	0	1
 Statistics/np.average.cs	5	44
-Statistics/np.cov.cs	8	7
 Statistics/np.median.cs	2	0
 Statistics/np.nanmean.cs	0	1
 Statistics/np.nanstd.cs	0	1
