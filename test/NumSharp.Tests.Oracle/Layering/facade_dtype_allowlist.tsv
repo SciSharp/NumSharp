@@ -132,7 +132,6 @@ Math/np.rad2deg.cs	1	0
 Math/np.real.cs	0	1
 Math/np.real_if_close.cs	0	1
 Math/np.sinc.cs	3	5
-Math/np.trapezoid.cs	9	4
 Math/np.unwrap.cs	1	13
 Matrixlib/NDMatrix.Construction.cs	0	8
 Matrixlib/NDMatrix.Indexing.cs	0	3
