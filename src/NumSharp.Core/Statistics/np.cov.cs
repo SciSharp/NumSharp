@@ -36,6 +36,29 @@ namespace NumSharp
         /// <param name="aweights">1-D array of observation vector weights (relative importance of each observation).</param>
         /// <param name="dtype">Data-type of the result. By default the result has at least float64 precision.</param>
         /// <returns>The covariance matrix of the variables.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
+        /// <exception cref="ValueError"><paramref name="m"/> or <paramref name="y"/> has more than 2 dimensions; text variables
+        ///     (or a text <paramref name="dtype"/> request) whose <paramref name="m"/> and <paramref name="y"/> have different
+        ///     observation counts (concatenate's text); a negative weight; text that does not parse into a numeric
+        ///     <paramref name="dtype"/>; a <c>StringDType</c> request over no observations (add.reduce's "no
+        ///     identity").</exception>
+        /// <exception cref="IncorrectShapeException">Numeric variables of <paramref name="m"/> and <paramref name="y"/> with
+        ///     different observation counts (concatenate's text; NumPy's ValueError).</exception>
+        /// <exception cref="TypeError">A non-integral frequency weight; text the mean refuses (add.reduce's text, the weighted
+        ///     mean's class-only refusal of a sized string descriptor, the division of <c>StringDType</c> text by the
+        ///     count).</exception>
+        /// <exception cref="RuntimeError">A weight array that is multidimensional or does not have one weight per
+        ///     observation.</exception>
+        /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>
+        ///     (<c>result_type(m, y, float64)</c>), or a <c>StringDType</c> request with weights.</exception>
+        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/>: NumPy's in-place
+        ///     <c>X -= avg[:, None]</c> cannot cast the float64 mean's difference back (its UFuncTypeError text).</exception>
+        /// <exception cref="DivideByZeroException">Weights that sum to zero (the weighted mean's "Weights sum to zero, can't
+        ///     be normalized"; NumPy's ZeroDivisionError).</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
+        ///     arithmetic out of decimal's range.</exception>
+        /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
+        /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cov.html</remarks>
         [NDScoped]
         public static NDArray cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false,
@@ -120,9 +143,16 @@ namespace NumSharp
 
             // --- Center the observations, weight them, and form the covariance via one GEMM. ---
             NDArray Xc = X - avg.reshape(avg.size, 1);
-            // NumPy does `X -= avg[:, None]` in place, so X keeps its dtype even if avg was promoted.
+            // NumPy does `X -= avg[:, None]` in place: the subtract's output is X, so the difference is cast back into X's
+            // dtype under the in-place operator's same_kind rule. A float or complex X keeps its dtype (a float32 / float16
+            // X takes a float64 weighted mean's difference rounded back); an integer or bool X — an integer or bool dtype=
+            // request — cannot take the float64 mean's difference: NumPy's UFuncTypeError ("Cannot cast ufunc 'subtract'
+            // output from dtype('float64') to dtype('int32') with casting rule 'same_kind'"), the house ArgumentException.
             if (Xc.typecode != X.typecode)
+            {
+                Backends.DefaultEngine.ValidateOutCast(Xc.typecode, X.typecode, "subtract");
                 Xc = Xc.astype(X.typecode);
+            }
 
             // c = dot(Xc, Xc_T.conj()) — a SYMMETRIC Gram (syrk). For a small number of real
             // (Single/Double) variables over a contiguous Xc, a dedicated pairwise-SIMD Gram

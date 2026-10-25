@@ -193,7 +193,10 @@ namespace NumSharp.Backends
         /// <param name="ufuncName">The ufunc name for the message ("evaluate" for the fused path).</param>
         /// <param name="casting">The cast rule to enforce; defaults to NumPy's ufunc <c>same_kind</c>.</param>
         /// <exception cref="ArgumentException"><paramref name="resultType"/> is not castable to <paramref name="outType"/> under <paramref name="casting"/>.</exception>
-        private static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName,
+        /// <remarks>Internal (not private) because a composition that writes a ufunc result back into an operand the way
+        ///     NumPy's in-place operator does (<c>np.cov</c>'s <c>X -= avg[:, None]</c>) refuses with the same rule and
+        ///     text.</remarks>
+        internal static void ValidateOutCast(NPTypeCode resultType, NPTypeCode outType, string ufuncName,
             NPY_CASTING casting = NPY_CASTING.NPY_SAME_KIND_CASTING)
         {
             if (resultType == outType)
