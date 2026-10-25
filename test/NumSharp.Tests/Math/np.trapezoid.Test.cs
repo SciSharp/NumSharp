@@ -539,5 +539,36 @@ namespace NumSharp.Tests.Math
             DoubleBitsOf(r).Should().Equal(new ulong[] { 4652851733771321344, 4659259577586837095 });
             r.GetDouble(0).Should().Be(1168.0);
         }
+
+        // ------------------- the spacing is the product's first operand -------------------
+
+        /// <summary>
+        ///     NumPy writes <c>d * (y[1:] + y[:-1])</c> with <c>d = dx</c>, so the spacing is the product's FIRST operand,
+        ///     and the operand order decides which NaN a product of two NaNs keeps: a NaN <c>dx</c> times a sum that holds
+        ///     the integrand's negative NaN keeps the integrand's (NumPy's scalar-broadcast multiply keeps the array
+        ///     operand's NaN below two vectors). NumSharp wrote the spacing second and kept the spacing's positive NaN.
+        ///     NumPy 2.4.2's bits, over a 1-D y, the flat route of a dense 2-D y (float64, float32) and the general route
+        ///     of a stepped float32 view.
+        /// </summary>
+        [TestMethod]
+        public void Trapezoid_NaNSpacing_IsTheProductsFirstOperand()
+        {
+            double nan = BitConverter.Int64BitsToDouble(0x7ff8000000000000);
+            double negNan = BitConverter.Int64BitsToDouble(unchecked((long)0xfff8000000000000));
+
+            DoubleBitsOf(np.trapezoid(np.array(new[] { negNan, 1.0, 2.0 }), dx: nan)).Should()
+                .Equal(new ulong[] { 0xfff8000000000000 });
+
+            var dense = np.array(new[] { negNan, 1.0, 2.0, 3.0, 4.0, 5.0 }).reshape(2, 3);
+            DoubleBitsOf(np.trapezoid(dense, dx: nan)).Should().Equal(new ulong[] { 0xfff8000000000000, 0x7ff8000000000000 });
+
+            var dense32 = np.trapezoid(dense.astype(np.float32), dx: nan);
+            dense32.dtype.Should().Be(np.float32);
+            BitConverter.ToString(dense32.tobytes()).Should().Be("00-00-C0-FF-00-00-C0-7F");
+
+            float negNan32 = BitConverter.Int32BitsToSingle(unchecked((int)0xffc00000));
+            var stepped = np.array(new[] { negNan32, 9f, 1f, 9f, 2f, 9f, 3f, 9f, 4f, 9f, 5f, 9f }).reshape(2, 6)[":, ::2"];
+            BitConverter.ToString(np.trapezoid(stepped, dx: nan).tobytes()).Should().Be("00-00-C0-FF-00-00-C0-7F");
+        }
     }
 }

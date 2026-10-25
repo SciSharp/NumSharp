@@ -553,7 +553,7 @@ namespace NumSharp
         /// <summary>
         ///     The uniform-spacing route for a <paramref name="y"/> that is dense in NumPy's layout and integrated
         ///     along its innermost or outermost memory axis (<see cref="TrapezoidFlatGate"/>): computes
-        ///     <c>(y[k+s] + y[k]) * dx / 2.0</c> for every <c>k</c> of y's memory run in ONE contiguous 1-D pass
+        ///     <c>dx * (y[k+s] + y[k]) / 2.0</c> for every <c>k</c> of y's memory run in ONE contiguous 1-D pass
         ///     (<c>s</c> = the axis's stride), then sums it through a view that skips the elements NumPy's half does
         ///     not have.
         /// </summary>
@@ -709,7 +709,9 @@ namespace NumSharp
                         : ops.X1 is null ? null
                         : boolDiff ? NDExpr.NotEqual(NDExpr.Arr(ops.X1), NDExpr.Arr(ops.X2))
                         : NDExpr.Arr(ops.X1) - NDExpr.Arr(ops.X2);
-                    NDExpr expr = spacing is null ? inner * dx / 2.0 : spacing * inner / 2.0;
+                    // The spacing is the multiply's FIRST operand for dx too (NumPy's `d * (...)` with d = dx): the order
+                    // decides which NaN a product of two NaNs keeps, and a complex product's parts (its 0 * NaN terms).
+                    NDExpr expr = spacing is null ? dx * inner / 2.0 : spacing * inner / 2.0;
                     return np.evaluate(expr);
                 }
                 catch (NotSupportedException) { /* fall through to the composition */ }
@@ -724,7 +726,7 @@ namespace NumSharp
                 if (d is null && ops.X1 is not null)
                     d = diffArr = boolDiff ? (NDArray)(ops.X1 != ops.X2) : ops.X1 - ops.X2;
                 innerArr = ops.Y1 + ops.Y2;
-                scaled = d is null ? innerArr * dx : d * innerArr;
+                scaled = d is null ? dx * innerArr : d * innerArr;
                 return scaled / 2.0;
             }
             finally
