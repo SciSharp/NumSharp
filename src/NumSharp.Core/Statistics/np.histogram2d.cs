@@ -146,12 +146,20 @@ namespace NumSharp
         /// <param name="density">When true, return the probability density.</param>
         /// <param name="weights">Optional per-point weights.</param>
         /// <returns>The 2-D histogram and its two edge arrays.</returns>
-        /// <exception cref="ValueError"><paramref name="x"/> and <paramref name="y"/> differ in length.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> or <paramref name="y"/> is null.</exception>
+        /// <exception cref="TypeError"><paramref name="x"/> or <paramref name="y"/> is 0-d: NumPy's first statement takes
+        ///     <c>len()</c> of both (<c>len() of unsized object</c>), before any bin, range or weight is read.</exception>
+        /// <exception cref="ValueError"><paramref name="x"/> and <paramref name="y"/> differ in length — their FIRST
+        ///     dimension, not their size (<c>x and y must have the same length.</c>) — and every refusal of the histogramdd
+        ///     engine the two arrays and the arguments then meet.</exception>
         private static Histogram2dResult Histogram2dImpl(NDArray x, NDArray y, object bins, (double, double)?[] range, bool density, NDArray weights)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (y is null) throw new ArgumentNullException(nameof(y));
-            if (x.size != y.size)
+            // NumPy's first statement, `if len(x) != len(y)`: len() of a 0-d array raises (x's first, as Python evaluates it
+            // first), and len() is the FIRST dimension rather than the size — so a (2, 3) x and a (3, 2) y differ here, while a
+            // (2, 3) x and a (2, 4) y pass on to histogramdd, whose stacking of [x, y] refuses them.
+            if (x.__len__() != y.__len__())
                 throw new ValueError("x and y must have the same length.");
 
             int n = BinsSeqLength(bins);

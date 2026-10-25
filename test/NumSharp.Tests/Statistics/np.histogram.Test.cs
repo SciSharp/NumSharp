@@ -723,6 +723,47 @@ public class np_histogram_Tests
         => ((Action)(() => np.histogram2d(np.array(new[] { 1.0, 2 }), np.array(new[] { 1.0, 2, 3 }), 3)))
             .Should().Throw<ValueError>().WithMessage("x and y must have the same length.");
 
+    /// <summary>
+    ///     histogram2d's first statement is NumPy's <c>if len(x) != len(y)</c>, and <c>len()</c> of a 0-d array raises
+    ///     <c>TypeError: len() of unsized object</c> — for x or y, whatever the bins (NumPy 2.4.2:
+    ///     <c>np.histogram2d(np.array(1.5), np.array([0.5, 1.5, 2.5]), bins=2)</c>, the swapped call, two 0-d arrays with
+    ///     <c>bins=10</c> and with <c>bins=[2, 2]</c>). Two 0-d arrays used to histogram as two one-point columns.
+    /// </summary>
+    [TestMethod]
+    public void Error_Histogram2D_ZeroDimOperand_IsLenOfUnsizedObject()
+    {
+        var z0 = np.array(1.5);
+        var z0b = np.array(2.5);
+        var x3 = np.array(new[] { 0.5, 1.5, 2.5 });
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogram2d(z0, x3, 2),
+                     () => np.histogram2d(x3, z0, 2),
+                     () => np.histogram2d(z0, z0b),
+                     () => np.histogram2d(z0, z0b, new[] { 2, 2 }),
+                 })
+            act.Should().Throw<TypeError>().WithMessage("len() of unsized object");
+    }
+
+    /// <summary>
+    ///     <c>len()</c> is the FIRST dimension, not the size: a <c>(2, 3)</c> x and a <c>(3, 2)</c> y, or a <c>(2, 3)</c> x
+    ///     and a six-point y, have different lengths although their sizes agree (NumPy 2.4.2:
+    ///     <c>x and y must have the same length.</c>), and the length check comes before the bins' own refusal
+    ///     (<c>bins=[2]</c>, one count for two dimensions).
+    /// </summary>
+    [TestMethod]
+    public void Error_Histogram2D_LengthIsTheFirstDimension()
+    {
+        var m23 = np.arange(6.0).reshape(2, 3);
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogram2d(m23, np.arange(6.0).reshape(3, 2), 2),
+                     () => np.histogram2d(m23, np.arange(6.0), 2),
+                     () => np.histogram2d(np.array(new[] { 0.5, 1.5, 2.5 }), np.array(new[] { 0.5, 1.5 }), new[] { 2 }),
+                 })
+            act.Should().Throw<ValueError>().WithMessage("x and y must have the same length.");
+    }
+
     // ── mixed-dtype columns: NumPy stacks a sequence via atleast_2d(sample).T, promoting to a common dtype ──
     // (regression for the histogram2d/histogramdd column-promotion fix)
 
