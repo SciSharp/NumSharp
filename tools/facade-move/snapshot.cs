@@ -33,9 +33,11 @@
 // and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
 // operand named lhs / rhs / left / right / x / y / other, the histogram family's bins as an int, an estimator name, an
 // array or a double[], and its (lower, upper) range, np.histogramdd / np.histogram2d's sample as a sequence of columns,
-// their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, and np.trapezoid's
-// optional sample points x and its spacing dx); an overload with a required parameter of another kind is reported once as
-// SKIP. An int axis starts from its default when it has one. A result that is a struct of arrays (np.histogram's
+// their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
+// optional sample points x and its spacing dx, and np.searchsorted's keys v (an array, or a C# int / double), its side
+// name and its sorter); an overload with a required parameter of another kind is reported once as SKIP. An int axis
+// starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
+// strided, reversed, unsorted and empty ones beside one 2-D operand. A result that is a struct of arrays (np.histogram's
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field.
 using System;
 using System.Collections;
@@ -182,6 +184,9 @@ static class Snapshot
         // np.trapezoid: the sample points x (an optional array whose default, null, means "evenly spaced by dx", so its base
         // is null and its variants are built from the operand like a second operand's) and the uniform spacing dx.
         Spacing, Dx,
+        // np.searchsorted: the keys v (an array built from the operand, or a C# int / double key), the side name, and the
+        // sorter (built from the operand: its argsort in several dtypes and the forms NumPy refuses).
+        Keys, KeyInt, KeyDouble, Side, Sorter,
         Default, Unsupported,
     }
 
@@ -206,6 +211,9 @@ static class Snapshot
                 // np.trapezoid's x is optional (null = evenly spaced), unlike a binary function's second operand x: tested
                 // before the operand names so its base stays the default.
                 : n == "x" && p.HasDefaultValue ? Role.Spacing
+                // np.searchsorted's keys and sorter.
+                : n == "v" ? Role.Keys
+                : n == "sorter" ? Role.Sorter
                 : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
@@ -220,6 +228,10 @@ static class Snapshot
         if (n == "bins" && t == typeof(object[])) return Role.BinsObjects;
         if (n == "range" && t == typeof((double, double)?[])) return Role.RangeArray;
         if (n == "dx" && t == typeof(double)) return Role.Dx;
+        // np.searchsorted's C# scalar keys (a strong int32 / float64 key) and its side name.
+        if (n == "v" && t == typeof(int)) return Role.KeyInt;
+        if (n == "v" && t == typeof(double)) return Role.KeyDouble;
+        if (n == "side" && t == typeof(string)) return Role.Side;
         if (n == "q" && t == typeof(double)) return Role.QDouble;
         if (n == "q" && t == typeof(double[])) return Role.QDoubles;
         if (n == "q" && t == typeof(long)) return Role.QLong;
@@ -267,6 +279,38 @@ static class Snapshot
                 break;
             case Role.Spacing:
                 // The base is the default (no sample points); the variants follow from the operand (MakeSpacing).
+                Add("null", () => null);
+                break;
+            case Role.Keys:
+                // The base is the operand's own copy (MakeKeys "same"); the variants follow from the operand.
+                Add("same", () => null);
+                break;
+            case Role.KeyInt:
+                // A key inside the pool's values, the ends of the int32 range, a key below and above every value.
+                foreach (var k in new[] { 2, 0, -5, 100, int.MaxValue, int.MinValue })
+                    Add(k.ToString(CultureInfo.InvariantCulture), () => k);
+                break;
+            case Role.KeyDouble:
+            {
+                // A key between the pool's values, a tie, a negative zero, Python's float('nan') (the positive quiet NaN:
+                // .NET's double.NaN is negative, and NumPy sorts and compares NaN by value), both infinities, a huge key.
+                double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+                foreach (var (label, k) in new[]
+                         {
+                             ("2.5", 2.5), ("3", 3.0), ("-0", -0.0), ("nan", nan), ("inf", double.PositiveInfinity),
+                             ("-inf", double.NegativeInfinity), ("1e300", 1e300),
+                         })
+                    Add(label, () => k);
+                break;
+            }
+            case Role.Side:
+                // The default first, the other name, then the three forms NumPy refuses: a capitalized and a one-letter name
+                // (its finalized deprecation's text) and any other string (its general text), the empty one included.
+                foreach (var s in new[] { "left", "right", "Left", "l", "x", "" })
+                    Add(s.Length == 0 ? "empty" : s, () => s);
+                break;
+            case Role.Sorter:
+                // The base is the default (no sorter); the variants follow from the operand (MakeSorter).
                 Add("null", () => null);
                 break;
             case Role.Dx:
@@ -425,6 +469,30 @@ static class Snapshot
     /// <summary>The layouts of the small operand pool phase C runs every parameter pair on.</summary>
     private static readonly string[] PairLayouts = { "c2d", "3d", "0d" };
 
+    /// <summary>The 1-D layouts a search function's haystack needs: sorted values (np.sort of the pool's prefix, the
+    ///     special ones with NaN last), every other element of a sorted run (a strided haystack) and a descending run (a
+    ///     reversed view, which NumPy's binary search reads as unsorted).</summary>
+    private static readonly string[] SortedLayouts = { "sorted1d", "sorted1d_special", "strided1d", "reversed1d" };
+
+    /// <summary>The reduced pool of a search function (phase B): the 1-D layouts, the unsorted 1-D and empty 1-D operands,
+    ///     and one 2-D operand for the haystack's rank error.</summary>
+    private static readonly string[] SortedReducedLayouts = { "sorted1d", "1d", "empty1d", "sorted1d_special", "strided1d", "reversed1d", "c2d" };
+
+    /// <summary>The small pool of a search function (phase C).</summary>
+    private static readonly string[] SortedPairLayouts = { "sorted1d", "empty1d", "c2d" };
+
+    /// <summary>
+    ///     The operand layouts of the three phases for an overload: the general pools, or, for np.searchsorted /
+    ///     NDArray.searchsorted, pools of 1-D haystacks (every other operand of the general pools fails NumPy's 1-D check
+    ///     before anything else is read, so the varied keys, sides and sorters would never reach the search).
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>The layouts of phase A, phase B and phase C.</returns>
+    private static (string[] Full, string[] Reduced, string[] Pair) PoolsFor(MethodInfo m) =>
+        m.Name == "searchsorted"
+            ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
+            : (Layouts, ReducedLayouts, PairLayouts);
+
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
     ///     phase C varying every pair of parameters together on the small pool.
@@ -476,20 +544,25 @@ static class Snapshot
             Role.Where => WhereVariantLabels.Length,
             Role.Operand2 => Operand2VariantLabels.Length - 1,
             Role.Spacing => SpacingVariantLabels.Length - 1,
+            Role.Keys => KeysVariantLabels.Length - 1,
+            Role.Sorter => SorterVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
 
+        // The operand layouts of the three phases: the general pools, or the 1-D pools of a search function (below).
+        var (fullLayouts, reducedLayouts, pairLayouts) = PoolsFor(m);
+
         // phase A: every operand, every other parameter at its base
         foreach (var dt in Dtypes)
-            foreach (var layout in Layouts)
+            foreach (var layout in fullLayouts)
                 yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, none);
 
         // phase B: one parameter varied at a time, on the reduced pool
         for (int p = 0; p < ps.Length; p++)
             for (int v = 1; v <= Count(p); v++)
                 foreach (var dt in Dtypes)
-                    foreach (var layout in ReducedLayouts)
+                    foreach (var layout in reducedLayouts)
                         yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles, new[] { (p, v) });
 
         // phase C: every pair of parameters varied together, on the small pool
@@ -498,7 +571,7 @@ static class Snapshot
                 for (int v1 = 1; v1 <= Count(p1); v1++)
                     for (int v2 = 1; v2 <= Count(p2); v2++)
                         foreach (var dt in PairDtypes)
-                            foreach (var layout in PairLayouts)
+                            foreach (var layout in pairLayouts)
                                 yield return Call(m, signature, instance, matrix, operandIndex, dt, layout, variants, roles,
                                     new[] { (p1, v1), (p2, v2) });
     }
@@ -561,6 +634,8 @@ static class Snapshot
             Role.Where => WhereVariantLabels[v - 1],
             Role.Operand2 => Operand2VariantLabels[v],
             Role.Spacing => SpacingVariantLabels[v],
+            Role.Keys => KeysVariantLabels[v],
+            Role.Sorter => SorterVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -580,6 +655,7 @@ static class Snapshot
             for (int i = 0; i < ps.Length; i++)
                 argv[i] = i == operandIndex ? operand
                     : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
+                    : roles[i] == Role.Keys ? MakeKeys(KeysVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -602,6 +678,12 @@ static class Snapshot
                         break;
                     case Role.Spacing:
                         argv[p] = MakeSpacing(SpacingVariantLabels[v], operand);
+                        break;
+                    case Role.Keys:
+                        argv[p] = MakeKeys(KeysVariantLabels[v], operand);
+                        break;
+                    case Role.Sorter:
+                        argv[p] = MakeSorter(SorterVariantLabels[v], operand);
                         break;
                     case Role.SampleSeq:
                     case Role.BinsInts:
@@ -709,7 +791,26 @@ static class Snapshot
             case "empty1d": return Values(0);
             case "1d": return Values(6);
             case "3d": return Values(24).reshape(new Shape(2, 3, 4));
+            // The search functions' haystacks (SortedLayouts). np.sort of a dtype it refuses leaves the operand unavailable.
+            case "sorted1d": return SortedOrNull(Values(6));
+            case "strided1d": return SortedOrNull(Values(12))?["::2"];
+            case "reversed1d": return SortedOrNull(Values(6))?["::-1"];
             default: throw new ArgumentException("unknown layout " + layout);
+        }
+    }
+
+    /// <summary>np.sort of a 1-D array, or null when NumSharp's np.sort refuses its dtype.</summary>
+    /// <param name="values">The values.</param>
+    /// <returns>A sorted copy (NaN last), or null.</returns>
+    private static NDArray SortedOrNull(NDArray values)
+    {
+        try
+        {
+            return np.sort(values);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
         }
     }
 
@@ -921,6 +1022,98 @@ static class Snapshot
             case "f": return np.asfortranarray(Points(size).reshape(shape));
             case "bcast": return dims.Length == 0 ? np.array(2.0) : np.broadcast_to(Points(last), shape);
             default: throw new ArgumentException("unknown sample-point variant " + label);
+        }
+    }
+
+    /// <summary>np.searchsorted's key variants, built from the operand (see <see cref="MakeKeys"/>); the first is the
+    ///     base.</summary>
+    private static readonly string[] KeysVariantLabels =
+    {
+        "same", "int32", "float64", "frac", "U5", "T", "S5", "0d", "0d_f", "2d", "empty", "special", "bool", "complex", "row",
+    };
+
+    /// <summary>np.searchsorted's sorter variants, built from the operand (see <see cref="MakeSorter"/>); the first, null,
+    ///     is the base.</summary>
+    private static readonly string[] SorterVariantLabels =
+        { "null", "argsort", "int32", "uint64", "float", "bool", "2d", "short", "oob", "neg", "reversed" };
+
+    /// <summary>
+    ///     Builds np.searchsorted's keys for an operand: the haystack's own values, keys of other dtypes and shapes around
+    ///     the pool's values, and text.
+    /// </summary>
+    /// <param name="label">The variant: <c>same</c> (a copy of the operand: keys of its dtype, every value a tie),
+    ///     <c>int32</c> / <c>float64</c> (seven keys from -6 to 6 / -3 to 3, around the pool's values), <c>frac</c> (seven
+    ///     float64 keys between them), <c>U5</c> / <c>T</c> / <c>S5</c> (seven text keys: numbers, a letter and the empty
+    ///     string), <c>0d</c> / <c>0d_f</c> (a 0-d int64 2 / float64 2.5: a scalar result), <c>2d</c> (a (2, 3) float64
+    ///     block), <c>empty</c> (no key), <c>special</c> (float64 keys with NaN, signed zeros and infinities), <c>bool</c>,
+    ///     <c>complex</c>, <c>row</c> (an int32 ramp as long as the operand's last axis).</param>
+    /// <param name="operand">The operand (the haystack).</param>
+    /// <returns>A fresh array.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeKeys(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        string[] text = { "-1", "0", "2", "3", "10", "x", "" };
+        switch (label)
+        {
+            case "same": return operand.copy();
+            case "int32": return np.array(Enumerable.Range(0, 7).Select(i => 2 * i - 6).ToArray());
+            case "float64": return np.array(Enumerable.Range(0, 7).Select(i => i - 3.0).ToArray());
+            case "frac": return np.array(new[] { -4.5, -0.5, 0.5, 2.5, 4.5, 5.5, 13.5 });
+            case "U5": return np.array(text).astype(np.dtype("U5"));
+            case "T": return np.array(text).astype(np.dtype("T"));
+            case "S5": return np.array(text).astype(np.dtype("S5"));
+            case "0d": return np.array(2L);
+            case "0d_f": return np.array(2.5);
+            case "2d": return np.array(Enumerable.Range(0, 6).Select(i => i - 3.0).ToArray()).reshape(new Shape(2, 3));
+            case "empty": return np.empty(new Shape(0), np.dtype("float64"));
+            case "special": return np.array(Special.Take(7).ToArray());
+            case "bool": return np.array(new[] { true, false, true });
+            case "complex": return np.array(new[] { new Complex(1, 1), new Complex(-1, 0), new Complex(2, -1) });
+            case "row":
+                return np.array(Enumerable.Range(0, (int)(dims.Length == 0 ? 1 : dims[^1])).Select(i => i % 4).ToArray());
+            default: throw new ArgumentException("unknown key variant " + label);
+        }
+    }
+
+    /// <summary>
+    ///     Builds np.searchsorted's sorter for an operand: the argsort of its flattened values (so it sorts a 1-D haystack)
+    ///     in several dtypes, and the forms NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant: <c>argsort</c> (np.argsort of the flattened operand, int64), <c>int32</c> (the
+    ///     same cast to int32), <c>uint64</c> (cast to uint64: no 'safe' cast to intp), <c>float</c> / <c>bool</c> (not
+    ///     integers), <c>2d</c> (the argsort as a (1, n) array: not 1-D), <c>short</c> (one entry fewer than the haystack),
+    ///     <c>oob</c> / <c>neg</c> (the last entry replaced by n / by -1: an index outside the haystack, refused when the
+    ///     search reaches it), <c>reversed</c> (n-1 .. 0 as a reversed view: valid indices that do not sort it).</param>
+    /// <param name="operand">The operand (the haystack).</param>
+    /// <returns>A fresh array, or null for the base label.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeSorter(string label, NDArray operand)
+    {
+        if (label == "null")
+            return null;
+        NDArray order = np.argsort(operand.ravel());
+        long n = order.size;
+        NDArray Replaced(long value)
+        {
+            var copy = order.copy();
+            if (n > 0)
+                copy[n - 1] = NDArray.Scalar(value);
+            return copy;
+        }
+        switch (label)
+        {
+            case "argsort": return order;
+            case "int32": return order.astype(np.dtype("int32"));
+            case "uint64": return order.astype(np.dtype("uint64"));
+            case "float": return order.astype(np.dtype("float64"));
+            case "bool": return np.ones(new Shape(n), np.dtype("bool"));
+            case "2d": return order.reshape(new Shape(1, n));
+            case "short": return n > 0 ? order[$":{n - 1}"] : order;
+            case "oob": return Replaced(n);
+            case "neg": return Replaced(-1);
+            case "reversed": return np.arange(n)["::-1"];
+            default: throw new ArgumentException("unknown sorter variant " + label);
         }
     }
 
