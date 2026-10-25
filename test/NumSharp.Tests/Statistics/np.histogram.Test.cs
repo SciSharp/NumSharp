@@ -612,6 +612,53 @@ public class np_histogram_Tests
         edges[0].typecode.Should().Be(xe.typecode);
     }
 
+    /// <summary>
+    ///     histogramdd hands its weights to <c>np.bincount</c> as given (NumPy never ravels them), so weights that are not
+    ///     1-D meet bincount's depth check, which comes before its cast: a (2, 2) or an (N, 1) array, deeper text and the
+    ///     histogram2d form are <c>object too deep for desired array</c>, a 0-d array — complex too — beside one point
+    ///     <c>object of too small depth for desired array</c> (NumPy 2.4.2's ValueErrors; the house dimension-error type).
+    ///     The weights used to be raveled, so an (N, 1) array histogrammed and a (2, 2) one met the length check.
+    /// </summary>
+    [TestMethod]
+    public void Error_DD_WeightsThatAreNot1D_MeetBincountsDepthCheck()
+    {
+        var s = np.array(new double[,] { { 0, 1 }, { 2, 3 } });
+        var onePoint = np.array(new double[,] { { 0.5, 1.5 } });
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogramdd(s, 2, weights: np.ones(new Shape(2, 2))),
+                     () => np.histogramdd(s, 2, weights: np.ones(new Shape(2, 1))),
+                     () => np.histogramdd(s, 2, weights: np.array(new[] { "1", "2", "3", "4" }).reshape(2, 2)),
+                     () => np.histogram2d(np.array(new[] { 0.0, 2.0 }), np.array(new[] { 1.0, 3.0 }), 2,
+                         weights: np.ones(new Shape(2, 1))),
+                 })
+            act.Should().Throw<IncorrectShapeException>().WithMessage("object too deep for desired array");
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogramdd(onePoint, 2, weights: np.array(2.0)),
+                     () => np.histogramdd(onePoint, 2, weights: np.array(new Complex(1, 2))),
+                 })
+            act.Should().Throw<IncorrectShapeException>().WithMessage("object of too small depth for desired array");
+    }
+
+    /// <summary>
+    ///     Without points, bincount returns its zeros before it reads the weights, so weights of any shape or dtype pass and
+    ///     H is all zeros (NumPy 2.4.2: <c>np.histogramdd(np.zeros((0, 2)), bins=2, weights=np.ones((3, 3)))</c>, and with a
+    ///     0-d text weight).
+    /// </summary>
+    [TestMethod]
+    public void DD_NoPoints_WeightsAreNeverRead()
+    {
+        var empty = np.zeros(new Shape(0, 2), np.float64);
+        foreach (var w in new[] { np.ones(new Shape(3, 3)), np.squeeze(np.array(new[] { "a" })) })
+        {
+            var (H, edges) = np.histogramdd(empty, 2, weights: w);
+            H.shape.Should().Equal(new long[] { 2, 2 });
+            Flat(np.sum(H))[0].Should().Be(0);
+            Eq(edges[1], new[] { 0.0, 0.5, 1.0 });
+        }
+    }
+
     // ── np.histogram2d ───────────────────────────────────────────────────
 
     [TestMethod]

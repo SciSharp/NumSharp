@@ -186,16 +186,22 @@ namespace NumSharp
         /// <param name="bins">The bin spec (int, int[], NDArray, NDArray[], or object[]).</param>
         /// <param name="range">Optional per-dimension outer edges.</param>
         /// <param name="density">When true, normalize to a probability density.</param>
-        /// <param name="weights">Optional per-point weights.</param>
+        /// <param name="weights">Optional per-point weights: a 1-D array of N values, read as given (NumPy never ravels them).</param>
         /// <returns>The histogram and its per-dimension edges. Without density, H is NumPy's VIEW of the padded counts
         ///     (strides of the padded shape, not C-contiguous, OWNDATA False); a 1-D edges array the caller passed is
         ///     returned as that same array.</returns>
         /// <exception cref="ValueError">A dimension mismatch, a non-positive scalar bin, edges that are not a scalar or 1-D,
         ///     or non-monotonic edges.</exception>
+        /// <exception cref="IncorrectShapeException">With points, weights that are not 1-D: bincount's depth check
+        ///     (<c>object of too small depth for desired array</c> for 0-d weights, <c>object too deep for desired array</c>
+        ///     for deeper ones; NumPy's ValueError, under the house dimension-error type).</exception>
+        /// <exception cref="ArgumentException">With points, 1-D weights of another length than the points (bincount's
+        ///     <c>The weights and list don't have the same length.</c>).</exception>
+        /// <exception cref="InvalidCastException">With points, complex weights (bincount's safe cast to float64).</exception>
         /// <exception cref="TypeError">A scalar bin that is not an integer (<c>`bins[i]` must be an integer, when a scalar</c>)
         ///     or that does not compare with 1 (text: <see cref="DdScalarBinBelowOne"/>). Text samples: the column's
         ///     <c>min()</c> (<c>minimum</c> has no text loop, named with the STACKED dtype) when the dimension has a scalar bin
-        ///     spec and no range; text edges: their widths' <c>subtract</c> refusal; text weights with points: bincount's
+        ///     spec and no range; text edges: their widths' <c>subtract</c> refusal; 1-D text weights with points: bincount's
         ///     safe cast to float64.</exception>
         /// <exception cref="UnicodeDecodeError">An <c>S</c> column beside a <c>U</c> column holding a byte that is not ASCII:
         ///     NumPy's stacking, its first statement, decodes the bytes before any bin is read, so this wins over every bin
@@ -360,16 +366,14 @@ namespace NumSharp
             long minlen = 1;
             foreach (int nb in nbin) minlen *= nb;
 
-            NDArray w1d = weights is null ? null : np.ravel(weights);
-            if (Backends.Strings.NDStringUfuncs.IsText(w1d))
-            {
-                // np.bincount converts the weights with a SAFE cast to float64 — after its empty-input early return, which
-                // never reads them (so no points means the plain zero counts).
-                if (xy.size > 0)
-                    throw new TypeError($"Cannot cast array data from {w1d.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
-                w1d = null;
-            }
-            NDArray flat = bincount(xy, w1d, minlength: (int)minlen);
+            // `np.bincount(xy, weights, minlength=nbin.prod())`: NumPy hands the weights over AS GIVEN (np.asarray only), and
+            // bincount reads them only after its empty-input early return, as a 1-D float64 array — so a 0-d or deeper
+            // weights array is refused by its depth check (object of too small depth / object too deep for desired array)
+            // before the safe cast refuses a complex or text one, and the length is compared last. A text array of the right
+            // depth meets that cast here, with NumPy's text (NumSharp's bincount does not convert text).
+            if (weights is not null && weights.ndim == 1 && xy.size > 0 && Backends.Strings.NDStringUfuncs.IsText(weights))
+                throw new TypeError($"Cannot cast array data from {weights.dtype.ToString(true)} to dtype('float64') according to the rule 'safe'");
+            NDArray flat = bincount(xy, weights, minlength: (int)minlen);
             NDArray hist = flat.reshape(Shape.Adopt(ToLongShape(nbin)));
             hist = hist.astype(NPTypeCode.Double); // NumPy: hist.astype(float, casting='safe') — H is always float64
 
