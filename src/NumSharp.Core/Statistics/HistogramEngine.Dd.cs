@@ -222,7 +222,10 @@ namespace NumSharp.Statistics
                     continue;
                 NPTypeCode cmp = promote_types(edges[i].typecode, cols[i].typecode);
                 var searchIdx = DirectILKernelGenerator.GetHistogramSearchIndexKernel(cmp);
-                if (searchIdx != null)
+                // The fused kernel counts the edges at or below each point, which is NumPy's binary search only over SORTED
+                // edges. An edge array holding a NaN passes the monotonic check (no comparison with a NaN is true) but is not
+                // sorted for the search, whose ordering puts NaN last, so NumPy's searchsorted itself decides those indices.
+                if (searchIdx != null && !EdgesHoldNaN(edges[i]))
                 {
                     NDArray colC = EnsureContiguousDtype(cols[i], cmp);
                     NDArray edgeC = EnsureContiguousDtype(edges[i], cmp);

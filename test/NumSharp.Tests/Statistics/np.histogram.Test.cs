@@ -768,6 +768,29 @@ public class np_histogram_Tests
     }
 
     /// <summary>
+    ///     Edges holding a NaN pass the monotonic check but are not sorted for NumPy's binary search (NaN sorts last), so
+    ///     NumPy's searchsorted itself decides each point's bin; counting the edges at or below a point gives other bins
+    ///     (NumPy 2.4.2's answers for an inner, a last and a first NaN edge, an int32 column, and a 2-D sample).
+    /// </summary>
+    [TestMethod]
+    public void DD_NaNEdges_AreNumPysSearch()
+    {
+        var col = np.array(new[] { 0.5, 1.5, 2.0, -1.0, 3.0, 0.0, 1.0 });
+        double nan = double.NaN;
+        foreach (var (edges, expected) in new (double[], double[])[]
+                 {
+                     (new[] { 0.0, nan, 2.0 }, new[] { 5.0, 1.0 }),
+                     (new[] { 0.0, 2.0, nan }, new[] { 4.0, 2.0 }),
+                     (new[] { nan, 1.0, 2.0 }, new[] { 0.0, 3.0 }),
+                 })
+            Eq(np.histogramdd(col, new[] { np.array(edges) }).H, expected);
+        Eq(np.histogramdd(np.array(new[] { 0, 1, 2, 3, -1 }), new[] { np.array(new[] { 0.0, nan, 2.0 }) }).H, new[] { 2.0, 1.0 });
+        var two = np.stack(new[] { col, col }, axis: 1);
+        Eq(np.histogramdd(two, new[] { np.array(new[] { 0.0, nan, 2.0 }), np.array(new[] { 0.0, 1.0, 2.0 }) }).H,
+            new[] { 2.0, 2.0, 0.0, 1.0 });
+    }
+
+    /// <summary>
     ///     A complex column runs NumPy's same statements in complex128: its lexicographic min / max are the outer edges
     ///     (complex scalars), so the count edges are a complex128 linspace, the search and the rightmost-edge test are
     ///     lexicographic, and the density divides by complex widths (a complex H). A range's Python floats keep the edges
