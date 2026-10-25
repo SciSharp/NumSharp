@@ -32,8 +32,10 @@
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
 // and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
 // operand named lhs / rhs / left / right / x / y / other, the histogram family's bins as an int, an estimator name, an
-// array or a double[], and its (lower, upper) range); an overload with a required parameter of another kind is reported
-// once as SKIP. A result that is a struct of arrays (np.histogram's HistogramResult) renders each array field.
+// array or a double[], and its (lower, upper) range, and np.histogramdd / np.histogram2d's sample as a sequence of columns,
+// their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges); an overload with a
+// required parameter of another kind is reported once as SKIP. A result that is a struct of arrays (np.histogram's
+// HistogramResult, np.histogramdd's HistogramddResult) renders each array field.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -172,6 +174,10 @@ static class Snapshot
         // np.histogram / np.histogram_bin_edges: bins as an int count, an estimator name, an array (edges or a 0-d count)
         // or a double[] of edges, and the optional (lower, upper) range.
         Bins, BinsName, BinsArray, BinsDoubles, Range,
+        // np.histogramdd / np.histogram2d: the sample as a sequence of columns, the per-dimension bins as an int[] / NDArray[]
+        // / object[], and the per-dimension ranges. Their values depend on the sample's dimension count, so they are built
+        // from the operand (see MakeDd) like the weights.
+        SampleSeq, BinsInts, BinsArrays, BinsObjects, RangeArray,
         Default, Unsupported,
     }
 
@@ -202,6 +208,10 @@ static class Snapshot
         if (n == "bins" && t == typeof(string)) return Role.BinsName;
         if (n == "bins" && t == typeof(double[])) return Role.BinsDoubles;
         if (n == "range" && t == typeof((double, double)?)) return Role.Range;
+        if (n == "bins" && t == typeof(int[])) return Role.BinsInts;
+        if (n == "bins" && t == typeof(NDArray[])) return Role.BinsArrays;
+        if (n == "bins" && t == typeof(object[])) return Role.BinsObjects;
+        if (n == "range" && t == typeof((double, double)?[])) return Role.RangeArray;
         if (n == "q" && t == typeof(double)) return Role.QDouble;
         if (n == "q" && t == typeof(double[])) return Role.QDoubles;
         if (n == "q" && t == typeof(long)) return Role.QLong;
@@ -234,6 +244,14 @@ static class Snapshot
             case Role.Weights:
             case Role.Where:
                 Add("null", () => null);
+                break;
+            case Role.SampleSeq:
+            case Role.BinsInts:
+            case Role.BinsArrays:
+            case Role.BinsObjects:
+            case Role.RangeArray:
+                // Built from the operand (MakeDd); the factory here is never called.
+                Add(DdLabels(role)[0], () => null);
                 break;
             case Role.Operand2:
                 // The base is the operand's own copy (MakeOperand2 "same"); the variants follow from the operand.
@@ -393,6 +411,14 @@ static class Snapshot
         bool sawArray = instance;
         for (int i = 0; i < ps.Length; i++)
         {
+            // np.histogramdd's sequence form: its NDArray[] sample is built from the pool operand (its columns), and the
+            // NDArray parameters after it (weights) keep their own roles.
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "sample")
+            {
+                roles[i] = Role.SampleSeq;
+                sawArray = true;
+                continue;
+            }
             roles[i] = Classify(ps[i], !sawArray && ps[i].ParameterType == typeof(NDArray));
             if (ps[i].ParameterType == typeof(NDArray)) sawArray = true;
         }
@@ -414,6 +440,7 @@ static class Snapshot
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
             Role.Operand2 => Operand2VariantLabels.Length - 1,
+            Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
 
@@ -489,6 +516,7 @@ static class Snapshot
             Role.Weights => WeightVariantLabels[v - 1],
             Role.Where => WhereVariantLabels[v - 1],
             Role.Operand2 => Operand2VariantLabels[v],
+            Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
 
@@ -507,6 +535,7 @@ static class Snapshot
             for (int i = 0; i < ps.Length; i++)
                 argv[i] = i == operandIndex ? operand
                     : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
+                    : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
             foreach (var (p, v) in assignments)
@@ -525,6 +554,13 @@ static class Snapshot
                         break;
                     case Role.Operand2:
                         argv[p] = MakeOperand2(Operand2VariantLabels[v], operand);
+                        break;
+                    case Role.SampleSeq:
+                    case Role.BinsInts:
+                    case Role.BinsArrays:
+                    case Role.BinsObjects:
+                    case Role.RangeArray:
+                        argv[p] = MakeDd(roles[p], DdLabels(roles[p])[v], operand, m);
                         break;
                     default:
                         argv[p] = variants[p][v].Make();
@@ -778,6 +814,197 @@ static class Snapshot
             case "row": return Ramp("int32", dims.Length == 0 ? 1 : dims[dims.Length - 1]);
             case "badshape": return Ramp("int32", 7);
             default: throw new ArgumentException("unknown second-operand variant " + label);
+        }
+    }
+
+    /// <summary>The labels of a histogramdd / histogram2d role; the first is the base value.</summary>
+    /// <param name="role">One of <see cref="Role.SampleSeq"/>, <see cref="Role.BinsInts"/>, <see cref="Role.BinsArrays"/>,
+    ///     <see cref="Role.BinsObjects"/>, <see cref="Role.RangeArray"/>.</param>
+    /// <returns>The labels <see cref="MakeDd"/> understands.</returns>
+    /// <exception cref="ArgumentException">Another role (a bug in the tool).</exception>
+    private static string[] DdLabels(Role role) => role switch
+    {
+        Role.SampleSeq => new[] { "cols", "mixed", "ragged", "single" },
+        Role.BinsInts => new[] { "2s", "mixed", "wronglen", "zero", "neg" },
+        Role.BinsArrays => new[] { "f64", "i64", "decr", "2d", "0d_i3", "U", "nan", "empty", "wronglen" },
+        Role.BinsObjects => new[] { "mixed", "float", "text", "bool", "0d", "doubles", "wronglen", "null" },
+        Role.RangeArray => new[] { "null", "all01", "first01", "bad", "nan", "wronglen", "zero" },
+        _ => throw new ArgumentException("not a histogramdd role: " + role),
+    };
+
+    /// <summary>Whether a role's values are built from the operand by <see cref="MakeDd"/>.</summary>
+    /// <param name="role">The role.</param>
+    /// <returns>True for the histogramdd / histogram2d roles.</returns>
+    private static bool IsDdRole(Role role) =>
+        role is Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray;
+
+    /// <summary>
+    ///     The dimension count a histogramdd / histogram2d call sees for a pool operand: 2 for histogram2d; for histogramdd,
+    ///     the columns of a 2-D sample (the last axis of a 3-D one, which NumSharp refuses anyway), one for a 1-D or 0-d
+    ///     sample, and the length of the sequence <see cref="MakeSampleSeq"/> builds for the sequence form.
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>The dimension count the per-dimension variants are sized for (the "wronglen" variants take one more).</returns>
+    private static int DdDims(MethodInfo m, NDArray operand)
+    {
+        if (m.Name == "histogram2d")
+            return 2;
+        bool sequence = m.GetParameters()[0].ParameterType == typeof(NDArray[]);
+        int nd = operand.ndim;
+        if (sequence)
+            return nd == 0 ? 1 : nd == 2 ? (int)operand.shape[1] : 2;
+        return nd == 2 ? (int)operand.shape[1] : nd == 3 ? (int)operand.shape[2] : 1;
+    }
+
+    /// <summary>
+    ///     Builds a histogramdd / histogram2d argument from the operand: the sample sequence, or per-dimension bins or ranges
+    ///     sized for the call's dimension count (<see cref="DdDims"/>).
+    /// </summary>
+    /// <param name="role">The parameter's role.</param>
+    /// <param name="label">The variant (see <see cref="DdLabels"/>): bins as counts (<c>2s</c>, <c>mixed</c> 2, 3, 4, ...,
+    ///     <c>wronglen</c> one count too many, <c>zero</c> / <c>neg</c> a first count NumPy refuses), as edge arrays (the
+    ///     BinsArray edges of np.histogram per dimension, the first one replaced by a decreasing, 2-D, 0-d, text, NaN or empty
+    ///     one, or one array too many), as a mixed object[] (counts beside edges, a float, a str, a bool, a 0-d array, a
+    ///     double[], one entry too many, a null), ranges (none, (0, 1) everywhere or first only, a first range NumPy refuses
+    ///     (decreasing, NaN), one range too many, a zero-width first range), and the sample sequence (the operand's columns,
+    ///     the last one replaced by a float64 ramp, shortened by one, or alone).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="m">The overload (its name and sample form decide the dimension count).</param>
+    /// <returns>A fresh argument.</returns>
+    /// <exception cref="ArgumentException">An unknown role or label (a bug in the tool).</exception>
+    private static object MakeDd(Role role, string label, NDArray operand, MethodInfo m)
+    {
+        int d = DdDims(m, operand);
+        NDArray F64() => np.array(new[] { -2.0, 0.0, 1.5, 5.0 });
+        switch (role)
+        {
+            case Role.SampleSeq:
+                return MakeSampleSeq(label, operand);
+            case Role.BinsInts:
+            {
+                int[] counts = label switch
+                {
+                    "2s" => Enumerable.Repeat(2, d).ToArray(),
+                    "mixed" => Enumerable.Range(0, d).Select(i => 2 + i).ToArray(),
+                    "wronglen" => Enumerable.Repeat(2, d + 1).ToArray(),
+                    "zero" => Enumerable.Range(0, d).Select(i => i == 0 ? 0 : 2).ToArray(),
+                    "neg" => Enumerable.Range(0, d).Select(i => i == 0 ? -1 : 2).ToArray(),
+                    _ => throw new ArgumentException("unknown int[] bins variant " + label),
+                };
+                return counts;
+            }
+            case Role.BinsArrays:
+            {
+                NDArray First() => label switch
+                {
+                    "f64" => F64(),
+                    "i64" => np.array(new long[] { -4, 0, 2, 4 }),
+                    "decr" => np.array(new[] { 5.0, 1.0 }),
+                    "2d" => np.array(new[] { 0.0, 1.0, 2.0, 3.0 }).reshape(new Shape(2, 2)),
+                    "0d_i3" => np.array(3L),
+                    "U" => np.array(new[] { "1", "2", "10" }).astype(np.dtype("U5")),
+                    "nan" => np.array(new[] { 0.0, BitConverter.Int64BitsToDouble(0x7FF8000000000000), 2.0 }),
+                    "empty" => np.empty(new Shape(0), np.dtype("float64")),
+                    "wronglen" => F64(),
+                    _ => throw new ArgumentException("unknown NDArray[] bins variant " + label),
+                };
+                int count = label == "wronglen" ? d + 1 : d;
+                var edges = new NDArray[count];
+                for (int i = 0; i < count; i++)
+                    edges[i] = i == 0 ? First() : label == "i64" ? np.array(new long[] { -4, 0, 2, 4 }) : F64();
+                return edges;
+            }
+            case Role.BinsObjects:
+            {
+                object First() => label switch
+                {
+                    "mixed" => 3,
+                    "float" => 2.0,
+                    "text" => "a",
+                    "bool" => true,
+                    "0d" => np.array(3L),
+                    "doubles" => new[] { -2.0, 0.0, 1.5, 5.0 },
+                    "wronglen" => 3,
+                    "null" => null,
+                    _ => throw new ArgumentException("unknown object[] bins variant " + label),
+                };
+                int count = label == "wronglen" ? d + 1 : d;
+                var specs = new object[count];
+                // After the first entry, edge arrays alternate with counts (NumPy's mixed per-dimension specs).
+                for (int i = 0; i < count; i++)
+                    specs[i] = i == 0 ? First() : i % 2 == 1 ? F64() : (object)3;
+                return specs;
+            }
+            case Role.RangeArray:
+            {
+                if (label == "null")
+                    return null;
+                (double, double)? First() => label switch
+                {
+                    "all01" or "first01" or "wronglen" => (0.0, 1.0),
+                    "bad" => (1.0, 0.0),
+                    "nan" => (BitConverter.Int64BitsToDouble(0x7FF8000000000000), 1.0),
+                    "zero" => (2.0, 2.0),
+                    _ => throw new ArgumentException("unknown range[] variant " + label),
+                };
+                int count = label == "wronglen" ? d + 1 : d;
+                var ranges = new (double, double)?[count];
+                for (int i = 0; i < count; i++)
+                    ranges[i] = i == 0 ? First() : label is "all01" or "wronglen" ? (0.0, 1.0) : null;
+                return ranges;
+            }
+            default:
+                throw new ArgumentException("not a histogramdd role: " + role);
+        }
+    }
+
+    /// <summary>
+    ///     Builds np.histogramdd's sequence-of-columns sample from a pool operand.
+    /// </summary>
+    /// <param name="label"><c>cols</c>: the columns of a 2-D operand, a 1-D operand and its copy, a 0-d operand alone, the
+    ///     two rows of a 3-D operand (2-D entries); <c>mixed</c>: the same with the last entry replaced by a float64 ramp of
+    ///     its shape (columns of two dtypes); <c>ragged</c>: the last entry one element shorter (or longer when empty);
+    ///     <c>single</c>: the first entry alone.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh array of column arrays.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeSampleSeq(string label, NDArray operand)
+    {
+        NDArray[] cols = operand.ndim switch
+        {
+            0 => new[] { operand },
+            1 => new[] { operand, operand.copy() },
+            2 => Enumerable.Range(0, (int)operand.shape[1]).Select(i => operand[$":, {i}"]).ToArray(),
+            _ => new[] { operand[0], operand[1] },
+        };
+        NDArray Ramp(Shape shape)
+        {
+            long size = 1;
+            foreach (long x in shape.Dimensions) size *= x;
+            return np.array(Enumerable.Range(0, (int)size).Select(i => (double)(i % 4)).ToArray()).reshape(shape);
+        }
+        switch (label)
+        {
+            case "cols":
+                return cols;
+            case "mixed":
+            {
+                var mixed = (NDArray[])cols.Clone();
+                mixed[^1] = Ramp(new Shape(cols[^1].Shape.Dimensions));
+                return mixed;
+            }
+            case "ragged":
+            {
+                var ragged = (NDArray[])cols.Clone();
+                NDArray last = cols[^1].ravel();
+                ragged[^1] = last.size > 0 ? last[$":{last.size - 1}"] : np.zeros(new Shape(1), last.dtype);
+                return ragged;
+            }
+            case "single":
+                return new[] { cols[0] };
+            default:
+                throw new ArgumentException("unknown sample sequence variant " + label);
         }
     }
 
