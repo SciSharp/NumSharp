@@ -50,10 +50,10 @@ namespace NumSharp
             if (y is not null && y.ndim > 2)
                 throw new ValueError("y has more than 2 dimensions");
 
-            // Text (an operand, or a string dtype= request): NumPy's statements run up to the first reduction, which
-            // refuses text — or the empty-variables early return, which yields the (0, 0) float64 result.
+            // Text (an operand, or a text dtype= request: S, U or StringDType): NumPy's statements run up to the first
+            // reduction, which refuses text — or the empty-variables early return, which yields the (0, 0) float64 result.
             if (Backends.Strings.NDStringUfuncs.IsText(m) || Backends.Strings.NDStringUfuncs.IsText(y) ||
-                Backends.Strings.NDStringUfuncs.IsStringRequest(dtype))
+                Backends.Strings.NDStringUfuncs.IsTextRequest(dtype))
                 return CovOfText(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
 
             // Result dtype: at least float64 (complex input stays complex).
@@ -215,16 +215,20 @@ namespace NumSharp
         private static NDArray EmptyCovariance() => np.array(Array.Empty<double>()).reshape(0, 0);
 
         /// <summary>
-        ///     <c>np.cov</c> over text (a string operand, or a string <c>dtype=</c> request), following NumPy's statements:
-        ///     with a NUMERIC <c>dtype=</c>, <c>X = array(m, ndmin=2, dtype=dtype)</c> parses text <paramref name="m"/> (each
-        ///     element by <c>int()</c> / <c>float()</c> / <c>complex()</c>), the empty-variables early return comes next, then
+        ///     <c>np.cov</c> over text (a string operand, or a text <c>dtype=</c> request: <c>S</c>, <c>U</c> or
+        ///     <c>StringDType</c>), following NumPy's statements: with a NUMERIC <c>dtype=</c>,
+        ///     <c>X = array(m, ndmin=2, dtype=dtype)</c> parses text <paramref name="m"/> (each element by <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c>), the empty-variables early return comes next, then
         ///     <c>array(y, dtype=dtype)</c> parses text <paramref name="y"/>, and the covariance of the numbers follows.
         ///     Otherwise the statements run up to the first reduction: the observations' descriptor
         ///     (<c>result_type(m, y, float64)</c> without <c>dtype=</c> — text absorbs float64 as 32 characters — else
         ///     <c>array(m, dtype=dtype)</c>'s), the text-to-text conversion (which can fail: U → S encodes ASCII, S → U
         ///     decodes it), the empty-variables early return, <c>y</c>'s conversion and concatenation, the weight checks,
-        ///     and then <c>average</c>: its <c>a.mean</c> refuses text with add.reduce's text, or with weights its weight sum
-        ///     refuses the SIZED string descriptor by class.
+        ///     and then <c>average</c>: for fixed-width text its <c>a.mean</c> refuses with add.reduce's text, or with weights
+        ///     its weight sum refuses the SIZED string descriptor by class; for <c>StringDType</c> (requested: no operand
+        ///     reaches it otherwise) <c>a.mean</c>'s add.reduce concatenates, so its <c>true_divide</c> by the count refuses
+        ///     (add.reduce itself refuses an axis of no observations: no identity), and with weights the weighted mean's
+        ///     <c>result_type(a.dtype, w.dtype)</c> has no common DType.
         /// </summary>
         /// <param name="m">The variables.</param>
         /// <param name="y">The additional variables, or null.</param>
@@ -243,15 +247,27 @@ namespace NumSharp
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="ValueError">The variables of <paramref name="m"/> and <paramref name="y"/> do not have the same
         ///     number of observations (concatenate's text), or a negative weight.</exception>
-        /// <exception cref="TypeError">add.reduce's refusal of text, a weighted mean's class-only refusal, or a non-integral
-        ///     frequency weight.</exception>
+        /// <exception cref="TypeError">add.reduce's refusal of text, a weighted mean's class-only refusal, the mean's
+        ///     division of <c>StringDType</c> text (<c>ufunc 'divide' did not contain a loop with signature matching types
+        ///     (&lt;class 'numpy.dtypes.StringDType'&gt;, &lt;class 'numpy.dtypes.Int64DType'&gt;) -&gt; None</c>), or a
+        ///     non-integral frequency weight.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> request over no observations (add.reduce's <c>zero-size array to
+        ///     reduction operation add which has no identity</c>).</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> request with weights (the weighted mean's
+        ///     <c>result_type</c> of the text and the float64 weights), or <c>StringDType</c> operands without
+        ///     <c>dtype=</c> (<c>result_type(m, y, float64)</c>).</exception>
         /// <exception cref="RuntimeError">A malformed weight array.</exception>
+        /// <exception cref="InvalidOperationException">Not reached: StringDType and float64 have no common DType, so the
+        ///     weighted mean's promotion always raises first.</exception>
         [NDScopedCovered] // only caller: the [NDScoped] cov (the conversion temporaries are scope-reclaimed)
         private static NDArray CovOfText(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
             NDArray aweights, DType dtype)
         {
             DType xd, yd;
-            if (dtype is not null && !Backends.Strings.NDStringUfuncs.IsStringRequest(dtype))
+            // A numeric request parses the text. A StringDType request is text like S and U (the descriptor it asks for,
+            // which X and y become); read as numeric, its parse produced StringDType text again and cov recursed into this
+            // branch until the stack overflowed.
+            if (dtype is not null && !Backends.Strings.NDStringUfuncs.IsTextRequest(dtype))
             {
                 // X = array(m, ndmin=2, dtype=dtype): np.array with a dtype casts unsafely, so text is parsed (a number is
                 // left for the numeric path's own cast).
@@ -312,6 +328,22 @@ namespace NumSharp
             }
 
             NDArray w = CovWeights(fweights, aweights, xDims[1], out _);
+            if (observed.Meta is VStringDTypeMeta)
+            {
+                // average(X, axis=1, weights=w) over StringDType text. With weights: result_type(a.dtype, wgt.dtype) (the
+                // text is not an integer, so no 'f8' joins) has no common DType with the float64 weights, and the
+                // sequence promotion raises NumPy's DTypePromotionError listing both classes.
+                if (w is not null)
+                {
+                    DTypePromotion.ResultType(observed, np.float64);
+                    throw new InvalidOperationException("StringDType text promoted with the float64 weights, which NumPy refuses.");
+                }
+                // Without: a.mean(axis=1) runs add.reduce, which concatenates StringDType text but has no identity for an
+                // axis of no observations, then true_divide(ret, rcount) with the strong intp count, which has no loop.
+                if (xDims[1] == 0)
+                    throw new ValueError("zero-size array to reduction operation add which has no identity");
+                throw Backends.Strings.NDStringUfuncs.NoLoop("divide", observed, np.int64);
+            }
             if (w is not null)
                 throw new TypeError(Backends.DefaultEngine.GeneralDTypeOnlyText);
             throw Backends.Strings.NDStringUfuncs.AddNotCompatible(observed, "reduce");

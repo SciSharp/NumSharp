@@ -266,6 +266,46 @@ namespace NumSharp.Tests.Backends.Strings
             np.cov(np.zeros(new Shape(0, 2), T), dtype: np.float64).shape.Should().Equal(0, 0);
         }
 
+        /// <summary>
+        ///     <c>np.cov(..., dtype=StringDType())</c> is a text request like <c>U</c> and <c>S</c>: <c>X = array(m, ndmin=2,
+        ///     dtype=dtype)</c> makes StringDType text of any operand (numbers formatted), and the weighted or plain mean
+        ///     refuses it — <c>a.mean</c>'s add.reduce concatenates, so its division by the intp count has no loop (no
+        ///     observations: add.reduce has no identity); with weights, <c>result_type(a.dtype, w.dtype)</c> has no common
+        ///     DType. A text operand used to recurse (the request was read as numeric, its parse gave text again) until the
+        ///     stack overflowed and ended the process; a numeric one raised NumSharp's storage-lane NotSupportedException,
+        ///     even for no variables, where NumPy returns its empty (0, 0) float64. Probed against <c>numpy==2.4.2</c>.
+        /// </summary>
+        [TestMethod]
+        public void Cov_StringDTypeRequest_RunsTheTextStatements()
+        {
+            using var numbers = np.array(new[] { 3.0, -1.0, 2.0, 0.0, 5.0, -4.0, 1.0, 7.0 }).reshape(2, 4);
+            string divide = NoLoop("divide", "StringDType", "Int64DType");
+            new Action(() => np.cov(numbers, dtype: T)).Should().Throw<TypeError>().WithMessage(divide);
+            new Action(() => np.cov(numbers.astype(np.dtype("U5")), dtype: T)).Should().Throw<TypeError>().WithMessage(divide);
+            new Action(() => np.cov(Ts("3", "-1", "2", "0").reshape(2, 2), dtype: T)).Should().Throw<TypeError>()
+                .WithMessage(divide);
+            new Action(() => np.cov(numbers, numbers, dtype: T)).Should().Throw<TypeError>().WithMessage(divide);
+            new Action(() => np.corrcoef(numbers, dtype: T)).Should().Throw<TypeError>().WithMessage(divide);
+            // No observations: add.reduce of StringDType has no identity.
+            new Action(() => np.cov(np.zeros(new Shape(3, 0)), dtype: T)).Should().Throw<ValueError>()
+                .WithMessage("zero-size array to reduction operation add which has no identity");
+            // Weights: the weighted mean's promotion of the text with the float64 weights.
+            new Action(() => np.cov(numbers, aweights: np.ones(new Shape(4)), dtype: T)).Should().Throw<DTypePromotionError>()
+                .WithMessage("The DType <class 'numpy.dtypes.StringDType'> could not be promoted by " +
+                             "<class 'numpy.dtypes.Float64DType'>. This means that no common DType exists for the given inputs. " +
+                             "For example they cannot be stored in a single array unless the dtype is `object`. The full list " +
+                             "of DTypes is: (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.Float64DType'>)");
+            // The weight checks come first.
+            new Action(() => np.cov(numbers, fweights: np.array(new[] { 1.5, 1.0, 1.0, 1.0 }), dtype: T))
+                .Should().Throw<TypeError>().WithMessage("fweights must be integer");
+            // No variables: NumPy's empty (0, 0) float64, a reshape view.
+            using (var none = np.cov(np.zeros(new Shape(0, 3)), dtype: T))
+            {
+                none.shape.Should().Equal(0, 0);
+                none.dtype.Should().Be(np.float64);
+            }
+        }
+
         [TestMethod]
         public void Average_ChecksTheWeightsShapesBeforePromoting()
         {
