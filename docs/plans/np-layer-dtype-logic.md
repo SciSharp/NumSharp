@@ -492,6 +492,46 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-26, P2's fifth family: np.cov moved into `CovEngine`, its text route NumPy's statements, two divergences
+  fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot
+  (31,392 calls over np.cov / np.corrcoef), `twin_cov.py` (the tool's operands, y, weights, rowvar, bias, ddof and dtype
+  rebuilt in NumPy; dtype, shape, C / F / OWNDATA / WRITEABLE flags and SHA-256 per line), `ab_verdict.py --twin
+  twin_cov`, `ulp_cov.py` (a value mismatch measured element by element against the bytes a `SNAPSHOT_BYTES=1`
+  snapshot carries), and a NumPy probe per fix:
+  - `82a6e78a` the snapshot tool reaches np.cov / np.corrcoef's optional second set of variables y (base null), the
+    nullable ddof and the frequency / analytic weights (built from the operand: one per observation for either
+    orientation, and the forms NumPy refuses); `SNAPSHOT_BYTES=1` appends each array result's bytes. Its first run on
+    the parent did not finish: the next fix.
+  - `51e20fda` (D4, a process crash) a `StringDType()` `dtype=` request is a text request: np.cov tested only the
+    fixed-width class (`IsStringRequest`), so a text operand's parse gave StringDType text again and cov recursed
+    until the stack overflowed, and a numeric operand raised NumSharp's storage-lane NotSupportedException. Now
+    NumPy's answers: the mean's divide no-loop text, add.reduce's "no identity" over no observations, the weighted
+    mean's DTypePromotionError, the empty (0, 0) float64. All 1,380 dtype=T lines agree with the twin.
+  - `8e8c3210` (D4) an integer or bool `dtype=` refuses NumPy's in-place `X -= avg[:, None]` (the float64 mean's
+    difference cannot be cast back same_kind: NumPy's UFuncTypeError, the house ArgumentException, through
+    `DefaultEngine.ValidateOutCast`, now internal); NumSharp cast it back unsafely and returned an integer covariance.
+    2,100 snapshot lines change: 2,082 to NumPy's outcome, 18 decimal.
+  - `d5783534` the move (D1: numpy.cov is Python): the body and every private member of np.cov.cs into
+    `Statistics/CovEngine.cs` (beside the facade, C3), statement for statement; CovOfText's parsed-text call re-enters
+    `CovEngine.Cov`. 31,392 calls byte-identical; R1 np.cov.cs 8 text / 7 numeric lines -> out of the allowlist.
+  - `6127173b` step 2: the text route converts X and y, concatenates, checks the weights and lets np.average refuse,
+    instead of naming the refusal from descriptor classes (a probe: NumSharp's np.average gives NumPy's outcome over
+    the twelve text forms the route builds). 31,392 calls byte-identical. The concatenation's observation check stays
+    in the route for NumPy's ValueError (NumSharp's np.concatenate raises the house IncorrectShapeException).
+  - Evidence at `8e8c3210` (the move and step 2 change no line): the twin agrees with NumPy 2.4.2 on 26,176 of the
+    31,036 comparable lines (356 decimal lines have no NumPy dtype); every other line is one of three known classes —
+    the OWNDATA flag of the open gap VA04 (cov ends with ndarray.squeeze, which in NumSharp returns a new view where
+    NumPy returns the array itself, VF04), 699 value lines each within 4 epsilon of the result's largest element
+    (without the OpenBLAS backend the managed Gram / dot product sums in another order than NumPy's BLAS; 4 of them
+    place a NaN differently because an infinite scale meets a 1e-18 imaginary residue NumPy's product leaves at 0), and
+    8 lines where the twin names NumSharp's char as numpy's UInt16DType in a promotion text. The twin models one
+    documented divergence: NumPy 2.4.2's StringDType -> complex cast writes the real part into both parts, NumSharp
+    writes the value complex() parses (`NDTextParse.ParseVStringElement`).
+  - Left: VF04 / VA04 (np.squeeze returning its operand itself changes what a caller's disposal reaches: its own
+    decision).
+  - At `6127173b`: NumSharp.Tests net10.0 20,551 passed / 11 skipped and net8.0 20,550 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed (Layering 6 / 6).
+  - Next in P2: `GufuncGuard`, then the list's order.
 - **2026-10-25, P2's fourth family: np.searchsorted moved into `TensorEngine.SearchSorted`, the divergences around the
   move fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the
   snapshot (44,676 calls over np.searchsorted / NDArray.searchsorted), `twin_searchsorted.py` (the tool's haystacks, keys,
