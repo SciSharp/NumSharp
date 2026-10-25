@@ -175,16 +175,16 @@ public class np_histogram_complex_data_tests
 
     /// <summary>
     ///     Where the imaginary parts pull the complex quotient past the edges, NumPy's own statements fail: a negative index
-    ///     reaches <c>np.bincount</c> (NumSharp's np.bincount raises NumPy's text as an <see cref="ArgumentException"/>), or the
+    ///     reaches <c>np.bincount</c> (its <see cref="ValueError"/>), or the
     ///     fancy index into the edges is out of bounds. <c>stone</c> meets the first in its own histograms.
     /// </summary>
     [TestMethod]
     public void ComplexQuotientOutsideTheEdges_NumPysErrors()
     {
         var negative = np.array(new[] { new Complex(0, 0), new Complex(1, 10), new Complex(0.1, -5) });
-        ((Action)(() => np.histogram(negative, 3))).Should().Throw<ArgumentException>()
+        ((Action)(() => np.histogram(negative, 3))).Should().Throw<ValueError>()
             .WithMessage("'list' argument must have no negative elements");
-        ((Action)(() => np.histogram(negative, "stone"))).Should().Throw<ArgumentException>()
+        ((Action)(() => np.histogram(negative, "stone"))).Should().Throw<ValueError>()
             .WithMessage("'list' argument must have no negative elements");
 
         var beyond = np.array(new[] { new Complex(0, 10), new Complex(1, 0), new Complex(0.9, -10) });

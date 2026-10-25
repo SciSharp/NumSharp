@@ -53,6 +53,15 @@ namespace NumSharp
         ///     A 1-D array: <c>int64</c> counts when <paramref name="weights"/> is null, otherwise
         ///     <c>float64</c> weighted sums.
         /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="IncorrectShapeException"><paramref name="x"/>, or with points the weights, is not 1-D (NumPy's
+        ///     depth check: <c>object of too small depth for desired array</c>, <c>object too deep for desired array</c>;
+        ///     its ValueError under the house dimension-error type).</exception>
+        /// <exception cref="InvalidCastException"><paramref name="x"/> is not an integer, bool or char array, or with points
+        ///     the weights are complex or text (NumPy's safe-cast TypeError text).</exception>
+        /// <exception cref="ValueError">NumPy's three ValueErrors, in its order: a negative <paramref name="minlength"/>
+        ///     (<c>'minlength' must not be negative</c>), a negative element (<c>'list' argument must have no negative
+        ///     elements</c>), weights of another length (<c>The weights and list don't have the same length.</c>).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bincount.html</remarks>
         [NDScoped]
         public static NDArray bincount(NDArray x, NDArray weights = null, int minlength = 0)
@@ -79,7 +88,7 @@ namespace NumSharp
                     $"to dtype('int64') according to the rule 'safe'");
 
             if (minlength < 0)
-                throw new ArgumentException("'minlength' must not be negative");
+                throw new ValueError("'minlength' must not be negative");
 
             // Materialize x as a contiguous, offset-free int64 buffer. `.Address` ignores
             // Shape.offset, so a sliced/broadcast view must be copied (the astype already produces a
@@ -98,7 +107,7 @@ namespace NumSharp
 
             MinMaxInt64(xi, len, out long mn, out long mx);
             if (mn < 0)
-                throw new ArgumentException("'list' argument must have no negative elements");
+                throw new ValueError("'list' argument must have no negative elements");
 
             long ansSize = mx + 1;
             if (ansSize < minlength) ansSize = minlength;
@@ -124,7 +133,7 @@ namespace NumSharp
                 w64 = w64.copy();
 
             if (w64.size != len)
-                throw new ArgumentException("The weights and list don't have the same length.");
+                throw new ValueError("The weights and list don't have the same length.");
 
             return BincountWeighted(xi, w64, len, ansSize);
         }

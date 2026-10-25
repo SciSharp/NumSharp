@@ -46,7 +46,7 @@ namespace NumSharp.Statistics
         /// <exception cref="IncorrectShapeException">With points, weights that are not 1-D: bincount's depth check
         ///     (<c>object of too small depth for desired array</c> for 0-d weights, <c>object too deep for desired array</c>
         ///     for deeper ones; NumPy's ValueError, under the house dimension-error type).</exception>
-        /// <exception cref="ArgumentException">With points, 1-D weights of another length than the points (bincount's
+        /// <exception cref="ValueError">With points, 1-D weights of another length than the points (bincount's
         ///     <c>The weights and list don't have the same length.</c>).</exception>
         /// <exception cref="InvalidCastException">With points, complex weights (bincount's safe cast to float64).</exception>
         /// <exception cref="TypeError">A scalar bin that is not an integer (<c>`bins[i]` must be an integer, when a scalar</c>)

@@ -291,9 +291,8 @@ namespace NumSharp.Statistics
         /// <param name="be">The equal-width edges and their outer edges, count and dtype.</param>
         /// <param name="ntype">The result's dtype: int64 without weights, the weights' dtype with them.</param>
         /// <returns>The counts (or summed weights), one per bin, in <paramref name="ntype"/>.</returns>
-        /// <exception cref="ArgumentException">Zero bins with a sample between the outer edges: NumPy's np.bincount refusal
-        ///     (<c>'list' argument must have no negative elements</c>, a ValueError in NumPy; NumSharp's np.bincount raises
-        ///     it as an ArgumentException), see <see cref="HistogramZeroBins"/>.</exception>
+        /// <exception cref="ValueError">Zero bins with a sample between the outer edges: NumPy's np.bincount refusal
+        ///     (<c>'list' argument must have no negative elements</c>), see <see cref="HistogramZeroBins"/>.</exception>
         /// <exception cref="IndexError">Zero bins whose quotient is not finite (<see cref="HistogramZeroBins"/>); float16 /
         ///     float32 data over a range narrower than the dtype's spacing, whose float64 quotient passes the edges
         ///     (<c>index 3 is out of bounds for axis 0 with size 3</c>, the first such sample).</exception>
@@ -397,9 +396,8 @@ namespace NumSharp.Statistics
         /// <returns>The empty counts, when no sample lies between the outer edges.</returns>
         /// <exception cref="IndexError">A kept sample of the first block holding one whose quotient is not finite:
         ///     <c>index -9223372036854775808 is out of bounds for axis 0 with size 1</c>.</exception>
-        /// <exception cref="ArgumentException">Otherwise a sample between the outer edges: np.bincount's refusal of the -1
-        ///     indices (<c>'list' argument must have no negative elements</c>; NumSharp's np.bincount raises NumPy's
-        ///     ValueError text as an ArgumentException).</exception>
+        /// <exception cref="ValueError">Otherwise a sample between the outer edges: np.bincount's refusal of the -1
+        ///     indices (<c>'list' argument must have no negative elements</c>).</exception>
         /// <remarks>
         ///     Zero bins come only from an estimator, which ran over the samples between the outer edges and found at least
         ///     one, so NumPy's answer is in practice always one of the refusals. The keep mask is the estimator branch's own
