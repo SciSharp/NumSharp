@@ -236,14 +236,15 @@ namespace NumSharp.Statistics
         ///     <c>X = array(m, ndmin=2, dtype=dtype)</c> parses text <paramref name="m"/> (each element by <c>int()</c> /
         ///     <c>float()</c> / <c>complex()</c>), the empty-variables early return comes next, then
         ///     <c>array(y, dtype=dtype)</c> parses text <paramref name="y"/>, and the covariance of the numbers follows.
-        ///     Otherwise the statements run up to the first reduction: the observations' descriptor
+        ///     Otherwise the statements run up to the first reduction, each as NumPy writes it: the observations' descriptor
         ///     (<c>result_type(m, y, float64)</c> without <c>dtype=</c> — text absorbs float64 as 32 characters — else
-        ///     <c>array(m, dtype=dtype)</c>'s), the text-to-text conversion (which can fail: U → S encodes ASCII, S → U
-        ///     decodes it), the empty-variables early return, <c>y</c>'s conversion and concatenation, the weight checks,
-        ///     and then <c>average</c>: for fixed-width text its <c>a.mean</c> refuses with add.reduce's text, or with weights
-        ///     its weight sum refuses the SIZED string descriptor by class; for <c>StringDType</c> (requested: no operand
-        ///     reaches it otherwise) <c>a.mean</c>'s add.reduce concatenates, so its <c>true_divide</c> by the count refuses
-        ///     (add.reduce itself refuses an axis of no observations: no identity), and with weights the weighted mean's
+        ///     <c>array(m, dtype=dtype)</c>'s), <c>X = array(m, ndmin=2, dtype=...)</c> (numbers formatted, text converted:
+        ///     U → S encodes ASCII, S → U decodes it), the empty-variables early return, <c>y</c>'s conversion and the
+        ///     concatenation, the weight checks, and then <c>average(X, axis=1, weights=w)</c>, which refuses the text:
+        ///     for fixed-width text its <c>a.mean</c> with add.reduce's text, or with weights its weight sum with the SIZED
+        ///     string descriptor <c>result_type</c> gives; for <c>StringDType</c> (requested: no operand reaches it
+        ///     otherwise) <c>a.mean</c>'s add.reduce concatenates, so its <c>true_divide</c> by the count refuses (add.reduce
+        ///     itself refuses an axis of no observations: no identity), and with weights the weighted mean's
         ///     <c>result_type(a.dtype, w.dtype)</c> has no common DType.
         /// </summary>
         /// <param name="m">The variables.</param>
@@ -273,8 +274,8 @@ namespace NumSharp.Statistics
         ///     <c>result_type</c> of the text and the float64 weights), or <c>StringDType</c> operands without
         ///     <c>dtype=</c> (<c>result_type(m, y, float64)</c>).</exception>
         /// <exception cref="RuntimeError">A malformed weight array.</exception>
-        /// <exception cref="InvalidOperationException">Not reached: StringDType and float64 have no common DType, so the
-        ///     weighted mean's promotion always raises first.</exception>
+        /// <exception cref="InvalidOperationException">Not reached: np.average refuses every text array, as NumPy's mean
+        ///     does.</exception>
         [NDScopedCovered] // only caller: the [NDScoped] cov (the conversion temporaries are scope-reclaimed)
         private static NDArray CovOfText(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
             NDArray aweights, DType dtype)
@@ -320,49 +321,37 @@ namespace NumSharp.Statistics
                 yd = y is null ? null : TextDescriptorFor(y.dtype, dtype);
             }
 
-            // X = array(m, ndmin=2, dtype=dtype): only a text-to-text conversion can fail, and only on its content.
-            ConvertTextForCov(m, xd);
-            long[] xDims = AtLeast2dDims(m);
+            // X = array(m, ndmin=2, dtype=dtype): numbers are formatted and text converted (np.array with a dtype casts
+            // unsafely); only a text-to-text conversion can fail, and only on its content (U -> S encodes ASCII, S -> U
+            // decodes it).
+            NDArray X = np.atleast_2d(m).astype(xd, true, 'K', "unsafe");
             if (!rowvar && m.ndim != 1)
-                Array.Reverse(xDims);
-            if (xDims[0] == 0)
+                X = X.T;
+            if (X.Shape.dimensions[0] == 0)
                 return EmptyCovariance();
 
-            DType observed = xd;
             if (y is not null)
             {
-                ConvertTextForCov(y, yd);
-                long[] yDims = AtLeast2dDims(y);
-                if (!rowvar && yDims[0] != 1)
-                    Array.Reverse(yDims);
-                // X = np.concatenate((X, y), axis=0): the observation counts must agree.
-                if (yDims[1] != xDims[1])
+                // y = array(y, copy=None, ndmin=2, dtype=dtype), then X = np.concatenate((X, y), axis=0): the observation
+                // counts must agree. NumPy's concatenate raises a ValueError there; NumSharp's raises its house
+                // IncorrectShapeException with the same text, so the check is made here with NumPy's type.
+                NDArray Y = np.atleast_2d(y).astype(yd, true, 'K', "unsafe");
+                if (!rowvar && Y.Shape.dimensions[0] != 1)
+                    Y = Y.T;
+                if (Y.Shape.dimensions[1] != X.Shape.dimensions[1])
                     throw new ValueError(
                         "all the input array dimensions except for the concatenation axis must match exactly, but along " +
-                        $"dimension 1, the array at index 0 has size {xDims[1]} and the array at index 1 has size {yDims[1]}");
-                observed = DTypePromotion.PromoteTypes(xd, yd);
+                        $"dimension 1, the array at index 0 has size {X.Shape.dimensions[1]} and the array at index 1 has size {Y.Shape.dimensions[1]}");
+                X = np.concatenate((X, Y), 0);
             }
 
-            NDArray w = CovWeights(fweights, aweights, xDims[1], out _);
-            if (observed.Meta is VStringDTypeMeta)
-            {
-                // average(X, axis=1, weights=w) over StringDType text. With weights: result_type(a.dtype, wgt.dtype) (the
-                // text is not an integer, so no 'f8' joins) has no common DType with the float64 weights, and the
-                // sequence promotion raises NumPy's DTypePromotionError listing both classes.
-                if (w is not null)
-                {
-                    DTypePromotion.ResultType(observed, np.float64);
-                    throw new InvalidOperationException("StringDType text promoted with the float64 weights, which NumPy refuses.");
-                }
-                // Without: a.mean(axis=1) runs add.reduce, which concatenates StringDType text but has no identity for an
-                // axis of no observations, then true_divide(ret, rcount) with the strong intp count, which has no loop.
-                if (xDims[1] == 0)
-                    throw new ValueError("zero-size array to reduction operation add which has no identity");
-                throw Backends.Strings.NDStringUfuncs.NoLoop("divide", observed, np.int64);
-            }
-            if (w is not null)
-                throw new TypeError(Backends.DefaultEngine.GeneralDTypeOnlyText);
-            throw Backends.Strings.NDStringUfuncs.AddNotCompatible(observed, "reduce");
+            NDArray w = CovWeights(fweights, aweights, X.Shape.dimensions[1], out _);
+            // avg, w_sum = average(X, axis=1, weights=w, returned=True): the mean refuses the text - add.reduce's text for
+            // S / U, or, weighted, the weight sum's dtype= refusal of the sized string descriptor result_type gives; for
+            // StringDType the division of the concatenated text by the count (add.reduce's "no identity" over no
+            // observations), or, weighted, result_type's DTypePromotionError.
+            np.average(X, 1, w);
+            throw new InvalidOperationException("np.average accepted text, which NumPy's mean refuses.");
         }
 
         /// <summary>
@@ -374,23 +363,6 @@ namespace NumSharp.Statistics
         /// <returns>The sized string descriptor.</returns>
         private static DType TextDescriptorFor(DType from, DType request)
             => from.Meta == request.Meta ? from : DTypePromotion.CastDescrToDType(from, request.Meta);
-
-        /// <summary>
-        ///     Runs the text-to-text conversion <c>np.array(x, dtype=descr)</c> makes, for its errors only: U → S encodes
-        ///     ASCII and S → U decodes it, so non-ASCII content raises NumPy's Unicode error. A number converted to text
-        ///     cannot fail (and the covariance refuses the text it makes anyway), so it is skipped, as is a conversion
-        ///     within one class.
-        /// </summary>
-        /// <param name="x">The operand.</param>
-        /// <param name="descr">The descriptor it is converted to.</param>
-        /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
-        /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
-        [NDScopedCovered] // only caller: CovOfText (the converted copy is scope-reclaimed)
-        private static void ConvertTextForCov(NDArray x, DType descr)
-        {
-            if (Backends.Strings.NDStringUfuncs.IsText(x) && descr.Meta is StringDTypeMeta && descr.Meta != x.dtype.Meta)
-                x.astype(descr);
-        }
 
         /// <summary>The dimensions of <c>np.array(x, ndmin=2)</c>: ones prepended up to two dimensions.</summary>
         /// <param name="x">The operand.</param>
