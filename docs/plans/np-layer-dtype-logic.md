@@ -488,6 +488,53 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-25, P2's second family: np.histogramdd / np.histogram2d moved, the divergences around the move fixed; and
+  np.histogram's step 2.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees
+  as for the first family, plus `twin_histogramdd.py` (the tool's samples, sequences, second operands, per-dimension bins
+  and ranges rebuilt in NumPy) and a probe pair per fix (a NumPy script and its NumSharp twin, printed alike):
+  - `f37a44cc` np.histogram's step 2: its text answers come from NumPy's statements (the cumulative loop for text
+    weights, np.diff of text edges, the range mask's comparison with C# doubles — NumSharp's weak Python floats —, np.amin
+    of fixed-width text). 58,356 snapshot calls byte-identical. `NDArray.Scalar(x)` was tried first for the range mask:
+    360 lines then named `Float64DType` (NumPy's text for an np.float64 operand, not a Python float).
+  - `97836742` the snapshot tool reaches the sample as a sequence of columns, the per-dimension bins as an `int[]`,
+    `NDArray[]` or `object[]`, and the per-dimension ranges, built from the operand for the dimension count the call sees
+    (135,300 calls). `02b4e532` fixes the tool: its `object[]` variants came from a switch whose natural type was NDArray
+    (NumSharp's implicit conversions make it the best common type of int, double, string, bool, double[] and NDArray),
+    so every "Python scalar" entry was a 0-d array; 1,214 of the twin's mismatches were the tool's input.
+  - `4832082e` (D4) histogram2d's first statement is NumPy's `len(x) != len(y)`: a 0-d operand is `TypeError len() of
+    unsized object`, and the length is the first dimension, not the size.
+  - `0ad171a5` (D4) histogramdd hands its weights to np.bincount as given (it raveled them), so a 0-d or deeper weights
+    array meets bincount's depth check before its cast.
+  - `9f71efec` (D4, memory safety) histogramdd's sample statement, `sample = np.atleast_2d(sample).T; N, D =
+    sample.shape`: a sequence of arrays of different shapes is array coercion's inhomogeneous-shape ValueError (through
+    `PolySequence.NDim`, the house port of `update_shape`) where the columns were read with the first one's length, past
+    the end of a shorter one (the snapshot was not deterministic on those lines); 0-d entries are one dimension of n
+    points, no entries one empty dimension, 2-D entries and 3-D samples "too many values to unpack (expected 2)", a 0-d
+    sample one point; histogram2d's `[x, y]` goes through the same statement.
+  - `b074641b` the move (D1): every private member of np.histogramdd.cs and np.histogram2d.cs into
+    `Statistics/HistogramEngine.Dd.cs`, statement for statement; `Histogramdd` / `Histogram2d` get `[NDScopedCovered]`
+    (their only callers are scoped). 135,300 calls byte-identical, np.histogram's 58,356 too; R1 np.histogramdd.cs 10 text
+    / 5 numeric lines -> out of the allowlist.
+  - `492c8552` (D4) np.bincount raises NumPy's three ValueErrors as ValueError (the first family's finding (2)).
+  - `5765818d` (D4, memory safety) NumPy searches every dimension before it reads any rightmost edge: an empty edge array
+    is `edges[i][-1]`'s IndexError after every search (a StringDType search refusal comes first), and the fused search
+    kernel no longer runs on it — it read `e[numEdges - 1]`, the element before the buffer.
+  - `c4b727e9` (D4) histogram2d's shared bins are `xedges = yedges = asarray(bins)`: a list goes through array coercion,
+    once, the same array for both dimensions.
+  - `bfb2b9f6` (D4) a complex column runs NumPy's statements in complex128 (np.histogram's complex outer edges and
+    linspace; a range or an empty column keeps float64 edges, as histogramdd's linspace has no dtype).
+  - `43ee8a6e` (D4) edges holding a NaN take NumPy's searchsorted (the fused kernel counts edges, which is the binary
+    search's answer only over sorted ones).
+  - `3a364832` step 2: a text column's outer edges are np.amin's refusal and text edges' widths np.diff's, instead of
+    replayed errors; 135,300 calls byte-identical. Left a replay, with the reason: 1-D text weights' safe-cast TypeError
+    (NumSharp's np.bincount does not convert text, and raises casts as InvalidCastException, the house type).
+  - Evidence at `43ee8a6e`: the twin agrees with NumPy 2.4.2 on all 133,158 comparable snapshot lines (2,142 decimal
+    lines have no NumPy dtype). The remaining divergence of the probes, kept: NumPy stacks None entries, or StringDType
+    text beside a number, into an object array and computes with Python objects; NumSharp raises NotSupportedException.
+  - Every commit: NumSharp.Tests net10.0 20,536-20,540 and net8.0 20,535-20,539 passed / 11 skipped (the wall-clock test
+    `T2_NonZero_Is_Much_Slower_Than_NumPy` failed once per framework on a loaded host and passed on the rerun); Oracle
+    net10.0 and net8.0 411 / 2 skipped, 0 failed, at `9f71efec` and at `3a364832`.
+  - Next in P2: `np.trapezoid`, then the list's order.
 - **2026-10-25, P2's first family: np.histogram / np.histogram_bin_edges moved, and the divergences behind the move
   fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot
   (41,604 calls at the move, 58,356 once `38dda739` added the cumulative path's variants), a NumPy twin of its lines
