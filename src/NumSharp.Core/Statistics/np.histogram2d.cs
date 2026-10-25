@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Statistics;
 
 namespace NumSharp
 {
@@ -19,6 +20,10 @@ namespace NumSharp
             /// <summary>The bin edges along the second (y) dimension.</summary>
             public readonly NDArray yedges;
 
+            /// <summary>Groups the three results; <see cref="Statistics.HistogramEngine"/> builds them.</summary>
+            /// <param name="h">The histogram (the result owns it).</param>
+            /// <param name="xedges">The x edges.</param>
+            /// <param name="yedges">The y edges.</param>
             internal Histogram2dResult(NDArray h, NDArray xedges, NDArray yedges) { H = h; this.xedges = xedges; this.yedges = yedges; }
 
             /// <summary>Deconstructs into <c>(H, xedges, yedges)</c>.</summary>
@@ -51,7 +56,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return Histogram2dImpl(x, y, bins, range, density, weights);
+            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a per-dimension bin count <c>[nx, ny]</c>.</summary>
@@ -67,7 +72,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return Histogram2dImpl(x, y, bins, range, density, weights);
+            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a single edge array shared by both dimensions (<c>x_edges = y_edges = bins</c>).</summary>
@@ -83,7 +88,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return Histogram2dImpl(x, y, bins, range, density, weights);
+            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with explicit per-dimension edge arrays <c>[x_edges, y_edges]</c> (or a mixed <c>[int, array]</c>).</summary>
@@ -100,7 +105,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(bins);
-            return Histogram2dImpl(x, y, bins, range, density, weights);
+            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a mixed per-dimension bin spec <c>[nx, y_edges]</c> or <c>[x_edges, ny]</c>.</summary>
@@ -116,7 +121,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return Histogram2dImpl(x, y, bins, range, density, weights);
+            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a single edge array (C# <c>double[]</c>) shared by both dimensions.</summary>
@@ -132,82 +137,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, double[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return Histogram2dImpl(x, y, bins, range, density, weights);
+            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
         }
-
-        /// <summary>
-        ///     Shared core: reproduce NumPy's <c>len(bins)</c> dispatch — a bin spec that is not a 1- or 2-element
-        ///     sequence is a single edge array shared by both dimensions — then delegate to the histogramdd engine.
-        /// </summary>
-        /// <param name="x">The x coordinates.</param>
-        /// <param name="y">The y coordinates.</param>
-        /// <param name="bins">The polymorphic bin argument.</param>
-        /// <param name="range">Optional per-dimension outer edges.</param>
-        /// <param name="density">When true, return the probability density.</param>
-        /// <param name="weights">Optional per-point weights.</param>
-        /// <returns>The 2-D histogram and its two edge arrays.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="x"/> or <paramref name="y"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="x"/> or <paramref name="y"/> is 0-d: NumPy's first statement takes
-        ///     <c>len()</c> of both (<c>len() of unsized object</c>), before any bin, range or weight is read.</exception>
-        /// <exception cref="ValueError"><paramref name="x"/> and <paramref name="y"/> differ in length — their FIRST
-        ///     dimension, not their size (<c>x and y must have the same length.</c>); arrays of one length but different
-        ///     shapes, which the stacking of <c>[x, y]</c> refuses (<c>setting an array element with a sequence. The requested
-        ///     array has an inhomogeneous shape after N dimensions. ...</c>); two 2-D arrays of one shape
-        ///     (<c>too many values to unpack (expected 2)</c>); and every refusal of the histogramdd engine the two arrays and
-        ///     the arguments then meet.</exception>
-        [NDScopedCovered] // only callers: the six [NDScoped] histogram2d overloads (the stacked column and every binning temporary are scope-reclaimed)
-        private static Histogram2dResult Histogram2dImpl(NDArray x, NDArray y, object bins, (double, double)?[] range, bool density, NDArray weights)
-        {
-            if (x is null) throw new ArgumentNullException(nameof(x));
-            if (y is null) throw new ArgumentNullException(nameof(y));
-            // NumPy's first statement, `if len(x) != len(y)`: len() of a 0-d array raises (x's first, as Python evaluates it
-            // first), and len() is the FIRST dimension rather than the size — so a (2, 3) x and a (3, 2) y differ here, while a
-            // (2, 3) x and a (2, 4) y pass on to histogramdd, whose stacking of [x, y] refuses them.
-            if (x.__len__() != y.__len__())
-                throw new ValueError("x and y must have the same length.");
-
-            int n = BinsSeqLength(bins);
-            object ddBins = (n != 1 && n != 2)
-                ? new NDArray[] { AsEdgeArray(bins), AsEdgeArray(bins) } // xedges = yedges = asarray(bins)
-                : bins;
-
-            // `histogramdd([x, y], ...)`: the pair is a sequence sample, so its stacking statement runs on it — two arrays of
-            // one length but different shapes are refused there, and two 2-D arrays of one shape leave three values to unpack.
-            HistogramddResult dd = HistogramddImpl(ColumnsFromSequence(new[] { x, y }), ddBins, range, density, weights);
-            return new Histogram2dResult(dd.H, dd.edges[0], dd.edges[1]);
-        }
-
-        /// <summary>
-        ///     NumPy's <c>try: N = len(bins) except TypeError: N = 1</c> — a scalar bin count (or a 0-d array, which has no
-        ///     <c>len</c>) reports length 1; a sequence reports its element count and an array its FIRST dimension.
-        /// </summary>
-        /// <param name="bins">The bin spec.</param>
-        /// <returns>NumPy's <c>N</c>.</returns>
-        /// <exception cref="ValueError">A bin spec of an unsupported C# type.</exception>
-        /// <remarks>
-        ///     <c>len</c> of a 2-D array is its row count, not its size: a <c>(2, k)</c> array is one edge row per dimension
-        ///     (histogramdd indexes it), where reading its size made it a shared edge array and failed.
-        /// </remarks>
-        private static int BinsSeqLength(object bins) => bins switch
-        {
-            int => 1,
-            int[] a => a.Length,
-            long[] a => a.Length,
-            double[] a => a.Length,
-            NDArray[] a => a.Length,
-            object[] a => a.Length,
-            NDArray nd => nd.ndim == 0 ? 1 : checked((int)nd.Shape.dimensions[0]),
-            _ => throw new ValueError("`bins` must be an int or a sequence")
-        };
-
-        /// <summary>Coerce a shared-edge bin argument to an <see cref="NDArray"/> of edges.</summary>
-        private static NDArray AsEdgeArray(object bins) => bins switch
-        {
-            NDArray nd => nd,
-            double[] a => np.array(a),
-            int[] a => np.array(a),
-            long[] a => np.array(a),
-            _ => throw new ValueError("shared `bins` must be a 1-D edge array")
-        };
     }
 }
