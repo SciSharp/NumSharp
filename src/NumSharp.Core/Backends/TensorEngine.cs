@@ -761,6 +761,83 @@ namespace NumSharp
 
         public abstract NDArray AMin(NDArray nd, int? axis = null, DType dtype = null, bool keepdims = false);
 
+        /// <summary>
+        ///     NumPy's <c>np.searchsorted(a, v, side, sorter)</c> (<c>PyArray_SearchSorted</c>) for a Python int key: the
+        ///     index at which <paramref name="v"/> would be inserted into the sorted 1-D <paramref name="a"/> to keep it
+        ///     sorted, the whole call (NumPy's argument checks in its order, then the search in the operands' common dtype).
+        /// </summary>
+        /// <param name="a">The haystack: 1-D, sorted ascending unless <paramref name="sorter"/> is given (an unsorted one
+        ///     gets NumPy's bisection's answer, not an error). Any dtype, text included; any layout.</param>
+        /// <param name="v">The key, read as NumPy's Python int (a strong int32 descriptor: the search runs in
+        ///     <c>promote_types(a, int32)</c>, never casting the key down to <paramref name="a"/>'s dtype).</param>
+        /// <param name="side"><c>"left"</c> (the first suitable index) or <c>"right"</c> (the last).</param>
+        /// <param name="sorter">Indices that sort <paramref name="a"/> (typically its argsort), or null: 1-D, integer, of
+        ///     <paramref name="a"/>'s size.</param>
+        /// <returns>The insertion index (0 to <c>a.size</c>).</returns>
+        /// <exception cref="ArgumentException"><paramref name="side"/> is not <c>"left"</c> / <c>"right"</c> (NumPy's two
+        ///     ValueError texts).</exception>
+        /// <exception cref="ValueError"><paramref name="a"/> is not 1-D, a sorter of uint64, a sorter whose size differs
+        ///     from <paramref name="a"/>'s, or a sorter index outside <paramref name="a"/> that the search reaches.</exception>
+        /// <exception cref="TypeError">A sorter that is not 1-D (<c>could not parse sorter argument</c>) or not integer
+        ///     (<c>sorter must only contain integers</c>), or a StringDType haystack whose first comparison with the int
+        ///     Python refuses (<c>'&lt;' not supported between instances of 'str' and 'int'</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> opens the matrix boundary's
+        ///     plain region and calls this. A member of its own, not the array form over a 0-d key: the key stays on the
+        ///     stack, about 15x cheaper per call.</remarks>
+        public abstract long SearchSorted(NDArray a, int v, string side = "left", NDArray sorter = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.searchsorted(a, v, side, sorter)</c> (<c>PyArray_SearchSorted</c>) for a Python float key: the
+        ///     index at which <paramref name="v"/> would be inserted into the sorted 1-D <paramref name="a"/> to keep it
+        ///     sorted, the whole call.
+        /// </summary>
+        /// <param name="a">The haystack: 1-D, sorted ascending unless <paramref name="sorter"/> is given. Any dtype, text
+        ///     included; any layout.</param>
+        /// <param name="v">The key, read as NumPy's Python float (the search runs in <c>promote_types(a, float64)</c>: a
+        ///     float32 haystack is searched in float64, as NumPy does).</param>
+        /// <param name="side"><c>"left"</c> (the first suitable index) or <c>"right"</c> (the last).</param>
+        /// <param name="sorter">Indices that sort <paramref name="a"/>, or null: 1-D, integer, of <paramref name="a"/>'s
+        ///     size.</param>
+        /// <returns>The insertion index (0 to <c>a.size</c>).</returns>
+        /// <exception cref="ArgumentException"><paramref name="side"/> is not <c>"left"</c> / <c>"right"</c>.</exception>
+        /// <exception cref="ValueError">See <see cref="SearchSorted(NDArray, int, string, NDArray)"/>.</exception>
+        /// <exception cref="TypeError">A sorter refusal (see the int member), or a StringDType haystack whose first
+        ///     comparison with the float Python refuses (<c>'&lt;' not supported between instances of 'str' and
+        ///     'float'</c>).</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> opens the matrix boundary's
+        ///     plain region and calls this.</remarks>
+        public abstract long SearchSorted(NDArray a, double v, string side = "left", NDArray sorter = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.searchsorted(a, v, side, sorter)</c> (<c>PyArray_SearchSorted</c>): the indices at which the
+        ///     elements of <paramref name="v"/> would be inserted into the sorted 1-D <paramref name="a"/> to keep it sorted,
+        ///     the whole call — the descriptor both operands are converted to (numbers: their common dtype; text: the common
+        ///     string dtype, a number formatted; StringDType without a common descriptor: Python objects), NumPy's checks in
+        ///     its order, and its binary search, its monotonic carry and its sorter checks included.
+        /// </summary>
+        /// <param name="a">The haystack: 1-D, sorted ascending unless <paramref name="sorter"/> is given. Any dtype, text
+        ///     included; any layout.</param>
+        /// <param name="v">The keys: any dtype, shape and layout (a 0-d array for one key).</param>
+        /// <param name="side"><c>"left"</c> (the first suitable index) or <c>"right"</c> (the last).</param>
+        /// <param name="sorter">Indices that sort <paramref name="a"/>, or null: 1-D, integer, of <paramref name="a"/>'s
+        ///     size.</param>
+        /// <returns>A fresh int64 array of <paramref name="v"/>'s shape (0-d for a 0-d key).</returns>
+        /// <exception cref="ArgumentException"><paramref name="side"/> is not <c>"left"</c> / <c>"right"</c>.</exception>
+        /// <exception cref="ValueError">See <see cref="SearchSorted(NDArray, int, string, NDArray)"/>; or a StringDType
+        ///     comparison that touched a None-like NA.</exception>
+        /// <exception cref="TypeError">A sorter refusal; a U array converted to StringDType (NumPy's 'safe' cast refusal);
+        ///     the first comparison Python refuses on the object path (<c>'&lt;' not supported between instances of 'str'
+        ///     and 'int'</c>).</exception>
+        /// <exception cref="UnicodeDecodeError">A text search converts bytes that are not ASCII to the common <c>U</c>
+        ///     dtype.</exception>
+        /// <exception cref="DTypePromotionError">Text with an operand that has no common dtype with it.</exception>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="v"/> is null.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, P2): the public <c>np.searchsorted</c> opens the matrix boundary's
+        ///     plain region and calls this.</remarks>
+        public abstract NDArray SearchSorted(NDArray a, NDArray v, string side = "left", NDArray sorter = null);
+
         #endregion
 
         #region Indexing
