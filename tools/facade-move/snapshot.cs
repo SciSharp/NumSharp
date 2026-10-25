@@ -37,8 +37,9 @@
 // array or a double[], and its (lower, upper) range, np.histogramdd / np.histogram2d's sample as a sequence of columns,
 // their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
 // optional sample points x and its spacing dx, np.searchsorted's keys v (an array, or a C# int / double), its side
-// name and its sorter, and np.cov / np.corrcoef's optional second set of variables y, nullable ddof and frequency /
-// analytic weights); an overload with a required parameter of another kind is reported once as SKIP. An int axis
+// name and its sorter, np.cov / np.corrcoef's optional second set of variables y, nullable ddof and frequency /
+// analytic weights, and the gufuncs' second operand x2, axes= lists, nullable keepdims and casting rule); an overload with
+// a required parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand. A result that is a struct of arrays (np.histogram's
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field.
@@ -194,6 +195,9 @@ static class Snapshot
         // second operand's), the nullable ddof, and the frequency / analytic weights (built from the operand: one per
         // observation, for either orientation, and the forms NumPy refuses).
         Variables, Ddof, FWeights, AWeights,
+        // The gufuncs (np.matmul / np.vecdot / np.matvec / np.vecmat): the per-operand core axes axes= (an int[][]),
+        // matmul's nullable keepdims, and its casting rule.
+        AxesList, KeepdimsNullable, Casting,
         Default, Unsupported,
     }
 
@@ -226,7 +230,7 @@ static class Snapshot
                 : n == "y" && p.HasDefaultValue ? Role.Variables
                 : n == "fweights" ? Role.FWeights
                 : n == "aweights" ? Role.AWeights
-                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" ? Role.Operand2
+                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -255,6 +259,10 @@ static class Snapshot
         if (n is "offset" or "axis1" or "axis2" or "ddof" && t == typeof(int)) return Role.IntArg;
         // np.cov's nullable ddof (null = bias's default).
         if (n == "ddof" && t == typeof(int?)) return Role.Ddof;
+        // The gufuncs' axes= list, matmul's nullable keepdims and its casting rule.
+        if (n == "axes" && t == typeof(int[][])) return Role.AxesList;
+        if (n == "keepdims" && t == typeof(bool?)) return Role.KeepdimsNullable;
+        if (n == "casting" && t == typeof(string)) return Role.Casting;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -342,6 +350,45 @@ static class Snapshot
                 foreach (var d in new[] { 0, 1, 2, 4, 5, -1 })
                     Add(d.ToString(CultureInfo.InvariantCulture), () => (int?)d);
                 break;
+            case Role.AxesList:
+                // No axes first, then the forms each gufunc accepts for some operand pair and the forms they refuse:
+                // vecdot's two-entry and three-entry lists, matmul's 2-D cores (and x1's core transposed), matvec's and
+                // vecmat's mixed cores, vecdot's keepdims output entry, one entry only, an axis out of range, a repeated
+                // axis, and an entry of the wrong length.
+                Add("null", () => null);
+                foreach (var (label, axes) in new (string, int[][])[]
+                         {
+                             ("vec", new[] { new[] { -1 }, new[] { -1 } }),
+                             ("vec3", new[] { new[] { -1 }, new[] { -1 }, Array.Empty<int>() }),
+                             ("mat", new[] { new[] { -2, -1 }, new[] { -2, -1 }, new[] { -2, -1 } }),
+                             ("matT", new[] { new[] { -1, -2 }, new[] { -2, -1 }, new[] { -2, -1 } }),
+                             ("mv", new[] { new[] { -2, -1 }, new[] { -1 }, new[] { -1 } }),
+                             ("vm", new[] { new[] { -1 }, new[] { -2, -1 }, new[] { -1 } }),
+                             ("keep", new[] { new[] { 0 }, new[] { 0 }, new[] { 0 } }),
+                             ("one", new[] { new[] { 0 } }),
+                             ("oob", new[] { new[] { 5 }, new[] { 0 }, Array.Empty<int>() }),
+                             ("rep", new[] { new[] { 0, 0 }, new[] { -2, -1 }, new[] { -2, -1 } }),
+                             ("wrong", new[] { new[] { 0, 1 }, new[] { 0 }, Array.Empty<int>() }),
+                         })
+                    Add(label, () => axes.Select(e => e.ToArray()).ToArray());
+                break;
+            case Role.KeepdimsNullable:
+                // matmul's keepdims: absent first, then both values (NumPy refuses either: matmul's output has core
+                // dimensions).
+                Add("null", () => null);
+                Add("true", () => (bool?)true);
+                Add("false", () => (bool?)false);
+                break;
+            case Role.Casting:
+            {
+                // The default first, then the other rules and a name NumPy refuses.
+                string c0 = p.HasDefaultValue && p.DefaultValue is string dc ? dc : "same_kind";
+                Add(c0, () => c0);
+                foreach (var c in new[] { "no", "equiv", "safe", "same_kind", "unsafe", "bogus" })
+                    if (c != c0)
+                        Add(c, () => c);
+                break;
+            }
             case Role.Dx:
             {
                 // The default first, then a fraction, a negative spacing, a negative zero (the sign of a zero area), and the
@@ -617,7 +664,7 @@ static class Snapshot
 
     /// <summary>The second-operand variants, built from the operand (see <see cref="MakeOperand2"/>); the first is the
     ///     base.</summary>
-    private static readonly string[] Operand2VariantLabels = { "same", "int32", "float64", "U5", "T", "0d", "row", "badshape" };
+    private static readonly string[] Operand2VariantLabels = { "same", "int32", "float64", "U5", "T", "0d", "row", "badshape", "transposed" };
 
     /// <summary>np.trapezoid's sample-point variants, built from the operand (see <see cref="MakeSpacing"/>); the first,
     ///     null, is the base.</summary>
@@ -982,7 +1029,8 @@ static class Snapshot
     /// <param name="label">The variant: <c>same</c> (a copy of the operand), <c>int32</c> / <c>float64</c> (a ramp of the
     ///     operand's shape), <c>U5</c> / <c>T</c> (text of the operand's shape: a text operand compares as text, a number
     ///     meets NumPy's failed-comparison rule), <c>0d</c> (an int64 0-d 2), <c>row</c> (the last axis only: it
-    ///     broadcasts), <c>badshape</c> (seven elements, which no operand of this pool broadcasts against).</param>
+    ///     broadcasts), <c>badshape</c> (seven elements, which no operand of this pool broadcasts against), <c>transposed</c>
+    ///     (a copy of the operand transposed: a (3, 4) operand's (4, 3) partner, which a matrix product accepts).</param>
     /// <param name="operand">The operand.</param>
     /// <returns>A fresh array.</returns>
     /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
@@ -1006,6 +1054,7 @@ static class Snapshot
             case "0d": return np.array(2L);
             case "row": return Ramp("int32", dims.Length == 0 ? 1 : dims[dims.Length - 1]);
             case "badshape": return Ramp("int32", 7);
+            case "transposed": return operand.T.copy();
             default: throw new ArgumentException("unknown second-operand variant " + label);
         }
     }
