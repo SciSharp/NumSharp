@@ -1799,6 +1799,9 @@ _ARRAY_JOB_NUMPY = {
 # VF24, VF25, VF28, VF33, VF35, VF39 and VF40 match NumPy (their rules are dropped) and parts of VF01 (unravel_index
 # of a 0-d), VF08 (np.all / np.any / np.count_nonzero), VF12 (np.asarray / np.asanyarray), VF26 (np.resize, np.tile
 # of an empty input) and VF32 (np.roll, np.fft.fftshift / ifftshift); the replay of the gap files found which.
+# 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset, so VA01
+# matches NumPy; its two rules are dropped and its 4 cases moved back into view_flags.jsonl / array_args.jsonl at the
+# positions the generator gave them (the tiers are in the order of their ids' trailing numbers; no regeneration).
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron / matmul of 0-d or 1-D "
             "pairs) comes back as a WRITEABLE 0-d array (matmul's also does not own its data)",
@@ -1849,8 +1852,6 @@ GAPS = {
             "datatype, number of dimensions, and be a C-Array)', which np.dot itself reproduces",
     "VS01": "np.zeros / ones / empty / full given a view's Shape of a dense F or permuted layout allocate that "
             "layout; NumPy's np.zeros(x.shape) is always C-ordered",
-    "VA01": "np.searchsorted / ndarray.searchsorted read a C-contiguous v / sorter at a non-zero offset (an np.split "
-            "child) WRONG",
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
     "VA03": "np.where reads a C-contiguous condition / x / y at a non-zero offset (an np.split child) WRONG",
     "VA04": "np.cov / np.corrcoef results do not own their data (OWNDATA false): both end with ndarray.squeeze, which "
@@ -1960,8 +1961,6 @@ def _gap_of(tier, case):
             return "VF37"
         if fn in ("tril", "triu") and lay == "view_perm_3d":
             return "VF38"
-        if fn == "ndarray.searchsorted" and lay == "sorted+view_off_2d":
-            return "VA01"
         if fn == "where3" and lay == "view_off_2d":
             return "VA03"
         return None
@@ -1975,8 +1974,6 @@ def _gap_of(tier, case):
     if tier == "arrays":
         if fn in ("matvec", "vecmat"):
             return "VF27"
-        if fn == "searchsorted" and lay in ("v=off", "sorter=off"):
-            return "VA01"
         if fn == "take_along_axis" and lay in ("indices=f", "indices=t"):
             return "VA02"
         if fn == "where" and lay in ("condition=off", "x=off", "y=off"):

@@ -157,8 +157,11 @@ namespace NumSharp
                 var kernel = DirectILKernelGenerator.GetSearchSortedKernel(common, leftSide, sorter is not null, contigA);
                 long arrStride = contigA ? elemSize : aP.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)aP.Storage.Address + aP.Shape.offset * elemSize);
-                void* keyPtr = (void*)vTyped.Address;
-                void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
+                // The keys and the sorter may be the caller's own arrays (already of the dtype and C-contiguous): a view at
+                // a non-zero offset (an np.split child) starts Shape.offset elements into its storage, which Address does
+                // not include.
+                void* keyPtr = (void*)((byte*)vTyped.Address + vTyped.Shape.offset * elemSize);
+                void* sorterPtr = sorterTyped is null ? null : (void*)((long*)sorterTyped.Address + sorterTyped.Shape.offset);
                 long* retPtr = (long*)output.Address;
                 // The kernel stops at the first sorter entry outside the haystack it reaches (argbinsearch's -1).
                 if (kernel(arrPtr, aP.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr) < 0)
@@ -183,7 +186,8 @@ namespace NumSharp
                 var kernel = DirectILKernelGenerator.GetSearchSortedKernel(a.typecode, leftSide, sorter is not null, contigA);
                 long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
-                void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
+                // A sorter view at a non-zero offset starts Shape.offset elements into its storage (see the array form).
+                void* sorterPtr = sorterTyped is null ? null : (void*)((long*)sorterTyped.Address + sorterTyped.Shape.offset);
                 // The kernel stops at the first sorter entry outside the haystack it reaches (argbinsearch's -1).
                 if (kernel(arrPtr, a.size, arrStride, keyBuf, 1, sorterPtr, retBuf) < 0)
                     throw new ValueError("Sorter index out of range.");

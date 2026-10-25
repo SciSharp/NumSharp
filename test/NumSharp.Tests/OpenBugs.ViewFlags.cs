@@ -17,10 +17,10 @@ namespace NumSharp.Tests
     //
     //   * Offset views (VALUES). np.split / np.unstack / np.array_split children are C-contiguous views whose Shape
     //     carries a non-zero offset (a basic slice re-seats the storage address instead). Several kernels ignore that
-    //     offset for a C-contiguous operand and read the parent from its start: np.searchsorted (v, sorter, the method
-    //     too), np.where (condition, x, y), np.ldexp (x2), np.nansum / np.nanprod with axis=None, np.repeat and
-    //     ndarray.repeat, np.unique and the set routines that call it, and a[:, idx] (which throws). The results are
-    //     silently wrong.
+    //     offset for a C-contiguous operand and read the parent from its start: np.where (condition, x, y), np.ldexp
+    //     (x2), np.nansum / np.nanprod with axis=None, and a[:, idx] (which throws); np.searchsorted (v, sorter, the
+    //     method too), np.repeat and ndarray.repeat, np.unique and the set routines did, and are fixed (below). The
+    //     results are silently wrong.
     //   * Read-only arrays. A copy of a read-only array stays read-only, a basic index of a read-only broadcast view
     //     through the object[] indexer is writeable, and np.broadcast_arrays hands a read-only broadcast operand back
     //     writeable — a write through it changes every row the broadcast repeats.
@@ -38,6 +38,9 @@ namespace NumSharp.Tests
     // FIXED 2026-10-15 (the numpy.char phase-2 work): np.imag / ndarray.imag of a real F array is F-ordered (VF31), and
     // ndarray.getfield of an empty array is a view (VF26's getfield part); their carved cells are back in the gate.
     //
+    // FIXED 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset
+    // (VA01); its two pins are untagged, the generator's VA01 rules are dropped and its 4 cells are back in the gate.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
     // (_gap_of) so the case returns to the gate.
@@ -47,10 +50,11 @@ namespace NumSharp.Tests
         // ----- Offset views: silent wrong values -----
 
         /// <summary>
-        ///     <c>np.searchsorted(a, v)</c> with <c>v</c> an <c>np.split</c> child (offset 3): NumPy returns <c>[0, 1, 5]</c>
-        ///     for <c>v = [0.5, 2, 9]</c>; NumSharp searches the parent's first elements <c>[9, 9, 9]</c> (gap VA01).
+        ///     FIXED 2026-10-25 (np-layer-dtype-logic P2): <c>np.searchsorted(a, v)</c> with <c>v</c> an <c>np.split</c> child
+        ///     (offset 3) is NumPy's <c>[0, 1, 5]</c> for <c>v = [0.5, 2, 9]</c>; NumSharp searched the parent's first elements
+        ///     <c>[9, 9, 9]</c> (gap VA01: the kernel read the keys from the storage's start, not the view's offset).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA01")]
+        [TestMethod]
         public void ViewFlags_Searchsorted_VAtAnOffset_ShouldReadTheView()
         {
             using var vbase = np.array(new double[] { 9, 9, 9, 0.5, 2, 9, 3, 4, 1 });
@@ -62,10 +66,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.searchsorted(a, v, sorter=s)</c> with the sorter an <c>np.split</c> child (offset 2): NumPy returns
-        ///     <c>[2, 4]</c> for <c>a = [5, 1, 3, 2, 8]</c>, <c>v = [2, 7.5]</c>, <c>s = [1, 3, 2, 0, 4]</c> (gap VA01).
+        ///     FIXED 2026-10-25 (np-layer-dtype-logic P2): <c>np.searchsorted(a, v, sorter=s)</c> with the sorter an
+        ///     <c>np.split</c> child (offset 2) is NumPy's <c>[2, 4]</c> for <c>a = [5, 1, 3, 2, 8]</c>, <c>v = [2, 7.5]</c>,
+        ///     <c>s = [1, 3, 2, 0, 4]</c> (gap VA01: the kernel read the sorter from the storage's start).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VA01")]
+        [TestMethod]
         public void ViewFlags_Searchsorted_SorterAtAnOffset_ShouldReadTheView()
         {
             using var sbase = np.array(new long[] { 7, 7, 1, 3, 2, 0, 4 });

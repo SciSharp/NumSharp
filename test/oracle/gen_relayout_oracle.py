@@ -790,11 +790,10 @@ def _predicted_kind(tname, nd, size):
 # regeneration on the merged corpus surveys strings' tiers too and is a separate step).
 # 2026-10-24: arctan2 and the float-tier binary ufuncs broadcast an empty operand and allocate the loop dtype, so RL07
 # matches NumPy; its rule is dropped and its 40 cases moved back into relayout.jsonl the same way.
+# 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset, so RL01 (and
+# np.digitize / np.isin, which reach it through searchsorted) matches NumPy; its rule is dropped and its 15 cases moved
+# back into relayout.jsonl the same way.
 GAPS = {
-    "RL01": "np.searchsorted / ndarray.searchsorted read a C-contiguous v (operand 1) or sorter (operand 2) at a "
-            "non-zero offset from the owner's start (WRONG indices); np.digitize passes its x as searchsorted's v, and "
-            "np.isin passes a complex128 / float16 element the same way (its sort + searchsorted route), so both "
-            "inherit it (same root cause as the array-object oracle's VA01)",
     "RL02": "np.where reads a C-contiguous condition (bool) / x / y already of the result dtype at a non-zero offset "
             "from the owner's start (WRONG values; a cast operand is copied first and is read right), and so does its "
             "all-0-d route for a 0-d y at an offset; np.nancumsum / np.nancumprod of float16 / complex128 run "
@@ -855,13 +854,6 @@ def _gap_of(case, misread):
     dts = [d["dtype"] for d in case["operands"]]
     result_dt = (case.get("expected") or {}).get("dtype")
     if kind == "c_offset":
-        if (op == "searchsorted" and pos in (1, 2)) or (op == "ndarray.searchsorted" and pos == 1) \
-                or (op == "digitize" and pos == 0):
-            return "RL01"
-        # isin's complex / float16 route (sort + searchsorted) runs only when the element is already the common dtype.
-        if op == "isin" and pos == 0 and dts[0] in ("complex128", "float16") \
-                and np.result_type(*[np.dtype(t) for t in dts[:2]]).name == dts[0]:
-            return "RL01"
         if op == "where" and ((pos == 0 and dts[0] == "bool") or (pos in (1, 2) and dts[pos] == result_dt)):
             return "RL02"
         if op == "ldexp" and ((pos == 0 and dts[0] == result_dt) or (pos == 1 and dts[1] in ("int32", "int64"))):

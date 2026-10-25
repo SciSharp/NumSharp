@@ -221,6 +221,22 @@ public class NpSearchsortedSideSorterTests
         np.searchsorted(a, np.array(new long[] { 15, 12 }), sorter: oob).ToArray<long>().Should().Equal(1L, 1L);
     }
 
+    /// <summary>
+    ///     Keys and a sorter that are C-contiguous views at a non-zero offset (np.split children) are read from the view, for
+    ///     the scalar keys as for the array ones (gap VA01: the kernel calls passed the storage's start). NumPy 2.4.2: with
+    ///     a = [5, 1, 3, 2, 8] and the sorter [1, 3, 2, 0, 4] (offset 2 of its owner), 7.5 and 2 on the right are 4 and 2.
+    /// </summary>
+    [TestMethod]
+    public void Sorter_ViewAtAnOffset_IsReadFromTheView_ForEveryKeyForm()
+    {
+        var a = np.array(new double[] { 5, 1, 3, 2, 8 });
+        var sorter = np.split(np.array(new long[] { 7, 7, 1, 3, 2, 0, 4 }), new[] { 2 })[1];
+        np.searchsorted(a, 7.5, side: "right", sorter: sorter).Should().Be(4);
+        np.searchsorted(a, 2, side: "right", sorter: sorter).Should().Be(2);
+        var keys = np.split(np.array(new double[] { 9, 2, 7.5 }), new[] { 1 })[1];
+        np.searchsorted(a, keys, "right", sorter).ToArray<long>().Should().Equal(2L, 4L);
+    }
+
     #endregion
 
     #region Multidim 'a' validation

@@ -16,10 +16,11 @@ namespace NumSharp.Tests
     // members the array-object oracle's repros (OpenBugs.ViewFlags.cs) do not already cover:
     //
     //   * Offset views (VALUES, RL01-RL04). A C-contiguous view whose Shape carries a non-zero offset (an np.split,
-    //     np.unstack or np.array_split child) is read from its OWNER'S START by np.digitize (its x is np.searchsorted's
-    //     v), np.isin of a complex128 / float16 element (its sort + searchsorted route), np.nancumsum / np.nancumprod
-    //     of float16 / complex128 (they run np.where(np.isnan(a), fill, a)), np.ldexp's mantissa, np.unique_values
-    //     and np.intersect1d's first operand. The results are silently wrong.
+    //     np.unstack or np.array_split child) is read from its OWNER'S START by np.nancumsum / np.nancumprod of
+    //     float16 / complex128 (they run np.where(np.isnan(a), fill, a)) and np.ldexp's mantissa; np.digitize (its x is
+    //     np.searchsorted's v), np.isin of a complex128 / float16 element (its sort + searchsorted route),
+    //     np.unique_values and np.intersect1d's first operand were, and are fixed (below). The results are silently
+    //     wrong.
     //   * Empty operands (RL06, RL07). The NDArray comparison operators return np.empty(lhs.Shape, bool) for an empty
     //     left operand, and np.logaddexp / np.logaddexp2 return a clone of an empty operand: neither broadcasts the
     //     operands (no error where NumPy raises, the wrong shape where NumPy broadcasts) nor, for logaddexp, promotes
@@ -34,6 +35,10 @@ namespace NumSharp.Tests
     // the early return) broadcast an empty operand and allocate the loop dtype (RL07); its pin is untagged the same
     // way, and the generator's RL07 rule is dropped.
     //
+    // FIXED 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset, so
+    // np.digitize and np.isin's complex / float16 route read theirs right too (RL01); both pins are untagged the same way,
+    // and the generator's RL01 rule is dropped.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so
     // the cases return to the gate.
@@ -43,11 +48,12 @@ namespace NumSharp.Tests
         // ----- Offset views: silent wrong values -----
 
         /// <summary>
-        ///     <c>np.digitize(x, bins)</c> with <c>x</c> an <c>np.split</c> child (offset 3, <c>[0.5, 2.5, 4, 9]</c>) and
-        ///     <c>bins = [1, 2, 3, 4]</c>: NumPy returns <c>[0, 2, 4, 4]</c>; NumSharp digitizes the owner's first four
-        ///     elements <c>[7, 7, 7, 0.5]</c> (gap RL01: digitize passes x to np.searchsorted as its v).
+        ///     FIXED 2026-10-25 (np-layer-dtype-logic P2): <c>np.digitize(x, bins)</c> with <c>x</c> an <c>np.split</c> child
+        ///     (offset 3, <c>[0.5, 2.5, 4, 9]</c>) and <c>bins = [1, 2, 3, 4]</c> is NumPy's <c>[0, 2, 4, 4]</c>; NumSharp
+        ///     digitized the owner's first four elements <c>[7, 7, 7, 0.5]</c> (gap RL01: digitize passes x to
+        ///     np.searchsorted as its v, whose kernel read the keys from the storage's start).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL01")]
+        [TestMethod]
         public void Relayout_Digitize_XAtAnOffset_ShouldReadTheView()
         {
             using var xbase = np.array(new double[] { 7, 7, 7, 0.5, 2.5, 4, 9 });
@@ -59,11 +65,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.isin(element, test)</c> with a complex128 <c>element</c> that is an <c>np.split</c> child (offset 3,
-        ///     <c>[1+1j, 2, 3j]</c>) and <c>test = [2, 3j, 5]</c>: NumPy returns <c>[False, True, True]</c>; NumSharp
-        ///     returns all False (gap RL01: the complex route searches the owner's start).
+        ///     FIXED 2026-10-25 (np-layer-dtype-logic P2): <c>np.isin(element, test)</c> with a complex128 <c>element</c> that
+        ///     is an <c>np.split</c> child (offset 3, <c>[1+1j, 2, 3j]</c>) and <c>test = [2, 3j, 5]</c> is NumPy's
+        ///     <c>[False, True, True]</c>; NumSharp returned all False (gap RL01: the complex route's np.searchsorted read the
+        ///     element from the storage's start).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "relayout-RL01")]
+        [TestMethod]
         public void Relayout_Isin_ComplexElementAtAnOffset_ShouldReadTheView()
         {
             using var ebase = np.array(new Complex[] { 7, 7, 7, new(1, 1), 2, new(0, 3) });
