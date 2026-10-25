@@ -12,6 +12,8 @@
 // usage (from the repo root, after every Core edit: --no-cache, or dotnet run reuses a stale build):
 //   dotnet run --no-cache -c Release tools/facade-move/snapshot.cs -- <out.tsv> np.cumsum np.cumprod NDArray.cumsum ...
 //   diff <parent.tsv> <child.tsv>
+// With the environment variable SNAPSHOT_BYTES=1 every array result's line also carries its C-order bytes (" BYTES
+// <hex>"), to measure a value mismatch element by element; compare only snapshots made the same way.
 //
 // A name "np.f" is every public static overload of np.f; "NDArray.f" every public instance overload declared on NDArray;
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
@@ -34,8 +36,9 @@
 // operand named lhs / rhs / left / right / x / y / other, the histogram family's bins as an int, an estimator name, an
 // array or a double[], and its (lower, upper) range, np.histogramdd / np.histogram2d's sample as a sequence of columns,
 // their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
-// optional sample points x and its spacing dx, and np.searchsorted's keys v (an array, or a C# int / double), its side
-// name and its sorter); an overload with a required parameter of another kind is reported once as SKIP. An int axis
+// optional sample points x and its spacing dx, np.searchsorted's keys v (an array, or a C# int / double), its side
+// name and its sorter, and np.cov / np.corrcoef's optional second set of variables y, nullable ddof and frequency /
+// analytic weights); an overload with a required parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand. A result that is a struct of arrays (np.histogram's
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field.
@@ -187,6 +190,10 @@ static class Snapshot
         // np.searchsorted: the keys v (an array built from the operand, or a C# int / double key), the side name, and the
         // sorter (built from the operand: its argsort in several dtypes and the forms NumPy refuses).
         Keys, KeyInt, KeyDouble, Side, Sorter,
+        // np.cov / np.corrcoef: the optional second set of variables y (base null, variants built from the operand like a
+        // second operand's), the nullable ddof, and the frequency / analytic weights (built from the operand: one per
+        // observation, for either orientation, and the forms NumPy refuses).
+        Variables, Ddof, FWeights, AWeights,
         Default, Unsupported,
     }
 
@@ -214,6 +221,11 @@ static class Snapshot
                 // np.searchsorted's keys and sorter.
                 : n == "v" ? Role.Keys
                 : n == "sorter" ? Role.Sorter
+                // np.cov / np.corrcoef's optional second set of variables (null = none), unlike a binary function's
+                // second operand y: tested before the operand names so its base stays the default. Their weights.
+                : n == "y" && p.HasDefaultValue ? Role.Variables
+                : n == "fweights" ? Role.FWeights
+                : n == "aweights" ? Role.AWeights
                 : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
@@ -241,6 +253,8 @@ static class Snapshot
         // np.trace / np.diagonal's integer arguments, and numpy.matrix's var / std ddof: varied around their defaults (out of
         // range included; a ddof past the count makes the divisor 0).
         if (n is "offset" or "axis1" or "axis2" or "ddof" && t == typeof(int)) return Role.IntArg;
+        // np.cov's nullable ddof (null = bias's default).
+        if (n == "ddof" && t == typeof(int?)) return Role.Ddof;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -312,6 +326,21 @@ static class Snapshot
             case Role.Sorter:
                 // The base is the default (no sorter); the variants follow from the operand (MakeSorter).
                 Add("null", () => null);
+                break;
+            case Role.Variables:
+            case Role.FWeights:
+            case Role.AWeights:
+                // The base is the default (no second set of variables / no weights); the variants follow from the operand
+                // (MakeOperand2 for y, MakeCovWeights for the weights).
+                Add("null", () => null);
+                break;
+            case Role.Ddof:
+                // The default (null: bias decides) first, then the values NumPy's normalization meets: 0 and 1 (bias's two
+                // answers), 2, the pool's observation count of a (3, 4) operand (a zero factor), one past it (a negative
+                // factor, replaced by 0 and so an infinite scale) and a negative ddof (a factor above the count).
+                Add("null", () => null);
+                foreach (var d in new[] { 0, 1, 2, 4, 5, -1 })
+                    Add(d.ToString(CultureInfo.InvariantCulture), () => (int?)d);
                 break;
             case Role.Dx:
             {
@@ -546,6 +575,9 @@ static class Snapshot
             Role.Spacing => SpacingVariantLabels.Length - 1,
             Role.Keys => KeysVariantLabels.Length - 1,
             Role.Sorter => SorterVariantLabels.Length - 1,
+            Role.Variables => VariablesVariantLabels.Length - 1,
+            Role.FWeights => FWeightVariantLabels.Length - 1,
+            Role.AWeights => AWeightVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -636,6 +668,9 @@ static class Snapshot
             Role.Spacing => SpacingVariantLabels[v],
             Role.Keys => KeysVariantLabels[v],
             Role.Sorter => SorterVariantLabels[v],
+            Role.Variables => VariablesVariantLabels[v],
+            Role.FWeights => FWeightVariantLabels[v],
+            Role.AWeights => AWeightVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -684,6 +719,15 @@ static class Snapshot
                         break;
                     case Role.Sorter:
                         argv[p] = MakeSorter(SorterVariantLabels[v], operand);
+                        break;
+                    case Role.Variables:
+                        argv[p] = MakeOperand2(VariablesVariantLabels[v], operand);
+                        break;
+                    case Role.FWeights:
+                        argv[p] = MakeCovWeights(frequency: true, FWeightVariantLabels[v], operand);
+                        break;
+                    case Role.AWeights:
+                        argv[p] = MakeCovWeights(frequency: false, AWeightVariantLabels[v], operand);
                         break;
                     case Role.SampleSeq:
                     case Role.BinsInts:
@@ -1117,6 +1161,94 @@ static class Snapshot
         }
     }
 
+    /// <summary>np.cov / np.corrcoef's second-set-of-variables variants: none (the base), then the second operands of
+    ///     <see cref="MakeOperand2"/>.</summary>
+    private static readonly string[] VariablesVariantLabels =
+        { "null", "same", "int32", "float64", "U5", "T", "0d", "row", "badshape" };
+
+    /// <summary>np.cov's frequency-weight variants, built from the operand (see <see cref="MakeCovWeights"/>); the first,
+    ///     null, is the base.</summary>
+    private static readonly string[] FWeightVariantLabels =
+        { "null", "ones", "counts", "zeros", "float", "frac", "negative", "2d", "wronglen", "rows", "bool", "U5", "T", "complex" };
+
+    /// <summary>np.cov's analytic-weight variants, built from the operand (see <see cref="MakeCovWeights"/>); the first,
+    ///     null, is the base.</summary>
+    private static readonly string[] AWeightVariantLabels =
+        { "null", "ones", "pattern", "zeros", "negative", "2d", "wronglen", "rows", "int", "nan", "U5", "T", "complex" };
+
+    /// <summary>
+    ///     The number of observations np.cov sees in an operand: <c>X = array(m, ndmin=2)</c> holds the variables in its
+    ///     rows (<paramref name="rowvar"/>) or, for a 2-D operand, in its columns; a 0-d operand is one observation, a 1-D
+    ///     one is one variable. A 3-D operand is refused before any weight is read; its last axis stands in.
+    /// </summary>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="rowvar">Whether rows are variables (the default).</param>
+    /// <returns>The observation count.</returns>
+    private static long CovObservations(NDArray operand, bool rowvar)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        return dims.Length switch
+        {
+            0 => 1,
+            1 => dims[0],
+            2 => rowvar ? dims[1] : dims[0],
+            _ => dims[^1],
+        };
+    }
+
+    /// <summary>
+    ///     Builds np.cov's frequency or analytic weights for an operand: one weight per observation (the default
+    ///     orientation; <c>rows</c> for <c>rowvar=False</c>, which a phase-C pair reaches), and the forms NumPy refuses.
+    /// </summary>
+    /// <param name="frequency">True for <c>fweights</c>, false for <c>aweights</c>.</param>
+    /// <param name="label">The variant. Both: <c>ones</c>, <c>zeros</c> (a zero weight sum: np.average's
+    ///     ZeroDivisionError), <c>negative</c> (one -1: NumPy's "cannot be negative"), <c>2d</c> (the weights as a (1, n)
+    ///     array: "cannot handle multidimensional"), <c>wronglen</c> (one weight too many: "incompatible numbers of
+    ///     samples"), <c>rows</c> (ones for the other orientation), <c>U5</c> / <c>T</c> (the text "1": NumPy's
+    ///     <c>asarray(w, dtype=float)</c> parses it), <c>complex</c> (1+0.5j). Frequency weights only: <c>counts</c> (int64
+    ///     2, 1, 0, 3, ...), <c>float</c> (integral float64 values, accepted), <c>frac</c> (a fraction: "fweights must be
+    ///     integer"), <c>bool</c>. Analytic weights only: <c>pattern</c> (float64 0.5, 2, 1, 3, ...), <c>int</c> (int64 1,
+    ///     2, 3, ...), <c>nan</c> (a NaN weight, Python's positive quiet NaN: no comparison refuses it).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh array, or null for the base label.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeCovWeights(bool frequency, string label, NDArray operand)
+    {
+        if (label == "null")
+            return null;
+        long n = CovObservations(operand, rowvar: true);
+        long rows = CovObservations(operand, rowvar: false);
+        NDArray Doubles(long count, Func<int, double> value) =>
+            np.array(Enumerable.Range(0, (int)count).Select(value).ToArray());
+        NDArray Longs(long count, Func<int, long> value) =>
+            np.array(Enumerable.Range(0, (int)count).Select(value).ToArray());
+        NDArray Text(string dt) => n == 0
+            ? np.empty(new Shape(0), np.dtype(dt))
+            : np.array(Enumerable.Repeat("1", (int)n).ToArray()).astype(np.dtype(dt));
+        switch (label)
+        {
+            case "ones": return frequency ? Longs(n, _ => 1) : Doubles(n, _ => 1.0);
+            case "zeros": return frequency ? Longs(n, _ => 0) : Doubles(n, _ => 0.0);
+            case "negative": return frequency ? Longs(n, i => i == 0 ? -1 : 1) : Doubles(n, i => i == 0 ? -1.0 : 1.0);
+            case "2d": return (frequency ? Longs(n, _ => 1) : Doubles(n, _ => 1.0)).reshape(new Shape(1, n));
+            case "wronglen": return frequency ? Longs(n + 1, _ => 1) : Doubles(n + 1, _ => 1.0);
+            case "rows": return frequency ? Longs(rows, _ => 1) : Doubles(rows, _ => 1.0);
+            case "U5": return Text("U5");
+            case "T": return Text("T");
+            case "complex": return np.array(Enumerable.Repeat(new Complex(1.0, 0.5), (int)n).ToArray());
+            // frequency weights only
+            case "counts": return Longs(n, i => new long[] { 2, 1, 0, 3 }[i % 4]);
+            case "float": return Doubles(n, i => i % 3 + 1.0);
+            case "frac": return Doubles(n, i => i == 0 ? 1.5 : 1.0);
+            case "bool": return np.ones(new Shape(n), np.dtype("bool"));
+            // analytic weights only
+            case "pattern": return Doubles(n, i => new[] { 0.5, 2.0, 1.0, 3.0 }[i % 4]);
+            case "int": return Longs(n, i => i + 1);
+            case "nan": return Doubles(n, i => i == 0 ? BitConverter.Int64BitsToDouble(0x7FF8000000000000) : 1.0);
+            default: throw new ArgumentException("unknown cov weights variant " + label);
+        }
+    }
+
     /// <summary>The labels of a histogramdd / histogram2d role; the first is the base value.</summary>
     /// <param name="role">One of <see cref="Role.SampleSeq"/>, <see cref="Role.BinsInts"/>, <see cref="Role.BinsArrays"/>,
     ///     <see cref="Role.BinsObjects"/>, <see cref="Role.RangeArray"/>.</param>
@@ -1357,7 +1489,7 @@ static class Snapshot
                 var f = a.flags;
                 string flags = $"{(f.c_contiguous ? "C" : "-")}{(f.f_contiguous ? "F" : "-")}{(f.owndata ? "O" : "-")}{(f.writeable ? "W" : "-")}";
                 return $"ARR {a.GetType().Name} {a.dtype} ({string.Join(",", a.shape)}) {flags} {HashOf(a)}" +
-                       (outArray is not null && ReferenceEquals(a, outArray) ? " is_out" : "");
+                       (outArray is not null && ReferenceEquals(a, outArray) ? " is_out" : "") + BytesOf(a);
             case string s:
                 return "VAL String " + s.Replace("\n", "\\n");
             case double d:
@@ -1405,5 +1537,29 @@ static class Snapshot
             catch { return "unhashable(" + e.GetType().Name + ")"; }
         }
         return Convert.ToHexString(SHA256.HashData(data)).Substring(0, 16).ToLowerInvariant();
+    }
+
+    /// <summary>Whether ARR lines carry the result's bytes (environment variable <c>SNAPSHOT_BYTES=1</c>).</summary>
+    private static readonly bool WithBytes = Environment.GetEnvironmentVariable("SNAPSHOT_BYTES") == "1";
+
+    /// <summary>
+    ///     With <c>SNAPSHOT_BYTES=1</c>, the result's bytes in C order as <c> BYTES &lt;hex&gt;</c>, so a value mismatch the
+    ///     hash shows can be measured element by element (ULP distances, NaN payloads) against NumPy's bytes; otherwise
+    ///     nothing. A diagnostic mode: a line with bytes never equals a line without, so compare snapshots made the same way.
+    /// </summary>
+    /// <param name="a">The result.</param>
+    /// <returns>The suffix, or the empty string (the mode off, a StringDType result, or bytes NumPy's tobytes refuses).</returns>
+    private static string BytesOf(NDArray a)
+    {
+        if (!WithBytes || a.dtype.kind == 'T')
+            return "";
+        try
+        {
+            return " BYTES " + Convert.ToHexString(np.ascontiguousarray(a).tobytes()).ToLowerInvariant();
+        }
+        catch
+        {
+            return "";
+        }
     }
 }
