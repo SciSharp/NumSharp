@@ -118,16 +118,16 @@ namespace NumSharp
         /// <exception cref="ValueError">A 0-D <paramref name="x"/> (np.diff's "at least one dimensional"), or a StringDType
         ///     <paramref name="y"/> whose concatenation meets an NA it cannot add.</exception>
         /// <exception cref="IncorrectShapeException">The spacing does not broadcast against <c>y[1:] + y[:-1]</c>.</exception>
-        /// <exception cref="TypeError">A text <paramref name="y"/> or <paramref name="x"/>: the no-loop refusal of the first
-        ///     NumPy statement that refuses it (<see cref="TrapezoidTextAnswer"/>).</exception>
+        /// <exception cref="TypeError">A text <paramref name="y"/> or <paramref name="x"/>: the refusal of the first NumPy
+        ///     statement that has no loop for it (<see cref="TrapezoidText"/>).</exception>
         /// <remarks>Moved from <c>np.trapezoid</c> statement for statement by the np-layer dtype plan's P2; it runs under the
         ///     facade's scope (<c>[NDScoped]</c>), which reclaims what the matrix boundary and this body leave.</remarks>
         [NDScopedCovered] // only caller: np.trapezoid ([NDScoped])
         internal static NDArray Trapezoid(NDArray y, NDArray x, double dx, int axis)
         {
-            // Text (y or x): NumPy's statements in their order, up to the first refusal (TrapezoidTextAnswer).
+            // Text (y or x): NumPy's statements as they are (TrapezoidText); the fused pass below is numeric.
             if (Backends.Strings.NDStringUfuncs.IsText(y) || Backends.Strings.NDStringUfuncs.IsText(x))
-                throw TrapezoidTextAnswer(y, x, axis);
+                return TrapezoidText(y, x, dx, axis);
 
             int nd = y.ndim;
             var ops = new TrapezoidOperands();
@@ -278,61 +278,77 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>trapezoid</c> over text (a string <paramref name="y"/> or <paramref name="x"/>), statement by
-        ///     statement up to the refusal: the spacing (<c>diff(x)</c> for a 1-D x, then <c>shape[axis] = d.shape[0]</c>;
-        ///     <c>diff(x, axis=axis)</c> otherwise; the Python float <c>dx</c> without x), the slices of y
-        ///     (<c>slice1[axis] = ...</c>), <c>y[1:] + y[:-1]</c>, and the multiply by the spacing.
+        ///     NumPy's <c>trapezoid</c> over text (a string <paramref name="y"/> or <paramref name="x"/>): NumPy's statements as
+        ///     they are, through the library's own functions and operators. The spacing (<c>diff(x)</c> for a 1-D x, then
+        ///     <c>shape[axis] = d.shape[0]</c> and the reshape; <c>diff(x, axis=axis)</c> otherwise; the Python float
+        ///     <c>dx</c> without x), the slices of y (<c>slice1[axis] = ...</c>), <c>y[1:] + y[:-1]</c> (the concatenation),
+        ///     the multiply by the spacing, the division by <c>2.0</c> and the sum along the axis.
         /// </summary>
         /// <param name="y">The values (text unless <paramref name="x"/> is).</param>
         /// <param name="x">The sample points, or null.</param>
-        /// <param name="axis">The caller's axis.</param>
-        /// <returns>The refusal to throw: the subtract of a text x (diff's), or the multiply of the spacing and the
-        ///     concatenated text — a StringDType y names the classes (the spacing's, <c>_PyFloatDType</c> for dx), a
-        ///     fixed-width y the descriptors (float64 for dx, the concatenation's doubled width).</returns>
-        /// <exception cref="IndexError">Thrown (not returned): the axis is outside y's rank (<see cref="TrapezoidAxis"/>).</exception>
-        /// <exception cref="ValueError">Thrown (not returned): a 0-D N-D-route x (diff's rank check), or a StringDType y
-        ///     whose concatenation meets an NA it cannot add (<c>Cannot add null that is not a nan-like value</c>, which NumPy
-        ///     raises again from its <c>except ValueError</c> retry).</exception>
-        /// <exception cref="AxisError">Thrown (not returned): an N-D x without the axis (diff's <c>normalize_axis_index</c>).</exception>
-        private static Exception TrapezoidTextAnswer(NDArray y, NDArray x, int axis)
+        /// <param name="dx">The spacing when <paramref name="x"/> is null: a Python float, the multiply's weak first operand.</param>
+        /// <param name="axis">The caller's axis, read against each statement's array as NumPy reads it.</param>
+        /// <returns>The sum NumPy's last statement returns. No text dtype reaches it: every chain of statements over text
+        ///     refuses at the subtract, the multiply or the division, so this method returns only by throwing today.</returns>
+        /// <remarks>
+        ///     <para>The refusals are the statements' own, so they cannot drift from NumPy's: a text x meets np.diff's subtract
+        ///     (diff's rank and axis checks first, for an N-D x); a fixed-width sum meets the multiply's no-loop refusal, or,
+        ///     for an integer spacing, the string multiply ufunc's "The 'out' kwarg is necessary" TypeError; a StringDType sum
+        ///     repeats by an integer spacing and then meets the division's refusal, or the multiply's broadcast error when the
+        ///     spacing does not fit.</para>
+        ///     <para>NumPy wraps the last statement in <c>try ... except ValueError</c> and retries it on <c>np.asarray(d)</c>,
+        ///     <c>np.asarray(y)</c>: for an ndarray the retry repeats the same statements and raises the same ValueError (a
+        ///     StringDType NA the concatenation cannot add, a broadcast mismatch), so the first raise stands for it here.</para>
+        /// </remarks>
+        /// <exception cref="IndexError">The axis is outside y's rank (<see cref="TrapezoidAxis"/>), after a 1-D x's
+        ///     difference.</exception>
+        /// <exception cref="ValueError">A 0-D x (diff's rank check), or a StringDType y whose concatenation meets an NA it
+        ///     cannot add (<c>Cannot add null that is not a nan-like value</c>).</exception>
+        /// <exception cref="AxisError">An N-D x without the axis (diff's <c>normalize_axis_index</c>).</exception>
+        /// <exception cref="TypeError">The subtract of a text x, the multiply of the spacing and a text sum, or the division
+        ///     of a StringDType product by <c>2.0</c>: the first statement that has no loop for its operands.</exception>
+        /// <exception cref="IncorrectShapeException">An integer spacing that does not broadcast against a StringDType sum (the
+        ///     repetition's operands).</exception>
+        private static NDArray TrapezoidText(NDArray y, NDArray x, double dx, int axis)
         {
             int nd = y.ndim;
-            DType spacing = null;   // the spacing array's descriptor; null for the Python float dx
-            if (x is not null)
+            NDArray diffed = null, d = null;   // the spacing array (d: diffed reshaped); both null for the Python float dx
+            try
             {
-                if (x.ndim == 1)
+                if (x is not null)
                 {
-                    // d = diff(x): its subtract refuses text before the reshape reads the axis.
-                    if (Backends.Strings.NDStringUfuncs.IsText(x))
-                        return Backends.Strings.NDStringUfuncs.NoLoop("subtract", x.dtype, x.dtype);
-                    TrapezoidAxis(axis, nd);
+                    if (x.ndim == 1)
+                    {
+                        // d = diff(x), then `shape[axis] = d.shape[0]`, where an axis outside y fails, and the reshape.
+                        diffed = np.diff(x);
+                        int dax = TrapezoidAxis(axis, nd);
+                        long[] shp = new long[nd];
+                        for (int i = 0; i < nd; i++) shp[i] = 1;
+                        shp[dax] = diffed.Shape.dimensions[0];
+                        d = diffed.reshape(Shape.Adopt(shp));
+                    }
+                    else
+                        d = diffed = np.diff(x, 1, axis);
                 }
-                else
-                {
-                    // d = diff(x, axis=axis): the rank and axis checks, then the subtract.
-                    DiffAxis(x, axis);
-                    if (Backends.Strings.NDStringUfuncs.IsText(x))
-                        return Backends.Strings.NDStringUfuncs.NoLoop("subtract", x.dtype, x.dtype);
-                }
-                // The difference keeps x's dtype (a bool x's not_equal is bool too).
-                spacing = x.dtype;
-            }
-            int ax = TrapezoidAxis(axis, nd);
-            // y is text here (a numeric y with a text x returned above).
-            if (Backends.Strings.NDStringUfuncs.IsVString(y))
-            {
-                // The concatenation runs for real: an NA it cannot add raises NumPy's ValueError (the retry in NumPy's
-                // except-branch raises it again). Its result is a temporary.
+
+                // slice1[axis] / slice2[axis]: the list assignments, then y[1:] + y[:-1], the multiply, the division and the
+                // sum, each through the library's own function or operator.
+                int ax = TrapezoidAxis(axis, nd);
                 var (next, prev) = TrapezoidSlices(y.Shape, ax);
                 using var y1 = new NDArray(y.Storage, next);
                 using var y2 = new NDArray(y.Storage, prev);
                 using var concatenated = np.add(y1, y2);
-                return Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply",
-                    new[] { spacing is null ? DTypeRegistry.PyFloat.ToString() : spacing.Meta.ToString(), y.dtype.Meta.ToString() });
+                using var product = d is null ? dx * concatenated : d * concatenated;
+                using var half = product / 2.0;
+                return np.sum(half, axis);
             }
-            var meta = (StringDTypeMeta)y.dtype.Meta;
-            var doubled = meta.Descr(2L * (y.dtype.itemsize / meta.UnitSize));
-            return Backends.Strings.NDStringUfuncs.NoLoop("multiply", spacing ?? np.float64, doubled);
+            finally
+            {
+                // d is a reshape view of diffed (or diffed itself, for an N-D x or a reshape that returned it): the view
+                // first, then the owner once.
+                d?.Dispose();
+                if (!ReferenceEquals(d, diffed)) diffed?.Dispose();
+            }
         }
 
         /// <summary>

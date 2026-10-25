@@ -68,6 +68,14 @@ namespace NumSharp
         ///     <c>operands could not be broadcast together with shapes … </c> from the
         ///     <c>d * (…)</c> multiply, verbatim.
         /// </exception>
+        /// <exception cref="TypeError">
+        ///     A text <paramref name="y"/> or <paramref name="x"/> (U, S or StringDType): NumPy's statements run as they are,
+        ///     and the first one without a loop for its operands refuses with NumPy's text — np.diff's subtract for a text
+        ///     <paramref name="x"/>, the multiply of the spacing and the concatenated <c>y[1:] + y[:-1]</c> (for a fixed-width
+        ///     <paramref name="y"/> and an integer spacing, the string multiply's "The 'out' kwarg is necessary" error), or the
+        ///     division by <c>2.0</c> of a StringDType product an integer spacing repeated. A StringDType concatenation that
+        ///     meets an NA it cannot add raises NumPy's <see cref="ValueError"/> instead.
+        /// </exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trapezoid.html</remarks>
         [NDScoped]
         public static NDArray trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1)

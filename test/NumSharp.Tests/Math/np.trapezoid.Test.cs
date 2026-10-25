@@ -570,5 +570,38 @@ namespace NumSharp.Tests.Math
             var stepped = np.array(new[] { negNan32, 9f, 1f, 9f, 2f, 9f, 3f, 9f, 4f, 9f, 5f, 9f }).reshape(2, 6)[":, ::2"];
             BitConverter.ToString(np.trapezoid(stepped, dx: nan).tobytes()).Should().Be("00-00-C0-FF-00-00-C0-7F");
         }
+
+        // ------------------- text: NumPy's statements as they are -------------------
+
+        /// <summary>
+        ///     A text <c>y</c> with an INTEGER spacing (an integer x's difference) goes further through NumPy's statements than
+        ///     a float one: NumPy's string multiply has a loop for an integer and a string, so for a fixed-width
+        ///     concatenation it refuses with its "The 'out' kwarg is necessary" TypeError, and a StringDType concatenation is
+        ///     repeated and then refused by the division by 2.0 (or, for points that do not fit, by the multiply's broadcast
+        ///     error). NumSharp used to replay the multiply's no-loop refusal for every spacing. NumPy 2.4.2's texts.
+        /// </summary>
+        [TestMethod]
+        public void Trapezoid_TextWithAnIntegerSpacing_RunsNumPysStatements()
+        {
+            const string outKwarg = "The 'out' kwarg is necessary when using the string multiply ufunc directly. Use numpy.strings.multiply to multiply strings without specifying 'out'.";
+            var points = np.array(new[] { 0, 2, 3 });
+            foreach (var dt in new[] { "U5", "S5" })
+            {
+                var y = np.array(new[] { "1", "2", "10" }).astype(np.dtype(dt));
+                new Action(() => np.trapezoid(y, points)).Should().Throw<TypeError>().WithMessage(outKwarg);
+                new Action(() => np.trapezoid(y, np.array(new byte[] { 0, 2, 3 }))).Should().Throw<TypeError>().WithMessage(outKwarg);
+            }
+
+            var t = np.array(new[] { "1", "2", "10" }).astype(np.dtype("T"));
+            new Action(() => np.trapezoid(t, points)).Should().Throw<TypeError>().WithMessage(
+                "ufunc 'divide' did not contain a loop with signature matching types (<class 'numpy.dtypes.StringDType'>, <class 'numpy.dtypes._PyFloatDType'>) -> None");
+            new Action(() => np.trapezoid(t, np.array(new[] { 0, 2, 3, 4 }))).Should().Throw<IncorrectShapeException>()
+                .WithMessage("operands could not be broadcast together with shapes (3,) (2,) ");
+
+            // A bool spacing has no loop with a string, fixed-width or not (unchanged by the statements).
+            var u = np.array(new[] { "1", "2", "10" }).astype(np.dtype("U5"));
+            new Action(() => np.trapezoid(u, np.array(new[] { true, false, true }))).Should().Throw<TypeError>().WithMessage(
+                "ufunc 'multiply' did not contain a loop with signature matching types (dtype('bool'), dtype('<U10')) -> None");
+        }
     }
 }
