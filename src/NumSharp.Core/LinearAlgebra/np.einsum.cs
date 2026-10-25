@@ -100,8 +100,8 @@ namespace NumSharp
                 throw new ValueError(
                     "must specify the einstein sum subscripts string and at least one operand");
 
-            RequireOrder(order);
-            RequireCasting(casting);
+            Backends.GufuncGuard.RequireOrder(order);
+            Backends.GufuncGuard.RequireCasting(casting);
             RequireOptimize(optimize);
 
             // The contractor parses AND validates (rank, ellipsis grammar, operand count, output
@@ -155,19 +155,6 @@ namespace NumSharp
 
             string rendered = EinsumSubscripts.FromSublists(operands, out var parsed);
             return einsum(rendered, parsed, null);
-        }
-
-        private static void RequireOrder(char order)
-        {
-            if (order is not ('C' or 'F' or 'A' or 'K'))
-                throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
-        }
-
-        private static void RequireCasting(string casting)
-        {
-            if (casting is not ("no" or "equiv" or "safe" or "same_kind" or "unsafe"))
-                throw new ValueError(
-                    $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')");
         }
 
         private static void RequireOptimize(object optimize)

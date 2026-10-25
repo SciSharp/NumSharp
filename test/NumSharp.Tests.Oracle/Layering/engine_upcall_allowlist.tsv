@@ -8,6 +8,8 @@ Backends/Default/Indexing/Default.BooleanMask.cs	0	2
 Backends/Default/Indexing/Default.FlatNonZero.cs	0	2
 Backends/Default/Indexing/Default.NonZero.cs	1	2
 Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
+Backends/Default/LinearAlgebra/Default.Gufuncs.cs	0	6	# the gufunc bodies moved by P2: np.copyto delivers matmul's product into out=, np.expand_dims keeps vecdot's reduced axis, np.ascontiguousarray / np.asfortranarray apply matmul's order= until P6 gives the engine its own
+Backends/Default/LinearAlgebra/GufuncGuard.cs	0	1	# moved from the np layer by P2: Deliver's np.copyto stores a gufunc's answer into out= until P6 gives the engine its own copy
 Backends/Default/LinearAlgebra/LinAlgEmpty.cs	7	25
 Backends/Default/Logic/Default.AllClose.cs	2	0
 Backends/Default/Logic/Default.IsClose.cs	6	0

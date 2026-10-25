@@ -1,15 +1,19 @@
-using NumSharp.Backends;
-
-namespace NumSharp
+namespace NumSharp.Backends
 {
     /// <summary>
-    ///     The two rejections every generalized ufunc shares, reproduced verbatim from NumPy's
-    ///     <c>_parse_axes</c>/<c>_get_coredim_sizes</c> in <c>numpy/_core/src/umath/ufunc_object.c</c>.
+    ///     The checks every generalized ufunc of the product family shares (<c>np.matmul</c>, <c>np.vecdot</c>,
+    ///     <c>np.matvec</c>, <c>np.vecmat</c>, and the gufunc core checks of <c>np.linalg.solve</c>), with NumPy's texts
+    ///     from <c>_parse_axes_arg</c> / <c>_validate_num_dims</c> / <c>_get_coredim_sizes</c> in
+    ///     <c>numpy/_core/src/umath/ufunc_object.c</c>, plus the <c>order=</c> / <c>casting=</c> name checks
+    ///     <c>np.matmul</c> and <c>np.einsum</c> share.
     /// </summary>
     /// <remarks>
     ///     A gufunc's core dimensions are matched EXACTLY — they do not broadcast, so a length-1 core
     ///     dim against a length-3 one is an error, not a stretch. Only the LEADING (loop) axes
     ///     broadcast, and those are left to the ordinary elementwise machinery downstream.
+    ///     <para>Engine-layer since the np-layer dtype plan's P2 (it lived beside the public functions): the gufunc calls
+    ///     are <see cref="DefaultEngine"/> members now, and <c>np.linalg.solve</c> / <c>np.einsum</c> call these checks
+    ///     from the np layer.</para>
     /// </remarks>
     internal static class GufuncGuard
     {
@@ -29,6 +33,7 @@ namespace NumSharp
         ///     (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, …) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>), the operand
         ///     DESCRIPTORS for a string operand (<c>(dtype('&lt;U2'), dtype('float64')) -&gt; None</c>).</exception>
         /// <exception cref="ValueError">Text with a read-only <paramref name="out"/>.</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         /// <remarks>
         ///     No gufunc has a string loop, so text never reaches <see cref="ToLoop"/> (the string lane has no element
         ///     size); a numeric request still passes only its class check here (probed: <c>vecdot(f, f, dtype='U3')</c>
@@ -57,9 +62,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     "<c>{name}: Input operand {i} does not have enough dimensions (has {n}, gufunc core
-        ///     with signature {sig} requires {k})</c>"
+        ///     NumPy's minimum-rank check of one input (<c>_validate_num_dims</c>): an operand with fewer dimensions than
+        ///     the gufunc's core needs raises "<c>{name}: Input operand {i} does not have enough dimensions (has {n},
+        ///     gufunc core with signature {sig} requires {k})</c>".
         /// </summary>
+        /// <param name="name">The gufunc's name as NumPy prints it (<c>vecdot</c>, <c>solve</c>, ...).</param>
+        /// <param name="signature">The gufunc signature the message quotes (<c>(n),(n)-&gt;()</c>).</param>
+        /// <param name="operandIndex">The input's position (0 or 1), as the message numbers it.</param>
+        /// <param name="operand">The input.</param>
+        /// <param name="required">How many core dimensions the signature gives that input.</param>
+        /// <exception cref="ValueError"><paramref name="operand"/> has fewer than <paramref name="required"/>
+        ///     dimensions.</exception>
         internal static void RequireRank(string name, string signature, int operandIndex, NDArray operand, int required)
         {
             if (operand.ndim >= required)
@@ -71,11 +84,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     "<c>{name}: Input operand {i} has a mismatch in its core dimension {d}, with gufunc
-        ///     signature {sig} (size {actual} is different from {expected})</c>"
+        ///     NumPy's core-size check (<c>_get_coredim_sizes</c>): a core dimension an earlier operand already fixed must
+        ///     have the same size here — "<c>{name}: Input operand {i} has a mismatch in its core dimension {d}, with
+        ///     gufunc signature {sig} (size {actual} is different from {expected})</c>". Core dimensions never broadcast.
         /// </summary>
+        /// <param name="name">The gufunc's name as NumPy prints it.</param>
+        /// <param name="signature">The gufunc signature the message quotes.</param>
+        /// <param name="operandIndex">The input whose core dimension is checked, as the message numbers it.</param>
+        /// <param name="coreDimension">The core dimension's position within that input's core, as the message numbers
+        ///     it.</param>
         /// <param name="actual">The size this operand carries — reported FIRST, as NumPy does.</param>
         /// <param name="expected">The size an earlier operand already fixed for this core dimension.</param>
+        /// <exception cref="ValueError">The two sizes differ.</exception>
         internal static void RequireCoreSize(string name, string signature, int operandIndex, int coreDimension,
             long actual, long expected)
         {
@@ -89,9 +109,17 @@ namespace NumSharp
 
         /// <summary>
         ///     Applies a gufunc's <c>dtype=</c> (the loop selector) and <c>out=</c> in NumPy's order:
-        ///     the loop runs at <paramref name="dtype"/>, and only then is the answer delivered into
+        ///     the loop runs at the requested dtype, and only then is the answer delivered into
         ///     <paramref name="out"/>.
         /// </summary>
+        /// <param name="result">The gufunc's answer, computed at the loop dtype.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <returns><paramref name="result"/> when <paramref name="out"/> is null, else <paramref name="out"/> itself
+        ///     holding the answer.</returns>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only, or <paramref name="result"/> does not
+        ///     broadcast into its shape (<c>np.copyto</c>'s texts).</exception>
+        /// <exception cref="System.InvalidCastException">The answer's dtype cannot reach <paramref name="out"/>'s under
+        ///     <c>same_kind</c> (<c>np.copyto</c>'s text, not the gufunc's UFuncTypeError).</exception>
         internal static NDArray Deliver(NDArray result, NDArray @out)
         {
             if (@out is null)
@@ -102,6 +130,14 @@ namespace NumSharp
         }
 
         /// <summary>Casts an operand to the requested loop dtype (a descriptor; <see langword="null"/> = no request), or returns it unchanged.</summary>
+        /// <param name="operand">The operand.</param>
+        /// <param name="dtype">The loop dtype, or null.</param>
+        /// <returns><paramref name="operand"/> itself without a request; else the cast (no copy when it already has the
+        ///     dtype).</returns>
+        /// <exception cref="System.NotSupportedException"><paramref name="dtype"/> is a class without storage yet
+        ///     (datetime64 before Stage C).</exception>
+        /// <remarks>The cast is UNSAFE: no casting rule is checked here (NumPy checks <c>same_kind</c> before the
+        ///     loop).</remarks>
         internal static NDArray ToLoop(NDArray operand, DType dtype)
             // GetTypeCode() raises the descriptive "no storage yet" for a descriptor-only class (datetime64 before Stage C).
             => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.GetTypeCode().AsType(), copy: false);
@@ -110,20 +146,15 @@ namespace NumSharp
         ///     Validates a gufunc <c>axes=</c> list and normalizes each INPUT entry against its
         ///     operand's rank.
         /// </summary>
+        /// <param name="name">The gufunc's name as NumPy prints it.</param>
+        /// <param name="axes">The <c>axes=</c> list: one entry per operand, each the axes carrying that operand's core
+        ///     dimensions.</param>
         /// <param name="coreRanks">
         ///     How many core dimensions each of the three slots has — <c>{x1, x2, out}</c>. For
         ///     <c>vecdot</c>'s <c>(n),(n)-&gt;()</c> that is <c>{1, 1, 0}</c>.
         /// </param>
-        /// <returns>
-        ///     Three entries. The two input entries hold non-negative axis indices; the OUTPUT entry
-        ///     is returned as given, because the result's rank is not known until the loop has run.
-        /// </returns>
-        /// <remarks>
-        ///     <c>axes</c> names, per operand, which axes carry the core dimensions — so it is the
-        ///     general form of <c>axis</c>, and NumPy rejects the two together. The output entry may
-        ///     be omitted ONLY when the output has no core axes, which among this family is
-        ///     <c>vecdot</c> alone.
-        /// </remarks>
+        /// <param name="x1">The first input (its rank normalizes entry 0).</param>
+        /// <param name="x2">The second input (its rank normalizes entry 1).</param>
         /// <param name="outputCoreRankOverride">
         ///     The output's EFFECTIVE core rank when it differs from the signature's — namely under
         ///     <c>keepdims</c>, where the reduced core dimension is kept as size 1 and a PROVIDED
@@ -133,6 +164,20 @@ namespace NumSharp
         ///     <c>vecdot</c> passes it — <c>matvec</c>/<c>vecmat</c> reject keepdims before reaching
         ///     here — so their behaviour is unchanged (<c>null</c> ⇒ the signature rank).
         /// </param>
+        /// <returns>
+        ///     Three entries. The two input entries hold non-negative axis indices; the OUTPUT entry
+        ///     is returned as given, because the result's rank is not known until the loop has run.
+        /// </returns>
+        /// <exception cref="ValueError">The list has neither three entries nor (for an output without core axes)
+        ///     two.</exception>
+        /// <exception cref="AxisError">An entry's length is not its operand's core rank, or an input axis is out of
+        ///     range.</exception>
+        /// <remarks>
+        ///     <c>axes</c> names, per operand, which axes carry the core dimensions — so it is the
+        ///     general form of <c>axis</c>, and NumPy rejects the two together. The output entry may
+        ///     be omitted ONLY when the output has no core axes, which among this family is
+        ///     <c>vecdot</c> alone.
+        /// </remarks>
         internal static int[][] NormalizeAxes(string name, int[][] axes, int[] coreRanks, NDArray x1, NDArray x2,
             int? outputCoreRankOverride = null)
         {
@@ -176,6 +221,9 @@ namespace NumSharp
         }
 
         /// <summary>NumPy rejects <c>axis</c> and <c>axes</c> together, whichever gufunc it is.</summary>
+        /// <param name="axes">The <c>axes=</c> list, or null.</param>
+        /// <param name="axis">The <c>axis=</c> value, or null.</param>
+        /// <exception cref="TypeError">Both are given (<c>cannot specify both 'axis' and 'axes'</c>).</exception>
         internal static void RejectAxisWithAxes(int[][] axes, int? axis)
         {
             if (axes is not null && axis is not null)
@@ -187,10 +235,15 @@ namespace NumSharp
         ///     <c>axis</c> and <c>keepdims</c> — <c>matvec</c> and <c>vecmat</c>, never
         ///     <c>vecdot</c>.
         /// </summary>
+        /// <param name="name">The gufunc's name as NumPy prints it.</param>
+        /// <param name="signature">The gufunc signature the messages quote.</param>
+        /// <param name="axis">The <c>axis=</c> value, or null.</param>
+        /// <param name="keepdims">The <c>keepdims=</c> value.</param>
         /// <param name="secondOperandCoreRank">
         ///     How many core dimensions input 1 has — 1 for <c>matvec</c>, 2 for <c>vecmat</c>.
         ///     NumPy names that operand in the keepdims message.
         /// </param>
+        /// <exception cref="TypeError"><paramref name="axis"/> is given, or <paramref name="keepdims"/> is true.</exception>
         internal static void RejectAxisAndKeepdims(string name, string signature, int? axis, bool keepdims,
             int secondOperandCoreRank)
         {
@@ -205,6 +258,33 @@ namespace NumSharp
                     $"to have {secondOperandCoreRank} core dimensions, but keepdims can only be used " +
                     "when all inputs have the same number of core dimensions and all outputs have no " +
                     "core dimensions.");
+        }
+
+        /// <summary>
+        ///     The <c>order=</c> name check <c>np.matmul</c> and <c>np.einsum</c> share: one of <c>'C'</c>, <c>'F'</c>,
+        ///     <c>'A'</c>, <c>'K'</c>.
+        /// </summary>
+        /// <param name="order">The order letter the caller passed.</param>
+        /// <exception cref="ValueError">Any other character (<c>order must be one of 'C', 'F', 'A', or 'K' (got
+        ///     '…')</c>), a lowercase letter included.</exception>
+        internal static void RequireOrder(char order)
+        {
+            if (order is not ('C' or 'F' or 'A' or 'K'))
+                throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
+        }
+
+        /// <summary>
+        ///     The <c>casting=</c> name check <c>np.matmul</c> and <c>np.einsum</c> share: one of NumPy's five casting
+        ///     rules.
+        /// </summary>
+        /// <param name="casting">The rule name the caller passed.</param>
+        /// <exception cref="ValueError">Any other string, null included (<c>casting must be one of 'no', 'equiv',
+        ///     'safe', 'same_kind', 'unsafe' (got '…')</c>).</exception>
+        internal static void RequireCasting(string casting)
+        {
+            if (casting is not ("no" or "equiv" or "safe" or "same_kind" or "unsafe"))
+                throw new ValueError(
+                    $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')");
         }
     }
 }

@@ -43,13 +43,13 @@ namespace NumSharp
                 ThrowIfTextGufunc(oneDimensional ? "solve1" : "solve", a, b);
                 if (oneDimensional)
                 {
-                    GufuncGuard.RequireCoreSize("solve1", "(m,m),(m)->(m)", 1, 0,
+                    Backends.GufuncGuard.RequireCoreSize("solve1", "(m,m),(m)->(m)", 1, 0,
                         b.Shape.dimensions[0], a.Shape.dimensions[a.ndim - 1]);
                 }
                 else
                 {
-                    GufuncGuard.RequireRank("solve", "(m,m),(m,n)->(m,n)", 1, b, 2);
-                    GufuncGuard.RequireCoreSize("solve", "(m,m),(m,n)->(m,n)", 1, 0,
+                    Backends.GufuncGuard.RequireRank("solve", "(m,m),(m,n)->(m,n)", 1, b, 2);
+                    Backends.GufuncGuard.RequireCoreSize("solve", "(m,m),(m,n)->(m,n)", 1, 0,
                         b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
                 }
 

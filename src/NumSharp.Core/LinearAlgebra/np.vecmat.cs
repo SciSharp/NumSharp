@@ -3,11 +3,6 @@ namespace NumSharp
     public static partial class np
     {
         /// <summary>
-        ///     The gufunc signature <c>np.vecmat</c> matches its core dimensions against.
-        /// </summary>
-        internal const string VecmatSignature = "(n),(n,m)->(m)";
-
-        /// <summary>
         ///     Vector-matrix product (NumPy 2.2) — the gufunc <c>(n),(n,m)->(m)</c>, conjugating the
         ///     vector operand.
         /// </summary>
@@ -28,6 +23,8 @@ namespace NumSharp
         /// <param name="dtype">
         ///     Selects the LOOP: computation runs at this dtype, not merely the result.
         /// </param>
+        /// <returns>The vector-matrix products (the operands' loop axes broadcast together), or <paramref name="out"/>
+        ///     itself holding them.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.vecmat.html
         ///     <para>
@@ -41,8 +38,24 @@ namespace NumSharp
         ///     <c>signature</c>) are not modelled anywhere in NumSharp's ufunc surface and are
         ///     absent here too. See <see cref="vecdot"/>.
         ///     </para>
+        ///     <para>
+        ///     The whole call is the engine member <c>TensorEngine.Vecmat(x1, x2, out, axes, axis, keepdims, dtype)</c>
+        ///     since the np-layer dtype plan's P2; this function keeps the numpy.matrix boundary.
+        ///     </para>
         /// </remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes
+        ///     longer than 1 (<c>shape too large to be a matrix.</c>); an operand with too few dimensions; core axes of
+        ///     different lengths; an <paramref name="axes"/> list without three entries; a read-only <paramref name="out"/>,
+        ///     or one the answer does not broadcast into.</exception>
+        /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>, or either given; a
+        ///     <paramref name="dtype"/> with details beyond its class; text operands or a text <paramref name="dtype"/>;
+        ///     <paramref name="keepdims"/>.</exception>
+        /// <exception cref="AxisError">An <paramref name="axes"/> entry of the wrong length, or an axis out of
+        ///     range.</exception>
+        /// <exception cref="System.InvalidCastException">The answer cannot be cast into <paramref name="out"/> under
+        ///     same_kind.</exception>
+        /// <exception cref="IncorrectShapeException">Loop axes that do not broadcast.</exception>
+        /// <exception cref="System.NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         [NDScoped]
         public static NDArray vecmat(NDArray x1, NDArray x2, NDArray @out = null, int[][] axes = null,
             int? axis = null, bool keepdims = false, DType dtype = null)
@@ -50,39 +63,7 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x1, x2))
                 return NDMatrixBoundary.Wrapped((x1, x2, @out, axes, axis, keepdims, dtype), static s => vecmat(s.x1, s.x2, s.@out, s.axes, s.axis, s.keepdims, s.dtype), @out);
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-            // The dtype= class check and, for text, NumPy's loop refusal come before axis / keepdims semantics.
-            GufuncGuard.ThrowIfText("vecmat", x1, x2, dtype, @out);
-            GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
-
-            GufuncGuard.RequireRank("vecmat", VecmatSignature, 0, x1, 1);
-            GufuncGuard.RequireRank("vecmat", VecmatSignature, 1, x2, 2);
-
-            var a = x1;
-            var b = x2;
-            int[] outputAxes = System.Array.Empty<int>();
-
-            if (axes is not null)
-            {
-                var resolved = GufuncGuard.NormalizeAxes("vecmat", axes, new[] {1, 2, 1}, x1, x2);
-                outputAxes = resolved[2];
-
-                a = moveaxis(a, resolved[0][0], -1);
-                b = moveaxis(b, resolved[1], new[] {b.ndim - 2, b.ndim - 1});
-            }
-
-            GufuncGuard.RequireCoreSize("vecmat", VecmatSignature, 1, 0,
-                b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
-
-            a = GufuncGuard.ToLoop(a, dtype);
-            b = GufuncGuard.ToLoop(b, dtype);
-
-            var result = a.TensorEngine.Vecmat(a, b);
-
-            if (outputAxes.Length == 1)
-                result = moveaxis(result, -1, outputAxes[0]);
-
-            return GufuncGuard.Deliver(result, @out);
+            return x1.TensorEngine.Vecmat(x1, x2, @out, axes, axis, keepdims, dtype);
         }
     }
 }
