@@ -150,8 +150,12 @@ namespace NumSharp
         /// <exception cref="TypeError"><paramref name="x"/> or <paramref name="y"/> is 0-d: NumPy's first statement takes
         ///     <c>len()</c> of both (<c>len() of unsized object</c>), before any bin, range or weight is read.</exception>
         /// <exception cref="ValueError"><paramref name="x"/> and <paramref name="y"/> differ in length — their FIRST
-        ///     dimension, not their size (<c>x and y must have the same length.</c>) — and every refusal of the histogramdd
-        ///     engine the two arrays and the arguments then meet.</exception>
+        ///     dimension, not their size (<c>x and y must have the same length.</c>); arrays of one length but different
+        ///     shapes, which the stacking of <c>[x, y]</c> refuses (<c>setting an array element with a sequence. The requested
+        ///     array has an inhomogeneous shape after N dimensions. ...</c>); two 2-D arrays of one shape
+        ///     (<c>too many values to unpack (expected 2)</c>); and every refusal of the histogramdd engine the two arrays and
+        ///     the arguments then meet.</exception>
+        [NDScopedCovered] // only callers: the six [NDScoped] histogram2d overloads (the stacked column and every binning temporary are scope-reclaimed)
         private static Histogram2dResult Histogram2dImpl(NDArray x, NDArray y, object bins, (double, double)?[] range, bool density, NDArray weights)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
@@ -167,7 +171,9 @@ namespace NumSharp
                 ? new NDArray[] { AsEdgeArray(bins), AsEdgeArray(bins) } // xedges = yedges = asarray(bins)
                 : bins;
 
-            HistogramddResult dd = HistogramddImpl(new[] { x, y }, ddBins, range, density, weights);
+            // `histogramdd([x, y], ...)`: the pair is a sequence sample, so its stacking statement runs on it — two arrays of
+            // one length but different shapes are refused there, and two 2-D arrays of one shape leave three values to unpack.
+            HistogramddResult dd = HistogramddImpl(ColumnsFromSequence(new[] { x, y }), ddBins, range, density, weights);
             return new Histogram2dResult(dd.H, dd.edges[0], dd.edges[1]);
         }
 

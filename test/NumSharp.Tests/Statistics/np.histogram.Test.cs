@@ -642,6 +642,147 @@ public class np_histogram_Tests
     }
 
     /// <summary>
+    ///     A sequence sample is stacked first (<c>np.atleast_2d(sample).T</c>): entries of different shapes are refused by
+    ///     array coercion with NumPy 2.4.2's texts — before any bin, range or weight is read — instead of being read with
+    ///     the first entry's length (past the end of a shorter entry). The detected shape is what the shapes still agree on.
+    /// </summary>
+    [TestMethod]
+    public void Error_DD_SequenceOfDifferentShapes_IsInhomogeneous()
+    {
+        var x3 = np.array(new[] { 0.5, 1.5, 2.5 });
+        var y2 = np.array(new[] { 0.5, 1.5 });
+        var z0 = np.array(1.5);
+        var e0 = np.zeros(new Shape(0), np.float64);
+        var m23 = np.arange(6.0).reshape(2, 3);
+        var m33 = np.arange(9.0).reshape(3, 3);
+        var m24 = np.arange(8.0).reshape(2, 4);
+        var t3 = np.arange(24.0).reshape(2, 3, 4);
+        const string head = "setting an array element with a sequence. The requested array has an inhomogeneous shape after ";
+        foreach (var (sample, tail) in new (NDArray[], string)[]
+                 {
+                     (new[] { x3, y2 }, "1 dimensions. The detected shape was (2,) + inhomogeneous part."),
+                     (new[] { x3, z0 }, "1 dimensions. The detected shape was (2,) + inhomogeneous part."),
+                     (new[] { z0, x3 }, "1 dimensions. The detected shape was (2,) + inhomogeneous part."),
+                     (new[] { e0, z0 }, "1 dimensions. The detected shape was (2,) + inhomogeneous part."),
+                     (new[] { x3, null }, "1 dimensions. The detected shape was (2,) + inhomogeneous part."),
+                     (new[] { m33, x3 }, "2 dimensions. The detected shape was (2, 3) + inhomogeneous part."),
+                     (new[] { x3, m33 }, "2 dimensions. The detected shape was (2, 3) + inhomogeneous part."),
+                     (new[] { m23, m24 }, "2 dimensions. The detected shape was (2, 2) + inhomogeneous part."),
+                     (new[] { m23, t3 }, "3 dimensions. The detected shape was (2, 2, 3) + inhomogeneous part."),
+                     (new[] { t3, m23 }, "3 dimensions. The detected shape was (2, 2, 3) + inhomogeneous part."),
+                     (new[] { m23, m24, x3 }, "1 dimensions. The detected shape was (3,) + inhomogeneous part."),
+                     (new[] { y2, x3, x3 }, "1 dimensions. The detected shape was (3,) + inhomogeneous part."),
+                 })
+            ((Action)(() => np.histogramdd(sample, 2))).Should().Throw<ValueError>().WithMessage(head + tail);
+        // The stacking is the first statement: it wins over a wrong number of bins or ranges.
+        ((Action)(() => np.histogramdd(new[] { x3, y2 }, new[] { 2 }))).Should().Throw<ValueError>().WithMessage(head + "*");
+        ((Action)(() => np.histogramdd(new[] { x3, y2 }, 2, new (double, double)?[] { (0, 1) })))
+            .Should().Throw<ValueError>().WithMessage(head + "*");
+    }
+
+    /// <summary>
+    ///     After the stacking, <c>N, D = sample.shape</c> needs a 2-D stack: entries of two or more dimensions (one, or several
+    ///     of one shape), an array sample of three or more dimensions, and histogram2d's two 2-D arrays of one shape leave
+    ///     too many values (NumPy 2.4.2: <c>too many values to unpack (expected 2)</c>, before any bin is read).
+    /// </summary>
+    [TestMethod]
+    public void Error_DD_SampleDeeperThan2D_IsTooManyValuesToUnpack()
+    {
+        var m23 = np.arange(6.0).reshape(2, 3);
+        var t3 = np.arange(24.0).reshape(2, 3, 4);
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogramdd(new[] { m23 }, 2),
+                     () => np.histogramdd(new[] { m23, m23 }, new[] { 2 }),
+                     () => np.histogramdd(new[] { t3, t3 }, 2),
+                     () => np.histogramdd(t3, 2),
+                     () => np.histogramdd(t3, new[] { 2 }),
+                     () => np.histogramdd(np.zeros(new Shape(1, 2, 3, 4), np.float64), 2),
+                     () => np.histogram2d(m23, m23, 2),
+                 })
+            act.Should().Throw<ValueError>().WithMessage("too many values to unpack (expected 2)");
+    }
+
+    /// <summary>
+    ///     0-d entries stack to <c>(n,)</c>, which <c>atleast_2d(..).T</c> makes <c>(n, 1)</c>: ONE dimension of n points,
+    ///     in the entries' promoted dtype (int64 beside float64 is float64), weighted per point; an empty sequence is NumPy's
+    ///     float64 <c>(0,)</c> stack, one empty dimension; a 0-d array sample is <c>(1, 1)</c>. NumPy 2.4.2's answers. The 0-d
+    ///     entries used to be one dimension each, and the 0-d array sample was refused.
+    /// </summary>
+    [TestMethod]
+    public void DD_ScalarEntriesAndZeroDimSample_AreOneColumn()
+    {
+        var z0 = np.array(1.5);
+        var z0b = np.array(2.5);
+        var (h, e) = np.histogramdd(new[] { z0, z0b }, 2);
+        h.shape.Should().Equal(new long[] { 2 });
+        Eq(h, new[] { 1.0, 1.0 });
+        e.Length.Should().Be(1);
+        Eq(e[0], new[] { 1.5, 2.0, 2.5 });
+
+        (h, e) = np.histogramdd(new[] { z0, np.array(2L) }, 2);
+        Eq(e[0], new[] { 1.5, 1.75, 2.0 });
+        e[0].typecode.Should().Be(NPTypeCode.Double);
+
+        (h, _) = np.histogramdd(new[] { z0, z0b }, 2, weights: np.array(new[] { 1.0, 3.0 }));
+        Eq(h, new[] { 1.0, 3.0 });
+        ((Action)(() => np.histogramdd(new[] { z0, z0b }, new[] { 2, 2 })))
+            .Should().Throw<ValueError>().WithMessage("The dimension of bins must be equal to the dimension of the sample x.");
+
+        (h, e) = np.histogramdd(new NDArray[0], 2);
+        h.shape.Should().Equal(new long[] { 2 });
+        Eq(h, new[] { 0.0, 0.0 });
+        Eq(e[0], new[] { 0.0, 0.5, 1.0 });
+
+        (h, e) = np.histogramdd(z0, 2);
+        Eq(h, new[] { 0.0, 1.0 });
+        Eq(e[0], new[] { 1.0, 1.5, 2.0 });
+        ((Action)(() => np.histogramdd(z0, new[] { 2, 2 })))
+            .Should().Throw<ValueError>().WithMessage("The dimension of bins must be equal to the dimension of the sample x.");
+    }
+
+    /// <summary>
+    ///     0-d text entries stack into one text column of the promoted text dtype (a float64 beside a <c>&lt;U1</c> makes
+    ///     <c>&lt;U32</c>, whose missing minimum loop NumPy names; with numeric edges the formatted text is searched, NumPy
+    ///     2.4.2's <c>[1, 0]</c>). NumPy stacks None, or StringDType text beside a number, into an object array, which NumSharp
+    ///     has no dtype for.
+    /// </summary>
+    [TestMethod]
+    public void DD_TextScalarEntries_AreOneTextColumn_ObjectStacksAreRefused()
+    {
+        var u0 = np.squeeze(np.array(new[] { "3" }));
+        var f0 = np.array(1.5);
+        ((Action)(() => np.histogramdd(new[] { u0, f0 }, 2))).Should().Throw<TypeError>()
+            .WithMessage("ufunc 'minimum' did not contain a loop with signature matching types (dtype('<U32'), dtype('<U32')) -> None");
+        var (h, _) = np.histogramdd(new[] { u0, f0 }, new[] { np.array(new[] { 0.0, 2.0, 20.0 }) });
+        Eq(h, new[] { 1.0, 0.0 });
+
+        var t0 = np.squeeze(np.array(new[] { "5" }).astype(np.dtype("T")));
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogramdd(new NDArray[] { null }, 2),
+                     () => np.histogramdd(new NDArray[] { null, null }, 2),
+                     () => np.histogramdd(new[] { t0, f0 }, 2),
+                 })
+            act.Should().Throw<NotSupportedException>();
+    }
+
+    /// <summary>
+    ///     histogram2d is <c>histogramdd([x, y])</c>: x and y of one length but different shapes are refused by the stacking
+    ///     (NumPy 2.4.2: a <c>(2, 3)</c> x beside a <c>(2, 4)</c> or a <c>(2,)</c> y is inhomogeneous after 2 dimensions,
+    ///     <c>(2, 2)</c>).
+    /// </summary>
+    [TestMethod]
+    public void Error_Histogram2D_SameLengthDifferentShapes_IsInhomogeneous()
+    {
+        var m23 = np.arange(6.0).reshape(2, 3);
+        foreach (var y in new[] { np.arange(8.0).reshape(2, 4), np.array(new[] { 0.5, 1.5 }) })
+            ((Action)(() => np.histogram2d(m23, y, 2))).Should().Throw<ValueError>().WithMessage(
+                "setting an array element with a sequence. The requested array has an inhomogeneous shape after 2 dimensions. " +
+                "The detected shape was (2, 2) + inhomogeneous part.");
+    }
+
+    /// <summary>
     ///     Without points, bincount returns its zeros before it reads the weights, so weights of any shape or dtype pass and
     ///     H is all zeros (NumPy 2.4.2: <c>np.histogramdd(np.zeros((0, 2)), bins=2, weights=np.ones((3, 3)))</c>, and with a
     ///     0-d text weight).

@@ -405,9 +405,17 @@ namespace NumSharp
         // ---------------------------------------------------------------------
 
         /// <summary>
-        ///     Split an <c>(N, D)</c> sample array into D coordinate columns (each a 1-D view). A 1-D sample is
-        ///     read as a single column (D = 1), matching NumPy's <c>atleast_2d(sample).T</c> fallback.
+        ///     NumPy's first statement for an array sample: <c>N, D = sample.shape</c>, and where that unpacking fails (a
+        ///     sample that is not 2-D), <c>sample = np.atleast_2d(sample).T</c> and <c>N, D = sample.shape</c> again. An
+        ///     <c>(N, D)</c> sample is its D column views; a 1-D sample becomes <c>(N, 1)</c>, one column of N points, and a 0-d
+        ///     sample <c>(1, 1)</c>, one column of one point; a deeper sample keeps its rank through <c>atleast_2d</c>, so the
+        ///     second unpacking fails too.
         /// </summary>
+        /// <param name="sample">The sample array.</param>
+        /// <returns>The D coordinate columns, each a 1-D view of <paramref name="sample"/> (a 1-D sample is its own column).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sample"/> is null.</exception>
+        /// <exception cref="ValueError">A sample of three or more dimensions: Python's <c>too many values to unpack
+        ///     (expected 2)</c>, raised before any bin, range or weight is read.</exception>
         private static NDArray[] SampleColumns(NDArray sample)
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
@@ -421,14 +429,87 @@ namespace NumSharp
             }
             if (sample.ndim == 1)
                 return new[] { sample }; // atleast_2d((N,)).T == (N,1) => a single column
-            throw new ValueError("sample must be a 2-D (N, D) array or a sequence of 1-D arrays");
+            // atleast_2d(()).T is (1, 1): the 0-d value is one point of one column, read through a (1,) view of it.
+            if (sample.ndim == 0)
+                return new[] { sample.reshape(1) };
+            throw new ValueError("too many values to unpack (expected 2)");
         }
 
-        /// <summary>Use a sequence of D coordinate arrays directly as the columns.</summary>
+        /// <summary>
+        ///     NumPy's first statement for a sequence sample: <c>sample = np.atleast_2d(sample).T</c>, then
+        ///     <c>N, D = sample.shape</c>. The stacking is array coercion of the list of arrays, which checks every entry's
+        ///     shape against the first one's; <c>atleast_2d</c> and <c>.T</c> then decide what a column is.
+        /// </summary>
+        /// <param name="sample">The sequence's entries (NumPy's list or tuple of arrays). Not modified.</param>
+        /// <returns><paramref name="sample"/> itself when its entries are D 1-D arrays of one length (each entry is one column,
+        ///     <c>(D, N)</c> transposed); a new one-element array holding ONE column when the entries are 0-d (the stack is
+        ///     <c>(n,)</c>, which <c>atleast_2d(..).T</c> makes <c>(n, 1)</c>: n points of one dimension) or when there are no
+        ///     entries (NumPy's float64 <c>(0,)</c> stack, one empty column).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sample"/> is null.</exception>
+        /// <exception cref="ValueError">Entries of different shapes (array coercion's <c>setting an array element with a
+        ///     sequence. The requested array has an inhomogeneous shape after N dimensions. The detected shape was (...) +
+        ///     inhomogeneous part.</c>), or entries of two or more dimensions (<c>too many values to unpack (expected 2)</c>):
+        ///     both before any bin, range or weight is read.</exception>
+        /// <exception cref="NotSupportedException">0-d entries NumPy stacks into an OBJECT array — a null entry (None), or
+        ///     StringDType text beside a number — which NumPy then computes with as Python objects; NumSharp has no object
+        ///     dtype.</exception>
+        /// <remarks>
+        ///     The shape check runs FIRST, before an entry's values are read: the columns used to be read with the first
+        ///     entry's length, which read past the end of a shorter entry. A null entry beside arrays is a scalar of the
+        ///     coercion, so it is ragged like a 0-d array would be.
+        /// </remarks>
         private static NDArray[] ColumnsFromSequence(NDArray[] sample)
         {
             if (sample is null) throw new ArgumentNullException(nameof(sample));
-            return sample;
+            // np.atleast_2d(sample) coerces the list first: its shape walk (array_coercion.c's update_shape, ported as
+            // PolySequence.NDim) compares every entry's dims with the first entry's, so entries of different shapes raise
+            // NumPy's inhomogeneous ValueError here, before anything is read from them.
+            int ndim = PolySequence.NDim(sample);
+            // `N, D = sample.shape` after `.T`: atleast_2d leaves a stack of two or more dims as it is, so entries of two or
+            // more dims leave more than two values to unpack.
+            if (ndim > 2)
+                throw new ValueError("too many values to unpack (expected 2)");
+            // (D, N) transposed: every entry is one column of N points (the stacking's dtype promotion runs in HistogramddImpl).
+            if (ndim == 2)
+                return sample;
+            // (n,) -> (1, n) -> (n, 1): the entries are 0-d, the n values of ONE column.
+            return new[] { StackScalarEntries(sample) };
+        }
+
+        /// <summary>
+        ///     The one column NumPy's stack makes of 0-d entries: <c>np.asanyarray(sample)</c> is an <c>(n,)</c> array of the
+        ///     entries' common dtype — promoted as arrays are (every entry strong, not NEP 50), a text entry making the whole
+        ///     column text (<c>&lt;U32</c> beside a float64) — and no entries at all make NumPy's float64 <c>(0,)</c> array.
+        /// </summary>
+        /// <param name="entries">The 0-d entries (or none). Not modified.</param>
+        /// <returns>A new 1-D array of the n entry values in the stacked dtype.</returns>
+        /// <exception cref="NotSupportedException">A null entry, or StringDType text beside a number: NumPy's stack is then
+        ///     an object array, a dtype NumSharp does not have.</exception>
+        /// <exception cref="UnicodeDecodeError">An <c>S</c> entry holding a byte that is not ASCII beside a <c>U</c> entry
+        ///     (the stack decodes the bytes, as for columns).</exception>
+        private static NDArray StackScalarEntries(NDArray[] entries)
+        {
+            // np.asanyarray(()) is an empty float64 array: one column without points.
+            if (entries.Length == 0)
+                return np.empty(Shape.Vector(0), NPTypeCode.Double);
+            foreach (var e in entries)
+                if (e is null)
+                    throw new NotSupportedException("None has no NumSharp equivalent: NumPy stacks the sample into an object " +
+                                                    "array, a dtype NumSharp does not have");
+            // The common dtype of the stack, through the descriptor promotion the columns use (string widths kept); null when
+            // StringDType text meets a number, where NumPy's stack is an object array of Python values.
+            DType stacked = StackedSampleDescr(entries);
+            if (stacked is null)
+                throw new NotSupportedException("StringDType text beside a number makes NumPy stack the sample into an " +
+                                                "object array, which it computes with as Python objects; NumSharp has no " +
+                                                "object dtype");
+            // Each entry converted to the stacked dtype (a number formatted as text, bytes decoded), then the n values side by
+            // side: every part already has the stacked dtype, so the concatenation promotes nothing.
+            NDArray[] cast = CastColumnsToStacked(entries, stacked);
+            var parts = new NDArray[cast.Length];
+            for (int i = 0; i < cast.Length; i++)
+                parts[i] = cast[i].reshape(1);
+            return np.concatenate(parts);
         }
 
         /// <summary>
