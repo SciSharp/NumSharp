@@ -165,6 +165,47 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     A char array meets <c>StringDType</c> as NumPy's uint16 does: the two have no common descriptor, so NumPy searches
+        ///     Python objects, and a uint16 element is a Python int — an int and a str do not order, whichever operand is the
+        ///     haystack (the comparison is <c>haystack element &lt; key</c>). Nothing is compared when the haystack or the keys
+        ///     are empty except the keys with each other, so those answer. The search used to read a char element as a
+        ///     one-character str and order it against the text (<c>[0, 0, 0]</c> for the first call below). Probed against
+        ///     <c>numpy==2.4.2</c> with the uint16 arrays NumSharp's char stands for.
+        /// </summary>
+        [TestMethod]
+        public void SearchSorted_CharAndStringDType_ArePythonIntsAndStrs()
+        {
+            using var chars = np.array(new[] { 'a', 'b', 'c' });
+            using var texts = A(T, "a", "b", "zz");
+            Action charHaystack = () => np.searchsorted(chars, texts);
+            charHaystack.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'int' and 'str'");
+            Action charHaystackRight = () => np.searchsorted(chars, texts, "right");
+            charHaystackRight.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'int' and 'str'");
+            Action textHaystack = () => np.searchsorted(texts, chars);
+            textHaystack.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'str' and 'int'");
+            // A 0-d char array is NumPy's 0-d uint16 array (its cast to object gives a Python int, not an np.uint16 scalar).
+            using var oneChar = NDArray.Scalar('b');
+            Action zeroDKey = () => np.searchsorted(texts, oneChar);
+            zeroDKey.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'str' and 'int'");
+            // The sorter's range check runs only where the bisection reaches it: the first comparison already failed.
+            using var outOfRange = np.array(new long[] { 0, 1, 3 });
+            Action sorted = () => np.searchsorted(texts, chars, "left", outOfRange);
+            sorted.Should().Throw<TypeError>().WithMessage("'<' not supported between instances of 'str' and 'int'");
+
+            using var noChars = np.array(new char[0]);
+            using (var r = np.searchsorted(noChars, texts))
+                L(r).Should().Equal(0L, 0L, 0L);
+            using var noTexts = np.array(new object[0], T);
+            using (var r = np.searchsorted(noTexts, chars))
+                L(r).Should().Equal(0L, 0L, 0L);
+            using (var r = np.searchsorted(texts, noChars))
+                r.shape.Should().Equal(0L);
+            // Fixed-width text is a text search: the char haystack is formatted as uint16 numbers ("97", "98", "99").
+            using (var r = np.searchsorted(chars, np.array(new[] { "97", "98" })))
+                L(r).Should().Equal(0L, 1L);
+        }
+
+        /// <summary>
         ///     NumPy 2.4.2's searchsorted loads the HAYSTACK cells with the keys' allocator, so a haystack text in its arena
         ///     raises <c>MemoryError: Failed to load string in string comparison</c> (or reads another array's arena). NumSharp
         ///     reads each array's cells with its own allocator and searches.

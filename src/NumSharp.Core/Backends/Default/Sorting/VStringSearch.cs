@@ -326,10 +326,15 @@ namespace NumSharp.Backends.Sorting
 
         /// <summary>
         ///     The Python objects NumPy's conversion to object gives for every element of <paramref name="a"/>, in C order: a
-        ///     StringDType text's str, its NA object ('' without one), U strs, S bytes, Python numbers and bools.
+        ///     StringDType text's str, its NA object ('' without one), U strs, S bytes, Python numbers and bools; a char
+        ///     element is the Python int of its uint16 (NumSharp's char is NumPy's uint16 wherever it meets NumPy).
         /// </summary>
         /// <param name="a">The array.</param>
         /// <returns>The objects.</returns>
+        /// <remarks>The char rule is the array's, not a C# value's: the boundary map (<c>PyObj.From</c>) reads a C# char as a
+        ///     one-character str, which is right for a value a caller writes but not for an element of a char array, whose
+        ///     store, casts and text are uint16's (a char compared with StringDType text here is NumPy's int-and-str
+        ///     TypeError, as the uint16 array is).</remarks>
         private static PyObj[] ReadObjects(NDArray a)
         {
             long n = a.size;
@@ -363,11 +368,16 @@ namespace NumSharp.Backends.Sorting
                 }
                 return objs;
             }
-            // Fixed-width text and numbers: the element values in C order (GetAtIndex walks the logical order).
+            // Fixed-width text and numbers: the element values in C order (GetAtIndex walks the logical order); a char
+            // element as its uint16 number (see the remarks).
             using NDArray flat = a.Shape.IsContiguous && a.Shape.offset == 0 ? null : np.ascontiguousarray(a);
             NDArray s = flat ?? a;
+            bool charElements = s.typecode == NPTypeCode.Char;
             for (long i = 0; i < n; i++)
-                objs[i] = PyObj.From(s.Storage.GetAtIndex(i));
+            {
+                object element = s.Storage.GetAtIndex(i);
+                objs[i] = PyObj.From(charElements ? (ushort)(char)element : element);
+            }
             return objs;
         }
 
