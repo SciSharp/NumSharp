@@ -146,18 +146,33 @@ namespace NumSharp.Statistics
                     // A text sample's column is the STACKED text column: its min() names that dtype (<U32 beside float64).
                     if (textSample && !ri.HasValue && N > 0)
                         throw Backends.Strings.NDStringUfuncs.NoLoop("minimum", stacked, stacked);
-                    (double smin, double smax) = GetOuterEdges(cols[i], ri);
-                    int nb = DdOperatorIndex(spec, i);
-                    // histogramdd calls `np.linspace(smin, smax, n+1)` WITHOUT a dtype, so the edges take
-                    // result_type(smin, smax, n+1) — which, unlike np.histogram, has NO array to keep it strong.
-                    // The column's own float width survives ONLY when the endpoints are strong array scalars
-                    // (non-empty AND no range → smin/smax = col.min()/max()); a supplied range (Python floats) or an
-                    // empty column (the 0/1 int defaults) makes the endpoints weak, collapsing the edges to float64.
-                    // So a ranged or empty float32/float16 column yields float64 edges — matching NumPy (a
-                    // float32-column-with-strong-endpoints keeps float32). Compute AND result are the same dtype here.
-                    bool weakEndpoints = ri.HasValue || N == 0;
-                    NPTypeCode edgeType = weakEndpoints ? NPTypeCode.Double : FloatPromoteBinType(cols[i].typecode);
-                    edges[i] = HistogramLinspace(smin, smax, nb + 1, edgeType, edgeType);
+                    if (cols[i].typecode == NPTypeCode.Complex)
+                    {
+                        // A complex column: NumPy's same statements in complex128. `_get_outer_edges` gives the column's
+                        // lexicographic min / max (complex128 scalars, both parts checked finite, a zero width widened by
+                        // 0.5), so `np.linspace(smin, smax, n + 1)` — no dtype — runs in complex128; a range's Python floats
+                        // or an empty column's ints 0 and 1 have no array to make them complex, so those edges stay float64.
+                        ComplexOuterEdges ce = GetComplexOuterEdges(cols[i], ri);
+                        int cnb = DdOperatorIndex(spec, i);
+                        edges[i] = ce.Strong
+                            ? ComplexEqualWidthEdges(ce, cnb)
+                            : HistogramLinspace(ce.First.Real, ce.Last.Real, cnb + 1, NPTypeCode.Double, NPTypeCode.Double);
+                    }
+                    else
+                    {
+                        (double smin, double smax) = GetOuterEdges(cols[i], ri);
+                        int nb = DdOperatorIndex(spec, i);
+                        // histogramdd calls `np.linspace(smin, smax, n+1)` WITHOUT a dtype, so the edges take
+                        // result_type(smin, smax, n+1) — which, unlike np.histogram, has NO array to keep it strong.
+                        // The column's own float width survives ONLY when the endpoints are strong array scalars
+                        // (non-empty AND no range → smin/smax = col.min()/max()); a supplied range (Python floats) or an
+                        // empty column (the 0/1 int defaults) makes the endpoints weak, collapsing the edges to float64.
+                        // So a ranged or empty float32/float16 column yields float64 edges — matching NumPy (a
+                        // float32-column-with-strong-endpoints keeps float32). Compute AND result are the same dtype here.
+                        bool weakEndpoints = ri.HasValue || N == 0;
+                        NPTypeCode edgeType = weakEndpoints ? NPTypeCode.Double : FloatPromoteBinType(cols[i].typecode);
+                        edges[i] = HistogramLinspace(smin, smax, nb + 1, edgeType, edgeType);
+                    }
                 }
 
                 nbin[i] = (int)edges[i].size + 1; // +1 for an outlier bin on each end (shared low+high span)

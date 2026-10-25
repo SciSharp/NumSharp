@@ -768,6 +768,48 @@ public class np_histogram_Tests
     }
 
     /// <summary>
+    ///     A complex column runs NumPy's same statements in complex128: its lexicographic min / max are the outer edges
+    ///     (complex scalars), so the count edges are a complex128 linspace, the search and the rightmost-edge test are
+    ///     lexicographic, and the density divides by complex widths (a complex H). A range's Python floats keep the edges
+    ///     float64; a non-finite part is NumPy's complex-printed refusal. NumPy 2.4.2's answers; the edges used to be the real
+    ///     parts' float64 linspace.
+    /// </summary>
+    [TestMethod]
+    public void DD_ComplexColumn_ComplexEdges()
+    {
+        var z = np.array(new[] { new Complex(1, 2), new Complex(-1, 0.5), new Complex(3, -1), new Complex(1, 2), Complex.Zero, new Complex(2, 0) });
+        var (h, e) = np.histogramdd(z, 3);
+        e[0].typecode.Should().Be(NPTypeCode.Complex);
+        e[0].ToArray<Complex>().Should().Equal(new Complex(-1, 0.5), new Complex(0.33333333333333326, 0),
+            new Complex(1.6666666666666665, -0.5), new Complex(3, -1));
+        Eq(h, new[] { 2.0, 2.0, 2.0 });
+
+        (h, e) = np.histogramdd(new[] { z, np.real(z) }, 2);
+        Eq(h, new[] { 2.0, 0.0, 0.0, 4.0 });
+        e[1].ToArray<Complex>().Should().Equal(new Complex(-1, 0), new Complex(1, 0), new Complex(3, 0));
+
+        (h, e) = np.histogramdd(z, 2, new (double, double)?[] { (0, 2) });
+        e[0].typecode.Should().Be(NPTypeCode.Double);
+        Eq(e[0], new[] { 0.0, 1.0, 2.0 });
+        Eq(h, new[] { 1.0, 3.0 });
+
+        (h, _) = np.histogramdd(z, new[] { np.array(new[] { -1.0, 0.0, 1.0, 3.0 }) });
+        Eq(h, new[] { 1.0, 1.0, 4.0 });
+
+        (h, _) = np.histogramdd(z, 2, density: true);
+        h.typecode.Should().Be(NPTypeCode.Complex);
+        h.ToArray<Complex>().Should().Equal(new Complex(0.1461187214611872, 0.0547945205479452),
+            new Complex(0.2922374429223744, 0.1095890410958904));
+
+        var (h2, xe, _) = np.histogram2d(z, z, 2);
+        Eq(h2, new[] { 2.0, 0.0, 0.0, 4.0 });
+        xe.ToArray<Complex>().Should().Equal(new Complex(-1, 0.5), new Complex(1, -0.25), new Complex(3, -1));
+
+        ((Action)(() => np.histogramdd(np.array(new[] { new Complex(1, 1), new Complex(double.PositiveInfinity, 0.5) }), 2)))
+            .Should().Throw<ValueError>().WithMessage("autodetected range of [(1+1j), (inf+0.5j)] is not finite");
+    }
+
+    /// <summary>
     ///     histogram2d's bins of a length other than 1 or 2 are NumPy's <c>xedges = yedges = asarray(bins)</c>: ONE array for
     ///     both dimensions (the same object), a list converted by array coercion. A list of numbers is the shared edges (ints
     ///     and a bool give int64); a count beside an edge array is the coercion's inhomogeneous ValueError, raised before the
