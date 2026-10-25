@@ -14,8 +14,8 @@ namespace NumSharp.Tests
     ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9); then the summation
     ///     orders np.sum's routes still miss (an axis sum over a reversed view, group 10; the flat sum of a broadcast
     ///     operand, group 11; an axis sum of a broadcast operand, group 12), the engine's flat mean of a broadcast
-    ///     operand ignoring <c>dtype=</c> (group 13), and np.average over a tuple axis reducing one axis at a time
-    ///     (group 14). Each test asserts NumPy
+    ///     operand ignoring <c>dtype=</c> (group 13), np.average over a tuple axis reducing one axis at a time
+    ///     (group 14), and which NaN an axis sum along an outer axis keeps (group 15). Each test asserts NumPy
     ///     2.4.2's answer — dtype, shape and the raw bits of every element — so it FAILS while the bug lives and passes
     ///     once it is fixed. Remove <c>[OpenBugs]</c> from a test when its path is fixed, and move the test next to the
     ///     function's own tests.
@@ -678,6 +678,39 @@ namespace NumSharp.Tests
             Check(fails, "average (0,1)", () => np.average(a, new[] { 0, 1 }), "float64 () c0f49029c6ff513c");
             Check(fails, "average (0,1) weighted", () => np.average(a, new[] { 0, 1 }, w), "float64 () c0f5f8e28597b5a4");
             AssertNoMismatch(fails, "NumPy's average is one add.reduce over the whole axis set");
+        }
+
+        // ======================================================================================================
+        //  GROUP 15 — an AXIS sum along an outer axis keeps the accumulator's NaN; NumPy's add keeps the new row's.
+        // ======================================================================================================
+
+        /// <summary>
+        ///     <c>np.sum(h, axis=0)</c> of two rows whose first column holds a NaN in both must return the SECOND row's
+        ///     NaN: NumPy reduces an outer axis with the elementwise add loop, <c>out = out + h[k]</c> per row from the
+        ///     <c>+0.0</c> identity, and the win-amd64 add keeps its second operand's NaN when both are NaN. NumSharp's slab
+        ///     fold keeps the accumulator's, so a negative NaN in row 0 and a positive one in row 1 sum to the negative NaN
+        ///     where NumPy returns the positive (float32 and float64 alike).
+        /// </summary>
+        /// <remarks>
+        ///     Found by np.trapezoid's random differential (2026-10-25, plan <c>docs/plans/np-layer-dtype-logic.md</c> P2):
+        ///     once trapezoid multiplied the spacing first (NumPy's order, commit 6b535945), its half kept the integrand's
+        ///     negative NaN above the spacing's positive one, and the sum along axis 0 returned the negative NaN. The value
+        ///     is NaN either way and the fuzz oracle tokenizes float NaN, so only a raw-bit comparison sees it. Fix: give the
+        ///     slab fold's add the explicit NaN priority the add kernels carry (<c>DirectILKernelGenerator.NaNOperandOrder.cs</c>);
+        ///     np.mean and the variance's sums inherit it. Group 8 is the flat sum's form of the same NaN choice.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Sum_OuterAxis_KeepsTheLaterRowsNaN()
+        {
+            float negNan = BitConverter.Int32BitsToSingle(unchecked((int)0xffc00000));
+            float posNan = BitConverter.Int32BitsToSingle(0x7fc00000);
+            var h32 = np.array(new[] { negNan, 1f, 2f, posNan, 3f, 4f }).reshape(2, 3);
+            var h64 = h32.astype(np.float64);
+            var fails = new List<string>();
+            Check(fails, "sum f32 axis 0", () => np.sum(h32, 0), "float32 (3,) 7fc00000 40800000 40c00000", rawNaN: true);
+            Check(fails, "sum f64 axis 0", () => np.sum(h64, 0),
+                "float64 (3,) 7ff8000000000000 4010000000000000 4018000000000000", rawNaN: true);
+            AssertNoMismatch(fails, "NumPy's outer-axis sum is out = out + h[k], whose add keeps the new row's NaN");
         }
     }
 }
