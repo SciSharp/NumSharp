@@ -160,7 +160,9 @@ namespace NumSharp
                 void* keyPtr = (void*)vTyped.Address;
                 void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
                 long* retPtr = (long*)output.Address;
-                kernel(arrPtr, aP.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr);
+                // The kernel stops at the first sorter entry outside the haystack it reaches (argbinsearch's -1).
+                if (kernel(arrPtr, aP.size, arrStride, keyPtr, vTyped.size, sorterPtr, retPtr) < 0)
+                    throw new ValueError("Sorter index out of range.");
             }
 
             return output;
@@ -182,7 +184,9 @@ namespace NumSharp
                 long arrStride = contigA ? elemSize : a.Shape.strides[0] * elemSize;
                 void* arrPtr = (void*)((byte*)a.Storage.Address + a.Shape.offset * elemSize);
                 void* sorterPtr = sorterTyped is null ? null : (void*)sorterTyped.Address;
-                kernel(arrPtr, a.size, arrStride, keyBuf, 1, sorterPtr, retBuf);
+                // The kernel stops at the first sorter entry outside the haystack it reaches (argbinsearch's -1).
+                if (kernel(arrPtr, a.size, arrStride, keyBuf, 1, sorterPtr, retBuf) < 0)
+                    throw new ValueError("Sorter index out of range.");
                 result = retBuf[0];
             }
             return result;

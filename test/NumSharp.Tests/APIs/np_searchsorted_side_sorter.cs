@@ -192,6 +192,35 @@ public class NpSearchsortedSideSorterTests
         np.searchsorted(a, 2, sorter: sorter);
     }
 
+    /// <summary>
+    ///     A sorter entry outside the haystack is NumPy's <c>ValueError: Sorter index out of range.</c> when the bisection
+    ///     reaches it (argbinsearch checks each entry it reads before the entry addresses the haystack), and never read, so
+    ///     never an error, when it does not. NumSharp's kernel read the haystack at the entry: memory outside it, an answer
+    ///     that changed from run to run. NumPy 2.4.2's answers for every overload, both sides, an int32 sorter, a strided
+    ///     haystack and a huge index.
+    /// </summary>
+    [TestMethod]
+    public void Sorter_IndexOutsideTheHaystack_IsNumPysValueErrorWhenReached()
+    {
+        var a = np.array(new long[] { 10, 20, 30, 40 });
+        var oob = np.array(new long[] { 0, 1, 2, 4 });
+        const string text = "Sorter index out of range.";
+        void Refused(Action call) => new Action(call).Should().Throw<ValueError>().WithMessage(text);
+
+        Refused(() => np.searchsorted(a, 35, sorter: oob));
+        Refused(() => np.searchsorted(a, 35.0, sorter: oob));
+        Refused(() => np.searchsorted(a, np.array(new long[] { 15, 35 }), sorter: oob));
+        Refused(() => np.searchsorted(a, 30, side: "right", sorter: oob));
+        Refused(() => np.searchsorted(a, 35, sorter: np.array(new long[] { 0, 1, 2, -1 })));
+        Refused(() => np.searchsorted(a, 35, sorter: np.array(new long[] { 0, 1, 2, 1L << 40 })));
+        Refused(() => np.searchsorted(a, 35, sorter: np.array(new[] { 0, 1, 2, 4 })));
+        Refused(() => np.searchsorted(np.array(new long[] { 10, 0, 20, 0, 30, 0, 40, 0 })["::2"], 35, sorter: oob));
+
+        // Not reached: the bisection for 15 reads sorter[2], sorter[1] and sorter[0] only.
+        np.searchsorted(a, 15, sorter: oob).Should().Be(1);
+        np.searchsorted(a, np.array(new long[] { 15, 12 }), sorter: oob).ToArray<long>().Should().Equal(1L, 1L);
+    }
+
     #endregion
 
     #region Multidim 'a' validation
