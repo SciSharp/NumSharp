@@ -768,6 +768,52 @@ public class np_histogram_Tests
     }
 
     /// <summary>
+    ///     histogram2d's bins of a length other than 1 or 2 are NumPy's <c>xedges = yedges = asarray(bins)</c>: ONE array for
+    ///     both dimensions (the same object), a list converted by array coercion. A list of numbers is the shared edges (ints
+    ///     and a bool give int64); a count beside an edge array is the coercion's inhomogeneous ValueError, raised before the
+    ///     sample's own refusal of two 2-D arrays; a list of edge arrays stacks into a 2-D array, which histogramdd refuses
+    ///     per dimension (or the sample first); an empty list is an empty edge array (NumPy 2.4.2's answers). Lists used to be
+    ///     refused with NumSharp's own text, and a <c>double[]</c> was converted twice.
+    /// </summary>
+    [TestMethod]
+    public void Histogram2D_SharedBinsList_IsNumPysAsarray()
+    {
+        var x = np.array(new[] { 0.5, 1.5, 2.5 });
+        var y = np.array(new[] { 1.0, 2.0, 0.2 });
+        var F = np.array(new[] { -2.0, 0.0, 1.5, 5.0 });
+        var m = np.arange(6.0).reshape(2, 3);
+
+        var (h, xe, ye) = np.histogram2d(x, y, new object[] { 0.0, 1.5, 3.0 });
+        h.shape.Should().Equal(new long[] { 2, 2 });
+        Eq(h, new[] { 1.0, 0.0, 1.0, 1.0 });
+        Eq(xe, new[] { 0.0, 1.5, 3.0 });
+        ReferenceEquals(xe, ye).Should().BeTrue();
+
+        (h, xe, ye) = np.histogram2d(x, y, new double[] { 0.0, 1.5, 3.0 });
+        Eq(h, new[] { 1.0, 0.0, 1.0, 1.0 });
+        ReferenceEquals(xe, ye).Should().BeTrue();
+
+        (h, xe, _) = np.histogram2d(x, y, new object[] { 0, 1, 2, 3 });
+        xe.typecode.Should().Be(NPTypeCode.Int64);
+        Eq(h, new[] { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0 });
+        (h, xe, _) = np.histogram2d(x, y, new object[] { true, 2, 3 });
+        xe.typecode.Should().Be(NPTypeCode.Int64);
+        Eq(h, new[] { 0.0, 1.0, 0.0, 0.0 });
+
+        const string ragged = "setting an array element with a sequence. The requested array has an inhomogeneous shape after " +
+                              "1 dimensions. The detected shape was (3,) + inhomogeneous part.";
+        ((Action)(() => np.histogram2d(x, y, new object[] { 3, F, 3 }))).Should().Throw<ValueError>().WithMessage(ragged);
+        ((Action)(() => np.histogram2d(m, m, new object[] { 3, F, 3 }))).Should().Throw<ValueError>().WithMessage(ragged);
+        ((Action)(() => np.histogram2d(x, y, new NDArray[] { F, F, F }))).Should().Throw<ValueError>()
+            .WithMessage("`bins[0]` must be a scalar or 1d array");
+        ((Action)(() => np.histogram2d(m, m, new NDArray[] { F, F, F }))).Should().Throw<ValueError>()
+            .WithMessage("too many values to unpack (expected 2)");
+        ((Action)(() => np.histogram2d(x, y, new NDArray[0]))).Should().Throw<IndexError>()
+            .WithMessage("index -1 is out of bounds for axis 0 with size 0");
+        ((Action)(() => np.histogram2d(x, y, new object[] { "a", 1, 2 }))).Should().Throw<NotSupportedException>();
+    }
+
+    /// <summary>
     ///     histogram2d is <c>histogramdd([x, y])</c>: x and y of one length but different shapes are refused by the stacking
     ///     (NumPy 2.4.2: a <c>(2, 3)</c> x beside a <c>(2, 4)</c> or a <c>(2,)</c> y is inhomogeneous after 2 dimensions,
     ///     <c>(2, 2)</c>).

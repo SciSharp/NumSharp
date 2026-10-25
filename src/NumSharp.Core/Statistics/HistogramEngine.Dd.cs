@@ -720,9 +720,15 @@ namespace NumSharp.Statistics
                 throw new ValueError("x and y must have the same length.");
 
             int n = BinsSeqLength(bins);
-            object ddBins = (n != 1 && n != 2)
-                ? new NDArray[] { AsEdgeArray(bins), AsEdgeArray(bins) } // xedges = yedges = asarray(bins)
-                : bins;
+            object ddBins = bins;
+            if (n != 1 && n != 2)
+            {
+                // `xedges = yedges = asarray(bins)`: ONE conversion, the same array for both dimensions (NumPy returns that
+                // one object as xedges and as yedges). It runs before histogramdd, so its own refusal — a ragged list's
+                // inhomogeneous shape — comes before the sample's.
+                NDArray shared = AsEdgeArray(bins);
+                ddBins = new NDArray[] { shared, shared };
+            }
 
             // `histogramdd([x, y], ...)`: the pair is a sequence sample, so its stacking statement runs on it — two arrays of
             // one length but different shapes are refused there, and two 2-D arrays of one shape leave three values to unpack.
@@ -753,17 +759,54 @@ namespace NumSharp.Statistics
             _ => throw new ValueError("`bins` must be an int or a sequence")
         };
 
-        /// <summary>Coerce a shared-edge bin argument to an <see cref="NDArray"/> of edges.</summary>
+        /// <summary>
+        ///     NumPy's <c>asarray(bins)</c> for histogram2d's shared edges: an <see cref="NDArray"/> is itself, a typed C# array
+        ///     is an array of its dtype, and an <c>NDArray[]</c> / <c>object[]</c> is a Python list, converted by array
+        ///     coercion — stacked when its entries have one shape (a list of edge arrays is a 2-D array, which histogramdd
+        ///     then refuses per dimension), refused with NumPy's inhomogeneous-shape ValueError when they do not (a count
+        ///     beside an edge array).
+        /// </summary>
         /// <param name="bins">histogram2d's bin argument, when its length is not 1 or 2.</param>
-        /// <returns>The argument itself for an <see cref="NDArray"/>, else a new array of the C# array's values.</returns>
-        /// <exception cref="ValueError">Any other C# form (<c>shared `bins` must be a 1-D edge array</c>).</exception>
+        /// <returns>The argument itself for an <see cref="NDArray"/>, else a new array.</returns>
+        /// <exception cref="ValueError">A list whose entries have different shapes (<c>setting an array element with a
+        ///     sequence. The requested array has an inhomogeneous shape after N dimensions. ...</c>), or a C# form NumPy has no
+        ///     counterpart for (<c>shared `bins` must be a 1-D edge array</c>).</exception>
+        /// <exception cref="NotSupportedException">A list holding text or None: NumPy's array is then a str or object one,
+        ///     which NumSharp's histogram edges do not model.</exception>
         private static NDArray AsEdgeArray(object bins) => bins switch
         {
             NDArray nd => nd,
             double[] a => np.array(a),
             int[] a => np.array(a),
             long[] a => np.array(a),
+            NDArray[] or object[] => SharedEdgesFromList(bins),
             _ => throw new ValueError("shared `bins` must be a 1-D edge array")
         };
+
+        /// <summary>
+        ///     <c>np.asarray</c> of histogram2d's list of bins (an <c>NDArray[]</c> or <c>object[]</c>): array coercion's shape
+        ///     walk first, then the numeric array its entries promote to.
+        /// </summary>
+        /// <param name="list">The list.</param>
+        /// <returns>A new C-contiguous array (float64 <c>(0,)</c> for an empty list).</returns>
+        /// <exception cref="ValueError">Entries of different shapes: NumPy's inhomogeneous-shape text, which the walk raises
+        ///     before any entry's dtype is read.</exception>
+        /// <exception cref="NotSupportedException">An entry that is text (a str, bytes or a text array) or None.</exception>
+        private static NDArray SharedEdgesFromList(object list)
+        {
+            // The shape walk alone (PolySequence.NDim, array_coercion.c's update_shape): NumPy reports raggedness before it
+            // looks at what the entries hold.
+            PolySequence.NDim(list);
+            // A text array entry: the coercion's numeric fill cannot read it (NumPy's array is a str one, see below).
+            foreach (object item in PolySequence.Items(list))
+                if (item is NDArray a && Backends.Strings.NDStringUfuncs.IsText(a))
+                    throw StrOrObjectEdges();
+            // null: NumPy's str or object array (a str / None item anywhere in the list).
+            return PolySequence.ToArrayOrNonNumeric(list, out _) ?? throw StrOrObjectEdges();
+
+            static NotSupportedException StrOrObjectEdges() => new NotSupportedException(
+                "histogram2d's bins list holds text or None: NumPy's np.asarray(bins) makes it a str or object array, " +
+                "which NumSharp's histogram edges do not model");
+        }
     }
 }
