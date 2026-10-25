@@ -783,6 +783,46 @@ public class np_histogram_Tests
     }
 
     /// <summary>
+    ///     NumPy searches every dimension first and only then reads each rightmost edge (<c>edges[i][-1]</c>), so an empty edge
+    ///     array in any dimension raises <c>IndexError: index -1 is out of bounds for axis 0 with size 0</c> — with or
+    ///     without points, before the weights are read, for histogram2d too — unless another dimension's search refuses
+    ///     first: a StringDType sample against numeric edges is Python's comparison TypeError wherever the empty array sits
+    ///     (NumPy 2.4.2). One edge is legal (no bins). The fused search kernel used to run on the empty array and read the
+    ///     edge before its start.
+    /// </summary>
+    [TestMethod]
+    public void Error_DD_EmptyEdges_IsIndexErrorAfterEverySearch()
+    {
+        var e = np.zeros(new Shape(0), np.float64);
+        var f = np.array(new[] { 0.0, 1.0, 2.0 });
+        var s = np.array(new double[,] { { 0.5, 1.5 }, { 1.0, 0.2 } });
+        const string text = "index -1 is out of bounds for axis 0 with size 0";
+        foreach (var act in new Action[]
+                 {
+                     () => np.histogramdd(s, new NDArray[] { e, f }),
+                     () => np.histogramdd(s, new NDArray[] { f, e }),
+                     () => np.histogramdd(s, new NDArray[] { e, e }),
+                     () => np.histogramdd(np.zeros(new Shape(0, 2), np.float64), new NDArray[] { e, f }),
+                     () => np.histogramdd(s, new NDArray[] { e, f }, weights: np.ones(new Shape(5))),
+                     () => np.histogramdd(s, new NDArray[] { e, f }, density: true),
+                     () => np.histogram2d(np.array(new[] { 0.5, 1.0 }), np.array(new[] { 1.5, 0.2 }), new NDArray[] { e, f }),
+                 })
+            act.Should().Throw<IndexError>().WithMessage(text);
+
+        var t = np.array(new[] { "a", "b", "c", "d" }).astype(np.dtype("T")).reshape(2, 2);
+        foreach (var bins in new[] { new NDArray[] { e, f }, new NDArray[] { f, e } })
+            ((Action)(() => np.histogramdd(t, bins))).Should().Throw<TypeError>()
+                .WithMessage("'<' not supported between instances of 'float' and 'str'");
+        ((Action)(() => np.histogramdd(t, new NDArray[] { e, e }))).Should().Throw<IndexError>().WithMessage(text);
+        ((Action)(() => np.histogramdd(np.zeros(new Shape(0, 2), np.float64).astype(np.dtype("T")), new NDArray[] { e, f })))
+            .Should().Throw<IndexError>().WithMessage(text);
+
+        var (h, edges) = np.histogramdd(s, new NDArray[] { np.array(new[] { 1.0 }), f });
+        h.shape.Should().Equal(new long[] { 0, 2 });
+        Eq(edges[0], new[] { 1.0 });
+    }
+
+    /// <summary>
     ///     Without points, bincount returns its zeros before it reads the weights, so weights of any shape or dtype pass and
     ///     H is all zeros (NumPy 2.4.2: <c>np.histogramdd(np.zeros((0, 2)), bins=2, weights=np.ones((3, 3)))</c>, and with a
     ///     0-d text weight).

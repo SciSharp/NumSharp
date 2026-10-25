@@ -49,6 +49,9 @@ namespace NumSharp.Statistics
         /// <exception cref="ValueError">With points, 1-D weights of another length than the points (bincount's
         ///     <c>The weights and list don't have the same length.</c>).</exception>
         /// <exception cref="InvalidCastException">With points, complex weights (bincount's safe cast to float64).</exception>
+        /// <exception cref="IndexError">An empty edge array in any dimension, with or without points: NumPy's
+        ///     <c>edges[i][-1]</c> (<c>index -1 is out of bounds for axis 0 with size 0</c>), read after every dimension's
+        ///     search, so a search's refusal comes first.</exception>
         /// <exception cref="TypeError">A scalar bin that is not an integer (<c>`bins[i]` must be an integer, when a scalar</c>)
         ///     or that does not compare with 1 (text: <see cref="DdScalarBinBelowOne"/>). Text samples: the column's
         ///     <c>min()</c> (<c>minimum</c> has no text loop, named with the STACKED dtype) when the dimension has a scalar bin
@@ -179,21 +182,29 @@ namespace NumSharp.Statistics
             // A fused SIMD/binary search-index kernel does this in one pass per dimension (the general
             // np.searchsorted has heavy per-key overhead — the whole dd hot loop otherwise); Complex edges
             // (no ordering) fall back to the composed searchsorted + on-edge subtract.
+            //
+            // NumPy writes these as two loops, and their order is observable: `Ncount = tuple(np.searchsorted(edges[i],
+            // sample[:, i], side='right') for i in range(D))` searches EVERY dimension first, and only then `for i in
+            // range(D): on_edge = (sample[:, i] == edges[i][-1])` reads each rightmost edge. So a search's refusal in any
+            // dimension (StringDType text against numeric edges) wins over an EMPTY edge array's IndexError, which
+            // `edges[i][-1]` raises in the second loop — with or without points.
             var Ncount = new NDArray[D];
+            // The dimensions whose search left the rightmost-edge correction to the second loop (text and complex columns);
+            // the fused kernel's dimensions are complete after the first.
+            var needsOnEdge = new bool[D];
             for (int i = 0; i < D; i++)
             {
                 if ((textSample || Backends.Strings.NDStringUfuncs.IsVString(cols[i])) && N > 0)
                 {
-                    // A text column: NumPy's searchsorted in the text descriptor common to the column and the edges, then the
-                    // rightmost-edge comparison (text against a number compares unequal everywhere, as NumPy's == answers).
-                    // The temporaries are this iteration's own (only the difference is kept).
-                    using NDArray textIdx = np.searchsorted(edges[i], cols[i], "right");
-                    using NDArray lastEdge = edges[i]["-1"];
-                    using NDArray textOnEdge = cols[i] == lastEdge;
-                    using NDArray onEdge = textOnEdge.astype(NPTypeCode.Int64);
-                    Ncount[i] = textIdx - onEdge;
+                    // A text column: NumPy's searchsorted in the text descriptor common to the column and the edges.
+                    Ncount[i] = np.searchsorted(edges[i], cols[i], "right");
+                    needsOnEdge[i] = true;
                     continue;
                 }
+                // An empty edge array: its search finds nothing, and the second loop's `edges[i][-1]` refuses it. The fused
+                // kernel must not run on it: it reads the last edge, which an empty array does not have.
+                if (edges[i].size == 0)
+                    continue;
                 NPTypeCode cmp = promote_types(edges[i].typecode, cols[i].typecode);
                 var searchIdx = DirectILKernelGenerator.GetHistogramSearchIndexKernel(cmp);
                 if (searchIdx != null)
@@ -206,10 +217,23 @@ namespace NumSharp.Statistics
                 }
                 else
                 {
-                    NDArray idx = np.searchsorted(edges[i], cols[i], "right");
-                    NDArray onEdge = cols[i] == edges[i]["-1"];
-                    Ncount[i] = idx - onEdge.astype(NPTypeCode.Int64);
+                    Ncount[i] = np.searchsorted(edges[i], cols[i], "right");
+                    needsOnEdge[i] = true;
                 }
+            }
+            for (int i = 0; i < D; i++)
+            {
+                // `edges[i][-1]`, for every dimension: an empty edge array raises NumPy's IndexError here ("index -1 is out of
+                // bounds for axis 0 with size 0").
+                using NDArray lastEdge = edges[i]["-1"];
+                if (!needsOnEdge[i])
+                    continue;
+                // Text against a number compares unequal everywhere, as NumPy's == answers. The search result and the masks
+                // are this dimension's own temporaries: only the difference is kept.
+                using NDArray found = Ncount[i];
+                using NDArray onEdge = cols[i] == lastEdge;
+                using NDArray onEdge64 = onEdge.astype(NPTypeCode.Int64);
+                Ncount[i] = found - onEdge64;
             }
 
             // Flatten the D bin numbers into one index into the padded histogram, tally, reshape, drop outliers.
