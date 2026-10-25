@@ -32,9 +32,10 @@
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
 // and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
 // operand named lhs / rhs / left / right / x / y / other, the histogram family's bins as an int, an estimator name, an
-// array or a double[], and its (lower, upper) range, and np.histogramdd / np.histogram2d's sample as a sequence of columns,
-// their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges); an overload with a
-// required parameter of another kind is reported once as SKIP. A result that is a struct of arrays (np.histogram's
+// array or a double[], and its (lower, upper) range, np.histogramdd / np.histogram2d's sample as a sequence of columns,
+// their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, and np.trapezoid's
+// optional sample points x and its spacing dx); an overload with a required parameter of another kind is reported once as
+// SKIP. An int axis starts from its default when it has one. A result that is a struct of arrays (np.histogram's
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field.
 using System;
 using System.Collections;
@@ -178,6 +179,9 @@ static class Snapshot
         // / object[], and the per-dimension ranges. Their values depend on the sample's dimension count, so they are built
         // from the operand (see MakeDd) like the weights.
         SampleSeq, BinsInts, BinsArrays, BinsObjects, RangeArray,
+        // np.trapezoid: the sample points x (an optional array whose default, null, means "evenly spaced by dx", so its base
+        // is null and its variants are built from the operand like a second operand's) and the uniform spacing dx.
+        Spacing, Dx,
         Default, Unsupported,
     }
 
@@ -199,6 +203,9 @@ static class Snapshot
                 : n == "out" ? Role.Out
                 : n == "weights" ? Role.Weights
                 : n == "where" ? Role.Where
+                // np.trapezoid's x is optional (null = evenly spaced), unlike a binary function's second operand x: tested
+                // before the operand names so its base stays the default.
+                : n == "x" && p.HasDefaultValue ? Role.Spacing
                 : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
@@ -212,6 +219,7 @@ static class Snapshot
         if (n == "bins" && t == typeof(NDArray[])) return Role.BinsArrays;
         if (n == "bins" && t == typeof(object[])) return Role.BinsObjects;
         if (n == "range" && t == typeof((double, double)?[])) return Role.RangeArray;
+        if (n == "dx" && t == typeof(double)) return Role.Dx;
         if (n == "q" && t == typeof(double)) return Role.QDouble;
         if (n == "q" && t == typeof(double[])) return Role.QDoubles;
         if (n == "q" && t == typeof(long)) return Role.QLong;
@@ -257,6 +265,26 @@ static class Snapshot
                 // The base is the operand's own copy (MakeOperand2 "same"); the variants follow from the operand.
                 Add("same", () => null);
                 break;
+            case Role.Spacing:
+                // The base is the default (no sample points); the variants follow from the operand (MakeSpacing).
+                Add("null", () => null);
+                break;
+            case Role.Dx:
+            {
+                // The default first, then a fraction, a negative spacing, a negative zero (the sign of a zero area), and the
+                // two non-finite values (a NaN spacing, an infinite one: inf * 0 is NaN). The NaN is Python's float('nan'),
+                // the positive quiet NaN: .NET's double.NaN is negative, and the sign travels into the result's bits.
+                double dx0 = p.HasDefaultValue && p.DefaultValue is double ddx ? ddx : 1.0;
+                Add(dx0.ToString("R", CultureInfo.InvariantCulture), () => dx0);
+                foreach (var (label, dx) in new[]
+                         {
+                             ("0.5", 0.5), ("-2", -2.0), ("-0", -0.0), ("nan", BitConverter.Int64BitsToDouble(0x7FF8000000000000)),
+                             ("inf", double.PositiveInfinity),
+                         })
+                    if (BitConverter.DoubleToInt64Bits(dx) != BitConverter.DoubleToInt64Bits(dx0))
+                        Add(label, () => dx);
+                break;
+            }
             case Role.QArray:
                 Add("0.5", () => np.array(0.5));
                 Add("[0.25,0.75]", () => np.array(new[] { 0.25, 0.75 }));
@@ -287,9 +315,16 @@ static class Snapshot
                     Add(a.ToString(CultureInfo.InvariantCulture), () => (int?)a);
                 break;
             case Role.AxisInt:
-                foreach (var a in new[] { 0, 1, -1, 5 })
-                    Add(a.ToString(CultureInfo.InvariantCulture), () => a);
+            {
+                // The default first when there is one (np.trapezoid's -1), else 0, so phase A calls every operand with the
+                // axis a caller omits; then both signs of every axis of the pool's ranks and one out of range.
+                int a0 = p.HasDefaultValue && p.DefaultValue is int da ? da : 0;
+                Add(a0.ToString(CultureInfo.InvariantCulture), () => a0);
+                foreach (var a in new[] { 0, 1, -1, 2, -2, -3, 5 })
+                    if (a != a0)
+                        Add(a.ToString(CultureInfo.InvariantCulture), () => a);
                 break;
+            }
             case Role.IntArg:
             {
                 // The default first (the base value), then values on both sides of it and one out of range.
@@ -440,6 +475,7 @@ static class Snapshot
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
             Role.Operand2 => Operand2VariantLabels.Length - 1,
+            Role.Spacing => SpacingVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -477,6 +513,14 @@ static class Snapshot
     /// <summary>The second-operand variants, built from the operand (see <see cref="MakeOperand2"/>); the first is the
     ///     base.</summary>
     private static readonly string[] Operand2VariantLabels = { "same", "int32", "float64", "U5", "T", "0d", "row", "badshape" };
+
+    /// <summary>np.trapezoid's sample-point variants, built from the operand (see <see cref="MakeSpacing"/>); the first,
+    ///     null, is the base.</summary>
+    private static readonly string[] SpacingVariantLabels =
+    {
+        "null", "same", "int32", "float64", "U5", "T", "0d", "row", "col", "decr", "badlen", "bool", "complex128", "float16",
+        "special", "highrank", "f", "bcast",
+    };
 
     /// <summary>The where= variants, built from the operand (see <see cref="MakeWhere"/>).</summary>
     private static readonly string[] WhereVariantLabels = { "mask", "row", "allfalse", "false0d", "int", "wrongshape" };
@@ -516,6 +560,7 @@ static class Snapshot
             Role.Weights => WeightVariantLabels[v - 1],
             Role.Where => WhereVariantLabels[v - 1],
             Role.Operand2 => Operand2VariantLabels[v],
+            Role.Spacing => SpacingVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -554,6 +599,9 @@ static class Snapshot
                         break;
                     case Role.Operand2:
                         argv[p] = MakeOperand2(Operand2VariantLabels[v], operand);
+                        break;
+                    case Role.Spacing:
+                        argv[p] = MakeSpacing(SpacingVariantLabels[v], operand);
                         break;
                     case Role.SampleSeq:
                     case Role.BinsInts:
@@ -814,6 +862,65 @@ static class Snapshot
             case "row": return Ramp("int32", dims.Length == 0 ? 1 : dims[dims.Length - 1]);
             case "badshape": return Ramp("int32", 7);
             default: throw new ArgumentException("unknown second-operand variant " + label);
+        }
+    }
+
+    /// <summary>
+    ///     Builds np.trapezoid's sample points for an operand: N-D points of its shape (one per sample, differenced along the
+    ///     axis), 1-D points along one axis (broadcast over the others), and the forms NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant: <c>same</c> (a copy of the operand: points of its own dtype, text for a text
+    ///     operand), <c>int32</c> / <c>float64</c> / <c>float16</c> / <c>complex128</c> (increasing points of the operand's
+    ///     shape with uneven steps), <c>U5</c> / <c>T</c> (text of the operand's shape: diff's subtract refuses it),
+    ///     <c>0d</c> (a 0-d 2.0: diff's "at least one dimensional"), <c>row</c> / <c>col</c> / <c>decr</c> (1-D points as long
+    ///     as the last / the first axis; decreasing ones integrate backwards), <c>badlen</c> (1-D points of seven, which no
+    ///     axis of the pool has), <c>bool</c> (bool points of the operand's shape: NumPy's diff is a not_equal),
+    ///     <c>special</c> (float64 points of the operand's shape with NaN, signed zeros and infinities), <c>highrank</c>
+    ///     (points with one more leading axis: the product broadcasts to it), <c>f</c> (float64 points of the operand's
+    ///     shape in F order: they vote on the reduction input's layout), <c>bcast</c> (1-D points broadcast to the operand's
+    ///     shape, a stride-0 view, which abstains from the vote on the axes it repeats).</param>
+    /// <param name="operand">The operand.</param>
+    /// <returns>A fresh array, or null for the base label.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeSpacing(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        long last = dims.Length == 0 ? 1 : dims[^1];
+        long first = dims.Length == 0 ? 1 : dims[0];
+        var shape = new Shape(dims);
+        // Increasing points with uneven steps (0, 0.5, 1.5, 2, 3, 3.5, ...: steps 0.5 and 1 in turn), so the products of
+        // the spacing and the sums differ from one interval to the next.
+        NDArray Points(long count) =>
+            np.array(Enumerable.Range(0, (int)count).Select(i => i * 0.75 - (i % 2 == 0 ? 0.0 : 0.25)).ToArray());
+        NDArray Text(string dt) => size == 0
+            ? np.empty(shape, np.dtype(dt))
+            : np.array(Enumerable.Range(0, (int)size).Select(i => (i % 3).ToString(CultureInfo.InvariantCulture)).ToArray())
+                .astype(np.dtype(dt)).reshape(shape);
+        switch (label)
+        {
+            case "null": return null;
+            case "same": return operand.copy();
+            case "int32":
+                return np.array(Enumerable.Range(0, (int)size).Select(i => (long)(2 * i - i % 3)).ToArray()).astype(np.dtype("int32")).reshape(shape);
+            case "float64": return Points(size).reshape(shape);
+            case "U5": return Text("U5");
+            case "T": return Text("T");
+            case "0d": return np.array(2.0);
+            case "row": return Points(last);
+            case "col": return Points(first);
+            case "decr": return np.array(Enumerable.Range(0, (int)last).Select(i => 4.0 - i * 0.75 - (i % 2 == 0 ? 0.0 : 0.25)).ToArray());
+            case "badlen": return Points(7);
+            case "bool": return np.array(Enumerable.Range(0, (int)size).Select(i => i % 3 != 1).ToArray()).reshape(shape);
+            case "complex128":
+                return np.array(Enumerable.Range(0, (int)size).Select(i => new Complex(i * 0.75, (i % 3) * 0.5)).ToArray()).reshape(shape);
+            case "float16": return Points(size).astype(np.dtype("float16")).reshape(shape);
+            case "special": return np.array(Special.Take((int)size).ToArray()).reshape(shape);
+            case "highrank": return Points(2 * size).reshape(new Shape(new long[] { 2 }.Concat(dims).ToArray()));
+            case "f": return np.asfortranarray(Points(size).reshape(shape));
+            case "bcast": return dims.Length == 0 ? np.array(2.0) : np.broadcast_to(Points(last), shape);
+            default: throw new ArgumentException("unknown sample-point variant " + label);
         }
     }
 
