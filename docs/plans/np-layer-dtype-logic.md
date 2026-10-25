@@ -492,6 +492,43 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-25, P2's fourth family: np.searchsorted moved into `TensorEngine.SearchSorted`, the divergences around the
+  move fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the
+  snapshot (44,676 calls over np.searchsorted / NDArray.searchsorted), `twin_searchsorted.py` (the tool's haystacks, keys,
+  sides and sorters rebuilt in NumPy; a scalar key's index, an array result's dtype, shape, C / F flags and SHA-256, or
+  the exception's type and text; a C# int / double key as NumPy's Python int / float), `ab_verdict.py --twin
+  twin_searchsorted`, and a NumPy probe per fix:
+  - `24ad50ae` the snapshot tool reaches np.searchsorted's keys (15 arrays built from the operand, or a C# int / double
+    key), its side (both names and the three forms NumPy refuses) and its sorter (the operand's argsort in four dtypes and
+    the forms NumPy refuses, out-of-range entries included), over pools of 1-D haystacks (sorted, strided, reversed,
+    unsorted, empty, one 2-D). Its first two runs were not identical (46 lines): the next fix.
+  - `5d409ad1` (D4, memory safety) the search kernel checks every sorter entry its bisection reaches, as NumPy's
+    argbinsearch does: an entry outside the haystack is NumPy's `ValueError: Sorter index out of range.`, where the kernel
+    read the haystack at it. 832 snapshot lines change: 788 to NumPy's outcome, 44 decimal (no NumPy dtype).
+  - `67293fac` (D4) keys and a sorter that are views at an offset (an np.split child: C-contiguous, Shape.offset > 0)
+    are read from the view; the kernel calls passed the storage's start. The array-object oracle's VA01 (4 cases) and the
+    relayout tiers' RL01 (15: np.digitize and np.isin's complex / float16 route reach it through np.searchsorted) are
+    fixed: their cases return to their tiers, four `[OpenBugs]` pins become regression tests.
+  - `c6561f85` (D4) a char array meets StringDType as NumPy's uint16 does: the object search reads a char element as a
+    Python int (`VStringSearch.ReadObjects`), so `'<' not supported between instances of 'int' and 'str'` where the
+    element was a one-character str. 10 snapshot lines change, all 10 to NumPy's outcome.
+  - `01a71fc9` the move (D1: np.searchsorted is ndarray.searchsorted, i.e. `PyArray_SearchSorted` in C, so
+    `TensorEngine` members). Three members, one per key form (a C# int, a C# double, an NDArray of keys): the scalar
+    forms search from the stack in ~50 ns per call, the array form with a 0-d key takes ~740 ns. Every private member of
+    np.searchsorted.cs into `Backends/Default/Sorting/Default.SearchSorted.cs`, statement for statement, except two
+    statements written in place (same answers): `promote_types` over type codes (`SearchSortedCommonType`: no up-call,
+    R2 unchanged) and np.insert's private `IsIntegerIndexDtype` (`IsSearchSorterIntegerDtype`). 44,676 calls
+    byte-identical; R1 np.searchsorted.cs 10 text / 23 numeric lines -> out of the allowlist.
+  - No step 2: the moved routes already run NumPy's statements (`TextSearch` / `VStringSearch` are NumPy's binary search
+    over its descriptors), there is no replayed answer to remove.
+  - Evidence at `01a71fc9`: the twin agrees with NumPy 2.4.2 on all 43,594 comparable snapshot lines (1,082 decimal
+    lines have no NumPy dtype); the scalar route costs 41-61 ns per call after the move (45-59 before).
+  - **Found for np.isin's family** (P2's list): np.isin's StringDType route reads a char test set's elements as strs
+    too (`np.isin(StringDType ['a', 'zz'], char ['a', 'b'])` is `[True, False]`; NumPy's uint16 gives `[False, False]`,
+    and `invert=True` `[True, True]`, probed). The same root cause as `c6561f85`, fixed with that family.
+  - At `01a71fc9`: NumSharp.Tests net10.0 20,549 passed / 11 skipped and net8.0 20,548 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed (Layering 6 / 6).
+  - Next in P2: `np.cov`, then the list's order.
 - **2026-10-25, P2's third family: np.trapezoid moved, its text route NumPy's statements, its spacing NumPy's first
   operand.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot
   (7,962 calls), `twin_trapezoid.py` (the tool's operands, sample points, spacings and axes rebuilt in NumPy; dtype,
