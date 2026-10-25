@@ -202,7 +202,11 @@ the NaN scans have no `TensorEngine` member at all.
 
 **Consequence.** For each family, D1 decides between a `TensorEngine` member and an internal operation class. New
 operation classes go under `Backends/Default/<Family>/`; existing ones (`QuantileEngine` in `Statistics/`, the `NDPoly*`
-classes in `Polynomial/Package/`) stay where they are, because moving files only adds conflicts.
+classes in `Polynomial/Package/`) stay where they are, because moving files only adds conflicts. **Correction
+(2026-10-25, P2):** an operation class whose statements call np.* functions (every P2 composition: NumPy's Python
+calls NumPy's functions) sits beside its facade instead (`Statistics/HistogramEngine`, `Math/TrapezoidEngine`), because
+ratchet R2 counts np.* calls against every file under `Backends/` and would grow; `Backends/Default/<Family>/` holds the
+ones that compose engine members only.
 
 ### C4. The engine calls back up into np.*
 
@@ -488,6 +492,39 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-25, P2's third family: np.trapezoid moved, its text route NumPy's statements, its spacing NumPy's first
+  operand.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot
+  (7,962 calls), `twin_trapezoid.py` (the tool's operands, sample points, spacings and axes rebuilt in NumPy; dtype,
+  shape, C / F flags and SHA-256 per line), `ab_verdict.py --twin twin_trapezoid`, and a random differential
+  (`rand_trap_gen.py` / `rand_trap_check.cs`: integrands of 13 dtypes in random views — transposed, stepped, reversed,
+  offset, broadcast —, points absent, 1-D or N-D in views of their own, broadcasting, of a higher rank, of a wrong length;
+  every spacing and axis; raw bits, flags and error texts; 24,000 cases over three seeds):
+  - `4bd797be` the snapshot tool reaches np.trapezoid's optional sample points x (null, then 17 forms built from the
+    operand) and its spacing dx (a fraction, negative, -0.0, NaN, inf); an int axis now starts from its default.
+  - `6fd84579` the move (D1: NumPy writes trapezoid in Python): the body and every private member of np.trapezoid.cs
+    into `Math/TrapezoidEngine.cs`, statement for statement; the facade keeps the matrix boundary and the null check.
+    7,962 calls byte-identical; R1 np.trapezoid.cs 9 text / 4 numeric lines -> out of the allowlist. Placement: beside
+    the facade, not under `Backends/Default/` as C3 says, because the moved statements call np.* functions and R2 counts
+    those against every file under `Backends/` (HistogramEngine sits in `Statistics/` for the same reason; C3 now says
+    so).
+  - `6b535945` (D4) the spacing is the multiply's FIRST operand for dx too (NumPy's `d * (...)` with `d = dx`): the order
+    decides which NaN a product of two NaNs keeps and how a complex product places its `0 * NaN` terms. A NumPy probe of
+    a NaN dx against an integrand's negative NaN (1-D, the flat route, a stepped view) pins it in a unit test.
+  - `a101b54d` an `[OpenBugs]` pin the fix unmasked (group 15 of `OpenBugs.Reductions.cs`): np.sum along an outer axis
+    keeps the accumulator's NaN where NumPy's `out = out + h[k]` keeps the new row's. Library-wide, not fixed here.
+  - `b0ad5af9` step 2 (and D4): the text route runs NumPy's statements (np.diff and the reshape, the list assignment's
+    axis check, `y[1:] + y[:-1]`, `d * (...)`, `/ 2.0`, `.sum(axis)`) instead of replaying the multiply's no-loop
+    error. With an integer spacing NumPy goes further: a fixed-width concatenation meets the string multiply's "The 'out'
+    kwarg is necessary" TypeError, a StringDType one is repeated and then refused by the division. 48 snapshot lines now
+    NumPy's answer, 0 regressed.
+  - Evidence at `b0ad5af9`: the twin agrees with NumPy 2.4.2 on 7,793 of the 7,809 comparable snapshot lines (153
+    decimal lines have no NumPy dtype); the other 16 are complex128 over NaN and infinite values and differ only in NaN
+    bits (checked NaN-blind, element by element). The random differential: 23,809 of 24,000 cases identical, the other
+    191 NaN-bit-only; no value, shape, layout, flags or error difference. The NaN-bit classes are the library's (probed:
+    complex division and complex sums keep another part's NaN than NumPy; np.sum along an outer axis, group 15).
+  - Every commit: the snapshot as above; at `b0ad5af9` NumSharp.Tests net10.0 20,542 / net8.0 20,541 passed, 11
+    skipped; Oracle net10.0 and net8.0 411 / 2 skipped, 0 failed.
+  - Next in P2: `np.searchsorted`, then the list's order.
 - **2026-10-25, P2's second family: np.histogramdd / np.histogram2d moved, the divergences around the move fixed; and
   np.histogram's step 2.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees
   as for the first family, plus `twin_histogramdd.py` (the tool's samples, sequences, second operands, per-dimension bins
