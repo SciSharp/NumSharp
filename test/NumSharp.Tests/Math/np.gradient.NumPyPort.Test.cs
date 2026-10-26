@@ -316,5 +316,45 @@ namespace NumSharp.Tests.Math
             Action zeroStep = () => np.gradient(np.array(new[] { 1.0, 2.0 }), 0.0, edge_order: 0);
             zeroStep.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
         }
+
+        /// <summary>
+        ///     A bool input keeps its dtype and gets float64 components, as NumPy's otype branches give it; NumPy's statements
+        ///     then refuse it only where they subtract. It was refused up front with the boolean-subtract TypeError. Probed
+        ///     2.4.2: coordinates with second-order edges compute (the coefficients times the bools: float32 coordinates
+        ///     give float32 values in the float64 component); uniform spacing (the interior's subtraction) and first-order
+        ///     edges raise; an empty axis is the shape check's ValueError first; a 0-d input without an axis has no
+        ///     components.
+        /// </summary>
+        [TestMethod]
+        public void BoolInput_KeepsItsDtype()
+        {
+            var b = np.array(new[] { true, false, true, true, false });
+            var x = np.array(new[] { 0.0, 0.5, 1.5, 2.0, 3.0 });
+
+            NDArray r = np.gradient(b, x, edge_order: 2);
+            r.dtype.Should().Be(np.float64);
+            Bits64(r).Should().Equal(0xc008000000000000ul, 0xbff0000000000000ul, 0x3fd5555555555554ul, 0xbfd5555555555554ul,
+                0xbffaaaaaaaaaaaabul);
+            r = np.gradient(b, x.astype(np.float32), edge_order: 2);
+            r.dtype.Should().Be(np.float64);
+            Bits64(r).Should().Equal(0xc008000000000000ul, 0xbff0000000000000ul, 0x3fd5555580000000ul, 0xbfd5555580000000ul,
+                0xbffaaaaaa0000000ul);
+            var b2 = np.array(new[,] { { true, false }, { false, false }, { true, true }, { false, true } });
+            Bits64((NDArray)np.gradient(b2, np.array(new[] { 0.0, 1.0, 3.0, 4.0 }), axis: 0, edge_order: 2)).Should().Equal(
+                0xbff8000000000000ul, 0xbfc5555555555555ul, 0xbfe0000000000000ul, 0x3fc5555555555555ul, 0xbfe0000000000000ul,
+                0x3fc5555555555554ul, 0xbff8000000000000ul, 0xbfc5555555555558ul);
+
+            np.gradient(np.array(true)).Length.Should().Be(0);
+
+            const string boolSubtract = "numpy boolean subtract, the `-` operator, is not supported, use the bitwise_xor, " +
+                                        "the `^` operator, or the logical_xor function instead.";
+            Action uniform = () => np.gradient(b);
+            uniform.Should().Throw<TypeError>().WithMessage(boolSubtract);
+            Action firstOrderEdges = () => np.gradient(b, x);
+            firstOrderEdges.Should().Throw<TypeError>().WithMessage(boolSubtract);
+            Action empty = () => np.gradient(np.zeros(new Shape(0), np.@bool));
+            empty.Should().Throw<ValueError>().WithMessage("Shape of array too small to calculate a numerical gradient, " +
+                                                           "at least (edge_order + 1) elements are required.");
+        }
     }
 }

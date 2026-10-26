@@ -144,7 +144,9 @@ namespace NumSharp
         ///     ("invalid number of arguments").
         /// </exception>
         /// <exception cref="TypeError">
-        ///     <paramref name="f"/> is boolean (NumPy's boolean-subtract TypeError from the internal subtract).
+        ///     <paramref name="f"/> is boolean and a statement subtracts it: a scalar step (the interior) or first-order edges
+        ///     (NumPy's boolean-subtract TypeError). A bool input keeps its dtype and gets float64 components, so with
+        ///     coordinates and <c>edge_order = 2</c> it has a gradient, as in NumPy.
         /// </exception>
         /// <exception cref="TypeError">
         ///     A str or None step (Python's own <c>2. * ax_dx</c> refuses it: "can't multiply sequence by non-int of type

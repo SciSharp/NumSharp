@@ -31,10 +31,11 @@ namespace NumSharp
     //   * Output dtype (`otype`): a float-family input keeps its dtype
     //     (Half/Single/Double/Complex; NumSharp-only Decimal too); an
     //     integer/char input is promoted to float64 (NumPy converts f to float64
-    //     first, matching np.diff-free arithmetic); a BOOLEAN input raises the
-    //     same "numpy boolean subtract" TypeError NumPy raises (bool is not an
-    //     integer subtype, so NumPy leaves it bool and the internal subtract
-    //     fails).
+    //     first, matching np.diff-free arithmetic); a BOOLEAN input stays bool
+    //     with float64 components (bool is not an integer subtype, so NumPy
+    //     leaves it bool): its subtractions raise NumPy's "numpy boolean
+    //     subtract" TypeError (uniform spacing, first-order edges), while its
+    //     products with coordinate coefficients compute.
     //   * Spacing kinds: a scalar spacing stays the value NumPy's `dx` list holds,
     //     and each scalar statement (`2. * ax_dx`, the edge coefficients, the
     //     quotients and products of the edges) runs in NEP 50's loop dtype for its
@@ -95,7 +96,8 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A list spacing holding None or another object, or a Python int past
         ///     uint64 (NumPy's object array, a dtype NumSharp does not have).</exception>
         /// <exception cref="TypeError">A spacing count other than 0, 1 or the number of axes ("invalid number of
-        ///     arguments"); a bool <paramref name="f"/> (NumPy's boolean subtract); a text <paramref name="f"/> (NumPy's
+        ///     arguments"); a bool <paramref name="f"/> with a scalar step or first-order edges (NumPy's boolean subtract:
+        ///     with coordinates and second-order edges a bool input computes); a text <paramref name="f"/> (NumPy's
         ///     no-loop texts of the subtract or the coefficient multiply); bool coordinates (the boolean negative of the
         ///     coefficients); a str or None step, refused by Python's <c>2. * ax_dx</c> (<c>can't multiply sequence by
         ///     non-int of type 'float'</c>, <c>unsupported operand type(s) for *: 'float' and 'NoneType'</c>).</exception>
@@ -211,15 +213,16 @@ namespace NumSharp
             if (edge_order > 2)
                 throw new ValueError("'edge_order' greater than 2 not supported");
 
-            // Output dtype (otype). Integer/char → compute in float64. Boolean → NumPy's subtract
-            // TypeError. Float-family (incl. Decimal) keeps its dtype.
+            // Output dtype (otype), NumPy's branches: an inexact input keeps its dtype (NumSharp's decimal too); an integer
+            // input (char, NumPy's uint16, included) is converted to float64 first; anything else, bool and text, KEEPS its
+            // dtype while the components are float64, and NumPy's own statements refuse it where they compute with it: a
+            // bool input's subtractions (the uniform interior, the first-order edges) raise the boolean-subtract
+            // TypeError, while its products with coordinate coefficients compute (a bool input with coordinates and
+            // second-order edges has a gradient). The port raised that TypeError here, before the axis checks and for
+            // every spacing, and a 0-d bool input without an axis (no statement runs: an empty result) raised it too.
             NPTypeCode ftc = f.GetTypeCode;
-            if (ftc == NPTypeCode.Boolean)
-                throw new TypeError(
-                    "numpy boolean subtract, the `-` operator, is not supported, " +
-                    "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
             NDArray work = IsIntegerLike(ftc) ? f.astype(np.float64) : f;
-            DType otype = work.dtype;
+            DType otype = IsInexact(ftc) || IsIntegerLike(ftc) ? work.dtype : np.float64;
             // The scalar statements below (`2. * ax_dx`, the edge coefficients, the edge quotients and products) run
             // through PolyNumber, NumPy's three arithmetics by operand kind: every operation's loop dtype is NEP 50's for
             // its operands, so a weak Python step keeps a float32 input in float32 and a NumPy scalar of float64 (a
@@ -280,7 +283,11 @@ namespace NumSharp
                         // promotion for a NumPy scalar (a float32 input divided by a float64 step divides in float64, and
                         // the out= store rounds once).
                         NDArray ov = outp[BuildAxisSlices(N, axis, 1, M - 1)];
-                        np.subtract(fp2, fm2, @out: ov, dtype: otype);       // ov = f[2:] - f[:-2]
+                        // ov = f[2:] - f[:-2], in the input's dtype (NumPy's operator has no dtype=; the difference of an
+                        // inexact or converted input is already the component's dtype): a bool input is refused here, as
+                        // NumPy's subtract refuses it, where a dtype=float64 loop would compute it (NumPy's np.subtract
+                        // computes two bools with dtype=float64).
+                        np.subtract(fp2, fm2, @out: ov);
                         PolyNumber twice = TwiceSpacing(ax_dx);
                         NPTypeCode loop = PolyNumber.LoopDtype(BinaryOp.Divide, PolyNumber.FromArray(ov), twice);
                         if (StoresInPlace(loop, otype))
@@ -720,6 +727,17 @@ namespace NumSharp
             NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16 or NPTypeCode.UInt16
             or NPTypeCode.Int32 or NPTypeCode.UInt32 or NPTypeCode.Int64 or NPTypeCode.UInt64
             or NPTypeCode.Char => true,
+            _ => false,
+        };
+
+        /// <summary>NumPy's <c>np.issubdtype(dtype, np.inexact)</c> over NumSharp's dtypes: the floating and complex dtypes,
+        ///     and NumSharp's decimal (no NumPy dtype; a fraction-holding type like the floats).</summary>
+        /// <param name="tc">The dtype.</param>
+        /// <returns>Whether the input keeps its dtype for the components; a bool or text input gets float64 components
+        ///     while it keeps its own dtype.</returns>
+        private static bool IsInexact(NPTypeCode tc) => tc switch
+        {
+            NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex or NPTypeCode.Decimal => true,
             _ => false,
         };
     }
