@@ -245,20 +245,17 @@ namespace NumSharp
                 // uniform; only a coordinate array's differences (an NDArray of rank 1) are not.
                 bool uniform = ax_dx is not NDArray;
                 // Text has no arithmetic loop: NumPy's first statement on it is the interior difference f[2:] - f[:-2]
-                // (subtract of two string operands) or, for a non-uniform spacing, a * f[:-2] (float64 coefficients times
-                // text). The checks above (spacing, shape) still come first, as in NumPy.
-                if (Backends.Strings.NDStringUfuncs.IsVString(work))
+                // (subtract of two string operands) for a uniform spacing. For a non-uniform spacing it is a * f[:-2],
+                // which comes after the coefficients and names their dtype (raised in the interior below). The checks above
+                // (spacing, shape) still come first, as in NumPy.
+                if (uniform && Backends.Strings.NDStringUfuncs.IsVString(work))
                 {
                     // StringDType: a new-style DType in the key, so NumPy's dispatcher names every operand's class.
                     string t = work.dtype.Meta.ToString();
-                    throw uniform
-                        ? Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract", new[] { t, t })
-                        : Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { np.float64.Meta.ToString(), t });
+                    throw Backends.Strings.NDStringUfuncs.VStringNoLoop("subtract", new[] { t, t });
                 }
-                if (Backends.Strings.NDStringUfuncs.IsString(work))
-                    throw uniform
-                        ? Backends.Strings.NDStringUfuncs.NoLoop("subtract", work.dtype, work.dtype)
-                        : Backends.Strings.NDStringUfuncs.NoLoop("multiply", np.float64, work.dtype);
+                if (uniform && Backends.Strings.NDStringUfuncs.IsString(work))
+                    throw Backends.Strings.NDStringUfuncs.NoLoop("subtract", work.dtype, work.dtype);
                 // NumPy's `out = np.empty_like(f, dtype=otype)`: the component keeps the input's memory order (order 'K':
                 // an F-ordered input gives an F-ordered component, a broadcast or permuted one the order its strides sort
                 // into), where a fresh C-ordered array of the dimensions was allocated. empty_like reads only the input's
@@ -301,7 +298,7 @@ namespace NumSharp
                     }
                     else
                     {
-                        NDArray axd = (NDArray)ax_dx;                        // float64 diffs (len M-1)
+                        NDArray axd = (NDArray)ax_dx;                        // the diffs, in their own dtype (len M-1)
                         NDArray dx1 = SliceAlongAxis(axd, 0, 0, M - 2);      // ax_dx[:-1]
                         NDArray dx2 = SliceAlongAxis(axd, 0, 1, M - 1);      // ax_dx[1:]
                         NDArray sum = dx1 + dx2;
@@ -309,9 +306,20 @@ namespace NumSharp
                         NDArray a = ReshapeAlong(-(dx2) / (dx1 * sum), axis, N);
                         NDArray b = ReshapeAlong((dx2 - dx1) / (dx1 * dx2), axis, N);
                         NDArray c = ReshapeAlong(dx1 / (dx2 * sum), axis, N);
+                        // A text input meets its first arithmetic here, NumPy's `a * f[s2]`: the no-loop TypeError names the
+                        // coefficients' dtype, which is the coordinate differences' (float32 coordinates: float32; integer
+                        // coordinates were converted to float64), after the coefficients' own refusals (bool coordinates'
+                        // boolean negative). The port named float64 for every coordinate dtype.
+                        if (Backends.Strings.NDStringUfuncs.IsVString(work))
+                        {
+                            string t = work.dtype.Meta.ToString();
+                            throw Backends.Strings.NDStringUfuncs.VStringNoLoop("multiply", new[] { a.dtype.Meta.ToString(), t });
+                        }
+                        if (Backends.Strings.NDStringUfuncs.IsString(work))
+                            throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", a.dtype, work.dtype);
                         // a*f[:-2] + b*f[1:-1] + c*f[2:] as ONE fused pass straight into the out view
-                        // (same left-to-right elementwise order as NumPy, so bit-identical; the f64
-                        // result is cast down to `otype` by the out= store for a float32/float16 input).
+                        // (same left-to-right elementwise order as NumPy, so bit-identical; the result, in NEP 50's
+                        // dtype for the coefficients and the input, is cast to `otype` by the out= store).
                         NDArray ov = outp[BuildAxisSlices(N, axis, 1, M - 1)];
                         var expr = NDExpr.Arr(a) * NDExpr.Arr(fm2)
                                  + NDExpr.Arr(b) * NDExpr.Arr(fmid)

@@ -356,5 +356,44 @@ namespace NumSharp.Tests.Math
             empty.Should().Throw<ValueError>().WithMessage("Shape of array too small to calculate a numerical gradient, " +
                                                            "at least (edge_order + 1) elements are required.");
         }
+
+        /// <summary>
+        ///     A text input with coordinates meets its first arithmetic in NumPy's <c>a * f[s2]</c>, after the coefficients:
+        ///     the no-loop TypeError names the coefficients' dtype, which is the coordinate differences', and bool
+        ///     coordinates raise their boolean negative first. The text route named float64 for every coordinate dtype and
+        ///     raised before the coefficients. Probed 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void TextInput_WithCoordinates_NamesTheCoefficientsDtype()
+        {
+            var digits = np.array(new[] { "0", "1", "2", "3" });
+            var u5 = digits.astype(np.dtype("U5"));
+            var x = np.array(new[] { 0.0, 0.5, 1.5, 2.0 });
+            const string noLoop = "ufunc '{0}' did not contain a loop with signature matching types ({1}, {2}) -> None";
+
+            Action f32 = () => np.gradient(u5, x.astype(np.float32));
+            f32.Should().Throw<TypeError>().WithMessage(string.Format(noLoop, "multiply", "dtype('float32')", "dtype('<U5')"));
+            Action f16 = () => np.gradient(u5, x.astype(np.float16));
+            f16.Should().Throw<TypeError>().WithMessage(string.Format(noLoop, "multiply", "dtype('float16')", "dtype('<U5')"));
+            Action c128 = () => np.gradient(u5, x.astype(np.complex128));
+            c128.Should().Throw<TypeError>()
+                .WithMessage(string.Format(noLoop, "multiply", "dtype('complex128')", "dtype('<U5')"));
+            // Integer coordinates are converted to float64 before their differences.
+            Action ints = () => np.gradient(u5, np.array(new[] { 0L, 1L, 3L, 4L }));
+            ints.Should().Throw<TypeError>().WithMessage(string.Format(noLoop, "multiply", "dtype('float64')", "dtype('<U5')"));
+            Action bools = () => np.gradient(u5, np.array(new[] { false, true, true, false }));
+            bools.Should().Throw<TypeError>().WithMessage("The numpy boolean negative, the `-` operator, is not supported, " +
+                                                          "use the `~` operator or the logical_not function instead.");
+            Action uniform = () => np.gradient(u5, 2.0);
+            uniform.Should().Throw<TypeError>()
+                .WithMessage(string.Format(noLoop, "subtract", "dtype('<U5')", "dtype('<U5')"));
+
+            Action bytesF16 = () => np.gradient(digits.astype(np.dtype("S5")), x.astype(np.float16));
+            bytesF16.Should().Throw<TypeError>()
+                .WithMessage(string.Format(noLoop, "multiply", "dtype('float16')", "dtype('S5')"));
+            Action stringDType = () => np.gradient(digits.astype(np.dtype("T")), x.astype(np.float32));
+            stringDType.Should().Throw<TypeError>().WithMessage(string.Format(noLoop, "multiply",
+                "<class 'numpy.dtypes.Float32DType'>", "<class 'numpy.dtypes.StringDType'>"));
+        }
     }
 }
