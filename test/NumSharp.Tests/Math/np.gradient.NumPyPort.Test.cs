@@ -249,5 +249,72 @@ namespace NumSharp.Tests.Math
             shortList.Should().Throw<ValueError>()
                 .WithMessage("when 1d, distances must match the length of the corresponding dimension");
         }
+
+        /// <summary>The complex128 elements of a result as raw bits: real, then imaginary, per element.</summary>
+        /// <param name="a">A complex128 array.</param>
+        /// <returns>Each element's two IEEE patterns, in C order.</returns>
+        private static ulong[] Bits128(NDArray a) => a.ToArray<System.Numerics.Complex>()
+            .SelectMany(z => new[] { BitConverter.DoubleToUInt64Bits(z.Real), BitConverter.DoubleToUInt64Bits(z.Imaginary) })
+            .ToArray();
+
+        /// <summary>
+        ///     The edges are NumPy's integer-indexed statements (<c>f[0]</c>, <c>f[1]</c>, <c>f[2]</c>, ...), where length-1
+        ///     slices were taken. Probed 2.4.2: a 1-D input's edge values are NumPy scalars, so its edges are scalarmath (a sum
+        ///     of two NaNs keeps the first operand's payload, where the ufunc of an N-D input keeps the second; a complex
+        ///     product is the naive one, which rounds the last bit of a 1-D edge differently from the 2-D one); an axis of one
+        ///     or two elements under edge_order 0 or -1 is NumPy's IndexError at the front edge (the slices broadcast nothing
+        ///     and raised a broadcast error), after the coefficients' own ZeroDivisionError.
+        /// </summary>
+        [TestMethod]
+        public void Edges_AreIntegerIndexed()
+        {
+            static double Nan(ulong payload) => BitConverter.UInt64BitsToDouble(0x7ff8000000000000ul | payload);
+
+            // np.gradient([nan(1), nan(2), 3, 4, 5], edge_order=2): the front edge's -1.5 * nan(1) + 2. * nan(2) keeps
+            // nan(1) (np.float64 + np.float64); the 2-D input's front edge, an array sum, keeps nan(2).
+            var f1 = np.array(new[] { Nan(1), Nan(2), 3.0, 4.0, 5.0 });
+            Bits64((NDArray)np.gradient(f1, edge_order: 2)).Should().Equal(0x7ff8000000000001ul, 0x7ff8000000000001ul,
+                0x7ff8000000000002ul, 0x3ff0000000000000ul, 0x3ff0000000000000ul);
+            Bits64((NDArray)np.gradient(f1)).Should().Equal(0x7ff8000000000002ul, 0x7ff8000000000001ul, 0x7ff8000000000002ul,
+                0x3ff0000000000000ul, 0x3ff0000000000000ul);
+            var f2 = np.stack(new[] { f1, f1 }, axis: 1);
+            Bits64((NDArray)np.gradient(f2, axis: 0, edge_order: 2)).Should().Equal(0x7ff8000000000002ul,
+                0x7ff8000000000002ul, 0x7ff8000000000001ul, 0x7ff8000000000001ul, 0x7ff8000000000002ul, 0x7ff8000000000002ul,
+                0x3ff0000000000000ul, 0x3ff0000000000000ul, 0x3ff0000000000000ul, 0x3ff0000000000000ul);
+
+            // np.gradient(fc, xc, edge_order=2) of 1-D complex data and coordinates; the same column of a 2-D input differs
+            // in the last bit of its back edge's real part (the fused simd_cmul of the arrays' products).
+            var fc = np.array(new[]
+            {
+                new System.Numerics.Complex(1.0 / 3, 2.0 / 7), new System.Numerics.Complex(2.0 / 9, -1.0 / 11),
+                new System.Numerics.Complex(5.0 / 13, 3.0 / 17), new System.Numerics.Complex(7.0 / 19, 1.0 / 23),
+                new System.Numerics.Complex(3.0 / 29, -2.0 / 31),
+            });
+            var xc = np.array(new[]
+            {
+                new System.Numerics.Complex(0, 0), new System.Numerics.Complex(0.3, 0.1), new System.Numerics.Complex(0.7, 0.15),
+                new System.Numerics.Complex(1.1, 0.3), new System.Numerics.Complex(1.3, 0.35),
+            });
+            Bits128((NDArray)np.gradient(fc, xc, edge_order: 2)).Should().Equal(0xbff27659f4f7aee1ul, 0xbffca8a9c7e6f8a4ul,
+                0xbfd10674b58cc3ecul, 0xbfcf8815dcdb7073ul, 0x3fc01649c681201aul, 0x3fcb8259e9bec827ul, 0xbfef3fd53a2a5ed9ul,
+                0xbfd03d97b7273233ul, 0xbffc57c073b627a1ul, 0xbfc1d1147801139cul);
+            NDArray column = ((NDArray)np.gradient(np.stack(new[] { fc, fc }, axis: 1), xc, axis: 0, edge_order: 2))[":, 0"];
+            Bits128(column).Should().Equal(0xbff27659f4f7aee1ul, 0xbffca8a9c7e6f8a4ul, 0xbfd10674b58cc3ecul,
+                0xbfcf8815dcdb7073ul, 0x3fc01649c681201aul, 0x3fcb8259e9bec827ul, 0xbfef3fd53a2a5ed9ul, 0xbfd03d97b7273233ul,
+                0xbffc57c073b627a0ul, 0xbfc1d1147801139cul);
+
+            // An axis too short for the second-order edges: f[2] of 2 elements, f[1] of 1, f[0] of 0 (edge_order=-1).
+            Action two = () => np.gradient(np.array(new[] { 1.0, 2.0 }), edge_order: 0);
+            two.Should().Throw<IndexError>().WithMessage("index 2 is out of bounds for axis 0 with size 2");
+            Action one = () => np.gradient(np.array(new[] { 1.0 }), edge_order: 0);
+            one.Should().Throw<IndexError>().WithMessage("index 1 is out of bounds for axis 0 with size 1");
+            Action none = () => np.gradient(np.zeros(new Shape(0)), edge_order: -1);
+            none.Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 0 with size 0");
+            Action secondAxis = () => np.gradient(np.ones(new Shape(3, 2)), axis: 1, edge_order: 0);
+            secondAxis.Should().Throw<IndexError>().WithMessage("index 2 is out of bounds for axis 1 with size 2");
+            // The coefficients come first: a Python zero step raises its ZeroDivisionError before the index does.
+            Action zeroStep = () => np.gradient(np.array(new[] { 1.0, 2.0 }), 0.0, edge_order: 0);
+            zeroStep.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+        }
     }
 }

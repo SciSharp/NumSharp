@@ -325,17 +325,21 @@ namespace NumSharp
                 }
 
                 // ---- edges ----
+                // NumPy indexes the edges with INTEGERS (`slice1[axis] = 0`, `slice2[axis] = 1`, ...): an edge value is
+                // the (N-1)-D hyperplane f[..., k, ...], a NumPy SCALAR for a 1-D input, so a 1-D input's edges are
+                // scalarmath (a sum of two NaNs keeps the first operand's, a complex product is the naive one) where an
+                // N-D input's are ufuncs; and an index past a short axis is NumPy's IndexError, which only the
+                // second-order branch reaches (edge_order 0 / -1 admit axes of 1 / 0 elements). The port took length-1
+                // slices, which never raise and always broadcast as arrays.
                 if (edge_order == 1)
                 {
                     // out[0]  = (f[1]  - f[0])  / dx_0     (dx_0 = ax_dx    or ax_dx[0])
                     // out[-1] = (f[-1] - f[-2]) / dx_n     (dx_n = ax_dx    or ax_dx[-1])
                     // A non-uniform step is NumPy's `ax_dx[0]` / `ax_dx[-1]`: a NumPy scalar of the differences' dtype.
                     PolyNumber dx0 = uniform ? (PolyNumber)ax_dx : PolyNumber.ScalarOf(((NDArray)ax_dx)[0]);
-                    WriteEdge(outp, work, axis, N, 0,
-                        Edge1(SliceAlongAxis(work, axis, 1, 2), SliceAlongAxis(work, axis, 0, 1), dx0));
+                    WriteEdge(outp, work, axis, N, 0, Edge1(work, axis, N, 1, 0, dx0));
                     PolyNumber dxn = uniform ? (PolyNumber)ax_dx : PolyNumber.ScalarOf(((NDArray)ax_dx)[-1]);
-                    WriteEdge(outp, work, axis, N, M - 1,
-                        Edge1(SliceAlongAxis(work, axis, M - 1, M), SliceAlongAxis(work, axis, M - 2, M - 1), dxn));
+                    WriteEdge(outp, work, axis, N, -1, Edge1(work, axis, N, -1, -2, dxn));
                 }
                 else
                 {
@@ -360,10 +364,9 @@ namespace NumSharp
                         b0 = Div(Add(d1, d2), Mul(d1, d2));
                         c0 = Div(PolyNumber.Negate(d1), Mul(d2, Add(d1, d2)));
                     }
-                    // front: out[0] = a0*f[0] + b0*f[1] + c0*f[2]
-                    WriteEdge(outp, work, axis, N, 0,
-                        Edge2(SliceAlongAxis(work, axis, 0, 1), SliceAlongAxis(work, axis, 1, 2),
-                              SliceAlongAxis(work, axis, 2, 3), a0, b0, c0));
+                    // front: out[0] = a0*f[0] + b0*f[1] + c0*f[2]; f[1] / f[2] of an axis of 1 / 2 elements is the
+                    // IndexError, raised after the coefficients (a Python zero step's ZeroDivisionError comes first).
+                    WriteEdge(outp, work, axis, N, 0, Edge2(work, axis, N, 0, 1, 2, a0, b0, c0));
                     PolyNumber a1, b1, c1;
                     if (uniform)
                     {
@@ -380,10 +383,9 @@ namespace NumSharp
                         b1 = Div(PolyNumber.Negate(Add(e2, e1)), Mul(e1, e2));
                         c1 = Div(Add(Mul(Py(2.0), e2), e1), Mul(e2, Add(e1, e2)));
                     }
-                    // back: out[-1] = a1*f[-3] + b1*f[-2] + c1*f[-1]
-                    WriteEdge(outp, work, axis, N, M - 1,
-                        Edge2(SliceAlongAxis(work, axis, M - 3, M - 2), SliceAlongAxis(work, axis, M - 2, M - 1),
-                              SliceAlongAxis(work, axis, M - 1, M), a1, b1, c1));
+                    // back: out[-1] = a1*f[-3] + b1*f[-2] + c1*f[-1] (an axis short enough to make these raise has
+                    // already raised at the front edge)
+                    WriteEdge(outp, work, axis, N, -1, Edge2(work, axis, N, -3, -2, -1, a1, b1, c1));
                 }
 
                 outvals[ai] = outp;
@@ -393,21 +395,25 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     One first-order gradient edge, NumPy's <c>(f[s2] - f[s3]) / dx</c>: the difference of two length-1 slices in
-        ///     the input's dtype, then the quotient in NEP 50's loop dtype for the step's own kind.
+        ///     One first-order gradient edge, NumPy's <c>(f[s2] - f[s3]) / dx</c> with integer indices along the axis: the
+        ///     difference of two edge values (<see cref="EdgeOperand"/>: NumPy scalars for a 1-D input, (N-1)-D arrays
+        ///     otherwise) in the input's dtype, then the quotient in NEP 50's loop dtype for the step's own kind.
         /// </summary>
-        /// <param name="hi">The later length-1 slice along the axis (<c>f[1]</c> or <c>f[-1]</c>).</param>
-        /// <param name="lo">The earlier length-1 slice along the axis (<c>f[0]</c> or <c>f[-2]</c>).</param>
+        /// <param name="f">The (converted) input.</param>
+        /// <param name="axis">The axis the edge lies on.</param>
+        /// <param name="N">The input's rank.</param>
+        /// <param name="kHi">The later index along the axis (<c>1</c> or <c>-1</c>), indexed first as Python does.</param>
+        /// <param name="kLo">The earlier index along the axis (<c>0</c> or <c>-2</c>).</param>
         /// <param name="d">The step: the uniform spacing as NumPy holds it (a weak Python number keeps the input's dtype; a
         ///     NumPy scalar or 0-d array promotes with it), or a non-uniform spacing's <c>ax_dx[0]</c> / <c>ax_dx[-1]</c>, a
         ///     NumPy scalar of the coordinate differences' dtype.</param>
-        /// <returns>The edge values, length 1 along the axis.</returns>
+        /// <returns>The edge value: an (N-1)-D array, or a 0-d array holding the NumPy scalar of a 1-D input.</returns>
         /// <exception cref="TypeError">A bool or text input (NumPy's subtract refusals).</exception>
+        /// <exception cref="IndexError">An index outside the axis (unreachable for edge_order 1, whose axes hold at least two
+        ///     elements).</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the difference and the converted operands of the quotient are released when
-        ///     the edge returns, and the result is yielded to the caller. <paramref name="hi"/> and
-        ///     <paramref name="lo"/> are views the caller built before this scope opened, so this method no longer
-        ///     disposes them: <c>Gradient</c>'s own scope releases them.
+        ///     Scoped by <c>[NDScoped]</c>: the two edge views, the difference and the converted operands of the quotient are
+        ///     released when the edge returns, and the result is yielded to the caller.
         ///     <para>This helper keeps a scope of its own instead of <c>[NDScopedCovered]</c>, although its only
         ///     caller is scoped. An edge slice holds one hyperplane of the input, which is as large as the whole
         ///     array divided by the axis length: along a short axis (length 3, say) each temporary here is a third
@@ -415,43 +421,73 @@ namespace NumSharp
         ///     costs one scope allocation per call (about 220 bytes), two calls per gradient axis.</para>
         /// </remarks>
         [NDScoped]
-        private static NDArray Edge1(NDArray hi, NDArray lo, PolyNumber d)
+        private static NDArray Edge1(NDArray f, int axis, int N, long kHi, long kLo, PolyNumber d)
         {
-            NDArray num = hi - lo;
-            return PolyNumber.Binary(BinaryOp.Divide, PolyNumber.FromArray(num), d).Array;
+            PolyNumber hi = EdgeOperand(AtAxis(f, axis, N, kHi));
+            PolyNumber lo = EdgeOperand(AtAxis(f, axis, N, kLo));
+            PolyNumber num = PolyNumber.Binary(BinaryOp.Subtract, hi, lo);
+            return PolyNumber.Binary(BinaryOp.Divide, num, d).ToNDArray();
         }
 
         /// <summary>
-        ///     One second-order gradient edge, NumPy's <c>a * f[s2] + b * f[s3] + c * f[s4]</c>: evaluated left to right as
-        ///     Python does, each product and sum in NEP 50's loop dtype for its operands (a weak Python coefficient keeps the
-        ///     input's dtype; a NumPy scalar coefficient promotes with it, so a float64 coordinate coefficient computes a
-        ///     float32 input's edge in float64), the coefficient first in each product, as NumPy writes it.
+        ///     One second-order gradient edge, NumPy's <c>a * f[s2] + b * f[s3] + c * f[s4]</c> with integer indices along the
+        ///     axis: evaluated left to right as Python does, each edge value indexed just before its product (so an index past
+        ///     a short axis raises after the products before it), each product and sum in NEP 50's loop dtype for its operands
+        ///     (a weak Python coefficient keeps the input's dtype; a NumPy scalar coefficient promotes with it, so a float64
+        ///     coordinate coefficient computes a float32 input's edge in float64), the coefficient first in each product, as
+        ///     NumPy writes it. A 1-D input's edge values are NumPy scalars, so its products and sums are scalarmath.
         /// </summary>
-        /// <param name="f0">The first length-1 slice of the three-point stencil.</param>
-        /// <param name="f1">The second length-1 slice.</param>
-        /// <param name="f2">The third length-1 slice.</param>
-        /// <param name="a">The coefficient of <paramref name="f0"/> (a Python number or a NumPy scalar).</param>
-        /// <param name="b">The coefficient of <paramref name="f1"/>.</param>
-        /// <param name="c">The coefficient of <paramref name="f2"/>.</param>
-        /// <returns>The edge values, length 1 along the axis.</returns>
+        /// <param name="f">The (converted) input.</param>
+        /// <param name="axis">The axis the edge lies on.</param>
+        /// <param name="N">The input's rank.</param>
+        /// <param name="k0">The index of the first stencil point (<c>0</c> or <c>-3</c>).</param>
+        /// <param name="k1">The index of the second (<c>1</c> or <c>-2</c>).</param>
+        /// <param name="k2">The index of the third (<c>2</c> or <c>-1</c>).</param>
+        /// <param name="a">The coefficient of the first point (a Python number or a NumPy scalar).</param>
+        /// <param name="b">The coefficient of the second.</param>
+        /// <param name="c">The coefficient of the third.</param>
+        /// <returns>The edge value: an (N-1)-D array, or a 0-d array holding the NumPy scalar of a 1-D input.</returns>
         /// <exception cref="TypeError">A text input (NumPy's multiply refusal).</exception>
+        /// <exception cref="IndexError">An index outside an axis of one or two elements (edge_order 0 or -1 admits them):
+        ///     <c>index 2 is out of bounds for axis 0 with size 2</c>.</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the converted operands, the three products and the partial sum are released when
-        ///     the edge returns, and the result is yielded to the caller. The three slices are views the caller built before
-        ///     this scope opened, so this method no longer disposes them: <c>Gradient</c>'s own scope releases them.
+        ///     Scoped by <c>[NDScoped]</c>: the edge views, the converted operands, the three products and the partial sum are
+        ///     released when the edge returns, and the result is yielded to the caller.
         ///     <para>This helper keeps a scope of its own instead of <c>[NDScopedCovered]</c> for the reason given on
         ///     <see cref="Edge1"/>: the products and the partial sum are each one hyperplane of the input, and the caller's
         ///     scope would hold them until every axis is done.</para>
         /// </remarks>
         [NDScoped]
-        private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, PolyNumber a, PolyNumber b, PolyNumber c)
+        private static NDArray Edge2(NDArray f, int axis, int N, long k0, long k1, long k2,
+                                     PolyNumber a, PolyNumber b, PolyNumber c)
         {
-            PolyNumber t0 = Mul(a, PolyNumber.FromArray(f0));
-            PolyNumber t1 = Mul(b, PolyNumber.FromArray(f1));
+            PolyNumber t0 = Mul(a, EdgeOperand(AtAxis(f, axis, N, k0)));
+            PolyNumber t1 = Mul(b, EdgeOperand(AtAxis(f, axis, N, k1)));
             PolyNumber s01 = Add(t0, t1);
-            PolyNumber t2 = Mul(c, PolyNumber.FromArray(f2));
-            return Add(s01, t2).Array;
+            PolyNumber t2 = Mul(c, EdgeOperand(AtAxis(f, axis, N, k2)));
+            return Add(s01, t2).ToNDArray();
         }
+
+        /// <summary>
+        ///     NumPy's <c>f[tuple(slice)]</c> with an integer at <paramref name="axis"/>: the hyperplane at index
+        ///     <paramref name="k"/>, one rank lower than <paramref name="a"/> (a 0-d view of a 1-D array).
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <param name="axis">The indexed axis.</param>
+        /// <param name="N">The array's rank.</param>
+        /// <param name="k">The index (negative counts from the end, as in Python).</param>
+        /// <returns>A view.</returns>
+        /// <exception cref="IndexError"><paramref name="k"/> is outside the axis: NumPy's <c>index {k} is out of bounds for
+        ///     axis {axis} with size {M}</c>, the index as given.</exception>
+        private static NDArray AtAxis(NDArray a, int axis, int N, long k) => a[BuildAxisIndex(N, axis, k)];
+
+        /// <summary>
+        ///     An edge value as Python holds it: integer indexing of a 1-D array gives a NumPy scalar (scalarmath from then
+        ///     on), of an N-D array an (N-1)-D array (ufuncs).
+        /// </summary>
+        /// <param name="v">The indexed hyperplane (<see cref="AtAxis"/>).</param>
+        /// <returns>A NumPy scalar for a 0-d view, else the array.</returns>
+        private static PolyNumber EdgeOperand(NDArray v) => v.ndim == 0 ? PolyNumber.ScalarOf(v) : PolyNumber.FromArray(v);
 
         /// <summary>NumPy's unit step <c>1.0</c> (the <c>dx</c> list's entry when no spacing is given): a Python float,
         ///     weak under NEP 50.</summary>
@@ -534,22 +570,26 @@ namespace NumSharp
         ///     <c>float division by zero</c>); a NumPy scalar divisor gives inf / nan instead.</exception>
         private static PolyNumber Div(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Divide, a, b);
 
-        // Assign a length-1 edge slice at index `at` along `axis` into `outp`, then dispose the value.
+        // Assign an edge hyperplane at index `at` along `axis` into `outp`, then dispose the value.
         /// <summary>
         ///     Stores one computed edge into the output — NumPy's <c>out[tuple(slice1)] = ...</c> with <c>slice1[axis]</c> the
-        ///     edge index — and releases the computed value at once (one hyperplane of the input, see <see cref="Edge1"/>).
+        ///     edge's integer index — and releases the computed value at once (one hyperplane of the input, see
+        ///     <see cref="Edge1"/>).
         /// </summary>
         /// <param name="outp">The output component being filled.</param>
         /// <param name="work">The (converted) input; unused by the store, kept for the call sites' symmetry.</param>
         /// <param name="axis">The axis the edge lies on.</param>
         /// <param name="N">The rank of <paramref name="outp"/>.</param>
-        /// <param name="at">The edge's index along <paramref name="axis"/> (0 or the last).</param>
-        /// <param name="value">The edge values, length 1 along <paramref name="axis"/>; disposed here.</param>
-        /// <exception cref="ValueError">A value that does not broadcast into the length-1 slot (an edge slice that came out
-        ///     empty: NumPy's integer index raises IndexError there instead).</exception>
+        /// <param name="at">The edge's index along <paramref name="axis"/> (0, or -1 for the last, as NumPy writes it).</param>
+        /// <param name="value">The edge value, (N-1)-D (0-d for a 1-D output); disposed here.</param>
+        /// <remarks>
+        ///     The target is the integer-indexed hyperplane, as NumPy's: the value has the rank NumPy's has, so it stores
+        ///     along any axis (a length-1 slice of a later axis, (3, 1), would not take an (N-1)-D (3,) value). The store is
+        ///     NumPy's setitem, whose cast is unsafe: a complex value keeps its real part in a real component.
+        /// </remarks>
         private static void WriteEdge(NDArray outp, NDArray work, int axis, int N, long at, NDArray value)
         {
-            outp[BuildAxisSlices(N, axis, at, at + 1)] = value;
+            outp[BuildAxisIndex(N, axis, at)] = value;
             value.Dispose();
         }
 
@@ -587,6 +627,22 @@ namespace NumSharp
             var slices = new Slice[N];
             for (int i = 0; i < N; i++)
                 slices[i] = i == axis ? new Slice(start, stop) : Slice.All;
+            return slices;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>tuple(slice1)</c> with an integer at the axis: every axis taken whole except
+        ///     <paramref name="axis"/>, which takes element <paramref name="k"/> and drops out of the result.
+        /// </summary>
+        /// <param name="N">The rank.</param>
+        /// <param name="axis">The indexed axis.</param>
+        /// <param name="k">The index (negative counts from the end).</param>
+        /// <returns>A fresh index list for the indexer.</returns>
+        private static Slice[] BuildAxisIndex(int N, int axis, long k)
+        {
+            var slices = new Slice[N];
+            for (int i = 0; i < N; i++)
+                slices[i] = i == axis ? Slice.Index(k) : Slice.All;
             return slices;
         }
 
