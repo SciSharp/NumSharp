@@ -416,6 +416,45 @@ namespace NumSharp.Tests.Backends
                 .Should().Throw<ValueError>().WithMessage("Unrecognized mode 'banana'");
         }
 
+        /// <summary>
+        ///     NumPy's raw mode returns <c>transpose(a)</c> of the K-order copy of the operand that its gufunc factored in
+        ///     place: a VIEW, F-contiguous for a C operand and C-contiguous for an F one (a float32 operand, factored in
+        ///     float64, gets that view cast back: a new F-ordered array); the economic mode returns the copy itself, in the
+        ///     operand's order. NumSharp returned C-ordered owners; the values were already NumPy's. Expected layouts: NumPy
+        ///     2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Qr_RawAndEconomic_AreNumPysObjects()
+        {
+            RequireLapack();
+            var c = np.array(new double[,] { { 4, 1, 2 }, { 1, 5, 3 }, { 2, 3, 6 }, { 1, 0, 1 } });
+            var (h, tau) = np.linalg.qr(c, "raw");
+            h.shape.Should().Equal(3L, 4L);
+            h.strides.Should().Equal(8L, 24L);
+            h.flags.owndata.Should().BeFalse();
+            tau.flags.owndata.Should().BeTrue();
+
+            var f = np.asfortranarray(c);
+            var (hf, _) = np.linalg.qr(f, "raw");
+            hf.strides.Should().Equal(32L, 8L);
+            hf.flags.owndata.Should().BeFalse();
+            np.array_equal(hf, h).Should().BeTrue();
+
+            var (h32, _) = np.linalg.qr(c.astype(np.float32), "raw");
+            h32.dtype.Should().Be(np.float32);
+            h32.strides.Should().Equal(4L, 12L);
+            h32.flags.owndata.Should().BeTrue();
+
+            var (hs, _) = np.linalg.qr(np.stack(new[] { c, np.multiply(c, NDArray.Scalar(2.0)) }), "raw");
+            hs.strides.Should().Equal(96L, 8L, 24L);
+
+            var (e, _) = np.linalg.qr(f, "economic");
+            e.strides.Should().Equal(8L, 32L);
+            e.flags.owndata.Should().BeTrue();
+            var (ec, _) = np.linalg.qr(c, "economic");
+            ec.strides.Should().Equal(24L, 8L);
+        }
+
         // ------------------------------------------------------------------ the seam
 
         [TestMethod]
