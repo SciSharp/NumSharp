@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
+// PolyNumber's operator kinds (BinaryOp), its Python values (PyScalar) and its promotion table (PolyTyping).
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 // The moved statements call the public np.* functions they called inside np (np.diff, np.empty, np.subtract, np.divide,
 // np.evaluate, np.all) and np's internal SliceAlongAxis, and build np's GradientResult; importing np's statics keeps them
@@ -24,8 +26,8 @@ namespace NumSharp
     // Each output axis is a fresh `otype` array whose interior and two edges are
     // filled by slice-assignment of the difference expressions.
     //
-    // Two dtype/precision rules are ported EXACTLY so the result is bit-identical
-    // to NumPy:
+    // Every statement computes in NumPy's dtype, so the result is bit-identical to
+    // NumPy's:
     //   * Output dtype (`otype`): a float-family input keeps its dtype
     //     (Half/Single/Double/Complex; NumSharp-only Decimal too); an
     //     integer/char input is promoted to float64 (NumPy converts f to float64
@@ -33,30 +35,28 @@ namespace NumSharp
     //     same "numpy boolean subtract" TypeError NumPy raises (bool is not an
     //     integer subtype, so NumPy leaves it bool and the internal subtract
     //     fails).
-    //   * Spacing precision: UNIFORM spacing feeds the stencil WEAK C# double
-    //     coefficients (NEP50 weak scalars, so a float32 input stays float32),
-    //     while NON-UNIFORM spacing (a coordinate array) feeds STRONG float64
-    //     coefficients (NumPy converts the coordinates to float64), so the
-    //     stencil runs in float64 and is cast down to `otype` on store — exactly
-    //     as NumPy pre-allocates `out` and assigns the computed slices into it.
-    //     A reduced-precision (float16/float32) input with NON-UNIFORM spacing
-    //     additionally widens the one-sided EDGE slices to float64 (see `edgeWiden`
-    //     below), because NumSharp demotes a 0-d float64 Scalar coefficient to weak
-    //     against a reduced-precision operand and would otherwise compute the edge
-    //     in reduced precision; the interior already runs in float64 via its 1-D
-    //     float64 coefficient arrays.
+    //   * Spacing kinds: a scalar spacing stays the value NumPy's `dx` list holds,
+    //     and each scalar statement (`2. * ax_dx`, the edge coefficients, the
+    //     quotients and products of the edges) runs in NEP 50's loop dtype for its
+    //     operands (PolyNumber, NumPy's three arithmetics). A Python number (a C#
+    //     int / double / bool / Complex / BigInteger) is WEAK, so a float32 input
+    //     stays float32; a NumPy scalar (Half, char, decimal), a 0-d array and a
+    //     collapsed coordinate step (`diffx[0]`) are STRONG, so a float64 step
+    //     computes a float32 input in float64, rounded once into the component.
+    //     Coordinate differences keep the coordinates' dtype (only integer
+    //     coordinates are converted to float64), and so do the coefficients built
+    //     from them: float32 coordinates give float32 coefficients. A complex
+    //     result written into a real component keeps its real part (NumPy's
+    //     setitem). The port converted every scalar step to a C# double (a weak
+    //     Python float) and widened the non-uniform edges to float64, on the belief
+    //     that NumPy converts all coordinates to float64.
     //
-    // ACCEPTED 1-ULP divergence, complex128 ONLY, with a spacing whose divisor is not
-    // a power of two (e.g. a per-axis scalar dx=1.5 → /3.0, or any non-uniform edge
-    // /dx): gradient divides the complex difference by a real spacing, and .NET's
-    // System.Numerics.Complex division (Smith's algorithm, which reduces a real
-    // divisor to the component-wise a/c) rounds the last bit differently from NumPy's
-    // complex divide loop (which computes (a·c+b·d)/(c²+d²) = 3a/9 for c=3). This is
-    // the pre-existing complex128-binary-op limitation (NumSharp's complex byte-
-    // exactness is contractual for UNARY ufuncs only), reproducible in isolation as
-    // `np.divide(complexArray, 3.0)`; gradient/trapezoid merely inherit it, and
-    // trapezoid avoids it because it only ever divides by the exact /2.0. float16/
-    // float32/float64 gradient is bit-exact.
+    // complex128: the divisions are NumPy's CDOUBLE_divide (Smith's algorithm, the
+    // house kernel), bit-exact for finite values. A NaN's sign can still differ for
+    // special operands, where NumPy's complex divide keeps another operand's NaN in
+    // one part: the library residual of the binary complex kernels (pinned by
+    // OpenBugs.NaNOperandOrder's Complex128_AddMultiplyDivide_KeepNumPysNaNPerPart),
+    // which gradient inherits.
 
     /// <summary>
     ///     The body of NumPy's <c>gradient</c> (<c>numpy/lib/_function_base_impl.py</c>): the axes, the spacing per axis
@@ -87,8 +87,7 @@ namespace NumSharp
         ///     values included, as NumPy reads them) gives second-order ends.</param>
         /// <returns>One component per requested axis, a single array when exactly one axis was requested (NumPy's bare
         ///     ndarray), none for a 0-d <paramref name="f"/> without an axis.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="f"/> is null, or a spacing entry is (NumSharp's refusal
-        ///     where NumPy computes <c>2. * None</c> and raises TypeError).</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="f"/> is null.</exception>
         /// <exception cref="AxisError">An axis outside <c>[-f.ndim, f.ndim)</c>.</exception>
         /// <exception cref="ValueError">A repeated axis; a ragged list spacing (np.ndim's inhomogeneous-shape text); a
         ///     coordinate array of another rank than 1 or another length than its axis; <paramref name="edge_order"/> above
@@ -98,12 +97,17 @@ namespace NumSharp
         /// <exception cref="TypeError">A spacing count other than 0, 1 or the number of axes ("invalid number of
         ///     arguments"); a bool <paramref name="f"/> (NumPy's boolean subtract); a text <paramref name="f"/> (NumPy's
         ///     no-loop texts of the subtract or the coefficient multiply); bool coordinates (the boolean negative of the
-        ///     coefficients); a spacing <see cref="Convert.ToDouble(object)"/> refuses (a <see cref="Half"/> or a
-        ///     <c>char</c>, raised as <see cref="InvalidCastException"/>).</exception>
+        ///     coefficients); a str or None step, refused by Python's <c>2. * ax_dx</c> (<c>can't multiply sequence by
+        ///     non-int of type 'float'</c>, <c>unsupported operand type(s) for *: 'float' and 'NoneType'</c>).</exception>
         /// <exception cref="IndexError">The coordinates of an empty axis (NumPy's <c>diffx[0]</c> of an empty
         ///     diff).</exception>
-        /// <exception cref="FormatException">A string spacing that is not a number (.NET's parse; NumPy raises TypeError
-        ///     for any str).</exception>
+        /// <exception cref="DivideByZeroException">A zero step that is a Python number with second-order edges (CPython's
+        ///     ZeroDivisionError of <c>-1.5 / ax_dx</c>: <c>float division by zero</c>, or <c>complex division by zero</c>
+        ///     for a complex step; a NumPy-scalar or 0-d array zero step gives inf / nan instead, as in NumPy); a decimal
+        ///     input or step divided by zero (decimal has no inf).</exception>
+        /// <exception cref="OverflowException">A Python int step past the float range (a <c>BigInteger</c>: CPython's
+        ///     <c>int too large to convert to float</c> in <c>2. * ax_dx</c>); a decimal result past decimal's
+        ///     range.</exception>
         /// <remarks>
         ///     Scoped by <c>[NDScoped]</c>: every slice view, coefficient array and edge temporary is released when the call
         ///     returns, and the output components are yielded to the caller through the returned
@@ -143,19 +147,22 @@ namespace NumSharp
             }
             int len_axes = axes.Length;
 
-            // Resolve the spacing for each axis. Each entry is either a boxed double (uniform
-            // spacing → weak coefficient) or a float64 1-D NDArray of successive differences
-            // (non-uniform spacing → strong coefficients).
+            // Resolve the spacing for each axis, as NumPy's `dx` list holds it. A scalar spacing stays the object it is
+            // (SpacingOf): a Python number (weak under NEP 50), a NumPy scalar or 0-d array (strong, of its own dtype), or
+            // a str / None, which NumPy accepts here and refuses only in `2. * ax_dx`. A coordinate array becomes the
+            // differences of its coordinates in their own dtype (integers converted to float64), or the NumPy scalar
+            // `diffx[0]` when every difference equals the first. Converting a scalar to a double here (the port did) made a
+            // NumPy scalar weak, refused a Half or a char, and parsed a str.
             int n = varargs.Length;
             object[] dx;
             if (n == 0)
             {
                 dx = new object[len_axes];
-                for (int i = 0; i < len_axes; i++) dx[i] = 1.0;              // unit spacing
+                for (int i = 0; i < len_axes; i++) dx[i] = UnitSpacing;        // NumPy's [1.0] * len_axes: a Python float
             }
             else if (n == 1 && GradSpacingNdim(varargs[0]) == 0)
             {
-                double s = GradToDouble(varargs[0]);                          // one scalar for all axes
+                object s = SpacingOf(varargs[0]);                              // varargs * len_axes: one object, every axis
                 dx = new object[len_axes];
                 for (int i = 0; i < len_axes; i++) dx[i] = s;
             }
@@ -167,7 +174,7 @@ namespace NumSharp
                     object v = varargs[i];
                     if (GradSpacingNdim(v) == 0)
                     {
-                        dx[i] = GradToDouble(v);                              // per-axis scalar
+                        dx[i] = SpacingOf(v);                                  // per-axis scalar, kept as it is
                         continue;
                     }
                     // NumPy's `distances = np.asanyarray(distances)`: a Python list is coerced by np.array's rules
@@ -191,7 +198,7 @@ namespace NumSharp
                     // when both parts are (the double read compared the real parts).
                     NDArray first = diffx[0];
                     if (np.all(diffx == first))
-                        dx[i] = SpacingElement(first, 0);
+                        dx[i] = PolyNumber.ScalarOf(first);                   // diffx[0]: a NumPy scalar (strong)
                     else
                         dx[i] = diffx;                                        // the diffs, in their own dtype
                 }
@@ -213,21 +220,12 @@ namespace NumSharp
                     "use the bitwise_xor, the `^` operator, or the logical_xor function instead.");
             NDArray work = IsIntegerLike(ftc) ? f.astype(np.float64) : f;
             DType otype = work.dtype;
-
-            // Computation dtype for the NON-UNIFORM one-sided EDGES. NumPy forms those edges with
-            // float64 coordinate coefficients (`ax_dx[i]` is a float64 scalar — STRONG under NEP50),
-            // so a reduced-precision input is widened to result_type(float64, otype) == float64 for
-            // the edge arithmetic and the quotient/combination is rounded ONCE to `otype` on store.
-            // NumSharp treats a 0-D `NDArray.Scalar(double)` coefficient as a WEAK scalar, which would
-            // demote the edge product/quotient back to float16/float32 and compute the edge in reduced
-            // precision (observed 1–14 ULP off NumPy). Widening the edge slices to `edgeWiden`
-            // reproduces NumPy's float64 edge exactly; float64/complex128/Decimal inputs need no
-            // widening (the float64 scalar promotes up to them, and their edge already matches), so
-            // `edgeWiden` is null there. The INTERIOR already computes in float64 — it multiplies by
-            // 1-D float64 coefficient arrays, which NumSharp correctly keeps strong — so only the
-            // edges need this. The UNIFORM path is unaffected: there NumPy's `2.*ax_dx` is a weak
-            // Python float, so both libraries compute in the reduced dtype and already agree.
-            DType edgeWiden = (otype == np.float32 || otype == np.float16) ? np.float64 : null;
+            // The scalar statements below (`2. * ax_dx`, the edge coefficients, the edge quotients and products) run
+            // through PolyNumber, NumPy's three arithmetics by operand kind: every operation's loop dtype is NEP 50's for
+            // its operands, so a weak Python step keeps a float32 input in float32 and a NumPy scalar of float64 (a
+            // collapsed float64 coordinate step, a 0-d float64 array) computes in float64, rounded once into the
+            // component. The port widened the non-uniform edges to float64 instead (edgeWiden), on the belief that NumPy
+            // converts every coordinate array to float64; it converts only integer coordinates.
 
             var outvals = new NDArray[len_axes];
             for (int ai = 0; ai < len_axes; ai++)
@@ -240,7 +238,9 @@ namespace NumSharp
                         "Shape of array too small to calculate a numerical gradient, " +
                         "at least (edge_order + 1) elements are required.");
 
-                bool uniform = ax_dx is double;
+                // NumPy's `uniform_spacing = np.ndim(ax_dx) == 0`: every scalar spacing (a PolyNumber, a str, a None) is
+                // uniform; only a coordinate array's differences (an NDArray of rank 1) are not.
+                bool uniform = ax_dx is not NDArray;
                 // Text has no arithmetic loop: NumPy's first statement on it is the interior difference f[2:] - f[:-2]
                 // (subtract of two string operands) or, for a non-uniform spacing, a * f[:-2] (float64 coefficients times
                 // text). The checks above (spacing, shape) still come first, as in NumPy.
@@ -272,13 +272,24 @@ namespace NumSharp
                     NDArray fp2 = SliceAlongAxis(work, axis, 2, M);          // f[2:]
                     if (uniform)
                     {
-                        // Compute straight into the out view via ufunc out= — no intermediate
-                        // full-size temp, no slice-copy. dtype:otype forces the loop to `otype`
-                        // (so a float32 input divides in float32, matching NumPy's weak scalar).
+                        // NumPy's `out[s1] = (f[s4] - f[s2]) / (2. * ax_dx)`, computed straight into the out view via
+                        // ufunc out= (no full-size temporary): the difference in the input's dtype first (Python evaluates
+                        // `/`'s left operand first, so a str or None step raises after it), then `2. * ax_dx` in the step's
+                        // own arithmetic (TwiceSpacing), then the quotient in NEP 50's loop dtype for the difference and that
+                        // value: the input's dtype for a weak Python number (a float32 input divides in float32), the
+                        // promotion for a NumPy scalar (a float32 input divided by a float64 step divides in float64, and
+                        // the out= store rounds once).
                         NDArray ov = outp[BuildAxisSlices(N, axis, 1, M - 1)];
                         np.subtract(fp2, fm2, @out: ov, dtype: otype);       // ov = f[2:] - f[:-2]
-                        using var half2 = NDArray.Scalar(2.0 * (double)ax_dx);
-                        np.divide(ov, half2, @out: ov, dtype: otype);        // ov /= (2*dx)
+                        PolyNumber twice = TwiceSpacing(ax_dx);
+                        NPTypeCode loop = PolyNumber.LoopDtype(BinaryOp.Divide, PolyNumber.FromArray(ov), twice);
+                        if (StoresInPlace(loop, otype))
+                        {
+                            using var divisor = twice.AsArrayOf(loop);
+                            np.divide(ov, divisor, @out: ov, dtype: loop);    // ov /= (2*dx)
+                        }
+                        else
+                            StoreComponent(ov, PolyNumber.Binary(BinaryOp.Divide, PolyNumber.FromArray(ov), twice).Array);
                         ov.Dispose();
                     }
                     else
@@ -298,7 +309,14 @@ namespace NumSharp
                         var expr = NDExpr.Arr(a) * NDExpr.Arr(fm2)
                                  + NDExpr.Arr(b) * NDExpr.Arr(fmid)
                                  + NDExpr.Arr(c) * NDExpr.Arr(fp2);
-                        np.evaluate(expr, @out: ov);
+                        // The fused pass types every node as NumPy types each ufunc call: the coefficients carry the
+                        // coordinates' dtype (float32 coordinates give float32 coefficients). A complex combination (complex
+                        // coordinates) into a real component is NumPy's setitem, which keeps the real part, where the fused
+                        // pass's out= refuses the cast: it is evaluated into a temporary and stored.
+                        if (StoresInPlace(PolyTyping.Promote(a.typecode, work.typecode), otype))
+                            np.evaluate(expr, @out: ov);
+                        else
+                            StoreComponent(ov, np.evaluate(expr));
                         ov.Dispose();
                         dx1.Dispose(); dx2.Dispose(); sum.Dispose();
                         a.Dispose(); b.Dispose(); c.Dispose();
@@ -311,47 +329,61 @@ namespace NumSharp
                 {
                     // out[0]  = (f[1]  - f[0])  / dx_0     (dx_0 = ax_dx    or ax_dx[0])
                     // out[-1] = (f[-1] - f[-2]) / dx_n     (dx_n = ax_dx    or ax_dx[-1])
-                    // The coordinate diffs keep their dtype (float32 / float16 / bool / complex coordinates are not
-                    // converted), so each end is read through that dtype (SpacingElement), never as a float64.
-                    double dx0v = uniform ? (double)ax_dx : SpacingElement((NDArray)ax_dx, 0);
-                    double dxnv = uniform ? (double)ax_dx : SpacingElement((NDArray)ax_dx, ((NDArray)ax_dx).size - 1);
+                    // A non-uniform step is NumPy's `ax_dx[0]` / `ax_dx[-1]`: a NumPy scalar of the differences' dtype.
+                    PolyNumber dx0 = uniform ? (PolyNumber)ax_dx : PolyNumber.ScalarOf(((NDArray)ax_dx)[0]);
                     WriteEdge(outp, work, axis, N, 0,
-                        Edge1(SliceAlongAxis(work, axis, 1, 2), SliceAlongAxis(work, axis, 0, 1), dx0v, uniform, edgeWiden));
+                        Edge1(SliceAlongAxis(work, axis, 1, 2), SliceAlongAxis(work, axis, 0, 1), dx0));
+                    PolyNumber dxn = uniform ? (PolyNumber)ax_dx : PolyNumber.ScalarOf(((NDArray)ax_dx)[-1]);
                     WriteEdge(outp, work, axis, N, M - 1,
-                        Edge1(SliceAlongAxis(work, axis, M - 1, M), SliceAlongAxis(work, axis, M - 2, M - 1), dxnv, uniform, edgeWiden));
+                        Edge1(SliceAlongAxis(work, axis, M - 1, M), SliceAlongAxis(work, axis, M - 2, M - 1), dxn));
                 }
                 else
                 {
-                    // 2nd-order one-sided edges.
-                    double a0, b0, c0, a1, b1, c1;
+                    // 2nd-order one-sided edges, NumPy's statements in its order: the front coefficients, the front edge,
+                    // the back coefficients, the back edge. A uniform step's coefficients are a Python float divided by the
+                    // step (CPython's ZeroDivisionError for a Python 0.0, scalarmath inf / nan for a NumPy zero); a
+                    // non-uniform step's are scalarmath over the NumPy scalars ax_dx[0], ax_dx[1] (front) and ax_dx[-2],
+                    // ax_dx[-1] (back), in the differences' dtype.
+                    PolyNumber a0, b0, c0;
                     if (uniform)
                     {
-                        double s = (double)ax_dx;
-                        a0 = -1.5 / s; b0 = 2.0 / s; c0 = -0.5 / s;
-                        a1 = 0.5 / s; b1 = -2.0 / s; c1 = 1.5 / s;
+                        var s = (PolyNumber)ax_dx;
+                        a0 = Div(Py(-1.5), s); b0 = Div(Py(2.0), s); c0 = Div(Py(-0.5), s);
                     }
                     else
                     {
+                        // a = -(2. * dx1 + dx2) / (dx1 * (dx1 + dx2)); b = (dx1 + dx2) / (dx1 * dx2);
+                        // c = - dx1 / (dx2 * (dx1 + dx2))
                         NDArray axd = (NDArray)ax_dx;
-                        // Read through the diffs' own dtype (SpacingElement): see the first-order edges.
-                        double d1 = SpacingElement(axd, 0), d2 = SpacingElement(axd, 1);
-                        a0 = -(2.0 * d1 + d2) / (d1 * (d1 + d2));
-                        b0 = (d1 + d2) / (d1 * d2);
-                        c0 = -d1 / (d2 * (d1 + d2));
-                        long L = axd.size;
-                        double e1 = SpacingElement(axd, L - 2), e2 = SpacingElement(axd, L - 1);
-                        a1 = e2 / (e1 * (e1 + e2));
-                        b1 = -(e2 + e1) / (e1 * e2);
-                        c1 = (2.0 * e2 + e1) / (e2 * (e1 + e2));
+                        PolyNumber d1 = PolyNumber.ScalarOf(axd[0]), d2 = PolyNumber.ScalarOf(axd[1]);
+                        a0 = Div(PolyNumber.Negate(Add(Mul(Py(2.0), d1), d2)), Mul(d1, Add(d1, d2)));
+                        b0 = Div(Add(d1, d2), Mul(d1, d2));
+                        c0 = Div(PolyNumber.Negate(d1), Mul(d2, Add(d1, d2)));
                     }
                     // front: out[0] = a0*f[0] + b0*f[1] + c0*f[2]
                     WriteEdge(outp, work, axis, N, 0,
                         Edge2(SliceAlongAxis(work, axis, 0, 1), SliceAlongAxis(work, axis, 1, 2),
-                              SliceAlongAxis(work, axis, 2, 3), a0, b0, c0, uniform, edgeWiden));
+                              SliceAlongAxis(work, axis, 2, 3), a0, b0, c0));
+                    PolyNumber a1, b1, c1;
+                    if (uniform)
+                    {
+                        var s = (PolyNumber)ax_dx;
+                        a1 = Div(Py(0.5), s); b1 = Div(Py(-2.0), s); c1 = Div(Py(1.5), s);
+                    }
+                    else
+                    {
+                        // a = (dx2) / (dx1 * (dx1 + dx2)); b = - (dx2 + dx1) / (dx1 * dx2);
+                        // c = (2. * dx2 + dx1) / (dx2 * (dx1 + dx2))
+                        NDArray axd = (NDArray)ax_dx;
+                        PolyNumber e1 = PolyNumber.ScalarOf(axd[-2]), e2 = PolyNumber.ScalarOf(axd[-1]);
+                        a1 = Div(e2, Mul(e1, Add(e1, e2)));
+                        b1 = Div(PolyNumber.Negate(Add(e2, e1)), Mul(e1, e2));
+                        c1 = Div(Add(Mul(Py(2.0), e2), e1), Mul(e2, Add(e1, e2)));
+                    }
                     // back: out[-1] = a1*f[-3] + b1*f[-2] + c1*f[-1]
                     WriteEdge(outp, work, axis, N, M - 1,
                         Edge2(SliceAlongAxis(work, axis, M - 3, M - 2), SliceAlongAxis(work, axis, M - 2, M - 1),
-                              SliceAlongAxis(work, axis, M - 1, M), a1, b1, c1, uniform, edgeWiden));
+                              SliceAlongAxis(work, axis, M - 1, M), a1, b1, c1));
                 }
 
                 outvals[ai] = outp;
@@ -361,23 +393,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     One first-order gradient edge, <c>out[0]</c> or <c>out[-1]</c> = <c>(hi - lo) / d</c>. Uniform spacing
-        ///     uses the weak C# double <paramref name="d"/>, so the quotient stays in the input dtype (NumPy's weak
-        ///     <c>ax_dx</c>); non-uniform spacing divides by the STRONG float64 coordinate scalar.
+        ///     One first-order gradient edge, NumPy's <c>(f[s2] - f[s3]) / dx</c>: the difference of two length-1 slices in
+        ///     the input's dtype, then the quotient in NEP 50's loop dtype for the step's own kind.
         /// </summary>
         /// <param name="hi">The later length-1 slice along the axis (<c>f[1]</c> or <c>f[-1]</c>).</param>
         /// <param name="lo">The earlier length-1 slice along the axis (<c>f[0]</c> or <c>f[-2]</c>).</param>
-        /// <param name="d">The spacing to divide by.</param>
-        /// <param name="uniform">True for scalar spacing (weak double divisor); false for coordinate spacing
-        /// (strong float64 divisor).</param>
-        /// <param name="widenTo">float64 for a reduced-precision float16/float32 input, else null. The difference
-        /// is widened to it BEFORE the divide, so the quotient is computed in float64 and rounded once to otype on
-        /// store, reproducing NumPy; a weak 0-D <c>NDArray.Scalar(double)</c> would demote it back to the input
-        /// precision. The subtraction itself runs in the input dtype first (as NumPy's <c>f[s2]-f[s3]</c> does);
-        /// widening is exact, so the order cannot change the result.</param>
+        /// <param name="d">The step: the uniform spacing as NumPy holds it (a weak Python number keeps the input's dtype; a
+        ///     NumPy scalar or 0-d array promotes with it), or a non-uniform spacing's <c>ax_dx[0]</c> / <c>ax_dx[-1]</c>, a
+        ///     NumPy scalar of the coordinate differences' dtype.</param>
         /// <returns>The edge values, length 1 along the axis.</returns>
+        /// <exception cref="TypeError">A bool or text input (NumPy's subtract refusals).</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the difference, the widened copy and the 0-d divisor are released when
+        ///     Scoped by <c>[NDScoped]</c>: the difference and the converted operands of the quotient are released when
         ///     the edge returns, and the result is yielded to the caller. <paramref name="hi"/> and
         ///     <paramref name="lo"/> are views the caller built before this scope opened, so this method no longer
         ///     disposes them: <c>Gradient</c>'s own scope releases them.
@@ -388,87 +415,124 @@ namespace NumSharp
         ///     costs one scope allocation per call (about 220 bytes), two calls per gradient axis.</para>
         /// </remarks>
         [NDScoped]
-        private static NDArray Edge1(NDArray hi, NDArray lo, double d, bool uniform, DType widenTo)
+        private static NDArray Edge1(NDArray hi, NDArray lo, PolyNumber d)
         {
             NDArray num = hi - lo;
-            NDArray res;
-            if (uniform)
-            {
-                res = num / d;
-            }
-            else if (widenTo is null)
-            {
-                // float64 / complex128 / Decimal input: the float64 scalar promotes up to the operand's
-                // dtype, so the edge already computes at full precision — keep the existing path.
-                var sd = NDArray.Scalar(d);
-                res = num / sd;
-            }
-            else
-            {
-                NDArray w = num.astype(widenTo);   // exact widen f16/f32 -> f64
-                var sd = NDArray.Scalar(d);        // f64 / f64 -> f64 (no weak demotion)
-                res = w / sd;
-            }
-            return res;
+            return PolyNumber.Binary(BinaryOp.Divide, PolyNumber.FromArray(num), d).Array;
         }
 
         /// <summary>
-        ///     One second-order gradient edge: <c>a*f0 + b*f1 + c*f2</c>, left-associative exactly as NumPy evaluates
-        ///     it. Uniform spacing uses the weak C# double coefficients, so the combination stays in the input dtype
-        ///     (NumPy's weak coefficients); non-uniform spacing uses STRONG float64 coordinate coefficients.
+        ///     One second-order gradient edge, NumPy's <c>a * f[s2] + b * f[s3] + c * f[s4]</c>: evaluated left to right as
+        ///     Python does, each product and sum in NEP 50's loop dtype for its operands (a weak Python coefficient keeps the
+        ///     input's dtype; a NumPy scalar coefficient promotes with it, so a float64 coordinate coefficient computes a
+        ///     float32 input's edge in float64), the coefficient first in each product, as NumPy writes it.
         /// </summary>
         /// <param name="f0">The first length-1 slice of the three-point stencil.</param>
         /// <param name="f1">The second length-1 slice.</param>
         /// <param name="f2">The third length-1 slice.</param>
-        /// <param name="a">The coefficient of <paramref name="f0"/>.</param>
+        /// <param name="a">The coefficient of <paramref name="f0"/> (a Python number or a NumPy scalar).</param>
         /// <param name="b">The coefficient of <paramref name="f1"/>.</param>
         /// <param name="c">The coefficient of <paramref name="f2"/>.</param>
-        /// <param name="uniform">True for scalar spacing (weak double coefficients); false for coordinate spacing
-        /// (strong float64 coefficients).</param>
-        /// <param name="widenTo">float64 for a reduced-precision float16/float32 input, else null. The three slices
-        /// are widened to it BEFORE the products, so <c>a*f0</c> and the rest are computed in float64 (NumPy widens
-        /// the f32 operand into the float64 multiply) and the float64 sum is rounded once to otype on store; a weak
-        /// 0-D <c>NDArray.Scalar(double)</c> coefficient would instead demote each product back to the input
-        /// precision and diverge by several ULP.</param>
         /// <returns>The edge values, length 1 along the axis.</returns>
+        /// <exception cref="TypeError">A text input (NumPy's multiply refusal).</exception>
         /// <remarks>
-        ///     Scoped by <c>[NDScoped]</c>: the 0-d coefficients, the widened slices, the three products and the
-        ///     partial sum are released when the edge returns, and the result is yielded to the caller. The three
-        ///     slices are views the caller built before this scope opened, so this method no longer disposes them:
-        ///     <c>Gradient</c>'s own scope releases them.
-        ///     <para>This helper keeps a scope of its own instead of <c>[NDScopedCovered]</c> for the reason given
-        ///     on <see cref="Edge1"/>: the widened slices, the products and the partial sum are each one hyperplane
-        ///     of the input, and the caller's scope would hold them until every axis is done.</para>
+        ///     Scoped by <c>[NDScoped]</c>: the converted operands, the three products and the partial sum are released when
+        ///     the edge returns, and the result is yielded to the caller. The three slices are views the caller built before
+        ///     this scope opened, so this method no longer disposes them: <c>Gradient</c>'s own scope releases them.
+        ///     <para>This helper keeps a scope of its own instead of <c>[NDScopedCovered]</c> for the reason given on
+        ///     <see cref="Edge1"/>: the products and the partial sum are each one hyperplane of the input, and the caller's
+        ///     scope would hold them until every axis is done.</para>
         /// </remarks>
         [NDScoped]
-        private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, double a, double b, double c, bool uniform, DType widenTo)
+        private static NDArray Edge2(NDArray f0, NDArray f1, NDArray f2, PolyNumber a, PolyNumber b, PolyNumber c)
         {
-            NDArray res;
-            if (uniform)
-            {
-                NDArray t0 = f0 * a, t1 = f1 * b, t2 = f2 * c;
-                NDArray s01 = t0 + t1; res = s01 + t2;
-            }
-            else if (widenTo is null)
-            {
-                // float64 / complex128 / Decimal input: the float64 scalar coefficients promote up to the
-                // operand dtype, so the edge already computes at full precision — keep the existing path.
-                NDArray na = NDArray.Scalar(a), nb = NDArray.Scalar(b), nc = NDArray.Scalar(c);
-                NDArray t0 = na * f0, t1 = nb * f1, t2 = nc * f2;
-                NDArray s01 = t0 + t1; res = s01 + t2;
-            }
-            else
-            {
-                // reduced precision: widen the slices to float64 so the products and sum run in float64
-                // (the f64 scalar coefficients no longer demote against an f32/f16 operand), then the
-                // caller's store rounds the float64 combination once to otype — bit-identical to NumPy.
-                NDArray w0 = f0.astype(widenTo), w1 = f1.astype(widenTo), w2 = f2.astype(widenTo);
-                NDArray na = NDArray.Scalar(a), nb = NDArray.Scalar(b), nc = NDArray.Scalar(c);
-                NDArray t0 = na * w0, t1 = nb * w1, t2 = nc * w2;
-                NDArray s01 = t0 + t1; res = s01 + t2;
-            }
-            return res;
+            PolyNumber t0 = Mul(a, PolyNumber.FromArray(f0));
+            PolyNumber t1 = Mul(b, PolyNumber.FromArray(f1));
+            PolyNumber s01 = Add(t0, t1);
+            PolyNumber t2 = Mul(c, PolyNumber.FromArray(f2));
+            return Add(s01, t2).Array;
         }
+
+        /// <summary>NumPy's unit step <c>1.0</c> (the <c>dx</c> list's entry when no spacing is given): a Python float,
+        ///     weak under NEP 50.</summary>
+        private static readonly object UnitSpacing = PolyNumber.FromPython(PyScalar.Float(1.0));
+
+        /// <summary>
+        ///     A scalar spacing as NumPy's <c>dx</c> list keeps it: the value classified by the house NEP 50 map
+        ///     (<see cref="PolyNumber.FromObject"/>: a C# number is a Python number, <see cref="Half"/> / <c>char</c> /
+        ///     <c>decimal</c> a NumPy scalar, a 0-d NDArray an ndarray), boxed; a string or null is returned as it is.
+        /// </summary>
+        /// <param name="v">The spacing (np.ndim(v) == 0).</param>
+        /// <returns>A boxed <see cref="PolyNumber"/>, or <paramref name="v"/> itself for a str or None.</returns>
+        /// <remarks>
+        ///     NumPy accepts a str or None here (np.ndim of either is 0) and refuses it only where Python computes with it,
+        ///     <c>2. * ax_dx</c> (<see cref="TwiceSpacing"/>), after the other spacings, the edge order and the axis' length
+        ///     were checked. PolyNumber has no str or None kind (NumPy would build a str / object array from them), so they
+        ///     stay raw until that statement.
+        /// </remarks>
+        private static object SpacingOf(object v) => v is null or string ? v : PolyNumber.FromObject(v);
+
+        /// <summary>
+        ///     NumPy's <c>2. * ax_dx</c>, the uniform interior's divisor: CPython arithmetic for a Python number, scalarmath
+        ///     for a NumPy scalar (a float16 step doubles in float16), a ufunc for a 0-d array (its result a NumPy scalar).
+        /// </summary>
+        /// <param name="axDx">The step as <see cref="SpacingOf"/> left it.</param>
+        /// <returns>The product, a Python number or a NumPy scalar.</returns>
+        /// <exception cref="TypeError">A None step (CPython's <c>unsupported operand type(s) for *: 'float' and
+        ///     'NoneType'</c>) or a str step (<c>can't multiply sequence by non-int of type 'float'</c>, from str's reflected
+        ///     multiply, as Python reports it).</exception>
+        private static PolyNumber TwiceSpacing(object axDx)
+        {
+            if (axDx is null)
+                throw new TypeError("unsupported operand type(s) for *: 'float' and 'NoneType'");
+            if (axDx is string)
+                throw new TypeError("can't multiply sequence by non-int of type 'float'");
+            return Mul(Py(2.0), (PolyNumber)axDx);
+        }
+
+        /// <summary>
+        ///     Whether a result computed in <paramref name="loop"/> can be written into a component of
+        ///     <paramref name="otype"/> by a ufunc's out= (same_kind): every loop but a complex one into a real component.
+        /// </summary>
+        /// <param name="loop">The dtype the statement computes in.</param>
+        /// <param name="otype">The component's dtype.</param>
+        /// <returns>False for a complex result into a real component, which NumPy's setitem stores as its real part
+        ///     (<see cref="StoreComponent"/>).</returns>
+        private static bool StoresInPlace(NPTypeCode loop, DType otype) =>
+            loop != NPTypeCode.Complex || otype.typecode == NPTypeCode.Complex;
+
+        /// <summary>
+        ///     NumPy's <c>out[s1] = value</c> into a component view: a setitem, whose cast is unsafe, so a complex value
+        ///     keeps its real part (NumPy's ComplexWarning, which NumSharp does not raise).
+        /// </summary>
+        /// <param name="dst">The component's slice view.</param>
+        /// <param name="value">The computed values (broadcast into <paramref name="dst"/>).</param>
+        private static void StoreComponent(NDArray dst, NDArray value) => np.copyto(dst, value, casting: "unsafe");
+
+        /// <summary>A Python float (weak under NEP 50): the literals of NumPy's gradient code (<c>2.</c>, <c>-1.5</c>, ...).</summary>
+        /// <param name="v">The value.</param>
+        /// <returns>The number.</returns>
+        private static PolyNumber Py(double v) => PolyNumber.FromPython(PyScalar.Float(v));
+
+        /// <summary>Python's <c>a + b</c> with NumPy's semantics for the operands' kinds (<see cref="PolyNumber.Binary"/>).</summary>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns>The sum.</returns>
+        private static PolyNumber Add(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Add, a, b);
+
+        /// <summary>Python's <c>a * b</c> with NumPy's semantics for the operands' kinds.</summary>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns>The product.</returns>
+        private static PolyNumber Mul(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Multiply, a, b);
+
+        /// <summary>Python's <c>a / b</c> (true division) with NumPy's semantics for the operands' kinds.</summary>
+        /// <param name="a">Left operand.</param>
+        /// <param name="b">Right operand.</param>
+        /// <returns>The quotient.</returns>
+        /// <exception cref="DivideByZeroException">Two Python numbers with a zero divisor (CPython's ZeroDivisionError:
+        ///     <c>float division by zero</c>); a NumPy scalar divisor gives inf / nan instead.</exception>
+        private static PolyNumber Div(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Divide, a, b);
 
         // Assign a length-1 edge slice at index `at` along `axis` into `outp`, then dispose the value.
         /// <summary>
@@ -529,24 +593,24 @@ namespace NumSharp
         // ndim of a spacing argument: 0 for a C# scalar, else the NDArray's ndim.
         /// <summary>
         ///     NumPy's <c>np.ndim(v)</c> for a spacing (<c>np.asarray(v).ndim</c>), which decides whether it is a step (0) or
-        ///     coordinates: 0 for a C# scalar or a string, the rank of an NDArray or a typed C# array, 1 for a
+        ///     coordinates: 0 for a C# scalar, a string or null (None), the rank of an NDArray or a typed C# array, 1 for a
         ///     <see cref="Memory{T}"/> of a dtype, and the nesting depth of a Python sequence (a <c>List&lt;T&gt;</c>, an
         ///     <c>object[]</c>, a tuple: the house map, <see cref="PolySequence.IsSequence"/>).
         /// </summary>
         /// <param name="v">The spacing.</param>
         /// <returns>Its rank.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="v"/> is null (NumPy's <c>np.ndim(None)</c> is 0, and its
-        ///     arithmetic then raises TypeError).</exception>
         /// <exception cref="ValueError">A ragged sequence (np.asarray's inhomogeneous-shape text, raised where NumPy's
         ///     np.ndim raises it).</exception>
         /// <remarks>
         ///     A sequence was read as a scalar (only a C# array was a coordinate list), so a <c>List&lt;double&gt;</c> of
         ///     coordinates reached the double conversion and its InvalidCastException, and an <c>object[]</c> was measured
-        ///     by its C# rank, not by what it holds.
+        ///     by its C# rank, not by what it holds. A None was refused here (ArgumentNullException); NumPy's
+        ///     <c>np.ndim(None)</c> is 0, and its <c>2. * ax_dx</c> raises the TypeError.
         /// </remarks>
         private static int GradSpacingNdim(object v)
         {
-            if (v is null) throw new ArgumentNullException(nameof(v));
+            // NumPy's np.ndim(None) is 0: a None step is uniform, and NumPy refuses it only in `2. * ax_dx`.
+            if (v is null) return 0;
             if (v is NDArray nd) return nd.ndim;
             // A Python sequence is tested before a C# array: an object[] (and any array whose elements are no dtype) is a
             // list, whose rank is the depth np.array discovers in it, not the C# array's own rank.
@@ -586,37 +650,10 @@ namespace NumSharp
             return np.asanyarray(v);
         }
 
-        // Convert a scalar spacing to double. A 0-d array spacing is read through its own dtype (SpacingElement): a 0-d
-        // int64 2 read as a float64 is the denormal 1e-323, and a 0-d float32 read as a float64 reaches past its buffer.
-        /// <summary>A scalar spacing (a C# number or string, or a 0-d array) as the double step the stencil uses.</summary>
-        /// <param name="v">The spacing (not null; <see cref="GradSpacingNdim"/> has refused null).</param>
-        /// <returns>The step.</returns>
-        /// <exception cref="InvalidCastException">A value <see cref="Convert.ToDouble(object)"/> refuses (a
-        ///     <see cref="Half"/>, a <c>char</c>).</exception>
-        /// <exception cref="FormatException">A string that is not a number.</exception>
-        private static double GradToDouble(object v)
-        {
-            if (v is NDArray nd) return SpacingElement(nd, 0);
-            return Convert.ToDouble(v);
-        }
-
-        /// <summary>
-        ///     One element of a spacing array (a 0-d spacing, or the diffs of a coordinate array) as a double, read through
-        ///     the array's own dtype.
-        /// </summary>
-        /// <param name="a">The array: any dtype np.diff or the caller gives (float64, float32, float16, bool, complex, ...).</param>
-        /// <param name="index">The flat C-order index of the element (0 for a 0-d array).</param>
-        /// <returns>The element converted to double (a complex element's real part, a bool's 1 or 0).</returns>
-        /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside the array.</exception>
-        /// <remarks>
-        ///     <c>NDArray.GetDouble</c> is not a conversion: it indexes the float64 lane of the storage's typed-slice union
-        ///     whatever the array's dtype. On a float32 diff array that reads two floats' bits as one double and, from the
-        ///     middle of the array on, eight bytes per element past its end, so np.gradient's results over float32, float16
-        ///     or bool coordinates changed from run to run; on an int64 element it reads the integer's bits. Reading the
-        ///     element boxed by its own dtype (<c>GetAtIndex</c>, which also maps the index through a view's offset and
-        ///     strides) and converting it is exact for every dtype.
-        /// </remarks>
-        private static double SpacingElement(NDArray a, long index) => Converts.ToDouble(a.GetAtIndex(index));
+        // The scalar steps and the coordinate differences are read as NumPy values (PolyNumber: SpacingOf, and
+        // PolyNumber.ScalarOf of `ax_dx[i]`, which reads an element through its own dtype), never converted to a double:
+        // NDArray.GetDouble indexes the float64 lane of the storage whatever the dtype (fixed in 382d0738, whose
+        // SpacingElement this replaces).
 
         /// <summary>NumPy's <c>np.issubdtype(dtype, np.integer)</c> over NumSharp's dtypes: the integer dtypes and
         ///     <c>char</c> (NumPy's uint16), not bool.</summary>

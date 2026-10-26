@@ -66,6 +66,100 @@ namespace NumSharp.Tests.Math
         }
 
         /// <summary>
+        ///     A scalar spacing keeps its NEP 50 kind through NumPy's statements (<c>2. * ax_dx</c>, the quotients, the edge
+        ///     coefficients), where every scalar was converted to a C# double, a weak Python float. Probed 2.4.2:
+        ///     <list type="bullet">
+        ///         <item>a Python float step keeps a float32 input in float32; the same value as a 0-d float64 array, or as a
+        ///         collapsed float64 coordinate step (<c>diffx[0]</c>, a NumPy scalar), divides in float64, rounded once;</item>
+        ///         <item>a float16 step (a NumPy scalar) doubles and divides the edge coefficients in float16 scalarmath;</item>
+        ///         <item>a char step is NumPy's uint16 (it was refused by the double conversion, as was a float16 one);</item>
+        ///         <item>float32 coordinates make float32 edge coefficients (the edges were widened to float64), and complex
+        ///         coordinates complex ones whose real part the store keeps;</item>
+        ///         <item>a str or None step is refused by Python's own <c>2. * ax_dx</c> (a str was parsed as a number), and a
+        ///         zero step raises ZeroDivisionError for a Python float in <c>-1.5 / ax_dx</c>, inf / nan for a NumPy
+        ///         scalar.</item>
+        ///     </list>
+        /// </summary>
+        [TestMethod]
+        public void SpacingKind_IsNumPysOperandKind()
+        {
+            var f32 = np.array(new[] { 1.25f, 5f, 11.25f, 20f, 31.25f, 45f, 61.25f });
+            var f64 = np.array(new[] { 1.0, 4.0, 9.0, 16.0, 25.0 });
+            // s = 1 + 2**-24: twice it is 2 + 2**-23, which rounds to 2.0 in float32 (a tie, to even), so a float32 quotient
+            // by the Python float is exact and a float64 quotient by the NumPy scalar lies just below it.
+            double s = 1.0 + System.Math.Pow(2, -24);
+
+            NDArray r = np.gradient(f32, s);
+            r.dtype.Should().Be(np.float32);
+            Bits32(r).Should().Equal(0x40700000u, 0x40a00000u, 0x40f00000u, 0x41200000u, 0x41480000u, 0x41700000u,
+                0x41820000u);
+            r = np.gradient(f32, np.array(s));
+            r.dtype.Should().Be(np.float32);
+            var strong = new[] { 0x406fffffu, 0x409fffffu, 0x40efffffu, 0x411fffffu, 0x4147ffffu, 0x416fffffu, 0x4181ffffu };
+            Bits32(r).Should().Equal(strong);
+            // np.gradient(f32, np.arange(7) * s): exact coordinates, every difference s, so diffx[0] is np.float64(s).
+            var coords = np.array(Enumerable.Range(0, 7).Select(k => k * s).ToArray());
+            Bits32((NDArray)np.gradient(f32, coords)).Should().Equal(strong);
+            // edge_order=2: the weak coefficients are float32 (-1.5 / s rounds s to 1.0), the strong ones float64.
+            Bits32((NDArray)np.gradient(f32, s, edge_order: 2)).Should().Equal(0x401ffffeu, 0x40a00000u, 0x40f00000u,
+                0x41200000u, 0x41480000u, 0x41700000u, 0x418c0000u);
+            var strong2 = new[] { 0x401fffffu, 0x409fffffu, 0x40efffffu, 0x411fffffu, 0x4147ffffu, 0x416fffffu, 0x418bffffu };
+            Bits32((NDArray)np.gradient(f32, np.array(s), edge_order: 2)).Should().Equal(strong2);
+            Bits32((NDArray)np.gradient(f32, coords, edge_order: 2)).Should().Equal(strong2);
+
+            // np.gradient(f64, np.float16(0.1)): `2. * np.float16(0.1)` is np.float16(0.19995), the interior's divisor; with
+            // edge_order=2 the coefficients -1.5 / step, 2. / step, -0.5 / step round to the float16 -15, 20, -5.
+            r = np.gradient(f64, (Half)0.1);
+            r.dtype.Should().Be(np.float64);
+            Bits64(r).Should().Equal(0x403e01e01e01e01eul, 0x4044014014014014ul, 0x404e01e01e01e01eul, 0x4054014014014014ul,
+                0x4056816816816817ul);
+            Bits64((NDArray)np.gradient(f64, (Half)0.1, edge_order: 2)).Should().Equal(0x4034000000000000ul,
+                0x4044014014014014ul, 0x404e01e01e01e01eul, 0x4054014014014014ul, 0x4059000000000000ul);
+
+            // np.gradient(f32, np.uint16(3)): `2. * np.uint16(3)` is np.float64(6.0), so the float32 input divides in float64.
+            r = np.gradient(f32, (char)3);
+            r.dtype.Should().Be(np.float32);
+            Bits32(r).Should().Equal(0x3fa00000u, 0x3fd55555u, 0x40200000u, 0x40555555u, 0x40855555u, 0x40a00000u,
+                0x40ad5555u);
+            Bits32((NDArray)np.gradient(f32, (char)3, edge_order: 2)).Should().Equal(0x3f555555u, 0x3fd55555u, 0x40200000u,
+                0x40555555u, 0x40855555u, 0x40a00000u, 0x40baaaabu);
+
+            // np.gradient(f32, np.array([0, 0.5, 1.5, 2, 3, 3.5, 4.5], np.float32), edge_order=2): float32 coefficients,
+            // the edges included (float64 coordinates give 0x40fd5555 at the front edge).
+            Bits32((NDArray)np.gradient(f32, np.array(new[] { 0f, 0.5f, 1.5f, 2f, 3f, 3.5f, 4.5f }), edge_order: 2))
+                .Should().Equal(0x40fd5554u, 0x40e2aaaau, 0x415c0001u, 0x4176aaabu, 0x41b0aaaau, 0x41be0000u, 0x410c0000u);
+
+            // np.gradient(f64, [0, 0.5+0.5j, 1.5+1j, 2, 3+0.5j]): complex coefficients, the float64 component keeps the real
+            // part of each complex value (NumPy's setitem, with its ComplexWarning).
+            var complexCoords = np.array(new[]
+            {
+                new System.Numerics.Complex(0, 0), new System.Numerics.Complex(0.5, 0.5),
+                new System.Numerics.Complex(1.5, 1), new System.Numerics.Complex(2, 0), new System.Numerics.Complex(3, 0.5),
+            });
+            r = np.gradient(f64, complexCoords);
+            r.dtype.Should().Be(np.float64);
+            Bits64(r).Should().Equal(0x4008000000000000ul, 0x400a762762762763ul, 0xbfd9999999999990ul, 0x3fd9999999999990ul,
+                0x401ccccccccccccdul);
+            Bits64((NDArray)np.gradient(f64, complexCoords, edge_order: 2)).Should().Equal(0x400589d89d89d89bul,
+                0x400a762762762763ul, 0xbfd9999999999990ul, 0x3fd9999999999990ul, 0x402c000000000000ul);
+
+            // A str or None step: Python's `2. * ax_dx` refuses it.
+            Action text = () => np.gradient(f32, "2");
+            text.Should().Throw<TypeError>().WithMessage("can't multiply sequence by non-int of type 'float'");
+            Action none = () => np.gradient(np.ones(new Shape(3, 4)), null, 1.0);
+            none.Should().Throw<TypeError>().WithMessage("unsupported operand type(s) for *: 'float' and 'NoneType'");
+
+            // A zero step with edge_order=2: CPython's `-1.5 / 0.0` raises; np.float16(0) gives -inf, inf, -inf
+            // coefficients (scalarmath), so the edges are inf - inf, a NaN (its sign is the CPU's default NaN).
+            Action pyZero = () => np.gradient(f32, 0.0, edge_order: 2);
+            pyZero.Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
+            float[] halfZero = ((NDArray)np.gradient(f32, (Half)0.0, edge_order: 2)).ToArray<float>();
+            float.IsNaN(halfZero[0]).Should().BeTrue();
+            float.IsNaN(halfZero[6]).Should().BeTrue();
+            halfZero.Skip(1).Take(5).Should().AllSatisfy(v => float.IsPositiveInfinity(v).Should().BeTrue());
+        }
+
+        /// <summary>
         ///     Asserts every component of a gradient: its byte strides and its C / F / OWNDATA flags.
         /// </summary>
         /// <param name="r">The gradient.</param>

@@ -116,7 +116,10 @@ namespace NumSharp
         ///     axis, or a 1-D coordinate array giving the sample positions along the (single) requested
         ///     axis. <c>null</c> (the default) means unit spacing. Coordinates may be an NDArray, a typed C# array or a
         ///     Python list (a <c>List&lt;T&gt;</c>, or an <c>object[]</c> passed as an <c>object</c>: as an
-        ///     <c>object[]</c> it binds the spacing-list overload, one spacing per item).
+        ///     <c>object[]</c> it binds the spacing-list overload, one spacing per item). A scalar step keeps NumPy's
+        ///     kind: a C# number is a Python number, weak under NEP 50 (a float32 <paramref name="f"/> stays float32);
+        ///     a <see cref="Half"/>, <c>char</c> or <c>decimal</c> is a NumPy scalar and a 0-d NDArray an array, both
+        ///     strong (a float64 0-d step computes a float32 <paramref name="f"/> in float64, rounded once).
         /// </param>
         /// <param name="axis">
         ///     The axis along which to take the gradient; <c>null</c> (default) computes it for every
@@ -142,6 +145,19 @@ namespace NumSharp
         /// </exception>
         /// <exception cref="TypeError">
         ///     <paramref name="f"/> is boolean (NumPy's boolean-subtract TypeError from the internal subtract).
+        /// </exception>
+        /// <exception cref="TypeError">
+        ///     A str or None step (Python's own <c>2. * ax_dx</c> refuses it: "can't multiply sequence by non-int of type
+        ///     'float'" / "unsupported operand type(s) for *: 'float' and 'NoneType'").
+        /// </exception>
+        /// <exception cref="DivideByZeroException">
+        ///     A zero step that is a Python number (a C# int, double, bool or Complex) with second-order edges: CPython's
+        ///     ZeroDivisionError of <c>-1.5 / ax_dx</c>. A NumPy scalar or 0-d array zero step gives inf / nan, as in NumPy.
+        ///     Also a decimal input or step divided by zero (decimal has no inf).
+        /// </exception>
+        /// <exception cref="OverflowException">
+        ///     A <c>BigInteger</c> step past the float range (CPython's "int too large to convert to float"), or a decimal
+        ///     result past decimal's range.
         /// </exception>
         public static GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
         {
