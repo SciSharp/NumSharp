@@ -428,5 +428,36 @@ namespace NumSharp.Tests.Backends.Strings
                 "ufunc 'less' did not contain a loop with signature matching types (<class 'numpy.dtypes.StrDType'>, " +
                 "<class 'numpy.dtypes.Int32DType'>) -> None");
         }
+
+        // ---------------------------------------------------------------- np.dot's scalar branch
+
+        /// <summary>
+        ///     <c>np.dot</c> with a 0-d text operand is NumPy's multiply ufunc of the operands converted to the string class
+        ///     (<c>PyArray_MatrixProduct2</c>'s scalar branch), and the ufunc's argument parsing refuses a read-only out=
+        ///     before it looks for a loop: <c>output array is read-only</c>, where NumSharp raised multiply's no-loop
+        ///     TypeError first. A writeable out, or none, still meets the no-loop answer. Expected texts: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Dot_ScalarTextOperand_ReadOnlyOut_IsRefusedBeforeTheLoop()
+        {
+            NDArray ReadOnly()
+            {
+                var o = np.zeros(new Shape(), np.dtype("U5"));
+                o.setflags(write: false);
+                return o;
+            }
+
+            Action both = () => np.dot(np.array("ab"), np.array("cd"), ReadOnly());
+            both.Should().Throw<ValueError>().WithMessage("output array is read-only");
+            Action number = () => np.dot(np.array("ab"), np.array(3), ReadOnly());
+            number.Should().Throw<ValueError>().WithMessage("output array is read-only");
+
+            Action writeable = () => np.dot(np.array("ab"), np.array("cd"), np.zeros(new Shape(), np.dtype("U5")));
+            writeable.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U2'), dtype('<U2')) -> None");
+            Action noOut = () => np.dot(np.array("ab"), np.array(3));
+            noOut.Should().Throw<TypeError>().WithMessage(
+                "ufunc 'multiply' did not contain a loop with signature matching types (dtype('<U2'), dtype('<U11')) -> None");
+        }
     }
 }

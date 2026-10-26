@@ -734,10 +734,11 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">A 0-d operand: <c>multiply</c>'s answer for the operand classes.</exception>
         /// <exception cref="IncorrectShapeException">The contracted lengths differ: <c>shapes (3,) and (4,) not aligned: 3
         ///     (dim 0) != 4 (dim 0)</c> (NumPy's ValueError text; the house type of the alignment error).</exception>
-        /// <exception cref="ValueError">With <paramref name="out"/>: <c>output array is not acceptable (must have the right
-        ///     datatype, number of dimensions, and be a C-Array)</c>, <c>output array has wrong dimensions</c>, or — for an
-        ///     acceptable out — <c>dot not available for this type</c>; without: <c>data type must provide an
-        ///     itemsize</c>.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/> beside a 0-d operand (<c>output array is
+        ///     read-only</c>, the multiply ufunc's argument check, before its loop answer); otherwise with
+        ///     <paramref name="out"/>: <c>output array is not acceptable (must have the right datatype, number of
+        ///     dimensions, and be a C-Array)</c>, <c>output array has wrong dimensions</c>, or — for an acceptable out —
+        ///     <c>dot not available for this type</c>; without: <c>data type must provide an itemsize</c>.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose product NumPy computes over Python
         ///     objects (see <see cref="VStringProductAnswer"/>).</exception>
         internal static void ThrowIfProduct(NDArray a, NDArray b, NDArray @out = null)
@@ -749,7 +750,13 @@ namespace NumSharp.Backends.Strings
             if (!IsString(a) && !IsString(b))
                 return;
             if (a.ndim == 0 || b.ndim == 0)
+            {
+                // The scalar branch is the multiply ufunc, whose argument parsing refuses a read-only out= before it looks
+                // for a loop (NumPy 2.4.2: np.dot(np.array('ab'), np.array('cd'), out=<a read-only 0-d>) reports "output
+                // array is read-only", not multiply's no-loop TypeError).
+                ThrowIfOutWhereInvalid(@out, null);
                 throw ScalarProductError(a, b);
+            }
 
             // dot_alignment_error: a's last axis against b's second-to-last (its only axis when 1-D).
             long l = a.Shape.dimensions[a.ndim - 1];
