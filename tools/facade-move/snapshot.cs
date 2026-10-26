@@ -38,11 +38,13 @@
 // their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
 // optional sample points x and its spacing dx, np.searchsorted's keys v (an array, or a C# int / double), its side
 // name and its sorter, np.cov / np.corrcoef's optional second set of variables y, nullable ddof and frequency /
-// analytic weights, and the gufuncs' second operand x2, axes= lists, nullable keepdims and casting rule); an overload with
-// a required parameter of another kind is reported once as SKIP. An int axis
+// analytic weights, the gufuncs' second operand x2, axes= lists, nullable keepdims and casting rule, and np.gradient's
+// spacing (one, one per axis, or the varargs list: scalars, 0-d arrays, coordinates of the operand's axis lengths) and
+// edge_order); an overload with a required parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand. A result that is a struct of arrays (np.histogram's
-// HistogramResult, np.histogramdd's HistogramddResult) renders each array field.
+// HistogramResult, np.histogramdd's HistogramddResult) renders each array field; np.gradient's GradientResult renders as
+// GRAD1(array) or GRADN(array; ...).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -198,6 +200,10 @@ static class Snapshot
         // The gufuncs (np.matmul / np.vecdot / np.matvec / np.vecmat): the per-operand core axes axes= (an int[][]),
         // matmul's nullable keepdims, and its casting rule.
         AxesList, KeepdimsNullable, Casting,
+        // np.gradient: the single spacing of the one-spacing overloads (a scalar for every axis or one axis' coordinates;
+        // base null, no spacing), a per-axis spacing of the two- and three-spacing overloads (base 1.0), the explicit
+        // spacing list varargs (base empty), all built from the operand's axis lengths, and the boundary order edge_order.
+        GradSpacing, GradAxisSpacing, GradVarargs, EdgeOrder,
         Default, Unsupported,
     }
 
@@ -263,6 +269,12 @@ static class Snapshot
         if (n == "axes" && t == typeof(int[][])) return Role.AxesList;
         if (n == "keepdims" && t == typeof(bool?)) return Role.KeepdimsNullable;
         if (n == "casting" && t == typeof(string)) return Role.Casting;
+        // np.gradient's spacings (typed object / object[]: NumPy's *varargs, each a scalar or a coordinate array) and its
+        // boundary order.
+        if (n == "spacing" && t == typeof(object)) return Role.GradSpacing;
+        if (n is "spacing0" or "spacing1" or "spacing2" && t == typeof(object)) return Role.GradAxisSpacing;
+        if (n == "varargs" && t == typeof(object[])) return Role.GradVarargs;
+        if (n == "edge_order" && t == typeof(int)) return Role.EdgeOrder;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -387,6 +399,30 @@ static class Snapshot
                 foreach (var c in new[] { "no", "equiv", "safe", "same_kind", "unsafe", "bogus" })
                     if (c != c0)
                         Add(c, () => c);
+                break;
+            }
+            case Role.GradSpacing:
+                // The base is the default (null: no spacing, unit steps); the variants follow from the operand (MakeGradSpacing).
+                Add(GradSpacingVariantLabels[0], () => null);
+                break;
+            case Role.GradAxisSpacing:
+                // The base is a unit step for this axis (a C# double: NumPy's Python float); the variants follow from the
+                // operand (MakeGradSpacing along this parameter's axis).
+                Add(GradAxisSpacingVariantLabels[0], () => 1.0);
+                break;
+            case Role.GradVarargs:
+                // The base is the empty list (no spacing); the variants follow from the operand (MakeGradVarargs).
+                Add(GradVarargsVariantLabels[0], () => Array.Empty<object>());
+                break;
+            case Role.EdgeOrder:
+            {
+                // The default first, then the other order NumPy computes, and the values its single check lets through
+                // (0 and -1 take the second-order branch with a one-element shape check) or refuses (3).
+                int e0 = p.HasDefaultValue && p.DefaultValue is int de ? de : 1;
+                Add(e0.ToString(CultureInfo.InvariantCulture), () => e0);
+                foreach (var e in new[] { 2, 0, 3, -1 })
+                    if (e != e0)
+                        Add(e.ToString(CultureInfo.InvariantCulture), () => e);
                 break;
             }
             case Role.Dx:
@@ -625,6 +661,9 @@ static class Snapshot
             Role.Variables => VariablesVariantLabels.Length - 1,
             Role.FWeights => FWeightVariantLabels.Length - 1,
             Role.AWeights => AWeightVariantLabels.Length - 1,
+            Role.GradSpacing => GradSpacingVariantLabels.Length - 1,
+            Role.GradAxisSpacing => GradAxisSpacingVariantLabels.Length - 1,
+            Role.GradVarargs => GradVarargsVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -718,6 +757,9 @@ static class Snapshot
             Role.Variables => VariablesVariantLabels[v],
             Role.FWeights => FWeightVariantLabels[v],
             Role.AWeights => AWeightVariantLabels[v],
+            Role.GradSpacing => GradSpacingVariantLabels[v],
+            Role.GradAxisSpacing => GradAxisSpacingVariantLabels[v],
+            Role.GradVarargs => GradVarargsVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -775,6 +817,16 @@ static class Snapshot
                         break;
                     case Role.AWeights:
                         argv[p] = MakeCovWeights(frequency: false, AWeightVariantLabels[v], operand);
+                        break;
+                    case Role.GradSpacing:
+                        argv[p] = MakeGradSpacing(GradSpacingVariantLabels[v], operand, axis: 0);
+                        break;
+                    case Role.GradAxisSpacing:
+                        // spacing0 / spacing1 / spacing2: the spacing of axis 0 / 1 / 2, so coordinates take that axis' length.
+                        argv[p] = MakeGradSpacing(GradAxisSpacingVariantLabels[v], operand, axis: ps[p].Name[^1] - '0');
+                        break;
+                    case Role.GradVarargs:
+                        argv[p] = MakeGradVarargs(GradVarargsVariantLabels[v], operand);
                         break;
                     case Role.SampleSeq:
                     case Role.BinsInts:
@@ -1298,6 +1350,171 @@ static class Snapshot
         }
     }
 
+    /// <summary>np.gradient's single-spacing variants (see <see cref="MakeGradSpacing"/>); the first, null (no spacing), is
+    ///     the base.</summary>
+    private static readonly string[] GradSpacingVariantLabels =
+    {
+        "null", "2", "0.5", "-1.5", "0", "nan", "inf", "true", "f16", "f32", "dec", "char", "str", "0d_f64", "0d_i64",
+        "0d_f32", "coords", "coords_last", "int_coords", "const", "const_int", "f32_coords", "f16_coords", "c128_coords",
+        "bool_coords", "U5_coords", "doubles", "longs", "2d", "badlen", "special", "dup", "decr", "strided",
+    };
+
+    /// <summary>np.gradient's per-axis spacing variants of the two- and three-spacing overloads (see
+    ///     <see cref="MakeGradSpacing"/>); the first, a unit step, is the base.</summary>
+    private static readonly string[] GradAxisSpacingVariantLabels =
+    {
+        "1", "2", "0.5", "0d_f64", "f16", "null", "str", "coords", "int_coords", "const", "f32_coords", "2d", "badlen",
+        "doubles",
+    };
+
+    /// <summary>np.gradient's spacing-list variants (see <see cref="MakeGradVarargs"/>); the first, the empty list, is the
+    ///     base.</summary>
+    private static readonly string[] GradVarargsVariantLabels =
+    {
+        "empty", "one", "one_0d", "one_coords", "scalars", "coords", "mixed", "int_coords", "const", "f32", "toomany", "2d",
+        "badlen", "null", "str", "doubles",
+    };
+
+    /// <summary>
+    ///     One coordinate of np.gradient's uneven sample points: 0, 0.5, 1.5, 2, 3, 3.5, ... (steps of 0.5 and 1 in turn), so
+    ///     the stencil's coefficients differ from one point to the next.
+    /// </summary>
+    /// <param name="i">The coordinate's index.</param>
+    /// <returns>The coordinate.</returns>
+    private static double GradPoint(int i) => i * 0.75 - (i % 2 == 0 ? 0.0 : 0.25);
+
+    /// <summary>The first <paramref name="count"/> uneven coordinates (<see cref="GradPoint"/>) as a float64 array.</summary>
+    /// <param name="count">The number of coordinates (an axis length of the pool, so small).</param>
+    /// <returns>A fresh 1-D float64 array (empty for a zero count).</returns>
+    private static NDArray GradPoints(long count) =>
+        np.array(Enumerable.Range(0, (int)count).Select(GradPoint).ToArray());
+
+    /// <summary>The first <paramref name="count"/> uneven integer coordinates (0, 1, 4, 5, 8, ...: steps of 1 and 3 in turn) as
+    ///     C# longs.</summary>
+    /// <param name="count">The number of coordinates.</param>
+    /// <returns>A fresh array.</returns>
+    private static long[] GradIntPoints(long count) =>
+        Enumerable.Range(0, (int)count).Select(i => (long)(2 * i - i % 2)).ToArray();
+
+    /// <summary>
+    ///     Builds one np.gradient spacing for an operand: the C# scalars NumSharp reads as Python numbers, NumPy scalars and
+    ///     0-d arrays (strong under NEP 50), coordinate arrays as long as an axis of the operand, and the forms NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="GradSpacingVariantLabels"/> / <see cref="GradAxisSpacingVariantLabels"/>):
+    ///     <c>null</c> (no spacing for a single spacing, a None entry for a per-axis one), <c>1</c> / <c>2</c> (a C# double /
+    ///     int), <c>0.5</c> / <c>-1.5</c> / <c>0</c> (a C# double: a fraction, a negative step, a zero step), <c>nan</c>
+    ///     (Python's positive quiet NaN) / <c>inf</c>, <c>true</c> (a C# bool: a Python bool), <c>f16</c> (the <c>Half</c> 0.5:
+    ///     NumPy's np.float16, strong), <c>f32</c> (the C# float 0.1f: a Python float of its value), <c>dec</c> (a decimal: no
+    ///     NumPy dtype), <c>char</c> (the C# char 'a': NumPy's np.uint16 97), <c>str</c> (the string "2": a Python str),
+    ///     <c>0d_f64</c> / <c>0d_i64</c> / <c>0d_f32</c> (0-d arrays: strong), coordinates as long as the axis (<c>coords</c>
+    ///     uneven float64, <c>coords_last</c> the same for the operand's LAST axis, <c>int_coords</c> uneven int64,
+    ///     <c>const</c> / <c>const_int</c> evenly spaced float64 / int64, which NumPy reduces to their step, a NumPy scalar,
+    ///     <c>f32_coords</c> / <c>f16_coords</c> / <c>c128_coords</c> / <c>bool_coords</c> / <c>U5_coords</c> in other dtypes,
+    ///     <c>doubles</c> / <c>longs</c> as C# arrays (Python lists), <c>special</c> with NaN, infinities and signed zeros,
+    ///     <c>dup</c> with a zero step, <c>decr</c> decreasing, <c>strided</c> a stepped view), and the coordinate forms NumPy
+    ///     refuses (<c>2d</c> a column, <c>badlen</c> one coordinate too many).</param>
+    /// <param name="operand">The operand.</param>
+    /// <param name="axis">The axis whose length the coordinates take (the first for the single spacing); an axis the operand
+    ///     does not have takes length 3, a call NumPy refuses for its spacing count or its axis anyway.</param>
+    /// <returns>The spacing: a boxed C# scalar, a string, an array, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeGradSpacing(string label, NDArray operand, int axis)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long n = axis < dims.Length ? dims[axis] : 3;
+        long last = dims.Length == 0 ? 3 : dims[^1];
+        // Every arm is cast to object: uncast, the switch's natural type would be NDArray through NumSharp's implicit
+        // conversions, which would turn each C# scalar into a 0-d array, not the Python scalar the variant stands for.
+        return label switch
+        {
+            "null" => null,
+            "1" => (object)1.0,
+            "2" => (object)2,
+            "0.5" => (object)0.5,
+            "-1.5" => (object)-1.5,
+            "0" => (object)0.0,
+            "nan" => (object)BitConverter.Int64BitsToDouble(0x7FF8000000000000),
+            "inf" => (object)double.PositiveInfinity,
+            "true" => (object)true,
+            "f16" => (object)(Half)0.5,
+            "f32" => (object)0.1f,
+            "dec" => (object)0.5m,
+            "char" => (object)'a',
+            "str" => (object)"2",
+            "0d_f64" => (object)np.array(0.5),
+            "0d_i64" => (object)np.array(2L),
+            "0d_f32" => (object)np.array(0.1f),
+            "coords" => (object)GradPoints(n),
+            "coords_last" => (object)GradPoints(last),
+            "int_coords" => (object)np.array(GradIntPoints(n)),
+            "const" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => 0.5 * i).ToArray()),
+            "const_int" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => 3L * i).ToArray()),
+            "f32_coords" => (object)GradPoints(n).astype(np.dtype("float32")),
+            "f16_coords" => (object)GradPoints(n).astype(np.dtype("float16")),
+            "c128_coords" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => new Complex(GradPoint(i), (i % 3) * 0.5)).ToArray()),
+            "bool_coords" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => i % 3 != 1).ToArray()),
+            "U5_coords" => (object)(n == 0
+                ? np.empty(new Shape(0), np.dtype("U5"))
+                : np.array(Enumerable.Range(0, (int)n).Select(i => (i % 3).ToString(CultureInfo.InvariantCulture)).ToArray())
+                    .astype(np.dtype("U5"))),
+            "doubles" => (object)Enumerable.Range(0, (int)n).Select(GradPoint).ToArray(),
+            "longs" => (object)GradIntPoints(n),
+            "2d" => (object)GradPoints(n).reshape(new Shape(n, 1)),
+            "badlen" => (object)GradPoints(n + 1),
+            "special" => (object)np.array(Special.Take((int)n).ToArray()),
+            "dup" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => GradPoint(i == 1 ? 0 : i)).ToArray()),
+            "decr" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => 4.0 - GradPoint(i)).ToArray()),
+            "strided" => (object)GradPoints(2 * n)["::2"],
+            _ => throw new ArgumentException("unknown gradient spacing variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     Builds np.gradient's spacing list for an operand: one entry per axis of the operand (each a scalar or that axis'
+    ///     coordinates), a single entry, and the counts and entries NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="GradVarargsVariantLabels"/>): <c>empty</c> (no spacing), <c>one</c> (a
+    ///     single C# double 2.0: one step for every axis), <c>one_0d</c> (a single 0-d float64 array), <c>one_coords</c> (the
+    ///     first axis' coordinates alone: valid for one requested axis), <c>scalars</c> (a C# double per axis: 1, 2, 0.5, 1,
+    ///     ...), <c>coords</c> / <c>int_coords</c> / <c>const</c> / <c>f32</c> / <c>doubles</c> (each axis' uneven float64,
+    ///     uneven int64, evenly spaced float64 or uneven float32 coordinates, or a C# double[] of the uneven ones),
+    ///     <c>mixed</c> (the first axis' coordinates, 2.0 for the other axes), <c>toomany</c> (one scalar more than the
+    ///     operand has axes), and a first entry NumPy refuses beside unit steps for the other axes (<c>2d</c> a column of
+    ///     coordinates, <c>badlen</c> one coordinate too many, <c>null</c> a None, <c>str</c> the string "2"; one entry even for
+    ///     a 0-d operand).</param>
+    /// <param name="operand">The operand.</param>
+    /// <returns>A fresh object array.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object[] MakeGradVarargs(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        int nd = dims.Length;
+        long first = nd == 0 ? 3 : dims[0];
+        object[] PerAxis(Func<long, object> make) => dims.Select(make).ToArray();
+        object[] FirstThenUnit(object entry) =>
+            new[] { entry }.Concat(Enumerable.Repeat((object)1.0, Math.Max(nd, 1) - 1)).ToArray();
+        return label switch
+        {
+            "empty" => Array.Empty<object>(),
+            "one" => new object[] { 2.0 },
+            "one_0d" => new object[] { np.array(0.5) },
+            "one_coords" => new object[] { GradPoints(first) },
+            "scalars" => Enumerable.Range(0, nd).Select(k => (object)new[] { 1.0, 2.0, 0.5 }[k % 3]).ToArray(),
+            "coords" => PerAxis(len => GradPoints(len)),
+            "int_coords" => PerAxis(len => np.array(GradIntPoints(len))),
+            "const" => PerAxis(len => np.array(Enumerable.Range(0, (int)len).Select(i => 0.5 * i).ToArray())),
+            "f32" => PerAxis(len => GradPoints(len).astype(np.dtype("float32"))),
+            "doubles" => PerAxis(len => Enumerable.Range(0, (int)len).Select(GradPoint).ToArray()),
+            "mixed" => dims.Select((len, k) => k == 0 ? (object)GradPoints(len) : 2.0).ToArray(),
+            "toomany" => Enumerable.Repeat((object)1.0, nd + 1).ToArray(),
+            "2d" => FirstThenUnit(GradPoints(first).reshape(new Shape(first, 1))),
+            "badlen" => FirstThenUnit(GradPoints(first + 1)),
+            "null" => FirstThenUnit(null),
+            "str" => FirstThenUnit("2"),
+            _ => throw new ArgumentException("unknown gradient spacing-list variant " + label),
+        };
+    }
+
     /// <summary>The labels of a histogramdd / histogram2d role; the first is the base value.</summary>
     /// <param name="role">One of <see cref="Role.SampleSeq"/>, <see cref="Role.BinsInts"/>, <see cref="Role.BinsArrays"/>,
     ///     <see cref="Role.BinsObjects"/>, <see cref="Role.RangeArray"/>.</param>
@@ -1547,6 +1764,11 @@ static class Snapshot
                 return "VAL Single " + BitConverter.SingleToInt32Bits(fl).ToString("x8");
             case ITuple t:
                 return "TUPLE(" + string.Join("; ", Enumerable.Range(0, t.Length).Select(i => Render(t[i], outArray))) + ")";
+            case np.GradientResult g:
+                // np.gradient's result keeps its arrays in private fields (the struct-of-arrays rule below sees none): GRAD1
+                // for NumPy's bare ndarray (one requested axis), GRADN for its tuple, each component in axis order.
+                return (g.IsSingle ? "GRAD1(" : "GRADN(") +
+                       string.Join("; ", Enumerable.Range(0, g.Length).Select(k => Render(g[k], outArray))) + ")";
             case IEnumerable e:
                 return "LIST[" + string.Join("; ", e.Cast<object>().Select(o => Render(o, outArray))) + "]";
             default:
