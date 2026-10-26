@@ -240,81 +240,332 @@ namespace NumSharp.Backends
             => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.GetTypeCode().AsType(), copy: false);
 
         /// <summary>
-        ///     Validates a gufunc <c>axes=</c> list and normalizes each INPUT entry against its
-        ///     operand's rank.
+        ///     NumPy's gufunc checks of <c>PyUFunc_GeneralizedFunctionInternal</c> before the iterator, in its order:
+        ///     keepdims support, axis support, the operands' ranks with the flexible dimensions dropped
+        ///     (<c>_validate_num_dims</c>), the <c>axes=</c> / <c>axis=</c> remap (<c>_parse_axes_arg</c> /
+        ///     <c>_parse_axis_arg</c>), and the core sizes (<c>_get_coredim_sizes</c>), over the inputs and a given out.
         /// </summary>
-        /// <param name="name">The gufunc's name as NumPy prints it.</param>
-        /// <param name="axes">The <c>axes=</c> list: one entry per operand, each the axes carrying that operand's core
-        ///     dimensions.</param>
-        /// <param name="coreRanks">
-        ///     How many core dimensions each of the three slots has — <c>{x1, x2, out}</c>. For
-        ///     <c>vecdot</c>'s <c>(n),(n)-&gt;()</c> that is <c>{1, 1, 0}</c>.
-        /// </param>
-        /// <param name="x1">The first input (its rank normalizes entry 0).</param>
-        /// <param name="x2">The second input (its rank normalizes entry 1).</param>
-        /// <param name="outputCoreRankOverride">
-        ///     The output's EFFECTIVE core rank when it differs from the signature's — namely under
-        ///     <c>keepdims</c>, where the reduced core dimension is kept as size 1 and a PROVIDED
-        ///     output entry must name it. It changes only the length a provided output entry is
-        ///     checked against; whether the entry may be OMITTED still keys off the signature rank
-        ///     (<c>coreRanks[2]</c>), because keepdims does not add a signature core axis. Only
-        ///     <c>vecdot</c> passes it — <c>matvec</c>/<c>vecmat</c> reject keepdims before reaching
-        ///     here — so their behaviour is unchanged (<c>null</c> ⇒ the signature rank).
-        /// </param>
-        /// <returns>
-        ///     Three entries. The two input entries hold non-negative axis indices; the OUTPUT entry
-        ///     is returned as given, because the result's rank is not known until the loop has run.
-        /// </returns>
-        /// <exception cref="ValueError">The list has neither three entries nor (for an output without core axes)
-        ///     two.</exception>
-        /// <exception cref="AxisError">An entry's length is not its operand's core rank, or an input axis is out of
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <param name="op">The operands: the inputs, then the output (null when no out= was given).</param>
+        /// <param name="axes">The <c>axes=</c> list, or null.</param>
+        /// <param name="axis">The <c>axis=</c> value, or null (never both: the argument parse refused that).</param>
+        /// <param name="keepdimsPassed">Whether the caller passed keepdims (NumPy's <c>keepdims != -1</c>): a gufunc that
+        ///     cannot keep dimensions refuses it whatever its value.</param>
+        /// <param name="keepdims">The keepdims value.</param>
+        /// <returns>The call's core-dimension facts, for the iterator check and the computation.</returns>
+        /// <exception cref="TypeError">keepdims passed to a gufunc whose inputs have different core ranks or whose
+        ///     outputs have core dimensions; axis given to a gufunc with more than one distinct core dimension.</exception>
+        /// <exception cref="ValueError">An operand with too few dimensions; an <c>axes=</c> list of the wrong length; a
+        ///     repeated axis in an <c>axes=</c> entry; a core dimension whose size differs between operands.</exception>
+        /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of its operand's
         ///     range.</exception>
         /// <remarks>
-        ///     <c>axes</c> names, per operand, which axes carry the core dimensions — so it is the
-        ///     general form of <c>axis</c>, and NumPy rejects the two together. The output entry may
-        ///     be omitted ONLY when the output has no core axes, which among this family is
-        ///     <c>vecdot</c> alone.
+        ///     Ported statement for statement so the first error is NumPy's: the checks of one stage run over every operand
+        ///     before the next stage starts, and an output's rank (when no out= is given) is the loop rank plus its core
+        ///     rank. A flexible dimension (<c>n?</c> / <c>m?</c>) that an operand cannot provide is dropped from EVERY
+        ///     operand that names it, so a short out= changes how the inputs are read (probed 2.4.2:
+        ///     <c>np.matmul(np.zeros((3,4)), np.zeros((4,5)), out=np.zeros(()))</c> drops both and reports input 1's
+        ///     <c>k</c> as 5).
         /// </remarks>
-        internal static int[][] NormalizeAxes(string name, int[][] axes, int[] coreRanks, NDArray x1, NDArray x2,
-            int? outputCoreRankOverride = null)
+        internal static GufuncLayout CheckCoreDimensions(GufuncSignature sig, NDArray[] op, int[][] axes, int? axis,
+            bool keepdimsPassed, bool keepdims)
         {
-            if (axes.Length != 3 && !(axes.Length == 2 && coreRanks[2] == 0))
-                throw new ValueError(
-                    "axes should be a list with an entry for all 3 inputs and outputs; entries for " +
-                    "outputs can only be omitted if none of them has core axes.");
+            if (keepdimsPassed)
+                CheckKeepdimsSupport(sig);
+            if (axis.HasValue)
+                CheckAxisSupport(sig);
 
-            var resolved = new int[3][];
-            resolved[2] = System.Array.Empty<int>();
-
-            for (int i = 0; i < axes.Length; i++)
+            int nin = sig.Nin, nop = sig.Nop;
+            var layout = new GufuncLayout
             {
-                var entry = axes[i] ?? System.Array.Empty<int>();
-                int expected = i == 2 ? (outputCoreRankOverride ?? coreRanks[2]) : coreRanks[i];
-                if (entry.Length != expected)
-                    throw new AxisError(
-                        $"{name}: operand {i} has {expected} core dimensions, " +
-                        $"but {entry.Length} dimensions are specified by axes tuple.");
+                OpCoreNumDims = new int[nop],
+                Missing = new bool[sig.CoreNumDimIx],
+                Keepdims = keepdimsPassed && keepdims,
+            };
+            for (int i = 0; i < nop; i++)
+                layout.OpCoreNumDims[i] = sig.CoreNumDims(i);
+            // keepdims set and true: every output keeps the inputs' core rank (as length-1 axes).
+            if (layout.Keepdims)
+                for (int i = nin; i < nop; i++)
+                    layout.OpCoreNumDims[i] = layout.OpCoreNumDims[0];
 
-                if (i == 2)
-                {
-                    resolved[2] = (int[])entry.Clone();
+            // _initialize_variable_parts: the call works on its own copy of the flexible flags.
+            ValidateNumDims(sig, op, (bool[])sig.CanIgnore.Clone(), layout);
+
+            // broadcast_ndim: the loop rank, from the operands that were given.
+            for (int i = 0; i < nop; i++)
+            {
+                if (op[i] is null)
                     continue;
-                }
-
-                var operand = i == 0 ? x1 : x2;
-                var normalized = new int[entry.Length];
-                for (int k = 0; k < entry.Length; k++)
-                {
-                    int axis = entry[k] < 0 ? entry[k] + operand.ndim : entry[k];
-                    if (axis < 0 || axis >= operand.ndim)
-                        throw new AxisError(entry[k], operand.ndim);
-                    normalized[k] = axis;
-                }
-
-                resolved[i] = normalized;
+                int n = op[i].ndim - layout.OpCoreNumDims[i];
+                if (n > layout.BroadcastNdim)
+                    layout.BroadcastNdim = n;
             }
 
-            return resolved;
+            if (axes is not null)
+                layout.RemapAxis = ParseAxesArg(sig, op, axes, layout);
+            else if (axis.HasValue)
+                layout.RemapAxis = ParseAxisArg(sig, op, axis.Value, layout);
+
+            layout.CoreDimSizes = GetCoreDimSizes(sig, op, layout);
+            return layout;
+        }
+
+        /// <summary>NumPy's <c>_check_keepdims_support</c>: keepdims needs every input to have the first input's core
+        ///     rank and every output none.</summary>
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <exception cref="TypeError">The signature does not allow keepdims (NumPy's text names the first operand that
+        ///     breaks the rule).</exception>
+        private static void CheckKeepdimsSupport(GufuncSignature sig)
+        {
+            int inputCoreDims = sig.CoreNumDims(0);
+            for (int i = 1; i < sig.Nop; i++)
+            {
+                if (sig.CoreNumDims(i) == (i < sig.Nin ? inputCoreDims : 0))
+                    continue;
+                throw new TypeError(
+                    $"{sig.Name} does not support keepdims: its signature {sig.Text} requires " +
+                    $"{(i < sig.Nin ? "input" : "output")} {(i < sig.Nin ? i : i - sig.Nin)} to have " +
+                    $"{sig.CoreNumDims(i)} core dimensions, but keepdims can only be used when all inputs have the " +
+                    "same number of core dimensions and all outputs have no core dimensions.");
+            }
+        }
+
+        /// <summary>NumPy's <c>_check_axis_support</c>: axis= needs a single shared core dimension.</summary>
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <exception cref="TypeError">The signature has more than one distinct core dimension.</exception>
+        private static void CheckAxisSupport(GufuncSignature sig)
+        {
+            if (sig.CoreNumDimIx != 1)
+                throw new TypeError(
+                    $"{sig.Name}: axis can only be used with a single shared core dimension, not with the " +
+                    $"{sig.CoreNumDimIx} distinct ones implied by signature {sig.Text}.");
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_validate_num_dims</c>: an operand with fewer dimensions than its core rank drops its flexible
+        ///     core dimensions (from every operand that names them, marking them missing) until it has enough, and is
+        ///     refused when it still has not.
+        /// </summary>
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <param name="op">The operands (null for an output not given).</param>
+        /// <param name="canIgnore">The call's copy of the flexible flags; a dropped dimension stops being
+        ///     flexible.</param>
+        /// <param name="layout">The call's layout: its core ranks and missing flags are updated.</param>
+        /// <exception cref="ValueError">"{name}: {Input|Output} operand {i} does not have enough dimensions (has {n},
+        ///     gufunc core with signature {sig} requires {k})", k being the core rank after the drops.</exception>
+        private static void ValidateNumDims(GufuncSignature sig, NDArray[] op, bool[] canIgnore, GufuncLayout layout)
+        {
+            int nin = sig.Nin, nop = sig.Nop;
+            var opCore = layout.OpCoreNumDims;
+            for (int i = 0; i < nop; i++)
+            {
+                if (op[i] is null)
+                    continue;
+                int ndim = op[i].ndim;
+                if (ndim >= opCore[i])
+                    continue;
+                foreach (int ix in sig.CoreDimIxs[i])
+                {
+                    if (!canIgnore[ix])
+                        continue;
+                    // Drop the flexible dimension from every operand that uses it (ours included), then see whether
+                    // this operand has enough dimensions now.
+                    layout.Missing[ix] = true;
+                    canIgnore[ix] = false;
+                    for (int i1 = 0; i1 < nop; i1++)
+                        foreach (int j1 in sig.CoreDimIxs[i1])
+                            if (j1 == ix)
+                                opCore[i1]--;
+                    if (ndim == opCore[i])
+                        break;
+                }
+                if (ndim < opCore[i])
+                    throw new ValueError(
+                        $"{sig.Name}: {(i < nin ? "Input" : "Output")} operand {(i < nin ? i : i - nin)} does not have " +
+                        $"enough dimensions (has {ndim}, gufunc core with signature {sig.Text} requires {opCore[i]})");
+            }
+        }
+
+        /// <summary>NumPy's <c>check_and_adjust_axis</c>.</summary>
+        /// <param name="axis">The axis as given (negative counts from the end).</param>
+        /// <param name="ndim">The rank it indexes.</param>
+        /// <returns>The axis, normalized.</returns>
+        /// <exception cref="AxisError">The axis is out of range (the message reports it as given).</exception>
+        private static int CheckAndAdjustAxis(int axis, int ndim)
+        {
+            if (axis < -ndim || axis >= ndim)
+                throw new AxisError(axis, ndim);
+            return axis < 0 ? axis + ndim : axis;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_parse_axis_arg</c>: <c>axis=</c> names the single shared core axis of every operand with core
+        ///     dimensions; the remap moves it to the last default position.
+        /// </summary>
+        /// <param name="sig">The gufunc's core signature (one distinct core dimension).</param>
+        /// <param name="op">The operands (null for an output not given).</param>
+        /// <param name="axis">The axis as given.</param>
+        /// <param name="layout">The call's layout (core ranks, loop rank).</param>
+        /// <returns>Per operand its remap, or null for the identity.</returns>
+        /// <exception cref="AxisError">The axis is out of an operand's range.</exception>
+        private static int[][] ParseAxisArg(GufuncSignature sig, NDArray[] op, int axis, GufuncLayout layout)
+        {
+            var remap = new int[sig.Nop][];
+            for (int iop = 0; iop < sig.Nop; iop++)
+            {
+                // _check_axis_support ensured the core rank is 0 or 1.
+                if (layout.OpCoreNumDims[iop] == 0)
+                    continue;
+                int opNdim = op[iop] is not null ? op[iop].ndim : layout.BroadcastNdim + 1;
+                int opAxis = CheckAndAdjustAxis(axis, opNdim);
+                if (opAxis == opNdim - 1)
+                    continue;
+                var r = new int[opNdim];
+                r[opNdim - 1] = opAxis;
+                for (int a = 0; a < opAxis; a++)
+                    r[a] = a;
+                for (int a = opAxis; a < opNdim - 1; a++)
+                    r[a] = a + 1;
+                remap[iop] = r;
+            }
+            return remap;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_parse_axes_arg</c>: one entry per operand (the outputs may be omitted only when none has core
+        ///     dimensions), each naming the operand's core axes in core order; the remap places the loop axes first, in
+        ///     their order, then the named core axes.
+        /// </summary>
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <param name="op">The operands (null for an output not given: its rank is the loop rank plus its core
+        ///     rank).</param>
+        /// <param name="axes">The <c>axes=</c> list; a null entry reads as an empty one.</param>
+        /// <param name="layout">The call's layout (core ranks, loop rank).</param>
+        /// <returns>Per operand its remap, or null for the identity (or an omitted output entry).</returns>
+        /// <exception cref="ValueError">The list has the wrong length, or an entry repeats an axis.</exception>
+        /// <exception cref="AxisError">An entry's length is not its operand's core rank, or an axis is out of
+        ///     range.</exception>
+        /// <remarks>Each operand's entry is checked completely (length, then each axis's range and repetition) before the
+        ///     next operand's, so the first bad entry is the error, as in NumPy.</remarks>
+        private static int[][] ParseAxesArg(GufuncSignature sig, NDArray[] op, int[][] axes, GufuncLayout layout)
+        {
+            int nin = sig.Nin, nop = sig.Nop;
+            if (axes.Length != nop && (axes.Length != nin || sig.HasOutputCoreDims))
+                throw new ValueError(
+                    $"axes should be a list with an entry for all {nop} inputs and outputs; entries for " +
+                    "outputs can only be omitted if none of them has core axes.");
+
+            var remap = new int[nop][];
+            for (int iop = 0; iop < axes.Length; iop++)
+            {
+                int ncore = layout.OpCoreNumDims[iop];
+                int opNdim, nbroadcast;
+                if (op[iop] is not null)
+                {
+                    opNdim = op[iop].ndim;
+                    nbroadcast = opNdim - ncore;
+                }
+                else
+                {
+                    nbroadcast = layout.BroadcastNdim;
+                    opNdim = layout.BroadcastNdim + ncore;
+                }
+
+                var entry = axes[iop] ?? System.Array.Empty<int>();
+                if (entry.Length != ncore)
+                    throw new AxisError(
+                        $"{sig.Name}: operand {iop} has {ncore} core dimensions, " +
+                        $"but {entry.Length} dimensions are specified by axes tuple.");
+
+                // The core axes take the last default positions, in the entry's order.
+                var seen = new bool[opNdim];
+                var r = new int[opNdim];
+                for (int a = nbroadcast; a < opNdim; a++)
+                {
+                    int opAxis = CheckAndAdjustAxis(entry[a - nbroadcast], opNdim);
+                    if (seen[opAxis])
+                        throw new ValueError($"axes item {iop} has value {opAxis} repeated");
+                    seen[opAxis] = true;
+                    r[a] = opAxis;
+                }
+                // The loop axes fill the first positions with the axes not named, in increasing order.
+                for (int a = 0, next = 0; a < nbroadcast; a++)
+                {
+                    while (seen[next])
+                        next++;
+                    r[a] = next++;
+                }
+
+                bool identity = true;
+                for (int a = 0; a < opNdim && identity; a++)
+                    identity = r[a] == a;
+                remap[iop] = identity ? null : r;
+            }
+            return remap;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_get_coredim_sizes</c>: each core dimension takes its size from the first operand that has it, and
+        ///     every later operand must match it exactly (a missing flexible dimension counts as 1); every output core
+        ///     dimension must get a size.
+        /// </summary>
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <param name="op">The operands (null for an output not given).</param>
+        /// <param name="layout">The call's layout (core ranks, missing flags, remap).</param>
+        /// <returns>Per distinct core dimension, its size.</returns>
+        /// <exception cref="ValueError">"{name}: {Input|Output} operand {i} has a mismatch in its core dimension {d}, with
+        ///     gufunc signature {sig} (size {actual} is different from {expected})", or an output core dimension no operand
+        ///     sizes.</exception>
+        private static long[] GetCoreDimSizes(GufuncSignature sig, NDArray[] op, GufuncLayout layout)
+        {
+            int nin = sig.Nin, nop = sig.Nop;
+            var sizes = new long[sig.CoreNumDimIx];
+            System.Array.Fill(sizes, -1L);
+            for (int i = 0; i < nop; i++)
+            {
+                if (op[i] is null)
+                    continue;
+                var dims = op[i].Shape.dimensions;
+                int coreStart = dims.Length - layout.OpCoreNumDims[i];
+                int delta = 0;
+                var ixs = sig.CoreDimIxs[i];
+                for (int idim = 0; idim < ixs.Length; idim++)
+                {
+                    int ix = ixs[idim];
+                    long size;
+                    if (layout.Missing[ix])
+                    {
+                        // A flexible dimension the operands dropped: its size is 1, and it takes no axis.
+                        size = 1;
+                        delta++;
+                    }
+                    else
+                    {
+                        int position = coreStart + idim - delta;
+                        size = dims[layout.RemapAxis?[i] is { } remap ? remap[position] : position];
+                    }
+
+                    if (sizes[ix] < 0)
+                        sizes[ix] = size;
+                    else if (size != sizes[ix])
+                        throw new ValueError(
+                            $"{sig.Name}: {(i < nin ? "Input" : "Output")} operand {(i < nin ? i : i - nin)} has a " +
+                            $"mismatch in its core dimension {idim - delta}, with gufunc signature {sig.Text} " +
+                            $"(size {size} is different from {sizes[ix]})");
+                }
+            }
+
+            for (int i = nin; i < nop; i++)
+            {
+                var ixs = sig.CoreDimIxs[i];
+                for (int idim = 0; idim < ixs.Length; idim++)
+                    if (sizes[ixs[idim]] < 0)
+                        throw new ValueError(
+                            $"{sig.Name}: Output operand {i - nin} has core dimension {idim} unspecified, with gufunc " +
+                            $"signature {sig.Text}");
+            }
+            return sizes;
         }
 
         /// <summary>NumPy rejects <c>axis</c> and <c>axes</c> together, whichever gufunc it is.</summary>
@@ -325,36 +576,6 @@ namespace NumSharp.Backends
         {
             if (axes is not null && axis is not null)
                 throw new TypeError("cannot specify both 'axis' and 'axes'");
-        }
-
-        /// <summary>
-        ///     The two rejections a gufunc whose core dimensions are DISTINCT raises for
-        ///     <c>axis</c> and <c>keepdims</c> — <c>matvec</c> and <c>vecmat</c>, never
-        ///     <c>vecdot</c>.
-        /// </summary>
-        /// <param name="name">The gufunc's name as NumPy prints it.</param>
-        /// <param name="signature">The gufunc signature the messages quote.</param>
-        /// <param name="axis">The <c>axis=</c> value, or null.</param>
-        /// <param name="keepdims">The <c>keepdims=</c> value.</param>
-        /// <param name="secondOperandCoreRank">
-        ///     How many core dimensions input 1 has — 1 for <c>matvec</c>, 2 for <c>vecmat</c>.
-        ///     NumPy names that operand in the keepdims message.
-        /// </param>
-        /// <exception cref="TypeError"><paramref name="axis"/> is given, or <paramref name="keepdims"/> is true.</exception>
-        internal static void RejectAxisAndKeepdims(string name, string signature, int? axis, bool keepdims,
-            int secondOperandCoreRank)
-        {
-            if (axis is not null)
-                throw new TypeError(
-                    $"{name}: axis can only be used with a single shared core dimension, not with " +
-                    $"the 2 distinct ones implied by signature {signature}.");
-
-            if (keepdims)
-                throw new TypeError(
-                    $"{name} does not support keepdims: its signature {signature} requires input 1 " +
-                    $"to have {secondOperandCoreRank} core dimensions, but keepdims can only be used " +
-                    "when all inputs have the same number of core dimensions and all outputs have no " +
-                    "core dimensions.");
         }
 
         /// <summary>

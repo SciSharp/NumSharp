@@ -132,5 +132,58 @@ namespace NumSharp.Tests.LinearAlgebra
                 "ufunc 'matmul' did not contain a loop with signature matching types (<class " +
                 "'numpy.dtypes.StringDType'>, <class 'numpy.dtypes.Float64DType'>) -> <class 'numpy.dtypes.Float64DType'>");
         }
+
+        [TestMethod]
+        public void Matmul_CoreChecks_AreNumPysGufuncChecks()
+        {
+            // np.matmul(np.ones((3,4)), np.ones((3,4))) -> ValueError (NumSharp: IncorrectShapeException "matmul: Input
+            // operand core dimension mismatch ...")
+            Action core = () => np.matmul(np.ones(new Shape(3L, 4L)), np.ones(new Shape(3L, 4L)));
+            core.Should().Throw<ValueError>().WithMessage(
+                "matmul: Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?) " +
+                "(size 3 is different from 4)");
+            // np.matmul(np.array(2.0), np.ones(3)) -> ValueError (NumSharp: InvalidOperationException)
+            Action zeroD = () => np.matmul(NDArray.Scalar(2.0), np.ones(new Shape(3L)));
+            zeroD.Should().Throw<ValueError>().WithMessage(
+                "matmul: Input operand 0 does not have enough dimensions (has 0, gufunc core with signature " +
+                "(n?,k),(k,m?)->(n?,m?) requires 1)");
+            // np.matmul(np.ones((3,4)), np.ones((4,5)), out=np.zeros((3,6))) -> the output's core mismatch
+            Action outCore = () => np.matmul(np.ones(new Shape(3L, 4L)), np.ones(new Shape(4L, 5L)), np.zeros(new Shape(3L, 6L)));
+            outCore.Should().Throw<ValueError>().WithMessage(
+                "matmul: Output operand 0 has a mismatch in its core dimension 1, with gufunc signature " +
+                "(n?,k),(k,m?)->(n?,m?) (size 6 is different from 5)");
+            // np.matmul(np.ones((3,4)), np.ones((4,5)), out=np.zeros(())) -> a 0-d out drops n? and m? from every operand,
+            // so input 1's k is read from its last axis: size 5 against 4
+            Action outZeroD = () => np.matmul(np.ones(new Shape(3L, 4L)), np.ones(new Shape(4L, 5L)), np.zeros(Shape.Scalar));
+            outZeroD.Should().Throw<ValueError>().WithMessage(
+                "matmul: Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (n?,k),(k,m?)->(n?,m?) " +
+                "(size 5 is different from 4)");
+        }
+
+        [TestMethod]
+        public void MatvecVecmat_CoreChecks_AreNumPysGufuncChecks()
+        {
+            var a34 = np.arange(12.0).reshape(3, 4);
+            // np.matvec(a34, np.ones(4), out=np.zeros(())) -> the output's rank
+            Action outRank = () => np.matvec(a34, np.ones(new Shape(4L)), np.zeros(Shape.Scalar));
+            outRank.Should().Throw<ValueError>().WithMessage(
+                "matvec: Output operand 0 does not have enough dimensions (has 0, gufunc core with signature " +
+                "(m,n),(n)->(m) requires 1)");
+            // np.matvec(a34, np.ones(4), out=np.zeros(2)) -> the output's core size (NumSharp: np.copyto's broadcast error)
+            Action outCore = () => np.matvec(a34, np.ones(new Shape(4L)), np.zeros(new Shape(2L)));
+            outCore.Should().Throw<ValueError>().WithMessage(
+                "matvec: Output operand 0 has a mismatch in its core dimension 0, with gufunc signature (m,n),(n)->(m) " +
+                "(size 2 is different from 3)");
+            // np.matvec(a34, np.ones(4), axis=0, keepdims=True) -> keepdims is refused before axis
+            Action both = () => np.matvec(a34, np.ones(new Shape(4L)), axis: 0, keepdims: true);
+            both.Should().Throw<TypeError>().WithMessage("matvec does not support keepdims: *");
+            // np.matvec(a34, np.ones(4), axes=[(0,0),(0,),(0,)]) and np.vecmat(np.ones(3), a34, axes=[(0,),(1,1),(0,)])
+            Action matvecRepeat = () => np.matvec(a34, np.ones(new Shape(4L)),
+                axes: new[] { new[] { 0, 0 }, new[] { 0 }, new[] { 0 } });
+            matvecRepeat.Should().Throw<ValueError>().WithMessage("axes item 0 has value 0 repeated");
+            Action vecmatRepeat = () => np.vecmat(np.ones(new Shape(3L)), a34,
+                axes: new[] { new[] { 0 }, new[] { 1, 1 }, new[] { 0 } });
+            vecmatRepeat.Should().Throw<ValueError>().WithMessage("axes item 1 has value 1 repeated");
+        }
     }
 }

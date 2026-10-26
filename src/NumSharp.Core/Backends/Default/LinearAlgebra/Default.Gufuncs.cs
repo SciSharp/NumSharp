@@ -60,50 +60,24 @@ namespace NumSharp.Backends
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
             GufuncGuard.ValidateCasting("matmul", x1, x2, loop, @out, casting);
 
-            if (keepdims.HasValue)
-                throw new TypeError(
-                    $"matmul does not support keepdims: its signature {MatmulSignature} requires " +
-                    "output 0 to have 2 core dimensions, but keepdims can only be used when all inputs " +
-                    "have the same number of core dimensions and all outputs have no core dimensions.");
-
-            if (axis.HasValue)
-                throw new TypeError(
-                    "matmul: axis can only be used with a single shared core dimension, not with the " +
-                    $"3 distinct ones implied by signature {MatmulSignature}.");
+            // NumPy's gufunc checks (PyUFunc_GeneralizedFunctionInternal), over x1, x2 and out=: keepdims and axis
+            // support, the ranks (n? / m? dropped for a 1-D operand, or for a short out=), axes=, the core sizes.
+            var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Matmul, new[] { x1, x2, @out }, axes, axis,
+                keepdims.HasValue, keepdims ?? false);
 
             var a = x1;
             var b = x2;
             int[] outputAxes = Array.Empty<int>();
-
-            // matmul's core RANKS depend on each operand's ndim (the n?/m? optional dims): a 1-D
-            // operand carries a single core dim, a >=2-D operand two; the output carries one per
-            // input that kept its optional dim (so 0 for the 1-D·1-D dot). Computed unconditionally
-            // because the out= shape validator needs it to tell a core dim from a loop dim.
-            int outputCore = (x1.ndim == 1 ? 0 : 1) + (x2.ndim == 1 ? 0 : 1);
             if (axes is not null)
             {
-                int op0Core = x1.ndim == 1 ? 1 : 2;
-                int op1Core = x2.ndim == 1 ? 1 : 2;
-
-                // matmul's output entry is NEVER omittable — its signature output (n?,m?) is treated
-                // as having core axes even when both optionals vanish (the 1-D·1-D dot), so all THREE
-                // entries are required. NumPy's shared NormalizeAxes would wrongly allow a 2-entry
-                // list when the effective output core rank is 0; guard that here (the output entry's
-                // LENGTH is still validated against the effective rank, so `[(-1,),(-1,),()]` passes
-                // for the dot while `[(-1,),(-1,)]` does not).
-                if (axes.Length != 3)
-                    throw new ValueError(
-                        "axes should be a list with an entry for all 3 inputs and outputs; entries " +
-                        "for outputs can only be omitted if none of them has core axes.");
-
-                var resolved = GufuncGuard.NormalizeAxes("matmul", axes, new[] {op0Core, op1Core, outputCore}, x1, x2);
-                RequireNoRepeatedAxes(resolved);
-                outputAxes = resolved[2];
+                // The output entry as given (three entries: matmul's output has core axes): it is placed against the
+                // product's rank once the loop has run.
+                outputAxes = (int[])(axes[2] ?? Array.Empty<int>()).Clone();
 
                 // Bring each operand's core axes to the trailing positions the kernel expects; the
                 // result's own core axes are relocated to `outputAxes` after the product runs.
-                a = BringCoreToEnd(a, resolved[0]);
-                b = BringCoreToEnd(b, resolved[1]);
+                a = BringCoreToEnd(a, layout.CoreAxes(0, x1.ndim));
+                b = BringCoreToEnd(b, layout.CoreAxes(1, x2.ndim));
             }
 
             // A dtype= request selects the loop (its casts validated above): cast so the product (and the backend route)
@@ -125,9 +99,8 @@ namespace NumSharp.Backends
             if (@out is null)
                 return result;
 
-            // The out cast was validated before the gufunc checks; the core dimensions, then the copy.
-            ValidateMatmulOutputShape(result, @out, outputCore);
-            np.copyto(@out, result, "unsafe");   // cast already validated
+            // The out cast and the out's core dimensions were validated before the product.
+            np.copyto(@out, result, "unsafe");
             return @out;
         }
 
@@ -151,8 +124,10 @@ namespace NumSharp.Backends
             // loop, then the loop's cast to out=, before the gufunc checks.
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
             GufuncGuard.ValidateCasting("vecdot", x1, x2, loop, @out, "same_kind");
-            GufuncGuard.RequireRank("vecdot", VecdotSignature, 0, x1, 1);
-            GufuncGuard.RequireRank("vecdot", VecdotSignature, 1, x2, 1);
+            // NumPy's gufunc checks, over x1, x2 and out=: keepdims support (this signature allows it), the ranks,
+            // axes= / axis=, the core sizes.
+            var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Vecdot, new[] { x1, x2, @out }, axes, axis,
+                keepdims, keepdims);
 
             var a = x1;
             var b = x2;
@@ -160,17 +135,12 @@ namespace NumSharp.Backends
 
             if (axes is not null)
             {
-                // Under keepdims the output gains a core dimension (the reduced axis, kept as size 1),
-                // so a PROVIDED output entry must have length 1 — but it may still be OMITTED. This is
-                // the whole reason vecdot passes an output-core-rank override: `axes=[[1],[1]]` with
-                // keepdims is legal and lands the kept axis at the end, `axes=[[1],[1],[]]` is not
-                // (an explicit 0-length output entry contradicts the kept dimension).
-                int outputCoreRank = keepdims ? 1 : 0;
-                var resolved = GufuncGuard.NormalizeAxes("vecdot", axes, new[] {1, 1, 0}, x1, x2, outputCoreRank);
-                outputAxes = resolved[2];
+                // Under keepdims the output gains a core dimension (the reduced axis, kept as size 1), so a
+                // PROVIDED output entry names where the kept axis lands; an omitted one puts it at the end.
+                outputAxes = axes.Length == 3 ? (int[])(axes[2] ?? System.Array.Empty<int>()).Clone() : System.Array.Empty<int>();
 
-                a = MoveAxis(a, new[] {resolved[0][0]}, new[] {-1});
-                b = MoveAxis(b, new[] {resolved[1][0]}, new[] {-1});
+                a = MoveAxis(a, new[] {layout.CoreAxes(0, x1.ndim)[0]}, new[] {-1});
+                b = MoveAxis(b, new[] {layout.CoreAxes(1, x2.ndim)[0]}, new[] {-1});
             }
             else if (axis is not null)
             {
@@ -180,17 +150,15 @@ namespace NumSharp.Backends
                 // to the end and the ordinary kernel runs. When the named axis IS already the last
                 // one — the overwhelmingly common case, and what np.linalg.vecdot's axis=-1 default
                 // always resolves to — the moveaxis is a pure no-op view rebuild, so skip it (the
-                // validation still runs). This is what kept np.linalg.vecdot ~2x slower than a bare
+                // validation already ran). This is what kept np.linalg.vecdot ~2x slower than a bare
                 // np.vecdot on the same 1-D operands.
-                int ra = RequireAxisInRange(axis.Value, a);
+                int ra = layout.CoreAxes(0, a.ndim)[0];
                 if (ra != a.ndim - 1)
                     a = MoveAxis(a, new[] {ra}, new[] {-1});
-                int rb = RequireAxisInRange(axis.Value, b);
+                int rb = layout.CoreAxes(1, b.ndim)[0];
                 if (rb != b.ndim - 1)
                     b = MoveAxis(b, new[] {rb}, new[] {-1});
             }
-
-            GufuncGuard.RequireCoreSize("vecdot", VecdotSignature, 1, 0, b.Shape.dimensions[b.ndim - 1], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
@@ -242,10 +210,10 @@ namespace NumSharp.Backends
             // loop, then the loop's cast to out=, before the gufunc checks.
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
             GufuncGuard.ValidateCasting("matvec", x1, x2, loop, @out, "same_kind");
-            GufuncGuard.RejectAxisAndKeepdims("matvec", MatvecSignature, axis, keepdims, 1);
-
-            GufuncGuard.RequireRank("matvec", MatvecSignature, 0, x1, 2);
-            GufuncGuard.RequireRank("matvec", MatvecSignature, 1, x2, 1);
+            // NumPy's gufunc checks, over x1, x2 and out=: keepdims and axis support (this signature has two distinct
+            // core dimensions, so both are refused), the ranks, axes=, the core sizes.
+            var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Matvec, new[] { x1, x2, @out }, axes, axis,
+                keepdims, keepdims);
 
             var a = x1;
             var b = x2;
@@ -253,17 +221,14 @@ namespace NumSharp.Backends
 
             if (axes is not null)
             {
-                var resolved = GufuncGuard.NormalizeAxes("matvec", axes, new[] {2, 1, 1}, x1, x2);
-                outputAxes = resolved[2];
+                // Three entries (the output has a core axis): the output entry is placed after the loop has run.
+                outputAxes = (int[])(axes[2] ?? System.Array.Empty<int>()).Clone();
 
                 // Bring (m,n) and (n) to the trailing positions the kernel expects; the result's
                 // own core axis goes back to where `axes` asked for it once the loop has run.
-                a = MoveAxis(a, resolved[0], new[] {a.ndim - 2, a.ndim - 1});
-                b = MoveAxis(b, new[] {resolved[1][0]}, new[] {-1});
+                a = MoveAxis(a, layout.CoreAxes(0, x1.ndim), new[] {a.ndim - 2, a.ndim - 1});
+                b = MoveAxis(b, new[] {layout.CoreAxes(1, x2.ndim)[0]}, new[] {-1});
             }
-
-            GufuncGuard.RequireCoreSize("matvec", MatvecSignature, 1, 0,
-                b.Shape.dimensions[b.ndim - 1], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
@@ -296,10 +261,10 @@ namespace NumSharp.Backends
             // loop, then the loop's cast to out=, before the gufunc checks.
             var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
             GufuncGuard.ValidateCasting("vecmat", x1, x2, loop, @out, "same_kind");
-            GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
-
-            GufuncGuard.RequireRank("vecmat", VecmatSignature, 0, x1, 1);
-            GufuncGuard.RequireRank("vecmat", VecmatSignature, 1, x2, 2);
+            // NumPy's gufunc checks, over x1, x2 and out=: keepdims and axis support (this signature has two distinct
+            // core dimensions, so both are refused), the ranks, axes=, the core sizes.
+            var layout = GufuncGuard.CheckCoreDimensions(GufuncSignature.Vecmat, new[] { x1, x2, @out }, axes, axis,
+                keepdims, keepdims);
 
             var a = x1;
             var b = x2;
@@ -307,15 +272,12 @@ namespace NumSharp.Backends
 
             if (axes is not null)
             {
-                var resolved = GufuncGuard.NormalizeAxes("vecmat", axes, new[] {1, 2, 1}, x1, x2);
-                outputAxes = resolved[2];
+                // Three entries (the output has a core axis): the output entry is placed after the loop has run.
+                outputAxes = (int[])(axes[2] ?? System.Array.Empty<int>()).Clone();
 
-                a = MoveAxis(a, new[] {resolved[0][0]}, new[] {-1});
-                b = MoveAxis(b, resolved[1], new[] {b.ndim - 2, b.ndim - 1});
+                a = MoveAxis(a, new[] {layout.CoreAxes(0, x1.ndim)[0]}, new[] {-1});
+                b = MoveAxis(b, layout.CoreAxes(1, x2.ndim), new[] {b.ndim - 2, b.ndim - 1});
             }
-
-            GufuncGuard.RequireCoreSize("vecmat", VecmatSignature, 1, 0,
-                b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
@@ -367,24 +329,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     NumPy's per-entry "axes item {i} has value {v} repeated" (a <c>ValueError</c> with NO
-        ///     name prefix), checked on the NORMALIZED input axes and the raw output axes, in order.
-        /// </summary>
-        /// <param name="entries">The resolved <c>axes=</c> entries.</param>
-        /// <exception cref="ValueError">An entry names one axis twice.</exception>
-        private static void RequireNoRepeatedAxes(int[][] entries)
-        {
-            for (int i = 0; i < entries.Length; i++)
-            {
-                var entry = entries[i];
-                for (int k = 0; k < entry.Length; k++)
-                    for (int j = k + 1; j < entry.Length; j++)
-                        if (entry[k] == entry[j])
-                            throw new ValueError($"axes item {i} has value {entry[k]} repeated");
-            }
-        }
-
-        /// <summary>
         ///     matmul's <c>order=</c> layout: <c>'F'</c> → column-major, <c>'A'</c> → column-major only
         ///     when BOTH inputs are, else C, and <c>'C'</c>/<c>'K'</c> → the product's natural
         ///     C-contiguous output (so the default <c>'K'</c> is a no-op — the pre-keyword fast path).
@@ -410,53 +354,6 @@ namespace NumSharp.Backends
                 default:   // 'K'
                     return result;
             }
-        }
-
-        /// <summary>
-        ///     Validates <paramref name="out"/>'s CORE dims (the trailing <paramref name="outputCore"/>)
-        ///     against the product's — they must match exactly, reporting NumPy's verbatim
-        ///     core-dimension message on mismatch. The leading LOOP dims are left to <c>copyto</c>,
-        ///     which broadcasts the product into <paramref name="out"/> (so an out with extra leading
-        ///     dims replicates the product, exactly as NumPy does) and raises on a real loop mismatch.
-        /// </summary>
-        /// <param name="result">The product.</param>
-        /// <param name="out">The <c>out=</c> operand.</param>
-        /// <param name="outputCore">How many trailing axes are the output's core axes.</param>
-        /// <exception cref="ValueError">A core dimension of <paramref name="out"/> differs from the product's.</exception>
-        private static void ValidateMatmulOutputShape(NDArray result, NDArray @out, int outputCore)
-        {
-            int rn = result.ndim, on = @out.ndim;
-            // Only the TRAILING `outputCore` dims are the product's CORE dims — out must match them
-            // EXACTLY (NumPy's verbatim core-dimension message on mismatch). The remaining leading
-            // dims are LOOP dims the product BROADCASTS into, so out may carry any broadcast-compatible
-            // loop shape — INCLUDING extra leading dims of any size, which NumPy fills by replicating
-            // the product (probed: out=(5,2,2) for a (2,2) product is 5 copies). Those are left to
-            // copyto (called next), which broadcasts the product into out and raises on a genuine
-            // loop-dim mismatch. `on < outputCore` (out missing a core dim) also falls to copyto.
-            if (on < outputCore)
-                return;
-            for (int c = 0; c < outputCore; c++)
-            {
-                long resDim = result.Shape.dimensions[rn - outputCore + c];
-                long outDim = @out.Shape.dimensions[on - outputCore + c];
-                if (outDim != resDim)
-                    throw new ValueError(
-                        $"matmul: Output operand 0 has a mismatch in its core dimension {c}, " +
-                        $"with gufunc signature {MatmulSignature} (size {outDim} is different from {resDim})");
-            }
-        }
-
-        /// <summary>NumPy's verbatim gufunc axis rejection.</summary>
-        /// <param name="axis">The axis as the caller gave it (negative counts from the end).</param>
-        /// <param name="operand">The operand it names an axis of.</param>
-        /// <returns>The axis, normalized.</returns>
-        /// <exception cref="AxisError">The axis is out of the operand's range.</exception>
-        private static int RequireAxisInRange(int axis, NDArray operand)
-        {
-            int resolved = axis < 0 ? axis + operand.ndim : axis;
-            if (resolved < 0 || resolved >= operand.ndim)
-                throw new AxisError(axis, operand.ndim);
-            return resolved;
         }
     }
 }
