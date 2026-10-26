@@ -45,8 +45,9 @@ namespace NumSharp
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes
         ///     longer than 1 (<c>shape too large to be a matrix.</c>); an operand with too few dimensions; core axes of
-        ///     different lengths; an <paramref name="axes"/> list without three entries; a read-only <paramref name="out"/>,
-        ///     or one the answer does not broadcast into.</exception>
+        ///     different lengths; an <paramref name="axes"/> list without three entries; loop axes that do not broadcast
+        ///     together, or a read-only <paramref name="out"/> or one the answer does not broadcast into (NumPy's gufunc
+        ///     iterator texts).</exception>
         /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>, or either given; a
         ///     <paramref name="dtype"/> with details beyond its class; text operands or a text <paramref name="dtype"/>;
         ///     <paramref name="keepdims"/>.</exception>

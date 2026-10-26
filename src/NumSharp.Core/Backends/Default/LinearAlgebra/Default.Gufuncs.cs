@@ -13,28 +13,6 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine
     {
-        /// <summary>
-        ///     The gufunc signature <c>np.matmul</c> matches its core dimensions against. The <c>?</c>
-        ///     marks OPTIONAL core dimensions: a 1-D operand drops its <c>n?</c>/<c>m?</c>, which is
-        ///     how <c>matmul</c> promotes a vector operand.
-        /// </summary>
-        internal const string MatmulSignature = "(n?,k),(k,m?)->(n?,m?)";
-
-        /// <summary>
-        ///     The gufunc signature <c>np.vecdot</c> matches its core dimensions against.
-        /// </summary>
-        internal const string VecdotSignature = "(n),(n)->()";
-
-        /// <summary>
-        ///     The gufunc signature <c>np.matvec</c> matches its core dimensions against.
-        /// </summary>
-        internal const string MatvecSignature = "(m,n),(n)->(m)";
-
-        /// <summary>
-        ///     The gufunc signature <c>np.vecmat</c> matches its core dimensions against.
-        /// </summary>
-        internal const string VecmatSignature = "(n),(n,m)->(m)";
-
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<see cref="GufuncGuard.CheckParsedArguments"/>:

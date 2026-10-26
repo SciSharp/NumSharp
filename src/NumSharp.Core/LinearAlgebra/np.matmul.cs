@@ -52,9 +52,14 @@ namespace NumSharp
         ///     does; <c>subok</c> concerns ndarray subclasses NumSharp does not have). A
         ///     <paramref name="out"/> with a wrong CORE dim reports NumPy's verbatim core-dimension
         ///     message; extra leading LOOP dims broadcast (replicating the product, as NumPy does), and
-        ///     the rarer genuine loop-dimension mismatch raises <c>copyto</c>'s broadcast
-        ///     <c>ValueError</c> whose wording differs from NumPy's leaked iterator text (the same
-        ///     latitude the siblings take).
+        ///     a loop-dimension mismatch raises the ValueError texts of NumPy's gufunc iterator, before the
+        ///     product runs (<c>GufuncGuard.CheckLoopBroadcast</c>).
+        ///     </para>
+        ///     <para>
+        ///     The result is NumPy's output object: a fresh array that owns its data, its loop axes in the
+        ///     inputs' K order and its core axes innermost (with <paramref name="order"/> 'K'), the C or F
+        ///     order of the iterator's axes otherwise, remapped by <paramref name="axes"/>; two vectors give
+        ///     the 0-d stand-in of NumPy's scalar (an owner, read-only).
         ///     </para>
         ///     <para>
         ///     The whole call is the engine member
