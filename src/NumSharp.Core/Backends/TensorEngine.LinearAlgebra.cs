@@ -121,6 +121,18 @@ namespace NumSharp
             if (blas != null && blas.TryVecdot(x1, x2, out var accelerated))
                 return accelerated;
 
+            // NumPy's float16 loop is HALF_dot (arraytypes.c.src, no BLAS): each pair widened to float32 and multiplied
+            // there, the products summed in float32 in order, the sum narrowed to float16 once. The elementwise product
+            // below would round every product to float16 first (probed 2.4.2: np.vecdot of random float16 rows differs
+            // from it for 3 terms already). The matmul kernel's float16 path is that same sum (HALF matmul_inner_noblas
+            // narrows once too), so each output is a (…,1,n) row times an (…,n,1) column.
+            if (x1.typecode == NPTypeCode.Half && x2.typecode == NPTypeCode.Half)
+            {
+                var halfProduct = Matmul(LinAlgHelper.UnitAxisView(x1, x1.ndim - 1), LinAlgHelper.UnitAxisView(x2, x2.ndim));
+                halfProduct = LinAlgHelper.DropAxis(halfProduct, halfProduct.ndim - 1);
+                return LinAlgHelper.DropAxis(halfProduct, halfProduct.ndim - 1);
+            }
+
             // The reduction dtype is the LOOP dtype, not NEP50's accumulator: np.vecdot's registered
             // loops are 'ii->i', so an int32 pair reduces to int32 where np.sum would give int64.
             var product = Multiply(LinAlgHelper.Conjugate(x1), x2);
@@ -408,5 +420,41 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a length-1 axis of
         ///     <paramref name="a"/>.</exception>
         internal static NDArray DropAxis(NDArray a, int axis) => NDArray.AdoptDroppedAxis(a, axis);
+
+        /// <summary>
+        ///     A view of <paramref name="x"/> with a length-1 axis inserted at <paramref name="axis"/> — what
+        ///     <c>np.expand_dims</c> returns, built here without the public function (an engine kernel calls no np.*
+        ///     layer). The view reads the same memory; the new axis's stride is 0, which an extent-1 axis never uses.
+        /// </summary>
+        /// <param name="x">The array.</param>
+        /// <param name="axis">The position of the new axis: 0 to <c>x.ndim</c>.</param>
+        /// <returns>A view of <c>x.ndim + 1</c> dimensions (the caller's scope reclaims it).</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is outside 0 to <c>x.ndim</c> (a
+        ///     caller's bug).</exception>
+        internal static NDArray UnitAxisView(NDArray x, int axis)
+        {
+            if ((uint)axis > (uint)x.ndim)
+                throw new ArgumentOutOfRangeException(nameof(axis), axis, "the new axis must lie between 0 and ndim");
+
+            var src = x.Shape;
+            var dims = new long[src.NDim + 1];
+            var strides = new long[src.NDim + 1];
+            for (int i = 0, j = 0; i < dims.Length; i++)
+            {
+                if (i == axis)
+                {
+                    dims[i] = 1;
+                    continue;   // stride 0
+                }
+
+                dims[i] = src.dimensions[j];
+                strides[i] = src.strides[j++];
+            }
+
+            return new NDArray(x.Storage.Alias(new Shape(dims, strides, src.offset, src.bufferSize)))
+            {
+                TensorEngine = x.TensorEngine
+            };
+        }
     }
 }

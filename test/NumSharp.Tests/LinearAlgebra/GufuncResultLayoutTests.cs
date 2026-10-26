@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 
 namespace NumSharp.Tests.LinearAlgebra
@@ -258,6 +259,52 @@ namespace NumSharp.Tests.LinearAlgebra
             // np.matmul(m, n, order='C') -> C
             AssertLayout("order C", np.matmul(m, n, order: 'C'), new long[] { 3, 5 }, new long[] { 40, 8 }, true, false,
                 values);
+        }
+
+        /// <summary>A float16 array of the given raw bits.</summary>
+        /// <param name="bits">The raw float16 bits.</param>
+        /// <returns>A 1-D array.</returns>
+        private static NDArray HalfBits(params ushort[] bits) => np.array(bits.Select(BitConverter.UInt16BitsToHalf).ToArray());
+
+        /// <summary>Asserts a float16 result's raw bits in C order.</summary>
+        /// <param name="label">The NumPy call, for the failure message.</param>
+        /// <param name="r">The NumSharp result.</param>
+        /// <param name="bits">NumPy's raw bits.</param>
+        private static void AssertHalfBits(string label, NDArray r, params ushort[] bits)
+        {
+            Assert.AreEqual(np.float16, r.dtype, label);
+            var got = np.ascontiguousarray(r).ToArray<Half>().Select(BitConverter.HalfToUInt16Bits).ToArray();
+            CollectionAssert.AreEqual(bits, got,
+                $"{label}: numpy [{string.Join(",", bits.Select(b => b.ToString("x4")))}], numsharp [{string.Join(",", got.Select(b => b.ToString("x4")))}]");
+        }
+
+        [TestMethod]
+        public void Float16Vecdot_IsNumPysHalfDot()
+        {
+            // NumPy's float16 vecdot loop is HALF_dot: each pair widened to float32 and multiplied there, the products
+            // summed in float32, the sum narrowed once. NumSharp rounded every product to float16 first; these rows differ
+            // by that rounding (probed 2.4.2, raw bits).
+            var a = HalfBits(0x3988, 0x3e93, 0x3949, 0xbc4c, 0x3ca6, 0x39d5, 0xbe41, 0xb81d, 0x242b).reshape(3, 3);
+            var b = HalfBits(0xc136, 0x3f3e, 0x3b24, 0x38b5, 0x2b47, 0x3c60, 0xb869, 0x412d, 0x4007).reshape(3, 3);
+            AssertHalfBits("vecdot rows", np.vecdot(a, b), 0x3f0e, 0x3367, 0xb6f9);
+            AssertHalfBits("vecdot axis=0 of the transposes", np.vecdot(a.T, b.T, axis: 0), 0x3f0e, 0x3367, 0xb6f9);
+            var kept = np.vecdot(a, b, keepdims: true);
+            CollectionAssert.AreEqual(new long[] { 3, 1 }, kept.shape, "keepdims shape");
+            AssertHalfBits("vecdot keepdims", kept, 0x3f0e, 0x3367, 0xb6f9);
+            AssertHalfBits("linalg.vecdot", np.linalg.vecdot(a, b), 0x3f0e, 0x3367, 0xb6f9);
+
+            // The float16 loop by request: np.vecdot(u, u, dtype=np.float16) of uint8 rows [[200,100,50],[255,3,7]]
+            var u = np.array(new byte[,] { { 200, 100, 50 }, { 255, 3, 7 } });
+            AssertHalfBits("vecdot uint8 dtype=float16", np.vecdot(u, u, dtype: np.float16), 0x7a69, 0x7bf2);
+            // A mixed pair (float16 with int8) runs the float16 loop too, both cast to it: -> 0xbe14
+            AssertHalfBits("vecdot float16 . int8",
+                np.vecdot(HalfBits(0x3988, 0x3e93, 0x3949), np.array(new sbyte[] { 3, -5, 7 })), 0xbe14);
+
+            // The float32 sum: 1 + nine 2^-11 is 1.00390625 (a float16 sum stays 1.0), ones(3000) . ones(3000) is 3000
+            var small = np.array(new[] { 1.0 }.Concat(Enumerable.Repeat(System.Math.Pow(2, -11), 9)).ToArray()).astype(np.float16);
+            AssertHalfBits("vecdot 1 + 9 * 2^-11", np.vecdot(small, np.ones(new Shape(10L), np.float16)), 0x3c04);
+            var ones = np.ones(new Shape(3000L), np.float16);
+            AssertHalfBits("vecdot ones(3000)", np.vecdot(ones, ones), 0x69dc);
         }
 
         [TestMethod]

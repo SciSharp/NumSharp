@@ -191,6 +191,14 @@ namespace NumSharp.Backends
 
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
+            // The float16 loop's kernel is HALF_dot, which needs two float16 operands: NumPy casts a mixed pair (float16
+            // with int8, say) to the loop, and the elementwise kernel would round each product to float16 instead.
+            if (dtype is null && loop.GetTypeCode() == NPTypeCode.Half)
+            {
+                a = GufuncGuard.ToLoop(a, loop);
+                b = GufuncGuard.ToLoop(b, loop);
+            }
+
             if (loopPerm != null)
             {
                 a = PermuteLoopAxes(a, 1, loopLayout.NDim, loopPerm);
