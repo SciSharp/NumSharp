@@ -319,5 +319,30 @@ namespace NumSharp.Tests.LinearAlgebra
             Assert.IsFalse(one.flags.owndata, "tensorinv([2.]) OWNDATA");
             Assert.AreEqual(0.5, one.GetDouble(0));
         }
+
+        /// <summary>
+        ///     norm's 2-norm reduces NumPy's <c>(x.conj() * x).real</c>, and NumPy's complex product is <c>simd_cmul</c>: the
+        ///     real part fuses <c>re * re</c> with the rounded <c>im * im</c>, one rounding where <c>re * re + im * im</c>
+        ///     rounds twice. NumSharp summed the twice-rounded squares, one ULP off for these vectors.
+        /// </summary>
+        [TestMethod]
+        public void VectorNorm_Complex_SquaresAsNumPysComplexProduct()
+        {
+            var z1 = np.array(new[]
+            {
+                new System.Numerics.Complex(0.348, -0.662), new System.Numerics.Complex(0.248, -0.838),
+                new System.Numerics.Complex(1.099, -1.734), new System.Numerics.Complex(-1.285, 0.126)
+            });
+            var z2 = np.array(new[]
+            {
+                new System.Numerics.Complex(0.372, 1.61), new System.Numerics.Complex(-2.475, 1.84),
+                new System.Numerics.Complex(-0.233, 1.426), new System.Numerics.Complex(0.532, -1.162)
+            });
+
+            // np.linalg.norm(z1, axis=0): 0x1.5792cb237ceb0p+1 (the twice-rounded squares give ...ceafp+1).
+            Assert.AreEqual(0x4005792CB237CEB0L, BitConverter.DoubleToInt64Bits(np.linalg.norm(z1, null, 0).GetDouble()));
+            // np.linalg.vector_norm(z2, axis=0): 0x1.ff674d62a1e57p+1 (twice-rounded: ...e56p+1).
+            Assert.AreEqual(0x400FF674D62A1E57L, BitConverter.DoubleToInt64Bits(np.linalg.vector_norm(z2, 0).GetDouble()));
+        }
     }
 }

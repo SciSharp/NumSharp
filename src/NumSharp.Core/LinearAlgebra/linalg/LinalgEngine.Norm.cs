@@ -214,7 +214,8 @@ namespace NumSharp
                 // with no N-element temporary (a (10000, 10) slab: 45 us against 152 us for the eager pair). x * x
                 // also keeps a negative NaN's sign as NumPy's x.conj() * x does, where |x| * |x| cleared it. float16
                 // and complex keep the eager form (np.evaluate's float16 sum is not NumPy's HALF schedule, and a
-                // complex |x|^2 is the real sum of squares), as does a host without dynamic code (no fused kernels).
+                // complex |x|^2 is the real part of NumPy's fused complex product, AbsSquared), as does a host without
+                // dynamic code (no fused kernels).
                 if (Backends.Kernels.DirectILKernelGenerator.Enabled && a.typecode is NPTypeCode.Double or NPTypeCode.Single)
                     return np.sqrt(np.evaluate(NDExpr.Sum((NDExpr)a * a, axis, keepdims)));
                 return np.sqrt(np.sum(AbsSquared(a), axis, keepdims));

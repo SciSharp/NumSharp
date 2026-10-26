@@ -236,25 +236,36 @@ namespace NumSharp
             => a.typecode == common ? a : a.TensorEngine.Cast(a, common.AsType(), copy: false);
 
         /// <summary>
-        ///     Element-wise <c>|x|²</c> as a REAL array — NumPy's <c>(x.conj() * x).real</c>.
+        ///     Element-wise <c>|x|²</c> as a REAL array — NumPy's <c>(x.conj() * x).real</c>, rounded as NumPy rounds it.
         /// </summary>
-        /// <param name="x">The operand (any numeric dtype).</param>
-        /// <returns>A fresh array: float64 <c>re² + im²</c> for a complex operand, <c>|x| * |x|</c> in the operand's dtype
-        ///     otherwise.</returns>
+        /// <param name="x">The operand (a float or complex dtype, or decimal: norm converts the others first).</param>
+        /// <returns>A fresh array: for a complex operand the float64 real part of NumPy's complex product
+        ///     <c>conj(x) * x</c>, <c>fma(re, re, round(im * im))</c>; otherwise <c>x * x</c> in the operand's dtype.</returns>
         /// <remarks>
+        ///     <para>
         ///     Spelled out rather than composed from <c>abs</c> because for a complex operand
         ///     <c>abs(z)² = hypot(re, im)²</c> is NOT <c>re² + im²</c>: the intermediate square
-        ///     root rounds, so a Frobenius norm built that way drifts from NumPy's. For every
-        ///     real dtype this is the ordinary square.
+        ///     root rounds, so a Frobenius norm built that way drifts from NumPy's.
+        ///     </para>
+        ///     <para>
+        ///     NumPy's complex multiply is <c>simd_cmul</c>: the real part is <c>muladdsub(a_re, b_re, a_im * b_im)</c>,
+        ///     one fused multiply-subtract over a rounded product. With <c>a = conj(x)</c> and <c>b = x</c> that is
+        ///     <c>re * re - (-im * im)</c>: the square of the real part fused with the rounded square of the imaginary part,
+        ///     one rounding of the sum where <c>re * re + im * im</c> rounds twice (probed on 20,000 random values: the
+        ///     two-rounding sum differs on 16 % of them, the fused one on none, contiguous or strided). A real operand's
+        ///     <c>x.conj()</c> is a copy of it, so the product is <c>x * x</c>, which keeps a NaN's sign where
+        ///     <c>|x| * |x|</c> cleared it.
+        ///     </para>
+        ///     <para>
+        ///     Not modelled: which NaN the complex product returns when its operands hold several (the MSVC-compiled
+        ///     <c>simd_cmul</c>'s operand order decides it), so a complex NaN's sign or payload can differ.
+        ///     </para>
         /// </remarks>
         [NDScopedCovered] // only callers: the norm helpers, themselves covered under the [NDScoped] norm entries
         internal static NDArray AbsSquared(NDArray x)
         {
             if (x.typecode != NPTypeCode.Complex)
-            {
-                var real = np.abs(x);
-                return np.multiply(real, real);
-            }
+                return np.multiply(x, x);
 
             var magnitudes = np.zeros(Shape.Adopt(x.Shape.dimensions), NPTypeCode.Double);
 
@@ -265,7 +276,8 @@ namespace NumSharp
             foreach (Complex z in np.nditer<Complex>(x, order: 'C'))
             {
                 writer.MoveNext();
-                writer.Current = z.Real * z.Real + z.Imaginary * z.Imaginary;
+                // simd_cmul's real lane for conj(x) * x: re * re fused with the rounded im * im (remarks).
+                writer.Current = Math.FusedMultiplyAdd(z.Real, z.Real, z.Imaginary * z.Imaginary);
             }
 
             return magnitudes;
