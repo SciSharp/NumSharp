@@ -261,6 +261,40 @@ namespace NumSharp.Tests.LinearAlgebra
         }
 
         [TestMethod]
+        public void MatmulOrder_LaysOutTheIteratorAxes()
+        {
+            // NumPy applies order= to the iterator's axes (loop, then core) and only then remaps them for axes=, with exact
+            // C / F strides (an extent-1 axis included). Probed 2.4.2.
+            var a = Base(2, 3, 4);
+            var b = Base(2, 4, 5);
+            var axes = new[] { new[] { 1, 2 }, new[] { 1, 2 }, new[] { 0, 1 } };
+            var reference = np.matmul(a, b, axes: axes);
+            // order='C' -> (3,5,2), strides (40,8,120); order='F' -> (16,48,8): neither is C- or F-contiguous
+            AssertLoopLayout("axes order C", np.matmul(a, b, axes: axes, order: 'C'), reference, new long[] { 40, 8, 120 },
+                false, false);
+            AssertLoopLayout("axes order F", np.matmul(a, b, axes: axes, order: 'F'), reference, new long[] { 16, 48, 8 },
+                false, false);
+            // order='A' over F-ordered inputs is F order; over C-ordered ones C order
+            AssertLoopLayout("axes order A of F inputs",
+                np.matmul(np.asfortranarray(a), np.asfortranarray(b), axes: axes, order: 'A'), reference,
+                new long[] { 16, 48, 8 }, false, false);
+            AssertLoopLayout("axes order A of C inputs", np.matmul(a, b, axes: axes, order: 'A'), reference,
+                new long[] { 40, 8, 120 }, false, false);
+
+            // order='F' gives an extent-1 axis its F stride: np.matmul(np.arange(2.), C(1,2,3), order='F') -> (1,3),
+            // strides (8,8) (a C-ordered (1,3) array, F-contiguous by its flags too, has (24,8))
+            var v = Base(2);
+            var c123 = Base(1, 2, 3);
+            AssertLoopLayout("vector @ (1,2,3) order F", np.matmul(v, c123, order: 'F'), np.matmul(v, c123),
+                new long[] { 8, 8 }, true, true);
+            // np.matmul(C(2,1,3,4), C(4,5), order='F') -> (2,1,3,5), strides (8,16,16,48)
+            var c2134 = Base(2, 1, 3, 4);
+            var c45 = Base(4, 5);
+            AssertLoopLayout("(2,1,3,4) @ (4,5) order F", np.matmul(c2134, c45, order: 'F'), np.matmul(c2134, c45),
+                new long[] { 8, 16, 16, 48 }, false, true);
+        }
+
+        [TestMethod]
         public void MatmulOrder_KeepsAVectorPairsScalar()
         {
             // np.matmul(a, a, order=o) of two vectors is a scalar for every o (NumSharp's order= copies returned shape (1,))

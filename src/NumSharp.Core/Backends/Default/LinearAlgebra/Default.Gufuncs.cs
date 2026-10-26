@@ -113,10 +113,12 @@ namespace NumSharp.Backends
             if (loopPerm != null)
                 result = AdoptLoopLayout(result, loopLayout);
 
+            // order= lays out the iterator's axes (the loop axes, then the core axes), and axes= remaps them after:
+            // NumPy allocates the output over the iterator and returns it with the remapped axes.
+            result = ApplyMatmulOrder(result, order, x1, x2);
+
             if (outputAxes.Length > 0)
                 result = PlaceOutputCore(result, outputAxes);
-
-            result = ApplyMatmulOrder(result, order, x1, x2);
 
             // The out cast and the out's core dimensions were validated before the product; without out= a 0-d answer
             // (two vectors) is handed back as NumPy's scalar stand-in.
@@ -561,37 +563,43 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     matmul's <c>order=</c> layout: <c>'F'</c> → column-major, <c>'A'</c> → column-major only
-        ///     when BOTH inputs are, else C, and <c>'C'</c>/<c>'K'</c> → the product's natural
-        ///     C-contiguous output (so the default <c>'K'</c> is a no-op — the pre-keyword fast path).
+        ///     matmul's <c>order=</c>: the memory order NumPy's iterator allocates the output in, over the ITERATOR's
+        ///     axes (the loop axes, then the core axes) — before an <c>axes=</c> output entry remaps them. <c>'C'</c>
+        ///     is C order, <c>'F'</c> F order, <c>'A'</c> F order when both inputs are F-contiguous (a 1-D input is)
+        ///     and C order otherwise, <c>'K'</c> the inputs' K order (<see cref="AdoptLoopLayout"/>, already applied).
         /// </summary>
-        /// <param name="result">The product.</param>
+        /// <param name="result">The product in iterator order (loop axes, then core axes), as the kernel wrote it: a fresh
+        ///     C-ordered owner for every order but <c>'K'</c>. Consumed.</param>
         /// <param name="order">The validated order letter.</param>
         /// <param name="x1">The left operand as the caller passed it (its layout decides <c>'A'</c>).</param>
         /// <param name="x2">The right operand as the caller passed it.</param>
-        /// <returns><paramref name="result"/> for <c>'K'</c> and for a 0-d product; else a C- or F-contiguous array (a copy
-        ///     when the layout changes).</returns>
+        /// <returns>The product with NumPy's exact strides for the order (an extent-1 axis included): the product itself
+        ///     for <c>'K'</c>, <c>'C'</c> and a 0-d product, relabelled when it is already F-ordered, else its F copy.</returns>
+        /// <remarks>
+        ///     Probed 2.4.2: <c>np.matmul(a, b, axes=[(1,2),(1,2),(0,1)], order=o)</c> of two C-ordered (2,3,4) /
+        ///     (2,4,5) arrays has strides (40,8,120) for <c>'C'</c> and (16,48,8) for <c>'F'</c> (neither is
+        ///     C- or F-contiguous: the order applies before the remap); <c>np.matmul(np.arange(2.), C(1,2,3),
+        ///     order='F')</c> has shape (1,3) and strides (8,8), where a C-ordered (1,3) array (also F-contiguous by its
+        ///     flags) has (24,8).
+        /// </remarks>
         private static NDArray ApplyMatmulOrder(NDArray result, char order, NDArray x1, NDArray x2)
         {
             // A 0-d product (two vectors) is C- and F-contiguous at once, and NumPy's iterator allocates the 0-d output
             // whatever the order (probed 2.4.2: np.matmul(a, a, order=o) of two vectors is a scalar for every o).
-            // np.ascontiguousarray / np.asfortranarray would hand back at least one dimension (NumPy's ndmin=1).
             if (result.ndim == 0)
                 return result;
 
-            switch (order)
-            {
-                case 'C':
-                    return np.ascontiguousarray(result);
-                case 'F':
-                    return np.asfortranarray(result);
-                case 'A':
-                    return (x1.Shape.IsFContiguous && x2.Shape.IsFContiguous)
-                        ? np.asfortranarray(result)
-                        : np.ascontiguousarray(result);
-                default:   // 'K'
-                    return result;
-            }
+            bool fortran = order == 'F' || (order == 'A' && x1.Shape.IsFContiguous && x2.Shape.IsFContiguous);
+            if (!fortran)
+                return result;   // 'C': the kernels allocate exact C strides; 'K': the loop layout is already NumPy's
+
+            var layout = Shape.Adopt((long[])result.Shape.dimensions.Clone(), 'F');
+            // A product that is C- and F-contiguous at once has at most one axis longer than 1, so C and F order
+            // address its elements alike: relabel it with exact F strides (NumPy's for its extent-1 axes) and keep the
+            // buffer. Any other product is copied into the F layout.
+            if (result.Shape.IsFContiguous && result.Shape.IsContiguous)
+                return NDArray.AdoptLayout(result, layout);
+            return result.copy('F');
         }
     }
 }
