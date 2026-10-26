@@ -122,12 +122,15 @@ namespace NumSharp
             return np.asanyarray(lhs) == rhs;
         }
 
-        /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>
         /// <summary>
-        /// Compare two NDArrays element wise
+        ///     This array <c>==</c> <paramref name="np2"/> elementwise, through the <c>==</c> operator (NumPy's
+        ///     <c>numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[,
+        ///     signature, extobj])</c>, the <c>&lt;ufunc 'equal'&gt;</c>, with the operator's answers for a pair it has no
+        ///     loop for).
         /// </summary>
-        /// <param name="np2">NDArray to compare with</param>
-        /// <returns>NDArray with result of each element compare</returns>
+        /// <param name="np2">The array to compare with (broadcast against this one).</param>
+        /// <returns>A bool array of the broadcast shape: True where the elements are equal (NaN never is).</returns>
+        /// <exception cref="IncorrectShapeException">The operands do not broadcast (NumPy's ValueError text).</exception>
         private NDArray<bool> equal(NDArray np2)
         {
             return this == np2;
@@ -153,77 +156,15 @@ namespace NumSharp
         ///     that cannot hold NaN (bool / all integer widths / char / decimal) skip the NaN machinery: their
         ///     <c>isnan</c> is uniformly false, so the fast path yields the identical result NumPy would (this
         ///     also sidesteps calling <c>isnan</c> on Char/Decimal, which have no NumPy analog).
-        ///     Scoped by <c>[NDScoped]</c>: every comparison/isnan mask the method builds is released on return
-        ///     (it returns a <c>bool</c>, so nothing is yielded), and the operands, built before the scope
-        ///     opened, are never touched.
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
-        [NDScoped]
+        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ (their <c>==</c> comparison
+        ///     refuses the pair).</exception>
         public bool array_equal(NDArray rhs, bool equal_nan = false)
         {
-            // A null operand can never match a real array.
-            if (rhs is null)
-                return false;
-
-            // NumPy checks shape equality before anything else; differing shapes are never equal
-            // (array_equal does NOT broadcast — that is array_equiv's job).
-            if (Shape != rhs.Shape)
-                return false;
-
-            // Default (equal_nan == false): pure element-wise equality reduced with all(). NaN != NaN,
-            // so an array containing NaN is not equal even to itself — which is exactly why NO
-            // reference/storage short-circuit is taken here (one would wrongly report such arrays equal).
-            if (!equal_nan)
-            {
-                var eq = this == rhs;
-                return np.all(eq);
-            }
-
-            // equal_nan == true from here on.
-            // Same object: NaN compares equal to itself, so an array always equals itself.
-            if (ReferenceEquals(this, rhs))
-                return true;
-
-            // Dtypes that cannot hold NaN take the plain comparison: their isnan is all-false, so the
-            // NaN-aware branch below would reduce to exactly this. Result-identical to NumPy's structure.
-            if (!CanHoldNaN(this) && !CanHoldNaN(rhs))
-            {
-                var eq = this == rhs;
-                return np.all(eq);
-            }
-
-            // NaN-aware path: NaN must occur at the SAME positions in both operands...
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-            var a1nan = np.isnan(this);
-            var a2nan = np.isnan(rhs);
-            var nanPositionsEq = a1nan == a2nan;
-            if (!np.all(nanPositionsEq))
-                return false;
-
-            // ...and every finite slot must be equal, while a NaN slot passes (a1nan is true there, and
-            // the positions were just proven to coincide). This `all((this == rhs) | isnan(this))` form is
-            // algebraically identical to NumPy's `all(this[~a1nan] == rhs[~a1nan])` once the positions
-            // agree, but needs no gather/copy and handles empty / 0-d inputs uniformly.
-            var elementsEq = this == rhs;
-            var okOrNan = elementsEq | a1nan;
-            return np.all(okOrNan);
-        }
-
-        // True only for the dtypes whose values can be NaN (the float family plus complex). Every other
-        // NumSharp dtype — bool, the signed/unsigned integer widths, char and decimal — cannot, so
-        // array_equal's equal_nan path safely skips isnan for them.
-        private static bool CanHoldNaN(NDArray a)
-        {
-            switch (a.typecode)
-            {
-                case NPTypeCode.Half:
-                case NPTypeCode.Single:
-                case NPTypeCode.Double:
-                case NPTypeCode.Complex:
-                    return true;
-                default:
-                    return false;
-            }
+            // The statements are np.array_equal's numeric ones, in ArrayEqualEngine (Logic/ArrayEqualEngine.cs), the
+            // operation class np.array_equal's facade calls too.
+            return ArrayEqualEngine.ArrayEqualNumeric(this, rhs, equal_nan);
         }
 
     }

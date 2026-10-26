@@ -72,8 +72,6 @@ Indexing/np.unravel_index.cs	0	2
 LinearAlgebra/np.cross.cs	2	0
 LinearAlgebra/np.einsum.Contract.cs	1	4
 LinearAlgebra/np.kron.cs	1	0
-Logic/np.array_equal.cs	6	0
-Logic/np.array_equiv.cs	3	0
 Logic/np.can_cast.cs	1	80
 Logic/np.common_type.cs	1	6
 Logic/np.find_common_type.cs	2	10
@@ -130,7 +128,6 @@ Matrixlib/NDMatrix.Methods.cs	0	1
 Matrixlib/NDMatrix.Operators.cs	0	12
 Matrixlib/NDMatrix.Reductions.cs	0	2
 Matrixlib/NDMatrix.cs	0	1
-Operations/Elementwise/NDArray.Equals.cs	0	5
 Operations/Elementwise/NDArray.TextComparison.cs	1	0
 Polynomial/Package/np.polynomial.polyutils.cs	1	1
 Polynomial/np.poly.cs	1	3
