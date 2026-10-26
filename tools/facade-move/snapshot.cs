@@ -42,7 +42,8 @@
 // layouts c2d, f2d, 0d, empty, 3d); phase C varies every PAIR of parameters together on a small pool (8 dtypes x c2d,
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
 // and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
-// operand named lhs / rhs / left / right / x / y / other, the histogram family's bins as an int, an estimator name, an
+// operand named lhs / rhs / left / right / x / y / other / a2 (np.array_equiv's and the legacy poly arithmetic's
+// a1 / a2), the histogram family's bins as an int, an estimator name, an
 // array or a double[], and its (lower, upper) range, np.histogramdd / np.histogram2d's sample as a sequence of columns,
 // their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
 // optional sample points x and its spacing dx, np.searchsorted's keys v (an array, or a C# int / double), its side
@@ -285,7 +286,8 @@ static class Snapshot
                 : n == "y" && p.HasDefaultValue ? Role.Variables
                 : n == "fweights" ? Role.FWeights
                 : n == "aweights" ? Role.AWeights
-                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" ? Role.Operand2
+                // a2: np.array_equiv(a1, a2) and the legacy polyadd / polysub / polymul (a1, the first array, is the operand).
+                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" or "a2" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
