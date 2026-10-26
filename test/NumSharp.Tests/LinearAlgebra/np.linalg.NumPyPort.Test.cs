@@ -372,5 +372,35 @@ namespace NumSharp.Tests.LinearAlgebra
             CollectionAssert.AreEqual(new sbyte[] { 0, -40, -16, -8, 48, 0, 0, -40, -16 }, c.flatten().ToArray<sbyte>());
             Assert.IsTrue(c.flags.f_contiguous && !c.flags.c_contiguous && !c.flags.owndata, "cross(a, a[::-1], axis=0) -F-W");
         }
+
+        /// <summary>
+        ///     norm's fast path (no axis, the default order) is NumPy's statements: <c>x = x.ravel(order='K')</c>, memory
+        ///     order, then <c>x.dot(x)</c>, or for a complex operand <c>x_real.dot(x_real) + x_imag.dot(x_imag)</c>. NumSharp
+        ///     raveled in C order and summed a complex operand's squares. Below 16 elements both dot products are a plain
+        ///     sequential sum, so the bits do not depend on a matrix backend.
+        /// </summary>
+        [TestMethod]
+        public void Norm_FastPath_RavelsInMemoryOrderAndDotsAComplexOperandsParts()
+        {
+            // a (3, 5) matrix held in F order: np.linalg.norm(np.asfortranarray(m)) is 0x1.1c1102d509a5bp+2, where the
+            // C-order dot gives ...a5ap+2.
+            var m = np.array(new[]
+            {
+                -0.803, 0.243, -1.656, 0.656, 1.143, -0.453, 0.43, 0.251, -0.394, -0.862, -2.033, 1.41, -0.048, 2.522, 0.826
+            }).reshape(3, 5);
+            Assert.AreEqual(0x4011C1102D509A5BL,
+                BitConverter.DoubleToInt64Bits(np.linalg.norm(np.asfortranarray(m)).GetDouble()));
+
+            // a complex vector: np.linalg.norm(z) is the two real dot products, 0x1.ff1a349a00ff0p+1, while
+            // np.linalg.vector_norm(z) reduces the squares along the flattened axis, ...ff1p+1 (NumPy's own two answers).
+            var z = np.array(new[]
+            {
+                new System.Numerics.Complex(-1.771, 1.752), new System.Numerics.Complex(1.394, 0.778),
+                new System.Numerics.Complex(0.474, 1.528), new System.Numerics.Complex(-0.641, 0.489),
+                new System.Numerics.Complex(0.068, 1.306), new System.Numerics.Complex(0.416, 1.448)
+            });
+            Assert.AreEqual(0x400FF1A349A00FF0L, BitConverter.DoubleToInt64Bits(np.linalg.norm(z).GetDouble()));
+            Assert.AreEqual(0x400FF1A349A00FF1L, BitConverter.DoubleToInt64Bits(np.linalg.vector_norm(z).GetDouble()));
+        }
     }
 }

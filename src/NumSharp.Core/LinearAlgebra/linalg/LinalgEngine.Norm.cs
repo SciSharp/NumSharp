@@ -8,7 +8,9 @@ namespace NumSharp
         /// <summary>
         ///     The body of <c>np.linalg.norm(x, ord, int[] axis, keepdims)</c> past the class boundary: NumPy's
         ///     <c>x.astype(float)</c> of a text operand, the float conversion of an integer / bool one, the fast path of
-        ///     the default order over the whole array, then the one-axis (vector) or two-axis (matrix) branch.
+        ///     the default order over the whole array (raveled in memory order, <c>sqrt(x.dot(x))</c>, and for a complex
+        ///     operand <c>sqrt(x_real.dot(x_real) + x_imag.dot(x_imag))</c>), then the one-axis (vector) or two-axis
+        ///     (matrix) branch.
         /// </summary>
         /// <param name="x">The operand (plain: the facade applied the class boundary).</param>
         /// <param name="ord">The order: null, a number, an infinity, or <c>"fro"</c> / <c>"f"</c> / <c>"nuc"</c>.</param>
@@ -41,10 +43,26 @@ namespace NumSharp
                  || (IsText(ord, out var word) && (word == "f" || word == "fro") && nd == 2)
                  || (IsNumber(ord, out double two) && two == 2d && nd == 1)))
             {
-                var flat = np.ravel(a);
-                var squared = a.typecode == NPTypeCode.Complex
-                    ? np.sum(AbsSquared(flat))
-                    : np.dot(flat, flat);
+                // `x = x.ravel(order='K')`: memory order, so an F-ordered or transposed operand is summed in the order
+                // NumPy's dot reads it (a view where the memory is one run, as NumPy's).
+                var flat = np.ravel(a, 'K');
+                NDArray squared;
+                if (a.typecode == NPTypeCode.Complex)
+                {
+                    // `sqnorm = x_real.dot(x_real) + x_imag.dot(x_imag)`: two real dot products over the strided parts
+                    // (a BLAS ddot of stride two, as NumPy's) - not the reduction of the complex squares the axis forms
+                    // take, which rounds differently. Each dot of two vectors is a NumPy scalar, so `+` is scalarmath,
+                    // which keeps the FIRST operand's NaN where the array ufunc keeps the second's: PolyNumber's
+                    // scalar add, not np.add of two 0-d arrays.
+                    var re = np.real(flat);
+                    var im = np.imag(flat);
+                    squared = PolyNumber.Binary(Backends.Kernels.BinaryOp.Add, PolyNumber.ScalarOf(np.dot(re, re)),
+                        PolyNumber.ScalarOf(np.dot(im, im))).ToNDArray();
+                }
+                else
+                {
+                    squared = np.dot(flat, flat);
+                }
                 var whole = np.sqrt(squared);
                 // NumPy's `ret = ret.reshape(ndim * [1])`.
                 return keepdims ? ReshapeLikeNumPy(whole, Ones(nd)) : whole;
