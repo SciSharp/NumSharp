@@ -76,5 +76,34 @@ namespace NumSharp.Tests.LinearAlgebra
             Assert.AreEqual(0, rank.GetInt32());
             Assert.IsTrue(x.flags.writeable && residuals.flags.writeable && s.flags.writeable, "lstsq arrays WRITEABLE");
         }
+
+        /// <summary>
+        ///     norm's one-axis branch never normalizes the axis: a string order is refused ("Invalid norm order ... for
+        ///     vectors") before any reduction would check the axis, while a numeric order's reduction raises NumPy's
+        ///     AxisError. NumSharp normalized the axis first, so a string order with an out-of-range axis (a 0-d input's
+        ///     axis 0 included) raised the AxisError.
+        /// </summary>
+        [TestMethod]
+        public void VectorNorm_RefusesAStringOrderBeforeTheAxis()
+        {
+            var a = np.arange(9.0).reshape(3, 3);
+
+            // np.linalg.norm(a, 'fro', axis=2): ValueError: Invalid norm order 'fro' for vectors.
+            Action fro = () => np.linalg.norm(a, "fro", 2);
+            fro.Should().Throw<ValueError>().WithMessage("Invalid norm order 'fro' for vectors");
+            // np.linalg.norm(a, 'bogus', axis=-6): the same refusal of the name.
+            Action bogus = () => np.linalg.norm(a, "bogus", -6);
+            bogus.Should().Throw<ValueError>().WithMessage("Invalid norm order 'bogus' for vectors");
+            // np.linalg.vector_norm(np.array(5.0), axis=0, ord='nuc'): a 0-d input has no axis 0, the name is refused first.
+            Action nuc = () => np.linalg.vector_norm(np.array(5.0), 0, ord: "nuc");
+            nuc.Should().Throw<ValueError>().WithMessage("Invalid norm order 'nuc' for vectors");
+
+            // A numeric order reaches its reduction, which checks the axis: np.linalg.norm(a, 1, axis=2) and
+            // np.linalg.vector_norm(np.array(5.0), axis=0) are AxisErrors.
+            Action one = () => np.linalg.norm(a, 1, 2);
+            one.Should().Throw<AxisError>().WithMessage("axis 2 is out of bounds for array of dimension 2*");
+            Action zeroD = () => np.linalg.vector_norm(np.array(5.0), 0);
+            zeroD.Should().Throw<AxisError>().WithMessage("axis 0 is out of bounds for array of dimension 0*");
+        }
     }
 }

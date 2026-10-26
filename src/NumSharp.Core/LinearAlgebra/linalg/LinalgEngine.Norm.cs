@@ -51,8 +51,10 @@ namespace NumSharp
 
             int[] axes = axis ?? AllAxes(nd);
 
+            // NumPy's one-axis branch hands the axis to its reductions as it is (they check it), so a string order is
+            // refused before any axis check: VectorNorm normalizes where those reductions would.
             if (axes.Length == 1)
-                return VectorNorm(a, ord, NormalizeAxis(axes[0], nd), keepdims);
+                return VectorNorm(a, ord, axes[0], keepdims);
             if (axes.Length == 2)
                 return MatrixNorm(a, ord, axes, nd, keepdims);
 
@@ -128,17 +130,21 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The floating operand.</param>
         /// <param name="ord">The order: null / 2, a number, or +-inf (text orders are refused).</param>
-        /// <param name="axis">The normalized axis.</param>
+        /// <param name="axis">The axis as given (negative values count from the end): NumPy checks it in the reduction a
+        ///     numeric order runs, so a text order is refused whatever the axis.</param>
         /// <param name="keepdims">Keep the axis as length 1.</param>
         /// <returns>The reduced norm.</returns>
         /// <exception cref="ValueError">A text order (<c>Invalid norm order '...' for vectors</c>), or -inf of an empty
         ///     axis (NumPy's empty-min error).</exception>
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+        /// <exception cref="AxisError">A numeric order with an axis out of range (NumPy's reductions' error).</exception>
         [NDScopedCovered] // always dispatched from the [NDScoped] Norm body; rides its scope
         private static NDArray VectorNorm(NDArray a, object ord, int axis, bool keepdims)
         {
             if (ord is null || (IsNumber(ord, out double n) && n == 2d))
             {
+                // NumPy's add.reduce checks the axis here.
+                axis = NormalizeAxis(axis, a.ndim);
                 // NumPy's special case: sqrt(add.reduce((x.conj() * x).real, axis)). For a real float32 / float64
                 // operand the product is x * x, and np.evaluate streams Sum(x * x, axis) in add.reduce's own schedule:
                 // the same bits as the eager product + np.sum (each product rounded, then summed in NumPy's order),
@@ -155,6 +161,8 @@ namespace NumSharp
                 throw new ValueError($"Invalid norm order '{word}' for vectors");
 
             double order = AsNumber(ord);
+            // Every remaining branch is a reduction over the axis, which checks it: after the order's refusal above.
+            axis = NormalizeAxis(axis, a.ndim);
 
             // NumPy 2.x reduces with initial=0 (`abs(x).max(axis=axis, keepdims=keepdims, initial=0)`): an EMPTY
             // vector's inf-norm is 0.0, not the empty-max ValueError. Every |x| is >= 0, so a non-empty answer is
