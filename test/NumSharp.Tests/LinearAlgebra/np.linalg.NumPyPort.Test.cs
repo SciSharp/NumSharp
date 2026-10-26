@@ -162,5 +162,59 @@ namespace NumSharp.Tests.LinearAlgebra
             AssertReshapedView("vector_norm(a, axis=(0, 1), keepdims=True, ord=1)",
                 np.linalg.vector_norm(a, new[] { 0, 1 }, true, 1), new long[] { 1, 1 }, 36.0);
         }
+
+        /// <summary>
+        ///     norm's general vector order is NumPy's four statements, <c>absx = abs(x); absx **= ord; ret =
+        ///     add.reduce(absx, axis=axis, keepdims=keepdims); ret **= reciprocal(ord, dtype=ret.dtype)</c>: a float16 /
+        ///     float32 operand keeps its dtype, the reciprocal is computed in that dtype, and the last power is scalarmath's
+        ///     <c>pow</c> when <c>ret</c> is 0-d (a NumPy scalar's <c>**=</c> rebinds the name) but the ufunc, with its fast
+        ///     path, when <c>ret</c> is an array. NumSharp computed the reciprocal in float64 and raised a 0-d sum with
+        ///     np.power on two 0-d arrays, which promote to float64.
+        /// </summary>
+        [TestMethod]
+        public void VectorNorm_GeneralOrder_IsNumPysStatements()
+        {
+            var v16 = np.array(new[] { (Half)3, (Half)(-1), (Half)2 });
+            var v32 = np.array(new[] { 3f, -1f, 2f });
+
+            // np.linalg.norm(v32, 3): np.float32(3.3019273), bytes c7525340.
+            var r32 = np.linalg.norm(v32, 3);
+            AssertScalar("norm(v32, 3)", r32);
+            Assert.AreEqual(np.float32, r32.dtype);
+            Assert.AreEqual(0x405352C7u, BitConverter.SingleToUInt32Bits(r32.GetSingle()));
+            // np.linalg.norm(v16, 3): np.float16(3.3), bytes 9a42.
+            var r16 = np.linalg.norm(v16, 3);
+            AssertScalar("norm(v16, 3)", r16);
+            Assert.AreEqual(np.float16, r16.dtype);
+            Assert.AreEqual((ushort)0x429A, BitConverter.HalfToUInt16Bits(r16.GetAtIndex<Half>(0)));
+            // np.linalg.vector_norm(v16, ord=-2): np.float16(0.857), bytes db3a.
+            Assert.AreEqual((ushort)0x3ADB,
+                BitConverter.HalfToUInt16Bits(np.linalg.vector_norm(v16, (int[])null, false, -2).GetAtIndex<Half>(0)));
+
+            // The reciprocal is float32's 1 / 1.1 (2eba683f; the float64 quotient rounded to float32 is 2fba683f), so
+            // np.linalg.norm(v32, 1.1) is 5241af40 where the rounded quotient would give 5341af40.
+            Assert.AreEqual(0x40AF4152u, BitConverter.SingleToUInt32Bits(np.linalg.norm(v32, 1.1).GetSingle()));
+            // np.linalg.norm(v16, 0.3): bytes 8d54 (72.8125).
+            Assert.AreEqual((ushort)0x548D, BitConverter.HalfToUInt16Bits(np.linalg.norm(v16, 0.3).GetAtIndex<Half>(0)));
+
+            // A 0-d ret ** 2 (the order 0.5) is scalarmath's pow, an array's ret **= 2 the ufunc's fast path x * x: with
+            // v = [757.7617475757002 ** 2], np.linalg.norm(v, 0.5) is pow's 0x1.185f5bb7003c2p+19 and
+            // np.linalg.norm(v, 0.5, keepdims=True) the product's 0x1.185f5bb7003c1p+19.
+            const double x = 757.7617475757002;
+            var v = np.array(new[] { x * x });
+            Assert.AreEqual(0x412185F5BB7003C2L, BitConverter.DoubleToInt64Bits(np.linalg.norm(v, 0.5).GetDouble()));
+            Assert.AreEqual(0x412185F5BB7003C1L,
+                BitConverter.DoubleToInt64Bits(np.linalg.norm(v, 0.5, (int?)null, true).GetDouble(0)));
+            // vector_norm never hands keepdims to norm: np.linalg.vector_norm(v, ord=0.5, keepdims=True) is the scalar's pow.
+            Assert.AreEqual(0x412185F5BB7003C2L,
+                BitConverter.DoubleToInt64Bits(np.linalg.vector_norm(v, (int[])null, true, 0.5).GetDouble(0)));
+
+            // An array result keeps the dtype: np.linalg.norm(a32, 1.1, axis=1) is float32 (3,), 5241af40 274a0741 fd131541.
+            var a32 = np.array(new[] { 3f, -1, 2, 0, 5, -4, 1, 7, -2 }).reshape(3, 3);
+            var rows = np.linalg.norm(a32, 1.1, 1);
+            Assert.AreEqual(np.float32, rows.dtype);
+            CollectionAssert.AreEqual(new uint[] { 0x40AF4152, 0x41074A27, 0x411513FD },
+                rows.ToArray<float>().Select(BitConverter.SingleToUInt32Bits).ToArray());
+        }
     }
 }

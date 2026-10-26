@@ -187,7 +187,9 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's one-axis branch of <c>norm</c>: the vector order <paramref name="ord"/> over <paramref name="axis"/>.
-        ///     The inf order reduces with <c>initial=0</c>, so an empty vector's inf-norm is 0.0 where -inf still raises.
+        ///     The inf order reduces with <c>initial=0</c>, so an empty vector's inf-norm is 0.0 where -inf still raises. Any
+        ///     other number is NumPy's general order, which keeps a float16 / float32 operand's dtype and raises a whole
+        ///     vector's 0-d sum with scalarmath's power (<see cref="ScalarPower"/>).
         /// </summary>
         /// <param name="a">The floating operand.</param>
         /// <param name="ord">The order: null / 2, a number, or +-inf (text orders are refused).</param>
@@ -243,9 +245,72 @@ namespace NumSharp
             if (order == 1d)
                 return np.sum(np.abs(a), axis, keepdims);
 
-            var raised = np.power(np.abs(a), NDArray.Scalar(order));
-            var reduced = np.sum(raised, axis, keepdims);
-            return np.power(reduced, NDArray.Scalar(1d / order));
+            // decimal has no NumPy dtype, so no NumPy statement to follow: it keeps NumSharp's own three steps.
+            if (a.typecode == NPTypeCode.Decimal)
+            {
+                var raised = np.power(np.abs(a), NDArray.Scalar(order));
+                var reduced = np.sum(raised, axis, keepdims);
+                return np.power(reduced, NDArray.Scalar(1d / order));
+            }
+
+            // NumPy's general order, statement for statement:
+            //     absx = abs(x); absx **= ord
+            //     ret = add.reduce(absx, axis=axis, keepdims=keepdims)
+            //     ret **= reciprocal(ord, dtype=ret.dtype)
+            // `absx **= ord` is the ufunc in place with a Python scalar, which NEP 50 keeps weak: the loop is absx's own
+            // float dtype (float16 / float32 stay), and np.power's zero-exponent-step fast path decides the orders 0.5
+            // (sqrt) and -1 (the reciprocal) where NumPy's does.
+            var absx = np.abs(a);
+            np.power(absx, NDArray.Scalar(order), @out: absx);
+            var ret = np.sum(absx, axis, keepdims);
+            // `reciprocal(ord, dtype=ret.dtype)`: ord converted to ret's dtype, then 1 / ord IN that dtype - float32's
+            // 1 / 1.1 is one ULP from the float64 quotient rounded to float32, which the last power then carries.
+            var recip = np.reciprocal(NDArray.Scalar(order), dtype: ret.dtype);
+            if (ret.ndim > 0)
+            {
+                // An array's `**=` is the ufunc in place: the 0-d exponent takes np.power's fast path where NumPy's does
+                // (1 / 0.5 = 2 squares, 1 / -1 = -1 takes the reciprocal).
+                np.power(ret, recip, @out: ret);
+                return ret;
+            }
+
+            // A 0-d ret is a NumPy scalar (a whole vector reduced without keepdims), and a scalar's `**=` rebinds the name
+            // to `ret ** recip`: scalarmath's power, which has no fast path.
+            return ScalarPower(ret, recip);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>ret **= recip</c> when <c>ret</c> is one of NumPy's scalars (the 0-d reduction of a whole vector):
+        ///     Python rebinds <c>ret</c> to <c>ret ** recip</c>, scalarmath's power - <c>npy_pow</c> (the C runtime's
+        ///     <c>pow</c>, <see cref="Math.Pow"/>) for float64, <c>npy_powf</c> (<see cref="MathF.Pow"/>) for float32, and
+        ///     <c>half_ctype_power</c> for float16 (<c>npy_powf</c> of the operands widened to float32, rounded once back to
+        ///     float16).
+        /// </summary>
+        /// <param name="ret">The 0-d float16 / float32 / float64 reduction result.</param>
+        /// <param name="recip">The 0-d exponent, of <paramref name="ret"/>'s dtype.</param>
+        /// <returns>A new 0-d array of <paramref name="ret"/>'s dtype standing for NumPy's scalar (read-only).</returns>
+        /// <remarks>
+        ///     np.power on the two 0-d arrays would run NumPy's ARRAY loop, whose fast path squares for the exponent 2 (the
+        ///     order 0.5), and <c>pow(x, 2.0)</c> is not always <c>x * x</c>: for x = 757.7617475757002 pow gives
+        ///     <c>0x1.185f5bb7003c2p+19</c> and the product <c>...3c1p+19</c>, so NumPy's <c>norm(v, 0.5)</c> and
+        ///     <c>norm(v, 0.5, keepdims=True)</c> of <c>v = [x * x]</c> differ in the last bit.
+        /// </remarks>
+        [NDScopedCovered] // only caller: VectorNorm under the [NDScoped] Norm body; the widened / narrowed copies ride its scope
+        private static NDArray ScalarPower(NDArray ret, NDArray recip)
+        {
+            switch (ret.typecode)
+            {
+                case NPTypeCode.Double:
+                    return NDArray.Scalar(Math.Pow(ret.GetDouble(), recip.GetDouble())).MarkReductionScalar();
+                case NPTypeCode.Single:
+                    return NDArray.Scalar(MathF.Pow(ret.GetSingle(), recip.GetSingle())).MarkReductionScalar();
+                default:
+                    // float16, the one other dtype |x| reduces to here (a complex operand's |x| is float64, decimal never
+                    // arrives): the house casts are npy_half_to_float and npy_float_to_half bit for bit.
+                    float b = ret.astype(np.float32).GetSingle();
+                    float e = recip.astype(np.float32).GetSingle();
+                    return NDArray.Scalar(MathF.Pow(b, e)).astype(np.float16).MarkReductionScalar();
+            }
         }
 
         /// <summary>
