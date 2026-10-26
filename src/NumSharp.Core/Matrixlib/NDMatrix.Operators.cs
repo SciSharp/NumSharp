@@ -522,7 +522,7 @@ namespace NumSharp
         public NDMatrix __pow__(int n)
         {
             using var plain = NDMatrixBoundary.Inside();   // the np.* calls below compute plain; this member builds the matrix
-            np.linalg.AssertStackedSquare(this);
+            LinalgEngine.AssertStackedSquare(this);
             if (n == 1)
                 return this;
             // a ** -1 is inv(a) itself in NumPy (the n == 1 shortcut after inverting), not a copy of it.
@@ -545,7 +545,7 @@ namespace NumSharp
         [NDScoped]
         public NDMatrix __pow__(object other)
         {
-            np.linalg.AssertStackedSquare(this);
+            LinalgEngine.AssertStackedSquare(this);
             return __pow__(PowerIndex(other));
         }
 

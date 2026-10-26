@@ -25,17 +25,19 @@ namespace NumSharp
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-            [NDScoped] // reclaims the ToCommon cast temp
+            /// <param name="a">The Hermitian positive-definite matrix, or a stack of them.</param>
+            /// <returns>The triangular factor, a fresh array (float64 for bool / integer operands).</returns>
+            /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a matrix that is not positive
+            ///     definite.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            [NDScoped] // the class boundary's temporaries; LinalgEngine.Cholesky scopes the computation's own
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.Wrapped((a, upper), static s => cholesky(s.a, s.upper));
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                // NumPy calls _umath_linalg.cholesky_lo / cholesky_up: its input cast refuses text.
-                ThrowIfTextGufunc(upper ? "cholesky_up" : "cholesky_lo", a);
-                return a.TensorEngine.Cholesky(ToCommon(a, common), upper);
+                return LinalgEngine.Cholesky(a, upper);
             }
         }
     }

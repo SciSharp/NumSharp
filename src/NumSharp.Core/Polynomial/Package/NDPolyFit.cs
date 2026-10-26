@@ -167,7 +167,7 @@ namespace NumSharp
             // buffer (24.8 MB at n = 100,000, degree 30).
             NDArray sclColumn = np.expand_dims(scl, 1);
             NDArray a = np.divide(lhs, sclColumn, @out: lhs).T;
-            np.linalg.CommonType(a, b);
+            LinalgEngine.CommonType(a, b);
             double rcondValue = RcondValue(rcond, rcondArr);
             var (c, resids, rank, s) = np.linalg.lstsq(a, b, rcondValue);
 

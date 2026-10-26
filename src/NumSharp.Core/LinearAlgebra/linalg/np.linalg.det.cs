@@ -18,17 +18,17 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            // Scope: reclaims the ToCommon dtype-cast temp (minted only when `a` needs casting;
-            // a passthrough input is never tracked), yielding the engine's fresh determinant scalar.
+            /// <param name="a">The square matrix, or a stack of them.</param>
+            /// <returns>The determinant: a 0-d array for one matrix, one value per matrix of a stack.</returns>
+            /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            // Scope: the facade keeps its scope over the call (LinalgEngine.Det reclaims the ToCommon dtype-cast temp).
             [NDScoped]
             public static NDArray det(NDArray a)
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                // NumPy calls _umath_linalg.det: its input cast refuses text, an empty operand included.
-                ThrowIfTextGufunc("det", a);
-                return a.TensorEngine.Det(ToCommon(a, common));
+                return LinalgEngine.Det(a);
             }
 
             /// <summary>
@@ -42,17 +42,17 @@ namespace NumSharp
             /// </returns>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.slogdet.html</remarks>
             /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
-            // Scope: reclaims the ToCommon dtype-cast temp; the (sign, logabsdet) tuple result is
-            // yielded through the weaver's Returns<T1,T2> tuple egress (both engine-fresh).
+            /// <param name="a">The square matrix, or a stack of them.</param>
+            /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
+            /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
+            // Scope: the facade keeps its scope over the call; the (sign, logabsdet) tuple result is yielded through the
+            // weaver's Returns<T1,T2> tuple egress (LinalgEngine.Slogdet reclaims the ToCommon dtype-cast temp).
             [NDScoped]
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                AssertStackedSquare(a);
-                var common = CommonType(a);
-                // NumPy calls _umath_linalg.slogdet: its input cast refuses text, an empty operand included.
-                ThrowIfTextGufunc("slogdet", a);
-                return a.TensorEngine.Slogdet(ToCommon(a, common));
+                return LinalgEngine.Slogdet(a);
             }
         }
     }
