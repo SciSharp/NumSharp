@@ -430,6 +430,62 @@ namespace NumSharp.Tests.Backends
             }
         }
 
+        /// <summary>
+        ///     A reduction whose result is 0-d hands it back as NumPy's scalar on every route, including the exits a
+        ///     non-empty input never reaches: an EMPTY 1-D input reduced along its only axis (np.sum, np.prod, np.mean,
+        ///     np.count_nonzero, np.trapezoid, np.nanmean of an integer input), np.count_nonzero of a 0-d input, and
+        ///     np.nansum / np.nanprod along a 1-D input's axis whatever its size. Each returned a writeable 0-d array.
+        ///     Array results (keepdims, an empty operand of two axes) stay writeable. Expected kinds: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void ReductionScalars_EmptyAxisAndNanAxis_AreNumPysScalars()
+        {
+            var empty = np.zeros(new Shape(0L));
+            var emptyInt = np.zeros(new Shape(0L), np.int32);
+            var scalars = new (string name, NDArray r)[]
+            {
+                ("sum_empty_ax", np.sum(empty, -1)), ("sum_empty_int_ax", np.sum(emptyInt, 0)),
+                ("sum_empty_dtype", np.sum(empty, 0, false, np.int64)), ("prod_empty_ax", np.prod(empty, -1)),
+                ("mean_empty_ax", np.mean(empty, -1)), ("nanmean_empty_int_ax", np.nanmean(emptyInt, -1)),
+                ("count_nonzero_empty_ax", np.count_nonzero(empty, -1)),
+                ("count_nonzero_0d", np.count_nonzero(np.array(5), 0)),
+                ("count_nonzero_0d_keepdims", np.count_nonzero(np.array(0.0), -1, true)),
+                ("trapezoid_empty", np.trapezoid(empty)),
+                ("nansum_empty_ax", np.nansum(empty, -1)), ("nanprod_empty_ax", np.nanprod(empty, -1)),
+                ("nansum_f64_ax", np.nansum(np.array(new[] { 1.0, double.NaN, 2.0 }), 0)),
+                ("nansum_f32_ax", np.nansum(np.array(new[] { 1f, float.NaN }), 0)),
+                ("nansum_f16_ax", np.nansum(np.array(new[] { (Half)1, Half.NaN }), 0)),
+                ("nanprod_f32_ax", np.nanprod(np.array(new[] { 2f, float.NaN }), 0)),
+            };
+            foreach (var (name, r) in scalars)
+            {
+                r.ndim.Should().Be(0, name);
+                r.flags.writeable.Should().BeFalse($"{name} is NumPy's read-only scalar");
+                r.flags.owndata.Should().BeTrue(name);
+            }
+            np.sum(emptyInt, 0).dtype.Should().Be(np.int64);
+            np.sum(empty, -1).GetDouble().Should().Be(0.0);
+            np.prod(empty, -1).GetDouble().Should().Be(1.0);
+            double.IsNaN(np.mean(empty, -1).GetDouble()).Should().BeTrue();
+            np.count_nonzero(np.array(5), 0).GetInt64().Should().Be(1L);
+            np.nansum(np.array(new[] { 1.0, double.NaN, 2.0 }), 0).GetDouble().Should().Be(3.0);
+
+            // Array results keep their writeable owners, as NumPy's do.
+            foreach (var (name, r) in new (string, NDArray)[]
+                     {
+                         ("count_nonzero_empty_keepdims", np.count_nonzero(empty, 0, true)),
+                         ("count_nonzero_0x3", np.count_nonzero(np.zeros(new Shape(0L, 3L)), 0)),
+                         ("sum_0x3", np.sum(np.zeros(new Shape(0L, 3L)), 0)),
+                         ("sum_empty_keepdims", np.sum(empty, 0, true)),
+                         ("nansum_keepdims", np.nansum(np.array(new[] { 1.0, double.NaN }), 0, true)),
+                         ("nansum_2x3", np.nansum(np.ones(new Shape(2L, 3L)), 0)),
+                     })
+            {
+                r.ndim.Should().Be(1, name);
+                r.flags.writeable.Should().BeTrue(name);
+            }
+        }
+
         [TestMethod]
         public void ReductionScalars_WorkAsOperands_Everywhere()
         {

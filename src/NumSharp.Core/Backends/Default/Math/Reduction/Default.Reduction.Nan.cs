@@ -160,7 +160,8 @@ namespace NumSharp.Backends
         /// The shared body of <see cref="NanMax"/> / <see cref="NanMin"/>. NumPy's <c>nanmax(a)</c> for a plain ndarray is
         /// <c>np.fmax.reduce(a, axis)</c> plus an "All-NaN slice" RuntimeWarning (NumSharp has no warnings), so float32 /
         /// float64 run NumPy's own fmax / fmin reduction schedules through the exact core
-        /// (<see cref="TryExactFlatMinMaxScalar"/>, <see cref="TryExactAxisMinMax"/> with <see cref="MinMaxOp.FMax"/> /
+        /// (<see cref="TryExactFlatMinMaxScalar(NDArray, MinMaxOp)"/>, <see cref="TryExactAxisMinMax(NDArray, int, MinMaxOp)"/>
+        /// with <see cref="MinMaxOp.FMax"/> /
         /// <see cref="MinMaxOp.FMin"/>).
         /// </summary>
         /// <remarks>
@@ -492,7 +493,8 @@ namespace NumSharp.Backends
         /// <param name="axis">The reduced axis; negative values count from the end.</param>
         /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
         /// <param name="op">The NaN-aware reduction.</param>
-        /// <returns>The reduced array.</returns>
+        /// <returns>The reduced array in the input's memory order; for a 1-D input without keepdims the 0-d result as
+        ///     NumPy's read-only scalar stand-in (the np.sum / np.prod / np.fmax.reduce it ports returns a scalar).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range — NumPy's np.sum / np.prod rule, which the
         ///     nan functions inherit (they call them on the NaN-replaced copy).</exception>
         private unsafe NDArray ExecuteNanAxisReduction(NDArray arr, int axis, bool keepdims, ReductionOp op)
@@ -536,12 +538,21 @@ namespace NumSharp.Backends
             // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
             if (keepdims)
                 result.Storage.ExpandDimension(axis);
-            return result;
+            // A 1-D input along its only axis leaves a 0-d result, which NumPy returns as a scalar (np.nansum(v, axis=0)
+            // is np.float64, empty or not); this exit returned it writeable. A no-op for an array result.
+            return result.MarkReductionScalar();
         }
 
         /// <summary>
-        /// Scalar fallback for NaN axis reduction.
+        ///     The scalar fallback of <see cref="ExecuteNanAxisReduction"/> when no IL kernel serves the dtype: each output
+        ///     reduces its input slice in C# (float32 / float64 / float16), in the input's memory order.
         /// </summary>
+        /// <param name="arr">The input (ndim &gt;= 1), its axis already normalized by the caller.</param>
+        /// <param name="axis">The reduced axis, non-negative.</param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <param name="op">The NaN-aware reduction.</param>
+        /// <returns>The reduced array in the input's memory order; for a 1-D input without keepdims the 0-d result as
+        ///     NumPy's read-only scalar stand-in.</returns>
         private NDArray ExecuteNanAxisReductionScalar(NDArray arr, int axis, bool keepdims, ReductionOp op)
         {
             var shape = arr.Shape;
@@ -607,7 +618,8 @@ namespace NumSharp.Backends
             // ExpandDimension re-inserts the reduced axis preserving the KEEPORDER layout.
             if (keepdims)
                 result.Storage.ExpandDimension(axis);
-            return result;
+            // The 0-d result of a 1-D input is NumPy's scalar, as in ExecuteNanAxisReduction; a no-op for an array.
+            return result.MarkReductionScalar();
         }
 
         /// <summary>

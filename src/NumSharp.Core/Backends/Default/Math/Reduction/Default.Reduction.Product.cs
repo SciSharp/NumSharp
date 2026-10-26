@@ -91,7 +91,9 @@ namespace NumSharp.Backends
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
                     result.Storage.Reshape(Shape.Adopt(ks));
                 }
-                return result;
+                // A 1-D input along its only axis gives the 0-d identity, NumPy's scalar as for a non-empty input (this
+                // exit returned it writeable); a no-op for an array result.
+                return result.MarkReductionScalar();
             }
 
             // Degenerate flat reduction (0-d scalar or single-element 1-D). NumPy still applies the

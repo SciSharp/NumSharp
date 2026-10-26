@@ -93,7 +93,9 @@ namespace NumSharp.Backends
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
                     result.Storage.Reshape(Shape.Adopt(ks));
                 }
-                return result;
+                // A 1-D input along its only axis gives the 0-d NaN, which NumPy returns as a scalar like any 0-d mean
+                // (this exit returned it writeable); a no-op for an array result.
+                return result.MarkReductionScalar();
             }
 
             // ONE element per output — a one-element input reduced flat or over its only axis: NumPy's mean is
@@ -269,7 +271,7 @@ namespace NumSharp.Backends
         ///     The two branches differ only for <paramref name="float16Result"/>: the array branch rounds the float64
         ///     quotient into the float32 sum and then into float16 (twice), the scalar branch rounds the float64 quotient
         ///     into float16 once. For every other loop both are the float64 quotient rounded once into the loop
-        ///     (<see cref="DivideByCountLikeNumPy"/>: complex divides by <c>rcount + 0j</c>, an integer or bool loop casts
+        ///     (<see cref="DivideByCountLikeNumPy(NDArray, long)"/>: complex divides by <c>rcount + 0j</c>, an integer or bool loop casts
         ///     unsafely, so 0 / 0 is INT_MIN or True).
         /// </remarks>
         private NDArray MeanLikeNumPy(NDArray arr, int? axis, bool keepdims, NPTypeCode loop, bool float16Result)

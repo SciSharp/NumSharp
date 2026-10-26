@@ -246,7 +246,8 @@ namespace NumSharp.Backends
         /// <param name="nd">The array.</param>
         /// <param name="axis">The reduced axis.</param>
         /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
-        /// <returns>The int64 counts.</returns>
+        /// <returns>The int64 counts: NumPy's read-only scalar stand-in when the result is 0-d (a 1-D or 0-d input without
+        ///     keepdims, empty or not), a fresh writeable array otherwise.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds — the sum's rule NumPy's count_nonzero
         ///     inherits (<c>a.astype(bool).sum(axis)</c>), so a 0-d input accepts 0 and -1 and nothing else.</exception>
         /// <remarks>A string array is counted by its truth values: NumPy's <c>(a != '').sum(axis)</c> (never raises).</remarks>
@@ -280,7 +281,10 @@ namespace NumSharp.Backends
                         ks[d] = (d == axis) ? 1 : resultShape[sd++];
                     empty.Storage.Reshape(Shape.Adopt(ks));
                 }
-                return empty;
+                // NumPy's count is a.astype(bool).sum(axis), so a 1-D input's 0-d count is the sum's scalar, as the
+                // non-empty route below returns it (np.linalg.matrix_rank of an empty matrix with a tolerance came back
+                // writeable through here). A no-op for an array result.
+                return empty.MarkReductionScalar();
             }
             // Boundary scope: reclaims the cast copy of a failed call and the scalar path's temporaries; the result is yielded.
 
@@ -292,7 +296,9 @@ namespace NumSharp.Backends
             {
                 if (axis != 0 && axis != -1)
                     throw new AxisError(axis, 0);
-                return NDArray.Scalar(CountNonZero(nd));
+                // The sum of a 0-d input is NumPy's scalar, keepdims or not (np.count_nonzero(np.array(5), axis=0) is
+                // np.int64(1)); NDArray.Scalar alone is a writeable 0-d array.
+                return NDArray.Scalar(CountNonZero(nd)).MarkReductionScalar();
             }
 
             axis = check_and_adjust_axis(nd.ndim, axis);
@@ -323,7 +329,7 @@ namespace NumSharp.Backends
         /// which is the SAME SIMD popcount kernel used by <c>np.nonzero</c>'s pre-size
         /// pass: load a Vector&lt;T&gt;, compare-ne-zero, ExtractMostSignificantBits,
         /// PopCount the inverted mask. The earlier scalar
-        /// <see cref="EqualityComparer{T}.Default.Equals"/> per-element loop was a
+        /// <c>EqualityComparer&lt;T&gt;.Default.Equals</c> per-element loop was a
         /// 109× regression vs NumPy (2.1 ms vs 19 µs on 1 M bool).
         /// </summary>
         private static unsafe long count_nonzero<T>(NDArray<T> x) where T : unmanaged

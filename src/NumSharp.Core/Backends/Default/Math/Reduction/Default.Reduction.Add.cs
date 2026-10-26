@@ -443,7 +443,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Allocates a single-axis reduction's output in the layout NumPy's reduce iterator gives it
         ///     (<c>npyiter_new_temp_array</c>): the input's axes in NpyIter's order — sorted by |stride|, C winning
-        ///     ties — with the reduced axis dropped (<see cref="Shape.ReductionOutputShape"/>). A C-contiguous input
+        ///     ties — with the reduced axis dropped (<see cref="Shape.ReductionOutputShape(long[], Shape, int)"/>). A C-contiguous input
         ///     yields a C result, an F-contiguous one an F result (issue #610), and any other order — a transposed 3-D
         ///     input — keeps the input's memory order for the remaining axes (until 2026-10-05 those were reordered to
         ///     C; plan api-parameter-parity A4). The reduction kernels write each output element through
@@ -647,6 +647,23 @@ namespace NumSharp.Backends
             return result;
         }
 
+        /// <summary>
+        ///     The add reduction of an array with no element: the loop's identity (zero) in every output, NumPy's
+        ///     <c>add.reduce</c> over an empty operand. Flat, the result is the 0-d zero (keepdims: <c>(1,)*ndim</c>); along
+        ///     an axis, zeros of the reduced shape — itself 0-d when a 1-D input loses its only axis.
+        /// </summary>
+        /// <param name="arr">The size-0 operand.</param>
+        /// <param name="axis_">The axis to reduce, or null for every axis.</param>
+        /// <param name="keepdims">When true the reduced axis (every axis, flat) stays in the result with length 1.</param>
+        /// <param name="typeCode">The <c>dtype=</c> loop, or null for the input's NEP 50 accumulator (int / bool to int64
+        ///     or uint64, floats kept).</param>
+        /// <param name="out">An output to fill with the identity and return, or null (ReduceAdd routes its out= elsewhere,
+        ///     so its one call passes null).</param>
+        /// <param name="op">The reduction (ReduceAdd passes <see cref="ReductionOp.Sum"/>); the identity is zero whatever it
+        ///     is.</param>
+        /// <returns><paramref name="out"/> when given; otherwise NumPy's read-only scalar stand-in for a 0-d result (flat,
+        ///     or a 1-D input along its axis), a fresh writeable array for any other shape.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range for <paramref name="arr"/>'s rank.</exception>
         private NDArray HandleEmptyArrayReduction(NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, NDArray @out, ReductionOp op)
         {
             var shape = arr.Shape;
@@ -671,7 +688,10 @@ namespace NumSharp.Backends
                 result.Storage.Reshape(Shape.Adopt(ks));
             }
             if (@out is not null) { np.copyto(@out, result); return @out; }
-            return result;
+            // A 1-D input reduced along its only axis leaves a 0-d result, which NumPy hands back as a scalar
+            // (PyArray_Return) exactly as it does for a non-empty input; this exit returned it writeable
+            // (np.sum(np.zeros(0), -1), np.trapezoid of an empty integrand). A no-op for an array result.
+            return result.MarkReductionScalar();
         }
 
         /// <summary>
