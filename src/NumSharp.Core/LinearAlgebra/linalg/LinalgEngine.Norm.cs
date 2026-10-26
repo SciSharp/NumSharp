@@ -46,7 +46,8 @@ namespace NumSharp
                     ? np.sum(AbsSquared(flat))
                     : np.dot(flat, flat);
                 var whole = np.sqrt(squared);
-                return keepdims ? np.reshape(whole, Ones(nd)) : whole;
+                // NumPy's `ret = ret.reshape(ndim * [1])`.
+                return keepdims ? ReshapeLikeNumPy(whole, Ones(nd)) : whole;
             }
 
             int[] axes = axis ?? AllAxes(nd);
@@ -115,13 +116,73 @@ namespace NumSharp
                 var kept = (long[])x.Shape.dimensions.Clone();
                 foreach (int ax in normalized)
                     kept[ax] = 1;
-                return np.reshape(res, Shape.Adopt(kept));
+                return ReshapeLikeNumPy(res, kept);
             }
 
             // Flatten first, then reduce — and restore the rank afterwards when keepdims asks,
             // because the ravel has already erased it.
             var flattened = np.linalg.norm(np.ravel(ToFloating(x)), order, new[] {0}, false);
-            return keepdims ? np.reshape(flattened, Ones(x.ndim)) : flattened;
+            return keepdims ? ReshapeLikeNumPy(flattened, Ones(x.ndim)) : flattened;
+        }
+
+        /// <summary>
+        ///     The body of <c>np.linalg.vector_norm(x, int axis, keepdims, ord)</c> past the class boundary: NumPy's
+        ///     <c>res = norm(x, axis=_axis, ord=ord)</c> (through the public <c>np.linalg.norm</c>, without keepdims) and,
+        ///     for keepdims, <c>res.reshape(tuple(shape))</c> with the reduced axis of the input's shape set to 1.
+        /// </summary>
+        /// <param name="x">The operand (plain: the facade applied the class boundary).</param>
+        /// <param name="axis">The reduced axis (negative values count from the end).</param>
+        /// <param name="keepdims">Leave the reduced axis in the result with length 1.</param>
+        /// <param name="ord">The vector order; null means NumPy's default of 2.</param>
+        /// <returns>The norm along <paramref name="axis"/>; with keepdims a view of it (NumPy's reshape).</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for a numeric order (a 0-d input has no
+        ///     axis).</exception>
+        /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
+        /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+        /// <remarks>
+        ///     NumPy's vector_norm never hands keepdims to norm ("We can't reuse np.linalg.norm(keepdims) because of the
+        ///     reshape hacks above"), so its keepdims result is a reshape of the reduced array, not the reduction's own
+        ///     keepdims array: a view that does not own its data.
+        /// </remarks>
+        [NDScoped]
+        internal static NDArray VectorNormOverAxis(NDArray x, int axis, bool keepdims, object ord)
+        {
+            var res = np.linalg.norm(x, ord ?? 2, new[] {axis}, false);
+            if (!keepdims)
+                return res;
+
+            // NumPy's `_axis = normalize_axis_tuple(axis, len(shape))` over the input's shape (taken before anything was
+            // computed; norm already accepted the axis, so this cannot fail), then `shape[i] = 1` and the reshape.
+            var shape = (long[])x.Shape.dimensions.Clone();
+            shape[NormalizeAxis(axis, x.ndim)] = 1;
+            return ReshapeLikeNumPy(res, shape);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>r.reshape(shape)</c> of a norm result, which may be one of NumPy's scalars: an array's reshape is a
+        ///     view; a scalar's is a view of the fresh writeable array NumPy makes from it (WRITEABLE, not OWNDATA), and its
+        ///     reshape to <c>()</c> is the scalar itself.
+        /// </summary>
+        /// <param name="r">The result: an array, or a 0-d array standing for NumPy's scalar (read-only when it is the
+        ///     scalar stand-in of a reduction or a gufunc).</param>
+        /// <param name="shape">The new shape (the same number of elements; a fresh array this call adopts).</param>
+        /// <returns>A view of <paramref name="r"/> (of a copy, for a 0-d <paramref name="r"/>), or <paramref name="r"/>
+        ///     itself for a 0-d result reshaped to <c>()</c>.</returns>
+        /// <remarks>
+        ///     Every 0-d norm result stands for NumPy's scalar: NumPy's reductions and ufuncs return scalars for 0-d results.
+        ///     A view of NumSharp's read-only scalar stand-in would stay read-only, where NumPy's reshape of a scalar is
+        ///     writeable, so the view is taken of a copy (a 0-d copy costs one element).
+        /// </remarks>
+        [NDScopedCovered] // only callers: the [NDScoped] norm bodies and MatrixNorm under them; the copy lives on as the view's base
+        private static NDArray ReshapeLikeNumPy(NDArray r, long[] shape)
+        {
+            if (r.ndim == 0)
+            {
+                if (shape.Length == 0)
+                    return r;
+                r = r.copy();
+            }
+            return np.reshape(r, Shape.Adopt(shape));
         }
 
         /// <summary>
@@ -258,11 +319,13 @@ namespace NumSharp
             if (!keepdims)
                 return result;
 
-            // Put the two reduced axes back as length-1, lowest index first so the second
-            // insertion is not displaced by the first.
-            int first = rowAxis < colAxis ? rowAxis : colAxis;
-            int second = rowAxis < colAxis ? colAxis : rowAxis;
-            return np.expand_dims(np.expand_dims(result, first), second);
+            // NumPy's `ret_shape = list(x.shape); ret_shape[axis[0]] = 1; ret_shape[axis[1]] = 1;
+            // ret = ret.reshape(ret_shape)`: the two reduced axes back as length 1, a view of the result (of the array a
+            // scalar result becomes).
+            var retShape = (long[])a.Shape.dimensions.Clone();
+            retShape[rowAxis] = 1;
+            retShape[colAxis] = 1;
+            return ReshapeLikeNumPy(result, retShape);
         }
 
         /// <summary>The Frobenius norm over an axis pair: the square root of the summed <c>|x|²</c>.</summary>
@@ -341,10 +404,10 @@ namespace NumSharp
 
         /// <summary>A shape of length-1 axes: keepdims after a whole-array reduction.</summary>
         /// <param name="nd">The rank.</param>
-        /// <returns><paramref name="nd"/> ones.</returns>
-        private static int[] Ones(int nd)
+        /// <returns><paramref name="nd"/> ones, a fresh array (<see cref="ReshapeLikeNumPy"/> adopts it).</returns>
+        private static long[] Ones(int nd)
         {
-            var ones = new int[nd];
+            var ones = new long[nd];
             for (int i = 0; i < nd; i++)
                 ones[i] = 1;
             return ones;

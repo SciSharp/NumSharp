@@ -76,11 +76,13 @@ namespace NumSharp
             /// <param name="axis">The reduced axis (negative values count from the end).</param>
             /// <param name="keepdims">Leave the reduced axis in the result with length 1.</param>
             /// <param name="ord">The vector order; <c>null</c> means NumPy's default of 2.</param>
-            /// <returns>The norm along <paramref name="axis"/>.
+            /// <returns>The norm along <paramref name="axis"/>; with <paramref name="keepdims"/> a view of it (NumPy's
+            ///     reshape, which does not own its data).
             ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
             ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <exception cref="AxisError"><paramref name="axis"/> is out of range (a 0-d input has no axis).</exception>
             /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
+            /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
             /// <remarks>
             ///     An integer axis is NOT the one-element tuple: NumPy hands it to norm as it is, while a tuple is moved to
             ///     the front and merged first (see the <c>int[]</c> overload). Both reach the vector branch, but in different
@@ -91,7 +93,7 @@ namespace NumSharp
                 ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
                 : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
                 ? NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
-                : norm(x, ord ?? 2, new[] {axis}, keepdims);
+                : LinalgEngine.VectorNormOverAxis(x, axis, keepdims, ord);
 
             /// <summary>
             ///     The Array-API vector norm — <c>axis</c> defaults to flattening and <c>ord</c> to 2.
