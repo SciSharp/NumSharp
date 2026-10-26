@@ -1,4 +1,5 @@
 #:project ../../src/NumSharp.Core
+#:project ../../src/NumSharp.Interop.OpenBLAS
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
 #:property Nullable=disable
@@ -14,8 +15,16 @@
 //   diff <parent.tsv> <child.tsv>
 // With the environment variable SNAPSHOT_BYTES=1 every array result's line also carries its C-order bytes (" BYTES
 // <hex>"), to measure a value mismatch element by element; compare only snapshots made the same way.
+// With SNAPSHOT_OPENBLAS=1 the tool installs the NumSharp.Interop.OpenBLAS backend at ONE thread before the first call, so
+// the LAPACK factorisations of np.linalg compute (without it they raise OpenBlasMissingBackendException for a non-empty
+// operand; det / slogdet / solve / inv take the managed LU)
+// and every product with a BLAS route takes it; NumPy's own scipy-openblas at OPENBLAS_NUM_THREADS=1 gives the same bits.
+// Without the variable the backend is never loaded (its module initializer runs only when a method naming its types is
+// prepared), so the snapshots of the other functions are what they were. Compare only snapshots made the same way.
 //
-// A name "np.f" is every public static overload of np.f; "NDArray.f" every public instance overload declared on NDArray;
+// A name "np.f" is every public static overload of np.f; "np.linalg.f" every public static overload of np.linalg.f (run on
+// pools of square matrices, stacks, rectangles and empties, see LinalgLayouts); "NDArray.f" every public instance overload
+// declared on NDArray;
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
 // NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
 // np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too.
@@ -38,11 +47,16 @@
 // their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
 // optional sample points x and its spacing dx, np.searchsorted's keys v (an array, or a C# int / double), its side
 // name and its sorter, np.cov / np.corrcoef's optional second set of variables y, nullable ddof and frequency /
-// analytic weights, the gufuncs' second operand x2, axes= lists, nullable keepdims and casting rule, and np.gradient's
+// analytic weights, the gufuncs' second operand x2, axes= lists, nullable keepdims and casting rule, np.gradient's
 // spacing (one, one per axis, or the varargs list: scalars, 0-d arrays, coordinates of the operand's axis lengths) and
-// edge_order); an overload with a required parameter of another kind is reported once as SKIP. An int axis
+// edge_order, and np.linalg's second operand b, multi_dot's array list, the orders ord / p, UPLO, qr's mode, matrix_power's
+// n, tensorinv's ind, tensordot's axes (a count, or the two axis lists), tensorsolve's axes and the nullable tolerances
+// rcond / rtol / tol); an overload with a required parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
-// strided, reversed, unsorted and empty ones beside one 2-D operand. A result that is a struct of arrays (np.histogram's
+// strided, reversed, unsorted and empty ones beside one 2-D operand. An np.linalg function runs on pools of matrices
+// (LinalgLayouts, 20 layouts in phase A: square ones in C, F, transposed, strided, reversed and broadcast form, a stack, a
+// positive definite and a singular matrix, rectangles, empties; 7 in phase B, a square matrix and a rectangle in phase C),
+// and multi_dot's array list is built from the operand (MakeLinalgArrays). A result that is a struct of arrays (np.histogram's
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field; np.gradient's GradientResult renders as
 // GRAD1(array) or GRADN(array; ...).
 using System;
@@ -64,6 +78,12 @@ if (args.Length < 2)
     return 2;
 }
 
+// The OpenBLAS backend only on request: the call sits in its own non-inlined method, so a run without the variable never
+// prepares a method that names the package's types, and the package's module initializer (which installs the bundled
+// backend) never runs.
+if (Environment.GetEnvironmentVariable("SNAPSHOT_OPENBLAS") == "1")
+    Console.Error.WriteLine(Snapshot.EnableOpenBlas());
+
 var output = new StreamWriter(args[0], false, new UTF8Encoding(false)) { NewLine = "\n" };
 int lines = 0;
 foreach (var target in args.Skip(1))
@@ -83,6 +103,26 @@ return 0;
 /// </summary>
 static class Snapshot
 {
+    /// <summary>
+    ///     Installs the NumSharp.Interop.OpenBLAS backend (the bundled scipy-openblas, NumPy's own build) pinned to ONE
+    ///     thread, the parity configuration: the bits of a BLAS / LAPACK result depend on the thread count.
+    /// </summary>
+    /// <returns>The backend's description, for the console.</returns>
+    /// <exception cref="DllNotFoundException">No OpenBLAS library could be loaded (the bundled one is not staged:
+    ///     <c>tools/fetch_openblas.py</c>).</exception>
+    /// <remarks>
+    ///     Not inlined, on purpose: the package's module initializer runs when the runtime first prepares a method that names
+    ///     one of its types, so naming <c>OpenBlasEngine</c> in the top-level statements would install the backend for every
+    ///     run. Here it runs only when the caller asks; it installs the bundled backend, and <c>Enable(threads: 1)</c> then
+    ///     pins the thread count on the library it loaded.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static string EnableOpenBlas()
+    {
+        NumSharp.Interop.OpenBLAS.OpenBlasEngine.Enable(threads: 1);
+        return "snapshot: OpenBLAS backend at one thread: " + NumSharp.Interop.OpenBLAS.OpenBlasEngine.Info;
+    }
+
     /// <summary>The dtypes of the operand pool: the 15 storage dtypes and the three text dtypes.</summary>
     private static readonly string[] Dtypes =
     {
@@ -127,9 +167,10 @@ static class Snapshot
     /// <summary>
     ///     Snapshots every overload of one target.
     /// </summary>
-    /// <param name="target"><c>np.name</c> for the public static overloads of <c>np.name</c>, <c>NDArray.name</c> for the
-    ///     public instance overloads declared on NDArray (<c>NDArray.op_X</c> for its static operators),
-    ///     <c>NDMatrix.name</c> for the public instance overloads declared on NDMatrix.</param>
+    /// <param name="target"><c>np.name</c> for the public static overloads of <c>np.name</c>, <c>np.linalg.name</c> for
+    ///     those of the module class <c>np.linalg</c>, <c>NDArray.name</c> for the public instance overloads declared on
+    ///     NDArray (<c>NDArray.op_X</c> for its static operators), <c>NDMatrix.name</c> for the public instance overloads
+    ///     declared on NDMatrix.</param>
     /// <returns>The output lines, overloads ordered by signature.</returns>
     /// <exception cref="ArgumentException">The target names no overload.</exception>
     /// <remarks>
@@ -139,7 +180,9 @@ static class Snapshot
     /// </remarks>
     public static IEnumerable<string> Run(string target)
     {
-        string name = target.Substring(target.IndexOf('.') + 1);
+        // np.linalg.f is a member of the nested module class np.linalg: the name is what follows the LAST dot.
+        bool onLinalg = target.StartsWith("np.linalg.", StringComparison.Ordinal);
+        string name = target.Substring((onLinalg ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
         bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
         bool onMatrix = target.StartsWith("NDMatrix.", StringComparison.Ordinal);
         // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is.
@@ -150,7 +193,9 @@ static class Snapshot
                     ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(NDArray))
                     : onNDArray
                         ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.DeclaringType == typeof(NDArray))
-                        : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
+                        : onLinalg
+                            ? typeof(np.linalg).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                            : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
             .Where(m => m.Name == name && !m.IsGenericMethodDefinition)
             .Select(m => (Method: m, Signature: Signature(target, m)))
             .OrderBy(t => t.Signature, StringComparer.Ordinal)
@@ -204,6 +249,10 @@ static class Snapshot
         // base null, no spacing), a per-axis spacing of the two- and three-spacing overloads (base 1.0), the explicit
         // spacing list varargs (base empty), all built from the operand's axis lengths, and the boundary order edge_order.
         GradSpacing, GradAxisSpacing, GradVarargs, EdgeOrder,
+        // np.linalg: multi_dot's array list (built from the operand), the norm / cond order (an object: a number, an
+        // infinity, a name), eigh's UPLO, qr's mode, matrix_power's exponent n, tensordot's two axis lists, and the
+        // nullable tolerances (pinv's rcond / rtol, matrix_rank's tol / rtol, lstsq's rcond).
+        LinalgArrays, Ord, Uplo, QrMode, Power, AxesPairArg, NullableDouble,
         Default, Unsupported,
     }
 
@@ -236,7 +285,7 @@ static class Snapshot
                 : n == "y" && p.HasDefaultValue ? Role.Variables
                 : n == "fweights" ? Role.FWeights
                 : n == "aweights" ? Role.AWeights
-                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" ? Role.Operand2
+                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" ? Role.Operand2
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -259,10 +308,12 @@ static class Snapshot
         if (n == "q" && t == typeof(long)) return Role.QLong;
         if (n == "axis" && t == typeof(int?)) return Role.Axis;
         if (n == "axis" && t == typeof(int)) return Role.AxisInt;
-        if (n == "axis" && t == typeof(int[])) return Role.AxisArray;
-        // np.trace / np.diagonal's integer arguments, and numpy.matrix's var / std ddof: varied around their defaults (out of
-        // range included; a ddof past the count makes the divisor 0).
-        if (n is "offset" or "axis1" or "axis2" or "ddof" && t == typeof(int)) return Role.IntArg;
+        // An axis list, and np.linalg.tensorsolve's axes (the axes of a to move to the end; null = none).
+        if ((n == "axis" || n == "axes") && t == typeof(int[])) return Role.AxisArray;
+        // np.trace / np.diagonal's integer arguments, numpy.matrix's var / std ddof, np.linalg.tensorinv's ind and
+        // tensordot's axis count: varied around their defaults (out of range included; a ddof past the count makes the
+        // divisor 0).
+        if (n is "offset" or "axis1" or "axis2" or "ddof" or "ind" or "axes" && t == typeof(int)) return Role.IntArg;
         // np.cov's nullable ddof (null = bias's default).
         if (n == "ddof" && t == typeof(int?)) return Role.Ddof;
         // The gufuncs' axes= list, matmul's nullable keepdims and its casting rule.
@@ -275,6 +326,16 @@ static class Snapshot
         if (n is "spacing0" or "spacing1" or "spacing2" && t == typeof(object)) return Role.GradAxisSpacing;
         if (n == "varargs" && t == typeof(object[])) return Role.GradVarargs;
         if (n == "edge_order" && t == typeof(int)) return Role.EdgeOrder;
+        // np.linalg: the norm / cond order (typed object: NumPy's ord / p takes numbers and names), eigh's UPLO, qr's mode
+        // (only np.linalg's: np.convolve's and np.take's modes keep their defaults), matrix_power's exponent (required),
+        // tensordot's two axis lists (required), and the nullable tolerances.
+        if ((n == "ord" || n == "p") && t == typeof(object)) return Role.Ord;
+        if (n == "UPLO" && t == typeof(char)) return Role.Uplo;
+        bool inLinalg = p.Member.DeclaringType == typeof(np.linalg);
+        if (n == "mode" && t == typeof(string) && inLinalg) return Role.QrMode;
+        if (n == "n" && t == typeof(int) && inLinalg) return Role.Power;
+        if (n is "axesA" or "axesB" && t == typeof(int[])) return Role.AxesPairArg;
+        if (n is "rcond" or "rtol" or "tol" && t == typeof(double?)) return Role.NullableDouble;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -568,6 +629,55 @@ static class Snapshot
                 Add("(0,inf)", () => ((double, double)?)(0.0, double.PositiveInfinity));
                 Add("(2,2)", () => ((double, double)?)(2.0, 2.0));
                 break;
+            case Role.LinalgArrays:
+                // Built from the operand (MakeLinalgArrays); the factory here is never called.
+                Add(LinalgArraysVariantLabels[0], () => null);
+                break;
+            case Role.Ord:
+                // No order first (NumPy's None: the Frobenius / 2-norm default, cond's 2-norm), then the orders NumPy's norms
+                // and cond know (Python ints, the infinities as floats, a fraction, the names) and the ones they refuse.
+                Add("null", () => null);
+                foreach (var (label, ord) in new (string, object)[]
+                         {
+                             ("1", 1), ("-1", -1), ("2", 2), ("-2", -2), ("0", 0), ("3", 3),
+                             ("inf", double.PositiveInfinity), ("-inf", double.NegativeInfinity), ("0.5", 0.5),
+                             ("fro", "fro"), ("nuc", "nuc"), ("f", "f"), ("bogus", "bogus"),
+                         })
+                    Add(label, () => ord);
+                break;
+            case Role.Uplo:
+                // The default first, the other triangle, a lowercase letter (NumPy upper-cases it) and a letter it refuses.
+                foreach (var c in new[] { 'L', 'U', 'l', 'X' })
+                    Add(c.ToString(), () => c);
+                break;
+            case Role.QrMode:
+                // The default first, the other modes NumPy computes, the spellings NumPy 1.x deprecated and an unknown one.
+                foreach (var m in new[] { "reduced", "complete", "r", "raw", "full", "economic", "bogus" })
+                    Add(m, () => m);
+                break;
+            case Role.Power:
+                // A required exponent: the square first, then the identity, the operand itself, a cube, the inverse and its
+                // square (both need a backend), and a higher power.
+                foreach (var e in new[] { 2, 0, 1, 3, -1, -2, 5 })
+                    Add(e.ToString(CultureInfo.InvariantCulture), () => e);
+                break;
+            case Role.AxesPairArg:
+                // tensordot's two required axis lists: the last axis of each operand first (the operand and its copy agree),
+                // then the first axis, two axes, none (an outer product) and an axis out of range.
+                foreach (var a in new[] { new[] { 1 }, new[] { 0 }, new[] { 0, 1 }, Array.Empty<int>(), new[] { 5 } })
+                    Add("[" + string.Join(",", a) + "]", () => a.ToArray());
+                break;
+            case Role.NullableDouble:
+                // Unset first (NumPy's default tolerance), then a large and a zero tolerance, a negative one, NumPy's 1e-15,
+                // and the two non-finite values (Python's positive NaN: .NET's double.NaN is negative).
+                Add("null", () => null);
+                foreach (var (label, d) in new[]
+                         {
+                             ("0.5", 0.5), ("0", 0.0), ("-1", -1.0), ("1e-15", 1e-15),
+                             ("nan", BitConverter.Int64BitsToDouble(0x7FF8000000000000)), ("inf", double.PositiveInfinity),
+                         })
+                    Add(label, () => (double?)d);
+                break;
             case Role.Default:
                 Add("default", () => p.DefaultValue is DBNull ? null : p.DefaultValue);
                 break;
@@ -594,16 +704,43 @@ static class Snapshot
     private static readonly string[] SortedPairLayouts = { "sorted1d", "empty1d", "c2d" };
 
     /// <summary>
-    ///     The operand layouts of the three phases for an overload: the general pools, or, for np.searchsorted /
+    ///     The full operand pool of an np.linalg overload (phase A). Most of np.linalg takes a square matrix or a stack of
+    ///     them and refuses the general pool's (3, 4) operands at its first check, so the pool is built around square ones:
+    ///     a (3, 3) matrix in C order (<c>sq3</c>, also with the special values), F order (<c>sq3f</c>), transposed
+    ///     (<c>sq3t</c>), every other column of a (3, 6) (<c>sq3s</c>), reversed along both axes (<c>sq3r</c>), broadcast
+    ///     from one row (<c>bcast3</c>: read-only and singular), the (2, 2) and (1, 1) matrices, a (2, 3, 3) stack, a
+    ///     symmetric (Hermitian for complex) positive definite matrix (<c>spd</c>: the input cholesky and eigh need), an
+    ///     exactly singular one (<c>singular</c>: LU meets an exact zero pivot, so solve and inv raise), the rectangles
+    ///     (3, 4) and (4, 3) (lstsq, qr, svd, pinv, matrix_rank, the norms), the empty square (0, 0), an empty stack
+    ///     (0, 3, 3), and the general pool's 1-D, 0-d, (0, 3) and (2, 3, 4) operands for the rank and shape checks.
+    /// </summary>
+    private static readonly string[] LinalgLayouts =
+    {
+        "sq3", "sq3_special", "sq3f", "sq3t", "sq3s", "sq3r", "bcast3", "sq2", "sq1", "stack", "spd", "singular", "c2d",
+        "rect_t", "empty00", "emptybatch", "1d", "0d", "empty", "3d",
+    };
+
+    /// <summary>The reduced pool of an np.linalg overload (phase B): a square matrix in both orders, a stack, the
+    ///     positive definite matrix, a rectangle, the empty square and a 0-d operand.</summary>
+    private static readonly string[] LinalgReducedLayouts = { "sq3", "sq3f", "stack", "spd", "c2d", "empty00", "0d" };
+
+    /// <summary>The small pool of an np.linalg overload (phase C): a square matrix and a rectangle.</summary>
+    private static readonly string[] LinalgPairLayouts = { "sq3", "c2d" };
+
+    /// <summary>
+    ///     The operand layouts of the three phases for an overload: the general pools; for np.searchsorted /
     ///     NDArray.searchsorted, pools of 1-D haystacks (every other operand of the general pools fails NumPy's 1-D check
-    ///     before anything else is read, so the varied keys, sides and sorters would never reach the search).
+    ///     before anything else is read, so the varied keys, sides and sorters would never reach the search); for np.linalg,
+    ///     pools of square matrices, stacks and rectangles (<see cref="LinalgLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>The layouts of phase A, phase B and phase C.</returns>
     private static (string[] Full, string[] Reduced, string[] Pair) PoolsFor(MethodInfo m) =>
         m.Name == "searchsorted"
             ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
-            : (Layouts, ReducedLayouts, PairLayouts);
+            : m.DeclaringType == typeof(np.linalg)
+                ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
+                : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
@@ -631,6 +768,14 @@ static class Snapshot
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "sample")
             {
                 roles[i] = Role.SampleSeq;
+                sawArray = true;
+                continue;
+            }
+            // np.linalg.multi_dot's array list likewise carries the operand (MakeLinalgArrays), so its out= after it is an
+            // out= and not the operand.
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "arrays")
+            {
+                roles[i] = Role.LinalgArrays;
                 sawArray = true;
                 continue;
             }
@@ -664,6 +809,7 @@ static class Snapshot
             Role.GradSpacing => GradSpacingVariantLabels.Length - 1,
             Role.GradAxisSpacing => GradAxisSpacingVariantLabels.Length - 1,
             Role.GradVarargs => GradVarargsVariantLabels.Length - 1,
+            Role.LinalgArrays => LinalgArraysVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -760,6 +906,7 @@ static class Snapshot
             Role.GradSpacing => GradSpacingVariantLabels[v],
             Role.GradAxisSpacing => GradAxisSpacingVariantLabels[v],
             Role.GradVarargs => GradVarargsVariantLabels[v],
+            Role.LinalgArrays => LinalgArraysVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -780,6 +927,7 @@ static class Snapshot
                 argv[i] = i == operandIndex ? operand
                     : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
                     : roles[i] == Role.Keys ? MakeKeys(KeysVariantLabels[0], operand)
+                    : roles[i] == Role.LinalgArrays ? MakeLinalgArrays(LinalgArraysVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -827,6 +975,9 @@ static class Snapshot
                         break;
                     case Role.GradVarargs:
                         argv[p] = MakeGradVarargs(GradVarargsVariantLabels[v], operand);
+                        break;
+                    case Role.LinalgArrays:
+                        argv[p] = MakeLinalgArrays(LinalgArraysVariantLabels[v], operand);
                         break;
                     case Role.SampleSeq:
                     case Role.BinsInts:
@@ -938,7 +1089,78 @@ static class Snapshot
             case "sorted1d": return SortedOrNull(Values(6));
             case "strided1d": return SortedOrNull(Values(12))?["::2"];
             case "reversed1d": return SortedOrNull(Values(6))?["::-1"];
+            // np.linalg's square matrices, stacks and rectangles (LinalgLayouts). The plain prefixes give nonsingular
+            // matrices (sq3's determinant is 48, sq3s's 1, sq2's 2, the stack's 48 and -472).
+            case "sq3": return Values(9).reshape(new Shape(3, 3));
+            case "sq3f": return np.asfortranarray(Values(9).reshape(new Shape(3, 3)));
+            case "sq3t": return Values(9).reshape(new Shape(3, 3)).T;
+            case "sq3s": return Values(18).reshape(new Shape(3, 6))[":, ::2"];
+            case "sq3r": return Values(9).reshape(new Shape(3, 3))["::-1, ::-1"];
+            case "bcast3": return np.broadcast_to(Values(3).reshape(new Shape(1, 3)), new Shape(3, 3));
+            case "sq2": return Values(4).reshape(new Shape(2, 2));
+            case "sq1": return Values(1).reshape(new Shape(1, 1));
+            case "stack": return Values(18).reshape(new Shape(2, 3, 3));
+            case "spd": return BuildFrom(dt, SpdValues, SpdComplexValues).reshape(new Shape(3, 3));
+            case "singular": return BuildFrom(dt, SingularValues, SingularComplexValues).reshape(new Shape(3, 3));
+            case "rect_t": return Values(12).reshape(new Shape(3, 4)).T;
+            case "empty00": return Values(0).reshape(new Shape(0, 0));
+            case "emptybatch": return Values(0).reshape(new Shape(0, 3, 3));
             default: throw new ArgumentException("unknown layout " + layout);
+        }
+    }
+
+    /// <summary>The symmetric positive definite (3, 3) matrix of the <c>spd</c> layout, row by row (its leading minors
+    ///     are 4, 11 and 18).</summary>
+    private static readonly double[] SpdValues = { 4, 1, 0, 1, 3, 1, 0, 1, 2 };
+
+    /// <summary>The Hermitian positive definite (3, 3) matrix of the <c>spd</c> layout's complex128 operand (its leading
+    ///     minors are 4, 10 and 16): eigh and cholesky read one triangle, so both triangles hold the conjugate pair.</summary>
+    private static readonly Complex[] SpdComplexValues =
+    {
+        new(4, 0), new(1, -1), new(0, 0),
+        new(1, 1), new(3, 0), new(0, 1),
+        new(0, 0), new(0, -1), new(2, 0),
+    };
+
+    /// <summary>The exactly singular (3, 3) matrix of the <c>singular</c> layout: its second row is twice the first, so
+    ///     partial-pivoting LU eliminates the first row to exact zeros (every multiplier is a power of two) and meets an
+    ///     exact zero pivot, the case solve and inv refuse.</summary>
+    private static readonly double[] SingularValues = { 1, 2, 3, 2, 4, 6, 1, 0, 1 };
+
+    /// <summary>The complex128 form of the <c>singular</c> layout: the first two rows scaled by 1+1j (the second still twice
+    ///     the first; the multipliers 0.5 and 0.25-0.25j stay exact), the third row real.</summary>
+    private static readonly Complex[] SingularComplexValues =
+    {
+        new(1, 1), new(2, 2), new(3, 3),
+        new(2, 2), new(4, 4), new(6, 6),
+        new(1, 0), new(0, 0), new(1, 0),
+    };
+
+    /// <summary>
+    ///     A fresh 1-D array of a dtype holding given values: the operand of a layout whose values matter (a positive
+    ///     definite or a singular matrix), where a prefix of the plain sequence would not do.
+    /// </summary>
+    /// <param name="dt">The dtype name.</param>
+    /// <param name="values">The values (small non-negative integers, so every numeric dtype holds them exactly).</param>
+    /// <param name="complexValues">The complex128 operand's values, of the same length.</param>
+    /// <returns>A C-contiguous 1-D array: text dtypes hold each value's invariant text, char the letter <c>'a' + |v|</c>
+    ///     (<see cref="Build"/>'s char mapping), decimal and the numeric dtypes the values.</returns>
+    private static NDArray BuildFrom(string dt, double[] values, Complex[] complexValues)
+    {
+        switch (dt)
+        {
+            case "S5":
+            case "U5":
+            case "T":
+                return np.array(values.Select(v => v.ToString(CultureInfo.InvariantCulture)).ToArray()).astype(np.dtype(dt));
+            case "decimal":
+                return np.array(values.Select(v => (decimal)v).ToArray());
+            case "complex128":
+                return np.array(complexValues);
+            case "char":
+                return np.array(values.Select(v => (char)('a' + (int)Math.Abs(v))).ToArray());
+            default:
+                return np.array(values).astype(np.dtype(dt));
         }
     }
 
@@ -1526,6 +1748,45 @@ static class Snapshot
             "ragged" => FirstThenUnit(new object[] { 0.0, new object[] { 0.5 } }),
             _ => throw new ArgumentException("unknown gradient spacing-list variant " + label),
         };
+    }
+
+    /// <summary>np.linalg.multi_dot's array-list variants (see <see cref="MakeLinalgArrays"/>); the first, the operand and
+    ///     its transpose, is the base.</summary>
+    private static readonly string[] LinalgArraysVariantLabels = { "pair", "triple", "four", "vecs", "mixed", "mid3d", "one", "none" };
+
+    /// <summary>
+    ///     Builds np.linalg.multi_dot's array list for an operand: lists of two, three and four arrays (NumPy's three code
+    ///     paths: a plain np.dot, the closed-form order of three, the dynamic-programming order), the vector forms, a mixed
+    ///     dtype, and the lists NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="LinalgArraysVariantLabels"/>): <c>pair</c> (the operand and its
+    ///     transpose: NumPy's two-array list is np.dot itself, which takes any rank), <c>triple</c> / <c>four</c> (the operand,
+    ///     its transpose, the operand[, its transpose]: the 2-D checks apply), <c>vecs</c> (the operand's first column, the
+    ///     operand, its first row: a 1-D first array is a row and a 1-D last one a column; an operand that is not a non-empty
+    ///     matrix keeps the pair), <c>mixed</c> (the operand and float64 ones of its transpose's shape: the product
+    ///     promotes), <c>mid3d</c> (a (2, 2, 2) array between two operands: NumPy's 2-D check names its rank), <c>one</c> /
+    ///     <c>none</c> (one array, no array: "Expecting at least two arrays.").</param>
+    /// <param name="operand">The operand.</param>
+    /// <returns>A fresh array of arrays (its entries may be views of the operand).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeLinalgArrays(string label, NDArray operand)
+    {
+        switch (label)
+        {
+            case "pair": return new[] { operand, operand.T };
+            case "triple": return new[] { operand, operand.T, operand };
+            case "four": return new[] { operand, operand.T, operand, operand.T };
+            case "vecs":
+                // An empty matrix has no first row or column to take: it keeps the pair, as other ranks do.
+                return operand.ndim == 2 && operand.shape[0] > 0 && operand.shape[1] > 0
+                    ? new[] { operand[":, 0"], operand, operand["0"] }
+                    : new[] { operand, operand.T };
+            case "mixed": return new[] { operand, np.ones(new Shape(operand.T.shape), np.dtype("float64")) };
+            case "mid3d": return new[] { operand, np.ones(new Shape(2, 2, 2), np.dtype("float64")), operand };
+            case "one": return new[] { operand };
+            case "none": return Array.Empty<NDArray>();
+            default: throw new ArgumentException("unknown multi_dot arrays variant " + label);
+        }
     }
 
     /// <summary>The labels of a histogramdd / histogram2d role; the first is the base value.</summary>
