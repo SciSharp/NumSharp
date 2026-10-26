@@ -5,37 +5,56 @@ namespace NumSharp
     internal static partial class LinalgEngine
     {
         /// <summary>
-        ///     The body of <c>np.linalg.multi_dot</c>: two arrays are a plain <c>np.dot</c>; three or more are promoted at
-        ///     their vector ends, checked by <c>_assert_2d</c>, multiplied in the cheapest association order, and the
-        ///     added axes dropped again.
+        ///     The body of <c>np.linalg.multi_dot</c>, NumPy's statements: two arrays are <c>dot(a, b, out=out)</c>; three
+        ///     or more are promoted at their vector ends (<c>atleast_2d</c>, and its transpose for the last), checked by
+        ///     <c>_assert_2d</c>, multiplied in the cheapest association order with <paramref name="out"/> handed to the
+        ///     FINAL dot, and the result reshaped back: <c>result[0, 0]</c> when both ends were vectors, <c>ravel()</c>
+        ///     when one was.
         /// </summary>
         /// <param name="arrays">The chain (plain: the facade applied the class boundary).</param>
-        /// <param name="out">Where to deposit the two-dimensional product, or null.</param>
-        /// <returns>The product: <paramref name="out"/> itself for a two-array chain given one, else a fresh array or a
-        ///     reshaped view of <paramref name="out"/>.</returns>
-        /// <exception cref="ValueError">Fewer than two arrays (<c>Expecting at least two arrays.</c>), or a product the
-        ///     out array cannot receive.</exception>
+        /// <param name="out">The final product's out array (np.dot's strict out: the product's exact dtype and rank,
+        ///     C-contiguous), or null.</param>
+        /// <returns>The product: <paramref name="out"/> itself when given (a two-array chain, or no vector end); a view
+        ///     of it raveled when one end was a vector; a NumPy scalar stand-in (a fresh read-only 0-d array holding the
+        ///     single element) when both were; otherwise a fresh array.</returns>
+        /// <exception cref="ValueError">Fewer than two arrays (<c>Expecting at least two arrays.</c>), or an out array
+        ///     np.dot refuses (<c>output array is not acceptable (must have the right datatype, number of dimensions, and be
+        ///     a C-Array)</c>, <c>output array has wrong dimensions</c>).</exception>
+        /// <exception cref="IncorrectShapeException">Misaligned operands: np.dot's <c>shapes (…) and (…) not aligned</c>
+        ///     (NumPy's ValueError text; the house type for an alignment error).</exception>
         /// <exception cref="LinAlgError">With three or more arrays, an operand other than a vector end that is not
         ///     two-dimensional.</exception>
+        /// <remarks>
+        ///     <para><b>out= is np.dot's.</b> NumPy passes <c>out</c> to the final <c>dot</c>, whose check is
+        ///     <c>new_array_for_sum</c>: no cast, no broadcast. So <c>multi_dot([v, B, C], out=o)</c> wants <c>o</c> shaped
+        ///     <c>(1, k)</c> and of the product's dtype, and a float64 <c>o</c> for an integer chain is refused where a
+        ///     copy into it would have cast. The inner products are computed first, so their errors come before the out
+        ///     check.</para>
+        ///     <para><b>The vector ends.</b> NumPy's <c>result[0, 0]</c> of the (1, 1) product is a scalar: here a fresh
+        ///     0-d copy of that element, marked like NumPy's scalars (<see cref="NDArray.MarkReductionScalar"/>), never a
+        ///     view of the product or of <paramref name="out"/>. <c>result.ravel()</c> of the C-ordered (1, k) or (k, 1)
+        ///     product is a view of it.</para>
+        /// </remarks>
         [NDScoped]
         internal static NDArray MultiDot(NDArray[] arrays, NDArray @out)
         {
             if (arrays is null || arrays.Length < 2)
                 throw new ValueError("Expecting at least two arrays.");
 
-            if (arrays.Length == 2)
-                return Deliver(np.dot(arrays[0], arrays[1]), @out);
+            int n = arrays.Length;
+            if (n == 2)
+                return np.dot(arrays[0], arrays[1], @out);
 
             var work = (NDArray[])arrays.Clone();
 
-            // Only the ENDS may be vectors; NumPy promotes them so the cost model sees matrices
-            // throughout, then drops the axis it added.
-            bool prependedRow = work[0].ndim == 1;
-            bool appendedColumn = work[work.Length - 1].ndim == 1;
-            if (prependedRow)
-                work[0] = np.expand_dims(work[0], 0);
-            if (appendedColumn)
-                work[work.Length - 1] = np.expand_dims(work[work.Length - 1], 1);
+            // NumPy saves the ends' ranks, then makes them matrices so the cost model sees matrices throughout:
+            // `arrays[0] = atleast_2d(arrays[0])` is a (1, k) row and `arrays[-1] = atleast_2d(arrays[-1]).T` a (k, 1)
+            // column (np.dot never reads an extent-1 axis's stride, so the views' strides there are immaterial).
+            int ndimFirst = work[0].ndim, ndimLast = work[n - 1].ndim;
+            if (ndimFirst == 1)
+                work[0] = np.atleast_2d(work[0]);
+            if (ndimLast == 1)
+                work[n - 1] = np.atleast_2d(work[n - 1]).T;
 
             // NumPy runs `_assert_2d(*arrays)` over the PROMOTED operands, so every array other
             // than a vector endpoint (already lifted to 2-D just above) must be exactly
@@ -45,76 +64,60 @@ namespace NumSharp
             // error or — worse — computes a silently wrong-shaped product.
             Assert2d(work);
 
-            NDArray product = work.Length == 3
-                ? ThreeInBestOrder(work[0], work[1], work[2])
-                : Chain(work, Order(work), 0, work.Length - 1);
+            NDArray result = n == 3
+                ? ThreeInBestOrder(work[0], work[1], work[2], @out)
+                : Chain(work, Order(work), 0, n - 1, @out);
 
-            // NumPy threads `out` into the FINAL dot, so `out` receives the two-dimensional
-            // product even when an endpoint was a vector — which is why
-            // `multi_dot([v, B, C], out: o)` wants `o` shaped (1, k), not (k,) — and the array
-            // returned to the caller is a reshaped VIEW of it.
-            if (@out is not null)
-            {
-                np.copyto(@out, product);
-                product = @out;
-            }
-
-            if (prependedRow && appendedColumn)
-                return np.reshape(product, Array.Empty<long>());
-            if (prependedRow)
-                return np.reshape(product, new[] {product.Shape.dimensions[1]});
-            if (appendedColumn)
-                return np.reshape(product, new[] {product.Shape.dimensions[0]});
-
-            return product;
-        }
-
-        /// <summary>A two-array chain's delivery: the product itself, or copied into <paramref name="out"/>.</summary>
-        /// <param name="result">The product.</param>
-        /// <param name="out">The out array, or null.</param>
-        /// <returns><paramref name="result"/>, or <paramref name="out"/> after the copy.</returns>
-        /// <exception cref="ValueError">The product cannot be copied into <paramref name="out"/> (a broadcast or
-        ///     writeability refusal of <c>np.copyto</c>).</exception>
-        /// <exception cref="TypeError">The product's dtype cannot be cast into <paramref name="out"/>'s same_kind.</exception>
-        private static NDArray Deliver(NDArray result, NDArray @out)
-        {
-            if (@out is null)
-                return result;
-            np.copyto(@out, result);
-            return @out;
+            if (ndimFirst == 1 && ndimLast == 1)
+                return result[0, 0].copy().MarkReductionScalar();   // NumPy's result[0, 0]: a scalar, not a view
+            if (ndimFirst == 1 || ndimLast == 1)
+                return np.ravel(result);
+            return result;
         }
 
         /// <summary>
-        ///     The two-way choice for a three-matrix chain: <c>(AB)C</c> costs
-        ///     <c>a0·a1·b1 + a0·b1·c1</c> and <c>A(BC)</c> costs <c>a1·b1·c1 + a0·a1·c1</c>.
+        ///     NumPy's <c>_multi_dot_three</c>: the two-way choice for a three-matrix chain, <c>(AB)C</c> costing
+        ///     <c>a0·b1c0·(a1b0 + c1)</c> against <c>A(BC)</c> costing <c>a1b0·c1·(a0 + b1c0)</c>, with the dimensions
+        ///     read from <c>A.shape</c> and <c>C.shape</c> only (so a misaligned B reports the misalignment of the order
+        ///     NumPy picks).
         /// </summary>
         /// <param name="a">The first matrix.</param>
         /// <param name="b">The second matrix.</param>
         /// <param name="c">The third matrix.</param>
+        /// <param name="out">The final dot's out array, or null.</param>
         /// <returns>The product: <c>(AB)C</c> when it is strictly cheaper, else <c>A(BC)</c> (NumPy's
-        ///     <c>cost1 &lt; cost2</c>, so a tie takes <c>A(BC)</c>).</returns>
+        ///     <c>cost1 &lt; cost2</c>, so a tie takes <c>A(BC)</c>); <paramref name="out"/> when given.</returns>
+        /// <exception cref="ValueError">An out array np.dot refuses.</exception>
+        /// <exception cref="IncorrectShapeException">Misaligned operands (np.dot's text).</exception>
+        /// <remarks>NumPy's costs are Python integers, exact at any size; <see cref="Int128"/> keeps them exact for every
+        ///     chain whose products could exist (three dimensions of at most 2^42 each).</remarks>
         [NDScopedCovered] // only caller: [NDScoped] multi_dot (the inner dot of the chosen parenthesisation is scope-reclaimed)
-        private static NDArray ThreeInBestOrder(NDArray a, NDArray b, NDArray c)
+        private static NDArray ThreeInBestOrder(NDArray a, NDArray b, NDArray c, NDArray @out)
         {
-            long a0 = a.Shape.dimensions[0];
-            long a1b0 = a.Shape.dimensions[1];
-            long b1c0 = b.Shape.dimensions[1];
-            long c1 = c.Shape.dimensions[1];
+            Int128 a0 = a.Shape.dimensions[0];
+            Int128 a1b0 = a.Shape.dimensions[1];
+            Int128 b1c0 = c.Shape.dimensions[0];
+            Int128 c1 = c.Shape.dimensions[1];
 
-            long left = a0 * b1c0 * (a1b0 + c1);
-            long right = a1b0 * c1 * (a0 + b1c0);
+            Int128 cost1 = a0 * b1c0 * (a1b0 + c1);
+            Int128 cost2 = a1b0 * c1 * (a0 + b1c0);
 
-            return left < right
-                ? np.dot(np.dot(a, b), c)
-                : np.dot(a, np.dot(b, c));
+            return cost1 < cost2
+                ? np.dot(np.dot(a, b), c, @out)
+                : np.dot(a, np.dot(b, c), @out);
         }
 
         /// <summary>
-        ///     Matrix-chain-order dynamic program. <c>s[i,j]</c> is the split point of the
-        ///     cheapest parenthesisation of <c>A_i … A_j</c>.
+        ///     NumPy's <c>_multi_dot_matrix_chain_order</c>, the matrix-chain-order dynamic program (Cormen et al. 15.2):
+        ///     <c>s[i,j]</c> is the split point of the cheapest parenthesisation of <c>A_i … A_j</c>.
         /// </summary>
         /// <param name="arrays">The chain of two-dimensional matrices.</param>
         /// <returns>The split table <c>s</c>.</returns>
+        /// <remarks>NumPy's cost table is float64 (<c>m = zeros((n, n), dtype=double)</c>, <c>m[i, j] = inf</c>) and each
+        ///     candidate is <c>m[i, k] + m[k + 1, j] + p[i] * p[k + 1] * p[j + 1]</c> with the product an exact Python
+        ///     integer added as a float, so the comparisons are float64 ones: past 2^53 two candidates can tie where
+        ///     exact integers would not, and the first split of a tie wins (<c>q &lt; m[i, j]</c>). The same arithmetic
+        ///     here keeps NumPy's order, and so its rounding, for every chain.</remarks>
         private static int[,] Order(NDArray[] arrays)
         {
             int n = arrays.Length;
@@ -125,7 +128,7 @@ namespace NumSharp
                 p[i] = arrays[i].Shape.dimensions[0];
             p[n] = arrays[n - 1].Shape.dimensions[1];
 
-            var cost = new long[n, n];
+            var cost = new double[n, n];
             var split = new int[n, n];
 
             for (int length = 1; length < n; length++)
@@ -133,14 +136,16 @@ namespace NumSharp
                 for (int i = 0; i < n - length; i++)
                 {
                     int j = i + length;
-                    cost[i, j] = long.MaxValue;
+                    cost[i, j] = double.PositiveInfinity;
                     for (int k = i; k < j; k++)
                     {
-                        long q = cost[i, k] + cost[k + 1, j] + p[i] * p[k + 1] * p[j + 1];
-                        if (q >= cost[i, j])
-                            continue;
-                        cost[i, j] = q;
-                        split[i, j] = k;
+                        // Python: (m[i, k] + m[k + 1, j]) + int, the int converted with one rounding (exact product first).
+                        double q = cost[i, k] + cost[k + 1, j] + (double)((Int128)p[i] * p[k + 1] * p[j + 1]);
+                        if (q < cost[i, j])
+                        {
+                            cost[i, j] = q;
+                            split[i, j] = k;
+                        }
                     }
                 }
             }
@@ -148,16 +153,22 @@ namespace NumSharp
             return split;
         }
 
-        /// <summary>The product of <c>A_i … A_j</c> in the order <paramref name="split"/> chose.</summary>
+        /// <summary>NumPy's <c>_multi_dot</c>: the product of <c>A_i … A_j</c> in the order <paramref name="split"/>
+        ///     chose, <paramref name="out"/> handed to the dot of this level only.</summary>
         /// <param name="arrays">The chain of two-dimensional matrices.</param>
         /// <param name="split">The split table of <see cref="Order"/>.</param>
         /// <param name="i">The first matrix of the sub-chain.</param>
         /// <param name="j">The last matrix of the sub-chain.</param>
-        /// <returns>The sub-chain's product (the matrix itself when <paramref name="i"/> equals <paramref name="j"/>).</returns>
+        /// <param name="out">The out array of this level's dot (the top level's only: the sub-products get none), or
+        ///     null.</param>
+        /// <returns>The sub-chain's product (the matrix itself when <paramref name="i"/> equals <paramref name="j"/>, which
+        ///     the top level never is: a chain of three or more has a split).</returns>
+        /// <exception cref="ValueError">An out array np.dot refuses.</exception>
+        /// <exception cref="IncorrectShapeException">Misaligned operands (np.dot's text).</exception>
         [NDScopedCovered] // only caller: [NDScoped] multi_dot (every recursive partial product is scope-reclaimed)
-        private static NDArray Chain(NDArray[] arrays, int[,] split, int i, int j)
+        private static NDArray Chain(NDArray[] arrays, int[,] split, int i, int j, NDArray @out = null)
             => i == j
                 ? arrays[i]
-                : np.dot(Chain(arrays, split, i, split[i, j]), Chain(arrays, split, split[i, j] + 1, j));
+                : np.dot(Chain(arrays, split, i, split[i, j]), Chain(arrays, split, split[i, j] + 1, j), @out);
     }
 }

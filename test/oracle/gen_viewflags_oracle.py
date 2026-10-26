@@ -1807,6 +1807,9 @@ _ARRAY_JOB_NUMPY = {
 # back into array_args.jsonl the same way. The same day np.matmul's vector-vector result became NumPy's scalar
 # stand-in (an owner, read-only: the gufuncs' return step), so matmul leaves VF01's rule and its 1 case moved back
 # into view_flags.jsonl.
+# 2026-10-26, again (np-layer-dtype-logic P2): np.linalg.multi_dot hands out= to its final np.dot, as NumPy's does, so an
+# out np.dot refuses (F, stepped, transposed, reversed) is refused and VO01 matches NumPy; its GAPS entry and its rule
+# are dropped and its 4 cases moved back into out_flags.jsonl the same way.
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
             "comes back as a WRITEABLE 0-d array",
@@ -1851,9 +1854,6 @@ GAPS = {
             "result owns its data",
     "VF38": "np.tril / np.triu of a dense permuted 3-D input return a C-ordered result; NumPy's (an np.where) keeps "
             "the input's layout",
-    "VO01": "np.linalg.multi_dot writes into an out= that is not C-contiguous (F, stepped, transposed, reversed); "
-            "NumPy's final np.dot refuses it with ValueError 'output array is not acceptable (must have the right "
-            "datatype, number of dimensions, and be a C-Array)', which np.dot itself reproduces",
     "VS01": "np.zeros / ones / empty / full given a view's Shape of a dense F or permuted layout allocate that "
             "layout; NumPy's np.zeros(x.shape) is always C-ordered",
     "VA02": "np.take_along_axis with F-ordered indices returns a C-ordered result; NumPy's follows the indices (F)",
@@ -1895,10 +1895,7 @@ def _gap_of(tier, case):
     lay = case["layout"]
     e = case.get("expected") or {}
     if tier == "out":
-        # The out tier's one divergence is an error NumPy raises and NumSharp does not, so its rule runs before the
-        # early return below (which keeps every other error case in the gate).
-        if fn == "multi_dot" and case.get("expects_throw"):
-            return "VO01"
+        # The out tier keeps no gap since VO01 (multi_dot's out= handed to np.dot) was fixed on 2026-10-26.
         return None
     if case.get("expects_throw"):
         return None

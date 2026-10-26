@@ -469,5 +469,71 @@ namespace NumSharp.Tests.LinearAlgebra
             Assert.IsTrue(g.flags.owndata);
             CollectionAssert.AreEqual(new long[] {1, 2}, g.Shape.strides);
         }
+
+        /// <summary>
+        ///     np.linalg.multi_dot is NumPy's statements: <c>out</c> goes to the FINAL np.dot, whose check is strict (no cast,
+        ///     no broadcast); the vector ends come back as <c>result[0, 0]</c> (a scalar) or <c>result.ravel()</c>; and the
+        ///     three-matrix order reads its costs from <c>A.shape</c> and <c>C.shape</c>. NumSharp copied the product into
+        ///     <c>out</c> with a same_kind cast, returned a writeable view for two vector ends, and read <c>B.shape</c>.
+        ///     NumPy 2.4.2's answers.
+        /// </summary>
+        [TestMethod]
+        public void MultiDot_IsNumPysStatements()
+        {
+            const string notAcceptable =
+                "output array is not acceptable (must have the right datatype, number of dimensions, and be a C-Array)";
+            var m = np.arange(9).reshape(3, 3).astype(np.float64);
+            var mi = np.arange(9).reshape(3, 3);
+            // The texts are NumPy's ValueError messages, matched whole.
+            void Refuses(string text, Action call) => call.Should().Throw<ValueError>().WithMessage(text);
+
+            // out= is np.dot's: an integer or complex product refuses a float64 out, an F out or one of another rank is
+            // refused, a same-rank shape mismatch is its own text; an acceptable out is returned itself.
+            Refuses(notAcceptable,
+                () => np.linalg.multi_dot(new[] {mi, mi.T}, np.zeros(new Shape(3, 3))));
+            var mc = m.astype(np.complex128);
+            Refuses(notAcceptable,
+                () => np.linalg.multi_dot(new[] {mc, mc.T}, np.zeros(new Shape(3, 3))));
+            Refuses(notAcceptable,
+                () => np.linalg.multi_dot(new[] {mi, mi.T, mi}, np.zeros(new Shape(3, 3))));
+            Refuses(notAcceptable,
+                () => np.linalg.multi_dot(new[] {m, m.T, m}, np.asfortranarray(np.zeros(new Shape(3, 3)))));
+            Refuses(notAcceptable,
+                () => np.linalg.multi_dot(new[] {m, m.T, m}, np.zeros(new Shape(1, 3, 3))));
+            Refuses("output array has wrong dimensions",
+                () => np.linalg.multi_dot(new[] {m, m.T, m, m.T}, np.zeros(new Shape(3, 4))));
+            var o = np.zeros(new Shape(3, 3));
+            Assert.IsTrue(ReferenceEquals(o, np.linalg.multi_dot(new[] {m, m.T, m, m.T}, o)));
+
+            // two vector ends: result[0, 0] is a scalar (a fresh read-only 0-d array here), never a view of the product
+            // or of out, which keeps the (1, 1) product; a (3,) out is refused (the final dot wants (1, 1)).
+            var s = np.linalg.multi_dot(new[] {m[":, 0"], m, m["0"]});
+            Assert.AreEqual(0, s.ndim);
+            Assert.AreEqual(180.0, s.GetDouble());
+            Assert.IsTrue(s.flags.owndata);
+            Assert.IsFalse(s.flags.writeable);
+            var o11 = np.zeros(new Shape(1, 1));
+            var s11 = np.linalg.multi_dot(new[] {m[":, 0"], m, m["0"]}, o11);
+            Assert.AreEqual(180.0, s11.GetDouble());
+            Assert.AreEqual(180.0, o11.GetDouble(0, 0));
+            Assert.IsFalse(np.shares_memory(s11, o11));
+            Refuses(notAcceptable,
+                () => np.linalg.multi_dot(new[] {m[":, 0"], m, m["0"]}, np.zeros(new Shape(3))));
+
+            // one vector end: result.ravel(), a view of the (1, 3) out.
+            var o13 = np.zeros(new Shape(1, 3));
+            var row = np.linalg.multi_dot(new[] {m[":, 0"], m, m}, o13);
+            CollectionAssert.AreEqual(new long[] {3}, row.shape);
+            Assert.IsTrue(np.shares_memory(row, o13));
+            Assert.IsFalse(row.flags.owndata);
+
+            // _multi_dot_three's costs use C.shape[0] (2 here), so the costs tie and NumPy takes A(BC): the misaligned
+            // product it reports is B's, (2,1) against (2,1), where B.shape[1] (1) would have picked (AB)C and reported (1,1).
+            // (np.dot's alignment error is the house IncorrectShapeException with NumPy's ValueError text.)
+            Action misaligned = () =>
+                np.linalg.multi_dot(new[] {np.ones(new Shape(1, 2)), np.ones(new Shape(2, 1)), np.ones(new Shape(2, 1))});
+            misaligned.Should().Throw<IncorrectShapeException>()
+                .WithMessage("shapes (2,1) and (2,1) not aligned: 1 (dim 1) != 2 (dim 0)");
+        }
     }
 }

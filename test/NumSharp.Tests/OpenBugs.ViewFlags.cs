@@ -41,6 +41,10 @@ namespace NumSharp.Tests
     // FIXED 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset
     // (VA01); its two pins are untagged, the generator's VA01 rules are dropped and its 4 cells are back in the gate.
     //
+    // FIXED 2026-10-26 (np-layer-dtype-logic P2): np.linalg.multi_dot hands out= to its final np.dot, so an out np.dot
+    // refuses is refused (VO01); its pin is untagged, the generator's VO01 rule is dropped and its 4 cells are back in
+    // the gate.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's carve rule from the generator
     // (_gap_of) so the case returns to the gate.
@@ -340,11 +344,12 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.linalg.multi_dot([A, B, A], out=o)</c> with an F-ordered <c>o</c>: NumPy's final <c>np.dot</c> raises
-        ///     <c>ValueError: output array is not acceptable (must have the right datatype, number of dimensions, and be a
-        ///     C-Array)</c>, as NumSharp's own <c>np.dot</c> does; NumSharp's multi_dot writes into <c>o</c> (gap VO01).
+        ///     FIXED 2026-10-26 (np-layer-dtype-logic P2): <c>np.linalg.multi_dot([A, B, A], out=o)</c> with an F-ordered
+        ///     <c>o</c> raises NumPy's <c>ValueError: output array is not acceptable (must have the right datatype, number of
+        ///     dimensions, and be a C-Array)</c>: multi_dot hands <c>o</c> to its final <c>np.dot</c>, whose check refuses
+        ///     it (gap VO01: NumSharp's multi_dot copied the product into <c>o</c> instead).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "viewflags-VO01")]
+        [TestMethod]
         public void ViewFlags_MultiDot_IntoAnFOrderedOut_ShouldRefuseIt()
         {
             using var a = np.arange(12.0).reshape(3, 4);
