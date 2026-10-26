@@ -9,7 +9,8 @@ namespace NumSharp
         ///     <c>_commonType</c>, then <see cref="TensorEngine.Qr"/> at the loop dtype; the raw and economic modes' factored
         ///     matrix comes back as NumPy's object (<see cref="RawFactor"/>, <see cref="FactoredCopy"/>).
         /// </summary>
-        /// <param name="a">The matrix, or a stack of them (plain: the facade applied the class boundary).</param>
+        /// <param name="a">The matrix, or a stack of them: plain for a numpy.matrix operand (the facade applied its rule), a
+        ///     numpy.char.chararray one as it is (NumPy's <c>_makearray</c> drops that class; the results are plain).</param>
         /// <param name="resolved">The mode <see cref="ResolveQrMode"/> returned.</param>
         /// <returns><c>(Q, R)</c>; for <c>"r"</c> the Q slot is null, for <c>"raw"</c> the pair is <c>(h, tau)</c>, for
         ///     <c>"economic"</c> the packed matrix and null.</returns>
@@ -52,15 +53,22 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>a = a.astype(t, copy=True)</c> after <c>qr_r_raw</c> wrote the factorisation into it: a new array of
-        ///     <paramref name="a"/>'s shape and K order holding <paramref name="factored"/>'s values. Economic mode returns it
-        ///     as it is (its <c>a.astype(result_t, copy=False)</c> keeps the order when it casts a float32 operand back).
+        ///     NumPy's <c>a = a.astype(t, copy=True)</c> after <c>qr_r_raw</c> wrote the factorisation into it: a new plain
+        ///     array of <paramref name="a"/>'s shape and K order holding <paramref name="factored"/>'s values. Economic mode
+        ///     returns it as it is (its <c>a.astype(result_t, copy=False)</c> keeps the order when it casts a float32 operand
+        ///     back).
         /// </summary>
-        /// <param name="a">The operand as the caller passed it.</param>
+        /// <param name="a">The operand as the caller passed it: its memory order decides the copy's. A numpy.char.chararray
+        ///     holding numbers arrives as it is (the facade has no chararray rule), and the copy is plain all the same, as
+        ///     NumPy's is (its <c>_makearray</c> took <c>asarray(a)</c>).</param>
         /// <param name="factored">The packed factorisation, shape <c>(..., M, N)</c>, of the result dtype.</param>
-        /// <returns>The new array, owning its data.</returns>
+        /// <returns>The new array, owning its data, never a chararray or a matrix.</returns>
         private static NDArray FactoredCopy(NDArray a, NDArray factored)
         {
+            // A plain region: np.empty_like must not apply its chararray rule to a chararray operand from inside the
+            // library (it wrapped the float64 copy as a chararray: "Can only create a chararray from string data."). The
+            // region does nothing for a plain operand, and a matrix one reaches here plain already (the facade's rule).
+            using var plain = NDMatrixBoundary.PlainFor(a);
             var copy = np.empty_like(a, factored.dtype);
             np.copyto(copy, factored);
             return copy;

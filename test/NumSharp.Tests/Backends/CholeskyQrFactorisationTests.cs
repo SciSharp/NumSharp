@@ -455,6 +455,36 @@ namespace NumSharp.Tests.Backends
             ec.strides.Should().Equal(24L, 8L);
         }
 
+        /// <summary>
+        ///     A numpy.char.chararray holding numbers: NumPy's qr takes <c>asarray(a)</c> (<c>_makearray</c> drops the class)
+        ///     and parses the text into float64, so raw and economic return plain float64 arrays with the layouts a plain
+        ///     operand gets (raw's h a transposed view of the factored copy). The copy went through np.empty_like's
+        ///     chararray rule from inside the library and raised <c>Can only create a chararray from string data.</c>.
+        ///     Expected objects: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Qr_RawAndEconomic_OfACharArray_ArePlainFloat64()
+        {
+            RequireLapack();
+            var text = np.@char.array(np.array(new[,] { { "4", "1", "2" }, { "1", "5", "3" }, { "2", "3", "6" }, { "1", "0", "1" } }));
+            var numbers = np.array(new double[,] { { 4, 1, 2 }, { 1, 5, 3 }, { 2, 3, 6 }, { 1, 0, 1 } });
+
+            var (h, tau) = np.linalg.qr(text, "raw");
+            h.GetType().Should().Be(typeof(NDArray));
+            h.dtype.Should().Be(np.float64);
+            h.strides.Should().Equal(8L, 24L);
+            h.flags.owndata.Should().BeFalse();
+            tau.GetType().Should().Be(typeof(NDArray));
+            np.array_equal(h, np.linalg.qr(numbers, "raw").Q).Should().BeTrue();
+
+            var (e, _) = np.linalg.qr(text, "economic");
+            e.GetType().Should().Be(typeof(NDArray));
+            e.dtype.Should().Be(np.float64);
+            e.strides.Should().Equal(24L, 8L);
+            e.flags.owndata.Should().BeTrue();
+            np.array_equal(e, np.linalg.qr(numbers, "economic").Q).Should().BeTrue();
+        }
+
         // ------------------------------------------------------------------ the seam
 
         [TestMethod]
