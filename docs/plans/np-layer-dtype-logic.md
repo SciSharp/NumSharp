@@ -492,6 +492,101 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-26 / 27, P2's eighth family: np.linalg moved into `LinalgEngine`, np.dot into `TensorEngine.Dot`, their
+  statements NumPy's.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees:
+  the snapshot (np.linalg's 35 overloads, 65,876 calls per mode: managed, and with the bundled OpenBLAS at one thread;
+  70,040 once np.dot and NDArray.dot joined it), `twin_linalg.py` (the tool's operands and arguments rebuilt in NumPy with
+  OPENBLAS_NUM_THREADS=1, so NumPy's own scipy-openblas build runs at the thread count the backend uses: dtype, shape,
+  C / F / OWNDATA / WRITEABLE flags and SHA-256 per result, a NumPy scalar's own flags, or the exception's type and text),
+  `ab_linalg.py` (parent against fix, each changed line classified by the twin), and NumPy probes per fix, written into
+  the unit tests:
+  - `289c0254` the snapshot tool reaches np.linalg: pools of square matrices in six layouts, a stack, positive definite,
+    singular, rectangular and empty matrices; b, multi_dot's array lists, every ord / p, UPLO, qr's mode, matrix_power's
+    n, ind, the axis lists, the nullable tolerances; `SNAPSHOT_OPENBLAS=1` installs the bundled backend at one thread.
+    Before any fix the twin agreed on 53,714 of the 63,034 comparable lines of the backend snapshot.
+  - `547e512c` the move (D1: NumPy writes numpy.linalg in Python around the `_umath_linalg` gufuncs): the bodies into
+    `LinearAlgebra/linalg/LinalgEngine*.cs`, an operation class beside the facades, one partial per facade file, statement
+    for statement; the gufuncs stay TensorEngine members. 65,876 calls byte-identical in both modes; R1's seven np.linalg
+    rows go.
+  - `9cf9d74b` (D4) det / slogdet of one matrix and lstsq's rank are NumPy's scalars: the gufunc's return step, in the
+    TensorEngine members that are the gufuncs. 1,221 lines change: 1,220 fixed.
+  - `42c5c08d` (D4) norm / vector_norm refuse a string order before the axis is read. 520 lines: 516 fixed, 4 decimal.
+  - `b4a0ff84` (D4) the keepdims norms are NumPy's reshapes, writeable views (`LinalgEngine.ReshapeLikeNumPy`). 732 lines:
+    672 fixed, 9 decimal, 51 left (a 0-d input's keepdims norm: VF01).
+  - `e6decc72` (D4) the general vector order is NumPy's four statements (a float16 / float32 operand keeps its dtype; a
+    0-d sum is raised with scalarmath's pow, `ScalarPower`). 548 lines, all fixed.
+  - `61898534` (D4) cond's inverse-based orders: the inverse in float64 / complex128 ignoring errors
+    (`InvIgnoringErrors`: a singular matrix's NaN inverse, so inf inside a stack too), both norms evaluated, the scalar.
+    275 lines: 271 fixed.
+  - `3f4fbf27` (D4) tensorsolve's statements (the slice of a.shape, `a.size != prod ** 2`, the in-place shape). 404 lines:
+    374 fixed, 15 decimal, 15 char (refused by design).
+  - `04dce29f` (D4) tensorinv of a 0-d operand raises `reshape()`'s TypeError after the inverse. 36 lines, all fixed.
+  - `2b8a68c5` (D4) norm's |x|^2 is `(x.conj() * x).real`, rounded as simd_cmul rounds it. 11 lines: 7 fixed, 4 VF01.
+  - `4753dc94` (D4) linalg.cross is the length check and then np.cross; the surface gap SU2 goes (1 case back). 625
+    lines: 587 fixed, 38 decimal.
+  - `f89777fc` the surface tier's SU3 and SU4 return to the gate: np.histogram's `98ea7bcf` had closed them, and the carve
+    was never redrawn (15 cases back).
+  - `013713eb` (D4) norm's fast path ravels in memory order and dots a complex operand's two parts (their sum is
+    scalarmath, `PolyNumber.Binary`). No snapshot line changes (its values are small integers); a unit test and a live
+    probe of long operands.
+  - `dae524d8` (D4) the Frobenius norm over an axis pair is one reduction in NumPy's order (`SumAxisPairOfCOrderSquares`,
+    `HalfRunSumsAddedInTurn`, `NDArray.AdoptAxisPermutation`): a probe of 17,560 results all NumPy's (4,026 of 8,780
+    before). 2 snapshot lines, both fixed.
+  - `319821e4` the np.dot move (D1: `PyArray_MatrixProduct2` is C): `TensorEngine.Dot(x, y, out)` widened in place (D2),
+    the text answers and `new_array_for_sum`'s out= check join the product. 70,040 calls byte-identical; R1's np.dot.cs row
+    goes.
+  - `1e5f8697` (D4) a 0-d operand: the common dtype, multiply's `out=` outside cblas, a 0-d out returned as a scalar. 387
+    lines: 333 fixed, 42 to NumPy's values in the text-scalar stand-in, 12 decimal.
+  - `7a6ba438` (D4) multi_dot's statements; the out-flags gap VO01 goes (4 cases back). 1,282 lines: 1,203 fixed, 22
+    stand-in, 57 decimal.
+  - `ee9ce021` (D4) np.dot's N-D route calls the dtype's dot function per output element (complex imaginary parts,
+    integer wrap, ddot's strided order); the matrix gap MX10 goes (3 cases back). A 936-call probe 338 -> 860
+    byte-identical (the 76 left: float32's sdot, two unit strides past the BLAS vector blocks); 15 snapshot lines, all
+    fixed; N-D int64 x0.026 -> x1.12 NumPy.
+  - `8b8dc280` (D4) a 0-d text operand's read-only out= is refused before multiply's missing loop. 19 lines, all fixed.
+  - `19240760` (D4) svd / pinv / matrix_rank with `hermitian=True` are NumPy's eigh statements. 170 lines, all fixed.
+  - `68513a2c` (D4) qr's raw and economic modes return NumPy's objects (the K-order copy factored in place, raw's
+    transposed view). 103 lines, all fixed.
+  - `0ef1aaec` (D4) matrix_power(a, 0) is `empty_like(a)` filled with the identity (the operand's order), in a plain region
+    (`NDMatrixBoundary.PlainFor`): the first run of this change failed the chararray boundary audit, its np.empty_like
+    reaching the chararray rule from inside the library. 18 lines: 17 fixed, 1 decimal.
+  - `4fbad833` (D4, found by that audit's lead) qr's factored copy in the same plain region: `68513a2c` had made raw /
+    economic of a chararray holding numbers raise `Can only create a chararray from string data.` (NumPy returns plain
+    float64 arrays). The string corpus has qr only in the default modes, so the audit could not see it. 0 snapshot lines.
+  - `66fd68c2` (D4) solve's gufunc checks through `GufuncGuard.CheckCoreDimensions` (signatures `Solve` / `Solve1`):
+    stacked axes that do not broadcast get NumPy's remapped-shapes text. 12 lines, all fixed.
+  - `65ccc213` (D4, library; found by the twin's empty-matrix matrix_rank lines) a reduction's 0-d result over an empty
+    axis (np.sum, np.prod, np.mean, np.count_nonzero, np.trapezoid), np.count_nonzero of a 0-d input and np.nansum /
+    np.nanprod along a 1-D input's axis are NumPy's scalars: six exits skipped `MarkReductionScalar` (the rule shipped in
+    0.70.0). An 87-call probe 33 -> 0 differing from NumPy; the snapshot tool over 13 reductions (67,290 calls) changes 173
+    lines, each only a 0-d result's WRITEABLE flag; 156 np.linalg lines, all on the empty matrix: 154 fixed, 2 decimal.
+  - Evidence at `65ccc213`: the twin agrees with NumPy 2.4.2 on 63,357 of the 67,052 comparable lines (2,988 decimal lines
+    have no NumPy twin); 53,714 of 63,034 at `289c0254` (np.linalg alone, before any fix). The count is derived: the
+    twin's last full run (`ee9ce021`'s snapshot, 62,882 agreeing) minus the 475 lines the later commits' A/Bs moved to
+    NumPy's answers (none moved away); a direct run over the final snapshot was stopped by the system for low memory
+    (its process had grown to 27 GB) and not repeated. The 3,695 left: 2,627 VF01 flag lines (a 0-d result of norm,
+    vector_norm, matrix_norm, cond, np.dot, NDArray.dot or multi_dot is writeable where NumPy returns a scalar), 859 char
+    lines, 148 object-dtype computations, 60 text-scalar stand-ins, 1 slogdet NaN-bits line.
+  - **Found:** VF01 reaches np.linalg's compositions (norm's sqrt, cond's ratio, np.dot without out=): their 0-d results
+    are writeable where NumPy returns scalars, the library gap of the array-object oracle, not this family's. NumSharp's
+    eager unary ufunc writes C order for a permuted operand (np.conjugate, the matrix tier's MX05), which
+    `SvdHermitian` routes around with `np.empty_like` and out=. NumPy's default argsort on an AVX2 host is x86-simd-sort's
+    bitonic argsort, which keeps ties in order up to three elements and reorders them from four: hermitian SVDs of four
+    or more rows with tied absolute eigenvalues can order their columns otherwise (NumSharp's argsort is stable). The
+    chararray boundary audit (`CharArrayOperand_LibraryNeverReachesACharArrayRule`) checks only the paths the string
+    corpus reaches: a facade without a chararray rule hands a chararray operand to the library as it is, so every
+    library call of a public np.* function with that operand needs a plain region (`NDMatrixBoundary.PlainFor`). The
+    snapshot tool calls a nullable `int?` axis at its default only (np.nansum's axis forms are not in it).
+  - Left: the text-scalar stand-in (NumPy returns a Python str for a 0-d text out=); object-dtype computations (np.dot /
+    tensordot of numbers with StringDType: NumPy computes Python objects, NumSharp refuses); char operands (refused in
+    linalg by design); float32 N-D np.dot (scipy-openblas' strided sdot, which no managed order reproduces: bounded, the
+    backend gives NumPy's bits); slogdet of a complex matrix holding NaN / inf (1 line, NaN bits); matrix_power(a, 0) of
+    a chararray is a plain array where NumPy's empty_like keeps the chararray (the class boundary, P7); LinalgEngine's
+    own np.* calls wait for P6.
+  - At `65ccc213`: NumSharp.Tests net10.0 20,610 passed / 11 skipped and net8.0 20,609 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed.
+  - Next in P2: `np.array_equal`, then `np.insert`, `np.isin` (VString), `np.average`, then the files of four lines or
+    fewer.
 - **2026-10-26, P2's seventh family: np.gradient moved into `GradientEngine`, its statements NumPy's, a memory-safety
   bug and six divergences fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The
   referees: the snapshot (76,410 calls over np.gradient's five overloads, 84,216 after `01b8706b`), `twin_gradient.py` (the
