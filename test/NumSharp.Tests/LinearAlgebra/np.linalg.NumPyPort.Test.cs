@@ -297,5 +297,27 @@ namespace NumSharp.Tests.LinearAlgebra
             Action half = () => np.linalg.tensorsolve(np.zeros(new Shape(0, 0), np.float16), np.zeros(new Shape(0, 0)));
             half.Should().Throw<TypeError>().WithMessage("array type float16 is unsupported in linalg");
         }
+
+        /// <summary>
+        ///     tensorinv's last statement is NumPy's <c>ia.reshape(*invshape)</c>: a 0-d operand's <c>invshape</c> is empty,
+        ///     so Python calls <c>reshape()</c> with no argument and raises <c>TypeError: reshape() takes exactly 1 argument
+        ///     (0 given)</c> after a successful 1x1 inverse, while a singular 0-d operand reports inv's error first. NumSharp
+        ///     reshaped the inverse to <c>()</c> and returned a 0-d array.
+        /// </summary>
+        [TestMethod]
+        public void Tensorinv_ZeroD_RaisesReshapesTypeError()
+        {
+            // np.linalg.tensorinv(np.array(2.)): TypeError: reshape() takes exactly 1 argument (0 given).
+            Action zeroD = () => np.linalg.tensorinv(np.array(2.0));
+            zeroD.Should().Throw<TypeError>().WithMessage("reshape() takes exactly 1 argument (0 given)");
+            // np.linalg.tensorinv(np.array(0.)): the singular 1x1 matrix raises first - LinAlgError: Singular matrix.
+            Action singular = () => np.linalg.tensorinv(np.array(0.0));
+            singular.Should().Throw<LinAlgError>().WithMessage("Singular matrix");
+            // np.linalg.tensorinv(np.array([2.])): (1,) [0.5], a view of the inverse (owndata False).
+            var one = np.linalg.tensorinv(np.array(new[] { 2.0 }));
+            CollectionAssert.AreEqual(new long[] { 1 }, one.shape.Select(d => (long)d).ToArray());
+            Assert.IsFalse(one.flags.owndata, "tensorinv([2.]) OWNDATA");
+            Assert.AreEqual(0.5, one.GetDouble(0));
+        }
     }
 }

@@ -75,12 +75,22 @@ namespace NumSharp
             /// <param name="ind">
             ///     How many LEADING axes form the "row" side. Must be positive.
             /// </param>
-            /// <returns>The inverse, shape <c>a.shape[ind:] + a.shape[:ind]</c>.</returns>
-            /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorinv.html</remarks>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            /// <returns>The inverse, shape <c>a.shape[ind:] + a.shape[:ind]</c>: a view of the inverse of the square
+            ///     matrix (NumPy's <c>ia.reshape(*invshape)</c>).</returns>
+            /// <remarks>
+            ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorinv.html
+            ///     <para>
+            ///     The inverse needs no matrix backend (the managed LU computes it). A 0-d operand is inverted as a 1x1
+            ///     matrix and then refused, as in NumPy: its <c>invshape</c> is empty, and <c>ia.reshape(*invshape)</c> calls
+            ///     <c>reshape()</c> with no argument.
+            ///     </para>
+            /// </remarks>
             /// <exception cref="ValueError"><paramref name="ind"/> is not positive, or the reshape to a square matrix is
             ///     impossible.</exception>
             /// <exception cref="LinAlgError">The reshaped matrix is not square, or is singular.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand (inv's <c>_commonType</c>), or a 0-d operand
+            ///     whose 1x1 inverse succeeded (<c>reshape() takes exactly 1 argument (0 given)</c>).</exception>
+            /// <exception cref="ArgumentException">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
             [NDScoped] // the facade keeps its scope over the call; LinalgEngine.Tensorinv scopes the computation's own
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {

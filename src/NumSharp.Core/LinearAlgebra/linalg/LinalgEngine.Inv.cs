@@ -106,7 +106,11 @@ namespace NumSharp
         /// <exception cref="ValueError"><paramref name="ind"/> is not positive (<c>Invalid ind argument.</c>), or the
         ///     reshape to a square matrix is impossible.</exception>
         /// <exception cref="LinAlgError">The reshaped matrix is not square, or is singular.</exception>
-        /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+        /// <exception cref="TypeError">A float16, decimal or char operand (inv's <c>_commonType</c>), or a 0-d operand
+        ///     whose 1x1 inverse succeeded: NumPy's last statement is <c>ia.reshape(*invshape)</c>, and an empty
+        ///     <c>invshape</c> calls <c>reshape()</c> with no argument (<c>reshape() takes exactly 1 argument (0
+        ///     given)</c>).</exception>
+        /// <exception cref="ArgumentException">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
         [NDScoped]
         internal static NDArray Tensorinv(NDArray a, int ind)
         {
@@ -133,7 +137,13 @@ namespace NumSharp
             // a.reshape(prod, -1): an empty operand with prod 0 is NumPy's own reshape refusal
             // ("cannot reshape array of size 0 into shape (0,newaxis)").
             var square = np.reshape(a, new[] {prod, -1L});
-            return np.reshape(np.linalg.inv(square), invertedShape);
+            var inverse = np.linalg.inv(square);
+            // `return ia.reshape(*invshape)`: a 0-d operand's invshape is (), and Python calls reshape() with no argument,
+            // which ndarray.reshape refuses - after the inverse, so a singular or unsupported 0-d operand reports inv's
+            // error first.
+            if (invertedShape.Length == 0)
+                throw new TypeError("reshape() takes exactly 1 argument (0 given)");
+            return np.reshape(inverse, invertedShape);
         }
     }
 }
