@@ -62,6 +62,44 @@ namespace NumSharp.Tests.LinearAlgebra
                 "casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'bogus')");
         }
 
+        [TestMethod]
+        public void OrderLetter_IsCaseInsensitive_AndANullCastingIsATypeError()
+        {
+            // NumPy's order converter takes one letter in either case: np.matmul(a, b, order='f') and
+            // np.einsum('ij,jk->ik', a, b, order='f') are F-ordered, 'c' / 'a' / 'k' C-ordered (probed 2.4.2, no warning).
+            // NumSharp refused the lowercase letters.
+            var a = np.ones(new Shape(2L, 3L));
+            var b = np.ones(new Shape(3L, 2L));
+            foreach (char o in "fF")
+            {
+                var m = np.matmul(a, b, order: o);
+                Assert.IsTrue(m.Shape.IsFContiguous && !m.Shape.IsContiguous, $"matmul order '{o}'");
+                var e = np.einsum("ij,jk->ik", new[] { a, b }, order: o);
+                Assert.IsTrue(e.Shape.IsFContiguous && !e.Shape.IsContiguous, $"einsum order '{o}'");
+            }
+
+            foreach (char o in "cakCAK")
+            {
+                Assert.IsTrue(np.matmul(a, b, order: o).Shape.IsContiguous, $"matmul order '{o}'");
+                Assert.IsTrue(np.einsum("ij,jk->ik", new[] { a, b }, order: o).Shape.IsContiguous, $"einsum order '{o}'");
+            }
+
+            // Any other letter is the ValueError quoting it as given: order='z' -> (got 'z')
+            Action matmulZ = () => np.matmul(a, b, order: 'z');
+            matmulZ.Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'z')");
+            Action einsumZ = () => np.einsum("ij,jk->ik", new[] { a, b }, order: 'z');
+            einsumZ.Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'z')");
+
+            // casting=None is a TypeError (NumSharp raised the name ValueError "(got '')"); a casting name is exact-case
+            Action matmulNone = () => np.matmul(a, b, casting: null);
+            matmulNone.Should().Throw<TypeError>().WithMessage("casting must be str, not NoneType");
+            Action einsumNone = () => np.einsum("ij,jk->ik", new[] { a, b }, casting: null);
+            einsumNone.Should().Throw<TypeError>().WithMessage("casting must be str, not NoneType");
+            Action matmulUpper = () => np.matmul(a, b, casting: "SAFE");
+            matmulUpper.Should().Throw<ValueError>().WithMessage(
+                "casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'SAFE')");
+        }
+
         /// <summary>A 2x2 float64 operand [[1, 2], [3, 4]].</summary>
         private static NDArray F22 => np.array(new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
 

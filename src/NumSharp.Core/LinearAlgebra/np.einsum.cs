@@ -64,12 +64,16 @@ namespace NumSharp
         /// <summary>
         ///     Evaluates the Einstein summation convention, with NumPy's full keyword surface.
         /// </summary>
+        /// <param name="subscripts">The subscripts string, as for <see cref="einsum(string, NDArray[])"/>
+        ///     (<c>"ij,jk-&gt;ik"</c>).</param>
+        /// <param name="operands">The arrays the subscripts label, in order.</param>
         /// <param name="out">Where the calculation would be deposited. Its RANK is validated now.</param>
         /// <param name="dtype">Forces the accumulation dtype.</param>
-        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, in either
+        ///     case (NumPy's order converter).</param>
         /// <param name="casting">
         ///     Casting rule — <c>"no"</c>, <c>"equiv"</c>, <c>"safe"</c>, <c>"same_kind"</c> or
-        ///     <c>"unsafe"</c>.
+        ///     <c>"unsafe"</c>, spelled exactly.
         /// </param>
         /// <param name="optimize">
         ///     <c>false</c> (the default), <c>true</c>, <c>"greedy"</c> or <c>"optimal"</c>. NumPy
@@ -84,6 +88,9 @@ namespace NumSharp
         ///     AND the <c>params</c> one, and the compiler rejects the call as ambiguous.
         ///     <inheritdoc cref="einsum(string, NDArray[])"/>
         /// </remarks>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null (<c>casting must be str, not NoneType</c>).</exception>
+        /// <exception cref="ValueError">An <paramref name="order"/> letter or a <paramref name="casting"/> name NumPy
+        ///     refuses, with its texts; malformed subscripts.</exception>
         public static NDArray einsum(string subscripts, NDArray[] operands, NDArray @out = null,
             DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {
@@ -100,7 +107,7 @@ namespace NumSharp
                 throw new ValueError(
                     "must specify the einstein sum subscripts string and at least one operand");
 
-            Backends.GufuncGuard.RequireOrder(order);
+            order = Backends.GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             Backends.GufuncGuard.RequireCasting(casting);
             RequireOptimize(optimize);
 

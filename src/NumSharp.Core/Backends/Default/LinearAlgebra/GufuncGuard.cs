@@ -777,27 +777,35 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     The <c>order=</c> name check <c>np.matmul</c> and <c>np.einsum</c> share: one of <c>'C'</c>, <c>'F'</c>,
-        ///     <c>'A'</c>, <c>'K'</c>.
+        ///     The <c>order=</c> name check <c>np.matmul</c> and <c>np.einsum</c> share — NumPy's
+        ///     <c>PyArray_OrderConverter</c> for one character: <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, in
+        ///     either case (probed 2.4.2: <c>np.matmul(a, b, order='f')</c> is F-ordered, with no warning).
         /// </summary>
         /// <param name="order">The order letter the caller passed.</param>
+        /// <returns>The letter in upper case, which is what the callers compare with.</returns>
         /// <exception cref="ValueError">Any other character (<c>order must be one of 'C', 'F', 'A', or 'K' (got
-        ///     '…')</c>), a lowercase letter included.</exception>
-        internal static void RequireOrder(char order)
+        ///     '…')</c>, quoting the character as given).</exception>
+        internal static char RequireOrder(char order)
         {
-            if (order is not ('C' or 'F' or 'A' or 'K'))
+            char upper = order switch { 'c' => 'C', 'f' => 'F', 'a' => 'A', 'k' => 'K', _ => order };
+            if (upper is not ('C' or 'F' or 'A' or 'K'))
                 throw new ValueError($"order must be one of 'C', 'F', 'A', or 'K' (got '{order}')");
+            return upper;
         }
 
         /// <summary>
         ///     The <c>casting=</c> name check <c>np.matmul</c> and <c>np.einsum</c> share: one of NumPy's five casting
-        ///     rules.
+        ///     rules, spelled exactly (<c>'SAFE'</c> and <c>'safe '</c> are refused, probed 2.4.2).
         /// </summary>
         /// <param name="casting">The rule name the caller passed.</param>
-        /// <exception cref="ValueError">Any other string, null included (<c>casting must be one of 'no', 'equiv',
-        ///     'safe', 'same_kind', 'unsafe' (got '…')</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="casting"/> is null: NumPy's <c>casting must be str, not
+        ///     NoneType</c> for <c>casting=None</c>.</exception>
+        /// <exception cref="ValueError">Any other string (<c>casting must be one of 'no', 'equiv', 'safe', 'same_kind',
+        ///     'unsafe' (got '…')</c>).</exception>
         internal static void RequireCasting(string casting)
         {
+            if (casting is null)
+                throw new TypeError("casting must be str, not NoneType");
             if (casting is not ("no" or "equiv" or "safe" or "same_kind" or "unsafe"))
                 throw new ValueError(
                     $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got '{casting}')");

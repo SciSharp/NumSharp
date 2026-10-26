@@ -35,7 +35,8 @@ namespace NumSharp
         ///     Casting rule (default <c>"same_kind"</c>, the ufunc default) gating BOTH the input→loop
         ///     cast a <paramref name="dtype"/> forces and the product→<paramref name="out"/> cast.
         /// </param>
-        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="order">Memory layout of the result — <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>, in either
+        ///     case (NumPy's order converter).</param>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.matmul.html
         ///     <para>
@@ -65,7 +66,10 @@ namespace NumSharp
         /// <returns>The matrix product, or <paramref name="out"/> when one is given (a text <paramref name="out"/> receives
         ///     each product as its scalar's <c>str()</c>).</returns>
         /// <exception cref="TypeError">Text operands or a string <paramref name="dtype"/> (no matmul loop), <c>keepdims</c>
-        ///     or <c>axis</c> (NumPy's matmul refusals).</exception>
+        ///     or <c>axis</c> (NumPy's matmul refusals); a null <paramref name="casting"/> (<c>casting must be str, not
+        ///     NoneType</c>).</exception>
+        /// <exception cref="ValueError">An <paramref name="order"/> letter or a <paramref name="casting"/> name NumPy
+        ///     refuses, with its texts.</exception>
         /// <exception cref="INumSharpException">A read-only <paramref name="out"/> (NumPy's ValueError "output array is
         ///     read-only").</exception>
         /// <exception cref="ArgumentException">A cast <paramref name="casting"/> refuses (NumPy's UFuncTypeError text).</exception>

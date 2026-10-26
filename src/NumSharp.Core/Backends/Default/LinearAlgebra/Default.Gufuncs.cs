@@ -53,7 +53,7 @@ namespace NumSharp.Backends
             // axis semantics.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
             GufuncGuard.RequireCasting(casting);
-            GufuncGuard.RequireOrder(order);
+            order = GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             GufuncGuard.ThrowIfText("matmul", x1, x2, dtype);
             // NumPy's validate_casting, before the gufunc checks: each input's cast to the loop, then the loop's cast to
             // out=, under `casting`.
