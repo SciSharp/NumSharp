@@ -185,5 +185,47 @@ namespace NumSharp.Tests.LinearAlgebra
                 axes: new[] { new[] { 0 }, new[] { 1, 1 }, new[] { 0 } });
             vecmatRepeat.Should().Throw<ValueError>().WithMessage("axes item 1 has value 1 repeated");
         }
+
+        [TestMethod]
+        public void LoopAxes_BroadcastAsNumPysIterator()
+        {
+            // np.matvec(np.ones((2,3,4)), np.ones((3,4))) -> the iterator's remapped-shapes text (NumSharp: "matmul: stacked
+            // (batch) dimensions are not broadcastable: 2 vs 3.")
+            Action matvec = () => np.matvec(np.ones(new Shape(2L, 3L, 4L)), np.ones(new Shape(3L, 4L)));
+            matvec.Should().Throw<ValueError>().WithMessage(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (2,3,4)->(2,newaxis) " +
+                "(3,4)->(3,newaxis)  and requested shape (3)");
+            // np.vecdot(np.ones((2,3,4)), np.ones((3,2,4)))
+            Action vecdot = () => np.vecdot(np.ones(new Shape(2L, 3L, 4L)), np.ones(new Shape(3L, 2L, 4L)));
+            vecdot.Should().Throw<ValueError>().WithMessage(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (2,3,4)->(2,3) " +
+                "(3,2,4)->(3,2)  and requested shape ()");
+            // np.matmul(np.ones(4), np.ones((2,4,5)), out=np.zeros((3,5))): the out takes part (a 1-D x1 maps nothing)
+            Action withOut = () => np.matmul(np.ones(new Shape(4L)), np.ones(new Shape(2L, 4L, 5L)), np.zeros(new Shape(3L, 5L)));
+            withOut.Should().Throw<ValueError>().WithMessage(
+                "operands could not be broadcast together with remapped shapes [original->remapped]: (4,)->() " +
+                "(2,4,5)->(2,newaxis) (3,5)->(3,5)  and requested shape (5)");
+        }
+
+        [TestMethod]
+        public void Out_NeitherBroadcastsNorReduces()
+        {
+            var a = np.ones(new Shape(2L, 3L, 4L));
+            var b = np.ones(new Shape(2L, 4L, 5L));
+            // np.matmul(a, b, out=np.zeros((1,3,5))) -> NumPy lists the remapped shape from the last iterator axis
+            Action one = () => np.matmul(a, b, np.zeros(new Shape(1L, 3L, 5L)));
+            one.Should().Throw<ValueError>().WithMessage(
+                "non-broadcastable output operand with shape (1,3,5) [remapped to (5,3,1)] doesn't match the broadcast " +
+                "shape (2,3,5)");
+            // np.matmul(a, b, out=np.zeros((3,5))) -> the out lacks the loop axis
+            Action missing = () => np.matmul(a, b, np.zeros(new Shape(3L, 5L)));
+            missing.Should().Throw<ValueError>().WithMessage(
+                "output operand requires a reduction along dimension -1, but the reduction is not enabled. The dimension " +
+                "size of 1 does not match the expected output shape.");
+            // np.vecdot(np.ones((2,3)), np.ones((2,3)), out=np.zeros((1,2))) -> the out's extra leading axis takes copies
+            var bigger = np.zeros(new Shape(1L, 2L));
+            np.vecdot(np.ones(new Shape(2L, 3L)), np.ones(new Shape(2L, 3L)), bigger);
+            bigger.Should().BeOfValues(3.0, 3.0).And.BeShaped(1, 2);
+        }
     }
 }

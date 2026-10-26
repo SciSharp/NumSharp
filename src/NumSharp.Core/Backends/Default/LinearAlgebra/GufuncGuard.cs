@@ -240,10 +240,11 @@ namespace NumSharp.Backends
             => dtype is null ? operand : operand.TensorEngine.Cast(operand, dtype.GetTypeCode().AsType(), copy: false);
 
         /// <summary>
-        ///     NumPy's gufunc checks of <c>PyUFunc_GeneralizedFunctionInternal</c> before the iterator, in its order:
-        ///     keepdims support, axis support, the operands' ranks with the flexible dimensions dropped
-        ///     (<c>_validate_num_dims</c>), the <c>axes=</c> / <c>axis=</c> remap (<c>_parse_axes_arg</c> /
-        ///     <c>_parse_axis_arg</c>), and the core sizes (<c>_get_coredim_sizes</c>), over the inputs and a given out.
+        ///     NumPy's gufunc checks of <c>PyUFunc_GeneralizedFunctionInternal</c>, in its order: keepdims support, axis
+        ///     support, the operands' ranks with the flexible dimensions dropped (<c>_validate_num_dims</c>), the
+        ///     <c>axes=</c> / <c>axis=</c> remap (<c>_parse_axes_arg</c> / <c>_parse_axis_arg</c>), the core sizes
+        ///     (<c>_get_coredim_sizes</c>), and the loop broadcast of the iterator it builds next
+        ///     (<see cref="CheckLoopBroadcast"/>), over the inputs and a given out.
         /// </summary>
         /// <param name="sig">The gufunc's core signature.</param>
         /// <param name="op">The operands: the inputs, then the output (null when no out= was given).</param>
@@ -256,7 +257,8 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">keepdims passed to a gufunc whose inputs have different core ranks or whose
         ///     outputs have core dimensions; axis given to a gufunc with more than one distinct core dimension.</exception>
         /// <exception cref="ValueError">An operand with too few dimensions; an <c>axes=</c> list of the wrong length; a
-        ///     repeated axis in an <c>axes=</c> entry; a core dimension whose size differs between operands.</exception>
+        ///     repeated axis in an <c>axes=</c> entry; a core dimension whose size differs between operands; loop axes that
+        ///     do not broadcast, or an output that would need a broadcast or a reduction.</exception>
         /// <exception cref="AxisError">An <c>axes=</c> entry of the wrong length, or an axis out of its operand's
         ///     range.</exception>
         /// <remarks>
@@ -308,6 +310,9 @@ namespace NumSharp.Backends
                 layout.RemapAxis = ParseAxisArg(sig, op, axis.Value, layout);
 
             layout.CoreDimSizes = GetCoreDimSizes(sig, op, layout);
+            // The iterator NumPy builds next broadcasts the loop axes (and refuses an output that would need a broadcast
+            // or a reduction) before the loop runs.
+            CheckLoopBroadcast(sig, op, layout);
             return layout;
         }
 
@@ -566,6 +571,190 @@ namespace NumSharp.Backends
                             $"signature {sig.Text}");
             }
             return sizes;
+        }
+
+        /// <summary>
+        ///     The broadcast checks of the iterator NumPy's <c>PyUFunc_GeneralizedFunctionInternal</c> builds after the core
+        ///     sizes (<c>NpyIter_AdvancedNew</c> with its <c>op_axes</c> and <c>iter_shape</c>, <c>npyiter_fill_axisdata</c>):
+        ///     the loop axes of every given operand broadcast together, and an output may not need a broadcast or a
+        ///     reduction.
+        /// </summary>
+        /// <param name="sig">The gufunc's core signature.</param>
+        /// <param name="op">The operands (null for an output not given).</param>
+        /// <param name="layout">The call's layout, complete through the core sizes.</param>
+        /// <exception cref="ValueError">"operands could not be broadcast together with remapped shapes
+        ///     [original-&gt;remapped]: ... and requested shape ..."; "non-broadcastable output operand with shape ...
+        ///     [remapped to ...] doesn't match the broadcast shape ..."; "output operand requires a reduction along
+        ///     dimension -1, but the reduction is not enabled. The dimension size of 1 does not match the expected output
+        ///     shape."</exception>
+        /// <remarks>
+        ///     The iterator's dimensions are the loop axes, then every output core dimension; an operand maps each to one
+        ///     of its axes, or to none (NumPy's -1, printed <c>newaxis</c>, or dropped while leading). The requested shape
+        ///     is unknown (-1) on the loop axes and the core sizes after them. Two of NumPy's texts are kept with their
+        ///     quirks: the remapped shapes end with a space before " and requested shape " (two spaces), and the
+        ///     non-broadcastable output's remapped shape lists the iterator axes from the LAST one (probed 2.4.2:
+        ///     <c>np.matmul(ones((2,3,4)), ones((2,4,5)), out=zeros((1,3,5)))</c> is "... (1,3,5) [remapped to (5,3,1)]
+        ///     ... (2,3,5)"). Every gufunc of this family has one output, so the iterator axes past the loop axes are all
+        ///     that output's core axes; NumPy marks another output's core axes as reduction axes, which only a second
+        ///     output would meet.
+        /// </remarks>
+        private static void CheckLoopBroadcast(GufuncSignature sig, NDArray[] op, GufuncLayout layout)
+        {
+            int nin = sig.Nin, nop = sig.Nop;
+            int bnd = layout.BroadcastNdim;
+            int iterNdim = bnd;
+            for (int i = nin; i < nop; i++)
+                iterNdim += layout.OpCoreNumDims[i];
+
+            // iter_shape: unknown on the loop axes, the core sizes (or 1 under keepdims) on each output's core axes.
+            var itershape = new long[iterNdim];
+            for (int idim = 0; idim < bnd; idim++)
+                itershape[idim] = -1;
+
+            // op_axes: an operand's axis per iterator dimension, or -1 (a missing loop axis, or another output's core
+            // axis: NumPy's NPY_ITER_REDUCTION_AXIS(-1), which reads as -1 everywhere it matters here).
+            var opAxes = new int[nop][];
+            int j = bnd;
+            for (int i = 0; i < nop; i++)
+            {
+                int n = op[i] is not null ? op[i].ndim - layout.OpCoreNumDims[i] : bnd;
+                var axes = new int[iterNdim];
+                for (int idim = 0; idim < bnd; idim++)
+                    axes[idim] = idim >= bnd - n ? Remap(layout, i, idim - (bnd - n)) : -1;
+                for (int idim = bnd; idim < iterNdim; idim++)
+                    axes[idim] = -1;
+
+                if (i >= nin)
+                {
+                    if (layout.Keepdims)
+                    {
+                        // keepdims: the kept axes are not core dimensions, they are added back with length 1.
+                        for (int idim = 0; idim < layout.OpCoreNumDims[i]; idim++, j++)
+                        {
+                            itershape[j] = 1;
+                            axes[j] = Remap(layout, i, n + idim);
+                        }
+                    }
+                    else
+                    {
+                        int removed = 0;
+                        var ixs = sig.CoreDimIxs[i];
+                        for (int idim = 0; idim < ixs.Length; idim++)
+                        {
+                            // A missing flexible dimension takes no iterator axis.
+                            if (layout.Missing[ixs[idim]])
+                            {
+                                removed++;
+                                continue;
+                            }
+                            itershape[j] = layout.CoreDimSizes[ixs[idim]];
+                            axes[j] = Remap(layout, i, n + idim - removed);
+                            j++;
+                        }
+                    }
+                }
+                opAxes[i] = axes;
+            }
+
+            // npyiter_fill_axisdata: broadcast every given operand's mapped axes, starting from the requested shape.
+            var bshape = new long[iterNdim];
+            for (int idim = 0; idim < iterNdim; idim++)
+                bshape[idim] = itershape[idim] < 0 ? 1 : itershape[idim];
+            for (int iop = 0; iop < nop; iop++)
+            {
+                if (op[iop] is null)
+                    continue;
+                var dims = op[iop].Shape.dimensions;
+                for (int idim = 0; idim < iterNdim; idim++)
+                {
+                    int i = opAxes[iop][idim];
+                    if (i < 0 || i >= dims.Length)
+                        continue;
+                    if (bshape[idim] == 1)
+                        bshape[idim] = dims[i];
+                    else if (bshape[idim] != dims[i] && dims[i] != 1)
+                        throw LoopBroadcastError(op, opAxes, itershape);
+                }
+            }
+            // A requested length of 1 (a kept axis) may not have been broadcast up.
+            for (int idim = 0; idim < iterNdim; idim++)
+                if (itershape[idim] == 1 && bshape[idim] != 1)
+                    throw LoopBroadcastError(op, opAxes, itershape);
+
+            // The axis fill, from the last iterator axis: an output may neither broadcast (NO_BROADCAST) nor be reduced.
+            for (int k = 0; k < iterNdim; k++)
+            {
+                int idim = iterNdim - k - 1;
+                if (bshape[idim] == 1)
+                    continue;
+                for (int iop = nin; iop < nop; iop++)
+                {
+                    if (op[iop] is null)
+                        continue;
+                    int i = opAxes[iop][idim];
+                    if (i < 0)
+                        throw new ValueError(
+                            $"output operand requires a reduction along dimension {i}, but the reduction is not " +
+                            "enabled. The dimension size of 1 does not match the expected output shape.");
+                    if (op[iop].Shape.dimensions[i] == 1)
+                        throw NonBroadcastableOutputError(op[iop], opAxes[iop], bshape);
+                }
+            }
+        }
+
+        /// <summary>NumPy's <c>REMAP_AXIS(iop, axis)</c>: the actual axis behind a default position.</summary>
+        /// <param name="layout">The call's layout.</param>
+        /// <param name="i">The operand.</param>
+        /// <param name="axis">The default position.</param>
+        /// <returns>The remapped axis, or the position itself without a remap.</returns>
+        private static int Remap(GufuncLayout layout, int i, int axis)
+            => layout.RemapAxis?[i] is { } remap ? remap[axis] : axis;
+
+        /// <summary>The iterator's broadcast error with remapped shapes (<c>npyiter_fill_axisdata</c>'s
+        ///     <c>broadcast_error</c>, the op_axes and itershape form).</summary>
+        /// <param name="op">The operands (null for an output not given: it is not printed).</param>
+        /// <param name="opAxes">Each operand's axis per iterator dimension (-1 for none).</param>
+        /// <param name="itershape">The requested shape (-1 for unknown).</param>
+        /// <returns>The error to throw.</returns>
+        private static ValueError LoopBroadcastError(NDArray[] op, int[][] opAxes, long[] itershape)
+        {
+            var sb = new System.Text.StringBuilder("operands could not be broadcast together with remapped shapes [original->remapped]: ");
+            for (int iop = 0; iop < op.Length; iop++)
+            {
+                if (op[iop] is null)
+                    continue;
+                var dims = op[iop].Shape.dimensions;
+                var remdims = new long[itershape.Length];
+                for (int idim = 0; idim < remdims.Length; idim++)
+                {
+                    int i = opAxes[iop][idim];
+                    remdims[idim] = i >= 0 && i < dims.Length ? dims[i] : -1;
+                }
+                sb.Append(Shape.ConvertShapeToString(dims)).Append("->").Append(Shape.ConvertShapeToString(remdims)).Append(' ');
+            }
+            sb.Append(" and requested shape ").Append(Shape.ConvertShapeToString(itershape));
+            return new ValueError(sb.ToString());
+        }
+
+        /// <summary>The iterator's refusal to broadcast an output (<c>operand_different_than_broadcast</c>, the remapped
+        ///     form), its remapped shape listed from the last iterator axis as NumPy prints it.</summary>
+        /// <param name="out">The output operand.</param>
+        /// <param name="axes">Its axis per iterator dimension (-1 for none).</param>
+        /// <param name="bshape">The broadcast shape.</param>
+        /// <returns>The error to throw.</returns>
+        private static ValueError NonBroadcastableOutputError(NDArray @out, int[] axes, long[] bshape)
+        {
+            var dims = @out.Shape.dimensions;
+            int ndim = axes.Length;
+            var remdims = new long[ndim];
+            for (int idim = 0; idim < ndim; idim++)
+            {
+                int i = axes[ndim - idim - 1];
+                remdims[idim] = i >= 0 && i < dims.Length ? dims[i] : -1;
+            }
+            return new ValueError(
+                $"non-broadcastable output operand with shape {Shape.ConvertShapeToString(dims)} [remapped to " +
+                $"{Shape.ConvertShapeToString(remdims)}] doesn't match the broadcast shape {Shape.ConvertShapeToString(bshape)}");
         }
 
         /// <summary>NumPy rejects <c>axis</c> and <c>axes</c> together, whichever gufunc it is.</summary>
