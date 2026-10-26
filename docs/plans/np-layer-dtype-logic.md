@@ -492,6 +492,93 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-26, P2's sixth family: the product gufuncs np.matmul / np.vecdot / np.matvec / np.vecmat moved into
+  `TensorEngine` members with `GufuncGuard`, their checks NumPy's, their results NumPy's objects.** Commits on `strings`,
+  developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (95,580 calls over the four
+  functions: 5,220 results, 90,360 exceptions), `twin_gufunc.py` (the tool's operands, x2, axes, axis, keepdims, dtype,
+  casting, order and out= rebuilt in NumPy; dtype, shape, C / F / OWNDATA / WRITEABLE flags and SHA-256 per line, a NumPy
+  scalar result with its own flags), `ab_gufunc.py` (parent against fix, each changed line classified by the twin: fixed,
+  regressed, still different, decimal), and NumPy probes per fix: a 34-case layout probe, and a seeded random differential
+  of 20,000 calls over the four functions (transposed, stepped, reversed and broadcast operands of up to three loop axes,
+  keepdims, dtype=, order=, axes= / axis= placing the core axes anywhere; shape, byte strides, flags, dtype and a value
+  digest):
+  - `6b143941` the snapshot tool reaches the gufuncs' arguments: x2 (with a new "transposed" second operand, so a (3, 4)
+    operand meets the (4, 3) partner a matrix product accepts), axes= lists (each function's cores, an axis out of range,
+    a repeated axis, an entry of the wrong length), matmul's nullable keepdims and the casting names.
+  - `b7b1b4d4` the move (D1: NumPy writes the gufuncs in C, `ufunc_generic_fastcall` over the gufunc loops): new abstract
+    `TensorEngine.Matmul(x1, x2, out, axes, axis, keepdims, dtype, casting, order)` and `Vecdot` / `Matvec` / `Vecmat(x1,
+    x2, out, axes, axis, keepdims, dtype)`, implemented in `Backends/Default/LinearAlgebra/Default.Gufuncs.cs` statement for
+    statement (each np.moveaxis became the engine's MoveAxis); `GufuncGuard` moved to `Backends/Default/LinearAlgebra/` with
+    the order / casting checks np.einsum shares. 95,580 calls byte-identical. R1 has no row to change (GufuncGuard.cs is not
+    an np.* file, and the four facades had no dtype test); R2 pinned the structural calls left (np.expand_dims, np.copyto,
+    np.ascontiguousarray / np.asfortranarray). The twin then agrees with NumPy on 68,122 of the 94,638 comparable lines (942
+    decimal lines have no NumPy dtype); each root cause of the rest is one of the commits below.
+  - `84ee0bd2` (D4) NumPy's parse order: axis with axes, the dtype= class, a read-only out= (`output array is read-only`,
+    before the product, where numeric operands reached np.copyto's text after it), matmul's casting and order names, then
+    the loop refusal of text. 2,157 lines change: 2,142 to NumPy's outcome, 15 decimal. 70,264 agree.
+  - `3f0e2f22` (D4) NumPy's `validate_casting`: each input's cast to the loop and the loop's cast to out=, before the gufunc
+    checks. vecdot / matvec / vecmat cast a `dtype=` operand unchecked (`np.vecdot(complex, float, dtype=np.float64)` dropped
+    the imaginary parts), np.matmul computed `casting='no'` over int32 and float64; a fixed-width text operand under a
+    numeric `dtype=` and `casting='unsafe'` is converted as NumPy's loop converts it, and a StringDType operand's no-loop
+    text names the requested class. 15,595 lines change: 15,457 fixed, 85 decimal, 53 left for the next commits. 85,721
+    agree.
+  - `ec9a384a` (D4) NumPy's gufunc checks as one port (`GufuncSignature` + `GufuncGuard.CheckCoreDimensions`): keepdims and
+    axis support, `_validate_num_dims` (matmul's flexible n? / m? dropped from every operand, out= included),
+    `_parse_axes_arg` / `_parse_axis_arg` and `_get_coredim_sizes`, with NumPy's texts. matmul left its ranks and core sizes
+    to its kernel (an InvalidOperationException and an IncorrectShapeException of its own words), matvec / vecmat never
+    checked an axes= entry for repeats. 7,395 lines change: 7,259 fixed, 136 decimal. 92,980 agree.
+  - `65d3cde3` (D4) the loop axes broadcast as `npyiter_fill_axisdata` does, with the iterator's texts (`operands could not
+    be broadcast together with remapped shapes [original->remapped]: ...`, `non-broadcastable output operand ...`, the
+    reduction that is not enabled): matmul raised its kernel's IncorrectShapeException, vecdot the elementwise broadcast's
+    text, a mismatched out= np.copyto's text after the product. 444 lines change: 432 fixed, 12 decimal. 93,412 agree.
+  - `f8dd92bf` (D4) the results own their data: matvec / vecmat drop the product's promoted axis, vecdot's keepdims inserts
+    the kept axis, and an axes= output entry remaps, each by relabelling the fresh product (`NDArray.AdoptDroppedAxis` /
+    `AdoptInsertedAxis`, new; the kept axis takes one element's stride, NumPy's innermost core axis). The array-object
+    oracle's VF27 (12 cases) returns to its tier. 1,123 lines change: 1,074 fixed, 40 decimal, 9 keep a value difference
+    (their flags now NumPy's). 94,484 agree (93,410 at the parent, under the twin corrected to read a NumPy scalar's own
+    flags).
+  - `f624bb44` (D4) a 0-d result without out= is NumPy's scalar stand-in (an owner, read-only; `GufuncGuard.Deliver` marks
+    it): matmul of two vectors returned a writeable 0-d view, vecdot of empty and float16 vectors writeable owners. VF01's
+    matmul case returns to its tier. 46 lines change: 43 fixed, 3 decimal. 94,527 agree.
+  - `7109bbc0` (D4) np.matmul's order= keeps a vector pair's 0-d result: np.ascontiguousarray / np.asfortranarray
+    (ndmin=1) made it shape (1,).
+  - `ae96f8af` (D4) the loop axes follow NumPy's iterator order (`npyiter_find_best_axis_ordering` over the inputs' loop
+    parts, the core axes innermost in C order, `Shape.NpyIterOutputShape`): with two or more loop axes over F-ordered,
+    permuted or broadcast inputs the results were C-ordered, and np.vecdot took its product's layout. The 34-case probe: 17
+    layouts differed, 0 now; the random differential 15,994 of 16,000.
+  - `ec61b110` (D4) order= lays out the iterator's axes before an axes= output entry remaps them, with exact strides (an
+    extent-1 axis gets its F stride under order='F'). The random differential: 20,000 of 20,000. R2: Default.Gufuncs.cs's
+    last structural calls go and its row is removed.
+  - `15004724` (D4) float16 np.vecdot is NumPy's HALF_dot (float32 products, a float32 sum in order, one narrow) through the
+    float16 matmul loop, which already matched NumPy; the products were rounded to float16 before the sum. 16 random sets:
+    15 differed, 0 now. 22 snapshot lines fixed; 94,549 agree.
+  - `06d3a13f` (D4) the float16 product kernels give a NaN result NumPy's NaN: in NumPy's HALF loops a product of two NaNs
+    keeps the second factor's and the float32 sum its first NaN, where NumSharp's kernels left the operand order to RyuJIT
+    (`Utilities/NDHalfDot.cs` encodes NumPy's order; an output is recomputed only when its float32 sum is NaN). It reaches
+    np.dot, np.inner, np.tensordot, np.vdot, np.convolve and np.correlate too. 1 snapshot line fixed; 94,550 agree.
+  - `b594d750` (D4) np.matmul and np.einsum read the order= letter in either case (NumPy's order converter), and
+    casting=None is NumPy's TypeError `casting must be str, not NoneType`.
+  - `546ea9e3` the facades' docs follow the fixes, and four signature constants without a reader go.
+  - Evidence at `546ea9e3`: the twin agrees with NumPy 2.4.2 on 94,550 of the 94,638 comparable lines. The 88 others: 80
+    exception texts that name NumSharp's char where NumPy's proxy is uint16 (inherent), and 8 float32 / float64 /
+    complex128 values that NumPy computes through scipy-openblas, which the managed kernels sum in another order (5 over
+    the special-value operand, matvec's through gemv and vecdot's through zdotc; 3 complex128 vecmat lines, through zgemm,
+    because gemv cannot conjugate the vector). R2 at the end:
+    GufuncGuard.cs 0 / 1 (Deliver's np.copyto into out=), TensorEngine.LinearAlgebra.cs 1 / 5 (np.reshape gone),
+    Default.MatMul.cs 0 / 5 (np.squeeze gone).
+  - **Found:** the managed float32 / float64 / complex128 vecdot (and np.dot of two vectors, np.vdot) do not follow NumPy's
+    per-dtype dotfunc where it is reproducible without BLAS: scipy-openblas' ddot sums sequentially below 16 terms, sdot in
+    double below 32, zdotc in four separate sums below 8, and its strided kernels keep their own accumulators. Random
+    vectors differ in the last bit (float64 from 16 terms, float32 from 15 in vecdot, complex128 at every length).
+    np.convolve models these regimes for contiguous operands (`NDArray.SlidingDot`); vecdot's rows can be strided. And
+    np.einsum's default loop (NumPy's sum_of_products) keeps another NaN than the matmul route NumSharp composes, the
+    documented divergence of its contraction.
+  - Left: vecdot / matvec / vecmat take no casting= / order= (NumPy's ufunc keywords; a signature change, which waits on
+    the owner's one-signature decision); the dotfunc regimes above; VF01 for the elementwise ufuncs, clip, round, conj,
+    nan_to_num and dot / inner / kron (71 cases).
+  - At `546ea9e3`: NumSharp.Tests net10.0 20,575 passed / 11 skipped and net8.0 20,574 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed (Layering 6 / 6).
+  - Next in P2: `np.gradient`, then the list's order.
 - **2026-10-26, P2's fifth family: np.cov moved into `CovEngine`, its text route NumPy's statements, two divergences
   fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot
   (31,392 calls over np.cov / np.corrcoef), `twin_cov.py` (the tool's operands, y, weights, rowvar, bias, ddof and dtype
