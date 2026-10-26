@@ -492,6 +492,67 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-26, P2's seventh family: np.gradient moved into `GradientEngine`, its statements NumPy's, a memory-safety
+  bug and six divergences fixed.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The
+  referees: the snapshot (76,410 calls over np.gradient's five overloads, 84,216 after `01b8706b`), `twin_gradient.py` (the
+  tool's operands, spacings, spacing lists, axis and edge_order rebuilt in NumPy; dtype, shape, C / F / OWNDATA / WRITEABLE
+  flags and SHA-256 per component, or the exception's type and text), `ab_gradient.py` (parent against fix, each changed
+  line classified by the twin), `cmp_bytes.py` (a `SNAPSHOT_BYTES=1` line's elements against NumPy's, bit for bit), and
+  NumPy probes per fix, written into `Math/np.gradient.NumPyPort.Test.cs` as raw bits:
+  - `f0918452` the snapshot tool reaches np.gradient's arguments: the one spacing (34 kinds: C# numbers, NaN / inf, bool,
+    Half, float, decimal, char, str, None, 0-d arrays, coordinates of every dtype, evenly spaced, as C# arrays, a column,
+    one too many, special values, a zero step, decreasing, strided), the per-axis spacings, the spacing list and edge_order
+    (0 and -1, which NumPy's single check admits, and 3).
+  - `382d0738` (D4, memory safety) every spacing value was read with `NDArray.GetDouble`, which indexes the float64 lane of
+    the storage's typed-slice union whatever the dtype: float32 / float16 / bool coordinate differences were read as
+    other bytes and past their buffer (results changed from run to run), a 0-d int64 step 2 became the denormal 1e-323,
+    an empty axis' coordinates read an empty buffer where NumPy raises IndexError. 1,214 lines change: 976 fixed (236 of
+    them the lines that changed from run to run), 33 decimal, 205 left for the next commits. 68,305 of the 74,671
+    comparable lines agree (67,329 before).
+  - `1089768b` the move (D1: NumPy writes gradient in Python): the body and its helpers move into
+    `Math/GradientEngine.cs`, beside the facade, statement for statement; 76,410 calls byte-identical; R1's row for
+    np.gradient.cs (6 text / 5 numeric lines) goes.
+  - `c443f174` (D4) the components are NumPy's `np.empty_like(f, dtype=otype)` (order 'K'): an F-ordered, broadcast or
+    transposed input gives F-ordered components, a permuted one its permutation's order (they were C). 1,198 lines
+    change: 1,027 fixed, 106 decimal, 65 left. 69,332 agree.
+  - `01b8706b` the tool's spacings gain Python lists (a `List<double>`, an `object[]` of C# ints, evenly spaced, a ragged
+    list): 7,806 new lines, the 76,410 earlier ones byte-identical.
+  - `b0f4f9a8` (D4) a Python list spacing is coordinates, as NumPy's `np.ndim` reads it: the port's np.ndim knew only
+    NDArrays and C# arrays, so a `List<double>` reached the double conversion's InvalidCastException and a ragged list a
+    KeyNotFoundException in dtype discovery (`PolySequence.NDim` / `ToArrayOrNonNumeric` now, np.array's rules). 2,944
+    lines change: 2,742 fixed, 48 decimal, 154 left. 76,841 of the 82,402 comparable lines agree (74,099 before).
+  - `10ab09a1` (D4) each scalar spacing keeps its NumPy kind through NumPy's statements (`PolyNumber`): every step was a
+    C# double, a weak Python float, so a 0-d float64 step or a collapsed float64 coordinate step (`diffx[0]`, a NumPy
+    scalar) computed a float32 input in float32 where NumPy computes in float64 (one ULP lower in every element of the
+    unit test), a float16 / char step was refused (InvalidCastException), a str was parsed as a number, a None refused
+    with ArgumentNullException, and the non-uniform edges were widened to float64 where NumPy keeps the coordinates'
+    dtype. 4,448 lines change: 4,241 fixed, 73 decimal, 134 left. 81,082 agree.
+  - `8af1310f` (D4) the edges are NumPy's integer-indexed statements: the length-1 slices made a 1-D input's edges ufuncs
+    where NumPy's are scalarmath (a sum of two NaNs kept the second operand's payload, a complex product was the fused
+    one), and an axis of 1 or 2 elements under edge_order 0 / -1 raised a broadcast error where NumPy raises IndexError.
+    928 lines change: 896 fixed, 32 decimal. 81,978 agree.
+  - `c1bdf5d9` (D4) a bool input stays bool with float64 components, as NumPy's otype branches give it: the port raised
+    the boolean-subtract TypeError up front, so bool data with coordinates and second-order edges had no gradient, an
+    empty axis skipped the shape check's ValueError, and a 0-d input without an axis raised. 364 lines change: 352 fixed,
+    12 decimal. 82,330 agree.
+  - `c0c0832d` (D4) a text input with coordinates is refused after the coefficients and with their dtype, NumPy's
+    `a * f[s2]`: the text route named float64 for float32 / float16 / complex128 coordinates. 64 lines change, all fixed.
+    82,394 agree. (Its commit message says the work began at 68,305; that is the count after `382d0738`, the count before
+    it is 67,329.)
+  - Evidence at `c0c0832d`: the twin agrees with NumPy 2.4.2 on 82,394 of the 82,402 comparable lines (1,814 decimal lines
+    have no NumPy twin). The 8 others are complex128 operands holding (+nan, -nan): np.divide by `2+0j` gives (-nan, -nan)
+    where NumPy keeps the positive NaN in the real part, the library residual pinned by `OpenBugs.NaNOperandOrder`'s
+    `Complex128_AddMultiplyDivide_KeepNumPysNaNPerPart`. R1 / R2: np.gradient.cs has no row; GradientEngine.cs sits beside
+    its facade (its statements call np.*), as TrapezoidEngine does.
+  - **Found:** `NDArray.GetDouble` is not a conversion (it reads the float64 lane of any storage; its doc comment's
+    NullReferenceException no longer happens since the typed-slice union), and `poly1d.Call(double)` reads np.polyval's
+    decimal result with it (P4); NumSharp's `np.subtract(bool, bool, dtype=float64)` raises the boolean-subtract TypeError
+    where NumPy computes; np.divide's complex NaN per part (above).
+  - Left: a list spacing holding None or another object is NotSupportedException (NumPy computes an object array); the
+    complex NaN residual; GradientEngine's own np.* calls wait for P6.
+  - At `c0c0832d`: NumSharp.Tests net10.0 20,582 passed / 11 skipped and net8.0 20,581 / 11; Oracle net10.0 411 / 2
+    skipped, 0 failed, and net8.0 411 / 2 skipped, 0 failed.
+  - Next in P2: `np.linalg`, then the list's order.
 - **2026-10-26, P2's sixth family: the product gufuncs np.matmul / np.vecdot / np.matvec / np.vecmat moved into
   `TensorEngine` members with `GufuncGuard`, their checks NumPy's, their results NumPy's objects.** Commits on `strings`,
   developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (95,580 calls over the four
