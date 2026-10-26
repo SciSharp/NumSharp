@@ -1779,6 +1779,10 @@ dropped) and narrowed VF01 (no longer `np.unravel_index` of a 0-d), VF08 (np.med
 The replay of the gap files named the matching cases (231 moved back into the gates); the redrawn carve is exact again.
 The list below is the one found at delivery.
 
+**Redrawn 2026-10-26** (31 ids and 449 carved cells since): np.matvec / np.vecmat relabel their product in place
+instead of returning a reshaped view (the np-layer-dtype-logic plan's P2), so their results own their data and VF27
+matches NumPy. Its rule is dropped and its 12 `array_args` cases moved back into the tier the same way.
+
 **Redrawn 2026-10-25** (32 ids and 461 carved cells since; 33 and 465 after the numpy.char phase-2 work of 2026-10-15
 fixed VF31 and VF26's `getfield` part): np.searchsorted reads its keys and its sorter from a view's offset (the
 np-layer-dtype-logic plan's P2), so VA01 matches NumPy. Its two rules are dropped and its 4 cases (2 `view_flags`,

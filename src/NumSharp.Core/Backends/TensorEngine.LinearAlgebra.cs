@@ -395,22 +395,18 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Drops a length-1 axis from a freshly computed C-contiguous product — the step that
+        ///     Drops a length-1 axis from a freshly computed product — the step that
         ///     turns matmul's <c>(…,m,1)</c> back into <c>matvec</c>'s <c>(…,m)</c> and its
         ///     <c>(…,1,m)</c> back into <c>vecmat</c>'s <c>(…,m)</c>.
         /// </summary>
-        internal static NDArray DropAxis(NDArray a, int axis)
-        {
-            var source = a.Shape.dimensions;
-            var dims = new long[source.Length - 1];
-            for (int i = 0, j = 0; i < source.Length; i++)
-            {
-                if (i == axis)
-                    continue;
-                dims[j++] = source[i];
-            }
-
-            return np.reshape(a, dims);
-        }
+        /// <param name="a">The product: consumed (it is returned relabelled, or disposed after a copy).</param>
+        /// <param name="axis">The length-1 axis to drop.</param>
+        /// <returns>The product without the axis, owning its buffer and keeping its other strides: relabelled in place
+        ///     (<see cref="NDArray.AdoptDroppedAxis"/>), as NumPy's gufunc output owns its data (probed 2.4.2:
+        ///     <c>np.matvec(a, v).flags.owndata</c> is True); a product that is not a fresh owner of its elements is
+        ///     copied in K order first.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a length-1 axis of
+        ///     <paramref name="a"/>.</exception>
+        internal static NDArray DropAxis(NDArray a, int axis) => NDArray.AdoptDroppedAxis(a, axis);
     }
 }

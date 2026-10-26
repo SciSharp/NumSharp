@@ -184,7 +184,9 @@ namespace NumSharp.Backends
                     keptAxis = axis.Value < 0 ? axis.Value + outNdim : axis.Value;
                 }
 
-                result = np.expand_dims(result, keptAxis);
+                // The answer keeps owning its buffer and its layout, as NumPy's output does: insert the length-1 axis
+                // by relabelling.
+                result = NDArray.AdoptInsertedAxis(result, keptAxis);
             }
 
             return GufuncGuard.Deliver(result, @out);
@@ -236,7 +238,7 @@ namespace NumSharp.Backends
             var result = Matvec(a, b);
 
             if (outputAxes.Length == 1)
-                result = MoveAxis(result, new[] {-1}, new[] {outputAxes[0]});
+                result = PlaceOutputCore(result, outputAxes);
 
             return GufuncGuard.Deliver(result, @out);
         }
@@ -285,7 +287,7 @@ namespace NumSharp.Backends
             var result = Vecmat(a, b);
 
             if (outputAxes.Length == 1)
-                result = MoveAxis(result, new[] {-1}, new[] {outputAxes[0]});
+                result = PlaceOutputCore(result, outputAxes);
 
             return GufuncGuard.Deliver(result, @out);
         }
@@ -306,10 +308,14 @@ namespace NumSharp.Backends
         ///     Relocates the product's core axes (currently trailing) to the positions <c>axes[2]</c>
         ///     named, validated against the OUTPUT rank (unknown until the product ran).
         /// </summary>
-        /// <param name="result">The product, its core axes last.</param>
+        /// <param name="result">The product, its core axes last: a fresh array, consumed (it is returned relabelled).</param>
         /// <param name="outputAxes">The output entry of <c>axes=</c>, as the caller gave it (negative axes count from the
         ///     end of the output).</param>
-        /// <returns>A view with the core axes where <paramref name="outputAxes"/> names them.</returns>
+        /// <returns>The product with the core axes where <paramref name="outputAxes"/> names them: the same buffer in its
+        ///     computed (C) memory order, relabelled, so it still owns its data — NumPy allocates a gufunc output in the
+        ///     iterator's order and returns it with the remapped axes (probed 2.4.2:
+        ///     <c>np.matmul(ones((2,3,4)), ones((2,4,5)), axes=[(1,2),(1,2),(0,1)])</c> has shape (3,5,2), strides
+        ///     (40,8,120), OWNDATA True).</returns>
         /// <exception cref="AxisError">An output axis out of the result's range.</exception>
         private NDArray PlaceOutputCore(NDArray result, int[] outputAxes)
         {
@@ -325,7 +331,9 @@ namespace NumSharp.Backends
             var src = new int[outputAxes.Length];
             for (int i = 0; i < outputAxes.Length; i++)
                 src[i] = result.ndim - outputAxes.Length + i;
-            return MoveAxis(result, src, dest);
+            // The moved view's shape is the product's strides permuted; relabel the product with it.
+            using var moved = MoveAxis(result, src, dest);
+            return NDArray.AdoptLayout(result, moved.Shape);
         }
 
         /// <summary>

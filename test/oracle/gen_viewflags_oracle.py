@@ -1802,6 +1802,9 @@ _ARRAY_JOB_NUMPY = {
 # 2026-10-25 (np-layer-dtype-logic P2): np.searchsorted reads its keys and its sorter from a view's offset, so VA01
 # matches NumPy; its two rules are dropped and its 4 cases moved back into view_flags.jsonl / array_args.jsonl at the
 # positions the generator gave them (the tiers are in the order of their ids' trailing numbers; no regeneration).
+# 2026-10-26 (np-layer-dtype-logic P2): np.matvec / np.vecmat relabel their product in place instead of returning a
+# reshaped view, so their results own their data and VF27 matches NumPy; its rule is dropped and its 12 cases moved
+# back into array_args.jsonl the same way.
 GAPS = {
     "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron / matmul of 0-d or 1-D "
             "pairs) comes back as a WRITEABLE 0-d array (matmul's also does not own its data)",
@@ -1833,7 +1836,6 @@ GAPS = {
     "VF26": "results NumPy returns as a VIEW of an internal temporary (np.tile with unit reps of a 0-d input, "
             "np.kron with a 0-d, np.nanmedian along an axis — MaskedArray.filled's _data view) come back owning "
             "their data",
-    "VF27": "np.matvec / np.vecmat return a view of an internal buffer (OWNDATA false); NumPy's result owns its data",
     "VF29": "np.median / np.nanmedian of a 0-d with keepdims=True are read-only; NumPy returns a writeable 0-d array",
     "VF30": "np.nansum / np.nanprod with axis=None of a view at a non-zero offset (a 0-d np.unstack child, a 2-D "
             "np.split child) read the WRONG elements (the owner's, from its start)",
@@ -1972,8 +1974,6 @@ def _gap_of(tier, case):
             return "VS01"
         return None
     if tier == "arrays":
-        if fn in ("matvec", "vecmat"):
-            return "VF27"
         if fn == "take_along_axis" and lay in ("indices=f", "indices=t"):
             return "VA02"
         if fn == "where" and lay in ("condition=off", "x=off", "y=off"):
