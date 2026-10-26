@@ -63,33 +63,20 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     Removes the length-1 axis that the promotion of a 1-D matmul operand inserted. The product is a
-        ///     fresh C-contiguous buffer, so the axis is dropped by relabelling the shape IN PLACE: the result
-        ///     stays the owner of its data, as NumPy's gufunc result is (it allocates the final shape), and no
-        ///     second array object is created. A product that is not such a buffer takes the squeeze view.
+        ///     fresh buffer, so the axis is dropped by relabelling the shape IN PLACE
+        ///     (<see cref="NDArray.AdoptDroppedAxis"/>): the result stays the owner of its data, as NumPy's gufunc
+        ///     result is (it allocates the final shape), and no second array object is created. That holds for the
+        ///     0-d result of a vector·vector product too (it was a squeezed view, OWNDATA False); np.matmul then
+        ///     hands it back as NumPy's scalar stand-in (<see cref="GufuncGuard.Deliver"/>).
         /// </summary>
-        /// <param name="result">The product with the inserted axis. Its storage is modified when it owns a
-        ///     C-contiguous buffer at offset 0; callers must not keep another wrapper of it.</param>
+        /// <param name="result">The product with the inserted axis. Its storage is relabelled; callers must not keep
+        ///     another wrapper of it. A product that is not a fresh owner of its elements (no kernel returns one) is
+        ///     copied in K order first and disposed.</param>
         /// <param name="axis">The axis to remove; its extent is 1.</param>
-        /// <returns><paramref name="result"/> itself with one axis fewer, or a squeezed view of it.</returns>
-        private static NDArray DropInsertedAxis(NDArray result, int axis)
-        {
-            Shape shape = result.Shape;
-            // The last axis of a vector·vector product leaves a 0-d result: that keeps the squeeze route, whose
-            // scalar result the callers already expect.
-            if (shape.NDim < 2 || !result.Storage.OwnsData || !shape.IsContiguous || shape.offset != 0)
-                return np.squeeze(result, axis);
-
-            long[] dims = shape.dimensions;
-            var kept = new long[dims.Length - 1];
-            for (int i = 0, j = 0; i < dims.Length; i++)
-            {
-                if (i != axis)
-                    kept[j++] = dims[i];
-            }
-
-            result.Storage.Reshape(Shape.Adopt(kept));
-            return result;
-        }
+        /// <returns><paramref name="result"/> itself with one axis fewer (or its relabelled copy).</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not a length-1 axis of
+        ///     <paramref name="result"/> (a caller's bug).</exception>
+        private static NDArray DropInsertedAxis(NDArray result, int axis) => NDArray.AdoptDroppedAxis(result, axis);
 
         /// <summary>
         /// Stacked / batched matmul: both operands are ≥2-D (after any 1-D promotion). The trailing

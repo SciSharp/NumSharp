@@ -12,6 +12,9 @@ namespace NumSharp
         ///     has no scalar type, so its 0-d NDArray plays that role and carries the flags.
         /// </summary>
         /// <remarks>
+        ///     The product gufuncs (<c>np.matmul</c>, <c>np.vecdot</c>) take the same step for a 0-d answer without
+        ///     <c>out=</c> (<c>GufuncGuard.Deliver</c>): NumPy's ufunc machinery returns it as a scalar too
+        ///     (<c>replace_with_wrapped_result_and_return</c> → <c>npy_apply_wrap</c> with <c>return_scalar</c>).
         ///     No-op for non-0-d results, so every exit of a reduction can route through here —
         ///     the keepdims path reshapes to <c>(1,)*ndim</c> first and passes untouched. Must NOT
         ///     be applied to an <c>out=</c> operand: NumPy returns the out array itself, writeable

@@ -206,21 +206,30 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Applies a gufunc's <c>dtype=</c> (the loop selector) and <c>out=</c> in NumPy's order:
         ///     the loop runs at the requested dtype, and only then is the answer delivered into
-        ///     <paramref name="out"/>.
+        ///     <paramref name="out"/>. Without <c>out=</c>, the answer is handed back as NumPy's ufunc machinery does:
+        ///     a 0-d answer becomes NumPy's scalar, whose stand-in here is the 0-d array with a scalar's flags.
         /// </summary>
-        /// <param name="result">The gufunc's answer, computed at the loop dtype.</param>
+        /// <param name="result">The gufunc's answer, computed at the loop dtype: a fresh array.</param>
         /// <param name="out">The <c>out=</c> operand, or null.</param>
-        /// <returns><paramref name="result"/> when <paramref name="out"/> is null, else <paramref name="out"/> itself
-        ///     holding the answer.</returns>
+        /// <returns><paramref name="result"/> when <paramref name="out"/> is null (a 0-d one marked as the scalar
+        ///     stand-in: an owner, not writeable), else <paramref name="out"/> itself holding the answer.</returns>
         /// <exception cref="ValueError"><paramref name="result"/> does not broadcast into <paramref name="out"/>'s shape
         ///     (<c>np.copyto</c>'s text).</exception>
-        /// <remarks>The copy is unsafe: <see cref="ValidateCasting"/> has checked the loop's cast to <paramref name="out"/>
+        /// <remarks>
+        ///     <para>The copy is unsafe: <see cref="ValidateCasting"/> has checked the loop's cast to <paramref name="out"/>
         ///     under the call's rule before the gufunc checks, as NumPy does, and a read-only out was refused while the
-        ///     arguments were parsed.</remarks>
+        ///     arguments were parsed.</para>
+        ///     <para>The scalar step is NumPy's <c>replace_with_wrapped_result_and_return</c> (ufunc_object.c): it calls
+        ///     <c>npy_apply_wrap</c> with <c>return_scalar</c> set when the output is 0-d and no <c>out=</c> was given,
+        ///     which is <c>PyArray_Return</c>. NumSharp has no scalar type, so the 0-d array takes the scalar's flags
+        ///     (<see cref="NDArray.MarkReductionScalar"/>, the reductions' rule; probed 2.4.2:
+        ///     <c>np.matmul(a, b).flags</c> of two vectors and <c>np.vecdot(a, b).flags</c> are C, F, OWNDATA and not
+        ///     WRITEABLE). A given <c>out=</c> clears <c>return_scalar</c>, so a 0-d out comes back itself, writeable.</para>
+        /// </remarks>
         internal static NDArray Deliver(NDArray result, NDArray @out)
         {
             if (@out is null)
-                return result;
+                return result.MarkReductionScalar();   // no-op unless 0-d
 
             np.copyto(@out, result, "unsafe");   // cast already validated
             return @out;

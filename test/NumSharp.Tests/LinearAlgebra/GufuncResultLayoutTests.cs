@@ -92,6 +92,57 @@ namespace NumSharp.Tests.LinearAlgebra
                 210, 216, 222, 228, 234, 240, 246, 252, 258, 264, 270, 276, 282, 288, 294);
         }
 
+        /// <summary>
+        ///     Asserts NumSharp's stand-in for a NumPy scalar result: a 0-d array that owns its data and is not
+        ///     writeable, as the scalar's flags are (C, F, OWNDATA, not WRITEABLE).
+        /// </summary>
+        /// <param name="label">The NumPy call, for the failure message.</param>
+        /// <param name="r">The NumSharp result.</param>
+        /// <param name="dtype">NumPy's scalar dtype.</param>
+        /// <param name="value">NumPy's <c>r.item()</c>.</param>
+        private static void AssertScalarStandIn(string label, NDArray r, DType dtype, double value)
+        {
+            Assert.AreEqual(dtype, r.dtype, label);
+            Assert.AreEqual(0, r.ndim, label + " ndim");
+            Assert.IsTrue(r.flags.c_contiguous && r.flags.f_contiguous, label + " contiguity");
+            Assert.IsTrue(r.flags.owndata, label + " OWNDATA");
+            Assert.IsFalse(r.flags.writeable, label + " WRITEABLE");
+            Assert.AreEqual(value, r.astype(np.float64).GetDouble(), label + " value");
+        }
+
+        [TestMethod]
+        public void ZeroDimensionalResult_IsNumPysScalarStandIn()
+        {
+            // NumPy hands a gufunc's 0-d output back as a scalar (replace_with_wrapped_result_and_return ->
+            // npy_apply_wrap with return_scalar): its flags are C, F, OWNDATA and not WRITEABLE.
+            var a = np.arange(3.0);
+            // np.matmul(a, a) -> np.float64(5.0); np.matmul(a, a[::-1]) -> 1.0 (NumSharp's was a writeable 0-d view)
+            AssertScalarStandIn("matmul", np.matmul(a, a), np.float64, 5);
+            AssertScalarStandIn("matmul reversed", np.matmul(a, a["::-1"]), np.float64, 1);
+            // np.matmul(np.zeros(0), np.zeros(0)) -> 0.0
+            AssertScalarStandIn("matmul empty", np.matmul(np.zeros(new Shape(0L)), np.zeros(new Shape(0L))), np.float64, 0);
+            // np.vecdot(np.zeros(0), np.zeros(0)) -> 0.0, and of float16 vectors np.float16(5.0) (NumSharp's were writeable)
+            AssertScalarStandIn("vecdot empty", np.vecdot(np.zeros(new Shape(0L)), np.zeros(new Shape(0L))), np.float64, 0);
+            var h = np.arange(3.0).astype(np.float16);
+            AssertScalarStandIn("vecdot float16", np.vecdot(h, h), np.float16, 5);
+            // np.vecdot of int64 vectors -> np.int64(5); np.linalg's forms return the same
+            AssertScalarStandIn("vecdot int64", np.vecdot(np.arange(3), np.arange(3)), np.int64, 5);
+            AssertScalarStandIn("linalg.matmul", np.linalg.matmul(a, a), np.float64, 5);
+            AssertScalarStandIn("linalg.vecdot", np.linalg.vecdot(a, a), np.float64, 5);
+
+            // With out= NumPy returns the out itself, writeable: return_scalar is off.
+            var o = np.zeros(new Shape());
+            var r = np.matmul(a, a, o);
+            Assert.IsTrue(ReferenceEquals(o, r), "matmul out= returns the out");
+            Assert.IsTrue(r.flags.writeable, "matmul out= stays writeable");
+            Assert.AreEqual(5.0, r.GetDouble());
+            var o2 = np.zeros(new Shape());
+            var r2 = np.vecdot(a, a, o2);
+            Assert.IsTrue(ReferenceEquals(o2, r2), "vecdot out= returns the out");
+            Assert.IsTrue(r2.flags.writeable, "vecdot out= stays writeable");
+            Assert.AreEqual(5.0, r2.GetDouble());
+        }
+
         [TestMethod]
         public void MatmulOrder_GivesNumPysOwnedLayout()
         {

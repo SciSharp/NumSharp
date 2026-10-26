@@ -1804,10 +1804,12 @@ _ARRAY_JOB_NUMPY = {
 # positions the generator gave them (the tiers are in the order of their ids' trailing numbers; no regeneration).
 # 2026-10-26 (np-layer-dtype-logic P2): np.matvec / np.vecmat relabel their product in place instead of returning a
 # reshaped view, so their results own their data and VF27 matches NumPy; its rule is dropped and its 12 cases moved
-# back into array_args.jsonl the same way.
+# back into array_args.jsonl the same way. The same day np.matmul's vector-vector result became NumPy's scalar
+# stand-in (an owner, read-only: the gufuncs' return step), so matmul leaves VF01's rule and its 1 case moved back
+# into view_flags.jsonl.
 GAPS = {
-    "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron / matmul of 0-d or 1-D "
-            "pairs) comes back as a WRITEABLE 0-d array (matmul's also does not own its data)",
+    "VF01": "a NumPy SCALAR result (ufuncs, clip, round, nan_to_num, conj, dot / inner / kron of 0-d or 1-D pairs) "
+            "comes back as a WRITEABLE 0-d array",
     "VF02": "element access that NumPy answers with a scalar COPY (a[i, j], z[()], np.flip(z), np.nan_to_num(z, "
             "copy=False) of a 0-d z) returns a writeable 0-d VIEW of the operand",
     "VF04": "np.squeeze / ndarray.squeeze with no length-1 axis return a new view where NumPy returns the operand itself",
@@ -1865,7 +1867,7 @@ GAPS = {
 _UFUNC_FNS = set(UNARY_K) | set(BINARY_K) | {"invert", "bitwise_and"}
 # The fns whose 0-d result NumPy hands back as a scalar and NumSharp as a writeable 0-d array (VF01).
 _VF01_FNS = _UFUNC_FNS | {"clip", "round", "conj", "conjugate", "ndarray.conj", "ndarray.conjugate", "dot", "inner",
-                          "kron", "matmul"}
+                          "kron"}
 
 
 def _is_scalar_result(expected):

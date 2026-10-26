@@ -96,12 +96,9 @@ namespace NumSharp.Backends
 
             result = ApplyMatmulOrder(result, order, x1, x2);
 
-            if (@out is null)
-                return result;
-
-            // The out cast and the out's core dimensions were validated before the product.
-            np.copyto(@out, result, "unsafe");
-            return @out;
+            // The out cast and the out's core dimensions were validated before the product; without out= a 0-d answer
+            // (two vectors) is handed back as NumPy's scalar stand-in.
+            return GufuncGuard.Deliver(result, @out);
         }
 
         /// <inheritdoc/>
