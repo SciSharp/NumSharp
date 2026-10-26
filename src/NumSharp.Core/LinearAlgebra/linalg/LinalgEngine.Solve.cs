@@ -48,23 +48,36 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The body of <c>np.linalg.tensorsolve</c> past the class boundary: NumPy's axis move, the shape check, the
-        ///     reshape to a square system, its solution (through the public <c>np.linalg.solve</c>) and the reshape of the
-        ///     answer.
+        ///     The body of <c>np.linalg.tensorsolve</c> past the class boundary, NumPy's statements: the axis move,
+        ///     <c>oldshape = a.shape[-(an - b.ndim):]</c>, the size check, the square system <c>a.reshape(prod, prod)</c>
+        ///     against <c>b.ravel()</c> (through the public <c>np.linalg.solve</c>) and <c>res.shape = oldshape</c>.
         /// </summary>
         /// <param name="a">The coefficient tensor (plain: the facade applied the class boundary).</param>
         /// <param name="b">The right-hand side.</param>
         /// <param name="axes">Axes of <paramref name="a"/> to move to the right before inversion, as LIST VALUES (never
         ///     normalized), or null.</param>
-        /// <returns>The solution, of shape <c>a.shape[b.ndim:]</c> (after the axis move).</returns>
+        /// <returns>The solution, of shape <c>oldshape</c>: <c>a.shape[b.ndim:]</c> (after the axis move) when
+        ///     <paramref name="a"/> has more axes than <paramref name="b"/>, the WHOLE shape of <paramref name="a"/> when
+        ///     they have as many. It is solve's own result relabelled in place, so it owns its data.</returns>
         /// <exception cref="ValueError">An axis that is not one of <c>0 .. a.ndim - 1</c> (Python's
-        ///     <c>list.remove(x): x not in list</c>).</exception>
-        /// <exception cref="LinAlgError">The moved operand is not square in the equation / unknown split, or the system
-        ///     is singular.</exception>
-        /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+        ///     <c>list.remove(x): x not in list</c>), or a right-hand side that does not match the square system
+        ///     (solve's gufunc text, <c>solve1: Input operand 1 has a mismatch in its core dimension 0, ...</c>).</exception>
+        /// <exception cref="LinAlgError"><c>a.size != prod(oldshape) ** 2</c>, or the system is singular.</exception>
+        /// <exception cref="TypeError">A float16, decimal or char operand (solve's <c>_commonType</c>).</exception>
+        /// <exception cref="ArgumentException">A text operand (solve's gufunc input cast, NumPy's UFuncTypeError).</exception>
+        /// <remarks>
+        ///     NumPy takes <c>oldshape</c> with a Python slice whose edges are part of the answer: when <c>a.ndim ==
+        ///     b.ndim</c> the slice starts at <c>-0</c>, which is 0, so the whole shape is the unknowns' shape and only an
+        ///     operand of 0 or 1 elements passes the size check (<c>tensorsolve(zeros((0, 0)), zeros((0, 0)))</c> is an
+        ///     empty (0, 0) solution, <c>tensorsolve([[2.]], [[4.]])</c> is <c>[[2.]]</c>, a 0-d pair a 0-d solution); when
+        ///     <c>b</c> has more axes than <c>a</c> the slice starts past them, and the system is <c>(1, 1)</c> against
+        ///     every element of <c>b</c>.
+        /// </remarks>
         [NDScoped]
         internal static NDArray Tensorsolve(NDArray a, NDArray b, int[] axes)
         {
+            // an = a.ndim, read before the axis move (which keeps the rank).
+            int an = a.ndim;
             var work = a;
             if (axes is not null)
             {
@@ -85,15 +98,23 @@ namespace NumSharp
                 work = np.transpose(a, order.ToArray());
             }
 
-            var prod = work.Shape.dimensions;
-            long trailing = 1;
-            for (int i = b.ndim; i < work.ndim; i++)
-                trailing *= prod[i];
-            long leading = 1;
-            for (int i = 0; i < b.ndim && i < work.ndim; i++)
-                leading *= prod[i];
+            // oldshape = a.shape[-(an - b.ndim):], Python's slice of the shape tuple: more axes in a than in b keep the
+            // last an - b.ndim; as many slice from -0, which is 0, the whole shape; fewer slice from b.ndim - an, past
+            // which no dim is left.
+            var dims = work.Shape.dimensions;
+            int surplus = an - b.ndim;
+            int start = surplus > 0 ? b.ndim : surplus == 0 ? 0 : Math.Min(-surplus, an);
+            var oldshape = new long[an - start];
+            long prod = 1;
+            for (int i = start; i < an; i++)
+            {
+                oldshape[i - start] = dims[i];
+                prod *= dims[i];
+            }
 
-            if (trailing != leading)
+            // `if a.size != prod ** 2`, compared by division: Python's ints do not overflow, a long's square can.
+            long size = work.size;
+            if (prod == 0 ? size != 0 : size % prod != 0 || size / prod != prod)
             {
                 // Verbatim, run of spaces included: NumPy's literal is a backslash-continued
                 // Python string, so the source's indentation lands inside the message.
@@ -102,14 +123,14 @@ namespace NumSharp
                     "prod(a.shape[b.ndim:]) == prod(a.shape[:b.ndim])");
             }
 
-            var resultShape = new long[work.ndim - b.ndim];
-            for (int i = b.ndim; i < work.ndim; i++)
-                resultShape[i - b.ndim] = prod[i];
-
-            var square = np.reshape(work, new[] {trailing, trailing});
+            var square = np.reshape(work, new[] {prod, prod});
             var rhs = np.ravel(b);
 
-            return np.reshape(np.linalg.solve(square, rhs), resultShape);
+            // `res = wrap(solve(a, b)); res.shape = oldshape`: solve's fresh solution relabelled IN PLACE (it keeps owning
+            // its data), not a reshaped view of it.
+            var res = np.linalg.solve(square, rhs);
+            res.shape = oldshape;
+            return res;
         }
     }
 }

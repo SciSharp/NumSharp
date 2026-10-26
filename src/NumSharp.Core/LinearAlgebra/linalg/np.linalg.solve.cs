@@ -51,21 +51,30 @@ namespace NumSharp
             ///     (<c>allaxes.remove(k)</c>), never normalizing them: a negative axis is not found, so only
             ///     <c>0 .. a.ndim - 1</c> are accepted.
             /// </param>
-            /// <returns>The solution, of shape <c>a.shape[b.ndim:]</c> (after the axis move).
+            /// <returns>The solution, of NumPy's <c>oldshape = a.shape[-(a.ndim - b.ndim):]</c> (after the axis move): the
+            ///     trailing <c>a.ndim - b.ndim</c> axes, or the WHOLE shape of <paramref name="a"/> when the two have as many
+            ///     axes. It owns its data (NumPy's <c>res.shape = oldshape</c>, not a reshape).
             ///     A <c>numpy.char.chararray</c> operand gives a plain array: NumPy converts it with <c>asarray</c> (or
             ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensorsolve.html
             ///     <para>
             ///     A reshape of <see cref="solve"/>: <paramref name="a"/> is collapsed to a square
-            ///     matrix whose side is <c>prod(b.shape)</c>, solved, and the answer reshaped to the
-            ///     trailing block of <c>a.shape</c>.
+            ///     matrix whose side is <c>prod(oldshape)</c>, solved against <c>b.ravel()</c>, and the
+            ///     solution relabelled to <c>oldshape</c> in place. The slice's edges are NumPy's: with
+            ///     as many axes in <paramref name="a"/> as in <paramref name="b"/> only an operand of 0
+            ///     or 1 elements passes the size check (an empty or 1x1 system), and with more axes in
+            ///     <paramref name="b"/> the system is 1x1. The solve needs no matrix backend (the managed
+            ///     LU computes it).
             ///     </para>
             /// </remarks>
             /// <exception cref="ValueError">An axis that is not one of <c>0 .. a.ndim - 1</c>: Python's
-            ///     "list.remove(x): x not in list" (a negative axis included; NumPy raises no AxisError here).</exception>
-            /// <exception cref="LinAlgError">The moved operand is not square in the equation / unknown split.</exception>
-            /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+            ///     "list.remove(x): x not in list" (a negative axis included; NumPy raises no AxisError here); or a
+            ///     right-hand side that does not match the square system (solve's gufunc text).</exception>
+            /// <exception cref="LinAlgError"><c>a.size</c> is not <c>prod(oldshape) ** 2</c>, or the system is
+            ///     singular.</exception>
+            /// <exception cref="TypeError">A float16, decimal or char operand (solve's <c>_commonType</c>).</exception>
+            /// <exception cref="ArgumentException">A text operand (solve's gufunc input cast, NumPy's UFuncTypeError).</exception>
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             [NDScoped] // the class boundary's temporaries; LinalgEngine.Tensorsolve scopes the computation's own
             public static NDArray tensorsolve(NDArray a, NDArray b, int[] axes = null)

@@ -255,5 +255,47 @@ namespace NumSharp.Tests.LinearAlgebra
             Assert.AreEqual(0x412E38E4u,
                 BitConverter.SingleToUInt32Bits(np.linalg.cond(f32, double.PositiveInfinity).GetSingle()));
         }
+
+        /// <summary>
+        ///     tensorsolve is NumPy's statements: <c>oldshape = a.shape[-(an - b.ndim):]</c> (with as many axes in a as in b
+        ///     the slice starts at -0, the whole shape), the size check <c>a.size != prod ** 2</c>, the square solve against
+        ///     <c>b.ravel()</c> and <c>res.shape = oldshape</c>, which relabels solve's result in place. NumSharp checked
+        ///     <c>prod(a.shape[b.ndim:]) == prod(a.shape[:b.ndim])</c> and reshaped the solution into a view, so an empty or
+        ///     1x1 pair of the same rank was refused or lost its shape, and a right-hand side with more axes than a overflowed
+        ///     a negative array length.
+        /// </summary>
+        [TestMethod]
+        public void Tensorsolve_IsNumPysStatements()
+        {
+            // np.linalg.tensorsolve(np.zeros((0, 0)), np.zeros((0, 0))): an empty (0, 0) float64 solution.
+            var empty = np.linalg.tensorsolve(np.zeros(new Shape(0, 0)), np.zeros(new Shape(0, 0)));
+            CollectionAssert.AreEqual(new long[] { 0, 0 }, empty.shape.Select(d => (long)d).ToArray());
+            Assert.AreEqual(np.float64, empty.dtype);
+
+            // np.linalg.tensorsolve([[2.]], [[4.]]): [[2.]], shape (1, 1), owning its data.
+            var one = np.linalg.tensorsolve(np.array(new[,] { { 2.0 } }), np.array(new[,] { { 4.0 } }));
+            CollectionAssert.AreEqual(new long[] { 1, 1 }, one.shape.Select(d => (long)d).ToArray());
+            Assert.IsTrue(one.flags.owndata, "tensorsolve([[2.]], [[4.]]) OWNDATA");
+            Assert.AreEqual(2.0, one.GetDouble(0, 0));
+
+            // np.linalg.tensorsolve(np.array(2.), np.ones(7)): the (1, 1) system against 7 elements is solve's gufunc
+            // error.
+            Action wide = () => np.linalg.tensorsolve(np.array(2.0), np.ones(7));
+            wide.Should().Throw<ValueError>().WithMessage(
+                "solve1: Input operand 1 has a mismatch in its core dimension 0, with gufunc signature (m,m),(m)->(m) " +
+                "(size 7 is different from 1)");
+
+            // np.linalg.tensorsolve(np.eye(6).reshape(2, 3, 6), np.arange(6.).reshape(2, 3)): (6,) [0, 1, 2, 3, 4, 5],
+            // owning its data (res.shape = oldshape, not a view).
+            var x = np.linalg.tensorsolve(np.eye(6).reshape(2, 3, 6), np.arange(6.0).reshape(2, 3));
+            CollectionAssert.AreEqual(new long[] { 6 }, x.shape.Select(d => (long)d).ToArray());
+            Assert.IsTrue(x.flags.owndata, "tensorsolve(eye(6).reshape(2, 3, 6), ...) OWNDATA");
+            CollectionAssert.AreEqual(new[] { 0.0, 1, 2, 3, 4, 5 }, x.ToArray<double>());
+
+            // np.linalg.tensorsolve(np.zeros((0, 0), float16), np.zeros((0, 0))): solve's _commonType refusal, reached now
+            // that the size check passes.
+            Action half = () => np.linalg.tensorsolve(np.zeros(new Shape(0, 0), np.float16), np.zeros(new Shape(0, 0)));
+            half.Should().Throw<TypeError>().WithMessage("array type float16 is unsupported in linalg");
+        }
     }
 }
