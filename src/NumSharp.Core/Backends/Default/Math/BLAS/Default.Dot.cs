@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using NumSharp.Backends.Iteration;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -11,8 +12,60 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
 
+        /// <summary>
+        ///     <c>np.dot</c>'s whole call (<see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/>): the text operands'
+        ///     answers with <paramref name="out"/> in NumPy's order, the product (<see cref="DotProduct"/>), then
+        ///     <c>new_array_for_sum</c>'s strict out= check and the copy into <paramref name="out"/>.
+        /// </summary>
+        /// <param name="left">The first operand.</param>
+        /// <param name="right">The second operand.</param>
+        /// <param name="out">The out array, or null.</param>
+        /// <returns>The product, or <paramref name="out"/> after the copy.</returns>
+        /// <exception cref="ValueError">An out array the strict check refuses (the two texts of
+        ///     <see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/>).</exception>
+        /// <exception cref="IncorrectShapeException">Misaligned operands.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dot.html</remarks>
-        public override NDArray Dot(NDArray left, NDArray right)
+        public override NDArray Dot(NDArray left, NDArray right, NDArray @out = null)
+        {
+            // Text: NumPy's alignment, out= and item-size answers, in its order (the product would report the item size
+            // before looking at out=).
+            Strings.NDStringUfuncs.ThrowIfProduct(left, right, @out);
+            var result = DotProduct(left, right);
+            if (@out is null)
+                return result;
+
+            // Port of NumPy's new_array_for_sum (numpy/_core/src/multiarray/common.c): the ndim,
+            // dtype and C-array checks fire together as one message; only then is each dimension
+            // compared. ISCARRAY = C-contiguous AND writeable (ALIGNED is always true here).
+            if (@out.ndim != result.ndim
+                || @out.typecode != result.typecode
+                || !@out.Shape.IsContiguous
+                || !@out.Shape.IsWriteable)
+                throw new ValueError(
+                    "output array is not acceptable (must have the right datatype, " +
+                    "number of dimensions, and be a C-Array)");
+
+            for (int d = 0; d < result.ndim; d++)
+                if (result.Shape.dimensions[d] != @out.Shape.dimensions[d])
+                    throw new ValueError("output array has wrong dimensions");
+
+            // dtype and shape already validated equal, and the product is freshly computed (it cannot overlap out), so
+            // this is np.copyto(out, result, "unsafe")'s unmasked copy: NDIter.Copy, with no call up into np.*.
+            NDIter.Copy(@out, result);
+            return @out;
+        }
+
+        /// <summary>
+        ///     The product of <c>np.dot</c> without out=: the BLAS backend when one takes the call, else the shape routes
+        ///     (a multiply with a 0-d operand, the 2-D matrix product, the 1-D inner product, the N-D x 1-D contraction,
+        ///     the 1-D x 2-D row product, the N-D x M-D sum product).
+        /// </summary>
+        /// <param name="left">The first operand.</param>
+        /// <param name="right">The second operand.</param>
+        /// <returns>A fresh product.</returns>
+        /// <exception cref="IncorrectShapeException">Misaligned operands.</exception>
+        /// <exception cref="ArgumentException">Misaligned N-D x 1-D or 1-D x 2-D operands (NumPy's text).</exception>
+        private NDArray DotProduct(NDArray left, NDArray right)
         {
             // A string operand: a 0-d one makes dot a multiply (its string loops answer), any other fails NumPy's
             // dot-function lookup ("data type must provide an itemsize"). Before the BLAS hook, which never takes text.

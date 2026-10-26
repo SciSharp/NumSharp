@@ -27,39 +27,20 @@
         ///         - If a is an N-D array and b is an M-D array(where M>=2), it is a sum product over the last axis of a and the second-to-last axis of b:<br></br>
         ///           dot(a, b)[i,j,k,m] = sum(a[i,j,:] * b[k,:,m])
         /// </remarks>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes
+        ///     longer than 1 (<c>shape too large to be a matrix.</c>); an out array the strict check refuses (the two texts
+        ///     above).</exception>
+        /// <exception cref="IncorrectShapeException">Misaligned operands (NumPy's <c>shapes (…) and (…) not aligned</c>
+        ///     ValueError text).</exception>
         [NDScoped]
         public static NDArray dot(NDArray a, NDArray b, NDArray @out = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a, b))
                 return NDMatrixBoundary.Wrapped((a, b, @out), static s => dot(s.a, s.b, s.@out), @out);
-            // Text: NumPy's alignment, out= and item-size answers, in its order (the engine call would report the item
-            // size before looking at out=).
-            Backends.Strings.NDStringUfuncs.ThrowIfProduct(a, b, @out);
-            var result = a.TensorEngine.Dot(a, b);
-            if (@out is null)
-                return result;
-
-            // Port of NumPy's new_array_for_sum (numpy/_core/src/multiarray/common.c): the ndim,
-            // dtype and C-array checks fire together as one message; only then is each dimension
-            // compared. ISCARRAY = C-contiguous AND writeable (ALIGNED is always true here).
-            if (@out.ndim != result.ndim
-                || @out.typecode != result.typecode
-                || !@out.Shape.IsContiguous
-                || !@out.Shape.IsWriteable)
-                throw new ValueError(
-                    "output array is not acceptable (must have the right datatype, " +
-                    "number of dimensions, and be a C-Array)");
-
-            for (int d = 0; d < result.ndim; d++)
-                if (result.Shape.dimensions[d] != @out.Shape.dimensions[d])
-                    throw new ValueError("output array has wrong dimensions");
-
-            // dtype already validated equal, so this is a straight copy of the freshly-computed
-            // (and therefore non-overlapping) result into out.
-            np.copyto(@out, result, "unsafe");
-            return @out;
+            // NumPy's dot is PyArray_MatrixProduct2 (C): the text answers, the product and the out= check are the
+            // engine's (TensorEngine.Dot).
+            return a.TensorEngine.Dot(a, b, @out);
         }
     }
 }

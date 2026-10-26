@@ -70,7 +70,6 @@ Indexing/np.take.cs	3	4
 Indexing/np.take_along_axis.cs	1	9
 Indexing/np.unravel_index.cs	0	2
 LinearAlgebra/np.cross.cs	2	0
-LinearAlgebra/np.dot.cs	1	1
 LinearAlgebra/np.einsum.Contract.cs	1	4
 LinearAlgebra/np.kron.cs	1	0
 Logic/np.array_equal.cs	6	0
