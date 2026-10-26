@@ -342,10 +342,16 @@ namespace NumSharp.Backends
         /// <param name="order">The validated order letter.</param>
         /// <param name="x1">The left operand as the caller passed it (its layout decides <c>'A'</c>).</param>
         /// <param name="x2">The right operand as the caller passed it.</param>
-        /// <returns><paramref name="result"/> for <c>'K'</c>; else a C- or F-contiguous array (a copy when the layout
-        ///     changes).</returns>
+        /// <returns><paramref name="result"/> for <c>'K'</c> and for a 0-d product; else a C- or F-contiguous array (a copy
+        ///     when the layout changes).</returns>
         private static NDArray ApplyMatmulOrder(NDArray result, char order, NDArray x1, NDArray x2)
         {
+            // A 0-d product (two vectors) is C- and F-contiguous at once, and NumPy's iterator allocates the 0-d output
+            // whatever the order (probed 2.4.2: np.matmul(a, a, order=o) of two vectors is a scalar for every o).
+            // np.ascontiguousarray / np.asfortranarray would hand back at least one dimension (NumPy's ndmin=1).
+            if (result.ndim == 0)
+                return result;
+
             switch (order)
             {
                 case 'C':

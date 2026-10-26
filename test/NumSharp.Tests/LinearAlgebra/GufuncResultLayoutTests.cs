@@ -164,5 +164,30 @@ namespace NumSharp.Tests.LinearAlgebra
             AssertLayout("order C", np.matmul(m, n, order: 'C'), new long[] { 3, 5 }, new long[] { 40, 8 }, true, false,
                 values);
         }
+
+        [TestMethod]
+        public void MatmulOrder_KeepsAVectorPairsScalar()
+        {
+            // np.matmul(a, a, order=o) of two vectors is a scalar for every o (NumSharp's order= copies returned shape (1,))
+            var a = np.arange(3.0);
+            foreach (char o in "CFAK")
+                AssertScalarStandIn($"order {o}", np.matmul(a, a, order: o), np.float64, 5);
+            // np.matmul(a, a, order='F', dtype=np.float32) -> np.float32(5.0); of two empty vectors -> 0.0
+            AssertScalarStandIn("order F, dtype float32", np.matmul(a, a, dtype: np.float32, order: 'F'), np.float32, 5);
+            AssertScalarStandIn("order F, empty", np.matmul(np.zeros(new Shape(0L)), np.zeros(new Shape(0L)), order: 'F'),
+                np.float64, 0);
+            // np.matmul(a, a, order='F', out=np.zeros(())) -> the out itself, shape ()
+            var z = np.zeros(new Shape());
+            var r = np.matmul(a, a, z, order: 'F');
+            Assert.IsTrue(ReferenceEquals(z, r), "out= returns the out");
+            Assert.AreEqual(0, r.ndim);
+            Assert.AreEqual(5.0, r.GetDouble());
+            // A 1-D product keeps its one axis under every order: np.matmul(m, v, order='F') -> (3,), C and F
+            var m = np.arange(12.0).reshape(3, 4);
+            AssertLayout("matrix-vector order F", np.matmul(m, np.arange(4.0), order: 'F'), new long[] { 3 },
+                new long[] { 8 }, true, true, 14, 38, 62);
+            AssertLayout("vector-matrix order C", np.matmul(np.arange(3.0), m, order: 'C'), new long[] { 4 },
+                new long[] { 8 }, true, true, 20, 23, 26, 29);
+        }
     }
 }
