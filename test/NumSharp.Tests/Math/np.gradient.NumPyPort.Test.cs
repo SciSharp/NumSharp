@@ -63,5 +63,51 @@ namespace NumSharp.Tests.Math
             Action emptyAxis = () => np.gradient(np.zeros(new Shape(0, 3)), np.zeros(new Shape(0)), 1.0);
             emptyAxis.Should().Throw<IndexError>().WithMessage("index 0 is out of bounds for axis 0 with size 0");
         }
+
+        /// <summary>
+        ///     Asserts every component of a gradient: its byte strides and its C / F / OWNDATA flags.
+        /// </summary>
+        /// <param name="r">The gradient.</param>
+        /// <param name="strides">NumPy's byte strides of every component (NumPy gives each component the same layout).</param>
+        /// <param name="c">NumPy's C_CONTIGUOUS flag.</param>
+        /// <param name="f">NumPy's F_CONTIGUOUS flag.</param>
+        private static void AssertLayout(np.GradientResult r, long[] strides, bool c, bool f)
+        {
+            foreach (NDArray component in r.ToArray())
+            {
+                component.strides.Should().Equal(strides);
+                component.flags.c_contiguous.Should().Be(c);
+                component.flags.f_contiguous.Should().Be(f);
+                component.flags.owndata.Should().BeTrue();
+            }
+        }
+
+        /// <summary>
+        ///     Each component is NumPy's <c>np.empty_like(f, dtype=otype)</c>: it keeps the input's memory order (order 'K'),
+        ///     where a C-ordered array was allocated. Probed 2.4.2: an F-ordered, a broadcast or a transposed input gives
+        ///     F-ordered components, a permuted one its permutation's order, a reversed or stepped one C order; an integer input
+        ///     converts to float64 with its order kept first.
+        /// </summary>
+        [TestMethod]
+        public void ComponentLayout_IsNumPysEmptyLike()
+        {
+            var squares = np.power(np.arange(12).astype(np.float64), 2).reshape(3, 4);
+            var squares3 = np.power(np.arange(24).astype(np.float64), 2).reshape(2, 3, 4);
+
+            var fOrdered = np.gradient(np.asfortranarray(squares));
+            AssertLayout(fOrdered, new long[] { 8, 24 }, c: false, f: true);
+            // np.gradient(np.asfortranarray(x))[1] is the C-order values [[1, 2, 4, 5], [9, 10, 12, 13], [17, 18, 20, 21]].
+            fOrdered[1].ToArray<double>().Should().Equal(1, 2, 4, 5, 9, 10, 12, 13, 17, 18, 20, 21);
+
+            AssertLayout(np.gradient(np.broadcast_to(np.array(new[,] { { 1.0, 4.0, 9.0, 16.0 } }), new Shape(3, 4))),
+                new long[] { 8, 24 }, c: false, f: true);
+            AssertLayout(np.gradient(np.transpose(squares3, new[] { 1, 0, 2 })), new long[] { 32, 96, 8 }, c: false, f: false);
+            AssertLayout(np.gradient(squares3.T, axis: 0), new long[] { 8, 32, 96 }, c: false, f: true);
+            AssertLayout(np.gradient(squares["::-1, ::-1"]), new long[] { 32, 8 }, c: true, f: false);
+            AssertLayout(np.gradient(np.power(np.arange(24).astype(np.float64), 2).reshape(3, 8)[":, ::2"]),
+                new long[] { 32, 8 }, c: true, f: false);
+            AssertLayout(np.gradient(np.asfortranarray(np.arange(12).astype(np.int8).reshape(3, 4))),
+                new long[] { 8, 24 }, c: false, f: true);
+        }
     }
 }

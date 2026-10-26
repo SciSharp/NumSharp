@@ -234,10 +234,6 @@ namespace NumSharp
                         "Shape of array too small to calculate a numerical gradient, " +
                         "at least (edge_order + 1) elements are required.");
 
-                // Fresh C-contiguous output of `work`'s DIMENSIONS (never `work.Shape`, which would
-                // inherit a strided view's strides/offset and mis-place the assigned slices).
-                long[] outDims = new long[N];
-                for (int d = 0; d < N; d++) outDims[d] = work.Shape.dimensions[d];
                 bool uniform = ax_dx is double;
                 // Text has no arithmetic loop: NumPy's first statement on it is the interior difference f[2:] - f[:-2]
                 // (subtract of two string operands) or, for a non-uniform spacing, a * f[:-2] (float64 coefficients times
@@ -254,7 +250,12 @@ namespace NumSharp
                     throw uniform
                         ? Backends.Strings.NDStringUfuncs.NoLoop("subtract", work.dtype, work.dtype)
                         : Backends.Strings.NDStringUfuncs.NoLoop("multiply", np.float64, work.dtype);
-                NDArray outp = np.empty(Shape.Adopt(outDims), otype);
+                // NumPy's `out = np.empty_like(f, dtype=otype)`: the component keeps the input's memory order (order 'K':
+                // an F-ordered input gives an F-ordered component, a broadcast or permuted one the order its strides sort
+                // into), where a fresh C-ordered array of the dimensions was allocated. empty_like reads only the input's
+                // dimensions and axis order, never its offset or a stride-0 axis, and the slice stores below write through
+                // any layout.
+                NDArray outp = np.empty_like(work, otype);
 
                 // ---- interior: 2nd-order central differences over [1 : M-1] ----
                 //   uniform     : out[1:-1] = (f[2:] - f[:-2]) / (2*dx)
