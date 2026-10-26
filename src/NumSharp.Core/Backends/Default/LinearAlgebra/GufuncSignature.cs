@@ -33,6 +33,16 @@ namespace NumSharp.Backends
         internal static readonly GufuncSignature Vecmat = new("vecmat", "(n),(n,m)->(m)", nin: 2,
             coreDimIxs: new[] { new[] { 0 }, new[] { 0, 1 }, new[] { 1 } }, canIgnore: new[] { false, false });
 
+        /// <summary><c>np.linalg.solve</c>'s gufunc for a <c>b</c> of two or more axes, <c>_umath_linalg.solve</c>:
+        ///     <c>(m,m),(m,n)-&gt;(m,n)</c>.</summary>
+        internal static readonly GufuncSignature Solve = new("solve", "(m,m),(m,n)->(m,n)", nin: 2,
+            coreDimIxs: new[] { new[] { 0, 0 }, new[] { 0, 1 }, new[] { 0, 1 } }, canIgnore: new[] { false, false });
+
+        /// <summary><c>np.linalg.solve</c>'s gufunc for a 1-D <c>b</c>, <c>_umath_linalg.solve1</c>:
+        ///     <c>(m,m),(m)-&gt;(m)</c>.</summary>
+        internal static readonly GufuncSignature Solve1 = new("solve1", "(m,m),(m)->(m)", nin: 2,
+            coreDimIxs: new[] { new[] { 0, 0 }, new[] { 0 }, new[] { 0 } }, canIgnore: new[] { false });
+
         /// <summary>Builds a signature from NumPy's fields.</summary>
         /// <param name="name">The gufunc's name as NumPy prints it.</param>
         /// <param name="text">The signature as NumPy prints it (<c>core_signature</c>).</param>

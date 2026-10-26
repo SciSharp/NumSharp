@@ -6,8 +6,9 @@ namespace NumSharp
     {
         /// <summary>
         ///     The body of <c>np.linalg.solve</c> past the class boundary: <c>_assert_stacked_square</c>, <c>_commonType</c>,
-        ///     the gufunc's text refusal and its core-dimension checks (the 1-D <paramref name="b"/> picks the
-        ///     <c>(m,m),(m)-&gt;(m)</c> gufunc, any other rank <c>(m,m),(m,n)-&gt;(m,n)</c>), then
+        ///     the gufunc's text refusal, its core-dimension checks and its iterator's broadcast of the stacked axes (the
+        ///     1-D <paramref name="b"/> picks the <c>(m,m),(m)-&gt;(m)</c> gufunc, any other rank
+        ///     <c>(m,m),(m,n)-&gt;(m,n)</c>; <see cref="Backends.GufuncGuard.CheckCoreDimensions"/>), then
         ///     <see cref="TensorEngine.Solve"/> at the loop dtype.
         /// </summary>
         /// <param name="a">Coefficient matrix, <c>(..., M, M)</c> (plain: the facade applied the class boundary).</param>
@@ -16,8 +17,9 @@ namespace NumSharp
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square <paramref name="a"/>, or a singular matrix.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
         /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="ValueError">A core dimension of <paramref name="b"/> that does not match, or a <paramref name="b"/>
-        ///     of too few axes for the matrix gufunc (NumPy's gufunc texts).</exception>
+        /// <exception cref="ValueError">A core dimension of <paramref name="b"/> that does not match, a <paramref name="b"/>
+        ///     of too few axes for the matrix gufunc, or stacked axes that do not broadcast (<c>operands could not be
+        ///     broadcast together with remapped shapes [original-&gt;remapped]: ...</c>): NumPy's gufunc texts.</exception>
         /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
         // Scope: solve casts BOTH operands via ToCommon (two potential dtype-cast temps) before
         // the engine call — [NDScoped] reclaims whichever were minted (a passthrough operand
@@ -32,17 +34,10 @@ namespace NumSharp
             // casts refuse text) before it checks the core dimensions.
             var common = CommonType(a, b);
             ThrowIfTextGufunc(oneDimensional ? "solve1" : "solve", a, b);
-            if (oneDimensional)
-            {
-                Backends.GufuncGuard.RequireCoreSize("solve1", "(m,m),(m)->(m)", 1, 0,
-                    b.Shape.dimensions[0], a.Shape.dimensions[a.ndim - 1]);
-            }
-            else
-            {
-                Backends.GufuncGuard.RequireRank("solve", "(m,m),(m,n)->(m,n)", 1, b, 2);
-                Backends.GufuncGuard.RequireCoreSize("solve", "(m,m),(m,n)->(m,n)", 1, 0,
-                    b.Shape.dimensions[b.ndim - 2], a.Shape.dimensions[a.ndim - 1]);
-            }
+            // The gufunc's checks in NumPy's order (PyUFunc_GeneralizedFunctionInternal): each operand's rank, the core
+            // sizes, then its iterator's broadcast of the loop axes, whose refusal is the "remapped shapes" text.
+            Backends.GufuncGuard.CheckCoreDimensions(oneDimensional ? Backends.GufuncSignature.Solve1 : Backends.GufuncSignature.Solve,
+                new[] { a, b, null }, null, null, keepdimsPassed: false, keepdims: false);
 
             return a.TensorEngine.Solve(ToCommon(a, common), ToCommon(b, common), oneDimensional);
         }
