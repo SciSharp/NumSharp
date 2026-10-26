@@ -114,7 +114,9 @@ namespace NumSharp
         /// <param name="spacing">
         ///     Optional spacing between samples: a scalar sample distance applied to every requested
         ///     axis, or a 1-D coordinate array giving the sample positions along the (single) requested
-        ///     axis. <c>null</c> (the default) means unit spacing.
+        ///     axis. <c>null</c> (the default) means unit spacing. Coordinates may be an NDArray, a typed C# array or a
+        ///     Python list (a <c>List&lt;T&gt;</c>, or an <c>object[]</c> passed as an <c>object</c>: as an
+        ///     <c>object[]</c> it binds the spacing-list overload, one spacing per item).
         /// </param>
         /// <param name="axis">
         ///     The axis along which to take the gradient; <c>null</c> (default) computes it for every
@@ -127,8 +129,13 @@ namespace NumSharp
         /// <exception cref="ValueError">
         ///     A repeated <paramref name="axis"/>; <paramref name="edge_order"/> &gt; 2; an axis is shorter
         ///     than <c>edge_order + 1</c>; or a 1-D coordinate spacing whose length or rank does not match
-        ///     its axis ("distances must be either scalars or 1d" / "… must match the length …").
+        ///     its axis ("distances must be either scalars or 1d" / "… must match the length …"); a ragged list spacing
+        ///     (np.ndim's "setting an array element with a sequence. …").
         /// </exception>
+        /// <exception cref="IndexError">The coordinates of an empty axis (NumPy's <c>diffx[0]</c> of their empty
+        ///     differences).</exception>
+        /// <exception cref="NotSupportedException">A list spacing holding None or another object, or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have).</exception>
         /// <exception cref="TypeError">
         ///     The number of positional spacings equals neither 0, 1, nor the number of requested axes
         ///     ("invalid number of arguments").

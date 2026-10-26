@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace NumSharp.Tests.Math
@@ -108,6 +109,51 @@ namespace NumSharp.Tests.Math
                 new long[] { 32, 8 }, c: true, f: false);
             AssertLayout(np.gradient(np.asfortranarray(np.arange(12).astype(np.int8).reshape(3, 4))),
                 new long[] { 8, 24 }, c: false, f: true);
+        }
+
+        /// <summary>
+        ///     A Python list spacing (a <c>List&lt;T&gt;</c> or an <c>object[]</c>, the house map) is coordinates, as NumPy's
+        ///     <c>np.ndim</c> reads it, converted by np.array's rules. It was read as a scalar step: a <c>List&lt;double&gt;</c>
+        ///     reached the double conversion and its InvalidCastException, and a ragged list reached a KeyNotFoundException
+        ///     in dtype discovery. Probed 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void SpacingList_IsCoordinates()
+        {
+            var f64 = np.array(new[] { 1.0, 4.0, 9.0, 16.0, 25.0 });
+
+            // np.gradient(f64, [0.0, 0.5, 1.5, 2.0, 3.0]): the same bits as the coordinates as an ndarray.
+            var uneven = new ulong[] { 0x4018000000000000ul, 0x4016aaaaaaaaaaabul, 0x4025fffffffffffful, 0x4028aaaaaaaaaaaaul,
+                0x4022000000000000ul };
+            Bits64((NDArray)np.gradient(f64, new List<double> { 0, 0.5, 1.5, 2, 3 })).Should().Equal(uneven);
+            // An object[] is ONE spacing only when it is passed as an object: as an object[] it binds the spacing-list
+            // overload (NumPy's *varargs), five scalar steps here. Its C# ints are Python ints (int64 coordinates).
+            Bits64((NDArray)np.gradient(f64, (object)new object[] { 0, 1, 4, 5, 8 })).Should().Equal(0x4008000000000000ul,
+                0x4005555555555555ul, 0x4016aaaaaaaaaaabul, 0x4017fffffffffffful, 0x4008000000000000ul);
+            // Evenly spaced coordinates collapse to their step, np.float64(0.5).
+            Bits64((NDArray)np.gradient(f64, new List<double> { 0, 0.5, 1, 1.5, 2 })).Should().Equal(0x4018000000000000ul,
+                0x4020000000000000ul, 0x4028000000000000ul, 0x4030000000000000ul, 0x4032000000000000ul);
+
+            // np.gradient(np.arange(12.0).reshape(3, 4) ** 2, [0.0, 0.5, 1.5], [0, 1, 4, 5]): a list per axis.
+            var (g0, g1) = np.gradient(np.power(np.arange(12).astype(np.float64), 2).reshape(3, 4),
+                new List<double> { 0, 0.5, 1.5 }, new List<int> { 0, 1, 4, 5 });
+            Bits64(g0).Should().Equal(0x4040000000000000ul, 0x4048000000000000ul, 0x4050000000000000ul, 0x4054000000000000ul,
+                0x4042aaaaaaaaaaaaul, 0x4049555555555556ul, 0x4050000000000000ul, 0x4053555555555555ul, 0x4048000000000000ul,
+                0x404c000000000000ul, 0x4050000000000000ul, 0x4052000000000000ul);
+            Bits64(g1).Should().Equal(0x3ff0000000000000ul, 0x3ff0000000000000ul, 0x4010000000000000ul, 0x4014000000000000ul,
+                0x4022000000000000ul, 0x401eaaaaaaaaaaa8ul, 0x4025555555555556ul, 0x402a000000000000ul, 0x4031000000000000ul,
+                0x402caaaaaaaaaaaaul, 0x4031555555555558ul, 0x4035000000000000ul);
+
+            // np.ndim's refusal of a ragged list, then np.gradient's own checks of a list's rank and length.
+            Action ragged = () => np.gradient(f64, (object)new object[] { 0.0, new object[] { 0.5 } });
+            ragged.Should().Throw<ValueError>().WithMessage("setting an array element with a sequence. The requested array " +
+                "has an inhomogeneous shape after 1 dimensions. The detected shape was (2,) + inhomogeneous part.");
+            Action column = () => np.gradient(np.ones(new Shape(3, 4)),
+                new List<List<double>> { new() { 0 }, new() { 1 }, new() { 2 } }, 1.0);
+            column.Should().Throw<ValueError>().WithMessage("distances must be either scalars or 1d");
+            Action shortList = () => np.gradient(f64, new List<double> { 0, 1 });
+            shortList.Should().Throw<ValueError>()
+                .WithMessage("when 1d, distances must match the length of the corresponding dimension");
         }
     }
 }

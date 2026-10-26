@@ -90,8 +90,11 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="f"/> is null, or a spacing entry is (NumSharp's refusal
         ///     where NumPy computes <c>2. * None</c> and raises TypeError).</exception>
         /// <exception cref="AxisError">An axis outside <c>[-f.ndim, f.ndim)</c>.</exception>
-        /// <exception cref="ValueError">A repeated axis; a coordinate array of another rank than 1 or another length
-        ///     than its axis; <paramref name="edge_order"/> above 2; an axis shorter than <c>edge_order + 1</c>.</exception>
+        /// <exception cref="ValueError">A repeated axis; a ragged list spacing (np.ndim's inhomogeneous-shape text); a
+        ///     coordinate array of another rank than 1 or another length than its axis; <paramref name="edge_order"/> above
+        ///     2; an axis shorter than <c>edge_order + 1</c>.</exception>
+        /// <exception cref="NotSupportedException">A list spacing holding None or another object, or a Python int past
+        ///     uint64 (NumPy's object array, a dtype NumSharp does not have).</exception>
         /// <exception cref="TypeError">A spacing count other than 0, 1 or the number of axes ("invalid number of
         ///     arguments"); a bool <paramref name="f"/> (NumPy's boolean subtract); a text <paramref name="f"/> (NumPy's
         ///     no-loop texts of the subtract or the coefficient multiply); bool coordinates (the boolean negative of the
@@ -167,7 +170,10 @@ namespace NumSharp
                         dx[i] = GradToDouble(v);                              // per-axis scalar
                         continue;
                     }
-                    NDArray distances = np.asanyarray(v);
+                    // NumPy's `distances = np.asanyarray(distances)`: a Python list is coerced by np.array's rules
+                    // (Coordinates), where np.asanyarray took one level of an object[] and refused a ragged one with a
+                    // KeyNotFoundException; GradSpacingNdim's walk has already raised NumPy's ValueError for a ragged one.
+                    NDArray distances = Coordinates(v);
                     if (distances.ndim != 1)
                         throw new ValueError("distances must be either scalars or 1d");
                     if (distances.Shape.dimensions[0] != f.Shape.dimensions[axes[i]])
@@ -521,18 +527,63 @@ namespace NumSharp
         }
 
         // ndim of a spacing argument: 0 for a C# scalar, else the NDArray's ndim.
-        /// <summary>NumPy's <c>np.ndim(v)</c> for a spacing: 0 for a C# scalar or string, the rank of an NDArray or a C#
-        ///     array.</summary>
+        /// <summary>
+        ///     NumPy's <c>np.ndim(v)</c> for a spacing (<c>np.asarray(v).ndim</c>), which decides whether it is a step (0) or
+        ///     coordinates: 0 for a C# scalar or a string, the rank of an NDArray or a typed C# array, 1 for a
+        ///     <see cref="Memory{T}"/> of a dtype, and the nesting depth of a Python sequence (a <c>List&lt;T&gt;</c>, an
+        ///     <c>object[]</c>, a tuple: the house map, <see cref="PolySequence.IsSequence"/>).
+        /// </summary>
         /// <param name="v">The spacing.</param>
         /// <returns>Its rank.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="v"/> is null (NumPy's <c>np.ndim(None)</c> is 0, and its
         ///     arithmetic then raises TypeError).</exception>
+        /// <exception cref="ValueError">A ragged sequence (np.asarray's inhomogeneous-shape text, raised where NumPy's
+        ///     np.ndim raises it).</exception>
+        /// <remarks>
+        ///     A sequence was read as a scalar (only a C# array was a coordinate list), so a <c>List&lt;double&gt;</c> of
+        ///     coordinates reached the double conversion and its InvalidCastException, and an <c>object[]</c> was measured
+        ///     by its C# rank, not by what it holds.
+        /// </remarks>
         private static int GradSpacingNdim(object v)
         {
             if (v is null) throw new ArgumentNullException(nameof(v));
             if (v is NDArray nd) return nd.ndim;
-            if (v is Array arr) return arr.Rank;    // a C# array is a coordinate list (ndim ≥ 1)
-            return 0;                               // a scalar
+            // A Python sequence is tested before a C# array: an object[] (and any array whose elements are no dtype) is a
+            // list, whose rank is the depth np.array discovers in it, not the C# array's own rank.
+            if (PolySequence.IsSequence(v)) return PolySequence.NDim(v);
+            if (v is Array arr) return arr.Rank;    // a typed C# array is an ndarray of its rank
+            return PolySequence.IsArrayLike(v) ? 1 : 0;    // a Memory<T> of a dtype is 1-D; anything else a scalar
+        }
+
+        /// <summary>
+        ///     NumPy's <c>np.asanyarray(distances)</c> for a coordinate spacing: an NDArray as it is, a Python sequence
+        ///     coerced by np.array's rules (<see cref="PolySequence.ToArray"/>: a Python int item is int64, a float float64,
+        ///     nested lists any depth), a typed C# array or a <see cref="Memory{T}"/> as a whole.
+        /// </summary>
+        /// <param name="v">A spacing whose <see cref="GradSpacingNdim"/> is not 0.</param>
+        /// <returns>The coordinates as an array (the caller checks its rank and length).</returns>
+        /// <exception cref="NotSupportedException">A sequence holding None or another object, or a Python int past
+        ///     uint64: NumPy builds an object array, a dtype NumSharp does not have.</exception>
+        /// <remarks>
+        ///     A list of str is NumPy's str array, which NumSharp holds: it is converted by <c>np.asanyarray</c>, and the
+        ///     differences of its coordinates raise NumPy's subtract TypeError as for a str NDArray.
+        /// </remarks>
+        private static NDArray Coordinates(object v)
+        {
+            if (v is NDArray nd)
+                return nd;
+            if (PolySequence.IsSequence(v))
+            {
+                NDArray coords = PolySequence.ToArrayOrNonNumeric(v, out PolyNonNumericArray nonNumeric);
+                if (coords is not null)
+                    return coords;
+                // The polynomial coercion reports a str array as a shape (it computes no str arithmetic); np.gradient's
+                // next statement, np.diff, refuses one by NumPy's own text, so the str array is built. An object array has
+                // no NumSharp dtype at all.
+                if (nonNumeric.IsObject)
+                    throw nonNumeric.Refusal;
+            }
+            return np.asanyarray(v);
         }
 
         // Convert a scalar spacing to double. A 0-d array spacing is read through its own dtype (SpacingElement): a 0-d
