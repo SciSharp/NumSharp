@@ -39,9 +39,10 @@ namespace NumSharp.Backends
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<see cref="GufuncGuard.CheckParsedArguments"/>:
         ///     <c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a read-only <c>out=</c>), the casting and order names,
-        ///     the loop refusal of text (<see cref="GufuncGuard.ThrowIfText"/>), <c>keepdims</c>, <c>axis</c>, the
-        ///     <c>axes=</c> list, each input's cast to the <c>dtype=</c> loop; after the product the output cast and the
-        ///     output's core dimensions. Moved from the public <c>np.matmul</c> by the np-layer dtype plan's P2.
+        ///     the loop refusal of text (<see cref="GufuncGuard.ThrowIfText"/>), each input's and the output's cast under
+        ///     <c>casting</c> (<see cref="GufuncGuard.ValidateCasting"/>), <c>keepdims</c>, <c>axis</c>, the <c>axes=</c>
+        ///     list; after the product the output's core dimensions. Moved from the public <c>np.matmul</c> by the np-layer
+        ///     dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the product before its delivery are reclaimed
         public override NDArray Matmul(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool? keepdims,
@@ -54,6 +55,10 @@ namespace NumSharp.Backends
             GufuncGuard.RequireCasting(casting);
             GufuncGuard.RequireOrder(order);
             GufuncGuard.ThrowIfText("matmul", x1, x2, dtype);
+            // NumPy's validate_casting, before the gufunc checks: each input's cast to the loop, then the loop's cast to
+            // out=, under `casting`.
+            var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
+            GufuncGuard.ValidateCasting("matmul", x1, x2, loop, @out, casting);
 
             if (keepdims.HasValue)
                 throw new TypeError(
@@ -101,13 +106,11 @@ namespace NumSharp.Backends
                 b = BringCoreToEnd(b, resolved[1]);
             }
 
-            // A dtype= request selects the loop: validate each input reaches it under `casting`, then
-            // cast so the product (and the backend route) run at that dtype.
+            // A dtype= request selects the loop (its casts validated above): cast so the product (and the backend route)
+            // run at that dtype. astype converts a fixed-width text operand too, which only casting='unsafe' lets
+            // through.
             if (dtype is not null)
             {
-                var loopType = dtype.GetTypeCode(); // a descriptor-only class raises its own descriptive "no storage yet"
-                ValidateMatmulCast(a.dtype, dtype, casting, "input 0");
-                ValidateMatmulCast(b.dtype, dtype, casting, "input 1");
                 a = a.astype(dtype, copy: false);
                 b = b.astype(dtype, copy: false);
             }
@@ -122,10 +125,7 @@ namespace NumSharp.Backends
             if (@out is null)
                 return result;
 
-            // out cast is validated BEFORE the shape (probed order), then the shape, then the copy.
-            // By descriptor: a text out= receives the product as each number's str() (probed: matmul of int64 into
-            // out=S3 is [[b'11']]), and the string lane alone carries no width or class.
-            ValidateMatmulCast(result.dtype, @out.dtype, casting, "output");
+            // The out cast was validated before the gufunc checks; the core dimensions, then the copy.
             ValidateMatmulOutputShape(result, @out, outputCore);
             np.copyto(@out, result, "unsafe");   // cast already validated
             return @out;
@@ -134,9 +134,10 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
-        ///     read-only <c>out=</c>), the loop refusal of text, each operand's rank, the <c>axes=</c> list or the
-        ///     <c>axis=</c> value, the core sizes; the loop casts are unsafe, and the delivery is <c>np.copyto</c>
-        ///     (same_kind). Moved from the public <c>np.vecdot</c> by the np-layer dtype plan's P2.
+        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under same_kind (NumPy's
+        ///     default rule; this gufunc takes no casting=), each operand's rank, the <c>axes=</c> list or the <c>axis=</c>
+        ///     value, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated). Moved from the
+        ///     public <c>np.vecdot</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Vecdot(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
@@ -146,6 +147,10 @@ namespace NumSharp.Backends
             // the loop resolution — all before any core-dimension, axis or keepdims check.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
             GufuncGuard.ThrowIfText("vecdot", x1, x2, dtype);
+            // NumPy's validate_casting under its default rule (this gufunc takes no casting=): each input's cast to the
+            // loop, then the loop's cast to out=, before the gufunc checks.
+            var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
+            GufuncGuard.ValidateCasting("vecdot", x1, x2, loop, @out, "same_kind");
             GufuncGuard.RequireRank("vecdot", VecdotSignature, 0, x1, 1);
             GufuncGuard.RequireRank("vecdot", VecdotSignature, 1, x2, 1);
 
@@ -220,9 +225,10 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
-        ///     read-only <c>out=</c>), the loop refusal of text, <c>axis</c> / <c>keepdims</c>, each operand's rank, the
-        ///     <c>axes=</c> list, the core sizes; the loop casts are unsafe, and the delivery is <c>np.copyto</c>
-        ///     (same_kind). Moved from the public <c>np.matvec</c> by the np-layer dtype plan's P2.
+        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under same_kind
+        ///     (NumPy's default rule; this gufunc takes no casting=), <c>axis</c> / <c>keepdims</c>, each operand's rank,
+        ///     the <c>axes=</c> list, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated).
+        ///     Moved from the public <c>np.matvec</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Matvec(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
@@ -232,6 +238,10 @@ namespace NumSharp.Backends
             // the loop resolution — all before any core-dimension, axis or keepdims check.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
             GufuncGuard.ThrowIfText("matvec", x1, x2, dtype);
+            // NumPy's validate_casting under its default rule (this gufunc takes no casting=): each input's cast to the
+            // loop, then the loop's cast to out=, before the gufunc checks.
+            var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
+            GufuncGuard.ValidateCasting("matvec", x1, x2, loop, @out, "same_kind");
             GufuncGuard.RejectAxisAndKeepdims("matvec", MatvecSignature, axis, keepdims, 1);
 
             GufuncGuard.RequireRank("matvec", MatvecSignature, 0, x1, 2);
@@ -269,9 +279,10 @@ namespace NumSharp.Backends
         /// <inheritdoc/>
         /// <remarks>
         ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
-        ///     read-only <c>out=</c>), the loop refusal of text, <c>axis</c> / <c>keepdims</c>, each operand's rank, the
-        ///     <c>axes=</c> list, the core sizes; the loop casts are unsafe, and the delivery is <c>np.copyto</c>
-        ///     (same_kind). Moved from the public <c>np.vecmat</c> by the np-layer dtype plan's P2.
+        ///     read-only <c>out=</c>), the loop refusal of text, each input's and the output's cast under same_kind
+        ///     (NumPy's default rule; this gufunc takes no casting=), <c>axis</c> / <c>keepdims</c>, each operand's rank,
+        ///     the <c>axes=</c> list, the core sizes; the delivery is an unsafe <c>np.copyto</c> (the cast validated).
+        ///     Moved from the public <c>np.vecmat</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Vecmat(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
@@ -281,6 +292,10 @@ namespace NumSharp.Backends
             // the loop resolution — all before any core-dimension, axis or keepdims check.
             GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
             GufuncGuard.ThrowIfText("vecmat", x1, x2, dtype);
+            // NumPy's validate_casting under its default rule (this gufunc takes no casting=): each input's cast to the
+            // loop, then the loop's cast to out=, before the gufunc checks.
+            var loop = GufuncGuard.ResolveLoop(x1, x2, dtype);
+            GufuncGuard.ValidateCasting("vecmat", x1, x2, loop, @out, "same_kind");
             GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
 
             GufuncGuard.RequireRank("vecmat", VecmatSignature, 0, x1, 1);
@@ -395,26 +410,6 @@ namespace NumSharp.Backends
                 default:   // 'K'
                     return result;
             }
-        }
-
-        /// <summary>
-        ///     A ufunc cast gate: reports NumPy's verbatim "Cannot cast ufunc 'matmul' {role} …". Checked by descriptor, so
-        ///     a text <c>out=</c> (whose storage lane alone carries no width or class) gets NumPy's answer: every number to
-        ///     text cast is same_kind, and the copy formats each product as its scalar's <c>str()</c>.
-        /// </summary>
-        /// <param name="from">The source descriptor (an input, or the product).</param>
-        /// <param name="to">The target descriptor (the loop, or <c>out=</c>).</param>
-        /// <param name="casting">The <c>casting=</c> rule (validated by the caller).</param>
-        /// <param name="role"><c>"input 0"</c>, <c>"input 1"</c> or <c>"output"</c>, as NumPy names the operand.</param>
-        /// <exception cref="ArgumentException">The cast is not allowed under <paramref name="casting"/> (NumPy's
-        ///     UFuncTypeError text).</exception>
-        private static void ValidateMatmulCast(DType from, DType to, string casting, string role)
-        {
-            if (from == to || DTypeCasting.CanCastTypeTo(from, to, DTypeCasting.ParseCasting(casting)))
-                return;
-            throw new ArgumentException(
-                $"Cannot cast ufunc 'matmul' {role} from {from.ToString(true)} to {to.ToString(true)} " +
-                $"with casting rule '{casting}'");
         }
 
         /// <summary>

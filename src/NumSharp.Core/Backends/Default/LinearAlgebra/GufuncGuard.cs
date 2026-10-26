@@ -1,3 +1,5 @@
+using NumSharp.Backends.Iteration;
+
 namespace NumSharp.Backends
 {
     /// <summary>
@@ -44,23 +46,29 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     The loop resolution of a gufunc call for text (NumPy's <c>promote_and_get_ufuncimpl</c>): no gufunc of this
-        ///     family has a string loop, so a string operand or a string <c>dtype=</c> request raises NumPy's no-loop
-        ///     TypeError. Runs after <see cref="CheckParsedArguments"/> and the casting / order names, and before any
-        ///     core-dimension, <c>axes</c> / <c>axis</c> / <c>keepdims</c> semantics or shape check.
+        ///     family has a string loop, so a StringDType operand, a string <c>dtype=</c> request, or a fixed-width string
+        ///     operand without a numeric request raises NumPy's no-loop TypeError. Runs after
+        ///     <see cref="CheckParsedArguments"/> and the casting / order names, and before <see cref="ValidateCasting"/> and
+        ///     any core-dimension, <c>axes</c> / <c>axis</c> / <c>keepdims</c> semantics or shape check.
         /// </summary>
         /// <param name="name">NumPy's gufunc name (<c>matmul</c>, <c>vecdot</c>, <c>matvec</c>, <c>vecmat</c>).</param>
         /// <param name="x1">The first operand.</param>
         /// <param name="x2">The second operand.</param>
         /// <param name="dtype">The <c>dtype=</c> request (its class already checked), or null.</param>
-        /// <exception cref="TypeError">NumPy's no-loop text: the operand CLASSES and the requested class under a string
-        ///     request (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, …) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>),
-        ///     the operand DESCRIPTORS for a string operand (<c>(dtype('&lt;U2'), dtype('float64')) -&gt; None</c>).</exception>
+        /// <exception cref="TypeError">NumPy's no-loop text: the operand CLASSES and the requested class (or None) for a
+        ///     StringDType operand (<c>(&lt;class 'numpy.dtypes.StringDType'&gt;, …) -&gt; &lt;class
+        ///     'numpy.dtypes.Float64DType'&gt;</c>), the operand classes and the requested class under a string request
+        ///     (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, …) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>), the
+        ///     operand DESCRIPTORS for a fixed-width string operand without a request
+        ///     (<c>(dtype('&lt;U2'), dtype('float64')) -&gt; None</c>).</exception>
         /// <exception cref="System.NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         /// <remarks>
-        ///     No gufunc has a string loop, so text never reaches <see cref="ToLoop"/> (the string lane has no element
-        ///     size); a numeric request passes its class check only (probed: <c>vecdot(f, f, dtype='U3')</c> is the
-        ///     class-only TypeError, and NumPy resolves the loop before <c>axis</c> / <c>keepdims</c> semantics:
-        ///     <c>matvec(u2, u, axis=0)</c> names the missing loop).
+        ///     A fixed-width string operand under a NUMERIC request is not refused here: NumPy's legacy dispatcher takes the
+        ///     requested loop, and <see cref="ValidateCasting"/> refuses the string input under same_kind (probed 2.4.2:
+        ///     <c>np.matmul(s, s, dtype=np.float64)</c> is "Cannot cast ufunc 'matmul' input 0 from dtype('S1') to
+        ///     dtype('float64') with casting rule 'same_kind'"), while under <c>casting='unsafe'</c> the loop converts the
+        ///     text (the numbers it holds, or "could not convert string to float"). StringDType is a new-style DType,
+        ///     which the legacy dispatcher does not serve: no loop, whatever the request.
         /// </remarks>
         internal static void ThrowIfText(string name, NDArray x1, NDArray x2, DType dtype)
         {
@@ -68,15 +76,85 @@ namespace NumSharp.Backends
             bool vstring = Backends.Strings.NDStringUfuncs.IsVString(x1) || Backends.Strings.NDStringUfuncs.IsVString(x2);
             if (!request && !vstring && !Backends.Strings.NDStringUfuncs.IsString(x1) && !Backends.Strings.NDStringUfuncs.IsString(x2))
                 return;
-            // A StringDType operand: NumPy's dispatcher (a new-style DType in the key) names every operand's class, and a
-            // string request's class as the output.
+            // A StringDType operand: NumPy's dispatcher (a new-style DType in the key) names every operand's class, and the
+            // requested class (any request: a numeric one too) as the output.
             if (vstring)
                 throw Backends.Strings.NDStringUfuncs.VStringNoLoop(name,
                     new[] { Backends.Strings.NDStringUfuncs.DispatchClass(x1), Backends.Strings.NDStringUfuncs.DispatchClass(x2) },
-                    request ? dtype.Meta.ToString() : "None");
-            throw request
-                ? Backends.Strings.NDStringUfuncs.GufuncDTypeLoopError(name, dtype, x1, x2)
-                : Backends.Strings.NDStringUfuncs.NoLoop(name, x1.dtype, x2.dtype);
+                    dtype is null ? "None" : dtype.Meta.ToString());
+            if (request)
+                throw Backends.Strings.NDStringUfuncs.GufuncDTypeLoopError(name, dtype, x1, x2);
+            // Fixed-width text without a request has no loop; under a numeric request the loop exists and the casts decide.
+            if (dtype is null)
+                throw Backends.Strings.NDStringUfuncs.NoLoop(name, x1.dtype, x2.dtype);
+        }
+
+        /// <summary>
+        ///     The loop descriptor of a gufunc call with numeric (or, under a numeric request, fixed-width text) operands:
+        ///     the <c>dtype=</c> request, else the operands' common dtype (NumPy's promotion of the two inputs).
+        /// </summary>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="dtype">The <c>dtype=</c> request (its class already checked), or null.</param>
+        /// <returns>The descriptor every input is cast to and the product is computed in.</returns>
+        /// <exception cref="System.NotSupportedException"><paramref name="dtype"/> is a class without storage yet
+        ///     (datetime64 before Stage C): NumSharp cannot hold its loop.</exception>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        internal static DType ResolveLoop(NDArray x1, NDArray x2, DType dtype)
+        {
+            if (dtype is null)
+                return DTypePromotion.PromoteTypes(x1.dtype, x2.dtype);
+            // A descriptor-only class raises its own descriptive "no storage yet".
+            _ = dtype.GetTypeCode();
+            return dtype;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyUFunc_ValidateCasting</c> for a gufunc call (<c>validate_casting</c>, the first statement of
+        ///     <c>PyUFunc_GeneralizedFunctionInternal</c>): each input's cast to the loop, in order, then the loop's cast to
+        ///     <paramref name="out"/>, each under <paramref name="casting"/>. Runs after the loop resolution and before the
+        ///     keepdims / axis support checks, the ranks, <c>axes=</c> and the core sizes.
+        /// </summary>
+        /// <param name="name">NumPy's gufunc name.</param>
+        /// <param name="x1">The first operand.</param>
+        /// <param name="x2">The second operand.</param>
+        /// <param name="loop">The loop descriptor (<see cref="ResolveLoop"/>).</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="casting">The casting rule: <c>np.matmul</c>'s argument (already validated), <c>"same_kind"</c>
+        ///     for the gufuncs without the keyword (NumPy's default).</param>
+        /// <exception cref="System.ArgumentException">A cast the rule refuses, with NumPy's UFuncTypeError text: "Cannot
+        ///     cast ufunc '{name}' input {i} from {from} to {loop} with casting rule '{casting}'", or "... output from {loop}
+        ///     to {out} ...".</exception>
+        /// <remarks>
+        ///     Checked by descriptor, so a text <paramref name="out"/> (whose storage lane alone carries no width or class)
+        ///     gets NumPy's answer: a number to fixed-width text cast is same_kind (not safe), a number to StringDType is
+        ///     safe, and the copy formats each value as its scalar's <c>str()</c> (probed 2.4.2: <c>matmul</c> of float64
+        ///     into <c>out=U5</c> gives <c>'7.0'</c>; of complex128, <c>'(7+0j'</c>, cut at five characters).
+        /// </remarks>
+        internal static void ValidateCasting(string name, NDArray x1, NDArray x2, DType loop, NDArray @out, string casting)
+        {
+            var rule = DTypeCasting.ParseCasting(casting);
+            RequireCast(name, "input 0", x1.dtype, loop, casting, rule);
+            RequireCast(name, "input 1", x2.dtype, loop, casting, rule);
+            if (@out is not null)
+                RequireCast(name, "output", loop, @out.dtype, casting, rule);
+        }
+
+        /// <summary>One cast of <see cref="ValidateCasting"/>.</summary>
+        /// <param name="name">NumPy's gufunc name.</param>
+        /// <param name="role"><c>"input 0"</c>, <c>"input 1"</c> or <c>"output"</c>, as NumPy names the operand.</param>
+        /// <param name="from">The source descriptor.</param>
+        /// <param name="to">The target descriptor.</param>
+        /// <param name="casting">The rule's name, as the message quotes it.</param>
+        /// <param name="rule">The rule.</param>
+        /// <exception cref="System.ArgumentException">The rule refuses the cast (NumPy's UFuncTypeError text).</exception>
+        private static void RequireCast(string name, string role, DType from, DType to, string casting, NPY_CASTING rule)
+        {
+            if (from == to || DTypeCasting.CanCastTypeTo(from, to, rule))
+                return;
+            throw new System.ArgumentException(
+                $"Cannot cast ufunc '{name}' {role} from {from.ToString(true)} to {to.ToString(true)} " +
+                $"with casting rule '{casting}'");
         }
 
         /// <summary>
@@ -134,16 +212,17 @@ namespace NumSharp.Backends
         /// <param name="out">The <c>out=</c> operand, or null.</param>
         /// <returns><paramref name="result"/> when <paramref name="out"/> is null, else <paramref name="out"/> itself
         ///     holding the answer.</returns>
-        /// <exception cref="ValueError"><paramref name="out"/> is read-only, or <paramref name="result"/> does not
-        ///     broadcast into its shape (<c>np.copyto</c>'s texts).</exception>
-        /// <exception cref="System.InvalidCastException">The answer's dtype cannot reach <paramref name="out"/>'s under
-        ///     <c>same_kind</c> (<c>np.copyto</c>'s text, not the gufunc's UFuncTypeError).</exception>
+        /// <exception cref="ValueError"><paramref name="result"/> does not broadcast into <paramref name="out"/>'s shape
+        ///     (<c>np.copyto</c>'s text).</exception>
+        /// <remarks>The copy is unsafe: <see cref="ValidateCasting"/> has checked the loop's cast to <paramref name="out"/>
+        ///     under the call's rule before the gufunc checks, as NumPy does, and a read-only out was refused while the
+        ///     arguments were parsed.</remarks>
         internal static NDArray Deliver(NDArray result, NDArray @out)
         {
             if (@out is null)
                 return result;
 
-            np.copyto(@out, result);
+            np.copyto(@out, result, "unsafe");   // cast already validated
             return @out;
         }
 
