@@ -18,38 +18,56 @@ namespace NumSharp.Backends
     internal static class GufuncGuard
     {
         /// <summary>
-        ///     The part of a gufunc call NumPy settles while it parses the arguments and resolves the loop, before any
-        ///     core-dimension, <c>axes</c> / <c>axis</c> / <c>keepdims</c> semantics or shape check: the <c>dtype=</c> class
-        ///     check, then — with text involved (a string operand or a string <c>dtype=</c> request) — a read-only
-        ///     <c>out=</c>, then the loop refusal.
+        ///     The first checks of NumPy's <c>ufunc_generic_fastcall</c> for a gufunc call, in its order: <c>axis</c> with
+        ///     <c>axes</c> (the keyword parse), the <c>dtype=</c> class (<c>_get_fixed_signature</c>), then a read-only
+        ///     <c>out=</c> (<c>convert_ufunc_arguments</c>' <c>_set_out_array</c>). The casting and order names come next,
+        ///     in the caller (only <c>np.matmul</c> takes them), then the loop resolution (<see cref="ThrowIfText"/>).
+        /// </summary>
+        /// <param name="axes">The <c>axes=</c> list, or null.</param>
+        /// <param name="axis">The <c>axis=</c> value, or null.</param>
+        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <exception cref="TypeError"><paramref name="axis"/> with <paramref name="axes"/>, or a <paramref name="dtype"/>
+        ///     with details beyond its class (<c>'U3'</c>, <c>'&gt;f8'</c>, a StringDType instance).</exception>
+        /// <exception cref="ValueError"><paramref name="out"/> is read-only (<c>output array is read-only</c>).</exception>
+        /// <remarks>NumPy checks the out operand while it converts the arguments, before it resolves a loop or looks at
+        ///     a shape, so a read-only out is refused even when the call would fail later (probed 2.4.2:
+        ///     <c>np.vecdot(a, b, out=ro)</c> with mismatched core sizes names the read-only out).</remarks>
+        internal static void CheckParsedArguments(int[][] axes, int? axis, DType dtype, NDArray @out)
+        {
+            RejectAxisWithAxes(axes, axis);
+            if (dtype is not null)
+                DefaultEngine.ThrowIfNotGeneralDType(dtype);
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
+        }
+
+        /// <summary>
+        ///     The loop resolution of a gufunc call for text (NumPy's <c>promote_and_get_ufuncimpl</c>): no gufunc of this
+        ///     family has a string loop, so a string operand or a string <c>dtype=</c> request raises NumPy's no-loop
+        ///     TypeError. Runs after <see cref="CheckParsedArguments"/> and the casting / order names, and before any
+        ///     core-dimension, <c>axes</c> / <c>axis</c> / <c>keepdims</c> semantics or shape check.
         /// </summary>
         /// <param name="name">NumPy's gufunc name (<c>matmul</c>, <c>vecdot</c>, <c>matvec</c>, <c>vecmat</c>).</param>
         /// <param name="x1">The first operand.</param>
         /// <param name="x2">The second operand.</param>
-        /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
-        /// <param name="out">The <c>out=</c> operand, or null.</param>
-        /// <exception cref="TypeError">A <paramref name="dtype"/> with details beyond its class (<c>'U3'</c>,
-        ///     <c>'&gt;f8'</c>), or NumPy's no-loop text: the operand CLASSES and the requested class under a string request
-        ///     (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, …) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>), the operand
-        ///     DESCRIPTORS for a string operand (<c>(dtype('&lt;U2'), dtype('float64')) -&gt; None</c>).</exception>
-        /// <exception cref="ValueError">Text with a read-only <paramref name="out"/>.</exception>
+        /// <param name="dtype">The <c>dtype=</c> request (its class already checked), or null.</param>
+        /// <exception cref="TypeError">NumPy's no-loop text: the operand CLASSES and the requested class under a string
+        ///     request (<c>(&lt;class 'numpy.dtypes.Float64DType'&gt;, …) -&gt; &lt;class 'numpy.dtypes.StrDType'&gt;</c>),
+        ///     the operand DESCRIPTORS for a string operand (<c>(dtype('&lt;U2'), dtype('float64')) -&gt; None</c>).</exception>
         /// <exception cref="System.NullReferenceException"><paramref name="x1"/> or <paramref name="x2"/> is null.</exception>
         /// <remarks>
         ///     No gufunc has a string loop, so text never reaches <see cref="ToLoop"/> (the string lane has no element
-        ///     size); a numeric request still passes only its class check here (probed: <c>vecdot(f, f, dtype='U3')</c>
-        ///     is the class-only TypeError, and NumPy resolves the loop before <c>axis</c> / <c>keepdims</c> semantics:
+        ///     size); a numeric request passes its class check only (probed: <c>vecdot(f, f, dtype='U3')</c> is the
+        ///     class-only TypeError, and NumPy resolves the loop before <c>axis</c> / <c>keepdims</c> semantics:
         ///     <c>matvec(u2, u, axis=0)</c> names the missing loop).
         /// </remarks>
-        internal static void ThrowIfText(string name, NDArray x1, NDArray x2, DType dtype, NDArray @out)
+        internal static void ThrowIfText(string name, NDArray x1, NDArray x2, DType dtype)
         {
-            if (dtype is not null)
-                DefaultEngine.ThrowIfNotGeneralDType(dtype);
             bool request = Backends.Strings.NDStringUfuncs.IsStringRequest(dtype);
             bool vstring = Backends.Strings.NDStringUfuncs.IsVString(x1) || Backends.Strings.NDStringUfuncs.IsVString(x2);
             if (!request && !vstring && !Backends.Strings.NDStringUfuncs.IsString(x1) && !Backends.Strings.NDStringUfuncs.IsString(x2))
                 return;
-            if (@out is not null)
-                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
             // A StringDType operand: NumPy's dispatcher (a new-style DType in the key) names every operand's class, and a
             // string request's class as the output.
             if (vstring)

@@ -37,21 +37,23 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     The checks run in this order: the order and casting names, <c>axis</c> with <c>axes</c>, the <c>dtype=</c>
-        ///     class and the loop refusal of text (<see cref="GufuncGuard.ThrowIfText"/>), <c>keepdims</c>, <c>axis</c>, a
-        ///     read-only <c>out=</c>, the <c>axes=</c> list, each input's cast to the <c>dtype=</c> loop; after the product
-        ///     the output cast and the output's core dimensions. Moved from the public <c>np.matmul</c> by the np-layer dtype
-        ///     plan's P2.
+        ///     The checks run in this order: NumPy's argument parse (<see cref="GufuncGuard.CheckParsedArguments"/>:
+        ///     <c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a read-only <c>out=</c>), the casting and order names,
+        ///     the loop refusal of text (<see cref="GufuncGuard.ThrowIfText"/>), <c>keepdims</c>, <c>axis</c>, the
+        ///     <c>axes=</c> list, each input's cast to the <c>dtype=</c> loop; after the product the output cast and the
+        ///     output's core dimensions. Moved from the public <c>np.matmul</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the product before its delivery are reclaimed
         public override NDArray Matmul(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool? keepdims,
             DType dtype, string casting, char order)
         {
-            GufuncGuard.RequireOrder(order);
+            // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
+            // the casting and order names (convert_ufunc_arguments), then the loop resolution — all before keepdims /
+            // axis semantics.
+            GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
             GufuncGuard.RequireCasting(casting);
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-            // The dtype= class check and, for text, NumPy's loop refusal come before keepdims / axis semantics.
-            GufuncGuard.ThrowIfText("matmul", x1, x2, dtype, @out);
+            GufuncGuard.RequireOrder(order);
+            GufuncGuard.ThrowIfText("matmul", x1, x2, dtype);
 
             if (keepdims.HasValue)
                 throw new TypeError(
@@ -63,12 +65,6 @@ namespace NumSharp.Backends
                 throw new TypeError(
                     "matmul: axis can only be used with a single shared core dimension, not with the " +
                     $"3 distinct ones implied by signature {MatmulSignature}.");
-
-            // A read-only out refuses FIRST — probed 2.4.2: NumPy's gufunc machinery reports
-            // "output array is read-only" ahead of the core-dimension mismatch error, so the guard
-            // sits before any out-shape validation below.
-            if (@out is not null)
-                NumSharpException.ThrowIfNotWriteable(@out.Shape, "output array");
 
             var a = x1;
             var b = x2;
@@ -137,18 +133,19 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     The checks run in this order: <c>axis</c> with <c>axes</c>, the <c>dtype=</c> class and the loop refusal of
-        ///     text, each operand's rank, the <c>axes=</c> list or the <c>axis=</c> value, the core sizes; the loop casts are
-        ///     unsafe, and the delivery is <c>np.copyto</c> (same_kind). Moved from the public <c>np.vecdot</c> by the
-        ///     np-layer dtype plan's P2.
+        ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
+        ///     read-only <c>out=</c>), the loop refusal of text, each operand's rank, the <c>axes=</c> list or the
+        ///     <c>axis=</c> value, the core sizes; the loop casts are unsafe, and the delivery is <c>np.copyto</c>
+        ///     (same_kind). Moved from the public <c>np.vecdot</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Vecdot(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
             DType dtype)
         {
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-            // The dtype= class check and, for text, NumPy's loop refusal come before any core-dimension check.
-            GufuncGuard.ThrowIfText("vecdot", x1, x2, dtype, @out);
+            // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
+            // the loop resolution — all before any core-dimension, axis or keepdims check.
+            GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
+            GufuncGuard.ThrowIfText("vecdot", x1, x2, dtype);
             GufuncGuard.RequireRank("vecdot", VecdotSignature, 0, x1, 1);
             GufuncGuard.RequireRank("vecdot", VecdotSignature, 1, x2, 1);
 
@@ -222,18 +219,19 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     The checks run in this order: <c>axis</c> with <c>axes</c>, the <c>dtype=</c> class and the loop refusal of
-        ///     text, <c>axis</c> / <c>keepdims</c>, each operand's rank, the <c>axes=</c> list, the core sizes; the loop casts
-        ///     are unsafe, and the delivery is <c>np.copyto</c> (same_kind). Moved from the public <c>np.matvec</c> by the
-        ///     np-layer dtype plan's P2.
+        ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
+        ///     read-only <c>out=</c>), the loop refusal of text, <c>axis</c> / <c>keepdims</c>, each operand's rank, the
+        ///     <c>axes=</c> list, the core sizes; the loop casts are unsafe, and the delivery is <c>np.copyto</c>
+        ///     (same_kind). Moved from the public <c>np.matvec</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Matvec(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
             DType dtype)
         {
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-            // The dtype= class check and, for text, NumPy's loop refusal come before axis / keepdims semantics.
-            GufuncGuard.ThrowIfText("matvec", x1, x2, dtype, @out);
+            // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
+            // the loop resolution — all before any core-dimension, axis or keepdims check.
+            GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
+            GufuncGuard.ThrowIfText("matvec", x1, x2, dtype);
             GufuncGuard.RejectAxisAndKeepdims("matvec", MatvecSignature, axis, keepdims, 1);
 
             GufuncGuard.RequireRank("matvec", MatvecSignature, 0, x1, 2);
@@ -270,18 +268,19 @@ namespace NumSharp.Backends
 
         /// <inheritdoc/>
         /// <remarks>
-        ///     The checks run in this order: <c>axis</c> with <c>axes</c>, the <c>dtype=</c> class and the loop refusal of
-        ///     text, <c>axis</c> / <c>keepdims</c>, each operand's rank, the <c>axes=</c> list, the core sizes; the loop casts
-        ///     are unsafe, and the delivery is <c>np.copyto</c> (same_kind). Moved from the public <c>np.vecmat</c> by the
-        ///     np-layer dtype plan's P2.
+        ///     The checks run in this order: NumPy's argument parse (<c>axis</c> with <c>axes</c>, the <c>dtype=</c> class, a
+        ///     read-only <c>out=</c>), the loop refusal of text, <c>axis</c> / <c>keepdims</c>, each operand's rank, the
+        ///     <c>axes=</c> list, the core sizes; the loop casts are unsafe, and the delivery is <c>np.copyto</c>
+        ///     (same_kind). Moved from the public <c>np.vecmat</c> by the np-layer dtype plan's P2.
         /// </remarks>
         [NDScoped] // engine boundary: the moved operands, the loop casts and the answer before its delivery are reclaimed
         public override NDArray Vecmat(NDArray x1, NDArray x2, NDArray @out, int[][] axes, int? axis, bool keepdims,
             DType dtype)
         {
-            GufuncGuard.RejectAxisWithAxes(axes, axis);
-            // The dtype= class check and, for text, NumPy's loop refusal come before axis / keepdims semantics.
-            GufuncGuard.ThrowIfText("vecmat", x1, x2, dtype, @out);
+            // NumPy's argument parse (ufunc_generic_fastcall): axis with axes, the dtype= class, a read-only out, then
+            // the loop resolution — all before any core-dimension, axis or keepdims check.
+            GufuncGuard.CheckParsedArguments(axes, axis, dtype, @out);
+            GufuncGuard.ThrowIfText("vecmat", x1, x2, dtype);
             GufuncGuard.RejectAxisAndKeepdims("vecmat", VecmatSignature, axis, keepdims, 2);
 
             GufuncGuard.RequireRank("vecmat", VecmatSignature, 0, x1, 1);
