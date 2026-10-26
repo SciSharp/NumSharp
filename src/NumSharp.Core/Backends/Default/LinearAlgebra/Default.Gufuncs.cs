@@ -80,6 +80,20 @@ namespace NumSharp.Backends
                 b = BringCoreToEnd(b, layout.CoreAxes(1, x2.ndim));
             }
 
+            // NumPy's iterator lays the output's loop axes out in K order (order='K', the default; 'C' / 'F' / 'A' lay
+            // out the whole output below). The operands vote as given, before a dtype= copy; with out= the answer is
+            // copied into out's own layout, so no order is needed.
+            int aCore = a.ndim == 1 ? 1 : 2, bCore = b.ndim == 1 ? 1 : 2;
+            int[] loopPerm = null;
+            Shape loopLayout = default;
+            if (order == 'K' && @out is null)
+            {
+                long n = a.ndim == 1 ? 1 : a.Shape.dimensions[a.ndim - 2];
+                long m = b.ndim == 1 ? 1 : b.Shape.dimensions[b.ndim - 1];
+                // The batched product writes C order, so only a vote against C order needs work.
+                GufuncLoopOrder(a, aCore, b, bCore, n * m, out loopLayout, out loopPerm);
+            }
+
             // A dtype= request selects the loop (its casts validated above): cast so the product (and the backend route)
             // run at that dtype. astype converts a fixed-width text operand too, which only casting='unsafe' lets
             // through.
@@ -89,7 +103,15 @@ namespace NumSharp.Backends
                 b = b.astype(dtype, copy: false);
             }
 
+            if (loopPerm != null)
+            {
+                a = PermuteLoopAxes(a, aCore, loopLayout.NDim, loopPerm);
+                b = PermuteLoopAxes(b, bCore, loopLayout.NDim, loopPerm);
+            }
+
             var result = Matmul(a, b);
+            if (loopPerm != null)
+                result = AdoptLoopLayout(result, loopLayout);
 
             if (outputAxes.Length > 0)
                 result = PlaceOutputCore(result, outputAxes);
@@ -157,10 +179,25 @@ namespace NumSharp.Backends
                     b = MoveAxis(b, new[] {rb}, new[] {-1});
             }
 
+            // NumPy's iterator lays the output's loop axes out in K order; the operands vote as given (see Matmul).
+            // The product kernel takes its layout from the elementwise product, whose own vote counts the core axis
+            // too, so its answer takes the voted layout even when the vote gives C order (AdoptLayout relabels a
+            // product already in that order and copies any other).
+            Shape loopLayout = default;
+            int[] loopPerm = null;
+            bool voted = @out is null && GufuncLoopOrder(a, 1, b, 1, 1, out loopLayout, out loopPerm);
+
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
+            if (loopPerm != null)
+            {
+                a = PermuteLoopAxes(a, 1, loopLayout.NDim, loopPerm);
+                b = PermuteLoopAxes(b, 1, loopLayout.NDim, loopPerm);
+            }
 
             var result = Vecdot(a, b);
+            if (voted)
+                result = AdoptLoopLayout(result, loopLayout);
 
             if (keepdims)
             {
@@ -229,10 +266,24 @@ namespace NumSharp.Backends
                 b = MoveAxis(b, new[] {layout.CoreAxes(1, x2.ndim)[0]}, new[] {-1});
             }
 
+            // NumPy's iterator lays the output's loop axes out in K order; the operands vote as given (see Matmul).
+            // The batched product writes C order, so only a vote against C order needs work.
+            Shape loopLayout = default;
+            int[] loopPerm = null;
+            if (@out is null)
+                GufuncLoopOrder(a, 2, b, 1, a.Shape.dimensions[a.ndim - 2], out loopLayout, out loopPerm);
+
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
+            if (loopPerm != null)
+            {
+                a = PermuteLoopAxes(a, 2, loopLayout.NDim, loopPerm);
+                b = PermuteLoopAxes(b, 1, loopLayout.NDim, loopPerm);
+            }
 
             var result = Matvec(a, b);
+            if (loopPerm != null)
+                result = AdoptLoopLayout(result, loopLayout);
 
             if (outputAxes.Length == 1)
                 result = PlaceOutputCore(result, outputAxes);
@@ -278,10 +329,24 @@ namespace NumSharp.Backends
                 b = MoveAxis(b, layout.CoreAxes(1, x2.ndim), new[] {b.ndim - 2, b.ndim - 1});
             }
 
+            // NumPy's iterator lays the output's loop axes out in K order; the operands vote as given (see Matmul).
+            // The batched product writes C order, so only a vote against C order needs work.
+            Shape loopLayout = default;
+            int[] loopPerm = null;
+            if (@out is null)
+                GufuncLoopOrder(a, 1, b, 2, b.Shape.dimensions[b.ndim - 1], out loopLayout, out loopPerm);
+
             a = GufuncGuard.ToLoop(a, dtype);
             b = GufuncGuard.ToLoop(b, dtype);
+            if (loopPerm != null)
+            {
+                a = PermuteLoopAxes(a, 1, loopLayout.NDim, loopPerm);
+                b = PermuteLoopAxes(b, 2, loopLayout.NDim, loopPerm);
+            }
 
             var result = Vecmat(a, b);
+            if (loopPerm != null)
+                result = AdoptLoopLayout(result, loopLayout);
 
             if (outputAxes.Length == 1)
                 result = PlaceOutputCore(result, outputAxes);
@@ -309,12 +374,12 @@ namespace NumSharp.Backends
         /// <param name="outputAxes">The output entry of <c>axes=</c>, as the caller gave it (negative axes count from the
         ///     end of the output).</param>
         /// <returns>The product with the core axes where <paramref name="outputAxes"/> names them: the same buffer in its
-        ///     computed (C) memory order, relabelled, so it still owns its data — NumPy allocates a gufunc output in the
-        ///     iterator's order and returns it with the remapped axes (probed 2.4.2:
-        ///     <c>np.matmul(ones((2,3,4)), ones((2,4,5)), axes=[(1,2),(1,2),(0,1)])</c> has shape (3,5,2), strides
-        ///     (40,8,120), OWNDATA True).</returns>
+        ///     computed memory order (C, or NumPy's K order of the loop axes), relabelled, so it still owns its data —
+        ///     NumPy allocates a gufunc output in the iterator's order and returns it with the remapped axes (probed
+        ///     2.4.2: <c>np.matmul(ones((2,3,4)), ones((2,4,5)), axes=[(1,2),(1,2),(0,1)])</c> has shape (3,5,2),
+        ///     strides (40,8,120), OWNDATA True).</returns>
         /// <exception cref="AxisError">An output axis out of the result's range.</exception>
-        private NDArray PlaceOutputCore(NDArray result, int[] outputAxes)
+        private static NDArray PlaceOutputCore(NDArray result, int[] outputAxes)
         {
             var dest = new int[outputAxes.Length];
             for (int i = 0; i < outputAxes.Length; i++)
@@ -325,12 +390,174 @@ namespace NumSharp.Backends
                 dest[i] = ax;
             }
 
-            var src = new int[outputAxes.Length];
-            for (int i = 0; i < outputAxes.Length; i++)
-                src[i] = result.ndim - outputAxes.Length + i;
-            // The moved view's shape is the product's strides permuted; relabel the product with it.
-            using var moved = MoveAxis(result, src, dest);
-            return NDArray.AdoptLayout(result, moved.Shape);
+            // np.moveaxis's permutation, the trailing core axes moved to `dest`: each lands at its destination, and the
+            // other axes fill the remaining positions in their order. The gufunc checks refused a repeated output axis,
+            // so every destination is used once.
+            int nd = result.ndim, ncore = outputAxes.Length;
+            var order = new int[nd];
+            var placed = new bool[nd];
+            for (int i = 0; i < ncore; i++)
+            {
+                order[dest[i]] = nd - ncore + i;
+                placed[dest[i]] = true;
+            }
+
+            for (int p = 0, next = 0; p < nd; p++)
+            {
+                if (!placed[p])
+                    order[p] = next++;
+            }
+
+            // A relabel of the axes alone, valid for any dense layout of the product (C, or the K order AdoptLoopLayout
+            // gave it).
+            return NDArray.AdoptAxisPermutation(result, order);
+        }
+
+        /// <summary>
+        ///     NumPy's memory order for a gufunc output's loop axes, when it is not C order. NumPy's gufunc iterator runs
+        ///     over the loop axes plus the output's core axes. The inputs vote on the loop axes only: their own core axes
+        ///     are not iterator axes, and every input's stride on an output core axis is 0, so those axes stay innermost,
+        ///     in C order. <c>npyiter_find_best_axis_ordering</c> then sorts the loop axes as it sorts a ufunc's
+        ///     (<see cref="Shape.NpyIterOutputShape"/>), and with order='K' (the default) the allocated output follows
+        ///     that order: <c>np.matvec</c> of an F-ordered (2,3,4,5) array and a vector has strides (32,64,8), its core
+        ///     axis innermost and the loop axes F-ordered (probed 2.4.2).
+        /// </summary>
+        /// <param name="a">The first input with its core axes last, as the caller gave it: before a <c>dtype=</c> cast,
+        ///     because a cast copy would give a broadcast axis a stride that votes.</param>
+        /// <param name="aCore">The number of <paramref name="a"/>'s trailing core axes.</param>
+        /// <param name="b">The second input, likewise.</param>
+        /// <param name="bCore">The number of <paramref name="b"/>'s trailing core axes.</param>
+        /// <param name="outputCoreSize">The element count of one output core block (1 when the output has no core axes);
+        ///     0 for an empty output.</param>
+        /// <param name="loopLayout">Set, when the vote ran, to the loop axes' layout: the broadcast loop dims with the
+        ///     dense strides NumPy allocates them with (in elements, for one element per core block).</param>
+        /// <param name="perm">Set, when the vote ran and did not give C order, to the loop axes in memory order,
+        ///     outermost first — the transposition under which the C-writing kernels write NumPy's order; null
+        ///     otherwise.</param>
+        /// <returns>Whether the vote ran: false when NumPy's output is C-ordered whatever the kernel, namely with fewer
+        ///     than two loop axes (a 0-d or 1-D loop is C and F at once), two C-contiguous inputs (they vote for C order:
+        ///     every pair of axes both see compares unswapped, the rest abstain), or an empty output. A kernel whose
+        ///     layout follows its own operands (vecdot's elementwise product) needs the layout even when the vote
+        ///     gives C order; the matrix products always write C order and need only <paramref name="perm"/>.</returns>
+        private static bool GufuncLoopOrder(NDArray a, int aCore, NDArray b, int bCore, long outputCoreSize,
+            out Shape loopLayout, out int[] perm)
+        {
+            loopLayout = default;
+            perm = null;
+            int aLoop = a.ndim - aCore, bLoop = b.ndim - bCore;
+            int loopNd = Math.Max(aLoop, bLoop);
+            if (loopNd < 2 || outputCoreSize == 0 || (a.Shape.IsContiguous && b.Shape.IsContiguous))
+                return false;
+
+            // The broadcast loop dims (CheckLoopBroadcast has validated the broadcast).
+            var dims = new long[loopNd];
+            for (int i = 0; i < loopNd; i++)
+            {
+                int ia = i - (loopNd - aLoop), ib = i - (loopNd - bLoop);
+                long da = ia >= 0 ? a.Shape.dimensions[ia] : 1;
+                long db = ib >= 0 ? b.Shape.dimensions[ib] : 1;
+                dims[i] = da == 1 ? db : da;
+                if (dims[i] == 0)
+                    return false;
+            }
+
+            loopLayout = Shape.NpyIterOutputShape(dims, new[] { LoopPart(a, aLoop), LoopPart(b, bLoop) });
+            var order = loopLayout.DenseAxisOrder();
+            for (int i = 0; i < loopNd; i++)
+            {
+                if (order[i] != i)
+                {
+                    perm = order;
+                    break;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>An input's loop axes as a shape for the vote: its leading dims and strides.</summary>
+        /// <param name="x">The input, its core axes last.</param>
+        /// <param name="loopNd">Its number of loop axes.</param>
+        /// <returns>A shape of the first <paramref name="loopNd"/> axes (0-d when the input has none, so it abstains
+        ///     everywhere).</returns>
+        private static Shape LoopPart(NDArray x, int loopNd)
+        {
+            var dims = new long[loopNd];
+            var strides = new long[loopNd];
+            Array.Copy(x.Shape.dimensions, dims, loopNd);
+            Array.Copy(x.Shape.strides, strides, loopNd);
+            return Shape.Adopt(dims, strides);
+        }
+
+        /// <summary>
+        ///     A view of an input with its loop axes in <paramref name="perm"/>'s order and its core axes still last, so
+        ///     the kernels, which write C order, write the product in NumPy's memory order for the loop axes.
+        /// </summary>
+        /// <param name="x">The input, its core axes last (after any <c>dtype=</c> cast).</param>
+        /// <param name="core">The number of its trailing core axes.</param>
+        /// <param name="loopNd">The number of broadcast loop axes; the input's loop axes are right-aligned against them,
+        ///     and an axis it lacks becomes a length-1 axis.</param>
+        /// <param name="perm">The broadcast loop axes in memory order, outermost first (<see cref="GufuncLoopOrder"/>).</param>
+        /// <returns><paramref name="x"/> itself when it has no loop axes (it broadcasts against all of them, and a 1-D
+        ///     matmul operand must stay 1-D); otherwise a view (the gufunc member's scope reclaims it).</returns>
+        private static NDArray PermuteLoopAxes(NDArray x, int core, int loopNd, int[] perm)
+        {
+            int xLoop = x.ndim - core;
+            if (xLoop == 0)
+                return x;
+
+            var src = x.Shape;
+            var dims = new long[loopNd + core];
+            var strides = new long[loopNd + core];
+            for (int p = 0; p < loopNd; p++)
+            {
+                int k = perm[p] - (loopNd - xLoop);
+                dims[p] = k < 0 ? 1 : src.dimensions[k];
+                strides[p] = k < 0 ? 0 : src.strides[k];
+            }
+
+            for (int c = 0; c < core; c++)
+            {
+                dims[loopNd + c] = src.dimensions[xLoop + c];
+                strides[loopNd + c] = src.strides[xLoop + c];
+            }
+
+            return new NDArray(x.Storage.Alias(new Shape(dims, strides, src.offset, src.bufferSize)))
+            {
+                TensorEngine = x.TensorEngine
+            };
+        }
+
+        /// <summary>
+        ///     Relabels a product computed over <see cref="PermuteLoopAxes"/>' views (or over the inputs themselves, when
+        ///     the vote gave C order) with NumPy's layout: the loop axes back in their order with the strides of
+        ///     <paramref name="loopLayout"/> (scaled by the core block), the core axes innermost in C order. A product
+        ///     written in that memory order is relabelled in place and keeps owning its buffer; any other is copied
+        ///     into the layout (<see cref="NDArray.AdoptLayout"/>).
+        /// </summary>
+        /// <param name="result">The product: its loop axes in the voted memory order, then its core axes. Consumed.</param>
+        /// <param name="loopLayout">The loop layout <see cref="GufuncLoopOrder"/> returned.</param>
+        /// <returns>The product in NumPy's layout.</returns>
+        private static NDArray AdoptLoopLayout(NDArray result, Shape loopLayout)
+        {
+            int loopNd = loopLayout.NDim, nd = result.ndim;
+            var dims = new long[nd];
+            var strides = new long[nd];
+            long coreSize = 1;
+            for (int c = nd - 1; c >= loopNd; c--)
+            {
+                dims[c] = result.Shape.dimensions[c];
+                strides[c] = coreSize;
+                coreSize *= dims[c];
+            }
+
+            for (int i = 0; i < loopNd; i++)
+            {
+                dims[i] = loopLayout.dimensions[i];
+                strides[i] = loopLayout.strides[i] * coreSize;
+            }
+
+            return NDArray.AdoptLayout(result, Shape.Adopt(dims, strides));
         }
 
         /// <summary>

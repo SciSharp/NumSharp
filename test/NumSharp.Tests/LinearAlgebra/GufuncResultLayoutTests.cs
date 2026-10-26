@@ -143,6 +143,101 @@ namespace NumSharp.Tests.LinearAlgebra
             Assert.AreEqual(5.0, r2.GetDouble());
         }
 
+        /// <summary>(arange(prod(shape)) % 7 - 3) as float64 in C order: the operand values of the loop-order probes.</summary>
+        private static NDArray Base(params long[] shape)
+        {
+            long n = 1;
+            foreach (long d in shape)
+                n *= d;
+            return (np.arange(n).astype(np.float64).reshape(new Shape(shape)) % 7.0) - 3.0;
+        }
+
+        /// <summary>The same values, F-ordered: NumPy's <c>np.asfortranarray</c>.</summary>
+        private static NDArray FOrder(params long[] shape) => np.asfortranarray(Base(shape));
+
+        /// <summary>The same values with the first two axes swapped in memory: <c>base(s1, s0, ...).swapaxes(0, 1)</c>.</summary>
+        private static NDArray Swapped(params long[] shape)
+        {
+            var t = (long[])shape.Clone();
+            (t[0], t[1]) = (t[1], t[0]);
+            return np.swapaxes(Base(t), 0, 1);
+        }
+
+        /// <summary>
+        ///     Asserts a result's NumPy layout and that its values equal the same product over C-ordered copies of the
+        ///     operands (the layout must not change a value).
+        /// </summary>
+        /// <param name="label">The NumPy call, for the failure message.</param>
+        /// <param name="r">The NumSharp result.</param>
+        /// <param name="reference">The product over C-ordered copies.</param>
+        /// <param name="strides">NumPy's byte strides.</param>
+        /// <param name="c">NumPy's <c>flags.c_contiguous</c>.</param>
+        /// <param name="f">NumPy's <c>flags.f_contiguous</c>.</param>
+        private static void AssertLoopLayout(string label, NDArray r, NDArray reference, long[] strides, bool c, bool f)
+        {
+            CollectionAssert.AreEqual(reference.shape, r.shape, label + " shape");
+            CollectionAssert.AreEqual(strides, r.strides, label + " strides");
+            Assert.AreEqual(c, r.flags.c_contiguous, label + " C_CONTIGUOUS");
+            Assert.AreEqual(f, r.flags.f_contiguous, label + " F_CONTIGUOUS");
+            Assert.IsTrue(r.flags.owndata, label + " OWNDATA");
+            Assert.IsTrue(np.array_equal(r, reference), label + " values");
+        }
+
+        [TestMethod]
+        public void LoopAxes_FollowNumPysIteratorOrder()
+        {
+            // NumPy's gufunc iterator sorts the loop axes by the inputs' strides (K order); the output's core axes stay
+            // innermost in C order. Probed 2.4.2 on (arange % 7 - 3) values; the reference is the product of C copies.
+            var fa = FOrder(2, 3, 4, 5);
+            var fb = FOrder(2, 3, 5, 6);
+            var ca = Base(2, 3, 4, 5);
+            var cb = Base(2, 3, 5, 6);
+            var mm = np.matmul(ca, cb);
+            // np.matmul(F, F) -> (2,3,4,6), strides (192,384,48,8): the loop axes F-ordered, the core block C-ordered
+            AssertLoopLayout("matmul F@F", np.matmul(fa, fb), mm, new long[] { 192, 384, 48, 8 }, false, false);
+            // np.matmul(F, C) -> C (576,192,48,8): where the inputs disagree, C order wins
+            AssertLoopLayout("matmul F@C", np.matmul(fa, cb), mm, new long[] { 576, 192, 48, 8 }, true, false);
+            // np.matmul(P, P) with the loop axes swapped in memory -> (192,384,48,8)
+            var pa = Swapped(2, 3, 4, 5);
+            var pb = Swapped(2, 3, 5, 6);
+            AssertLoopLayout("matmul P@P", np.matmul(pa, pb),
+                np.matmul(np.ascontiguousarray(pa), np.ascontiguousarray(pb)), new long[] { 192, 384, 48, 8 }, false, false);
+            // np.matmul(F, v) -> (2,3,4), strides (32,64,8): the vector abstains
+            var v = Base(5);
+            AssertLoopLayout("matmul F@v", np.matmul(fa, v), np.matmul(ca, v), new long[] { 32, 64, 8 }, false, false);
+            // np.matmul(F, F, axes=[(2,3),(2,3),(0,1)]) -> (4,6,2,3), strides (48,8,192,384)
+            AssertLoopLayout("matmul F@F axes", np.matmul(fa, fb, axes: new[] { new[] { 2, 3 }, new[] { 2, 3 }, new[] { 0, 1 } }),
+                np.matmul(ca, cb, axes: new[] { new[] { 2, 3 }, new[] { 2, 3 }, new[] { 0, 1 } }),
+                new long[] { 48, 8, 192, 384 }, false, false);
+            // order='C' and 'F' lay out the whole output instead
+            AssertLoopLayout("matmul F@F order C", np.matmul(fa, fb, order: 'C'), mm, new long[] { 576, 192, 48, 8 }, true,
+                false);
+            AssertLoopLayout("matmul F@F order F", np.matmul(fa, fb, order: 'F'), mm, new long[] { 8, 16, 48, 192 }, false,
+                true);
+
+            // np.matvec(F, v) -> (2,3,4), strides (32,64,8); of reversed (C) rows -> C (96,32,8)
+            AssertLoopLayout("matvec F@v", np.matvec(fa, v), np.matvec(ca, v), new long[] { 32, 64, 8 }, false, false);
+            var ra = Base(2, 3, 4, 5)["::-1, ::-1"];
+            AssertLoopLayout("matvec R@v", np.matvec(ra, v), np.matvec(np.ascontiguousarray(ra), v),
+                new long[] { 96, 32, 8 }, true, false);
+            // np.vecmat(v, F) -> (2,3,4), strides (32,64,8)
+            var fm = FOrder(2, 3, 5, 4);
+            AssertLoopLayout("vecmat v@F", np.vecmat(v, fm), np.vecmat(v, Base(2, 3, 5, 4)), new long[] { 32, 64, 8 },
+                false, false);
+
+            // np.vecdot(F, F) -> F (8,16,48); np.vecdot(P, C) -> C (96,32,8): C wins the disagreement
+            AssertLoopLayout("vecdot F.F", np.vecdot(fa, fa), np.vecdot(ca, ca), new long[] { 8, 16, 48 }, false, true);
+            AssertLoopLayout("vecdot P.C", np.vecdot(pa, ca), np.vecdot(np.ascontiguousarray(pa), ca),
+                new long[] { 96, 32, 8 }, true, false);
+            // np.vecdot(F, F, axis=0, keepdims=True) -> (1,3,4,5), strides (8,8,24,96): the kept axis innermost
+            AssertLoopLayout("vecdot F.F axis=0 keepdims", np.vecdot(fa, fa, axis: 0, keepdims: true),
+                np.vecdot(ca, ca, axis: 0, keepdims: true), new long[] { 8, 8, 24, 96 }, false, true);
+            // np.vecdot(F, C(4,5)) -> F (8,16,48): the broadcast operand votes on the loop axes only, never on the core
+            // axis (NumSharp's elementwise product counted the core axis and came out C)
+            var c45 = Base(4, 5);
+            AssertLoopLayout("vecdot F.Cb", np.vecdot(fa, c45), np.vecdot(ca, c45), new long[] { 8, 16, 48 }, false, true);
+        }
+
         [TestMethod]
         public void MatmulOrder_GivesNumPysOwnedLayout()
         {

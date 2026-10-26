@@ -151,9 +151,49 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The precondition of the unit-axis relabels: an array that owns a buffer of exactly its elements, at offset
-        ///     0, not broadcast. Every kernel's fresh output is one, and then its strides describe a dense layout, so a
-        ///     relabel that only inserts or drops a length-1 axis is a valid shape over the same bytes.
+        ///     Permutes a freshly computed result's axes by relabelling its storage in place — the dims and strides of
+        ///     <c>np.transpose(r, permutation)</c> become <paramref name="r"/>'s own — so the result keeps owning its
+        ///     buffer, as NumPy's gufunc output does when <c>axes=</c> remaps its core axes (probed 2.4.2:
+        ///     <c>np.matmul(ones((2,3,4)), ones((2,4,5)), axes=[(1,2),(1,2),(0,1)])</c> has shape (3,5,2), strides
+        ///     (40,8,120), OWNDATA True). Unlike <see cref="AdoptLayout"/> it accepts any dense layout of
+        ///     <paramref name="r"/>, so it can follow a relabel that already gave the result NumPy's K order.
+        /// </summary>
+        /// <param name="r">
+        ///     The result, normally a fresh owner (a kernel's output, in any dense layout). Consumed: it is returned
+        ///     relabelled; when it is not such an owner, it is first copied in K order (see <see cref="FreshOwner"/>) and
+        ///     disposed, and the permutation applies to the copy.
+        /// </param>
+        /// <param name="permutation">
+        ///     NumPy's <c>np.transpose</c> axes: axis <c>i</c> of the answer is axis <c>permutation[i]</c> of
+        ///     <paramref name="r"/>. Each axis once.
+        /// </param>
+        /// <returns>The result with its axes permuted, owning its buffer.</returns>
+        /// <exception cref="ArgumentException"><paramref name="permutation"/> is not a permutation of <paramref name="r"/>'s
+        ///     axes (a caller's bug: the gufunc checks validated the axes).</exception>
+        internal static NDArray AdoptAxisPermutation(NDArray r, int[] permutation)
+        {
+            int nd = r.ndim;
+            if (permutation.Length != nd)
+                throw new ArgumentException($"a permutation of {nd} axes was expected, got {permutation.Length}",
+                    nameof(permutation));
+            var seen = new bool[nd];
+            foreach (int ax in permutation)
+            {
+                if ((uint)ax >= (uint)nd || seen[ax])
+                    throw new ArgumentException("each axis must appear exactly once", nameof(permutation));
+                seen[ax] = true;
+            }
+
+            r = FreshOwner(r);
+            r.Storage.SetShapeUnsafe(DefaultEngine.TransposedShape(r.Shape, permutation));
+            return r;
+        }
+
+        /// <summary>
+        ///     The precondition of the unit-axis and permutation relabels: an array that owns a buffer of exactly its
+        ///     elements, at offset 0, not broadcast. Every kernel's fresh output is one, and then its strides describe a
+        ///     dense layout, so a relabel that only inserts or drops a length-1 axis, or permutes the axes, is a valid
+        ///     shape over the same bytes.
         /// </summary>
         /// <param name="r">The result to relabel. Disposed when it has to be copied.</param>
         /// <returns><paramref name="r"/> itself when it is such an owner; otherwise its copy in K order (no current
