@@ -99,7 +99,10 @@ namespace NumSharp
             ///     <b>Stricter than <see cref="np.cross"/>:</b> the Array-API form accepts 3-vectors
             ///     ONLY, over a single <paramref name="axis"/>, where the main-namespace
             ///     <see cref="np.cross"/> also takes the 2-vector form (deprecated in NumPy 2.0) and a
-            ///     separate <c>axisa</c>/<c>axisb</c>/<c>axisc</c> per operand.
+            ///     separate <c>axisa</c>/<c>axisb</c>/<c>axisc</c> per operand. Past the length check it IS
+            ///     <see cref="np.cross"/> (NumPy's <c>_core_cross(x1, x2, axis=axis)</c>): the dtypes promote
+            ///     strongly (<c>promote_types</c>), and the result is a view of a fresh C-ordered array whose
+            ///     component axis is moved to <paramref name="axis"/>.
             ///     </para>
             /// </remarks>
             /// <param name="x1">The first operand.</param>
@@ -109,7 +112,8 @@ namespace NumSharp
             ///     ends with <c>np.concatenate</c>), which drops the class.</returns>
             /// <exception cref="IndexError"><paramref name="axis"/> is out of range for either operand ("tuple index out of
             ///     range": NumPy indexes <c>x1.shape[axis]</c> before anything else).</exception>
-            /// <exception cref="ValueError">The component axis of either operand does not have length 3.</exception>
+            /// <exception cref="ValueError">The component axis of either operand does not have length 3, or the other axes
+            ///     do not broadcast.</exception>
             /// <exception cref="TypeError">Either operand holds text (the multiply has no string loop).</exception>
             [NDScoped] // the class boundary's temporaries; LinalgEngine.Cross scopes the computation's own
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)

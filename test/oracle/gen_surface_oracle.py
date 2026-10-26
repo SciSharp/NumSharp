@@ -1525,10 +1525,9 @@ def _with_bufsize(n, fn):
 # kernels cast the input to a float16 / complex128 accumulator first (DefaultEngine.ScanElementwiseFlat / ReduceCumAdd).
 # SU39 (np.cumsum(x, dtype=bool)) was fixed by f44c9579 (NumPy's bool loop, logical or); the gap replay reported its
 # case matching. Both rules are dropped.
+# SU2 (np.linalg.cross over operands that cannot broadcast) matches NumPy since 2026-10-26: np.linalg.cross is NumPy's
+# length check and then np.cross (_core_cross), whose broadcast_shapes refusal is NumPy's text. Its rule is dropped.
 GAPS = {
-    "SU2": "np.linalg.cross over operands that cannot broadcast raises 'operands could not be broadcast together with "
-           "shapes (4,) (5,)'; NumPy's linalg.cross raises broadcast_shapes' 'shape mismatch: objects cannot be "
-           "broadcast to a single shape.  Mismatch is between arg 0 with shape (4,) and arg 1 with shape (5,).'",
     "SU3": "np.histogram / np.histogram_bin_edges of a complex128 sample with a bin COUNT return float64 edges; NumPy's "
            "edges are complex128 (bin_type = result_type(first_edge, last_edge, a))",
     "SU4": "np.histogram of a complex128 sample with the estimators 'doane', 'scott', 'stone', 'rice', 'sturges' "
@@ -1592,8 +1591,6 @@ def _gap_of(case):
     if op.startswith(("finfo.", "iinfo.")) and "dtype" not in p:
         return None
     dt = np.dtype(p["dtype"]).name if op.startswith(("finfo.", "iinfo.")) else p.get("dtype")
-    if op == "linalg.cross" and err and err["text"].startswith("shape mismatch"):
-        return "SU2"
     if op in ("histogram", "histogram_bin_edges") and case["operands"][0]["dtype"] == "complex128":
         if isinstance(p.get("bins"), str):
             # 'auto' and 'fd' reach np.percentile, which refuses complex data with NumPy's text; the other

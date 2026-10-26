@@ -344,5 +344,33 @@ namespace NumSharp.Tests.LinearAlgebra
             // np.linalg.vector_norm(z2, axis=0): 0x1.ff674d62a1e57p+1 (twice-rounded: ...e56p+1).
             Assert.AreEqual(0x400FF674D62A1E57L, BitConverter.DoubleToInt64Bits(np.linalg.vector_norm(z2, 0).GetDouble()));
         }
+
+        /// <summary>
+        ///     np.linalg.cross is NumPy's length check and then <c>_core_cross</c>, np.cross: the dtypes promote strongly
+        ///     (<c>promote_types</c>: an int8 matrix against an int32 row is int32, a bool one int32 too) and the result is
+        ///     <c>moveaxis(cp, -1, axis)</c>, a view of a fresh C-ordered array (C order for the last axis, F order for a
+        ///     matrix's first). NumSharp multiplied 0-d component views (which the ufuncs read as Python scalars) and
+        ///     stacked the components along the first axis.
+        /// </summary>
+        [TestMethod]
+        public void LinalgCross_IsNpCross()
+        {
+            var a = np.array(new sbyte[] { 3, -1, 2, 0, 5, -4, 1, 7, -2 }).reshape(3, 3);
+            var row = np.array(new[] { 1, 2, 3 });
+
+            // np.linalg.cross(int8 a, int32 row): int32 (3, 3) [[-7, -7, 7], [23, -4, -5], [25, -5, -5]], a C view.
+            var r = np.linalg.cross(a, row);
+            Assert.AreEqual(np.int32, r.dtype);
+            CollectionAssert.AreEqual(new[] { -7, -7, 7, 23, -4, -5, 25, -5, -5 }, r.flatten().ToArray<int>());
+            Assert.IsTrue(r.flags.c_contiguous && !r.flags.f_contiguous && !r.flags.owndata, "cross(a, row) C--W");
+            // np.linalg.cross(a.astype(bool), row): int32 too.
+            Assert.AreEqual(np.int32, np.linalg.cross(a.astype(np.bool_), row).dtype);
+
+            // np.linalg.cross(a, a[::-1], axis=0): int8 (3, 3) [[0, -40, -16], [-8, 48, 0], [0, -40, -16]], an F view.
+            var c = np.linalg.cross(a, a["::-1"], 0);
+            Assert.AreEqual(np.int8, c.dtype);
+            CollectionAssert.AreEqual(new sbyte[] { 0, -40, -16, -8, 48, 0, 0, -40, -16 }, c.flatten().ToArray<sbyte>());
+            Assert.IsTrue(c.flags.f_contiguous && !c.flags.c_contiguous && !c.flags.owndata, "cross(a, a[::-1], axis=0) -F-W");
+        }
     }
 }

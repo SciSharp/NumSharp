@@ -64,6 +64,11 @@ namespace NumSharp.Tests
     // matrix is in Math/np.cumsum.AccumulatorCast.Test.cs and the scan tier's dtype= cases, and the generator's rules
     // are dropped.
     //
+    // FIXED 2026-10-26 by np.linalg.cross's port (docs/plans/np-layer-dtype-logic.md, P2's np.linalg family): past its
+    // length check np.linalg.cross is np.cross (NumPy's _core_cross), whose broadcast_shapes refusal is NumPy's text, so
+    // SU2 is gone. Its pin below stays as a regression test, its summary opening with "FIXED"; LinearAlgebra/
+    // np.linalg.NumPyPort.Test.cs holds the port's dtype and layout, and the generator's rule is dropped.
+    //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
     // cases return to the gate.
@@ -87,9 +92,11 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.linalg.cross</c> of (4, 3) and (5, 3): NumPy raises broadcast_shapes' ValueError (gap SU2).
+        ///     FIXED 2026-10-26 (np.linalg.cross is np.cross past its length check): NumSharp gives NumPy's answer now, and
+        ///     this test pins it. Before the fix: <c>np.linalg.cross</c> of (4, 3) and (5, 3): NumPy raises
+        ///     broadcast_shapes' ValueError; NumSharp raised its own broadcast text (gap SU2).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU2")]
+        [TestMethod]
         public void Surface_LinalgCross_NonBroadcastable_IsNumPysShapeMismatchText()
         {
             using var a = np.ones(new Shape(4, 3));
