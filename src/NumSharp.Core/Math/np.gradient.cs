@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -308,10 +309,15 @@ namespace NumSharp
                     NDArray diffx = np.diff(distances);
                     // Constant spacing collapses to the scalar (uniform) case — a real speedup and
                     // it matches NumPy bit-for-bit (the whole-array uniform formula runs instead).
-                    if (IsConstant(diffx))
-                        dx[i] = diffx.GetDouble(0);
+                    // NumPy's own statement, `if (diffx == diffx[0]).all(): diffx = diffx[0]`: diffx[0] is NumPy's
+                    // IndexError for the empty diff of an empty axis' coordinates (it read the empty buffer's first
+                    // eight bytes), and the comparison runs in the diffs' own dtype, so complex diffs are constant only
+                    // when both parts are (the double read compared the real parts).
+                    NDArray first = diffx[0];
+                    if (np.all(diffx == first))
+                        dx[i] = SpacingElement(first, 0);
                     else
-                        dx[i] = diffx;                                        // float64 diffs
+                        dx[i] = diffx;                                        // the diffs, in their own dtype
                 }
             }
             else
@@ -428,8 +434,10 @@ namespace NumSharp
                 {
                     // out[0]  = (f[1]  - f[0])  / dx_0     (dx_0 = ax_dx    or ax_dx[0])
                     // out[-1] = (f[-1] - f[-2]) / dx_n     (dx_n = ax_dx    or ax_dx[-1])
-                    double dx0v = uniform ? (double)ax_dx : ((NDArray)ax_dx).GetDouble(0);
-                    double dxnv = uniform ? (double)ax_dx : ((NDArray)ax_dx).GetDouble(((NDArray)ax_dx).size - 1);
+                    // The coordinate diffs keep their dtype (float32 / float16 / bool / complex coordinates are not
+                    // converted), so each end is read through that dtype (SpacingElement), never as a float64.
+                    double dx0v = uniform ? (double)ax_dx : SpacingElement((NDArray)ax_dx, 0);
+                    double dxnv = uniform ? (double)ax_dx : SpacingElement((NDArray)ax_dx, ((NDArray)ax_dx).size - 1);
                     WriteEdge(outp, work, axis, N, 0,
                         Edge1(SliceAlongAxis(work, axis, 1, 2), SliceAlongAxis(work, axis, 0, 1), dx0v, uniform, edgeWiden));
                     WriteEdge(outp, work, axis, N, M - 1,
@@ -448,12 +456,13 @@ namespace NumSharp
                     else
                     {
                         NDArray axd = (NDArray)ax_dx;
-                        double d1 = axd.GetDouble(0), d2 = axd.GetDouble(1);
+                        // Read through the diffs' own dtype (SpacingElement): see the first-order edges.
+                        double d1 = SpacingElement(axd, 0), d2 = SpacingElement(axd, 1);
                         a0 = -(2.0 * d1 + d2) / (d1 * (d1 + d2));
                         b0 = (d1 + d2) / (d1 * d2);
                         c0 = -d1 / (d2 * (d1 + d2));
                         long L = axd.size;
-                        double e1 = axd.GetDouble(L - 2), e2 = axd.GetDouble(L - 1);
+                        double e1 = SpacingElement(axd, L - 2), e2 = SpacingElement(axd, L - 1);
                         a1 = e2 / (e1 * (e1 + e2));
                         b1 = -(e2 + e1) / (e1 * e2);
                         c1 = (2.0 * e2 + e1) / (e2 * (e1 + e2));
@@ -620,12 +629,31 @@ namespace NumSharp
             return 0;                               // a scalar
         }
 
-        // Convert a scalar spacing to double.
+        // Convert a scalar spacing to double. A 0-d array spacing is read through its own dtype (SpacingElement): a 0-d
+        // int64 2 read as a float64 is the denormal 1e-323, and a 0-d float32 read as a float64 reaches past its buffer.
         private static double GradToDouble(object v)
         {
-            if (v is NDArray nd) return nd.GetDouble(0);
+            if (v is NDArray nd) return SpacingElement(nd, 0);
             return Convert.ToDouble(v);
         }
+
+        /// <summary>
+        ///     One element of a spacing array (a 0-d spacing, or the diffs of a coordinate array) as a double, read through
+        ///     the array's own dtype.
+        /// </summary>
+        /// <param name="a">The array: any dtype np.diff or the caller gives (float64, float32, float16, bool, complex, ...).</param>
+        /// <param name="index">The flat C-order index of the element (0 for a 0-d array).</param>
+        /// <returns>The element converted to double (a complex element's real part, a bool's 1 or 0).</returns>
+        /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside the array.</exception>
+        /// <remarks>
+        ///     <c>NDArray.GetDouble</c> is not a conversion: it indexes the float64 lane of the storage's typed-slice union
+        ///     whatever the array's dtype. On a float32 diff array that reads two floats' bits as one double and, from the
+        ///     middle of the array on, eight bytes per element past its end, so np.gradient's results over float32, float16
+        ///     or bool coordinates changed from run to run; on an int64 element it reads the integer's bits. Reading the
+        ///     element boxed by its own dtype (<c>GetAtIndex</c>, which also maps the index through a view's offset and
+        ///     strides) and converting it is exact for every dtype.
+        /// </remarks>
+        private static double SpacingElement(NDArray a, long index) => Converts.ToDouble(a.GetAtIndex(index));
 
         private static bool IsIntegerLike(NPTypeCode tc) => tc switch
         {
@@ -634,16 +662,5 @@ namespace NumSharp
             or NPTypeCode.Char => true,
             _ => false,
         };
-
-        // True when every element equals the first (NumPy's `(diffx == diffx[0]).all()`).
-        private static bool IsConstant(NDArray diffx)
-        {
-            long n = diffx.size;
-            if (n <= 1) return true;
-            double first = diffx.GetDouble(0);
-            for (long i = 1; i < n; i++)
-                if (diffx.GetDouble(i) != first) return false;
-            return true;
-        }
     }
 }
