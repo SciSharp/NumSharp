@@ -53,6 +53,38 @@ namespace NumSharp.Tests.LinearAlgebra
             ReferenceEquals(np.linalg.matrix_power(m, 1), m).Should().BeTrue();
         }
 
+        /// <summary>
+        ///     NumPy's <c>matrix_power(a, 0)</c> is <c>a = empty_like(a); a[...] = eye(a.shape[-2], dtype=a.dtype)</c>, so
+        ///     the identity takes the operand's memory order: an F-ordered operand (or a transposed C one) gives an
+        ///     F-ordered identity, a stack's identities follow its order too. NumSharp returned a C-ordered identity.
+        ///     Expected layouts: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void MatrixPower_Zero_KeepsTheOperandsOrder()
+        {
+            var f = np.asfortranarray(np.arange(9.0).reshape(3, 3));
+            var r = np.linalg.matrix_power(f, 0);
+            r.flags.f_contiguous.Should().BeTrue();
+            r.flags.c_contiguous.Should().BeFalse();
+            r.flags.owndata.Should().BeTrue();
+            np.array_equal(r, np.eye(3)).Should().BeTrue();
+
+            np.linalg.matrix_power(np.arange(9.0).reshape(3, 3).T, 0).strides.Should().Equal(8L, 24L);
+
+            var stack = np.linalg.matrix_power(np.asfortranarray(np.arange(18.0).reshape(2, 3, 3)), 0);
+            stack.strides.Should().Equal(8L, 16L, 48L);
+            np.array_equal(stack, np.stack(new[] { np.eye(3), np.eye(3) })).Should().BeTrue();
+
+            var ints = np.linalg.matrix_power(np.asfortranarray(np.arange(9).astype(np.int64).reshape(3, 3)), 0);
+            ints.dtype.Should().Be(np.int64);
+            ints.flags.f_contiguous.Should().BeTrue();
+            ints.GetInt64(1, 1).Should().Be(1L);
+            ints.GetInt64(0, 1).Should().Be(0L);
+
+            // A C-ordered operand still gets a C-ordered identity.
+            np.linalg.matrix_power(np.eye(3), 0).flags.c_contiguous.Should().BeTrue();
+        }
+
         [TestMethod]
         public void Cross_LeadingAxesBroadcast_BeforeAnythingElse()
         {

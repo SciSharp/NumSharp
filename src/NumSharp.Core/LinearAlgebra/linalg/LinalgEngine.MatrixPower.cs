@@ -9,7 +9,8 @@ namespace NumSharp
         ///     power (through the public <c>np.linalg.inv</c>), the identity for 0, the operand itself for 1, and binary
         ///     exponentiation with <c>np.matmul</c> above.
         /// </summary>
-        /// <param name="a">The square matrix, or a stack of them (plain: the facade applied the class boundary).</param>
+        /// <param name="a">The square matrix, or a stack of them: plain for a numpy.matrix operand (the facade applied its
+        ///     rule), a numpy.char.chararray one as it is (the facade has no chararray rule).</param>
         /// <param name="n">The power: any integer.</param>
         /// <returns>The power. <b>Footgun (NumPy's own):</b> <c>n == 1</c> returns <paramref name="a"/> ITSELF.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a negative power of a singular
@@ -61,15 +62,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The identity matching a stack's trailing two axes, broadcast across the batch —
-        ///     what <c>matrix_power(a, 0)</c> returns (NumPy: <c>a[...] = eye(a.shape[-2], dtype=a.dtype)</c>).
+        ///     What <c>matrix_power(a, 0)</c> returns, NumPy's two statements <c>a = empty_like(a)</c> and
+        ///     <c>a[...] = eye(a.shape[-2], dtype=a.dtype)</c>: a new array of <paramref name="a"/>'s dtype, shape and memory
+        ///     order (empty_like's order 'K': an F-ordered operand gives an F-ordered identity) holding the identity in every
+        ///     matrix of the stack.
         /// </summary>
-        /// <param name="a">The (square-stacked) operand.</param>
-        /// <returns>A new array of <paramref name="a"/>'s dtype and shape holding the identity.</returns>
+        /// <param name="a">The (square-stacked) operand; a numpy.char.chararray one arrives as it is.</param>
+        /// <returns>A new plain array of <paramref name="a"/>'s dtype, shape and K-order layout holding the identity.</returns>
         /// <exception cref="OverflowException">The matrix side exceeds <see cref="int.MaxValue"/>.</exception>
         /// <remarks>The identity is built IN the operand's dtype, as NumPy's <c>eye(..., dtype=a.dtype)</c> is: for a text
         ///     dtype the diagonal stores the Python int 1 as its <c>str()</c> (<c>'1'</c>) and the rest stays empty, where
         ///     a float64 identity cast to text would read <c>'1.0'</c> / <c>'0.0'</c>.</remarks>
+        [NDScopedCovered] // only caller: [NDScoped] MatrixPower; the eye temp rides its scope
         private static NDArray Identity(NDArray a)
         {
             long side = a.Shape.dimensions[a.ndim - 1];
@@ -77,10 +81,16 @@ namespace NumSharp
                 throw new OverflowException($"Matrix dimension {side} exceeds int.MaxValue for np.eye");
 
             var eye = np.eye((int)side, dtype: a.dtype);
-            if (a.ndim == 2)
-                return eye;
-
-            return np.broadcast_to(eye, Shape.Adopt(a.Shape.dimensions)).copy();
+            // A plain region: a numpy.char.chararray operand arrives as it is (the facade has no chararray rule), and
+            // np.empty_like must not apply its chararray rule from inside the library. The identity stays the plain array
+            // this function always returned (NumPy's empty_like keeps the chararray class: the class boundary's work,
+            // not this function's). The region does nothing for a plain operand.
+            using var plain = NDMatrixBoundary.PlainFor(a);
+            // empty_like keeps the operand's order (a C-ordered copy of eye did not), and the assignment broadcasts the one
+            // identity over the stack's leading axes.
+            var result = np.empty_like(a);
+            np.copyto(result, eye);
+            return result;
         }
     }
 }
