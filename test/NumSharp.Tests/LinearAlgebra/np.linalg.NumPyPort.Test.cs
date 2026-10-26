@@ -402,5 +402,72 @@ namespace NumSharp.Tests.LinearAlgebra
             Assert.AreEqual(0x400FF1A349A00FF0L, BitConverter.DoubleToInt64Bits(np.linalg.norm(z).GetDouble()));
             Assert.AreEqual(0x400FF1A349A00FF1L, BitConverter.DoubleToInt64Bits(np.linalg.vector_norm(z).GetDouble()));
         }
+
+        /// <summary>
+        ///     NumPy's Frobenius norm over an axis pair is <c>sqrt(add.reduce((x.conj() * x).real, axis=axis))</c>: one
+        ///     reduction over both axes, summed in the order its iterator visits the squares (laid out in the operand's K
+        ///     order). NumSharp summed one axis and then the other, which rounds differently. Each case below is one
+        ///     branch of that order, with NumPy 2.4.2's bits; the old two sums gave other bits in every one of them.
+        /// </summary>
+        [TestMethod]
+        public void MatrixNorm_Frobenius_IsOneReductionInNumPysOrder()
+        {
+            var v = np.array(new[]
+            {
+                0.071, 2.703, -2.135, 2.692, -1.129, -0.46, 1.966, -0.545, 0.298, -2.835, 1.521, 0.229, -1.022, 1.731,
+                -1.181, -0.279, -2.196, -0.581, -1.779, -1.426, 1.502, -1.318, -0.089, 2.884, 2.77, 1.349, 0.247, -1.339,
+                -2.036, 2.82, 0.096, -2.305, 0.741, 1.66, 0.678, 2.504
+            });
+
+            // a 2-D C matrix, both axes: one flat reduction (0x1.7c03d0db37a9cp+2; two sums ...9dp+2), in either order.
+            var a = v["0:12"].reshape(3, 4);
+            Assert.AreEqual(0x4017C03D0DB37A9CL, BitConverter.DoubleToInt64Bits(np.linalg.norm(a, "fro", new[] {0, 1}).GetDouble()));
+            Assert.AreEqual(0x4017C03D0DB37A9CL, BitConverter.DoubleToInt64Bits(np.linalg.norm(a, null, new[] {1, 0}).GetDouble()));
+
+            // a C stack, the trailing pair: the two axes merge into one run per matrix, an owning result.
+            var b = np.linalg.matrix_norm(v["0:24"].reshape(2, 3, 4));
+            Assert.AreEqual(0x4017C03D0DB37A9CL, BitConverter.DoubleToInt64Bits(b.GetDouble(0)));
+            Assert.AreEqual(0x40153CE021E56F24L, BitConverter.DoubleToInt64Bits(b.GetDouble(1)));
+            Assert.IsTrue(b.flags.owndata);
+
+            // an F-ordered matrix: the squares are reduced in memory order (0x1.8a5c325069fdfp+2; two sums ...dep+2).
+            var c = np.array(new[] { -1.356, -2.957, 0.874, 1.319, 2.013, -1.309, -1.709, 0.836, 1.83, 2.782, -2.097, -0.107 })
+                .reshape(4, 3).T;
+            Assert.AreEqual(0x4018A5C325069FDFL, BitConverter.DoubleToInt64Bits(np.linalg.norm(c, "fro", new[] {0, 1}).GetDouble()));
+
+            // float16, two reduced axes apart with the inner one innermost: HALF_add adds each run's float32 sum into the
+            // float16 result and rounds once per run (0x46A4; two float16 sums round each run first, 0x46A3).
+            var d = np.array(new[]
+            {
+                1.957, -2.629, -2.442, 2.779, 1.52, -0.973, -2.207, -0.68, -0.965, 2.247, -0.487, -2.508, 2.561, 0.734,
+                -2.3, -2.321, -0.204, -2.447, 0.791, 0.698, -2.808, 1.845, 1.721, 2.492
+            }).reshape(3, 2, 4).astype(np.float16);
+            var rd = np.linalg.norm(d, "fro", new[] {0, 2});
+            Assert.AreEqual((ushort)0x46A4, BitConverter.HalfToUInt16Bits(rd.GetAtIndex<Half>(0)));
+            Assert.AreEqual((ushort)0x46D8, BitConverter.HalfToUInt16Bits(rd.GetAtIndex<Half>(1)));
+
+            // two reduced axes apart with a kept axis innermost: every reduced element is added into its result in turn,
+            // one sequential chain (two sums: ...03p+2 and ...8dp+2 for the first two).
+            var e = np.linalg.norm(v.reshape(3, 2, 3, 2), "fro", new[] {0, 2});
+            CollectionAssert.AreEqual(new long[] {2, 2}, e.shape);
+            Assert.AreEqual(0x4013FDD36DC36502L, BitConverter.DoubleToInt64Bits(e.GetDouble(0, 0)));
+            Assert.AreEqual(0x4015D077D52CF68CL, BitConverter.DoubleToInt64Bits(e.GetDouble(0, 1)));
+            Assert.AreEqual(0x400C8688AFB33D7BL, BitConverter.DoubleToInt64Bits(e.GetDouble(1, 0)));
+            Assert.AreEqual(0x401799E4DD56544CL, BitConverter.DoubleToInt64Bits(e.GetDouble(1, 1)));
+
+            // a permuted operand: reduced in its memory order (the middle result, ...d7p+2; two sums ...d8p+2).
+            var f = np.linalg.norm(v["0:24"].reshape(3, 2, 4).transpose(new[] {1, 0, 2}), "fro", new[] {0, 2});
+            Assert.AreEqual(0x4013E7DAC696F813L, BitConverter.DoubleToInt64Bits(f.GetDouble(0)));
+            Assert.AreEqual(0x401000AF8E6642D7L, BitConverter.DoubleToInt64Bits(f.GetDouble(1)));
+            Assert.AreEqual(0x40130C4DFE8A825FL, BitConverter.DoubleToInt64Bits(f.GetDouble(2)));
+
+            // a 4-D F operand: NumPy's (2, 5) result is F-ordered and owns its buffer (element strides (1, 2)).
+            var g = np.linalg.norm(np.asfortranarray(np.arange(120).reshape(2, 3, 4, 5) / 7), "fro", new[] {1, 2});
+            Assert.AreEqual(0x40307D1C15F4010AL, BitConverter.DoubleToInt64Bits(g.GetDouble(0, 1)));
+            Assert.IsTrue(g.flags.f_contiguous);
+            Assert.IsFalse(g.flags.c_contiguous);
+            Assert.IsTrue(g.flags.owndata);
+            CollectionAssert.AreEqual(new long[] {1, 2}, g.Shape.strides);
+        }
     }
 }

@@ -412,17 +412,199 @@ namespace NumSharp
             return ReshapeLikeNumPy(result, retShape);
         }
 
-        /// <summary>The Frobenius norm over an axis pair: the square root of the summed <c>|x|²</c>.</summary>
-        /// <param name="a">The floating operand.</param>
+        /// <summary>
+        ///     NumPy's Frobenius norm over an axis pair, <c>sqrt(add.reduce((x.conj() * x).real, axis=axis))</c>: ONE
+        ///     reduction over both axes, summed in the order NumPy's reduction iterator visits the squares, which are laid
+        ///     out in the operand's K order. Two one-axis sums add the same squares in another order, so their last bits
+        ///     can differ from NumPy's.
+        /// </summary>
+        /// <param name="a">The floating operand (NumPy's <c>x</c> after its float conversion: NumSharp's cast keeps the
+        ///     K layout, as NumPy's <c>astype</c> does, so the squares' order can be read from it).</param>
         /// <param name="rowAxis">The normalized row axis.</param>
-        /// <param name="colAxis">The normalized column axis.</param>
-        /// <returns>The norm, both axes reduced.</returns>
+        /// <param name="colAxis">The normalized column axis (not <paramref name="rowAxis"/>).</param>
+        /// <returns>A fresh array: the norm, both axes reduced, its kept axes laid out as NumPy lays out the reduction's
+        ///     result (in the operand's memory order) and owning its buffer.</returns>
+        /// <remarks>
+        ///     <para><b>The order.</b> <c>(x.conj() * x).real</c> is a ufunc result, laid out in <c>x</c>'s K order
+        ///     (<see cref="Shape.NpyIterOutputShape"/>), and the reduction iterator walks it in that order. So the squares
+        ///     are computed over <c>np.transpose(a, perm)</c>, the operand transposed into its memory order, which makes
+        ///     them C-contiguous and the walk a C-order walk (<see cref="SumAxisPairOfCOrderSquares"/>). The result's axes
+        ///     are then in that order too, which is where NumPy allocates them: they are relabelled back to the operand's
+        ///     axis order (<see cref="NDArray.AdoptAxisPermutation"/>), so the answer keeps NumPy's layout and owns its
+        ///     buffer, as the <c>sqrt</c> NumPy returns does.</para>
+        ///     <para><b>Not modelled.</b> An empty operand keeps the two one-axis sums: every sum is the identity's 0 (or
+        ///     the result holds no element), whatever the order.</para>
+        /// </remarks>
         [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] Norm scope
         private static NDArray FrobeniusOverBoth(NDArray a, int rowAxis, int colAxis)
         {
-            var squared = AbsSquared(a);
-            var once = np.sum(squared, rowAxis);
-            return np.sqrt(np.sum(once, Shift(colAxis, rowAxis)));
+            if (a.size == 0)
+            {
+                var squares = AbsSquared(a);
+                var once = np.sum(squares, rowAxis);
+                return np.sqrt(np.sum(once, Shift(colAxis, rowAxis)));
+            }
+
+            int nd = a.ndim;
+            // The squares' layout: the ufunc vote of the operand alone (the complex product's two operands, x.conj() and
+            // x, are in one order), outermost axis first.
+            var layout = a.Shape;
+            int[] perm = Shape.NpyIterOutputShape((long[])layout.dimensions.Clone(), new ReadOnlySpan<Shape>(in layout))
+                .DenseAxisOrder();
+            bool identity = true;
+            for (int i = 0; i < nd && identity; i++)
+                identity = perm[i] == i;
+
+            var inOrder = identity ? a : np.transpose(a, perm);
+            int pr = identity ? rowAxis : Array.IndexOf(perm, rowAxis);
+            int pc = identity ? colAxis : Array.IndexOf(perm, colAxis);
+
+            var squared = AbsSquared(inOrder);
+            // AbsSquared allocates a fresh C-ordered result over a C-ordered operand; should a kernel ever hand back
+            // another layout, a C copy keeps the walk below a C-order walk (the values do not depend on the layout).
+            if (!squared.Shape.IsContiguous)
+                squared = np.ascontiguousarray(squared);
+
+            var root = np.sqrt(SumAxisPairOfCOrderSquares(squared, Math.Min(pr, pc), Math.Max(pr, pc)));
+            if (identity || root.ndim < 2)
+                return root;   // the kept axes are already in the operand's order (one or none is in any order)
+
+            // root's axes are the kept axes in perm order; answer axis i is the i-th kept axis in the operand's order.
+            var keptInOrder = new int[nd - 2];
+            for (int i = 0, j = 0; i < nd; i++)
+                if (perm[i] != rowAxis && perm[i] != colAxis)
+                    keptInOrder[j++] = perm[i];
+            var permutation = new int[nd - 2];
+            for (int ax = 0, i = 0; ax < nd; ax++)
+                if (ax != rowAxis && ax != colAxis)
+                    permutation[i++] = Array.IndexOf(keptInOrder, ax);
+            return NDArray.AdoptAxisPermutation(root, permutation);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>add.reduce</c> over two axes of a C-contiguous array of squares, in the order its reduction
+        ///     iterator adds them, built from one-axis <see cref="np.sum(NDArray, int)"/> calls
+        ///     (each NumPy's own add.reduce over one axis, bit for bit).
+        /// </summary>
+        /// <param name="s">The squares: C-contiguous, non-empty, a float dtype or decimal.</param>
+        /// <param name="lo">The smaller reduced axis.</param>
+        /// <param name="hi">The larger reduced axis.</param>
+        /// <returns>The sums, of <paramref name="s"/>'s dims without <paramref name="lo"/> and <paramref name="hi"/>, C
+        ///     order: a fresh array, or a view of <paramref name="s"/> when both reduced axes have extent 1.</returns>
+        /// <remarks>
+        ///     <para><b>The iterator.</b> NumPy reduces with one NpyIter over the result (stride 0 along the reduced axes)
+        ///     and the squares. A C-contiguous operand is walked in C order; extent-1 axes are dropped; adjacent axes merge
+        ///     when every operand's strides chain, which for two adjacent REDUCED axes they always do here (and a reduced
+        ///     axis never merges with a kept one: the result's stride 0 does not chain with its non-zero stride). The
+        ///     innermost axis is the ufunc loop: a reduced run there is one call, <c>out += pairwise_sum(run)</c>; a kept one
+        ///     adds element by element into the result. So, over the axes of extent &gt; 1:</para>
+        ///     <list type="bullet">
+        ///         <item>two reduced axes next to each other are ONE axis of their product's extent (a reshape);</item>
+        ///         <item>otherwise, with the inner reduced axis innermost, each run is pairwise-summed and the runs are
+        ///         added in order of the outer reduced axis: the inner axis's sum, then the outer one's;</item>
+        ///         <item>otherwise every reduced element is added into its result in turn, outer reduced index first
+        ///         (one sequential chain): the two axes moved to the front, copied C-contiguous, merged, and summed along
+        ///         the merged leading axis, whose one-axis sum is that sequential chain;</item>
+        ///         <item>a reduced axis of extent 1 adds one element to the identity, which leaves a square as it is
+        ///         (a square is never <c>-0.0</c>, and <c>0 + NaN</c> keeps the NaN), so it drops out.</item>
+        ///     </list>
+        /// </remarks>
+        [NDScopedCovered] // only caller: FrobeniusOverBoth, under the [NDScoped] Norm scope; the views and copies ride it
+        private static NDArray SumAxisPairOfCOrderSquares(NDArray s, int lo, int hi)
+        {
+            long[] d = s.Shape.dimensions;
+            int n = d.Length;
+            var target = new long[n - 2];
+            for (int i = 0, j = 0; i < n; i++)
+                if (i != lo && i != hi)
+                    target[j++] = d[i];
+
+            // The axes NumPy's iterator keeps: those of extent > 1 (a reshape of a C-contiguous array is a view).
+            int big = 0;
+            for (int i = 0; i < n; i++)
+                if (d[i] > 1)
+                    big++;
+            var squeezed = new long[big];
+            int qLo = -1, qHi = -1;
+            for (int i = 0, j = 0; i < n; i++)
+            {
+                if (d[i] <= 1)
+                    continue;
+                if (i == lo)
+                    qLo = j;
+                else if (i == hi)
+                    qHi = j;
+                squeezed[j++] = d[i];
+            }
+
+            var y = big == n ? s : s.reshape(squeezed);
+            NDArray r;
+            if (qLo < 0 && qHi < 0)
+            {
+                r = y;
+            }
+            else if (qLo < 0 || qHi < 0)
+            {
+                r = np.sum(y, qLo < 0 ? qHi : qLo);
+            }
+            else if (qHi == qLo + 1)
+            {
+                var merged = new long[big - 1];
+                for (int i = 0, j = 0; i < big; i++)
+                {
+                    if (i == qHi)
+                        continue;
+                    merged[j++] = i == qLo ? squeezed[qLo] * squeezed[qHi] : squeezed[i];
+                }
+                r = np.sum(y.reshape(merged), qLo);
+            }
+            else if (qHi == big - 1)
+            {
+                r = y.typecode == NPTypeCode.Half ? HalfRunSumsAddedInTurn(y, qLo, qHi) : np.sum(np.sum(y, qHi), qLo);
+            }
+            else
+            {
+                var front = np.ascontiguousarray(np.moveaxis(y, new[] {qLo, qHi}, new[] {0, 1}));
+                var chain = new long[big - 1];
+                chain[0] = squeezed[qLo] * squeezed[qHi];
+                for (int i = 0, j = 1; i < big; i++)
+                    if (i != qLo && i != qHi)
+                        chain[j++] = squeezed[i];
+                r = np.sum(front.reshape(chain), 0);
+            }
+
+            // Put the kept axes of extent 1 back (a view of the C-ordered sums).
+            return r.ndim == target.Length ? r : r.reshape(target);
+        }
+
+        /// <summary>
+        ///     NumPy's float16 reduction over two reduced axes that do not merge, the inner one innermost: HALF_add's
+        ///     reduce loop widens the running result to float32, adds the run's pairwise sum (computed in float32) and
+        ///     rounds back to float16 ONCE per run, so a run's own sum is never rounded to float16.
+        /// </summary>
+        /// <param name="y">The float16 squares, C-contiguous, every axis of extent &gt; 1.</param>
+        /// <param name="qLo">The outer reduced axis (a kept axis lies between it and <paramref name="qHi"/>).</param>
+        /// <param name="qHi">The inner reduced axis, the last one.</param>
+        /// <returns>A fresh float16 array of <paramref name="y"/>'s dims without the two reduced axes, C order.</returns>
+        /// <remarks>
+        ///     Two float16 one-axis sums would round each run's sum to float16 and then round again on every addition,
+        ///     which differs in the last bit. So the run sums are taken over a float32 copy (the widening is exact, and a
+        ///     float32 run's pairwise sum is HALF_pairwise_sum's: the same tree of float32 additions over the widened
+        ///     elements, at any run length), and then added into the float16 result one run at a time in the order of
+        ///     the outer reduced index, each addition in float32 and stored with one rounding (np.add's float32 loop
+        ///     into a float16 out). The other float dtypes need none of this: their run sum is already in the
+        ///     result's precision.
+        /// </remarks>
+        [NDScopedCovered] // only caller: SumAxisPairOfCOrderSquares, under the [NDScoped] Norm scope
+        private static NDArray HalfRunSumsAddedInTurn(NDArray y, int qLo, int qHi)
+        {
+            var runs = np.sum(y.astype(np.float32), qHi);
+            // runs keeps qLo where it was (qHi was after it); its slabs along qLo are the per-run sums to add in turn.
+            var slabs = np.moveaxis(runs, qLo, 0);
+            var acc = np.zeros(Shape.Adopt((long[])slabs.Shape.dimensions[1..]), NPTypeCode.Half);
+            for (long i = 0; i < slabs.Shape.dimensions[0]; i++)
+                np.add(acc, slabs[i], @out: acc);
+            return acc;
         }
 
         /// <summary>An axis index after a LOWER-numbered axis has been reduced away.</summary>
