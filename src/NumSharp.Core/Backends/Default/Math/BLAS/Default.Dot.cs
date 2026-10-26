@@ -14,22 +14,69 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     <c>np.dot</c>'s whole call (<see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/>): the text operands'
-        ///     answers with <paramref name="out"/> in NumPy's order, the product (<see cref="DotProduct"/>), then
-        ///     <c>new_array_for_sum</c>'s strict out= check and the copy into <paramref name="out"/>.
+        ///     answers with <paramref name="out"/> in NumPy's order; with <paramref name="out"/> and a 0-d operand outside
+        ///     the cblas route, the multiply ufunc's out=; otherwise the product (<see cref="DotProduct"/>), then
+        ///     <c>new_array_for_sum</c>'s strict out= check and the copy into <paramref name="out"/>. A 0-d result of an
+        ///     out= call is NumPy's scalar (<see cref="ScalarReturn"/>).
         /// </summary>
         /// <param name="left">The first operand.</param>
         /// <param name="right">The second operand.</param>
         /// <param name="out">The out array, or null.</param>
-        /// <returns>The product, or <paramref name="out"/> after the copy.</returns>
+        /// <returns>The product, or <paramref name="out"/> after the product reached it; for a 0-d result of an out= call,
+        ///     a fresh read-only 0-d copy instead of <paramref name="out"/>.</returns>
         /// <exception cref="ValueError">An out array the strict check refuses (the two texts of
-        ///     <see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/>).</exception>
+        ///     <see cref="TensorEngine.Dot(NDArray, NDArray, NDArray)"/>); on the multiply route, a read-only out
+        ///     (<c>output array is read-only</c>).</exception>
         /// <exception cref="IncorrectShapeException">Misaligned operands.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dot.html</remarks>
+        /// <exception cref="ArgumentException">On the multiply route, the ufunc's house type for NumPy's texts: an out
+        ///     dtype the product cannot be cast into same_kind (<c>Cannot cast ufunc 'multiply' output from …</c>, a
+        ///     UFuncTypeError in NumPy) or an out the product cannot broadcast into (<c>non-broadcastable output operand
+        ///     with shape …</c>, a ValueError in NumPy).</exception>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.dot.html
+        ///     <para><b>NumPy's routes</b> (<c>PyArray_MatrixProduct2</c>, <c>multiarraymodule.c</c>): both operands are
+        ///     converted to their common dtype; float32 / float64 / complex128 operands of at most two dims each go to
+        ///     <c>cblas_matrixproduct</c> (strict out=, a 0-d operand included); otherwise a 0-d operand is
+        ///     <c>multiply(ap1, ap2, out)</c>; otherwise the dtype's dot function per output element (strict out=).
+        ///     <c>array_matrixproduct</c> then returns <c>PyArray_Return(result)</c>, so a 0-d result is a scalar even when
+        ///     it is the caller's out array: np.dot(f8 [0, 1, 2], f8 [0, 1, 2], out=o) is np.float64(5.0), not o.</para>
+        /// </remarks>
         public override NDArray Dot(NDArray left, NDArray right, NDArray @out = null)
         {
             // Text: NumPy's alignment, out= and item-size answers, in its order (the product would report the item size
             // before looking at out=).
             Strings.NDStringUfuncs.ThrowIfProduct(left, right, @out);
+
+            if (@out is not null && (left.ndim == 0 || right.ndim == 0))
+            {
+                // PyArray_MatrixProduct2's 0-d route: unless cblas_matrixproduct takes the call, the operands converted to
+                // their common dtype meet the multiply ufunc with out= - its same_kind cast, broadcasting into out, and
+                // its read-only and cast refusals, with their texts.
+                var common = DTypePromotion.PromoteTypes(left.dtype, right.dtype);
+                var code = common.GetTypeCode();
+                bool cblas = (code == NPTypeCode.Single || code == NPTypeCode.Double || code == NPTypeCode.Complex)
+                             && left.ndim <= 2 && right.ndim <= 2;
+                if (!cblas)
+                {
+                    NDArray ap1 = left.astype(common, false), ap2 = right.astype(common, false);
+                    try
+                    {
+#pragma warning disable NDW012 // not a leak: the multiply with out= returns the caller's out itself, which the caller owns
+                        return ScalarReturn(Multiply(ap1, ap2, null, @out, null));
+#pragma warning restore NDW012
+                    }
+                    finally
+                    {
+                        // astype(copy: false) is the operand itself when it already has the common dtype; a converted
+                        // copy is this call's intermediate, released here because the engine may run outside any NDScope.
+                        if (!ReferenceEquals(ap1, left))
+                            ap1.Dispose();
+                        if (!ReferenceEquals(ap2, right))
+                            ap2.Dispose();
+                    }
+                }
+            }
+
             var result = DotProduct(left, right);
             if (@out is null)
                 return result;
@@ -52,7 +99,48 @@ namespace NumSharp.Backends
             // dtype and shape already validated equal, and the product is freshly computed (it cannot overlap out), so
             // this is np.copyto(out, result, "unsafe")'s unmasked copy: NDIter.Copy, with no call up into np.*.
             NDIter.Copy(@out, result);
-            return @out;
+            return ScalarReturn(@out);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_Return</c> at the end of <c>np.dot</c> (<c>array_matrixproduct</c>) for an out= call: a 0-d
+        ///     result is handed back as a scalar, even when it is the caller's out array. NumSharp's scalar stand-in is a
+        ///     fresh read-only 0-d array (<see cref="NDArray.MarkReductionScalar"/>), so a 0-d out keeps the value it
+        ///     received and stays writeable while the caller gets the scalar.
+        /// </summary>
+        /// <param name="r">The out= call's result: out itself, or the multiply ufunc's return (which is out).</param>
+        /// <returns><paramref name="r"/> when it has at least one dimension, else a fresh read-only 0-d copy of it.</returns>
+        /// <remarks>Without out= a 0-d product stays the writeable 0-d array the product routes return: NumPy's scalar there
+        ///     too, the library-wide gap VF01 of the view-flags tier.</remarks>
+        private static NDArray ScalarReturn(NDArray r) => r.ndim == 0 ? r.copy().MarkReductionScalar() : r;
+
+        /// <summary>
+        ///     The product with a 0-d operand: NumPy's <c>PyArray_MatrixProduct2</c> converts BOTH operands to their common
+        ///     dtype (<c>PyArray_FromAny</c> with the promoted descriptor) and multiplies those. Multiplying the operands as
+        ///     given would let the ufunc read a 0-d operand as a scalar of its own type: np.dot(int32 0-d, int8 vector) came
+        ///     out int8 where NumPy's is int32 (probed 2.4.2).
+        /// </summary>
+        /// <param name="left">The first operand.</param>
+        /// <param name="right">The second operand (one of the two is 0-d).</param>
+        /// <returns>A fresh product of the common dtype.</returns>
+        /// <exception cref="DTypePromotionError">The operands have no common dtype.</exception>
+        private NDArray MultiplyInCommonDtype(NDArray left, NDArray right)
+        {
+            var common = DTypePromotion.PromoteTypes(left.dtype, right.dtype);
+            NDArray ap1 = left.astype(common, false), ap2 = right.astype(common, false);
+            try
+            {
+                return Multiply(ap1, ap2);
+            }
+            finally
+            {
+                // astype(copy: false) is the operand itself when it already has the common dtype; a converted copy is this
+                // call's intermediate, released here because the engine may run outside any NDScope.
+                if (!ReferenceEquals(ap1, left))
+                    ap1.Dispose();
+                if (!ReferenceEquals(ap2, right))
+                    ap2.Dispose();
+            }
         }
 
         /// <summary>
@@ -93,9 +181,11 @@ namespace NumSharp.Backends
             var isLeftScalar = leftshape.IsScalar;
             var isRightScalar = rightshape.IsScalar;
 
+            // Both 0-d, or one (below): the multiply of the operands converted to their common dtype, as NumPy's
+            // PyArray_MatrixProduct2 converts both before its multiply (MultiplyInCommonDtype).
             if (isLeftScalar && isRightScalar)
             {
-                return Multiply(left, right);
+                return MultiplyInCommonDtype(left, right);
             }
 
             //If either a or b is 0-D (scalar), it is equivalent to multiply and using numpy.multiply(a, b) or a * b is preferred.
@@ -106,7 +196,7 @@ namespace NumSharp.Backends
             // OpenBugsReductionTests.Dot_SizeOneOperand_FollowsNumPysScalarBranch_OnTheManagedPath.
             if (isLeftScalar || isRightScalar)
             {
-                return Multiply(left, right);
+                return MultiplyInCommonDtype(left, right);
             }
 
             //If both a and b are 2-D arrays, it is matrix multiplication, but using matmul or a @ b is preferred.

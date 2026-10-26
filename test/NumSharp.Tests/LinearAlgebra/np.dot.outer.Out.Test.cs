@@ -81,5 +81,60 @@ namespace NumSharp.Tests.LinearAlgebra
                     @out: np.zeros(new Shape(3, 4), NPTypeCode.Int32)))
                 .Should().Throw<Exception>();
         }
+
+        /// <summary>
+        ///     NumPy's <c>PyArray_MatrixProduct2</c> converts both operands to their common dtype, and outside the cblas
+        ///     route (float32 / float64 / complex128 operands of at most two dims) a 0-d operand is
+        ///     <c>multiply(ap1, ap2, out)</c>: the ufunc's out=, cast and broadcast allowed. <c>array_matrixproduct</c>
+        ///     returns <c>PyArray_Return(result)</c>, so a 0-d result is a scalar, never the 0-d out itself. NumSharp
+        ///     multiplied the operands as given (an int32 0-d operand against an int8 vector gave int8), applied the
+        ///     strict out check to every route, and returned a 0-d out itself. NumPy 2.4.2's answers.
+        /// </summary>
+        [TestMethod]
+        public void Dot_ZeroDOperand_IsTheMultiplyUfuncOutsideCblas()
+        {
+            var i8 = np.full(new Shape(3), (sbyte)3);
+
+            // np.dot(np.array(2, np.int32), int8 [3, 3, 3]): the common dtype int32.
+            var promoted = np.dot(np.array(2), i8);
+            promoted.typecode.Should().Be(NPTypeCode.Int32);
+            promoted.Should().BeOfValues(6, 6, 6);
+
+            // out= is multiply's: an int8 product cast into a float64 out, and a 0-d product broadcast into a (2, 2) out.
+            var f8 = np.zeros(new Shape(3), NPTypeCode.Double);
+            np.dot(np.array((sbyte)2), i8, @out: f8).Should().BeSameAs(f8);
+            f8.Should().BeOfValues(6.0, 6.0, 6.0);
+            var square = np.zeros(new Shape(2, 2), NPTypeCode.SByte);
+            np.dot(np.array((sbyte)2), np.array((sbyte)3), @out: square).Should().BeSameAs(square);
+            square.Should().BeOfValues(6, 6, 6, 6);
+
+            // ... with multiply's refusals: the same_kind cast (UFuncTypeError's text, the house ArgumentException) and a
+            // read-only out.
+            new Action(() => np.dot(np.array((sbyte)2), np.array((sbyte)3), @out: np.zeros(new Shape(), NPTypeCode.Boolean)))
+                .Should().Throw<ArgumentException>()
+                .WithMessage("Cannot cast ufunc 'multiply' output from dtype('int8') to dtype('bool') with casting rule 'same_kind'");
+            new Action(() => np.dot(np.array((sbyte)2), i8, @out: np.broadcast_to(np.zeros(new Shape(1), NPTypeCode.SByte), new Shape(3))))
+                .Should().Throw<ValueError>().WithMessage("output array is read-only");
+
+            // float32 leaves the cblas route when an operand has three dims: the multiply ufunc takes a float64 out ...
+            var f8Cube = np.zeros(new Shape(2, 2, 2), NPTypeCode.Double);
+            np.dot(np.array(2f), np.ones(new Shape(2, 2, 2), NPTypeCode.Single), @out: f8Cube).Should().BeSameAs(f8Cube);
+            f8Cube.Should().BeOfValues(2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0);
+            // ... while two-dim float32 operands keep cblas_matrixproduct's strict check.
+            new Action(() => np.dot(np.array(2f), np.ones(new Shape(2, 2), NPTypeCode.Single),
+                    @out: np.zeros(new Shape(2, 2), NPTypeCode.Double)))
+                .Should().Throw<ValueError>().WithMessage(
+                    "output array is not acceptable (must have the right datatype, number of dimensions, and be a C-Array)");
+
+            // PyArray_Return: dot(f8 [0, 1, 2], f8 [0, 1, 2], out=0-d) is a scalar 5.0, not out; out received the value and
+            // stays writeable.
+            var o = np.zeros(new Shape(), NPTypeCode.Double);
+            var s = np.dot(np.arange(3).astype(np.float64), np.arange(3).astype(np.float64), @out: o);
+            ReferenceEquals(s, o).Should().BeFalse();
+            s.GetDouble().Should().Be(5.0);
+            s.flags.writeable.Should().BeFalse();
+            o.GetDouble().Should().Be(5.0);
+            o.flags.writeable.Should().BeTrue();
+        }
     }
 }
