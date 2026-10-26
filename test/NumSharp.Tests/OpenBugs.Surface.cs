@@ -67,7 +67,10 @@ namespace NumSharp.Tests
     // FIXED 2026-10-26 by np.linalg.cross's port (docs/plans/np-layer-dtype-logic.md, P2's np.linalg family): past its
     // length check np.linalg.cross is np.cross (NumPy's _core_cross), whose broadcast_shapes refusal is NumPy's text, so
     // SU2 is gone. Its pin below stays as a regression test, its summary opening with "FIXED"; LinearAlgebra/
-    // np.linalg.NumPyPort.Test.cs holds the port's dtype and layout, and the generator's rule is dropped.
+    // np.linalg.NumPyPort.Test.cs holds the port's dtype and layout, and the generator's rule is dropped. The gap replay of
+    // that day found SU3 and SU4 matching NumPy as well, fixed by 98ea7bcf (np.histogram's complex data meet NumPy's
+    // equal-width statements in complex128: complex edges, and the estimators stop at np.percentile / np.ceil as NumPy's
+    // do); both pins below stay as regression tests, their summaries opening with "FIXED", and their rules are dropped.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -111,10 +114,12 @@ namespace NumSharp.Tests
         // ----- histogram -----
 
         /// <summary>
-        ///     <c>np.histogram([1+1j, 2, 3], bins=2)</c>: NumPy's edges are complex128 <c>[1+1j, 2+0.5j, 3]</c>
-        ///     (bin_type = result_type(first, last, a)); NumSharp's are float64 (gap SU3).
+        ///     FIXED by 98ea7bcf (complex data meet np.histogram's equal-width statements in complex128): NumSharp gives
+        ///     NumPy's answer now, and this test pins it. Before the fix: <c>np.histogram([1+1j, 2, 3], bins=2)</c>: NumPy's
+        ///     edges are complex128 <c>[1+1j, 2+0.5j, 3]</c> (bin_type = result_type(first, last, a)); NumSharp's were
+        ///     float64 (gap SU3).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU3")]
+        [TestMethod]
         public void Surface_Histogram_ComplexSample_KeepsComplexEdges()
         {
             using var a = np.array(new Complex[] { new(1, 1), 2, 3 });
@@ -139,12 +144,13 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>np.histogram([1+1j, 2, 3], bins="sturges")</c>: NumPy raises TypeError <c>ufunc 'ceil' not supported for
-        ///     the input types, ...</c> (the bin count's ceil has no complex loop); NumSharp returns a result. The open part
-        ///     of gap SU4 since 'auto' / 'fd' were fixed: 'doane', 'scott', 'stone', 'rice', 'sturges' and 'sqrt' still
-        ///     compute.
+        ///     FIXED by 98ea7bcf (the bin-width estimators stop where NumPy's complex values meet real-only code): NumSharp
+        ///     gives NumPy's answer now, and this test pins it. Before the fix: <c>np.histogram([1+1j, 2, 3],
+        ///     bins="sturges")</c>: NumPy raises TypeError <c>ufunc 'ceil' not supported for the input types, ...</c> (the
+        ///     bin count's ceil has no complex loop); NumSharp returned a result. This was the open part of gap SU4 after
+        ///     'auto' / 'fd' were fixed: 'doane', 'scott', 'stone', 'rice', 'sturges' and 'sqrt' computed.
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "surface-SU4")]
+        [TestMethod]
         public void Surface_Histogram_ComplexSampleWithSturges_Refuses()
         {
             using var a = np.array(new Complex[] { new(1, 1), 2, 3 });

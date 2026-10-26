@@ -1527,12 +1527,10 @@ def _with_bufsize(n, fn):
 # case matching. Both rules are dropped.
 # SU2 (np.linalg.cross over operands that cannot broadcast) matches NumPy since 2026-10-26: np.linalg.cross is NumPy's
 # length check and then np.cross (_core_cross), whose broadcast_shapes refusal is NumPy's text. Its rule is dropped.
+# The gap replay of that day found SU3 (complex histogram edges) and SU4 (the estimators over complex data) matching
+# NumPy too, fixed by 98ea7bcf (np.histogram's complex data meet NumPy's equal-width statements in complex128); their
+# rules are dropped.
 GAPS = {
-    "SU3": "np.histogram / np.histogram_bin_edges of a complex128 sample with a bin COUNT return float64 edges; NumPy's "
-           "edges are complex128 (bin_type = result_type(first_edge, last_edge, a))",
-    "SU4": "np.histogram of a complex128 sample with the estimators 'doane', 'scott', 'stone', 'rice', 'sturges' "
-           "or 'sqrt' returns a result; NumPy raises TypeError (ufunc 'ceil' has no complex loop for the bin count; "
-           "'auto' and 'fd' refuse with 'a must be an array of real numbers', as NumSharp does)",
     "SU10": "ndarray.setfield with a Python int outside the field dtype's range wraps it (-1 into a uint8 field is "
             "255); NumPy raises OverflowError 'Python integer -1 out of bounds for uint8'",
     "SU11": "np.finfo of a non-inexact dtype raises 'data type 'int32' not inexact'; NumPy's text names the scalar "
@@ -1591,13 +1589,6 @@ def _gap_of(case):
     if op.startswith(("finfo.", "iinfo.")) and "dtype" not in p:
         return None
     dt = np.dtype(p["dtype"]).name if op.startswith(("finfo.", "iinfo.")) else p.get("dtype")
-    if op in ("histogram", "histogram_bin_edges") and case["operands"][0]["dtype"] == "complex128":
-        if isinstance(p.get("bins"), str):
-            # 'auto' and 'fd' reach np.percentile, which refuses complex data with NumPy's text; the other
-            # estimators compute where NumPy's ceil raises.
-            return "SU4" if p["bins"] not in ("auto", "fd") else None
-        if "bins_operand" not in p:
-            return "SU3"
     if op == "ndarray.setfield" and err and err["type"] == "OverflowError":
         return "SU10"
     if op.startswith("finfo."):
