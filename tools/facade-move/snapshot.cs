@@ -1356,7 +1356,8 @@ static class Snapshot
     {
         "null", "2", "0.5", "-1.5", "0", "nan", "inf", "true", "f16", "f32", "dec", "char", "str", "0d_f64", "0d_i64",
         "0d_f32", "coords", "coords_last", "int_coords", "const", "const_int", "f32_coords", "f16_coords", "c128_coords",
-        "bool_coords", "U5_coords", "doubles", "longs", "2d", "badlen", "special", "dup", "decr", "strided",
+        "bool_coords", "U5_coords", "doubles", "longs", "2d", "badlen", "special", "dup", "decr", "strided", "list",
+        "objlist", "list_const", "ragged",
     };
 
     /// <summary>np.gradient's per-axis spacing variants of the two- and three-spacing overloads (see
@@ -1364,7 +1365,7 @@ static class Snapshot
     private static readonly string[] GradAxisSpacingVariantLabels =
     {
         "1", "2", "0.5", "0d_f64", "f16", "null", "str", "coords", "int_coords", "const", "f32_coords", "2d", "badlen",
-        "doubles",
+        "doubles", "list",
     };
 
     /// <summary>np.gradient's spacing-list variants (see <see cref="MakeGradVarargs"/>); the first, the empty list, is the
@@ -1372,7 +1373,7 @@ static class Snapshot
     private static readonly string[] GradVarargsVariantLabels =
     {
         "empty", "one", "one_0d", "one_coords", "scalars", "coords", "mixed", "int_coords", "const", "f32", "toomany", "2d",
-        "badlen", "null", "str", "doubles",
+        "badlen", "null", "str", "doubles", "lists", "ragged",
     };
 
     /// <summary>
@@ -1411,8 +1412,11 @@ static class Snapshot
     ///     <c>const</c> / <c>const_int</c> evenly spaced float64 / int64, which NumPy reduces to their step, a NumPy scalar,
     ///     <c>f32_coords</c> / <c>f16_coords</c> / <c>c128_coords</c> / <c>bool_coords</c> / <c>U5_coords</c> in other dtypes,
     ///     <c>doubles</c> / <c>longs</c> as C# arrays (Python lists), <c>special</c> with NaN, infinities and signed zeros,
-    ///     <c>dup</c> with a zero step, <c>decr</c> decreasing, <c>strided</c> a stepped view), and the coordinate forms NumPy
-    ///     refuses (<c>2d</c> a column, <c>badlen</c> one coordinate too many).</param>
+    ///     <c>dup</c> with a zero step, <c>decr</c> decreasing, <c>strided</c> a stepped view, <c>list</c> / <c>objlist</c> /
+    ///     <c>list_const</c> as Python lists: a <c>List&lt;double&gt;</c> of the uneven coordinates, an <c>object[]</c> of C#
+    ///     ints (Python ints: int64 coordinates), a <c>List&lt;double&gt;</c> of the even ones), and the coordinate forms NumPy
+    ///     refuses (<c>2d</c> a column, <c>badlen</c> one coordinate too many, <c>ragged</c> a list holding a list, which
+    ///     np.ndim refuses).</param>
     /// <param name="operand">The operand.</param>
     /// <param name="axis">The axis whose length the coordinates take (the first for the single spacing); an axis the operand
     ///     does not have takes length 3, a call NumPy refuses for its spacing count or its axis anyway.</param>
@@ -1465,6 +1469,13 @@ static class Snapshot
             "dup" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => GradPoint(i == 1 ? 0 : i)).ToArray()),
             "decr" => (object)np.array(Enumerable.Range(0, (int)n).Select(i => 4.0 - GradPoint(i)).ToArray()),
             "strided" => (object)GradPoints(2 * n)["::2"],
+            // Python lists (the house map: a List<T>, an object[]): np.ndim reads them as coordinates, np.array's rules
+            // convert them (a C# int item is a Python int, so int64 coordinates).
+            "list" => (object)Enumerable.Range(0, (int)n).Select(GradPoint).ToList(),
+            "objlist" => (object)GradIntPoints(n).Select(v => (object)(int)v).ToArray(),
+            "list_const" => (object)Enumerable.Range(0, (int)n).Select(i => 0.5 * i).ToList(),
+            // A ragged list: np.ndim's np.asarray raises the inhomogeneous-shape ValueError, whatever the axis' length.
+            "ragged" => (object)new object[] { 0.0, new object[] { 0.5 } },
             _ => throw new ArgumentException("unknown gradient spacing variant " + label),
         };
     }
@@ -1476,12 +1487,12 @@ static class Snapshot
     /// <param name="label">The variant (<see cref="GradVarargsVariantLabels"/>): <c>empty</c> (no spacing), <c>one</c> (a
     ///     single C# double 2.0: one step for every axis), <c>one_0d</c> (a single 0-d float64 array), <c>one_coords</c> (the
     ///     first axis' coordinates alone: valid for one requested axis), <c>scalars</c> (a C# double per axis: 1, 2, 0.5, 1,
-    ///     ...), <c>coords</c> / <c>int_coords</c> / <c>const</c> / <c>f32</c> / <c>doubles</c> (each axis' uneven float64,
-    ///     uneven int64, evenly spaced float64 or uneven float32 coordinates, or a C# double[] of the uneven ones),
-    ///     <c>mixed</c> (the first axis' coordinates, 2.0 for the other axes), <c>toomany</c> (one scalar more than the
-    ///     operand has axes), and a first entry NumPy refuses beside unit steps for the other axes (<c>2d</c> a column of
-    ///     coordinates, <c>badlen</c> one coordinate too many, <c>null</c> a None, <c>str</c> the string "2"; one entry even for
-    ///     a 0-d operand).</param>
+    ///     ...), <c>coords</c> / <c>int_coords</c> / <c>const</c> / <c>f32</c> / <c>doubles</c> / <c>lists</c> (each axis'
+    ///     uneven float64, uneven int64, evenly spaced float64 or uneven float32 coordinates, or a C# double[] or a Python list
+    ///     (<c>List&lt;double&gt;</c>) of the uneven ones), <c>mixed</c> (the first axis' coordinates, 2.0 for the other
+    ///     axes), <c>toomany</c> (one scalar more than the operand has axes), and a first entry NumPy refuses beside unit
+    ///     steps for the other axes (<c>2d</c> a column of coordinates, <c>badlen</c> one coordinate too many, <c>null</c> a
+    ///     None, <c>str</c> the string "2", <c>ragged</c> a list holding a list; one entry even for a 0-d operand).</param>
     /// <param name="operand">The operand.</param>
     /// <returns>A fresh object array.</returns>
     /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
@@ -1511,6 +1522,8 @@ static class Snapshot
             "badlen" => FirstThenUnit(GradPoints(first + 1)),
             "null" => FirstThenUnit(null),
             "str" => FirstThenUnit("2"),
+            "lists" => PerAxis(len => Enumerable.Range(0, (int)len).Select(GradPoint).ToList()),
+            "ragged" => FirstThenUnit(new object[] { 0.0, new object[] { 0.5 } }),
             _ => throw new ArgumentException("unknown gradient spacing-list variant " + label),
         };
     }
