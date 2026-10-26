@@ -35,7 +35,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">The matrix, or a stack of them (plain: the facade applied the class boundary).</param>
         /// <param name="rcond">The relative cutoff; null with <paramref name="rtol"/> null means NumPy's 1e-15.</param>
-        /// <param name="hermitian">Assume the operand is Hermitian (its square check applies).</param>
+        /// <param name="hermitian">Decompose the Hermitian (real symmetric) matrix whose lower triangle the conjugated
+        ///     operand holds, through the hermitian SVD (eigh), as NumPy does: its square check applies and the upper
+        ///     triangle is not read.</param>
         /// <param name="rtol">The Array-API spelling of <paramref name="rcond"/>.</param>
         /// <returns>The pseudo-inverse, shape <c>(..., N, M)</c>: float64 / float32 / complex128 by the loop dtype, the
         ///     operand's own dtype for an empty operand.</returns>
@@ -85,7 +87,9 @@ namespace NumSharp
 
             var common = CommonType(a);
             var aConj = np.conjugate(ToCommon(a, common));
-            var (u, s, vt) = aConj.TensorEngine.Svd(aConj, fullMatrices: false, computeUv: true);
+            // NumPy's `u, s, vt = svd(a, full_matrices=False, hermitian=hermitian)`: with hermitian, the eigh-based factors
+            // of the matrix the conjugate's lower triangle holds.
+            var (u, s, vt) = Svd(aConj, full_matrices: false, compute_uv: true, hermitian);
 
             // Discard singular values at or below rcond * largest, reciprocate the rest, and recombine
             // with the (plain, since `a` was conjugated) transposed factors — NumPy's exact sequence.

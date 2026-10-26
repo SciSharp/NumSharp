@@ -5,14 +5,17 @@ namespace NumSharp
     internal static partial class LinalgEngine
     {
         /// <summary>
-        ///     The body of <c>np.linalg.svd</c> past the class boundary: the rank check (the square check of the hermitian
-        ///     route), <c>_commonType</c>, the gufunc's text refusal, then <see cref="TensorEngine.Svd"/> at the loop
-        ///     dtype.
+        ///     The body of <c>np.linalg.svd</c> past the class boundary. <paramref name="hermitian"/> takes NumPy's
+        ///     eigh-based branch (<see cref="SvdHermitian"/>, <see cref="SvdvalsHermitian"/>); otherwise the rank check,
+        ///     <c>_commonType</c>, the gufunc's text refusal, then <see cref="TensorEngine.Svd"/> at the loop dtype.
         /// </summary>
         /// <param name="a">The matrix, or a stack of them (plain: the facade applied the class boundary).</param>
-        /// <param name="full_matrices">True for square U and Vh, false for <c>K = min(M, N)</c> columns / rows.</param>
+        /// <param name="full_matrices">True for square U and Vh, false for <c>K = min(M, N)</c> columns / rows; ignored
+        ///     with <paramref name="hermitian"/> (a Hermitian matrix is square, so both are the same).</param>
         /// <param name="compute_uv">False for the singular values alone (U and Vh null).</param>
-        /// <param name="hermitian">Assume the operand is Hermitian (its square check applies).</param>
+        /// <param name="hermitian">Decompose the Hermitian (real symmetric) matrix whose lower triangle <paramref name="a"/>
+        ///     holds, through eigh / eigvalsh, as NumPy does; the upper triangle is not read, so a non-Hermitian operand
+        ///     gives the factors of another matrix, without an error.</param>
         /// <returns><c>(U, S, Vh)</c>, the singular values descending.</returns>
         /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
         /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
@@ -21,17 +24,95 @@ namespace NumSharp
         [NDScoped] // reclaims the ToCommon cast temp; the (U, S, Vh) tuple is yielded component-wise
         internal static (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool full_matrices, bool compute_uv, bool hermitian)
         {
-            // NumPy's hermitian=True route is eigh / eigvalsh: their square check, then their gufunc; otherwise
-            // _assert_stacked_2d and one of the three svd gufuncs.
+            // NumPy's hermitian=True branch runs before any check of svd's own: eigh / eigvalsh make theirs (the square
+            // check, _commonType, their gufunc's input cast).
             if (hermitian)
-                AssertStackedSquare(a);
-            else
-                AssertStacked2d(a);
+                return compute_uv ? SvdHermitian(a) : (null, SvdvalsHermitian(a), null);
+
+            AssertStacked2d(a);
             var common = CommonType(a);
-            ThrowIfTextGufunc(hermitian ? (compute_uv ? "eigh_lo" : "eigvalsh_lo")
-                                        : compute_uv ? (full_matrices ? "svd_f" : "svd_s") : "svd", a);
+            ThrowIfTextGufunc(compute_uv ? (full_matrices ? "svd_f" : "svd_s") : "svd", a);
             return a.TensorEngine.Svd(ToCommon(a, common), full_matrices, compute_uv);
         }
+
+        /// <summary>
+        ///     NumPy's <c>svd(a, hermitian=True)</c> with <c>compute_uv=True</c>, statement for statement:
+        ///     <code>
+        ///     s, u = eigh(a)
+        ///     sgn = sign(s)
+        ///     s = abs(s)
+        ///     sidx = argsort(s)[..., ::-1]
+        ///     sgn = np.take_along_axis(sgn, sidx, axis=-1)
+        ///     s = np.take_along_axis(s, sidx, axis=-1)
+        ///     u = np.take_along_axis(u, sidx[..., None, :], axis=-1)
+        ///     vt = transpose(u * sgn[..., None, :]).conjugate()
+        ///     </code>
+        /// </summary>
+        /// <param name="a">The Hermitian (real symmetric) matrix, or a stack of them; only its lower triangle is read
+        ///     (eigh's <c>UPLO='L'</c>).</param>
+        /// <returns><c>(U, S, Vh)</c>: S the absolute eigenvalues descending, U the eigenvectors in that order, Vh the
+        ///     conjugate transpose of U with each row multiplied by its eigenvalue's sign. For a real operand Vh is a
+        ///     transposed VIEW of that product (<c>ndarray.conjugate</c> returns a real array itself), for a complex one a
+        ///     new array in the view's order (the conjugate ufunc keeps it).</returns>
+        /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand (eigh's checks).</exception>
+        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
+        /// <exception cref="ArgumentException">A text operand (eigh's gufunc input cast).</exception>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <remarks>
+        ///     A zero eigenvalue's sign is 0, so its row of Vh is zero (Vh is not unitary then), as in NumPy. NumPy's
+        ///     <c>argsort</c> is its default kind, x86-simd-sort's bitonic argsort on an AVX2 host, which keeps equal values
+        ///     in order up to three elements and reorders them from four; NumSharp's argsort is stable. Where two absolute
+        ///     eigenvalues of a matrix of four or more rows are equal, S is the same and the tied columns of U, with their
+        ///     rows of Vh, can come in another order.
+        /// </remarks>
+        [NDScoped] // the eigh factors, the sign / abs / argsort temps and the product behind Vh; U, S and Vh are yielded
+        private static (NDArray U, NDArray S, NDArray Vh) SvdHermitian(NDArray a)
+        {
+            var (w, v) = Eigh(a, 'L');
+            var sgn = np.sign(w);
+            var s = np.abs(w);
+            var sidx = ReverseLastAxis(np.argsort(s, -1));
+            sgn = np.take_along_axis(sgn, sidx, -1);
+            s = np.take_along_axis(s, sidx, -1);
+            // sidx[..., None, :] and sgn[..., None, :]: one index / sign row broadcast over the rows of each matrix.
+            var u = np.take_along_axis(v, np.expand_dims(sidx, -2), -1);
+            var vt = np.swapaxes(np.multiply(u, np.expand_dims(sgn, -2)), -1, -2);
+            // transpose(...).conjugate(): the conjugate ufunc for a complex product; a real one is returned itself, so Vh
+            // stays the transposed view (the scope's release of the product leaves the view's own reference).
+            if (vt.typecode == NPTypeCode.Complex)
+            {
+                // NumPy's ufunc allocates its result in the view's K order (F for one matrix, the swapped permutation for
+                // a stack). NumSharp's eager unary ufunc writes C order for a permuted operand (the library's layout gap
+                // that the matrix tier's MX05 records for np.conjugate), so the result is allocated in that order and
+                // filled through out=.
+                var conj = np.empty_like(vt);
+                np.conjugate(vt, conj);
+                vt = conj;
+            }
+            return (u, s, vt);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>svd(a, compute_uv=False, hermitian=True)</c>: <c>s = eigvalsh(a); s = abs(s); return
+        ///     sort(s)[..., ::-1]</c>.
+        /// </summary>
+        /// <param name="a">The Hermitian (real symmetric) matrix, or a stack of them; only its lower triangle is read.</param>
+        /// <returns>The absolute eigenvalues descending: a view of the sorted copy with its last axis reversed (a negative
+        ///     stride, not an owner), as NumPy returns them.</returns>
+        /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand (eigvalsh's checks).</exception>
+        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
+        /// <exception cref="ArgumentException">A text operand (eigvalsh's gufunc input cast).</exception>
+        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <remarks>eigvalsh is not eigh without the vectors: LAPACK computes the values in another way when it computes no
+        ///     vectors, so these can differ from <see cref="SvdHermitian"/>'s S in the last bits, in NumPy as here.</remarks>
+        [NDScoped] // the eigenvalues and their absolute values; the reversed view of the sorted copy is yielded
+        private static NDArray SvdvalsHermitian(NDArray a)
+            => ReverseLastAxis(np.sort(np.abs(Eigvalsh(a, 'L')), -1));
+
+        /// <summary>NumPy's <c>x[..., ::-1]</c>: a view of <paramref name="x"/> with its last axis reversed.</summary>
+        /// <param name="x">An array of at least one axis.</param>
+        /// <returns>The view (shares <paramref name="x"/>'s memory; the last axis's stride negated).</returns>
+        private static NDArray ReverseLastAxis(NDArray x) => x[new[] {Slice.Ellipsis, new Slice(null, null, -1)}];
 
         /// <summary>
         ///     The body of <c>np.linalg.svdvals</c>: <c>svd(x, compute_uv=False)</c>'s statements.
@@ -58,7 +139,8 @@ namespace NumSharp
         /// </summary>
         /// <param name="A">The matrix, or a stack of them.</param>
         /// <param name="tol">The absolute threshold; null for <c>S.max() * max(M, N) * eps</c> (or <paramref name="rtol"/>).</param>
-        /// <param name="hermitian">Assume the operand is Hermitian (its square check applies).</param>
+        /// <param name="hermitian">Take the singular values from the Hermitian (real symmetric) matrix whose lower triangle
+        ///     <paramref name="A"/> holds, as NumPy does (its square check applies; the upper triangle is not read).</param>
         /// <param name="rtol">The relative threshold.</param>
         /// <returns>The rank (an int64 0-d array for one matrix, one per matrix of a stack).</returns>
         /// <exception cref="ValueError">Both <paramref name="tol"/> and <paramref name="rtol"/> are set.</exception>
@@ -85,12 +167,9 @@ namespace NumSharp
                 return NDArray.Scalar(A.TensorEngine.CountNonZero(A) == 0 ? 0L : 1L);
             }
 
-            // NumPy's svd(A, compute_uv=False, hermitian=hermitian): the eigvalsh route checks squareness first.
-            if (hermitian)
-                AssertStackedSquare(A);
-            var common = CommonType(A);
-            ThrowIfTextGufunc(hermitian ? "eigvalsh_lo" : "svd", A);
-            var s = A.TensorEngine.Svd(ToCommon(A, common), fullMatrices: false, computeUv: false).S;
+            // NumPy's `S = svd(A, compute_uv=False, hermitian=hermitian)`: with hermitian, the absolute eigenvalues of the
+            // matrix A's lower triangle holds (eigvalsh's checks first), else the svd gufunc's values.
+            var s = Svd(A, full_matrices: true, compute_uv: false, hermitian).S;
 
             int nd = A.ndim;
             long m = A.Shape.dimensions[nd - 2];

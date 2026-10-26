@@ -541,6 +541,107 @@ namespace NumSharp.Tests.Backends
 
         #endregion
 
+        #region hermitian=True
+
+        /// <summary>
+        ///     NumPy's <c>svd(a, hermitian=True)</c> is eigh's decomposition of the matrix whose lower triangle <c>a</c>
+        ///     holds: S the absolute eigenvalues descending, U the eigenvectors in that order, Vh the conjugate transpose of U
+        ///     with each row multiplied by its eigenvalue's sign. NumSharp ran the ordinary SVD of the whole matrix, so a
+        ///     non-symmetric <c>a</c> gave the singular values of another matrix. Expected values: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Svd_Hermitian_IsEighOfTheLowerTriangle()
+        {
+            RequireLapack();
+            var a = np.array(new double[,] { { 2.0, 7.0, 1.0 }, { -1.0, 3.0, 5.0 }, { 4.0, 0.5, -2.0 } });
+            // The matrix NumPy decomposes: a's lower triangle mirrored (eigenvalues -4.59..., 2.90..., 4.69...).
+            var mirrored = np.array(new double[,] { { 2.0, -1.0, 4.0 }, { -1.0, 3.0, 0.5 }, { 4.0, 0.5, -2.0 } });
+
+            var (u, s, vh) = np.linalg.svd(a, hermitian: true);
+            AssertClose(s, 1e-12, 4.689342475693309, 4.591878741146129, 2.9025362654528197);
+            np.allclose(ReconstructReduced(u, s, vh), mirrored).Should().BeTrue();
+            // Vh = U.T with the row of the negative eigenvalue (the second singular value) negated.
+            np.allclose(vh, np.multiply(np.swapaxes(u, -1, -2), np.array(new[,] { { 1.0 }, { -1.0 }, { 1.0 } })))
+                .Should().BeTrue();
+            // A real operand's Vh is a transposed VIEW of that product (ndarray.conjugate returns a real array itself).
+            vh.flags.f_contiguous.Should().BeTrue();
+            vh.flags.c_contiguous.Should().BeFalse();
+            vh.flags.owndata.Should().BeFalse();
+            u.flags.c_contiguous.Should().BeTrue();
+
+            // full_matrices is ignored on this route (a Hermitian matrix is square).
+            var (_, sReduced, _) = np.linalg.svd(a, full_matrices: false, hermitian: true);
+            AssertClose(sReduced, 1e-12, 4.689342475693309, 4.591878741146129, 2.9025362654528197);
+
+            // compute_uv=False: sort(abs(eigvalsh(a)))[..., ::-1], a reversed view of the sorted copy.
+            var (_, values, _) = np.linalg.svd(a, compute_uv: false, hermitian: true);
+            AssertClose(values, 1e-12, 4.689342475693309, 4.591878741146129, 2.9025362654528197);
+            values.strides.Should().Equal(-8L);
+            values.flags.owndata.Should().BeFalse();
+
+            // hermitian=False decomposes all of a.
+            var (_, full, _) = np.linalg.svd(a, compute_uv: false);
+            AssertClose(full, 1e-12, 8.386121997487018, 5.9292969929916435, 1.9407202302662188);
+        }
+
+        /// <summary>
+        ///     A zero eigenvalue's sign is 0, so NumPy's Vh has a zero row there (Vh is not unitary then). A complex operand's
+        ///     Vh is a new array in the order of the transposed view the conjugate ufunc reads (F for one matrix, the swapped
+        ///     axes for a stack); a float32 operand gives float32 factors. Expected values: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Svd_Hermitian_ZeroEigenvalue_Complex_Float32()
+        {
+            RequireLapack();
+            var z = np.array(new double[,] { { 1.0, 2.0 }, { 2.0, 4.0 } });
+            var (_, sz, vz) = np.linalg.svd(z, hermitian: true);
+            AssertClose(sz, 1e-12, 5.0, 0.0);
+            vz.GetDouble(1, 0).Should().Be(0.0);
+            vz.GetDouble(1, 1).Should().Be(0.0);
+
+            var c = np.array(new[,] { { new Complex(2, 0), new Complex(1, -2) }, { new Complex(1, 2), new Complex(-3, 0) } });
+            var (uc, sc, vc) = np.linalg.svd(c, hermitian: true);
+            uc.dtype.Should().Be(np.complex128);
+            sc.dtype.Should().Be(np.float64);
+            AssertClose(sc, 1e-12, 3.8541019662496847, 2.8541019662496847);
+            vc.flags.owndata.Should().BeTrue();
+            vc.flags.f_contiguous.Should().BeTrue();
+
+            var stack = np.stack(new[] { c, np.conjugate(c) });
+            var (_, _, vStack) = np.linalg.svd(stack, hermitian: true);
+            // NumPy's (2, 2, 2) complex Vh: byte strides (64, 16, 32), the stack's matrices each in F order.
+            vStack.strides.Should().Equal(64L, 16L, 32L);
+            vStack.flags.owndata.Should().BeTrue();
+
+            var f = np.array(new float[,] { { 2.0f, 1.0f }, { 1.0f, -3.0f } });
+            var (uf, sf, vf) = np.linalg.svd(f, hermitian: true);
+            uf.dtype.Should().Be(np.float32);
+            sf.dtype.Should().Be(np.float32);
+            vf.dtype.Should().Be(np.float32);
+            AssertClose(sf, 1e-6, 3.192582368850708, 2.192582368850708);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>pinv(a, hermitian=True)</c> and <c>matrix_rank(A, hermitian=True)</c> take their singular values
+        ///     from the hermitian SVD, so they read the lower triangle only: <c>[[0, 5], [0, 0]]</c> is the zero matrix
+        ///     there (rank 0, a zero pseudo-inverse) where the ordinary route gives rank 1. Expected values: NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Pinv_MatrixRank_Hermitian_ReadTheLowerTriangle()
+        {
+            RequireLapack();
+            var m = np.array(new double[,] { { 0.0, 5.0 }, { 0.0, 0.0 } });
+            Assert.AreEqual(0L, Convert.ToInt64(np.linalg.matrix_rank(m, hermitian: true).GetAtIndex(0)));
+            Assert.AreEqual(1L, Convert.ToInt64(np.linalg.matrix_rank(m).GetAtIndex(0)));
+            AssertClose(np.linalg.pinv(m, hermitian: true), 0.0, 0, 0, 0, 0);
+            AssertClose(np.linalg.pinv(m), 1e-15, 0, 0, 0.2, 0);
+
+            var a = np.array(new double[,] { { 2.0, 7.0, 1.0 }, { -1.0, 3.0, 5.0 }, { 4.0, 0.5, -2.0 } });
+            AssertClose(np.linalg.pinv(a, hermitian: true), 1e-12, 0.1, 0, 0.2, 0, 0.32, 0.08, 0.2, 0.08, -0.08);
+        }
+
+        #endregion
+
         #region the seam
 
         [TestMethod]
