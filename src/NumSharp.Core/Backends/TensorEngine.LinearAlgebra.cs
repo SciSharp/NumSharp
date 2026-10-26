@@ -197,24 +197,40 @@ namespace NumSharp
         ///     <c>np.linalg.det</c> — OpenBLAS <c>getrf</c>, or NumSharp's managed LU
         ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operand.
         /// </summary>
+        /// <param name="a">The square matrix or stack, validated and cast to the loop dtype by <c>np.linalg.det</c>.</param>
+        /// <returns>The determinant: for one matrix NumPy's scalar (a read-only 0-d array, the gufunc's return step), for a
+        ///     stack a writeable array of one determinant per matrix.</returns>
+        /// <remarks>
+        ///     NumPy's det is the gufunc <c>_umath_linalg.det</c>, and the ufunc machinery returns a 0-d output as a numpy
+        ///     scalar; <see cref="NDArray.MarkReductionScalar"/> is that step for both routes (a no-op for a stack's 1-d or
+        ///     larger result).
+        /// </remarks>
         public virtual NDArray Det(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TryDet(a, out var result))
-                return result;
-            return Backends.ManagedLu.Det(a);
+                return result.MarkReductionScalar();
+            return Backends.ManagedLu.Det(a).MarkReductionScalar();
         }
 
         /// <summary>
         ///     <c>np.linalg.slogdet</c> — OpenBLAS <c>getrf</c>, or NumSharp's managed LU
         ///     (<see cref="Backends.ManagedLu"/>) when no backend serves the operand.
         /// </summary>
+        /// <param name="a">The square matrix or stack, validated and cast to the loop dtype by <c>np.linalg.slogdet</c>.</param>
+        /// <returns>The sign and the log of the absolute determinant: NumPy's scalars for one matrix (read-only 0-d
+        ///     arrays, the gufunc's return step), writeable arrays for a stack.</returns>
+        /// <remarks>
+        ///     NumPy's slogdet is the gufunc <c>_umath_linalg.slogdet</c>: both 0-d outputs come back as numpy scalars
+        ///     (<see cref="NDArray.MarkReductionScalar"/>, a no-op for a stack's outputs).
+        /// </remarks>
         public virtual (NDArray sign, NDArray logabsdet) Slogdet(NDArray a)
         {
             var blas = Blas;
             if (blas != null && blas.TrySlogdet(a, out var sign, out var logabsdet))
-                return (sign, logabsdet);
-            return Backends.ManagedLu.Slogdet(a);
+                return (sign.MarkReductionScalar(), logabsdet.MarkReductionScalar());
+            var (managedSign, managedLogabsdet) = Backends.ManagedLu.Slogdet(a);
+            return (managedSign.MarkReductionScalar(), managedLogabsdet.MarkReductionScalar());
         }
 
         /// <summary><c>np.linalg.eig</c> / <c>np.linalg.eigvals</c> — OpenBLAS <c>geev</c> (always complex128; the caller
@@ -279,18 +295,26 @@ namespace NumSharp
         /// <param name="a">The coefficient matrix <c>(M, N)</c>, cast to <c>result_t</c>.</param>
         /// <param name="b">The right-hand sides <c>(M, K)</c>, K &gt;= 1 (the wrapper pads K == 0), cast to <c>result_t</c>.</param>
         /// <param name="rcond">The singular-value cutoff ratio.</param>
-        /// <returns>The solution, the residuals, the rank and the singular values, before the wrapper's casts.</returns>
+        /// <returns>The solution, the residuals, the rank and the singular values, before the wrapper's casts; the rank is
+        ///     NumPy's scalar (a read-only 0-d array, the gufunc's return step).</returns>
         /// <exception cref="OpenBlasMissingBackendException">A non-empty coefficient matrix and no backend serves it.</exception>
+        /// <remarks>
+        ///     NumPy's lstsq calls the gufunc <c>_umath_linalg.lstsq</c>, whose 0-d rank output the ufunc machinery returns
+        ///     as a numpy scalar (<c>np.intc</c>); <see cref="NDArray.MarkReductionScalar"/> is that step for both routes.
+        /// </remarks>
         public virtual (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
             NDArray a, NDArray b, double rcond)
         {
             // An empty operand (an empty matrix or a zero-size batch) factorises nothing: NumPy's answer needs no LAPACK, so
             // Core gives it whether or not a backend is installed (LinAlgEmpty, probed against NumPy 2.4.2).
             if (a.size == 0)
-                return Backends.LinAlgEmpty.Lstsq(a, b);
+            {
+                var (emptyX, emptyRes, emptyRank, emptyS) = Backends.LinAlgEmpty.Lstsq(a, b);
+                return (emptyX, emptyRes, emptyRank.MarkReductionScalar(), emptyS);
+            }
             var blas = Blas;
             if (blas != null && blas.TryLstsq(a, b, rcond, out var x, out var res, out var rank, out var s))
-                return (x, res, rank, s);
+                return (x, res, rank.MarkReductionScalar(), s);
             throw MissingBackend("np.linalg.lstsq", nameof(Backends.IBlasBackend.TryLstsq));
         }
 
