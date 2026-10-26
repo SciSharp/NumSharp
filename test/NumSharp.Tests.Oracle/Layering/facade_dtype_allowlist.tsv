@@ -124,7 +124,6 @@ Math/np.deg2rad.cs	1	0
 Math/np.diff.cs	3	16
 Math/np.ediff1d.cs	3	1
 Math/np.emath.cs	3	3
-Math/np.gradient.cs	6	5
 Math/np.i0.cs	1	5
 Math/np.imag.cs	0	1
 Math/np.interp.cs	1	3
