@@ -327,26 +327,36 @@ namespace NumSharp.Tests.Backends
             Assert.IsTrue(Convert.ToDouble(np.linalg.cond(s).GetAtIndex(0)) > 1e14);
             Assert.IsTrue(Convert.ToDouble(np.linalg.cond(s, 2).GetAtIndex(0)) > 1e14);
 
-            // 1/-1/±inf/'fro' compose norm*norm(inv); NumPy's raw inv nan-fills → inf. The 2-D raise is
-            // caught and routed to the same inf.
+            // 1/-1/±inf/'fro' compose norm*norm(inv); NumPy's raw inv nan-fills → inf, and so does
+            // cond's inverse that ignores errors.
             foreach (var p in new object[] { 1, -1, double.PositiveInfinity, double.NegativeInfinity, "fro" })
                 Assert.AreEqual(double.PositiveInfinity,
                     Convert.ToDouble(np.linalg.cond(s, p).GetAtIndex(0)), $"cond(singular, {p})");
         }
 
-        [TestMethod, Misaligned]
-        public void Cond_StackedWithSingularElement_Composition_Raises_WhereNumPyReturnsInf()
+        /// <summary>
+        ///     NumPy's cond inverts a stack with <c>_umath_linalg.inv</c> under <c>errstate(all='ignore')</c>: the singular
+        ///     matrix's inverse is NaN, so its condition number is inf while the other matrix's computes (probed 2.4.2:
+        ///     <c>cond(stack([[[1, 2], [3, 4]], [[1, 2], [2, 4]]]), 1)</c> is <c>[20.999999999999993, inf]</c>). NumSharp
+        ///     raised <c>LinAlgError("Singular matrix")</c> here until cond inverted each matrix on its own.
+        /// </summary>
+        [TestMethod]
+        public void Cond_StackedWithSingularElement_Composition_IsInfForThatMatrix()
         {
-            // Documented divergence: NumPy nan-fills the singular element of the STACKED inverse and
-            // returns inf for that element (finite for the rest). NumSharp's np.linalg.inv raises on the
-            // first singular element in a stack, so a composition-order cond over a stack containing a
-            // singular matrix raises rather than returning per-element inf. The single 2-D case IS
-            // handled (see the test above); closing the stacked case needs a non-raising inv.
             RequireLapack();
             var good = np.array(new double[,] { { 1.0, 2 }, { 3, 4 } });
             var singular = np.array(new double[,] { { 1.0, 2 }, { 2, 4 } });
             var stack = np.stack(new[] { good, singular });
-            new Action(() => np.linalg.cond(stack, 1)).Should().Throw<LinAlgError>();
+            foreach (var (p, finite) in new (object, double)[]
+                     {
+                         (1, 20.999999999999993), (-1, 5.999999999999998), (double.PositiveInfinity, 20.999999999999993),
+                         (double.NegativeInfinity, 5.999999999999998), ("fro", 14.999999999999998)
+                     })
+            {
+                var r = np.linalg.cond(stack, p);
+                Assert.AreEqual(finite, r.GetDouble(0), $"cond(stack, {p})[0]");
+                Assert.AreEqual(double.PositiveInfinity, r.GetDouble(1), $"cond(stack, {p})[1]");
+            }
         }
 
         #endregion

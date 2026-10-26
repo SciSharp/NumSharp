@@ -117,13 +117,15 @@ namespace NumSharp
         /// <summary>
         ///     The body of <c>np.linalg.cond</c>: the empty-operand refusal, the hashability of <paramref name="p"/>, the
         ///     singular-value orders (through the public <c>np.linalg.svdvals</c>), or <c>norm(x, p) * norm(inv(x), p)</c>
-        ///     for the others, and NumPy's NaN-to-inf tail.
+        ///     for the others (the inverse in float64 / complex128, NaN for a singular matrix), and NumPy's NaN-to-inf tail.
         /// </summary>
         /// <param name="x">The matrix, or a stack of them.</param>
         /// <param name="p">The order: null / ±2 (singular values), ±1, ±inf, <c>"fro"</c>, <c>"nuc"</c>.</param>
-        /// <returns>The condition number (a 0-d array for one matrix, one per matrix of a stack), real.</returns>
+        /// <returns>The condition number (a 0-d array for one matrix, one per matrix of a stack), real; inf for a singular
+        ///     matrix.</returns>
         /// <exception cref="LinAlgError">An empty operand (<c>cond is not defined on empty arrays</c>), a non-square one
-        ///     for an inverse-based order, or a singular matrix inside a stack.</exception>
+        ///     for an inverse-based order, or the nuclear norm of a singular matrix (its NaN inverse: <c>SVD did not
+        ///     converge</c>).</exception>
         /// <exception cref="TypeError">An array or list <paramref name="p"/> (unhashable), or a float16, decimal or char
         ///     operand (<c>_commonType</c>).</exception>
         /// <exception cref="ValueError">An order the norm refuses (<c>Invalid norm order for matrices.</c>).</exception>
@@ -162,31 +164,84 @@ namespace NumSharp
                 var common = CommonType(x);
                 // NumPy calls _umath_linalg.inv(x, signature=...) next: its input cast refuses text.
                 ThrowIfTextGufunc("inv", x);
+                // result_t = _realType(result_t): the condition number is real.
                 var realT = common == NPTypeCode.Complex ? NPTypeCode.Double : common;
 
-                // NumPy's own composition, verbatim — and the reason a bad order is reported by
-                // `norm` in the caller's words ("Invalid norm order for matrices.") rather than by
-                // `cond` itself. NumPy inverts IGNORING errors: a singular operand yields nan from
-                // the raw inv gufunc, which the nan→inf tail below turns into inf. NumSharp's
-                // `np.linalg.inv` RAISES on a singular matrix, so for a single (2-D) operand the raise
-                // is caught and the same nan→inf path is taken. A singular element inside a STACK
-                // still raises (per-element nan-fill would need a non-raising inv) — documented
-                // [Misaligned] divergence.
-                NDArray invx;
-                try
-                {
-                    invx = np.linalg.inv(ToCommon(x, common));
-                }
-                catch (LinAlgError) when (x.ndim == 2)
-                {
-                    return CondNanToInf(NDArray.Scalar(double.NaN).astype(realT), x);
-                }
-
-                r = np.multiply(np.linalg.norm(x, p, new[] {-2, -1}), np.linalg.norm(invx, p, new[] {-2, -1}));
-                r = r.astype(realT);
+                // NumPy's statements, in order:
+                //     signature = 'D->D' if isComplexType(t) else 'd->d'
+                //     with errstate(all='ignore'):
+                //         invx = _umath_linalg.inv(x, signature=signature)
+                //         r = norm(x, p, axis=(-2, -1)) * norm(invx, p, axis=(-2, -1))
+                //     r = r.astype(result_t, copy=False)
+                // The inverse runs in float64 / complex128 whatever result_t is (a float32 matrix's inverse and its norm
+                // are float64), and a singular matrix's inverse is NaN instead of an error. Both norms are evaluated, x's
+                // first: a bad order is refused by norm ("Invalid norm order for matrices.") even for a singular matrix,
+                // and the nuclear norm of a singular matrix's NaN inverse raises the SVD's "SVD did not converge".
+                var invx = InvIgnoringErrors(ToCommon(x, common == NPTypeCode.Complex ? NPTypeCode.Complex : NPTypeCode.Double));
+                var normX = np.linalg.norm(x, p, new[] {-2, -1});
+                var normInv = np.linalg.norm(invx, p, new[] {-2, -1});
+                // One matrix's two norms are NumPy scalars, so `*` is scalarmath (the float64 product: a float32 norm
+                // widens exactly) and astype keeps a scalar; a stack's are arrays, multiplied by the ufunc.
+                r = normX.ndim == 0
+                    ? NDArray.Scalar(normX.astype(np.float64).GetDouble() * normInv.GetDouble()).astype(realT).MarkReductionScalar()
+                    : np.multiply(normX, normInv).astype(realT, false);
             }
 
             return CondNanToInf(r, x);
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_umath_linalg.inv(x, signature=...)</c> under <c>errstate(all='ignore')</c>, as np.linalg.cond calls
+        ///     it: every matrix is inverted on its own (the gufunc's loop), and one that the factorisation finds singular is
+        ///     filled with NaN (umath_linalg's <c>nan_matrix</c>) where np.linalg.inv raises.
+        /// </summary>
+        /// <param name="x">The square matrices, float64 or complex128 (the <c>'d->d'</c> / <c>'D->D'</c> loop).</param>
+        /// <returns>The inverses, of <paramref name="x"/>'s shape and dtype; NaN (NumPy's positive quiet NaN, both parts of a
+        ///     complex element) throughout each singular matrix.</returns>
+        /// <remarks>
+        ///     Nothing is raised for a singular matrix, and no backend is needed: without one the managed LU inverts
+        ///     float64 and complex128 matrices. The engine's inverse raises <c>LinAlgError("Singular matrix")</c> at the
+        ///     first singular matrix, so a stack is inverted whole first (one call, the common case) and only after that
+        ///     error matrix by matrix. Each matrix is factorised independently on both routes (the OpenBLAS <c>gesv</c> loop
+        ///     and the managed LU), so every regular matrix's inverse is the same bits either way.
+        /// </remarks>
+        [NDScopedCovered] // only caller: [NDScoped] cond; the per-matrix views, inverses and the NaN scalar ride its scope
+        private static NDArray InvIgnoringErrors(NDArray x)
+        {
+            try
+            {
+                return x.TensorEngine.Inv(x);
+            }
+            catch (LinAlgError e) when (e.Message == "Singular matrix")
+            {
+                // errstate(all='ignore') swallows only the gufunc's invalid flag, which a singular factorisation sets;
+                // any other error still propagates.
+            }
+
+            int nd = x.ndim;
+            long m = x.Shape.dimensions[nd - 1];
+            // a singular matrix was found, so there is at least one element: m > 0 and the matrix count is size / m^2
+            long count = x.size / (m * m);
+            var matrices = np.reshape(x, Shape.Adopt(new[] {count, m, m}));
+            var inverses = np.empty(Shape.Adopt(new[] {count, m, m}), x.dtype);
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000L); // NPY_NAN; .NET's double.NaN is negative
+            var nanValue = x.typecode == NPTypeCode.Complex
+                ? NDArray.Scalar(new System.Numerics.Complex(nan, nan))
+                : NDArray.Scalar(nan);
+            for (long k = 0; k < count; k++)
+            {
+                var slot = inverses[new[] {Slice.Index(k)}];
+                try
+                {
+                    np.copyto(slot, x.TensorEngine.Inv(matrices[new[] {Slice.Index(k)}]));
+                }
+                catch (LinAlgError e) when (e.Message == "Singular matrix")
+                {
+                    np.copyto(slot, nanValue);
+                }
+            }
+
+            return np.reshape(inverses, Shape.Adopt((long[])x.Shape.dimensions.Clone()));
         }
 
         /// <summary>Whether an order is the number <paramref name="value"/> (NumPy's <c>p in {2, -2}</c> and <c>p == -2</c>).</summary>
@@ -226,12 +281,13 @@ namespace NumSharp
         /// <summary>
         ///     NumPy's tail of <c>cond</c>: turn a NaN condition number into <c>inf</c> — UNLESS the
         ///     matrix itself held a NaN (over its last two axes), in which case the NaN is kept. A
-        ///     NaN only arises here from a <c>0/0</c> (an all-zero matrix), which is infinitely
-        ///     ill-conditioned.
+        ///     NaN arises from a <c>0/0</c> (an all-zero matrix) or from a singular matrix's NaN
+        ///     inverse, both infinitely ill-conditioned.
         /// </summary>
         /// <param name="r">The condition numbers.</param>
         /// <param name="x">The operand they came from.</param>
-        /// <returns><paramref name="r"/> itself when it holds no NaN, else a fresh array with the NaNs replaced.</returns>
+        /// <returns><paramref name="r"/> itself when it holds no NaN to replace; else, for one matrix, NumPy's scalar
+        ///     <c>r.dtype.type(inf)</c> (a read-only 0-d array), and for a stack a fresh array with the NaNs replaced.</returns>
         [NDScopedCovered] // only caller: [NDScoped] cond (the isnan/logical/inf-scalar temps are scope-reclaimed)
         private static NDArray CondNanToInf(NDArray r, NDArray x)
         {
@@ -245,6 +301,13 @@ namespace NumSharp
                 var xNan = np.any(np.isnan(x), new[] {-2, -1}, null);
                 apply = np.logical_and(nanMask, np.logical_not(xNan));
             }
+
+            // NumPy's `elif nan_mask: r = r.dtype.type(inf)` ("Convention is to return scalars instead of 0d arrays"): a
+            // new scalar of r's dtype, or r itself when the matrix held the NaN.
+            if (r.ndim == 0)
+                return apply.GetBoolean()
+                    ? NDArray.Scalar(double.PositiveInfinity).astype(r.typecode).MarkReductionScalar()
+                    : r;
 
             return np.where(apply, NDArray.Scalar(double.PositiveInfinity).astype(r.typecode), r);
         }

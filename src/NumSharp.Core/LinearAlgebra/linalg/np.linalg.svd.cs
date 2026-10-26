@@ -96,21 +96,25 @@ namespace NumSharp
             ///     <c>±1</c>, <c>±inf</c> and <c>"fro"</c> are defined as
             ///     <c>norm(x, p) * norm(inv(x), p)</c>.
             /// </param>
-            /// <returns>The condition number, real.</returns>
+            /// <returns>The condition number, real: a 0-d array for one matrix (NumPy's scalar), one per matrix of a stack;
+            ///     inf for a singular matrix.</returns>
             /// <remarks>
             ///     https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html
             ///     <para>
-            ///     Every order needs a factorisation — the singular-value ones directly, the rest
-            ///     through <see cref="inv"/> — so unlike <see cref="norm(NDArray, object, int?, bool)"/> there is no order that
-            ///     works without a backend.
+            ///     Every order needs a factorisation: the singular-value ones (null, ±2) and <c>"nuc"</c> the SVD, which needs
+            ///     a matrix backend for a non-empty operand; ±1, ±inf and <c>"fro"</c> the inverse, which the managed LU
+            ///     computes without one. As in NumPy the inverse runs in float64 (complex128 for a complex operand) whatever
+            ///     the result dtype, and a singular matrix's inverse is NaN rather than an error, so its condition number is
+            ///     inf, inside a stack too.
             ///     </para>
             /// </remarks>
-            /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
+            /// <exception cref="OpenBlasMissingBackendException">An SVD-based order (null, ±2, <c>"nuc"</c>) over a non-empty
+            ///     operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             /// <exception cref="TypeError">An array or list <paramref name="p"/>: NumPy's <c>p in {2, -2}</c> hashes it
             ///     (<c>unhashable type: 'numpy.ndarray'</c> / <c>'list'</c>), after the empty-operand check; a float16,
             ///     decimal or char operand.</exception>
-            /// <exception cref="LinAlgError">An empty operand, a non-square one for an inverse-based order, or a singular
-            ///     matrix inside a stack.</exception>
+            /// <exception cref="LinAlgError">An empty operand, a non-square one for an inverse-based order, or
+            ///     <c>"nuc"</c> of a singular matrix (the SVD of its NaN inverse: <c>SVD did not converge</c>).</exception>
             /// <exception cref="ValueError">An order the norm refuses.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
             [NDScoped] // the facade keeps its scope over the call; LinalgEngine.Cond scopes the computation's own

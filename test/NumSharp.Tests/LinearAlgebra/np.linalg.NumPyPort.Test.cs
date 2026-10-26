@@ -216,5 +216,44 @@ namespace NumSharp.Tests.LinearAlgebra
             CollectionAssert.AreEqual(new uint[] { 0x40AF4152, 0x41074A27, 0x411513FD },
                 rows.ToArray<float>().Select(BitConverter.SingleToUInt32Bits).ToArray());
         }
+
+        /// <summary>
+        ///     cond's inverse-based orders are NumPy's statements: <c>invx = _umath_linalg.inv(x, signature='d->d')</c> under
+        ///     <c>errstate(all='ignore')</c> (float64 whatever the result dtype, NaN for a singular matrix where inv raises),
+        ///     then <c>norm(x, p, axis=(-2, -1)) * norm(invx, p, axis=(-2, -1))</c> with both norms evaluated, the cast to the
+        ///     real result dtype, and the NaN-to-inf tail. NumSharp inverted in the result dtype, raised on a singular matrix
+        ///     inside a stack, and returned inf for a single singular matrix without evaluating the norms, so an order the
+        ///     norm refuses was not refused.
+        /// </summary>
+        [TestMethod]
+        public void Cond_InvertsInDoubleIgnoringErrors()
+        {
+            var singular = np.array(new[] { 1.0, 1, 1, 0, 1, 1, 1, 1, 1 }).reshape(3, 3);
+
+            // np.linalg.cond(singular, 1): np.float64(inf), a scalar.
+            var inf = np.linalg.cond(singular, 1);
+            AssertScalar("cond(singular, 1)", inf);
+            Assert.AreEqual(double.PositiveInfinity, inf.GetDouble());
+            // np.linalg.cond(singular, 0): norm(x, 0) still runs and refuses the order.
+            Action bad = () => np.linalg.cond(singular, 0);
+            bad.Should().Throw<ValueError>().WithMessage("Invalid norm order for matrices.");
+
+            // np.linalg.cond(np.stack([singular, a]), 1): [inf, 11.375000000000002] - the singular matrix is inf, the
+            // other computes (the managed LU and LAPACK may differ in the last bit of a regular inverse).
+            var stack = np.linalg.cond(np.stack(new[] { singular, Sq3() }), 1);
+            CollectionAssert.AreEqual(new long[] { 2 }, stack.shape.Select(d => (long)d).ToArray());
+            Assert.AreEqual(double.PositiveInfinity, stack.GetDouble(0));
+            Assert.AreEqual(11.375000000000002, stack.GetDouble(1), 1e-12);
+
+            // A float32 matrix is inverted in float64: np.linalg.cond(f32, 1) is np.float32(13.802469), bytes ead65c41,
+            // where inverting in float32 gives e9d65c41; np.linalg.cond(f32, np.inf) is e4382e41 (float32: e3382e41).
+            var f32 = np.array(new[] { 3f, -1, 2, 0, 5, -4, 1, 7, -2.5f }).reshape(3, 3);
+            var c1 = np.linalg.cond(f32, 1);
+            AssertScalar("cond(f32, 1)", c1);
+            Assert.AreEqual(np.float32, c1.dtype);
+            Assert.AreEqual(0x415CD6EAu, BitConverter.SingleToUInt32Bits(c1.GetSingle()));
+            Assert.AreEqual(0x412E38E4u,
+                BitConverter.SingleToUInt32Bits(np.linalg.cond(f32, double.PositiveInfinity).GetSingle()));
+        }
     }
 }
