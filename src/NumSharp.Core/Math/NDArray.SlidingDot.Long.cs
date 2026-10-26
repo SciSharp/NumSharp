@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Kernels;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -196,6 +197,17 @@ namespace NumSharp
                         return false;   // a padding zero times an infinity would reach lanes that never met it
                     widen(a, a32, n1);
                     SlidingBlocks(a32, n1, k32, n2, s32, nLeft, 0, outLen, SingleBlock, &ExactBlockSingle);
+                    // A NaN sum carries NumPy's NaN only through HALF_dot's operand order: recompute those positions by
+                    // NDHalfDot over the position's terms (the data index q0 + s for the kernel terms s inside the data).
+                    for (long p = 0; p < outLen; p++)
+                    {
+                        if (!float.IsNaN(s32[p]))
+                            continue;
+                        long q0 = p - nLeft;
+                        long sLo = Math.Max(0, -q0), sHi = Math.Min(n2, n1 - q0);
+                        s32[p] = NDHalfDot.Sum(a + (q0 + sLo), 1, k + sLo, 1, sHi - sLo);
+                    }
+
                     narrow(s32, o, outLen);
                 }
             }

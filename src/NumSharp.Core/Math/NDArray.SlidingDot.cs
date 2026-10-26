@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using NumSharp.Backends;
+using NumSharp.Utilities;
 using SRCS = System.Runtime.CompilerServices;
 
 namespace NumSharp
@@ -519,12 +520,16 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void SlidingHalf(Half* a, Half* k, Half* o, long n2, long nLeft, long nRight, long mid)
         {
-            // HALF_dot: products and accumulation in float32, one final round to Half.
+            // HALF_dot: products and accumulation in float32, one final round to Half. A NaN sum is recomputed by
+            // NDHalfDot, which keeps HALF_dot's operand order (the data first, the kernel second; the first NaN of the
+            // sum wins) — the fast loop's order is RyuJIT's.
             for (long j = 0; j < nLeft; j++)
             {
                 long len = n2 - nLeft + j, koff = nLeft - j;
                 float s = 0f;
                 for (long t = 0; t < len; t++) s += (float)a[t] * (float)k[koff + t];
+                if (float.IsNaN(s))
+                    s = NDHalfDot.Sum(a, 1, k + koff, 1, len);
                 o[j] = (Half)s;
             }
             Half* om = o + nLeft;
@@ -532,6 +537,8 @@ namespace NumSharp
             {
                 float s = 0f;
                 for (long t = 0; t < n2; t++) s += (float)a[i + t] * (float)k[t];
+                if (float.IsNaN(s))
+                    s = NDHalfDot.Sum(a + i, 1, k, 1, n2);
                 om[i] = (Half)s;
             }
             Half* orr = o + nLeft + mid;
@@ -540,6 +547,8 @@ namespace NumSharp
                 long len = n2 - 1 - j; Half* ar = a + mid + j;
                 float s = 0f;
                 for (long t = 0; t < len; t++) s += (float)ar[t] * (float)k[t];
+                if (float.IsNaN(s))
+                    s = NDHalfDot.Sum(ar, 1, k, 1, len);
                 orr[j] = (Half)s;
             }
         }

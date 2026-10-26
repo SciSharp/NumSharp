@@ -211,9 +211,16 @@ namespace NumSharp.Backends
                         }
                     }
 
+                    // A NaN cell carries NumPy's NaN only through NumPy's operand order (NDHalfDot): recompute it.
+                    // Any other cell does not depend on the order (a non-NaN float32 multiply and add are commutative).
                     Half* cRow = C + i * N;
                     for (long j = 0; j < N; j++)
-                        cRow[j] = (Half)acc[j];
+                    {
+                        float s = acc[j];
+                        if (float.IsNaN(s))
+                            s = NDHalfDot.Sum(A + aRowBase, aStride1, B + j * bStride1, bStride0, K);
+                        cRow[j] = (Half)s;
+                    }
                 }
             }
         }
@@ -526,9 +533,26 @@ namespace NumSharp.Backends
                         }
                     }
 
+                    // A NaN cell carries NumPy's NaN only through NumPy's operand order (NDHalfDot): recompute it from
+                    // the operands as the half loop reads them (NumPy casts the bool / int8 / uint8 operand to half,
+                    // which is exact, then runs the same loop).
                     Half* cRow = c + i * N;
                     for (long j = 0; j < N; j++)
-                        cRow[j] = (Half)acc[j];
+                    {
+                        float s = acc[j];
+                        if (float.IsNaN(s))
+                        {
+                            s = 0f;
+                            for (long k = 0; k < K; k++)
+                            {
+                                float x = (float)ReadAsDouble(aBase, aTc, aRowBase + k * aStride1);
+                                float y = (float)ReadAsDouble(bBase, bTc, k * bStride0 + j * bStride1);
+                                s = NDHalfDot.Add(s, NDHalfDot.Multiply(x, y));
+                            }
+                        }
+
+                        cRow[j] = (Half)s;
+                    }
                 }
             }
         }

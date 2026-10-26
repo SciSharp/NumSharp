@@ -204,7 +204,15 @@ namespace NumSharp.Backends
         /// HALF_dot declares <c>float tmp = 0.</c>, accumulates every product there, and narrows
         /// once with <c>npy_float_to_half(tmp)</c>. Accumulating in Half saturates instead —
         /// <c>dot(ones(4096), ones(4096))</c> stalls at 2048, since half cannot represent 2049.
+        /// A NaN result carries NumPy's NaN: it is recomputed by <see cref="NDHalfDot.Sum"/>, which
+        /// encodes HALF_dot's operand order (the fast loop's order is RyuJIT's).
         /// </summary>
+        /// <param name="left">The first vector (NumPy's <c>ip1</c>).</param>
+        /// <param name="right">The second vector (<c>ip2</c>).</param>
+        /// <param name="sa">The first vector's element stride.</param>
+        /// <param name="sb">The second vector's element stride.</param>
+        /// <param name="n">The number of terms.</param>
+        /// <returns>The dot product, narrowed to Half once.</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe Half DotHalf(NDArray left, NDArray right, long sa, long sb, long n)
         {
@@ -215,6 +223,9 @@ namespace NumSharp.Backends
                 for (long i = 0; i < n; i++) acc += (float)a[i] * (float)b[i];
             else
                 for (long i = 0; i < n; i++) acc += (float)a[i * sa] * (float)b[i * sb];
+            // Only a NaN depends on the operand order (a non-NaN float32 multiply and add are commutative).
+            if (float.IsNaN(acc))
+                acc = NDHalfDot.Sum(a, sa, b, sb, n);
             return (Half)acc;
         }
 
