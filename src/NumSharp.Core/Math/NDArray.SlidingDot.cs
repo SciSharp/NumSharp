@@ -101,7 +101,8 @@ namespace NumSharp
         ///     stride, after the reversal, is not positive).</returns>
         /// <remarks>Only the complex dotfunc behaves differently on the two paths (cblas' zdotu builds its result with C99
         ///     complex arithmetic, which turns a non-finite imaginary part's <c>im*0</c> into a NaN real part — see
-        ///     <see cref="ZdotuResult"/>); a real dot of the single term such an operand allows is identical on both.</remarks>
+        ///     <see cref="ZdotuResult(double, double)"/>); a real dot of the single term such an operand allows is identical
+        ///     on both.</remarks>
         internal static bool DotOperandBlasable(NDArray x, NPTypeCode retType, bool reversed)
         {
             // Another dtype is a cast (a fresh array), more than one element a copy unless already C-contiguous — both a
@@ -591,7 +592,7 @@ namespace NumSharp
         /// <summary>
         ///     CDOUBLE_dot's loop without cblas (arraytypes.c.src): <c>sumr += ip1r*ip2r - ip1i*ip2i; sumi += ip1r*ip2i +
         ///     ip1i*ip2r</c> from +0, the first operand's parts first — plain double arithmetic, so a non-finite imaginary
-        ///     part does not reach the real part (compare <see cref="ZdotuResult"/>).
+        ///     part does not reach the real part (compare <see cref="ZdotuResult(double, double)"/>).
         /// </summary>
         /// <param name="ap">First operand (NumPy's <c>ip1</c>, the data).</param>
         /// <param name="kp">Second operand (<c>ip2</c>, the kernel; not conjugated).</param>
@@ -615,8 +616,8 @@ namespace NumSharp
         ///     CDOUBLE_dot adds into a zeroed double pair (probed 2.4.2, np.dot of 1..7 random complex terms: 0 of 2,100
         ///     differ from this model; the per-term naive product differs on up to 90%). From <see cref="ZdotuVectorMin"/>
         ///     terms the vector kernel reorders the sums (byte parity through the backend only); those keep the naive per-term
-        ///     product. Both regimes end in zdotu's C99 result construction (<see cref="ZdotuResult"/>), which is what makes a
-        ///     non-finite imaginary part poison the real part exactly as NumPy's does.
+        ///     product. Both regimes end in zdotu's C99 result construction (<see cref="ZdotuResult(double, double)"/>),
+        ///     which is what makes a non-finite imaginary part poison the real part exactly as NumPy's does.
         /// </summary>
         /// <param name="ap">First operand.</param>
         /// <param name="kp">Second operand (not conjugated).</param>
@@ -664,7 +665,7 @@ namespace NumSharp
         ///     2.4.2 loads: <c>scipy_cblas_zdotu_sub64_</c> on 1..8-term operands). Neither Roslyn nor the JIT folds a
         ///     floating-point <c>x * 0.0</c> (it is not an identity under IEEE rules), and the unit tests pin the NaN.
         /// </remarks>
-        private static Complex ZdotuResult(double re, double im)
+        internal static Complex ZdotuResult(double re, double im)
         {
             double sum0 = 0, sum1 = 0;   // CDOUBLE_dot's `sum += tmp` over its one chunk
             sum0 += re + im * 0.0;

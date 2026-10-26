@@ -18,7 +18,6 @@ namespace NumSharp.Tests
     //
     // This file reproduces the gaps through PUBLIC calls on plain arrays, so each can be fixed where it lives:
     //
-    //   * Silent wrong values: np.dot of an N-D operand with an M-D one computes complex128 in float64 (MX10).
     //   * A crash: fancy assignment with two index entries into a C-contiguous view at an offset (MX07).
     //   * Result LAYOUT (values equal): np.cumsum / np.cumprod (MX02), ndarray.round of a broadcast operand (MX04),
     //     np.conjugate of a transposed strided view (MX05).
@@ -29,6 +28,11 @@ namespace NumSharp.Tests
     // FIXED 2026-10-24 (the np-layer dtype plan's P1d): np.prod in a cast loop casts the input first (MX08: the flat form
     // read a narrower input as its float16 / complex128 loop, past the end of the buffer). Its pin moved to
     // Math/np.prod.CastLoop.Test.cs with the probes of the fix, and the gap's cases are back in matrix.jsonl.
+    //
+    // FIXED 2026-10-26 (the np-layer dtype plan's P2): np.dot of an N-D operand with an M-D one calls the result dtype's
+    // dot function once per output element (MX10: the route computed every dtype in float64, so a complex128 product
+    // lost its imaginary parts and an integer sum did not wrap). Its pin moved to LinearAlgebra/np.dot.Test.cs, and the
+    // gap's cases are back in matrix.jsonl.
     //
     // Not repeated here, because an older file already pins the same root cause: the fancy getter's result layout
     // (MX01: OpenBugs.FancyIndex.cs, group 2), reshape(-1) of a broadcast view (MX06: OpenBugs.ViewFlags.cs, VF24),
@@ -41,25 +45,6 @@ namespace NumSharp.Tests
     // =====================================================================
     public partial class OpenBugs
     {
-        /// <summary>
-        ///     <c>np.dot(a, b)</c> with a (1, 4, 3) complex128 <c>a</c> and a (3, 4) complex128 <c>b</c>: NumPy returns
-        ///     <c>[32-8j, 38-8j, 44-8j, 50-8j]</c> in its first row. NumSharp's generic N-D route converts every
-        ///     element to float64, so the imaginary parts are lost (gap MX10; int64 past 2^53 and decimal lose
-        ///     precision on the same route).
-        /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "matrix-MX10")]
-        public void Matrix_DotNDWithMD_Complex_ShouldKeepTheImaginaryParts()
-        {
-            using var real = np.arange(12).reshape(1, 4, 3).astype(np.complex128);
-            using var a = real + new Complex(0, 1);
-            using var b = np.arange(12).reshape(3, 4).astype(np.complex128) * new Complex(1, -1);
-            using var r = np.dot(a, b);
-
-            r.shape.Should().Equal(1L, 4L, 4L);
-            r.GetAtIndex<Complex>(0).Should().Be(new Complex(32, -8));
-            r.GetAtIndex<Complex>(3).Should().Be(new Complex(50, -8));
-        }
-
         /// <summary>
         ///     <c>view[[0, 2], [1, 3]] = -1</c> where <c>view</c> is the middle <c>np.unstack</c> child of a
         ///     (3, 4, 4) array (a C-contiguous (4, 4) view at offset 16): NumPy stores the two elements. NumSharp

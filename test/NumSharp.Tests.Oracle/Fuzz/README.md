@@ -2161,8 +2161,8 @@ and setitem (integers, slices, new axes, ellipses, index arrays, masks, 0-d arra
 / array / sequence / Python scalar / NumPy scalar on either side), the elementwise operators, `**`, the reductions
 (axis, dtype=, out= of seven dtypes, ddof, error forms), the methods ndarray hands down, text and iteration.
 
-26,819 gate cases over 87 op keys (26,761 at delivery; fixes returned MX06 / MX11's 28 cases on 2026-10-12 and MX03 /
-MX08's 30 by 2026-10-24, see below), valueclass
+26,822 gate cases over 87 op keys (26,761 at delivery; fixes returned MX06 / MX11's 28 cases on 2026-10-12, MX03 /
+MX08's 30 by 2026-10-24 and MX10's 3 on 2026-10-26, see below), valueclass
 `matrix`, **zero excuses** (`MisalignedRegistry` returns null).
 
 **Three replays, one per float scaling route.** `NDMatrix.Scale` (`m * 2.0`) has three routes that must give the
@@ -2194,11 +2194,11 @@ member or an `np.*` function that `NDMatrix` delegates to:
 | MX07 | 8 | a two-entry fancy assignment into a C-contiguous view at an offset throws IndexOutOfRangeException |
 | MX08 | 15 | `np.prod` in a cast loop: flat `dtype=bool` throws, flat complex128 / float16 loops return NaN or garbage; fixed by `d84021b8` |
 | MX09 | 4 | complex128 `np.prod` over a reversed view: the sign of a zero part |
-| MX10 | 3 | `np.dot` of an N-D operand with an M-D one computes in float64: complex128 loses its imaginary parts |
+| MX10 | 3 | `np.dot` of an N-D operand with an M-D one computes in float64: complex128 loses its imaginary parts; fixed by np-layer-dtype-logic P2 (2026-10-26) |
 | MX11 | 12 | `np.repeat` of a C-contiguous view at an offset reads from the parent's start |
 
-Seven of them had repros through public calls in `NumSharp.Tests/OpenBugs.Matrix.cs` (five open since MX03 and MX08
-were fixed: MX02, MX04, MX05, MX07, MX10); MX01, MX06, MX09 and MX11 are pinned by older files (`OpenBugs.FancyIndex.cs`, `OpenBugs.ViewFlags.cs` VF24 / VF39, `OpenBugs.Reductions.cs`).
+Seven of them had repros through public calls in `NumSharp.Tests/OpenBugs.Matrix.cs` (four open since MX03, MX08 and
+MX10 were fixed: MX02, MX04, MX05, MX07); MX01, MX06, MX09 and MX11 are pinned by older files (`OpenBugs.FancyIndex.cs`, `OpenBugs.ViewFlags.cs` VF24 / VF39, `OpenBugs.Reductions.cs`).
 
 **Redrawn 2026-10-12, when branch strings was rebased onto journey4:** MX06 and MX11 match NumPy (strings fixed the
 reshape of a broadcast view and np.repeat of an offset view, VF24 / VF39 with them); their rules are dropped and their 28
@@ -2208,6 +2208,11 @@ cases returned to the gate (26,789 gate cases, 144 carved under 9 ids since).
 MX08 since `d84021b8` (np-layer-dtype-logic P1d: `np.prod` in a cast loop casts the input first); their rules are
 dropped and their 30 cases are in the gate (26,819 gate cases, 114 carved under 7 ids: MX01, MX02, MX04, MX05, MX07,
 MX09, MX10).
+
+**Redrawn 2026-10-26:** MX10 matches NumPy since np-layer-dtype-logic P2 (`np.dot`'s N-D route converts both operands to
+the result dtype and calls that dtype's dot function once per output element, as `PyArray_MatrixProduct2` does); its
+rule is dropped and its 3 cases are in the gate (26,822 gate cases, 111 carved under 6 ids: MX01, MX02, MX04, MX05,
+MX07, MX09). Its pin moved from `OpenBugs.Matrix.cs` to `LinearAlgebra/np.dot.Test.cs`.
 
 **Generator rules worth keeping**: `argsort` is called with `kind="stable"` (NumPy's default sort orders equal elements
 by its SIMD kernel, NumSharp's argsort is always stable); the exact-inverse cases (`I`, negative powers) use diagonal

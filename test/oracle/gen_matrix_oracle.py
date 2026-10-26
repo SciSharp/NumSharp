@@ -1244,6 +1244,11 @@ def gen_text(em):
 # casts the input into a loop that is neither its dtype nor its accumulator first, as NumPy's buffered iterator does. Its
 # rule is dropped and its 15 cases were moved back into matrix.jsonl as they were (the precedent of 2026-10-12: no
 # regeneration of the tier for a fixed gap).
+#
+# MX10 (np.dot of an N-D operand with an M-D one) was fixed 2026-10-26 on strings by the np-layer dtype plan's P2: the
+# engine's N-D route converts both operands to the result dtype and calls that dtype's dot function once per output
+# element, as NumPy's PyArray_MatrixProduct2 does, so a complex128 product keeps its imaginary parts. Its rule is
+# dropped and its 3 cases were moved back into matrix.jsonl as they were.
 GAPS = {
     "MX01": "a[:, index_array]: NumPy returns its transposed MapIter view (F-contiguous for two axes); NumSharp's "
             "fancy getter returns a C-ordered array. Values equal. Library-wide (OpenBugs.FancyIndex.cs).",
@@ -1259,8 +1264,6 @@ GAPS = {
             "offset and the bound does not. The offset-view class of the array-object oracle.",
     "MX09": "complex128 np.prod over a reversed view: the sign of a zero part differs (NumPy's npy_cmul visiting "
             "order). The complex Prod gap of the reductions tier.",
-    "MX10": "np.dot of an N-D operand with an M-D one (the generic DotNDMD route) computes every dtype in "
-            "float64: a complex128 product loses its imaginary parts. Reached through ndarray(1,4,3) * matrix.",
 }
 
 
@@ -1331,9 +1334,6 @@ def _gap_of(case):
     if op == "matrix.prod":
         if layout.startswith("rev:") and dt == "complex128":
             return "MX09"
-
-    if op == "matrix.__rmul__" and layout.startswith("a143*m") and dt == "complex128":
-        return "MX10"
 
     return None
 
