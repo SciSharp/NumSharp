@@ -110,6 +110,17 @@ namespace NumSharp.Backends
             // NaN != 0 so logical_not(NaN)→False), which the equality comparison computes with out=/where=.
             if (nd.typecode == NPTypeCode.Boolean)
                 return Invert(nd, null, @out, where);
+            // logical_not is unary, but the comparison computing it has a second, hidden input (the 0-d zero), which its
+            // broadcast error would list ("(3,4) () (3,4,2)"). Joining the operand with out= / where= first gives NumPy's
+            // text, which lists the operand, then out= and where=. NumPy's checks before its broadcast run first, in its
+            // order: a read-only out= and a non-bool mask (its argument parsing), then the output cast, which a bool result
+            // never fails (it casts same_kind into every out=, text included). An out= of the operand's own dimensions
+            // without a mask cannot fail the join and skips it, as the ufunc routes do.
+            if (where is not null || (@out is not null && !SameDims(nd.Shape, @out.Shape)))
+            {
+                Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out, where);
+                ResolveUfuncIterationShape(nd.Shape.Clean(), new[] { nd }, @out, where);
+            }
             return Compare(nd, NDArray.Scalar(0), null, @out, where);
         }
     }
