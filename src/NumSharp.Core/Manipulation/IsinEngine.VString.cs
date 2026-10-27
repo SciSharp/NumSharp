@@ -233,7 +233,7 @@ namespace NumSharp
 
             /// <summary>
             ///     Reads every element of the flattened set: a <c>StringDType</c> cell's text or NA object, a <c>U</c>
-            ///     element's text, an <c>S</c> element's bytes, a number.
+            ///     element's text, an <c>S</c> element's bytes, a number (a char element is NumPy's uint16 number).
             /// </summary>
             /// <param name="ar2">The flattened set.</param>
             /// <exception cref="NotSupportedException">An NA object that is a sequence or an array (see
@@ -277,8 +277,15 @@ namespace NumSharp
                         AddObject(p.HasNAObject ? p.na_object : string.Empty);
                     return;
                 }
+                // Iterating a char set yields NumPy's uint16 numbers: a char ELEMENT is its uint16 proxy (as np.searchsorted's
+                // VStringSearch.ReadObjects reads it), which no text equals. A C# char VALUE (an NA object, above) stays a str
+                // in AddObject, the boundary map's Python str.
+                bool chars = ar2.typecode == NPTypeCode.Char;
                 for (long i = 0; i < n; i++)
-                    AddObject(ar2.Storage.GetAtIndex(i));
+                {
+                    object value = ar2.Storage.GetAtIndex(i);
+                    AddObject(chars ? (object)(ushort)(char)value : value);
+                }
             }
 
             /// <summary>Adds one yielded object by kind.</summary>

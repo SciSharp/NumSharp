@@ -84,10 +84,11 @@ namespace NumSharp
             NDArray ar1 = np.ravel(element);        // C-order flatten (NumPy: np.asarray(element).ravel())
             NDArray ar2 = np.ravel(test_elements);  // test values are always flattened
 
-            // kind='table' is only defined for boolean/integer arrays, and can overflow for wide signed ranges.
+            // kind='table' is only defined for boolean/integer arrays (NumPy's dtype.kind in ("u", "i", "b"): a char array,
+            // NumPy's uint16, is one), and can overflow for wide signed ranges.
             if (kind == "table")
             {
-                if (!(IsIntegerOrBool(ar1.typecode) && IsIntegerOrBool(ar2.typecode)))
+                if (!(IsNumPyIntegerKind(ar1.typecode) && IsNumPyIntegerKind(ar2.typecode)))
                     throw new ValueError("The 'table' method is only supported for boolean or integer arrays. "
                         + "Please select 'sort' or None for kind.");
                 if (ar2.size > 0 && !TableRangeIsSafe(ar2))
@@ -456,6 +457,13 @@ namespace NumSharp
             return raw & (ar1 >= (NDArray)0L);
         }
 
+        /// <summary>
+        ///     Whether a dtype takes the membership routes' integer arithmetic: bool and the eight integer dtypes. Char is not
+        ///     one here: its arithmetic is not uint16's, so a char pair stays off the counting table and on the exact hash
+        ///     route (for NumPy's table-method test, where char counts, see <see cref="IsNumPyIntegerKind"/>).
+        /// </summary>
+        /// <param name="tc">An operand's dtype (or the dtype both are cast to).</param>
+        /// <returns>True for bool and the integer dtypes.</returns>
         private static bool IsIntegerOrBool(NPTypeCode tc)
         {
             switch (tc)
@@ -474,6 +482,17 @@ namespace NumSharp
                     return false;
             }
         }
+
+        /// <summary>
+        ///     NumPy's <c>ar.dtype.kind in ("u", "i", "b")</c>, the test of the arrays its table method takes: bool, the
+        ///     integer dtypes, and NumSharp's char, which stands for NumPy's uint16 (the proxy np.searchsorted's
+        ///     <c>StringDType</c> route reads too).
+        /// </summary>
+        /// <param name="tc">An operand's dtype.</param>
+        /// <returns>True for bool, the integer dtypes and char.</returns>
+        /// <remarks>A test of kinds only: the membership itself keeps <see cref="IsIntegerOrBool"/>'s routes, which answer a
+        ///     char operand exactly.</remarks>
+        private static bool IsNumPyIntegerKind(NPTypeCode tc) => tc == NPTypeCode.Char || IsIntegerOrBool(tc);
 
         // range = max(ar2) - min(ar2); safe iff it fits the positive span of ar2's dtype (NumPy's
         // ar2_range <= iinfo(ar2.dtype).max). Only signed integer test dtypes can overflow: for unsigned
