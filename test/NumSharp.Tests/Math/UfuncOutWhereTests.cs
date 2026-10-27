@@ -19,6 +19,8 @@ namespace NumSharp.Tests.Math
     ///  • the out instance is returned (reference identity).
     ///  • where must be bool; it broadcasts and joins the output shape;
     ///    mask-false slots keep prior out contents.
+    ///  • out and where are parsed before any loop is resolved: a read-only
+    ///    out, then a non-bool mask, then the loop's own refusals.
     ///  • out aliasing an input is well-defined (COPY_IF_OVERLAP).
     /// </summary>
     [TestClass]
@@ -278,6 +280,42 @@ namespace NumSharp.Tests.Math
                 "Cannot cast array data from dtype('int64') to dtype('bool') " +
                 "according to the rule 'safe'",
                 ex.Message);
+        }
+
+        [TestMethod]
+        public void ParseErrors_PrecedeTheLoopAnswer_InNumPysOrder()
+        {
+            // NumPy parses out= and where= before it resolves any loop: after the dtype= class check, a read-only out is
+            // reported first, then a non-bool mask, then the loop's own refusals (a dtype= with no loop, an input cast
+            // under dtype=). Texts probed against NumPy 2.4.2.
+            static void Throws<T>(Action call, string text) where T : Exception
+                => Assert.AreEqual(text, Assert.ThrowsException<T>(call).Message);
+
+            var a = np.arange(1.0, 13.0).reshape(3, 4);
+            var ai = np.arange(1, 13).astype(np.int64).reshape(3, 4);
+            NDArray ReadOnly(DType dtype)
+            {
+                var o = np.zeros(new Shape(3, 4), dtype);
+                o.setflags(write: false);
+                return o;
+            }
+            var wi = np.ones(new Shape(3, 4), np.int64);
+            const string readOnly = "output array is read-only";
+            const string maskCast = "Cannot cast array data from dtype('int64') to dtype('bool') according to the rule 'safe'";
+
+            // A read-only out comes before a dtype= with no loop (sqrt has float loops only, the comparisons and bitwise
+            // ufuncs no float output), before an input cast under dtype= (negative), and before a non-bool mask.
+            Throws<ValueError>(() => np.sqrt(a, ReadOnly(np.float64), dtype: np.int32), readOnly);
+            Throws<ValueError>(() => np.negative(a, ReadOnly(np.float64), dtype: np.int32), readOnly);
+            Throws<ValueError>(() => np.equal(a, a, ReadOnly(np.@bool), dtype: np.float64), readOnly);
+            Throws<ValueError>(() => np.bitwise_and(ai, ai, ReadOnly(np.int64), dtype: np.float64), readOnly);
+            Throws<ValueError>(() => np.arctan2(a, a, ReadOnly(np.float64), wi), readOnly);
+            Throws<ValueError>(() => np.logical_and(a, a, ReadOnly(np.@bool), wi, np.float64), readOnly);
+            // A non-bool mask comes before the loop's refusals.
+            Throws<ArgumentException>(() => np.sqrt(a, where: wi, dtype: np.int32), maskCast);
+            Throws<ArgumentException>(() => np.negative(a, where: wi, dtype: np.int32), maskCast);
+            Throws<ArgumentException>(() => np.isnan(a, where: wi, dtype: np.float64), maskCast);
+            Throws<ArgumentException>(() => np.left_shift(ai, ai, where: wi, dtype: np.float64), maskCast);
         }
 
         [TestMethod]

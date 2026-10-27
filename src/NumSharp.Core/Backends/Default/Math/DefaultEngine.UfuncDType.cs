@@ -43,9 +43,11 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     <see cref="UfuncLoopCode(DType)"/> for a ufunc entry point that knows its operands: after the class check it
-        ///     runs NumPy's string-aware argument checks (<see cref="Strings.NDStringUfuncs.ThrowIfStringCall"/>), so a
-        ///     string <c>dtype=</c> request never reaches a numeric kernel (the string lane has no element size) and a string
-        ///     operand reports a read-only <c>out=</c> or a non-bool <c>where=</c> before its loop answer, as NumPy does.
+        ///     runs NumPy's argument parsing of <c>out=</c> and <c>where=</c> for every operand (a read-only out, then a
+        ///     non-bool mask: <see cref="Strings.NDStringUfuncs.ThrowIfOutWhereInvalid"/>), so they are reported before
+        ///     any loop answer the entry point raises after this call (a no-loop <c>dtype=</c>, an input cast NumPy
+        ///     refuses), as NumPy does; then its string-aware checks (<see cref="Strings.NDStringUfuncs.ThrowIfStringCall"/>),
+        ///     so a string <c>dtype=</c> request never reaches a numeric kernel (the string lane has no element size).
         /// </summary>
         /// <param name="dtype">The <c>dtype=</c> argument, or null.</param>
         /// <param name="ufunc">NumPy's ufunc name (it is quoted by the refusal texts).</param>
@@ -57,20 +59,26 @@ namespace NumSharp.Backends
         ///     loops ignore a string request: two strings of one class under <c>add</c>, a string and an integer count under
         ///     <c>multiply</c>); never the string lane.</returns>
         /// <exception cref="TypeError">A descriptor with details beyond its class, or NumPy's refusal of a string request.</exception>
-        /// <exception cref="ValueError">A string operand with a read-only <paramref name="out"/>.</exception>
-        /// <exception cref="System.ArgumentException">A string operand with a non-bool <paramref name="where"/>, or a cast the
-        ///     string loop refuses.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/> (<c>output array is read-only</c>).</exception>
+        /// <exception cref="System.ArgumentException">A non-bool <paramref name="where"/> (NumPy's TypeError text: the house
+        ///     type of <see cref="ValidateWhereMask"/>), or a cast the string loop refuses.</exception>
         /// <exception cref="InvalidOperationException">A string request whose loop computes reached the refusal (a wiring error
         ///     inside NumSharp: <c>add</c> under a string request computes in <see cref="Strings.NDStringUfuncs.AddUnderStringRequest"/>
         ///     before this check).</exception>
         /// <remarks>
-        ///     Two reference compares and two typecode reads when no operand holds text and no string class is requested;
-        ///     the hot numeric path pays nothing else.
+        ///     Two null tests for <c>out=</c> / <c>where=</c>, two reference compares and two typecode reads when no operand
+        ///     holds text and no string class is requested; the hot numeric path pays nothing else.
         /// </remarks>
         internal static NPTypeCode? UfuncLoopCode(DType dtype, string ufunc, NDArray x1, NDArray x2 = null,
             NDArray @out = null, NDArray where = null)
         {
             var code = UfuncLoopCode(dtype);
+            // NumPy parses out= and where= before it resolves any loop (convert_ufunc_arguments; _wheremask_converter), for
+            // every operand: a read-only out is reported first, then a non-bool mask, then the loop's own refusals (probed
+            // 2.4.2: np.equal(f8, f8, out=read_only, dtype=float64) is "output array is read-only", not the no-loop text;
+            // np.sqrt(f8, where=int64 mask, dtype=int32) is the mask's cast refusal). Only the class check above comes
+            // earlier (np.add(a, a, out=read_only, dtype='U5') is the general-DType TypeError).
+            Strings.NDStringUfuncs.ThrowIfOutWhereInvalid(@out, where);
             // NumPy's fixed-width string loops ignore a string request for two strings of one class (add) and for a string
             // and an integer count (multiply): no loop request at all, and the engine's string guard concatenates / repeats
             // (its out= / where= checks run there, in NumPy's order).
