@@ -164,5 +164,124 @@ namespace NumSharp.Tests.Manipulation
             np.insert(b, 1, np.array(new long[] { 7, 8, 9 }).reshape(1, 1, 3), axis: 0)
                 .array_equal(np.array(new long[,] { { 0, 1, 2 }, { 7, 8, 9 }, { 3, 4, 5 } })).Should().BeTrue();
         }
+
+        /// <summary>
+        ///     The multi-index branch's positions are NumPy's: <c>indices[indices &lt; 0] += N</c> once, then each index
+        ///     shifted by its rank (<c>indices[order] += np.arange(numnew)</c>), then <c>old_mask[indices] = False</c> over the
+        ///     <c>N + numnew</c> slots, which wraps a negative position and refuses one past the end. So an index below
+        ///     <c>-N</c> lands at the END, an index past <c>N</c> is an IndexError naming the SHIFTED position, two indices may
+        ///     name one slot (the later value wins), and the array must then fill one slot more (only a one-slab array can).
+        ///     NumSharp checked the indices against <c>[-N, N]</c> before the shift and interleaved the sorted indices.
+        /// </summary>
+        [TestMethod]
+        public void MultiIndex_PositionsAreNumPysShiftedIndices()
+        {
+            var a = np.arange(12L);
+            var v = np.array(new long[] { 100, 200 });
+            // >>> np.insert(np.arange(12), [-13, 1], [100, 200])
+            // array([  0,   1, 200,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11, 100])
+            np.insert(a, new long[] { -13, 1 }, v)
+                .array_equal(np.array(new long[] { 0, 1, 200, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 100 })).Should().BeTrue();
+            // >>> np.insert(np.arange(12), [1, -26], [100, 200])
+            // array([200,   0, 100,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11])
+            np.insert(a, new long[] { 1, -26 }, v)
+                .array_equal(np.array(new long[] { 200, 0, 100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 })).Should().BeTrue();
+            // >>> np.insert(np.arange(12), [1, 13], [100, 200])  IndexError: index 14 is out of bounds for axis 0 with size 14
+            Action past = () => np.insert(a, new long[] { 1, 13 }, v);
+            past.Should().Throw<IndexOutOfRangeException>().WithMessage("index 14 is out of bounds for axis 0 with size 14");
+            // >>> np.insert(np.arange(12), [13, 14], [100, 200])  IndexError: index 15 ... (13 shifted to 13 is in bounds)
+            Action first = () => np.insert(a, new[] { 13, 14 }, v);
+            first.Should().Throw<IndexOutOfRangeException>().WithMessage("index 15 is out of bounds for axis 0 with size 14");
+            // >>> np.insert(np.arange(12), [1, -27], [100, 200])  IndexError: index -15 is out of bounds for axis 0 with size 14
+            Action below = () => np.insert(a, new long[] { 1, -27 }, v);
+            below.Should().Throw<IndexOutOfRangeException>().WithMessage("index -15 is out of bounds for axis 0 with size 14");
+            // >>> np.insert(np.arange(2), [-3, 0, 1, 2], [100, 200, 300, 400])  (-3 wraps onto the slot of 2: three slots
+            // for two elements) ValueError: NumPy boolean array indexing assignment cannot assign 2 input values to the 3
+            // output values where the mask is true
+            Action collide = () => np.insert(np.arange(2L), new long[] { -3, 0, 1, 2 }, np.array(new long[] { 100, 200, 300, 400 }));
+            collide.Should().Throw<ValueError>().WithMessage(
+                "NumPy boolean array indexing assignment cannot assign 2 input values to the 3 output values where the mask is true");
+            // >>> np.insert(np.arange(6).reshape(2, 3), [-7, 0, 1, 2], 9, axis=1)
+            // ValueError: shape mismatch: value array of shape (2,3) could not be broadcast to indexing result of shape (2,4)
+            Action collide2d = () => np.insert(np.arange(6L).reshape(2, 3), new long[] { -7, 0, 1, 2 }, (object)9, axis: 1);
+            collide2d.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (2,3) could not be broadcast to indexing result of shape (2,4)");
+            // >>> np.insert(np.arange(1), [-3, 0, 1, 1], [100, 200, 300, 400])  (one slab fills both free slots; the
+            // later of the two values for slot 3 wins)  array([  0, 200,   0, 300, 400])
+            np.insert(np.arange(1L), new long[] { -3, 0, 1, 1 }, np.array(new long[] { 100, 200, 300, 400 }))
+                .array_equal(np.array(new long[] { 0, 200, 0, 300, 400 })).Should().BeTrue();
+            // >>> np.insert(np.arange(3).reshape(3, 1), [-2, 0], [100, 200], axis=1)
+            // array([[  0, 200, 100], [  1, 200, 100], [  2, 200, 100]])
+            np.insert(np.arange(3L).reshape(3, 1), new long[] { -2, 0 }, v, axis: 1)
+                .array_equal(np.array(new long[,] { { 0, 200, 100 }, { 1, 200, 100 }, { 2, 200, 100 } })).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     The multi-index branch's arithmetic runs in NumPy's index dtype: <c>indices &lt; 0</c> meets the Python int
+        ///     <c>N</c>, which NEP 50 refuses for a dtype that cannot hold it, and the in-place add of <c>np.arange</c> cannot
+        ///     cast its int64 result into an unsigned dtype (an empty index array too). NumSharp widened every index array to
+        ///     int64 first.
+        /// </summary>
+        [TestMethod]
+        public void MultiIndex_IndexArithmeticRunsInTheIndexDtype()
+        {
+            var v = np.array(new long[] { 100, 200 });
+            // >>> np.insert(np.arange(12), np.array([0, 2], np.uint8), [100, 200])
+            // UFuncTypeError: Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'
+            // (NumSharp's ufunc output-cast refusal is the house ArgumentException with NumPy's text.)
+            Action unsigned = () => np.insert(np.arange(12L), np.array(new byte[] { 0, 2 }), v);
+            unsigned.Should().ThrowExactly<ArgumentException>().WithMessage(
+                "Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'");
+            Action emptyUnsigned = () => np.insert(np.arange(12L), np.array(new byte[0]), v);
+            emptyUnsigned.Should().ThrowExactly<ArgumentException>().WithMessage(
+                "Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting rule 'same_kind'");
+            // >>> np.insert(np.arange(300), np.array([0, 2], np.uint8), [100, 200])
+            // OverflowError: Python integer 300 out of bounds for uint8
+            Action overflowU = () => np.insert(np.arange(300L), np.array(new byte[] { 0, 2 }), v);
+            overflowU.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for uint8");
+            // >>> np.insert(np.arange(200), np.array([-1, 2], np.int8), [100, 200])
+            // OverflowError: Python integer 200 out of bounds for int8
+            Action overflowS = () => np.insert(np.arange(200L), np.array(new sbyte[] { -1, 2 }), v);
+            overflowS.Should().Throw<OverflowException>().WithMessage("Python integer 200 out of bounds for int8");
+            // >>> np.insert(np.arange(12), np.array([3, 1], np.int32), [100, 200])
+            // array([  0, 200,   1,   2, 100,   3,   4,   5,   6,   7,   8,   9,  10,  11])
+            np.insert(np.arange(12L), np.array(new[] { 3, 1 }), v)
+                .array_equal(np.array(new long[] { 0, 200, 1, 2, 100, 3, 4, 5, 6, 7, 8, 9, 10, 11 })).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     The multi-index branch assigns its values with <c>new[..., indices, ...] = values</c>, a fancy assignment, so
+        ///     a value that does not fit the indexing result is MapIter's ValueError — an empty index included, whose
+        ///     result has no slot (<c>np.insert(a, [], [7, 8, 9])</c> raises where NumSharp returned a copy).
+        /// </summary>
+        [TestMethod]
+        public void MultiIndex_ValuesFitTheIndexingResultAsNumPysFancyAssignment()
+        {
+            var a = np.arange(12L);
+            var b = np.arange(6L).reshape(2, 3);
+            var three = np.array(new long[] { 7, 8, 9 });
+            // >>> np.insert(np.arange(12), [1, 3], [7, 8, 9])
+            // ValueError: shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,)
+            Action tooMany = () => np.insert(a, new long[] { 1, 3 }, three);
+            tooMany.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,)");
+            // >>> np.insert(b, [1, 3], [7, 8, 9], axis=1)  ... of shape (3,) ... indexing result of shape (2,2)
+            Action rows = () => np.insert(b, new long[] { 1, 3 }, three, axis: 1);
+            rows.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,2)");
+            // >>> np.insert(np.arange(12), [], [7, 8, 9])  ... of shape (3,) ... indexing result of shape (0,)
+            Action emptyIndex = () => np.insert(a, new long[0], three);
+            emptyIndex.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (0,)");
+            // >>> np.insert(b, [], [7, 8, 9], axis=1)  ... of shape (3,) ... indexing result of shape (2,0)
+            Action emptyIndex2d = () => np.insert(b, new long[0], three, axis: 1);
+            emptyIndex2d.Should().Throw<ValueError>().WithMessage(
+                "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,0)");
+            // >>> np.insert(np.arange(12), [], 7)  is a copy (a 0-d value fits (0,))
+            np.insert(a, new long[0], (object)7).array_equal(a).Should().BeTrue();
+            // >>> np.insert(b, [1, 3], [[7], [8]], axis=1)  array([[0, 7, 1, 2, 7], [3, 8, 4, 5, 8]])
+            np.insert(b, new long[] { 1, 3 }, np.array(new long[] { 7, 8 }).reshape(2, 1), axis: 1)
+                .array_equal(np.array(new long[,] { { 0, 7, 1, 2, 7 }, { 3, 8, 4, 5, 8 } })).Should().BeTrue();
+        }
     }
 }

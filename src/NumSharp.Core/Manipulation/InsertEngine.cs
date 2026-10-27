@@ -1,5 +1,7 @@
 using System;
 using NumSharp.Backends;
+// NDExprTypeRules: NEP 50's check of a Python int against an integer dtype (the multi-index branch's `indices < 0` add).
+using NumSharp.Backends.Iteration;
 // The moved statements call np's internal insert / delete helpers (PrepareAxisContext, WithSourceOrder, SliceAlongAxis,
 // DuplicateArray, ToInt64Scalar, ToInt64Vector, PythonSliceIndices) unqualified, as they did inside np; importing np's
 // statics keeps them verbatim.
@@ -24,16 +26,20 @@ namespace NumSharp
     //     the first axis of values onto the insertion axis.
     //
     //   * MULTI-INDEX path — obj is a multi-element int array, a bool mask
-    //     (converted via flatnonzero), or a non-trivial slice. Algorithm:
-    //         1. Sort indices (stable). Reorder values along axis by the
-    //            sort order so insertions land in monotonic axis position.
-    //         2. Split arr along axis at the sorted indices into len(idx)+1
-    //            chunks. Build a 2*N+1 interleaved sequence:
-    //                chunk_0 | val_0 | chunk_1 | val_1 | ... | chunk_N
-    //         3. Concatenate all chunks along axis.
-    //     Equivalent to NumPy's "build a keep-mask and scatter-place"
-    //     algorithm; the concatenate form lets the IL contig-cast kernel
-    //     fire instead of fancy-index scatter for each value slot.
+    //     (converted via flatnonzero), or a non-trivial slice. NumPy's
+    //     statements decide the POSITIONS, in the index array's dtype:
+    //         indices[indices < 0] += N
+    //         indices[order] += arange(numnew)      (order: a stable argsort)
+    //         old_mask[indices] = False             (M = N + numnew slots)
+    //     so an index below -N lands at M + i, two indices may name one slot
+    //     (the later value wins), and an index past N is an IndexError on the
+    //     shifted value. The values must fit new[..., indices, ...] (MapIter's
+    //     rule) and the array the slots old_mask keeps (one slab broadcasts).
+    //     The data then moves in ONE concatenate, in position order:
+    //                run_0 | val_0 | run_1 | val_1 | ... | run_n
+    //     instead of NumPy's two fancy assignments; the concatenate form lets
+    //     the IL contig-cast kernel fire instead of fancy-index scatter for
+    //     each value slot.
     //
     // axis=None ravels arr first (axis becomes 0 of the flattened array).
 
@@ -89,12 +95,13 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
-        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
-        ///     ...</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
+        /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
+        ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
+        ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
+        ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
+        ///     that do not parse as a numeric array's number type.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
         internal static NDArray Insert(NDArray arr, Slice obj, NDArray values, int? axis)
@@ -108,7 +115,7 @@ namespace NumSharp
             // the multi-index branch would refuse two values for one position.
             if (indices.Length == 1)
                 return WithSourceOrder(arr, InsertSingleIndex(ctx.work, indices[0], values, ctx.axis, scalarObj: false, obj));
-            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, NPTypeCode.Int64, values, ctx.axis));
         }
 
         /// <summary>
@@ -122,14 +129,16 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c> (one position: NumPy's text
-        ///     prints the sequence, <c>index [13] is out of bounds ...</c>).</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
-        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
-        ///     ...</c>).</exception>
+        /// <exception cref="IndexOutOfRangeException">One position outside <c>[-N, N]</c> (NumPy's text prints the
+        ///     sequence, <c>index [13] is out of bounds ...</c>); of several, a SHIFTED position outside <c>[-M, M)</c>,
+        ///     <c>M = N + numnew</c> (<c>index 14 is out of bounds for axis 0 with size 14</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
+        /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
+        ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
+        ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
+        ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
+        ///     that do not parse as a numeric array's number type.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
         internal static NDArray Insert(NDArray arr, int[] obj, NDArray values, int? axis)
@@ -141,7 +150,7 @@ namespace NumSharp
             // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
             if (longs.Length == 1)
                 return WithSourceOrder(arr, InsertSingleIndex(ctx.work, longs[0], values, ctx.axis, scalarObj: false, longs));
-            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, values, ctx.axis));
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, NPTypeCode.Int64, values, ctx.axis));
         }
 
         /// <summary>
@@ -154,14 +163,16 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c> (one position: NumPy's text
-        ///     prints the sequence, <c>index [13] is out of bounds ...</c>).</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
-        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
-        ///     ...</c>).</exception>
+        /// <exception cref="IndexOutOfRangeException">One position outside <c>[-N, N]</c> (NumPy's text prints the
+        ///     sequence, <c>index [13] is out of bounds ...</c>); of several, a SHIFTED position outside <c>[-M, M)</c>,
+        ///     <c>M = N + numnew</c> (<c>index 14 is out of bounds for axis 0 with size 14</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
+        /// <exception cref="ValueError">The values do not fit the insertion slots: for one position NumPy's view-assignment
+        ///     text (<c>could not broadcast input array from shape ... into shape ...</c>), for several MapIter's (<c>shape
+        ///     mismatch: value array of shape ... could not be broadcast to indexing result of shape ...</c>); the array
+        ///     does not fill the slots left when two positions name one slot (<see cref="InsertMultiIndex"/>); text values
+        ///     that do not parse as a numeric array's number type.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>.</remarks>
         [NDScopedCovered]
         internal static NDArray Insert(NDArray arr, long[] obj, NDArray values, int? axis)
@@ -170,7 +181,7 @@ namespace NumSharp
             // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
             if (obj.Length == 1)
                 return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj[0], values, ctx.axis, scalarObj: false, obj));
-            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis));
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), NPTypeCode.Int64, values, ctx.axis));
         }
 
         /// <summary>
@@ -188,18 +199,24 @@ namespace NumSharp
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="ValueError"><paramref name="obj"/> is a boolean mask that is not 1-D, or an index array of more
-        ///     than one dimension (NumPy's two texts); text values that do not parse as a numeric array's number type.</exception>
+        ///     than one dimension (NumPy's two texts); the values do not fit the insertion slots (one position: NumPy's
+        ///     view-assignment text; several: MapIter's <c>shape mismatch: ...</c>, or the array does not fill the slots
+        ///     left when two positions name one slot); text values that do not parse as a numeric array's number
+        ///     type.</exception>
         /// <exception cref="TypeError">A one-element text or complex <paramref name="obj"/>, a text <paramref name="obj"/> of
         ///     any other size, or a one-element float within bounds (see <see cref="InsertNonIntegerObj"/>); None into an
         ///     integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="IndexError">A float or complex <paramref name="obj"/> of any size but one, or a one-element float
         ///     out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">An integer position is outside <c>[-N, N]</c>, or a mask's one True is
-        ///     past <c>N</c> (one position: NumPy's text prints the array or the mask, <c>index [13] ...</c>).</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
-        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
-        ///     ...</c>).</exception>
-        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
+        /// <exception cref="IndexOutOfRangeException">One integer position outside <c>[-N, N]</c>, or a mask's one True
+        ///     past <c>N</c> (NumPy's text prints the array or the mask, <c>index [13] ...</c>); of several, a SHIFTED
+        ///     position outside <c>[-M, M)</c>, <c>M = N + numnew</c>.</exception>
+        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError),
+        ///     or, for several positions, an axis length the index dtype cannot hold (<c>Python integer 300 out of bounds
+        ///     for uint8</c>).</exception>
+        /// <exception cref="ArgumentException">Several positions in an UNSIGNED index array: NumPy's in-place shift cannot cast
+        ///     its int64 result back (<c>Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8') with casting
+        ///     rule 'same_kind'</c>, NumSharp's ufunc output-cast refusal); an empty one too.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>; the
         ///     boolean mask's flatnonzero temp is released by the same scope.</remarks>
         [NDScopedCovered]
@@ -219,7 +236,7 @@ namespace NumSharp
                 // IndexError that prints the whole mask, as NumPy's f"index {obj} ..." does.
                 if (indices.Length == 1)
                     return WithSourceOrder(arr, InsertSingleIndex(ctx.work, indices[0], values, ctx.axis, scalarObj: false, obj));
-                return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
+                return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, NPTypeCode.Int64, values, ctx.axis));
             }
 
             if (obj.ndim > 1)
@@ -243,7 +260,7 @@ namespace NumSharp
             if (objIndices.Length == 1)
                 return WithSourceOrder(arr, InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false, obj));
 
-            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, objIndices, values, ctx.axis));
+            return WithSourceOrder(arr, InsertMultiIndex(ctx.work, objIndices, obj.typecode, values, ctx.axis));
         }
 
         // ---------------------------- impl ----------------------------
@@ -307,121 +324,199 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Multi-index path. Normalise indices (negative → positive,
-        ///     bounds-check), stable-sort and reorder values, then build the
-        ///     interleaved chunk list for a single concatenate call.
+        ///     NumPy's multi-index branch, statement for statement on the positions —
+        ///     <c>indices[indices &lt; 0] += N</c>; <c>order = indices.argsort(kind='mergesort')</c>;
+        ///     <c>indices[order] += np.arange(numnew)</c>; <c>old_mask = ones(N + numnew, dtype=bool)</c>;
+        ///     <c>old_mask[indices] = False</c>; <c>new[..., indices, ...] = values</c>; <c>new[..., old_mask, ...] = arr</c> —
+        ///     with the data moved by ONE concatenate of the array's runs and the value slabs in position order instead of
+        ///     the two fancy assignments.
         /// </summary>
         /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
-        /// <param name="indices">The insertion indices; normalized in place (the caller passes an array it owns).</param>
-        /// <param name="values">The values to insert, one slot per index after broadcasting.</param>
+        /// <param name="indices">NumPy's index array, as <c>long</c> values; rewritten in place (the caller passes an array
+        ///     it owns).</param>
+        /// <param name="indexType">The dtype NumPy's index array has: int64 for a slice (<c>arange(..., dtype=intp)</c>), a
+        ///     sequence or a mask's <c>flatnonzero</c>; the array's own dtype for an index array.</param>
+        /// <param name="values">The values to insert; null is Python's None.</param>
         /// <param name="axis">The normalized axis.</param>
-        /// <returns>A fresh array with the values interleaved at the sorted insertion positions.</returns>
-        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N]</c>.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>insert</c>
-        ///     overloads, so the coerced values, the reordering <c>take</c>, its order array and every chunk view are
-        ///     released by the caller's scope, exceptions included. The chunk views share their bases' buffers, so
-        ///     holding them until that scope closes keeps no extra memory alive.</remarks>
+        /// <returns>A fresh array with the values at NumPy's positions and the array's slabs in the slots left over.</returns>
+        /// <exception cref="OverflowException">The axis length does not fit the index dtype: <c>indices &lt; 0</c> meets the
+        ///     Python int <c>N</c>, which NEP 50 packs into that dtype (<c>Python integer 300 out of bounds for uint8</c>);
+        ///     also a C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="ArgumentException">An unsigned index dtype: the in-place <c>indices[order] += np.arange(numnew)</c>
+        ///     cannot cast its int64 result back (<c>Cannot cast ufunc 'add' output from dtype('int64') to dtype('uint8')
+        ///     with casting rule 'same_kind'</c>; NumSharp's ufunc output-cast refusal, NumPy's UFuncTypeError).</exception>
+        /// <exception cref="IndexOutOfRangeException">A shifted position is outside <c>[-M, M)</c>, <c>M = N + numnew</c>:
+        ///     <c>index 14 is out of bounds for axis 0 with size 14</c> (the mask's axis 0, whatever the insertion axis),
+        ///     the first such index in the array's order.</exception>
+        /// <exception cref="ValueError">The values do not broadcast to the indexing result (MapIter's <c>shape mismatch: value
+        ///     array of shape ... could not be broadcast to indexing result of shape ...</c>, an empty index included), or the
+        ///     array's slabs do not fill the slots the mask keeps (<c>NumPy boolean array indexing assignment cannot assign 2
+        ///     input values to the 3 output values where the mask is true</c> for a 1-D array, MapIter's text otherwise);
+        ///     text values that do not parse.</exception>
+        /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's shift makes an index below <c>-N</c> land at <c>M + i</c> (<c>np.insert(arange(12), [-13, 1], [100,
+        ///     200])</c> puts 100 LAST), lets two indices name one position (the later value wins and the mask keeps one slot
+        ///     more, which only a one-slab array fills), and turns every index past <c>N</c> into an IndexError. The positions
+        ///     are therefore computed first and the result is built from them.
+        ///     </para>
+        ///     <para>
+        ///     Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>insert</c> overloads, so the
+        ///     coerced values, the reordering <c>take</c>, its order array, the broadcast runs and every chunk view are
+        ///     released by the caller's scope, exceptions included. The chunk views share their bases' buffers, so holding
+        ///     them until that scope closes keeps no extra memory alive.
+        ///     </para>
+        /// </remarks>
         [NDScopedCovered]
         private static NDArray InsertMultiIndex(
-            NDArray arr, long[] indices, NDArray values, int axis)
+            NDArray arr, long[] indices, NPTypeCode indexType, NDArray values, int axis)
         {
             long N = arr.Shape.dimensions[axis];
-
-            // Empty indices ⇒ NumPy returns arr.copy() (NumPy: indices.size == 0 and
-            // not isinstance(obj, np.ndarray); we always normalise empty regardless,
-            // which matches NumPy when obj wasn't an ndarray with shape (0,)).
-            if (indices.Length == 0)
-            {
-                // NumPy still runs `new[tuple(slobj)] = values` with the empty index, whose fancy setitem converts the values
-                // into arr's dtype first: None and a C# literal are packed, and an array or a C# collection is cast, even
-                // though nothing is inserted (np.insert(int_array, [], None) raises int(None)'s TypeError,
-                // np.insert(int8_array, [], 1000) the OverflowError, np.insert(int_array, [], [7, 'x']) int()'s ValueError,
-                // probed 2.4.2) — the conversion CoerceValuesForMultiIndex starts with. The converted values are the caller's
-                // scope's.
-                NDArray converted = values is null
-                    ? NDArray.NoneForStore(arr.dtype)
-                    : arr.Storage.IsVString
-                        ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
-                        : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
-                if (!converted.HasSameElementType(arr))
-                    converted.astype(arr.dtype, copy: true);
-                return DuplicateArray(arr);
-            }
-
-            // Normalize and validate indices.
-            for (int i = 0; i < indices.Length; i++)
-            {
-                long idx = indices[i];
-                if (idx < -N || idx > N)
-                    throw new IndexOutOfRangeException(
-                        $"index {indices[i]} is out of bounds for axis {axis} with size {N}");
-                if (idx < 0) idx += N;
-                indices[i] = idx;
-            }
-
             int numNew = indices.Length;
 
-            // Coerce values to arr.dtype with axis-dim broadcast to numNew. The
-            // multi-index path never applies the moveaxis quirk.
-            var coerced = CoerceValuesForMultiIndex(arr, values, axis, numNew);
+            // indices[indices < 0] += N. The in-place add meets the Python int N, which NEP 50 packs into the index dtype
+            // first, so an N that dtype cannot hold raises before anything else, even when no index is negative
+            // (np.insert(np.arange(300), np.array([0, 2], np.uint8), [1, 2]) raises "Python integer 300 out of bounds for
+            // uint8", probed 2.4.2). A negative index plus N cannot overflow a signed dtype: the two have opposite signs.
+            NDExprTypeRules.CheckIntLiteralFits(N, indexType);
+            for (int i = 0; i < numNew; i++)
+                if (indices[i] < 0)
+                    indices[i] += N;
 
-            // Stable sort of indices, recording the permutation. Used to reorder
-            // both the indices list (for chunk splitting) and the values along
-            // axis (so the reordered values match the sorted insertion positions).
+            // order = indices.argsort(kind='mergesort'); indices[order] += np.arange(numnew). The in-place add casts its
+            // int64 result back into the index dtype under same_kind: an unsigned dtype refuses it (an empty index array
+            // too), a narrower signed dtype wraps.
             int[] order = StableArgSort(indices);
-            long[] sortedIndices = new long[numNew];
-            for (int i = 0; i < numNew; i++) sortedIndices[i] = indices[order[i]];
+            DefaultEngine.ValidateOutCast(NPTypeCode.Int64, indexType, "add");
+            for (int k = 0; k < numNew; k++)
+                indices[order[k]] = WrapToIndexType(indices[order[k]] + k, indexType);
 
-            // Reorder values along axis to align with the sorted insertion order.
-            // values[..., order, ...] — done via np.take if the order is non-trivial.
-            // Skip the take if the order is already identity (early exit).
-            NDArray reorderedValues = null;
-            bool needReorder = false;
+            // old_mask = ones(N + numnew, dtype=bool); old_mask[indices] = False. The fancy setitem checks the indices in
+            // the array's order against the mask's length M and wraps a negative one (an original index below -N).
+            long M = N + numNew;
+            var positions = new long[numNew];
             for (int i = 0; i < numNew; i++)
             {
-                if (order[i] != i) { needReorder = true; break; }
+                long p = indices[i];
+                if (p < -M || p >= M)
+                    throw new IndexOutOfRangeException($"index {p} is out of bounds for axis 0 with size {M}");
+                positions[i] = p < 0 ? p + M : p;
             }
 
-            if (needReorder)
+            // new[tuple(slobj)] = values: converted into arr's dtype, then MapIter's broadcast to the indexing result
+            // (arr's shape with numnew along the axis), so an empty index still refuses values that do not fit (0,).
+            var coerced = CoerceValuesForMultiIndex(arr, values, axis, numNew);
+
+            // The positions in increasing order. Where several indices name one position the LAST of them wins (the fancy
+            // setitem writes in the index array's order: a stable sort keeps that order within equal positions).
+            int[] byPosition = StableArgSort(positions);
+            var slots = new long[numNew];
+            var writers = new int[numNew];
+            int distinct = 0;
+            for (int i = 0; i < numNew; i++)
             {
-                var orderArr = np.array(LongArrayFromInt(order));
-                reorderedValues = np.take(coerced, orderArr, axis: axis);
+                long p = positions[byPosition[i]];
+                if (distinct > 0 && slots[distinct - 1] == p)
+                {
+                    writers[distinct - 1] = byPosition[i];
+                    continue;
+                }
+                slots[distinct] = p;
+                writers[distinct] = byPosition[i];
+                distinct++;
             }
-            else
+
+            // new[tuple(slobj2)] = arr: the M - distinct slots the mask keeps receive the array's N slabs along the axis. One
+            // slab broadcasts to any number of slots; any other mismatch is the boolean assignment's refusal, whose text
+            // is array_assign_boolean_subscript's for a 1-D array (a lone 1-D mask) and MapIter's otherwise.
+            long count = M - distinct;
+            if (count != N && N != 1)
             {
-                reorderedValues = coerced;
+                if (arr.ndim == 1)
+                    throw new ValueError($"NumPy boolean array indexing assignment cannot assign {N} input values to the " +
+                                         $"{count} output values where the mask is true");
+                var resultDims = (long[])arr.Shape.dimensions.Clone();
+                resultDims[axis] = count;
+                throw new ValueError($"shape mismatch: value array of shape {arr.Shape.ToPythonTuple()} could not be " +
+                                     $"broadcast to indexing result of shape {Shape.Adopt(resultDims).ToPythonTuple()}");
             }
 
-            // Build interleaved chunk list: [arr[:s0], val0, arr[s0:s1], val1, ..., arr[s_{N-1}:end]]
-            // For each sorted index s_k, take values[..., k:k+1, ...] as the value chunk.
-            int totalChunks = numNew * 2 + 1;
-            var chunks = new NDArray[totalChunks];
-            int slot = 0;
-            long prevSplit = 0;
+            // No value slot (an empty index): the array alone, NumPy's copy.
+            if (distinct == 0)
+                return DuplicateArray(arr);
 
-            for (int k = 0; k < numNew; k++)
+            // The value slabs in slot order: values[..., writers, ...] (np.take along the axis) unless they already are.
+            bool inOrder = distinct == numNew;
+            for (int j = 0; inOrder && j < distinct; j++)
+                inOrder = writers[j] == j;
+            NDArray slabs = coerced;
+            if (!inOrder)
             {
-                long s = sortedIndices[k];
-                // arr chunk [prevSplit, s)
-                var arrChunk = SliceAlongAxis(arr, axis, prevSplit, s);
-                chunks[slot] = arrChunk;
-                slot++;
-
-                // values chunk along axis: [k, k+1)
-                var valChunk = SliceAlongAxis(reorderedValues, axis, k, k + 1);
-                chunks[slot] = valChunk;
-                slot++;
-
-                prevSplit = s;
+                var writerOrder = new long[distinct];
+                for (int j = 0; j < distinct; j++) writerOrder[j] = writers[j];
+                slabs = np.take(coerced, np.array(writerOrder), axis: axis);
             }
 
-            // Tail: arr[prevSplit:N]
-            var arrTail = SliceAlongAxis(arr, axis, prevSplit, N);
-            chunks[slot] = arrTail;
-            slot++;
+            // One concatenate in position order: a run of the array's slabs before each value slot, then the slot's slab.
+            // With one slab broadcast over a different number of slots, every run is that slab broadcast to its length.
+            bool broadcastArr = count != N;
+            var chunks = new System.Collections.Generic.List<NDArray>(2 * distinct + 1);
+            long nextPos = 0, nextSlab = 0;
+            for (int j = 0; j < distinct; j++)
+            {
+                long run = slots[j] - nextPos;
+                if (run > 0)
+                {
+                    chunks.Add(ArrayRun(arr, axis, nextSlab, run, broadcastArr));
+                    nextSlab += run;
+                }
+                chunks.Add(SliceAlongAxis(slabs, axis, j, j + 1));
+                nextPos = slots[j] + 1;
+            }
+            if (M - nextPos > 0)
+                chunks.Add(ArrayRun(arr, axis, nextSlab, M - nextPos, broadcastArr));
 
-            return np.concatenate(chunks, axis);
+            return np.concatenate(chunks.ToArray(), axis);
         }
+
+        /// <summary>
+        ///     A run of <paramref name="length"/> of the array's slabs along <paramref name="axis"/> for the multi-index
+        ///     result: the next slabs in order, or the array's ONE slab broadcast to the run when the mask keeps another
+        ///     number of slots than the array has (NumPy's boolean assignment broadcasts a one-slab value).
+        /// </summary>
+        /// <param name="arr">The working array.</param>
+        /// <param name="axis">The insertion axis.</param>
+        /// <param name="start">The first slab of the run (ignored when broadcasting).</param>
+        /// <param name="length">The run's length (at least 1).</param>
+        /// <param name="broadcast">True to broadcast the array's single slab.</param>
+        /// <returns>A view: a slice of <paramref name="arr"/>, or a read-only stride-0 broadcast of it.</returns>
+        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertMultiIndex"/>, so the
+        ///     view is released by the <c>insert</c> overload's scope.</remarks>
+        [NDScopedCovered]
+        private static NDArray ArrayRun(NDArray arr, int axis, long start, long length, bool broadcast)
+        {
+            if (!broadcast)
+                return SliceAlongAxis(arr, axis, start, start + length);
+            var dims = (long[])arr.Shape.dimensions.Clone();
+            dims[axis] = length;
+            return np.broadcast_to(arr, Shape.Adopt(dims));
+        }
+
+        /// <summary>
+        ///     A position wrapped into NumPy's index dtype, as the cast back of <c>indices[order] += np.arange(numnew)</c>
+        ///     wraps it: int8 / int16 / int32 keep the low bits (two's complement), int64 is the value itself.
+        /// </summary>
+        /// <param name="value">The shifted position, computed in int64.</param>
+        /// <param name="indexType">The index dtype (signed: the unsigned ones were refused by the add's cast).</param>
+        /// <returns>The value as the index dtype holds it, widened back to <c>long</c>.</returns>
+        private static long WrapToIndexType(long value, NPTypeCode indexType) => indexType switch
+        {
+            NPTypeCode.SByte => unchecked((sbyte)value),
+            NPTypeCode.Int16 => unchecked((short)value),
+            NPTypeCode.Int32 => unchecked((int)value),
+            _ => value,
+        };
 
         // ---------------------------- helpers ----------------------------
 
@@ -733,7 +828,11 @@ namespace NumSharp
         /// <param name="numNew">The number of insertion positions (the slot's extent along <paramref name="axis"/>).</param>
         /// <returns>The values, cast and broadcast to the slot; <paramref name="values"/> itself when it already has
         ///     the dtype and the slot's shape.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="values"/> cannot broadcast to the slot.</exception>
+        /// <exception cref="ValueError"><paramref name="values"/> cannot broadcast to the indexing result: MapIter's text,
+        ///     <c>shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape (2,)</c> (see
+        ///     <see cref="NDArray.PrepareAssignedValue"/>); text values that do not parse as the array's number type.</exception>
+        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertMultiIndex"/>,
         ///     under the <c>[NDScoped]</c> <c>insert</c> overloads. The cast, the ndmin reshape, the broadcast view and
         ///     its contiguous copy are released by that scope, and <paramref name="values"/> is never disposed. (The
@@ -764,6 +863,13 @@ namespace NumSharp
             for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
             var targetShape = Shape.Adopt(targetDims);
+
+            // NumPy writes them with new[..., indices, ...] = values, a fancy assignment: MapIter drops a value's extra
+            // leading axes (they must hold one element in total) and requires a right-aligned broadcast to the indexing
+            // result, else "shape mismatch: value array of shape (3,) could not be broadcast to indexing result of shape
+            // (2,)" — an empty index included, whose result (..., 0, ...) only a one-element value fits. np.broadcast_to
+            // below raised its own remapped-shapes text and refused every extra axis.
+            v = NDArray.PrepareAssignedValue(v, targetDims);
 
             // Shape already matches? Just hand it back (the caller's values or the cast copy).
             if (v.ndim == arr.ndim)
