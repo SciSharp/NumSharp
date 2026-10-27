@@ -95,7 +95,6 @@ Manipulation/np.copyto.Strings.cs	15	2
 Manipulation/np.copyto.VString.cs	7	0
 Manipulation/np.copyto.cs	7	5
 Manipulation/np.delete.cs	0	21
-Manipulation/np.insert.cs	7	4
 Manipulation/np.isin.VString.cs	15	1
 Manipulation/np.isin.cs	3	38
 Manipulation/np.packbits.cs	0	11

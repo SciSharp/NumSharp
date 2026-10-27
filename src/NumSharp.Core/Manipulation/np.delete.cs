@@ -279,7 +279,7 @@ namespace NumSharp
             }
 
             // Not an integer index array: NumPy's `keep[obj,] = False` refuses it, whatever its size (text, floats, complex).
-            if (!IsIntegerIndexDtype(obj.typecode))
+            if (!InsertEngine.IsIntegerIndexDtype(obj.typecode))
                 throw new IndexError("arrays used as indices must be of integer (or boolean) type");
 
             // Integer obj of any rank: its elements in C order (NumPy's fancy keep[obj,] reads every one).
@@ -310,7 +310,8 @@ namespace NumSharp
         /// <param name="axis">The caller's axis, or null for the flattened array.</param>
         /// <returns>The array to work on and the non-negative axis.</returns>
         /// <exception cref="AxisError">The axis is out of bounds (NumPy's <c>normalize_axis_index</c> text).</exception>
-        private static (NDArray work, int axis) PrepareAxisContext(NDArray arr, int? axis)
+        /// <remarks>Internal for <see cref="InsertEngine"/>, np.insert's operation class, which shares it with np.delete.</remarks>
+        internal static (NDArray work, int axis) PrepareAxisContext(NDArray arr, int? axis)
         {
             if (axis is null)
             {
@@ -330,7 +331,13 @@ namespace NumSharp
         ///     Casts <paramref name="obj"/> to <see cref="long"/> with NumPy-style
         ///     bounds error on out-of-range. Used by the scalar-index fast paths.
         /// </summary>
-        private static long ToInt64Scalar(NDArray obj, string fn)
+        /// <param name="obj">An integer index array; its first element is read (a uint64 above long's range wraps).</param>
+        /// <param name="fn">The NumPy function's name for the error text (<c>"insert"</c> / <c>"delete"</c>).</param>
+        /// <returns>The index as a <see cref="long"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="obj"/> is not an integer array (the callers test that
+        ///     first, so this is not reached from them).</exception>
+        /// <remarks>Internal for <see cref="InsertEngine"/>, np.insert's operation class, which shares it with np.delete.</remarks>
+        internal static long ToInt64Scalar(NDArray obj, string fn)
         {
             // Accept any integer dtype (NumPy: kind in "ui"). Bool is handled by
             // the caller before this point.
@@ -357,7 +364,13 @@ namespace NumSharp
         ///     Any integer dtype is accepted; size-0 input returns an empty array
         ///     so the caller's "no-op" branch kicks in.
         /// </summary>
-        private static long[] ToInt64Vector(NDArray obj, string fn)
+        /// <param name="obj">A 0-d or 1-D integer index array (a uint64 above long's range wraps).</param>
+        /// <param name="fn">The NumPy function's name for the error texts (<c>"insert"</c> / <c>"delete"</c>).</param>
+        /// <returns>A fresh array of the indices in order.</returns>
+        /// <exception cref="ArgumentException"><paramref name="obj"/> has more than one dimension or is not an integer
+        ///     array (the callers test both first, so neither is reached from them).</exception>
+        /// <remarks>Internal for <see cref="InsertEngine"/>, np.insert's operation class, which shares it with np.delete.</remarks>
+        internal static long[] ToInt64Vector(NDArray obj, string fn)
         {
             if (obj.ndim > 1)
                 throw new ArgumentException(
@@ -659,7 +672,7 @@ namespace NumSharp
         ///     Python-compatible <c>slice.indices(N)</c> implementation. Resolves
         ///     None/negative bounds to absolute positions and clamps to a legal
         ///     iteration range. Used by both <see cref="DeleteSlice"/> and
-        ///     <see cref="InsertExpandSliceObj"/>.
+        ///     <see cref="InsertEngine.InsertExpandSliceObj"/>.
         /// </summary>
         internal static (long start, long stop, long step) PythonSliceIndices(Slice s, long N)
         {
