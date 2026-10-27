@@ -649,13 +649,16 @@ namespace NumSharp
         /// <returns>A bool array of the operand's shape (broadcast with the mask and <paramref name="out"/>), or
         ///     <paramref name="out"/>.</returns>
         /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (<c>No loop matching the specified
-        ///     signature and casting was found for ufunc logical_not</c>).</exception>
-        /// <exception cref="TypeError">A text operand (NumPy's no-loop refusal), or a detailed or non-legacy
+        ///     signature and casting was found for ufunc logical_not</c>), for a text operand too: the loops are bool-output
+        ///     only.</exception>
+        /// <exception cref="TypeError">A text operand without <paramref name="dtype"/> (NumPy's no-loop refusal; a
+        ///     StringDType operand's text names the requested output class), or a detailed or non-legacy
         ///     <paramref name="dtype"/> descriptor.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
         /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
-        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the operand
-        ///     (NumPy's ValueError text).</exception>
+        ///     bool result cannot be cast into, a fixed-width text operand under <c>dtype=bool</c> (the input cast NumPy
+        ///     refuses, its UFuncTypeError text), or a mask or <paramref name="out"/> that does not broadcast with the
+        ///     operand (NumPy's ValueError text).</exception>
         public abstract NDArray LogicalNot(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
 
         // Bit shift operations (integer types only). dtype (ufunc dtype=) selects the loop among the

@@ -153,8 +153,9 @@ namespace NumSharp
         /// <exception cref="TypeError">A text operand (no string loop in NumPy), or a detailed or non-legacy
         ///     <paramref name="dtype"/> descriptor.</exception>
         /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
-        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
-        ///     not broadcast with the operand.</exception>
+        ///     <paramref name="out"/> the bool result cannot be cast into, a fixed-width text operand under
+        ///     <c>dtype=bool</c> (NumPy's input-cast refusal), or a mask or <paramref name="out"/> that does not broadcast
+        ///     with the operand.</exception>
         public static NDArray logical_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

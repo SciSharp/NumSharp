@@ -97,9 +97,12 @@ namespace NumSharp.Backends
         public override NDArray LogicalNot(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null)
         {
             // The dtype= class check, then for text the out= / where= parse and a string request's no-loop text; logical_not
-            // has no string loop in NumPy (unlike logical_and/or/xor).
-            UfuncLoopCode(dtype, "logical_not", nd, null, @out, where);
-            Strings.NDStringUfuncs.ThrowIfUnary("logical_not", nd);
+            // has no string loop in NumPy (unlike logical_and/or/xor). The text guard gets the loop request and out= /
+            // where= so it answers as NumPy does: the parse errors first, then the loop (a StringDType operand's no-loop text
+            // names the requested output class; a fixed-width one meets logical_not's bool-only loops, see
+            // NDStringUfuncs.UnaryError).
+            var loop = UfuncLoopCode(dtype, "logical_not", nd, null, @out, where);
+            Strings.NDStringUfuncs.ThrowIfUnary("logical_not", nd, loop, @out, where);
             ValidateLogicalDtype(dtype, "logical_not");
             // A bool input's logical NOT is exactly its bitwise invert (~True == False); route through the
             // invert ufunc so the bool→bool loop is used (np.negative(bool) is a TypeError, so Invert, not

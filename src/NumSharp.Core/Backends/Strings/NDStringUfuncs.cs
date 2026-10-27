@@ -483,6 +483,13 @@ namespace NumSharp.Backends.Strings
             if (ufunc == "positive" && loop == NPTypeCode.Boolean)
                 return new TypeError(
                     $"ufunc 'positive' did not contain a loop with signature matching types {d.Meta} -> {DTypeRegistry.FromTypeCode(NPTypeCode.Boolean)}");
+            // logical_not's loops are bool-output only (?->? .. G->?): a dtype= other than bool asks for an output it has no
+            // loop for, so NumPy's no-loop text comes before any input cast (probed: logical_not(U5, dtype=float64) and
+            // (S5, dtype=int8)); dtype=bool binds the ?->? loop, whose input cast from text fails next (the branch below).
+            if (ufunc == "logical_not" && loop is { } logicalLoop && logicalLoop != NPTypeCode.Boolean
+                && logicalLoop != NPTypeCode.String && logicalLoop != NPTypeCode.Empty)
+                return new IncorrectTypeException(
+                    "No loop matching the specified signature and casting was found for ufunc logical_not");
             // A numeric dtype= fixes the loop, and the input's cast to it fails first. The unary text names no index.
             if (loop is { } numeric && numeric != NPTypeCode.String && numeric != NPTypeCode.Empty)
                 return new ArgumentException(
