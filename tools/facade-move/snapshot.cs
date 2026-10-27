@@ -54,7 +54,9 @@
 // n, tensorinv's ind, tensordot's axes (a count, or the two axis lists), tensorsolve's axes and the nullable tolerances
 // rcond / rtol / tol, and np.insert / np.delete's positions obj (a C# int / long, a slice, an int[] / long[] sequence, an
 // index array or a boolean mask) and np.insert's values (an array, or any object: a number, a string, a bool, null, a C#
-// array, an NDArray passed as object)); an overload with a required parameter of another kind is reported once as SKIP. An int axis
+// array, an NDArray passed as object), and np.isin's test set test_elements (the operand's own values, sets of other
+// dtypes, sizes, ranges and layouts that reach NumPy's table, loop and sort paths) and its algorithm name kind); an
+// overload with a required parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand. An np.linalg function runs on pools of matrices
 // (LinalgLayouts, 20 layouts in phase A: square ones in C, F, transposed, strided, reversed and broadcast form, a stack, a
@@ -260,6 +262,9 @@ static class Snapshot
         // or boolean mask; np.insert's values as an array, or as any object (a C# number, string, bool, null, a C# array, an
         // NDArray passed as object).
         InsertObj, InsertObjSlice, InsertObjSeq, InsertObjArray, InsertValues, InsertValue,
+        // np.isin: the test set test_elements (built from the operand: its own values, sets of other dtypes, sizes, ranges
+        // and layouts, so NumPy's table, loop and sort paths are all reached) and the algorithm name kind.
+        IsinTest, IsinKind,
         Default, Unsupported,
     }
 
@@ -272,6 +277,15 @@ static class Snapshot
     /// <returns>True for a parameter of a public static np.insert or np.delete overload.</returns>
     private static bool IsInsertOrDelete(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name is "insert" or "delete";
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.isin, whose <c>test_elements</c> / <c>kind</c> roles are its alone: np.sort,
+    ///     np.argsort and np.partition name a parameter <c>kind</c> with another meaning, and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.isin overload.</returns>
+    private static bool IsIsin(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "isin";
 
     /// <summary>
     ///     Classifies a parameter.
@@ -307,6 +321,8 @@ static class Snapshot
                 // np.insert / np.delete's index array or mask, and np.insert's values array.
                 : n == "obj" && IsInsertOrDelete(p) ? Role.InsertObjArray
                 : n == "values" && IsInsertOrDelete(p) ? Role.InsertValues
+                // np.isin's test set.
+                : n == "test_elements" && IsIsin(p) ? Role.IsinTest
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -366,6 +382,8 @@ static class Snapshot
             if (n == "obj" && (t == typeof(int[]) || t == typeof(long[]))) return Role.InsertObjSeq;
             if (n == "value" && t == typeof(object)) return Role.InsertValue;
         }
+        // np.isin's algorithm name (only its: np.sort's, np.argsort's and np.partition's kind keep their defaults).
+        if (n == "kind" && t == typeof(string) && IsIsin(p)) return Role.IsinKind;
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -409,6 +427,16 @@ static class Snapshot
             case Role.Keys:
                 // The base is the operand's own copy (MakeKeys "same"); the variants follow from the operand.
                 Add("same", () => null);
+                break;
+            case Role.IsinTest:
+                // The base is the operand's own copy (MakeIsinTest "same"); the variants follow from the operand.
+                Add("same", () => null);
+                break;
+            case Role.IsinKind:
+                // The default (automatic) first, the two names NumPy knows, then two it refuses: another word and a
+                // capitalized name (the check is case-sensitive).
+                foreach (var s in new[] { null, "sort", "table", "x", "Sort" })
+                    Add(s ?? "null", () => s);
                 break;
             case Role.KeyInt:
                 // A key inside the pool's values, the ends of the int32 range, a key below and above every value.
@@ -912,6 +940,7 @@ static class Snapshot
             Role.Operand2 => Operand2VariantLabels.Length - 1,
             Role.Spacing => SpacingVariantLabels.Length - 1,
             Role.Keys => KeysVariantLabels.Length - 1,
+            Role.IsinTest => IsinTestVariantLabels.Length - 1,
             Role.Sorter => SorterVariantLabels.Length - 1,
             Role.Variables => VariablesVariantLabels.Length - 1,
             Role.FWeights => FWeightVariantLabels.Length - 1,
@@ -1009,6 +1038,7 @@ static class Snapshot
             Role.Operand2 => Operand2VariantLabels[v],
             Role.Spacing => SpacingVariantLabels[v],
             Role.Keys => KeysVariantLabels[v],
+            Role.IsinTest => IsinTestVariantLabels[v],
             Role.Sorter => SorterVariantLabels[v],
             Role.Variables => VariablesVariantLabels[v],
             Role.FWeights => FWeightVariantLabels[v],
@@ -1037,6 +1067,7 @@ static class Snapshot
                 argv[i] = i == operandIndex ? operand
                     : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
                     : roles[i] == Role.Keys ? MakeKeys(KeysVariantLabels[0], operand)
+                    : roles[i] == Role.IsinTest ? MakeIsinTest(IsinTestVariantLabels[0], operand)
                     : roles[i] == Role.LinalgArrays ? MakeLinalgArrays(LinalgArraysVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
@@ -1063,6 +1094,9 @@ static class Snapshot
                         break;
                     case Role.Keys:
                         argv[p] = MakeKeys(KeysVariantLabels[v], operand);
+                        break;
+                    case Role.IsinTest:
+                        argv[p] = MakeIsinTest(IsinTestVariantLabels[v], operand);
                         break;
                     case Role.Sorter:
                         argv[p] = MakeSorter(SorterVariantLabels[v], operand);
@@ -1550,6 +1584,74 @@ static class Snapshot
             case "row":
                 return np.array(Enumerable.Range(0, (int)(dims.Length == 0 ? 1 : dims[^1])).Select(i => i % 4).ToArray());
             default: throw new ArgumentException("unknown key variant " + label);
+        }
+    }
+
+    /// <summary>np.isin's test-set variants, built from the operand (see <see cref="MakeIsinTest"/>); the first is the
+    ///     base.</summary>
+    private static readonly string[] IsinTestVariantLabels =
+    {
+        "same", "int32", "float64", "U5", "T", "S5", "0d", "empty", "long", "widelong", "wide", "nan", "nanlong", "u64",
+        "u64long", "bool", "complex", "bcast", "strided",
+    };
+
+    /// <summary>
+    ///     Builds np.isin's test set for an operand: its own values, and sets that send NumPy's <c>_isin</c> down each of its
+    ///     paths. For an integer or bool pair NumPy takes the table method while the set's range is at most six times the two
+    ///     sizes; otherwise (and for every other dtype) the loop path while <c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c>
+    ///     (fewer than 10 to 15 values for this pool), else the sort path.
+    /// </summary>
+    /// <param name="label">The variant: <c>same</c> (a copy of the operand: every element a member), <c>int32</c> /
+    ///     <c>float64</c> (a ramp 0, 1, 2, 3, 0, ... of the operand's shape: repeated values), <c>U5</c> / <c>T</c> / <c>S5</c>
+    ///     (text "0", "1", "2", ... of the operand's shape: a text set against a number, str against bytes), <c>0d</c> (a 0-d
+    ///     int64 2), <c>empty</c> (no value), <c>long</c> (forty int64 values -3 to 3, repeated: a narrow range, the table
+    ///     method for an integer operand and the sort path for another), <c>widelong</c> (forty int64 values -3, 997, 1997,
+    ///     ...: a range too wide for the table method, so the sort path), <c>wide</c> (int64 0, 1000000, 3, -1: too wide for
+    ///     the table method, short enough for the loop path), <c>nan</c> (float64 NaN, -0.0, 3, inf, -1: the loop path),
+    ///     <c>nanlong</c> (forty float64 values with NaN, signed zeros and infinities: the sort path), <c>u64</c> (uint64 3,
+    ///     2**63 + 1, 7, 0: a signed operand meets uint64 on the loop path), <c>u64long</c> (forty uint64 values, twenty past
+    ///     2**63: the sort path, where NumPy concatenates a signed operand with them in float64), <c>bool</c> ([True]),
+    ///     <c>complex</c> ([1+0j, 3+0j, 2+1j]), <c>bcast</c> (int64 [1, 3] broadcast to (3, 2): a stride-0 set),
+    ///     <c>strided</c> (int64 0, 3, 6, ..., 18: a stepped view).</param>
+    /// <param name="operand">The operand (the tested values).</param>
+    /// <returns>A fresh array or view.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeIsinTest(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        NDArray Text(string dt) => size == 0
+            ? np.empty(new Shape(dims), np.dtype(dt))
+            : np.array(Enumerable.Range(0, (int)size).Select(i => (i % 3).ToString(CultureInfo.InvariantCulture)).ToArray())
+                .astype(np.dtype(dt)).reshape(new Shape(dims));
+        // Python's float('nan'): the positive quiet NaN (.NET's double.NaN is negative).
+        double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+        switch (label)
+        {
+            case "same": return operand.copy();
+            case "int32": return np.array(Enumerable.Range(0, (int)size).Select(i => i % 4).ToArray()).reshape(new Shape(dims));
+            case "float64":
+                return np.array(Enumerable.Range(0, (int)size).Select(i => (double)(i % 4)).ToArray()).reshape(new Shape(dims));
+            case "U5": return Text("U5");
+            case "T": return Text("T");
+            case "S5": return Text("S5");
+            case "0d": return np.array(2L);
+            case "empty": return np.empty(new Shape(0), np.dtype("int64"));
+            case "long": return np.array(Enumerable.Range(0, 40).Select(i => (long)(i % 7) - 3).ToArray());
+            case "widelong": return np.array(Enumerable.Range(0, 40).Select(i => i * 1000L - 3).ToArray());
+            case "wide": return np.array(new long[] { 0, 1_000_000, 3, -1 });
+            case "nan": return np.array(new[] { nan, -0.0, 3.0, double.PositiveInfinity, -1.0 });
+            case "nanlong": return np.array(Special.Concat(Plain.Take(16)).ToArray());
+            case "u64": return np.array(new ulong[] { 3, (1UL << 63) + 1, 7, 0 });
+            case "u64long":
+                return np.array(Enumerable.Range(0, 20).Select(i => (1UL << 63) + (ulong)i)
+                    .Concat(Enumerable.Range(0, 20).Select(i => (ulong)i)).ToArray());
+            case "bool": return np.array(new[] { true });
+            case "complex": return np.array(new[] { new Complex(1, 0), new Complex(3, 0), new Complex(2, 1) });
+            case "bcast": return np.broadcast_to(np.array(new long[] { 1, 3 }), new Shape(3, 2));
+            case "strided": return np.array(Enumerable.Range(0, 20).Select(i => (long)i).ToArray())["::3"];
+            default: throw new ArgumentException("unknown test-set variant " + label);
         }
     }
 
