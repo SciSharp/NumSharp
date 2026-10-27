@@ -279,6 +279,41 @@ namespace NumSharp.Backends
             // rcount: the reduced extent. An empty slice divides by 0 (NumPy's NaN, then the loop's cast of it).
             long count = axis is null ? arr.size : arr.Shape.dimensions[axis.Value];
             var ret = ReduceAdd(arr, axis, keepdims, loop, @out: null);
+            return FinishMeanLikeNumPy(ret, count, loop, float16Result);
+        }
+
+        /// <summary>
+        ///     The statements of NumPy's <c>_methods._mean</c> after its sum, shared by the single-axis mean
+        ///     (<see cref="MeanLikeNumPy"/>) and the mean over an axis set (<see cref="MeanOverAxes"/>):
+        ///     <code>
+        ///     if isinstance(ret, ndarray):
+        ///         ret = um.true_divide(ret, rcount, out=ret, casting='unsafe')
+        ///         if is_float16_result: ret = arr.dtype.type(ret)            # float32 -> float16
+        ///     else:                                                          # a scalar
+        ///         ret = (arr.dtype if is_float16_result else ret.dtype).type(ret / rcount)
+        ///     </code>
+        /// </summary>
+        /// <param name="ret">The sum (consumed: divided in place and returned, or disposed when a new array replaces
+        ///     it).</param>
+        /// <param name="count">The count of the reduced elements (NumPy's <c>rcount</c>, an <c>np.intp</c>); 0 gives NumPy's
+        ///     NaN (and the loop's cast of it).</param>
+        /// <param name="loop">The sum's loop dtype.</param>
+        /// <param name="float16Result">NumPy's <c>is_float16_result</c>: a float16 input summed in float32 and returned as
+        ///     float16.</param>
+        /// <returns>The mean: <paramref name="ret"/> divided in place (narrowed to float16 for
+        ///     <paramref name="float16Result"/>: a new array), or for a 0-d sum a fresh read-only 0-d scalar (NumPy's
+        ///     scalar).</returns>
+        /// <exception cref="DivideByZeroException">A decimal loop with a count of 0 (decimal has no NaN). Not reached:
+        ///     np.mean's decimal routes and <see cref="MeanOverAxes"/> answer a decimal mean over no element first.</exception>
+        /// <remarks>
+        ///     The two branches differ only for <paramref name="float16Result"/>: the array branch rounds the float64
+        ///     quotient into the float32 sum and then into float16 (twice), the scalar branch rounds the float64 quotient
+        ///     into float16 once. For every other loop both are the float64 quotient rounded once into the loop
+        ///     (<see cref="DivideByCountLikeNumPy(NDArray, long)"/>: complex divides by <c>rcount + 0j</c>, an integer or bool
+        ///     loop casts unsafely, so 0 / 0 is INT_MIN or True).
+        /// </remarks>
+        private static NDArray FinishMeanLikeNumPy(NDArray ret, long count, NPTypeCode loop, bool float16Result)
+        {
             bool scalar = ret.ndim == 0;
 
             if (float16Result && scalar)

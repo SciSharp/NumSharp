@@ -724,7 +724,9 @@ namespace NumSharp.Backends
         /// <param name="stride">Complex stride.</param>
         /// <param name="rr">Receives the real-part sum.</param>
         /// <param name="ri">Receives the imaginary-part sum.</param>
-        private static void FoldComplex(byte* a, long n, long stride, out double rr, out double ri)
+        /// <remarks>Internal: the add loop of the axis-set reduction (<see cref="NumPyAddLoops"/>) reduces its complex runs
+        ///     with it, so both reductions share NumPy's one complex fold.</remarks>
+        internal static void FoldComplex(byte* a, long n, long stride, out double rr, out double ri)
         {
             var fold = ILKernelGenerator.TryGetPairwiseFoldComplex();
             if (fold != null)

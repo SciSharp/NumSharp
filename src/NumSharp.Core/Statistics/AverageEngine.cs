@@ -447,89 +447,56 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     <c>a.mean(axis, keepdims)</c> over normalized axes: np.mean for none or one axis, else one np.mean per axis
-        ///     from the last to the first (keepdims between them), reshaped to drop the reduced axes unless
-        ///     <paramref name="keepdims"/>.
+        ///     <c>a.mean(axis, keepdims)</c> over normalized axes, NumPy's <c>_mean</c>: np.mean for none, one or every axis,
+        ///     and for any other set (two axes or more, or the empty tuple) ONE add.reduce over the whole set divided by the
+        ///     count of its elements (<see cref="Backends.DefaultEngine.MeanOverAxes"/>).
         /// </summary>
         /// <param name="a">The numeric operand.</param>
         /// <param name="axes">The normalized axes, or null for every axis.</param>
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
-        /// <returns>The mean. Over two or more axes it is a mean of means (NumPy sums the whole tuple once), and without
-        ///     keepdims a reshape view of the last mean; over an empty tuple it is <paramref name="a"/> itself.</returns>
+        /// <returns>The mean: a fresh array laid out as NumPy's reduction allocates it (the operand's axis order), or a
+        ///     read-only 0-d scalar for every axis without keepdims. Over the empty tuple every element is added to the
+        ///     identity and divided by 1 in the mean's dtype: a float64 copy of an integer operand, a -0.0 made +0.0. A decimal
+        ///     operand over axes that hold no element gives float64 NaN, as np.mean answers decimal.</returns>
+        /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
         private static NDArray MeanWithAxes(NDArray a, int[] axes, bool keepdims)
         {
-            if (axes is null) return np.mean(a, keepdims);
-            if (axes.Length == 1) return np.mean(a, axes[0], keepdims);
-
-            int[] sortedDesc = (int[])axes.Clone();
-            Array.Sort(sortedDesc);
-            Array.Reverse(sortedDesc);
-
-            NDArray cur = a;
-            foreach (int ax in sortedDesc)
-                cur = np.mean(cur, ax, keepdims: true);
-
-            if (!keepdims)
-            {
-                int ndim = a.ndim;
-                var kept = new List<long>(ndim - axes.Length);
-                for (int i = 0; i < ndim; i++)
-                {
-                    if (Array.IndexOf(axes, i) < 0)
-                        kept.Add(a.Shape.dimensions[i]);
-                }
-                cur = cur.reshape(Shape.Adopt(kept.ToArray()));
-            }
-
-            return cur;
+            // One axis is np.mean along it - tested first: a 1-D operand's (0,) keeps the one-output axis route, which
+            // follows NumPy's schedule where the flat route still declines (a broadcast operand). None and a tuple of every
+            // axis are one reduction in NumPy (PyUFunc_GenericReduction reads None as every axis).
+            if (axes is not null && axes.Length == 1) return np.mean(a, axes[0], keepdims);
+            if (axes is null || axes.Length == a.ndim) return np.mean(a, keepdims);
+            // Any other set: ONE reduction over the whole set. A mean of single-axis means rounds after each axis, and the
+            // empty tuple is still a sum (of one element per output) and a division.
+            return Backends.DefaultEngine.MeanOverAxes(a, axes, keepdims);
         }
 
         /// <summary>
-        ///     <c>a.sum(axis, dtype=dtype, keepdims)</c> over normalized axes: np.sum for none or one axis, the operand cast to
-        ///     <paramref name="dtype"/> for an empty tuple, else one np.sum per axis from the last to the first (keepdims
-        ///     between them), reshaped to drop the reduced axes unless <paramref name="keepdims"/>.
+        ///     <c>a.sum(axis, dtype=dtype, keepdims)</c> over normalized axes: np.sum for none, one or every axis, and for any
+        ///     other set (two axes or more, or the empty tuple) ONE add.reduce over the whole set
+        ///     (<see cref="Backends.DefaultEngine.ReduceAddOverAxes"/>: NumPy's iterator schedule, from the identity).
         /// </summary>
         /// <param name="a">The operand.</param>
         /// <param name="axes">The normalized axes, or null for every axis.</param>
         /// <param name="dtype">The loop dtype.</param>
         /// <param name="keepdims">Keep the reduced axes with length 1.</param>
-        /// <returns>The sum (over two or more axes a sum of sums, and without keepdims a reshape view of the last
-        ///     one).</returns>
+        /// <returns>The sum: a fresh array (never <paramref name="a"/> itself, the empty tuple included: each element is
+        ///     added to the identity), or a read-only 0-d scalar for every axis without keepdims.</returns>
+        /// <exception cref="NotSupportedException">A set of two axes or more, or the empty tuple, in a loop other than
+        ///     float16, float32, float64, complex128 or decimal (the weighted fallback reaches float16, complex128 and
+        ///     decimal).</exception>
+        /// <exception cref="OverflowException">A decimal sum leaves decimal's range.</exception>
         private static NDArray SumWithAxes(NDArray a, int[] axes, NPTypeCode dtype, bool keepdims)
         {
-            if (axes is null)
-                return np.sum(a, axis: null, keepdims: keepdims, dtype: dtype);
-
-            if (axes.Length == 0)
-            {
-                NDArray asd = a.typecode == dtype ? a : a.astype(dtype);
-                return asd;
-            }
-
-            if (axes.Length == 1)
+            // One axis is np.sum along it (tested first, as in MeanWithAxes); None and a tuple of every axis are one
+            // reduction (the flat sum).
+            if (axes is not null && axes.Length == 1)
                 return np.sum(a, axis: axes[0], keepdims: keepdims, dtype: dtype);
-
-            int[] sortedDesc = (int[])axes.Clone();
-            Array.Sort(sortedDesc);
-            Array.Reverse(sortedDesc);
-
-            NDArray cur = a.typecode == dtype ? a : a.astype(dtype);
-            foreach (int ax in sortedDesc)
-                cur = np.sum(cur, axis: ax, keepdims: true, dtype: dtype);
-
-            if (!keepdims)
-            {
-                int ndim = a.ndim;
-                var kept = new List<long>(ndim - axes.Length);
-                for (int i = 0; i < ndim; i++)
-                {
-                    if (Array.IndexOf(axes, i) < 0)
-                        kept.Add(a.Shape.dimensions[i]);
-                }
-                cur = cur.reshape(Shape.Adopt(kept.ToArray()));
-            }
-
-            return cur;
+            if (axes is null || axes.Length == a.ndim)
+                return np.sum(a, axis: null, keepdims: keepdims, dtype: dtype);
+            // Any other set: ONE reduction over the whole set (a sum of single-axis sums rounds after each axis; the empty
+            // tuple adds each element to the identity, it does not return the operand).
+            return Backends.DefaultEngine.ReduceAddOverAxes(a, axes, keepdims, dtype);
         }
 
         /// <summary>
