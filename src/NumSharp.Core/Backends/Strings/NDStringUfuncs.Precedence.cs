@@ -1544,15 +1544,19 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's answer for <c>np.average</c> of a string array, in NumPy's order: the axis tuple
+        ///     NumPy's first answers for <c>np.average</c> of a fixed-width string array, in NumPy's order: the axis tuple
         ///     (<c>normalize_axis_tuple</c> with the argument name <c>axis</c>); without weights, <c>a.mean(axis)</c> (the
-        ///     add.reduce text); with weights, their shape checks, then <c>wgt.sum(dtype=result_type(a, wgt))</c> — a SIZED
-        ///     string descriptor (<c>&lt;U32</c> for float weights), which a ufunc's <c>dtype=</c> refuses by class.
+        ///     add.reduce text); with weights, their shape checks (<c>_weights_are_valid</c>). Weights of a valid shape are
+        ///     not refused here: NumPy goes on to <c>result_type(a.dtype, wgt.dtype)</c> and <c>wgt.sum(dtype=result_type)</c>,
+        ///     the statements np.average runs for every operand (<see cref="NumSharp.Statistics.AverageEngine"/>), which
+        ///     refuse the text result dtype - a sized string for U / S / numeric weights, StringDType beside U (both
+        ///     descriptors a ufunc's <c>dtype=</c> refuses), no common DType for S beside StringDType.
         /// </summary>
         /// <param name="a">The string array.</param>
         /// <param name="axes">The axes, or null.</param>
         /// <param name="weights">The weights, or null.</param>
-        /// <returns>The exception to throw (never null).</returns>
+        /// <returns>The exception to throw for the weight-free mean and the weight-shape refusals, or null for weights of a
+        ///     valid shape (the caller's result_type and weight sum then raise NumPy's refusal).</returns>
         /// <exception cref="AxisError">An axis is out of bounds (thrown; <c>axis: axis 9 is out of bounds …</c>).</exception>
         /// <exception cref="ValueError">An axis appears twice (thrown; <c>repeated axis in `axis` argument</c>).</exception>
         /// <remarks>
@@ -1576,8 +1580,9 @@ namespace NumSharp.Backends.Strings
                     return new ValueError("Shape of weights must be consistent with shape of a along specified axis.");
             }
 
-            // result_type(text, weights) is text of a fixed length; the weight sum's dtype= then refuses it by class.
-            return new TypeError(DefaultEngine.GeneralDTypeOnlyText);
+            // Weights of a valid shape: result_type(a.dtype, wgt.dtype) and the weight sum come next, the statements the
+            // caller runs for every operand (an engine file asks no np.* function: ratchet R2).
+            return null;
         }
 
         /// <summary>

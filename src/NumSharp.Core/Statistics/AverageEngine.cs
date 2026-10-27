@@ -49,15 +49,15 @@ namespace NumSharp.Statistics
         /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
         ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>: NumPy's
         ///     <c>a.size / avg.size</c>).</exception>
-        /// <exception cref="NotSupportedException">Text weights beside a numeric operand: the numeric promotion table
-        ///     (<see cref="np._FindCommonArrayType(NPTypeCode, NPTypeCode)"/>) has no entry for text.</exception>
         /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
-        ///     and weights differ.</c>); a text operand: the mean's add.reduce refusal, or the weight sum's refusal of a
-        ///     sized string or <c>StringDType</c> <c>dtype=</c>.</exception>
-        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand with weights it has no common DType
-        ///     with.</exception>
-        /// <exception cref="InvalidOperationException">Not reached: a <c>StringDType</c> weight sum NumPy refuses that
-        ///     computed (a wiring error inside NumSharp).</exception>
+        ///     and weights differ.</c>); the weight sum's refusal of a text result dtype (U / S weights beside a number, a
+        ///     fixed-width text operand: <c>The `dtype` and `signature` arguments to ufuncs only select the general
+        ///     DType ...</c>; U weights beside StringDType: <c>Cannot pass a new user DType instance ...</c>); a text
+        ///     operand without weights: the mean's add.reduce refusal.</exception>
+        /// <exception cref="DTypePromotionError">Weights and an operand with no common DType: StringDType beside a number
+        ///     or beside S.</exception>
+        /// <exception cref="InvalidOperationException">Not reached: a weight sum in a text result dtype that NumPy refuses
+        ///     but that computed (a wiring error inside NumSharp).</exception>
         internal static (NDArray avg, NDArray sumOfWeights) Average(
             NDArray a, int[] axis, NDArray weights, bool keepdims, bool returned)
         {
@@ -83,7 +83,14 @@ namespace NumSharp.Statistics
                 return (scope.Returns(avg), scope.Returns(sclValue));
             }
             if (Backends.Strings.NDStringUfuncs.IsString(a))
-                throw Backends.Strings.NDStringUfuncs.AverageAnswer(a, axis, weights);
+            {
+                // U / S: the axis tuple, the weight-free mean's refusal and the weights' shape checks first. Weights of a
+                // valid shape go on to the weighted statements below, whose result_type and weight sum refuse the text
+                // result dtype exactly as they do beside a numeric operand with text weights.
+                var refusal = Backends.Strings.NDStringUfuncs.AverageAnswer(a, axis, weights);
+                if (refusal is not null)
+                    throw refusal;
+            }
 
             int ndim = a.ndim;
             int[] normalizedAxis = NormalizeAxisTuple(axis, ndim);
@@ -108,7 +115,19 @@ namespace NumSharp.Statistics
 
             NDArray wgt = WeightsAreValid(weights, a, normalizedAxis);
 
-            NPTypeCode resultDtype = ComputeResultDtype(a.typecode, wgt.typecode);
+            // result_dtype: NumPy's result_type over the DESCRIPTORS (with 'f8' for an integer or bool operand), so text
+            // weights promote as NumPy promotes them - U / S beside a number to a sized string, StringDType beside a number
+            // to nothing (DTypePromotionError) - instead of meeting a numeric table that has no text entry.
+            DType resultDescr = ComputeResultDtype(a.dtype, wgt.dtype);
+            if (Backends.Strings.NDStringUfuncs.IsTextRequest(resultDescr))
+            {
+                // scl = wgt.sum(axis=axis, dtype=result_dtype, ...): a text result_dtype is a descriptor INSTANCE, which a
+                // ufunc's dtype= refuses ("only select the general DType" for a sized string). The refusal does not
+                // depend on the axes (normalized and valid by now), so the sum is asked without them.
+                using var refused = np.sum(wgt, (int?)null, false, resultDescr);
+                throw new InvalidOperationException("np.average's weight sum in a text result dtype computed where NumPy refuses it.");
+            }
+            NPTypeCode resultDtype = resultDescr.GetTypeCode();
 
             NDArray wgtCast = wgt.typecode == resultDtype ? wgt : wgt.astype(resultDtype);
             NDArray aCast = a.typecode == resultDtype ? a : a.astype(resultDtype);
@@ -576,20 +595,19 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     The weighted average's result dtype: <c>result_type(a.dtype, wgt.dtype, 'f8')</c> for an integer or bool
-        ///     operand, else <c>result_type(a.dtype, wgt.dtype)</c>, through the numeric promotion table.
+        ///     The weighted average's result dtype, NumPy's statement: <c>np.result_type(a.dtype, wgt.dtype, 'f8')</c> for an
+        ///     integer or bool operand, else <c>np.result_type(a.dtype, wgt.dtype)</c> - the promotion over descriptors, so a
+        ///     text descriptor promotes as NumPy promotes it.
         /// </summary>
-        /// <param name="aType">The operand's dtype.</param>
-        /// <param name="wType">The weights' dtype.</param>
-        /// <returns>The result dtype.</returns>
-        /// <exception cref="NotSupportedException">A text dtype: the numeric table has no entry for it.</exception>
-        private static NPTypeCode ComputeResultDtype(NPTypeCode aType, NPTypeCode wType)
-        {
-            NPTypeCode common = _FindCommonArrayType(aType, wType);
-            if (IsIntegralOrBool(aType))
-                return _FindCommonArrayType(common, NPTypeCode.Double);
-            return common;
-        }
+        /// <param name="aType">The operand's descriptor.</param>
+        /// <param name="wType">The weights' descriptor.</param>
+        /// <returns>The result descriptor: a numeric one, or a text one (U / S weights beside a number give a sized
+        ///     string, U / S beside StringDType give StringDType), which the caller's weight sum then refuses.</returns>
+        /// <exception cref="DTypePromotionError">No common DType: StringDType beside a number or beside S (NumPy's text,
+        ///     listing every DType of the sequence: <c>(Int32DType, StringDType, Float64DType)</c> for an int32
+        ///     operand).</exception>
+        private static DType ComputeResultDtype(DType aType, DType wType)
+            => IsIntegralOrBool(aType.GetTypeCode()) ? np.result_type(aType, wType, np.float64) : np.result_type(aType, wType);
 
         /// <summary>NumPy's <c>issubclass(a.dtype.type, (np.integer, np.bool))</c>, with char as NumSharp's integer.</summary>
         /// <param name="t">The dtype.</param>
