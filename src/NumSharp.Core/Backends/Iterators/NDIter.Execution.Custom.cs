@@ -256,6 +256,10 @@ namespace NumSharp.Backends.Iteration
         {
             if (!DirectILKernelGenerator.Enabled) return false;
 
+            // An empty iteration runs no block (see ForEach): with an empty LEADING axis the block below would still be
+            // innerCount x outerCount elements of operands that hold none. Handled: there is nothing to compute.
+            if (_state->IterSize == 0) return true;
+
             int nop = _state->NOp;
             if (operandTypes.Length != nop) return false;                 // defensive (mask already excluded)
 
@@ -414,6 +418,9 @@ namespace NumSharp.Backends.Iteration
         /// </summary>
         private void Run2DMaskedBlocks(ND2DElementwiseKernel kernel)
         {
+            // An empty iteration runs no block (see ForEach and TryExecute2DElementwise).
+            if (_state->IterSize == 0) return;
+
             int nop = _state->NOp;                                        // data operands + the mask
             int ndim = _state->NDim;
             int inner = ndim - 1;

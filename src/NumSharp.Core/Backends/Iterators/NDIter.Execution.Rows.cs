@@ -91,7 +91,7 @@ namespace NumSharp.Backends.Iteration
         /// <remarks>
         ///     The iterator's own position is not moved: the blocks run over private copies of its start pointers, as the
         ///     numeric 2-D block route does, so the iterator is finished only in the sense that every element has been
-        ///     visited. A caller disposes it afterwards as usual.
+        ///     visited. A caller disposes it afterwards as usual. An empty iteration makes no kernel call.
         /// </remarks>
         internal void ForEachRows(NDInnerLoop2DFunc kernel, void* auxdata = null)
         {
@@ -100,6 +100,10 @@ namespace NumSharp.Backends.Iteration
             if (!CanRunRows)
                 throw new InvalidOperationException(
                     "ForEachRows needs an unbuffered, unmasked EXTERNAL_LOOP iteration of at least two axes at its start.");
+
+            // An empty iteration runs no block (see ForEach: NumPy's callers never enter the loop of an empty iteration).
+            if (_state->IterSize == 0)
+                return;
 
             int nop = _state->NOp;
             int ndim = _state->NDim;

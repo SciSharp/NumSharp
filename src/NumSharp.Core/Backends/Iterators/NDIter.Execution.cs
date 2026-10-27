@@ -123,11 +123,24 @@ namespace NumSharp.Backends.Iteration
         ///   • EXTERNAL_LOOP → 1 call per outer index, count = inner dim size.
         ///   • Buffered → 1 call per buffer fill, count = BufIterEnd.
         ///   • Otherwise → 1 call per element, count = 1.
+        ///   • Empty (IterSize 0) → no call at all, as NumPy's callers never enter the loop: a kernel can rely on every
+        ///     call covering elements that exist. Outputs keep whatever the caller seeded (a reduction's identity).
         /// </summary>
+        /// <param name="kernel">The inner-loop kernel.</param>
+        /// <param name="auxdata">The kernel's extra argument, passed through to every call.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="kernel"/> is null.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ForEach(NDInnerLoopFunc kernel, void* auxdata = null)
         {
             if (kernel is null) throw new ArgumentNullException(nameof(kernel));
+
+            // An empty iteration runs no inner loop. NumPy's callers test NpyIter_GetIterSize(iter) != 0 before their
+            // `do { inner(...) } while (iternext(iter))` loop, and this driver is that caller. The inner count of an empty
+            // iteration is still the innermost axis' extent when an OUTER axis is the empty one (an (11, 0, 14) operand
+            // reduced along its last axis hands the kernel 14), so a call would read and write that many elements of
+            // operands that hold none: np.average's fused weighted sum wrote past its empty outputs and corrupted the heap.
+            if (_state->IterSize == 0)
+                return;
 
             EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
 
@@ -450,11 +463,19 @@ namespace NumSharp.Backends.Iteration
         ///
         /// Performance note: the single-iteration fast path (coalesced + EXLOOP
         /// or ONEITERATION) avoids the do/while + delegate call so the JIT can
-        /// autovectorize the kernel body.
+        /// autovectorize the kernel body. An empty iteration (IterSize 0) makes no
+        /// call, as in <see cref="ForEach"/>.
         /// </summary>
+        /// <typeparam name="TKernel">The inner-loop kernel type.</typeparam>
+        /// <param name="kernel">The kernel.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public void ExecuteGeneric<TKernel>(TKernel kernel) where TKernel : struct, INDInnerLoop
         {
+            // An empty iteration runs no inner loop (see ForEach: the inner count would be an outer-empty iteration's
+            // innermost extent).
+            if (_state->IterSize == 0)
+                return;
+
             EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
             if (IsSingleInnerLoop())
                 ExecuteGenericSingle(kernel);
@@ -538,11 +559,21 @@ namespace NumSharp.Backends.Iteration
         /// Reducing variant. The accumulator is passed by reference; return
         /// <c>false</c> from the kernel to abort (used by All/Any early exit).
         /// </summary>
+        /// <typeparam name="TKernel">The inner-loop kernel type.</typeparam>
+        /// <typeparam name="TAccum">The accumulator type.</typeparam>
+        /// <param name="kernel">The kernel.</param>
+        /// <param name="init">The accumulator's starting value.</param>
+        /// <returns>The accumulator after the last call: <paramref name="init"/> itself for an empty iteration, which makes
+        ///     no call (see <see cref="ForEach"/>).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public TAccum ExecuteReducing<TKernel, TAccum>(TKernel kernel, TAccum init)
             where TKernel : struct, INDReducingInnerLoop<TAccum>
             where TAccum : unmanaged
         {
+            // An empty iteration runs no inner loop (see ForEach): the accumulator is the reduction over no element.
+            if (_state->IterSize == 0)
+                return init;
+
             EnsureBuffersReady();   // DELAY_BUFALLOC: materialize + prime first window
 
             void** dataptrs = GetDataPtrArray();
@@ -760,7 +791,8 @@ namespace NumSharp.Backends.Iteration
         ///     Reduction variant over a BUFFER + REDUCE iterator: one kernel call per inner loop — a core of NumPy's reduce
         ///     double loop when the buffering setup chose it (the reduce operand's element repeats along the core, or its core
         ///     repeats per outer step), else a plain fill — with <see cref="IsFirstVisit"/> telling the kernel when an output
-        ///     slot starts. The NumPy-parity path for axis reductions that span multiple output elements.
+        ///     slot starts. The NumPy-parity path for axis reductions that span multiple output elements. An empty iteration
+        ///     makes no call (see <see cref="ForEach"/>).
         /// </summary>
         /// <typeparam name="TKernel">The inner-loop kernel.</typeparam>
         /// <typeparam name="TAccum">The kernel's accumulator type (threaded through every call).</typeparam>
@@ -777,6 +809,10 @@ namespace NumSharp.Backends.Iteration
                 throw new InvalidOperationException(
                     "BufferedReduce requires BUFFER + REDUCE flags on the iterator.");
             }
+
+            // An empty iteration runs no inner loop (see ForEach): there is no fill to hand the kernel.
+            if (_state->IterSize == 0)
+                return;
 
             EnsureBuffersReady();   // DELAY_BUFALLOC: allocate + fill the first buffer
 
