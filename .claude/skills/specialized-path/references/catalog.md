@@ -24,7 +24,7 @@ pinned. The last section lists levers that were MEASURED AND REJECTED — do not
 | concatenate | `Creation/np.concatenate.cs` `TryDirectMemcpyConcat` (same dtype, !broadcast, all C-contig with C dst or all F with F dst), `TryUniformTinySlabInterleave` (every per-outer slab the same 1/2/4/8/16 bytes), `TryDirectCastConcat` | tiny-slab interleave ~10–20× over per-slab memcpy | — |
 | tril / triu | `Indexing/np.tril.cs` `TryTriangleBlit`: ndim ≥ 2, unit-stride last axis (1-D → the `where(tri)` composition) | — | — |
 | fill | `Manipulation/NDArray.fill.cs` `TryFillInnerContiguousRuns`: !broadcast, unit-stride inner axis of length > 1 | — | — |
-| average(weights) | `Statistics/np.average.cs` `TryFusedWeightedSum`: a weighted-sum iter kernel exists for the result dtype | — | — |
+| average(weights) | `Statistics/AverageEngine.cs` `TryFusedWeightedSum`: a weighted-sum iter kernel exists for the result dtype | — | — |
 | power(scalar exp) | `Backends/Default/Math/Default.Power.cs` `TryScalarExponentFastPath`: exp ∈ {0, 1, 2, 0.5, −1} AND the substitution's dtype equals the general path's | — | — |
 | managed LU (blocked) | `Backends/Default/LinearAlgebra/ManagedLu.cs`: `BlockedThreshold = 256` → panel getf2 + TRSM + Schur GEMM via `SimdMatMul`; double only | n ≤ 16: 2.2–4.7×; n ≥ 256: 0.4–0.6× (managed-GEMM ceiling) | 03884ee9 |
 | correlate / convolve | `Math/NDArray.SlidingDot.cs`: `SmallCorrelateMaxKernel = 11` (NumPy's `small_correlate` regime stays managed even with a backend), `InnerDotSimdMin = 32` (ramp dots go SIMD from length 32) | geomean ~4× | — |

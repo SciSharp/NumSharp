@@ -15,7 +15,7 @@ using NumSharp.Backends.Kernels;
 //     do { inner(dataptrs, strides, count, aux); } while (iternext(iter));
 //
 // np.average already builds this shape by hand for its fused 4-operand
-// weighted-sum (Statistics/np.average.cs : TryFusedWeightedSum). This file
+// weighted-sum (Statistics/AverageEngine.cs : TryFusedWeightedSum). This file
 // hoists that construction into a single reusable factory so every np.*
 // reduction (sum / prod / min / max / mean, single- or multi-axis) shares one
 // audited op_axes builder instead of re-deriving it per call site.

@@ -1562,7 +1562,7 @@ The iterator is broader than `np.nditer`, and production code does not enter thr
 | Reductions and scans | `DefaultEngine.ReductionOp.cs`, `Default.Reduction.{Add,CumAdd,Nan}.cs`, `Default.All.cs`, `Default.Any.cs` | `ExecuteReduction`, `ExecuteReducing`, `ForEach`, `NewReduce`, or dedicated axis iterators depending dtype/layout |
 | Selection/indexing/sorting | `np.where.cs`, `Default.BooleanMask.cs`, `Default.NonZero.cs`, `AxisSort.cs` | Chunk `ForEach`/reducing kernels where a direct whole-array kernel does not fit |
 | Copy/cast/fill/pad/concatenate | static `NDIter.Copy`/`CopyAs`, called by `np.copyto`, `NDArray.fill`, `np.pad`, `np.concatenate`, storage cloning/casting | Separate static copy-state core with contiguous, strided-IL, scalar-cast, broadcast, and overlap-temporary tiers |
-| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `np.average.cs`, `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
+| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `AverageEngine.cs` (np.average), `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
 
 Three older surfaces remain for compatibility or experiments:
 
