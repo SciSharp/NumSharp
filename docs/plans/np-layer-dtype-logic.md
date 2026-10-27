@@ -492,6 +492,84 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-27, P2's tenth family: np.insert moved into `InsertEngine`, its two branches NumPy's statements.** Commits on
+  `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (np.insert's twelve
+  overloads, 79,584 calls), `twin_insert.py` (the tool's operands, positions and values rebuilt in NumPy: dtype, shape,
+  C / F / OWNDATA / WRITEABLE flags and SHA-256 per result, or the exception's type and text), `ab_insert.py` (parent
+  against fix, each changed line classified by the twin), and NumPy probes per fix, written into the unit tests:
+  - `22eea5c0` the snapshot tool reaches np.insert's positions and values (six roles, given only to np.insert /
+    np.delete parameters): obj as a C# int / long, a slice, an int[] / long[] sequence, an index array or a boolean mask;
+    values as an array or any object. 79,584 calls where each overload was one SKIP line; np.delete runs too (17,046
+    calls; its 21 numeric lines are P5's). Before any fix the twin agreed on 64,559 of the 78,028 comparable lines (1,556
+    decimal lines have no NumPy twin).
+  - `b9774efb` the move (D1: NumPy writes insert in Python, `numpy/lib/_function_base_impl.py`): the bodies into
+    `Manipulation/InsertEngine.cs`, statement for statement; the twelve overloads keep their signatures, documentation,
+    class boundaries, null checks and one call. 79,584 calls byte-identical (np.delete's 17,046 too); R1's np.insert.cs
+    row goes (7 text, 4 numeric).
+  - `f5cc5a7f` (D4) an object value is converted where NumPy converts its values, after the axis and index checks (an
+    out-of-range literal, a text that does not parse or a complex into a real array raised its conversion error first),
+    and the empty index converts an array or collection value too. 848 lines: 630 fixed, 210 still differing (the next
+    fixes), 8 decimal.
+  - `a4552248` (D4) the single-index branch on NumPy's `indices.size == 1` for every positions argument (a one-position
+    slice or mask took the multi-index branch, which refused two values for one position), and its IndexError prints obj
+    (`index [10]`, a mask itself). 2,952 lines: 2,874 fixed, 32 still differing (the next fix), 46 decimal.
+  - `f9669a8c` (D4, library) a view assignment (`a[1:3] = v`, `a[:, ::2] = v`, `a[0] = v`) checks its value with NumPy's
+    `PyArray_AssignArray` rule before it writes: the value's leading extent-1 axes beyond the region's rank are stripped,
+    the error prints the stripped shape, and a strided region raises NumPy's ValueError where np.broadcast_to's
+    IncorrectShapeException came out (and refused a value with an extra leading axis, which NumPy assigns). The rule
+    moves from np.copyto onto `Shape.AssignmentBroadcastStrides`, its stripped view onto
+    `UnmanagedStorage.AliasWithoutLeadingAxes`; R2's UnmanagedStorage.Setters.cs row 3 -> 1. The numpy.ma surface gap
+    MS32 had carved 9 cases of this (a non-C operand's setitem text): they return to the gate, 19 stay carved. No
+    snapshot line changes (np.insert's routes make no view assignment).
+  - `1a11edb5` (D4) the single-index branch assigns its values as that view assignment (`could not broadcast input array
+    from shape (2,1) into shape (2,)`; a value with extra leading axes is inserted), and a one-element float index
+    converts the values without broadcasting them (the slice's TypeError comes first). 1,261 lines: 1,253 fixed, 8
+    decimal.
+  - `e3c91f64` (D4) the multi-index branch is NumPy's statements on the positions: the negative shift, the stable
+    argsort, the rank shift in the index array's dtype (an unsigned index array is the add's same_kind refusal, an axis
+    longer than the dtype holds the Python int's OverflowError), old_mask's bounds over N + numnew with the negative wrap
+    (an index below -N wraps, the error prints the shifted index), the values' fancy assignment (MapIter's text, an empty
+    index included) and the mask's assignment of the array (a one-slab array broadcasts, the boolean assignment's text
+    otherwise; two indices naming one slot keep the later value). The data still moves in one concatenate, in position
+    order. 7,936 lines: 7,684 fixed, 38 still differing (a Python list into a StringDType array, below), 214 decimal.
+  - Step 2 (C11): NumPy's composition built from the same public pieces (np.empty in the array's order and the
+    single-index branch's three view assignments; the multi-index branch's two fancy assignments) against the
+    concatenate routes, in one process, rounds interleaved, on two pinned P-cores: slower in 10 of 18 cells (x2.1-x2.35
+    at 1K elements, x1.11-x1.64 at 100K, x2.3 and x15 for ten rows and ten columns into a (1000, 1000) array), within 3%
+    in the 6 memory-bound cells, faster in 2 small ones (a (5, 6) array by 12%, ten positions into 1,000 elements by
+    22%). The concatenate routes stay; no code change. NPY/NS of the routes kept: x1.09-x12.1, geomean x2.89 (the
+    composition's: x0.79-x5.19, geomean x2.05).
+  - Evidence at `e3c91f64`: the twin agrees with NumPy 2.4.2 on 77,000 of the 78,028 comparable lines (64,559 at
+    `22eea5c0`). The 1,028 left: 882 exception texts of Python-list values (NumPy packs each element into the dtype with
+    `PyArray_Pack`; NumSharp converts the list first: P3's array coercion) and 146 lines of the documented StringDType ->
+    complex cast (NumPy 2.4.2 puts the real part in both parts).
+  - **Found:**
+    - A view assignment raised np.broadcast_to's text and refused a value with extra leading axes into a strided region:
+      fixed library-wide by `f9669a8c`.
+    - A Python-list value converts as a whole, library-wide, where NumPy packs each element (probed):
+      `np.insert(int8 array, 1, [7, 1000])` stores -24 (NumPy: `OverflowError: Python integer 1000 out of bounds for
+      int8`), `[7, None]` inserts only the 7 because `np.asanyarray([7, None])` drops the None (NumPy: an object array,
+      and insert's `TypeError: int() argument must be ...`), `[7, 1j]` into float64 stores 0 for the 1j (NumPy:
+      `TypeError: float() argument must be a string or a real number, not 'complex'`); `np.asarray(object[], np.int8)`
+      raises NotSupportedException and `np.array(object[], np.int8)` ArgumentOutOfRangeException (NumPy: the
+      OverflowError). Input to P3's single coercion path.
+    - np.nansum / np.nanprod of a one-element view at a non-zero offset (a (1, 1) view at offset 3, `a["3::5"]`) read
+      the buffer's first element, flat and along an axis: their size-1 route replaces NaNs with np.where, which reads a
+      C-contiguous operand at an offset from the buffer's start (the array-object oracle's gaps VF30 / VA03, carved).
+      Not fixed here.
+    - One net8.0 Oracle run of `a4552248` aborted with an access violation in
+      `DirectILKernelGenerator.NanReduceContiguousAxis<double>` (np.nansum along an axis, reached by
+      MatrixOperand_LibraryNeverReachesAMatrixRule through the sum_identity tier). It happened once in about eight
+      net8.0 Oracle runs of this family (the rerun passed), and not again alone under guard pages or in a race loop of
+      7.25 million np.nansum / np.nanprod calls (matrix operands built as the corpus builds them over C, F, stepped and
+      reversed views, every axis, beside a thread that allocates and collects; no crash, no wrong value). Unexplained,
+      open.
+  - Left: the Python-list values (P3); the StringDType -> complex cast (documented); ten positions into 1,000 elements at
+    x1.16 NumPy, under the 1.5x bar (21 concatenate pieces; NumPy's composition gives x1.48).
+  - At `e3c91f64`: NumSharp.Tests net10.0 20,621 passed / 11 skipped and net8.0 20,620 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed; the carved-gap replays find every carved case of their 82 gaps still diverging.
+  - Next in P2: `np.isin` (VString; the char lead of the searchsorted entry), `np.average`, then the files of four lines
+    or fewer.
 - **2026-10-27, P2's ninth family: np.array_equal and np.array_equiv moved into `ArrayEqualEngine`, their statements
   NumPy's for every dtype.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The
   referees: the snapshot (np.array_equal, NDArray.array_equal and np.array_equiv, 3,426 calls), `twin_array_equal.py`
