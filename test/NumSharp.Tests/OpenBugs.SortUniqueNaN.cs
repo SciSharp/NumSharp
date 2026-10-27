@@ -6,9 +6,8 @@ using NumSharp;
 namespace NumSharp.Tests
 {
     /// <summary>
-    ///     Open bugs in how <c>np.unique</c> / <c>np.unique_values</c> and <c>np.sort</c> treat a float NaN's exact
-    ///     bits versus NumPy 2.4.2. Each test asserts NumPy's raw bytes, so it FAILS while NumSharp's NaN policy
-    ///     differs and passes once it matches. Remove <c>[OpenBugs]</c> from a test when its path is fixed.
+    ///     Pins of how <c>np.unique</c> / <c>np.unique_values</c> and <c>np.sort</c> treat a float NaN's exact bits
+    ///     versus NumPy 2.4.2, both former open bugs, now regression guards. Each test asserts NumPy's raw bytes.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -16,16 +15,17 @@ namespace NumSharp.Tests
     ///     <c>'heapsort'</c>) rewrites every NaN of a line longer than one element — negative, signalling or
     ///     payload-bearing — to <c>std::numeric_limits&lt;T&gt;::quiet_NaN()</c>, the POSITIVE <c>0x7ff8000000000000</c>
     ///     / <c>0x7fc00000</c>. NumSharp's sort does the same since commit 7026b3e5 (<c>AxisSort.SortLineF32/F64</c>,
-    ///     the F5 fix). Of the two NaN-policy gaps below (both library-wide) the first remains:
+    ///     the F5 fix). The two NaN-policy gaps below are fixed:
     ///     </para>
     ///     <list type="number">
     ///         <item>
-    ///         <b><c>np.unique</c> / <c>np.unique_values</c> do NOT canonicalize.</b> NumPy's unique SORTS first, so
-    ///         a surviving float32 / float64 NaN comes back as the canonical positive quiet NaN with no payload.
-    ///         NumSharp's unique path preserves the input NaN's sign and payload (its sort-then-mask core keeps the
-    ///         original bits, and only the set routines — <c>union1d</c> / <c>setxor1d</c> / <c>setdiff1d</c> — run
-    ///         <c>CanonicalizeSetOpNaN</c> afterwards; plain <c>unique</c> does not). So a negative or payload NaN fed
-    ///         to <c>np.unique</c> comes back unchanged here where NumPy returns <c>0x7ff8…</c>.
+    ///         FIXED (np-layer dtype plan P2, the np.unique family): <b><c>np.unique</c> / <c>np.unique_values</c> did NOT
+    ///         canonicalize.</b> NumPy's <c>_unique1d</c> sorts in place when neither an index nor an inverse is asked, so a
+    ///         surviving float32 / float64 NaN of two or more elements comes back as the canonical positive quiet NaN with
+    ///         no payload; NumSharp's unique kept the input NaN's sign and payload (only the set routines —
+    ///         <c>union1d</c> / <c>setxor1d</c> / <c>setdiff1d</c> — ran <c>CanonicalizeSetOpNaN</c> afterwards). Its value
+    ///         routes now write NumPy's sort NaN (<c>UniqueEngine.WriteSortNaNs</c>); the index and inverse routes keep the
+    ///         bits, as NumPy's argsort-and-gather does.
     ///         </item>
     ///         <item>
     ///         FIXED (strings phase 2, P2.2): <b><c>np.sort</c> ignored <c>kind</c>.</b> NumPy's <c>kind='stable'</c> and
@@ -63,16 +63,41 @@ namespace NumSharp.Tests
         private const uint NegNaN32 = 0xffc00000, One32 = 0x3f800000, Two32 = 0x40000000;
 
         /// <summary>
-        ///     <c>np.unique</c> and <c>np.unique_values</c> must return NumPy's canonical positive quiet NaN
-        ///     (<c>0x7ff8000000000000</c> / <c>0x7fc00000</c>) for a surviving float NaN, whatever the input NaN's sign
-        ///     or payload, because NumPy's unique sorts first. NumSharp keeps the input bits, so each case below fails.
+        ///     FIXED (np-layer dtype plan P2, the np.unique family): <c>np.unique</c>'s values-only and counts-only routes,
+        ///     <c>np.unique_values</c> and <c>np.unique_counts</c> return NumPy's canonical positive quiet NaN
+        ///     (<c>0x7ff8000000000000</c> / <c>0x7fc00000</c>) for a surviving float NaN, whatever the input NaN's sign or
+        ///     payload: NumPy's <c>_unique1d</c> runs <c>ar.sort()</c> in place there, and its sort rewrites every NaN of a
+        ///     line longer than one element. A one-element array is not sorted (its NaN keeps its bits), and the index route
+        ///     argsorts and gathers (its NaN keeps its bits too). Each case is NumPy 2.4.2's output.
         /// </summary>
-        /// <exception cref="Exception">The assertion framework's failure exception, while NumSharp's unique preserves
-        /// the input NaN bits — the expected state until its unique path canonicalizes float NaN like NumPy's.</exception>
-        [TestMethod, OpenBugs]
-        public void Unique_KeepsInputNaNBits_InsteadOfCanonicalQuietNaN()
+        /// <exception cref="Exception">The assertion framework's failure exception, when a route keeps an input NaN NumPy
+        ///     rewrites, or rewrites one NumPy keeps (a regression).</exception>
+        [TestMethod]
+        public void Unique_ValueRoutes_WriteNumPysSortNaN()
         {
             var fails = new List<string>();
+
+            // The counts-only route and np.unique_counts sort in place too (neither an index nor an inverse is asked).
+            Check(fails, "unique return_counts f64 negative NaN",
+                () => np.unique(F64(NegNaN64, One64, Two64), return_counts: true).values,
+                "float64 (3,) 3ff0000000000000 4000000000000000 7ff8000000000000");
+            Check(fails, "unique_counts f64 payload NaN",
+                () => np.unique_counts(F64(PayloadNaN64, One64, Two64)).values,
+                "float64 (3,) 3ff0000000000000 4000000000000000 7ff8000000000000");
+            Check(fails, "unique equal_nan=False f64 two NaNs",
+                () => (NDArray)np.unique(F64(PayloadNaN64, NegNaN64, One64), equal_nan: false),
+                "float64 (3,) 3ff0000000000000 7ff8000000000000*2");
+            // One element: NumPy does not sort a line of one element, so the NaN keeps its bits.
+            Check(fails, "unique f64 one negative NaN",
+                () => (NDArray)np.unique(F64(NegNaN64)),
+                "float64 (1,) fff8000000000000");
+            Check(fails, "unique f32 one negative NaN",
+                () => (NDArray)np.unique(F32(NegNaN32)),
+                "float32 (1,) ffc00000");
+            // The index route argsorts and gathers: the NaN keeps its bits.
+            Check(fails, "unique return_index f64 negative NaN",
+                () => np.unique(F64(NegNaN64, One64, Two64), return_index: true).values,
+                "float64 (3,) 3ff0000000000000 4000000000000000 fff8000000000000");
 
             // A NEGATIVE float64 NaN: NumPy's sorted unique returns +0x7ff8…; NumSharp keeps 0xfff8….
             Check(fails, "unique f64 negative NaN",
@@ -99,9 +124,9 @@ namespace NumSharp.Tests
                 "float32 (3,) 3f800000 40000000 7fc00000");
 
             AssertNoMismatch(fails,
-                "np.unique / np.unique_values must canonicalize a surviving float NaN to NumPy's positive quiet NaN " +
-                "(NumPy's unique sorts first); NumSharp keeps the input NaN bits — see Manipulation/np.setops.cs " +
-                "CanonicalizeSetOpNaN and plan docs/plans/numpy-polynomial.md section 12");
+                "np.unique's values-only and counts-only routes, np.unique_values and np.unique_counts write NumPy's sort NaN " +
+                "for a surviving float NaN of an array of two or more elements (NumPy's ar.sort() rewrites it); a one-element " +
+                "array and the index route keep the input bits — see Manipulation/UniqueEngine.Kwargs.cs WriteSortNaNs");
         }
 
         /// <summary>
