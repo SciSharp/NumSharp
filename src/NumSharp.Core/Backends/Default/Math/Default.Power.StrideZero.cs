@@ -223,8 +223,9 @@ namespace NumSharp.Backends
                 return result;
             }
 
-            // where= without out: NumPy leaves the masked-off positions uninitialized (fillZeros: false).
-            NDArray target = @out ?? new NDArray(loop, iterShape, false);
+            // where= without out: NumPy leaves the masked-off positions uninitialized (fillZeros: false), and lays the
+            // result out by the operands' and the mask's axis order (WhereResultShape: an F base under an F mask is F).
+            NDArray target = @out ?? new NDArray(loop, WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where), false);
 
             if (where is null)
             {
@@ -281,8 +282,10 @@ namespace NumSharp.Backends
         private unsafe NDArray PowerStrideZeroElementwise(NDArray lhs, NDArray rhs, NPTypeCode loop, Shape iterShape,
                                                           NDArray @out, NDArray where)
         {
+            // A fresh result: the plain call's layout without a mask, NumPy's where= layout with one (WhereResultShape).
             NDArray target = @out ?? new NDArray(loop,
-                where is null ? PowerPlainResultShape(lhs, rhs, iterShape) : iterShape, false);
+                where is null ? PowerPlainResultShape(lhs, rhs, iterShape) : WhereResultShape(iterShape, lhs.Shape, rhs.Shape, where),
+                false);
 
             NPTypeCode lhsType = lhs.GetTypeCode, rhsType = rhs.GetTypeCode;
             Action<ILGenerator> scalarBody = il => DirectILKernelGenerator.EmitPowerStrideZeroBody(il, lhsType, rhsType, loop);

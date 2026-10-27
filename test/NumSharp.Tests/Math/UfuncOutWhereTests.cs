@@ -21,6 +21,8 @@ namespace NumSharp.Tests.Math
     ///    mask-false slots keep prior out contents.
     ///  • out and where are parsed before any loop is resolved: a read-only
     ///    out, then a non-bool mask, then the loop's own refusals.
+    ///  • a fresh result under where takes NumPy's iterator layout, the mask
+    ///    voting with the inputs (F operands under an F mask give an F result).
     ///  • out aliasing an input is well-defined (COPY_IF_OVERLAP).
     /// </summary>
     [TestClass]
@@ -329,6 +331,50 @@ namespace NumSharp.Tests.Math
             Assert.AreEqual(4.5, r.GetDouble(2));
             Assert.AreEqual(4, (int)r.size);
             Assert.AreEqual(NPTypeCode.Double, r.typecode);
+        }
+
+        [TestMethod]
+        public void Where_WithoutOut_ResultTakesNumPysLayout()
+        {
+            // A fresh result under where= is allocated by NumPy's iterator, whose axis order the inputs and the mask vote
+            // on (npyiter_find_best_axis_ordering): F operands under an F mask, a row or a column give an F result, one C
+            // operand makes it C, a permuted operand's order is kept. Layouts probed against NumPy 2.4.2; every mask is
+            // all True, so the values must be the unmasked computation's everywhere.
+            static void Layout(NDArray r, NDArray expected, params long[] strides)
+            {
+                CollectionAssert.AreEqual(strides, r.Shape.Strides, "strides (elements)");
+                Assert.IsTrue(np.array_equal(r, expected), "values");
+            }
+
+            var a = np.asfortranarray(np.arange(12.0).reshape(3, 4));
+            var c = np.ascontiguousarray(a);
+            var mF = np.asfortranarray(np.ones(new Shape(3, 4), np.@bool));
+            var mC = np.ones(new Shape(3, 4), np.@bool);
+            var row = np.ones(new Shape(4), np.@bool);
+            var col = np.ones(new Shape(3, 1), np.@bool);
+            Layout(np.add(a, a, where: mF), np.add(a, a), 1, 3);
+            Layout(np.add(a, a, where: row), np.add(a, a), 1, 3);
+            Layout(np.add(a, a, where: col), np.add(a, a), 1, 3);
+            Layout(np.add(a, a, where: mC), np.add(a, a), 4, 1);
+            Layout(np.add(a, c, where: mF), np.add(a, c), 4, 1);
+            Layout(np.add(a, np.array(2.0), where: mF), np.add(a, np.array(2.0)), 1, 3);
+            Layout(np.sqrt(a, where: row), np.sqrt(a), 1, 3);
+            Layout(np.sqrt(c, where: mF), np.sqrt(c), 4, 1);
+            Layout(np.less(a, a, where: row), np.less(a, a), 1, 3);
+            Layout(np.logical_and(a, a, where: mF), np.logical_and(a, a), 1, 3);
+            Layout(np.logical_not(a, where: mF), np.logical_not(a), 1, 3);
+            // np.power's float loops allocate on their own routes: a 0-d exponent's fast path, an array exponent, a
+            // column exponent.
+            Layout(np.power(a, np.array(2.0), where: mF), np.power(a, np.array(2.0)), 1, 3);
+            Layout(np.power(a, a, where: mF), np.power(a, a), 1, 3);
+            var colExp = np.array(new double[,] { { 2.0 }, { 0.5 }, { 1.0 } });
+            Layout(np.power(a, colExp, where: mF), np.power(a, colExp), 1, 3);
+            var a3 = np.asfortranarray(np.arange(24.0).reshape(2, 3, 4));
+            Layout(np.add(a3, a3, where: np.asfortranarray(np.ones(new Shape(2, 3, 4), np.@bool))), np.add(a3, a3), 1, 2, 6);
+            var t = np.arange(24.0).reshape(2, 3, 4).transpose(new[] { 2, 0, 1 });
+            var mt = np.ones(new Shape(2, 3, 4), np.@bool).transpose(new[] { 2, 0, 1 });
+            Layout(np.add(t, t, where: mt), np.add(t, t), 1, 12, 4);
+            Layout(np.sqrt(t, where: mt), np.sqrt(t), 1, 12, 4);
         }
 
         [TestMethod]

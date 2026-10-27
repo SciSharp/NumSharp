@@ -325,6 +325,36 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     The layout of a ufunc's fresh result in a call with <c>where=</c> and no <c>out=</c>: NumPy's iterator allocates
+        ///     the output by the operands' axis order, the mask voting with the inputs (<see cref="Shape.NpyIterOutputShape"/>;
+        ///     probed 2.4.2: <c>np.add(F, F, where=F_mask)</c> and <c>np.sqrt(F, where=row)</c> are F-contiguous,
+        ///     <c>np.add(F, F, where=C_mask)</c> and <c>np.add(F, C, where=F_mask)</c> are C, a permuted operand's order is
+        ///     kept). Without a mask the routes that call this are only reached with an out=, so the shape is the
+        ///     iteration's own C layout.
+        /// </summary>
+        /// <param name="iterShape">The iteration shape (the inputs, out= and where= joined), in C order.</param>
+        /// <param name="first">The first input's shape.</param>
+        /// <param name="second">The second input's shape, or null for a unary ufunc.</param>
+        /// <param name="where">The mask, or null.</param>
+        /// <returns>The fresh result's shape: NumPy's layout under a mask, else <paramref name="iterShape"/>.</returns>
+        /// <remarks>
+        ///     Only the layout changes, never a value: the kernels walk the result through its strides like any operand.
+        ///     A result of fewer than two axes has one layout, so it skips the vote (and its allocation of a strides
+        ///     array).
+        /// </remarks>
+        private static Shape WhereResultShape(Shape iterShape, Shape first, Shape? second, NDArray? where)
+        {
+            if (where is null || iterShape.NDim < 2)
+                return iterShape;
+            // The vote adopts the dims array it is given; a clone keeps it apart from the iteration shape's, which may
+            // be an operand's own.
+            var dims = (long[])iterShape.dimensions.Clone();
+            return second is { } s
+                ? Shape.NpyIterOutputShape(dims, new[] { first, s, where.Shape })
+                : Shape.NpyIterOutputShape(dims, new[] { first, where.Shape });
+        }
+
+        /// <summary>
         ///     The broadcast of a binary ufunc's two inputs in a call with <c>out=</c> or <c>where=</c>. NumPy broadcasts every
         ///     iterator operand at once, so its error lists all of them: the inputs, then <paramref name="out"/> and
         ///     <paramref name="where"/> when given (probed 2.4.2: <c>np.power(ones(3), ones(4), out=empty(3))</c> is
@@ -590,7 +620,10 @@ namespace NumSharp.Backends
 
                 // NumPy: 'where' without 'out' leaves unmasked slots uninitialized
                 // (it warns; values are unobservable). fillZeros:false matches.
-                target = @out ?? new NDArray(resultType, iterShape.Clean(), false);
+                // The fresh result takes NumPy's ufunc output layout: the inputs and the mask vote
+                // (NpyIter's allocation; two F inputs under an F mask stay F, one C operand makes it C).
+                target = @out ?? new NDArray(resultType,
+                    WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
             }
 
             if (target.size == 0)
@@ -761,8 +794,9 @@ namespace NumSharp.Backends
                     leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 
                 // 'where' without 'out': unmasked slots stay uninitialized
-                // (NumPy warns; values are unobservable garbage).
-                target = @out ?? new NDArray(NPTypeCode.Boolean, iterShape.Clean(), false);
+                // (NumPy warns; values are unobservable garbage). The layout is NumPy's (see the binary route).
+                target = @out ?? new NDArray(NPTypeCode.Boolean,
+                    WhereResultShape(iterShape.Clean(), lhs.Shape, rhs.Shape, where), false);
             }
 
             if (target.size == 0)
@@ -929,7 +963,8 @@ namespace NumSharp.Backends
                 var iterShape = ResolveUfuncIterationShape(
                     nd.Shape.Clean(), new[] { nd }, @out, where);
 
-                target = @out ?? new NDArray(outputType, iterShape.Clean(), false);
+                // A fresh result under where= takes NumPy's layout (see the binary route).
+                target = @out ?? new NDArray(outputType, WhereResultShape(iterShape.Clean(), nd.Shape, null, where), false);
             }
 
             if (target.size == 0)
