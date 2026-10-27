@@ -118,9 +118,9 @@ namespace NumSharp
                 ((dnd == 1 && dst.Shape.strides[0] * src.Shape.strides[src.ndim - 1] < 0) || dnd > 1)
                 && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
 
-            long[] srcStrides = CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides,
+            long[] srcStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides,
                 "input array", stripLeadingUnitAxes: true);
-            UnmanagedStorage source = src.ndim > dnd ? StrippedSourceView(src, dnd) : src.Storage;
+            UnmanagedStorage source = src.ndim > dnd ? src.Storage.AliasWithoutLeadingAxes(dnd) : src.Storage;
             bool crossClass = from.Meta != to.Meta;
 
             // NumPy's temporary copy of an overlapping source is an UNMASKED cast of every element, made before the mask is
@@ -142,7 +142,7 @@ namespace NumSharp
                 return;
             }
 
-            long[] maskStrides = CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+            long[] maskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                 "where mask", stripLeadingUnitAxes: false);
             if (dst.size == 0)
                 return;
@@ -212,7 +212,7 @@ namespace NumSharp
                     return;
                 }
                 if (@where is not null)
-                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                    Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
                 // Nothing written (or, for one element, nothing converted inside the masked loop) when nothing is selected.
                 if (dst.size == 0 || (@where is not null && !np.any(@where)))
@@ -228,9 +228,9 @@ namespace NumSharp
             bool overlapNeedsCopy =
                 ((dnd == 1 && dst.Shape.strides[0] * src.Shape.strides[src.ndim - 1] < 0) || dnd > 1)
                 && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
-            CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
+            Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
                 stripLeadingUnitAxes: true);
-            UnmanagedStorage source = src.ndim > dnd ? StrippedSourceView(src, dnd) : src.Storage;
+            UnmanagedStorage source = src.ndim > dnd ? src.Storage.AliasWithoutLeadingAxes(dnd) : src.Storage;
             if (overlapNeedsCopy && dst.size > 0)
             {
                 using var temp = CopytoConvertWhole(new NDArray(source), to, dst.Shape.KeepOrder());
@@ -246,7 +246,7 @@ namespace NumSharp
                 @where = null;
             }
             if (@where is not null)
-                CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
+                Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
                     stripLeadingUnitAxes: false);
             if (dst.size == 0 || (@where is not null && !np.any(@where)))
                 return;
@@ -305,7 +305,7 @@ namespace NumSharp
                     if (dst.size > 1)
                         truth = NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast);
                     if (@where is not null)
-                        CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                        Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                             "where mask", stripLeadingUnitAxes: false);
                     if (dst.size == 0 || (@where is not null && !np.any(@where)))
                         return;
@@ -321,7 +321,7 @@ namespace NumSharp
                 bool overlapNeedsCopy =
                     ((dnd == 1 && dst.Shape.strides[0] * src.Shape.strides[src.ndim - 1] < 0) || dnd > 1)
                     && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
-                CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
+                Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array",
                     stripLeadingUnitAxes: true);
                 if (overlapNeedsCopy && dst.size > 0)
                     truth = NDStringTruth.Truth(src, NDStringTruth.Flavor.Cast);
@@ -333,7 +333,7 @@ namespace NumSharp
                     @where = null;
                 }
                 if (@where is not null)
-                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
+                    Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask",
                         stripLeadingUnitAxes: false);
                 if (dst.size == 0 || (@where is not null && !np.any(@where)))
                     return;
@@ -418,7 +418,7 @@ namespace NumSharp
 
                 long[] maskStrides = null;
                 if (@where is not null)
-                    maskStrides = CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                    maskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
 
                 if (size == 0)

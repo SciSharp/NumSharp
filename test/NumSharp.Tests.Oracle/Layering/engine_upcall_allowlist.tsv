@@ -89,5 +89,5 @@ Backends/Strings/NDVStringReduction.cs	0	12
 Backends/Strings/NDVStringStatistics.Quantile.cs	22	12
 Backends/Strings/NDVStringStatistics.cs	4	2
 Backends/TensorEngine.LinearAlgebra.cs	1	5
-Backends/Unmanaged/UnmanagedStorage.Setters.cs	0	3
+Backends/Unmanaged/UnmanagedStorage.Setters.cs	0	1
 Backends/Unmanaged/VStringArraySlice.cs	0	1

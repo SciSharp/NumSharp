@@ -64,7 +64,7 @@ namespace NumSharp
             // NumPy's broadcast check of the source (leading extent-1 axes beyond dst's rank dropped first), then the 0-d
             // mask shortcut and the mask's broadcast check — all before anything is converted or written.
             if (!scalar)
-                CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array", stripLeadingUnitAxes: true);
+                Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array", stripLeadingUnitAxes: true);
             if (@where is not null && @where.ndim == 0)
             {
                 if (!(bool)@where.GetAtIndex(0))
@@ -72,7 +72,7 @@ namespace NumSharp
                 @where = null;
             }
             if (@where is not null)
-                CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask", stripLeadingUnitAxes: false);
+                Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask", stripLeadingUnitAxes: false);
             if (dst.size == 0)
                 return;
 
@@ -83,7 +83,7 @@ namespace NumSharp
             {
                 if (@where is null)
                 {
-                    UnmanagedStorage source = value.ndim > dst.ndim ? StrippedSourceView(value, dst.ndim) : value.Storage;
+                    UnmanagedStorage source = value.ndim > dst.ndim ? value.Storage.AliasWithoutLeadingAxes(dst.ndim) : value.Storage;
                     NDIter.Copy(dst.Storage, source);
                     return;
                 }
@@ -140,7 +140,7 @@ namespace NumSharp
                     return;
                 }
                 if (@where is not null)
-                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask", stripLeadingUnitAxes: false);
+                    Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask", stripLeadingUnitAxes: false);
                 // One element or none: the masked loop converts the value only for a selected element (a mask that
                 // broadcasts into one element has one element).
                 if (dst.size == 0 || (@where is not null && !(bool)@where.GetAtIndex(0)))
@@ -150,7 +150,7 @@ namespace NumSharp
                 return;
             }
 
-            CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array", stripLeadingUnitAxes: true);
+            Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides, "input array", stripLeadingUnitAxes: true);
             // "optimization: scalar boolean mask"
             if (@where is not null && @where.ndim == 0)
             {
@@ -159,7 +159,7 @@ namespace NumSharp
                 @where = null;
             }
             if (@where is not null)
-                CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask", stripLeadingUnitAxes: false);
+                Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides, "where mask", stripLeadingUnitAxes: false);
             if (dst.size == 0)
                 return;
 

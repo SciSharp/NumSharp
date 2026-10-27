@@ -454,26 +454,27 @@ namespace NumSharp.Backends
             if (_shape.IsBroadcasted || _shape.IsSliced || valueshape.IsBroadcasted || valueshape.IsSliced)
             {
                 var targetView = GetData(indices);
+                // NumPy's view assignment is PyArray_AssignArray: the value's leading extent-1 axes beyond the region's
+                // rank are stripped, then the value must broadcast to the region, or NumPy's broadcast_strides text is
+                // raised with the STRIPPED shape ("could not broadcast input array from shape (3,) into shape (3,2)" for
+                // a[:, 1:3] = [7, 8, 9]). It is checked before anything is written. The copy iterator's own broadcast
+                // raised np.broadcast_to's IncorrectShapeException text here, and refused a value with leading extent-1
+                // axes beyond the region's rank, which NumPy assigns (a[:, ::2] = ones((1, 1, 3))).
+                Shape.AssignmentBroadcastStrides(targetView.Shape.dimensions, valueshape.dimensions, valueshape.strides,
+                    "input array", stripLeadingUnitAxes: true);
                 // An EMPTY target region (a basic slice/newaxis/ellipsis that selects 0 elements,
-                // e.g. a[:, 1:1] = v or a[None, :0:3, 2] = v) assigns nothing — but NumPy still
-                // requires the value to broadcast to the target shape (a scalar/size-1 always does;
-                // an incompatible value raises ValueError), then it is a no-op. The copy iterator
+                // e.g. a[:, 1:1] = v or a[None, :0:3, 2] = v) assigns nothing once the value broadcasts to it (a
+                // scalar/size-1 value always does; (2,) into (3,0) raised above), so it is a no-op. The copy iterator
                 // indexes the first element of each operand and faults on a 0-size view
                 // (CreateCopyState), so handle the empty target here instead.
                 if (targetView.Shape.size == 0)
-                {
-                    if (value.size != 1)
-                    {
-                        string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                        try { np.broadcast_to(value, targetView.Shape).Dispose(); } // validate-only view — reclaim it
-                        catch (IncorrectShapeException ex)
-                        {
-                            throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(targetView.Shape.dimensions)}", ex);
-                        }
-                    }
                     return;
-                }
-                NDIter.Copy(targetView, value.Storage); //we use lhs stop because rhs is scalar which will fill all values of lhs
+                // The copy iterator broadcasts a source of at most the region's rank: a value validated with stripped
+                // axes is copied through its view without them.
+                var source = valueshape.NDim > targetView.Shape.NDim
+                    ? value.Storage.AliasWithoutLeadingAxes(targetView.Shape.NDim)
+                    : value.Storage;
+                NDIter.Copy(targetView, source); //we use lhs stop because rhs is scalar which will fill all values of lhs
                 return;
             }
 
@@ -507,28 +508,18 @@ namespace NumSharp.Backends
             //regular case
             var (subShape, offset) = _shape.GetSubshape(indices);
 
-            // Empty source: assigning an empty array into a NON-empty region cannot broadcast ->
-            // NumPy ValueError. Both being empty is NOT automatically a no-op either — NumPy still
-            // requires the value to BROADCAST to the target region, so (0,), (0,0) and (2,0) into
-            // (0,3) all raise, while (0,3), (1,3), (3,), (0,1) and () are genuine no-ops (e.g. np.pad
-            // on an array with an empty axis does `padded[originalSlice] = array`, both size 0).
-            // Probed against NumPy 2.4.2.
-            if (valueshape.size == 0)
-            {
-                string TupE(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-                if (subShape.size == 0)
-                {
-                    try { np.broadcast_to(value, subShape).Dispose(); } // validate-only view — reclaim it
-                    catch (IncorrectShapeException ex)
-                    {
-                        throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}", ex);
-                    }
-
-                    return;
-                }
-
-                throw new ValueError($"could not broadcast input array from shape {TupE(valueshape.dimensions)} into shape {TupE(subShape.dimensions)}");
-            }
+            // PyArray_AssignArray's rule (see the strided branch above), checked before anything is written: the value's
+            // leading extent-1 axes beyond the region's rank are stripped, then it must broadcast to the region, and the
+            // error prints the STRIPPED shape (a[1:2] = [[7, 8]] on a 1-D array: "from shape (2,) into shape (1,)"; the
+            // value's own shape was printed). This also decides an EMPTY source or region: an empty array into a
+            // NON-empty region cannot broadcast, and both being empty is NOT automatically a no-op either — NumPy still
+            // requires the value to BROADCAST to the target region, so (0,), (0,0) and (2,0) into (0,3) all raise, while
+            // (0,3), (1,3), (3,), (0,1) and () are genuine no-ops (e.g. np.pad on an array with an empty axis does
+            // `padded[originalSlice] = array`, both size 0). Probed against NumPy 2.4.2.
+            Shape.AssignmentBroadcastStrides(subShape.dimensions, valueshape.dimensions, valueshape.strides,
+                "input array", stripLeadingUnitAxes: true);
+            if (subShape.size == 0)
+                return;
 
             //if (!value.Storage.Shape.IsScalar && np.squeeze(subShape) != np.squeeze(value.Storage.Shape))
             //    throw new IncorrectShapeException($"Can't SetData to a from a shape of {value.Shape} to target shape {subShape}, the shape the coordinates point to mismatch the size of rhs (value)");
@@ -550,7 +541,7 @@ namespace NumSharp.Backends
                         ndims[i] = valueshape.dimensions[drop + i];
                     vForBc = value.reshape(Shape.Adopt(ndims));
                 }
-                // else: a leading non-1 dim -> broadcast_to below raises -> ValueError.
+                // else: unreachable — a leading non-1 dim beyond the region's rank was refused by the rule above.
             }
 
             // Fast path: the (squeezed) value exactly fills the region in C-order.
@@ -593,17 +584,9 @@ namespace NumSharp.Backends
             // Otherwise the value must BROADCAST to the target region (NumPy). The old check
             // only tested divisibility (subShape.size % valueshape.size), which let an
             // incompatible smaller value through and then copied it PARTIALLY — e.g.
-            // a[0] = [1,2] into a (4,) row wrote [1,2,_,_]. NumPy raises a ValueError here.
-            string Tup(long[] s) => s.Length == 1 ? $"({s[0]},)" : "(" + string.Join(",", s) + ")";
-            NDArray broadcasted;
-            try
-            {
-                broadcasted = np.broadcast_to(vForBc, subShape);
-            }
-            catch (IncorrectShapeException ex)
-            {
-                throw new ValueError($"could not broadcast input array from shape {Tup(valueshape.dimensions)} into shape {Tup(subShape.dimensions)}", ex);
-            }
+            // a[0] = [1,2] into a (4,) row wrote [1,2,_,_]. NumPy raises a ValueError here, which the rule above raised
+            // with NumPy's text, so the (stripped) value is known to broadcast: broadcast_to only builds the stride-0 view.
+            NDArray broadcasted = np.broadcast_to(vForBc, subShape);
 
             // A valid broadcast that needs stretching (value smaller than the region, or a
             // different but compatible rank) -> copy through the iterator, which honours the

@@ -174,6 +174,30 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     This storage with its leading axes beyond <paramref name="ndim"/> dropped: a view (no copy) over the same
+        ///     elements, for an assignment whose source <see cref="Shape.AssignmentBroadcastStrides"/> validated with the
+        ///     leading extent-1 axes stripped (the dropped axes then have extent 1, so no element is lost).
+        /// </summary>
+        /// <param name="ndim">The destination's rank (at most this storage's rank).</param>
+        /// <returns>An alias of this storage's buffer over its trailing <paramref name="ndim"/> axes, with this storage's
+        ///     offset and buffer size. No counted reference is taken: the caller's array keeps the buffer alive for the
+        ///     copy that reads the alias.</returns>
+        /// <remarks>The copy iterator (<see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>) broadcasts a source of
+        ///     at most the destination's rank, so a view assignment and <c>np.copyto</c> hand it this alias where NumPy's
+        ///     <c>PyArray_AssignArray</c> skips the stripped axes.</remarks>
+        internal UnmanagedStorage AliasWithoutLeadingAxes(int ndim)
+        {
+            long[] dims = _shape.dimensions, strides = _shape.strides;
+            int skip = dims.Length - ndim;
+            var nd = new long[ndim];
+            var ns = new long[ndim];
+            Array.Copy(dims, skip, nd, 0, ndim);
+            Array.Copy(strides, skip, ns, 0, ndim);
+            var shape = new Shape(nd, ns, _shape.offset, _shape.bufferSize);
+            return Alias(ref shape);
+        }
+
+        /// <summary>
         /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes —
         /// the storage half of NumPy's <c>ndarray.view(dtype)</c>.
         /// </summary>

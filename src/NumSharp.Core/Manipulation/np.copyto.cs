@@ -138,7 +138,7 @@ namespace NumSharp
             {
                 // broadcast_strides(..., "where mask", ...) of the masked assignment.
                 if (@where is not null)
-                    CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                    Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
 
                 if (size == 0)
@@ -581,7 +581,7 @@ namespace NumSharp
                 && NDMemOverlap.SolveMayShareMemory(src, dst, 0) != MemOverlap.No;
 
             // Broadcast 'src' to 'dst' for raw iteration (leading unit axes stripped first).
-            long[] srcStrides = CopytoBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides,
+            long[] srcStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, src.Shape.dimensions, src.Shape.strides,
                 "input array", stripLeadingUnitAxes: true);
 
             // "optimization: scalar boolean mask"
@@ -596,12 +596,12 @@ namespace NumSharp
             {
                 // raw_array_assign_array: NDIter.Copy is the shared port (its overlap rule is NumPy's). It broadcasts
                 // the source itself, so only a source with more axes than dst needs its stripped view.
-                UnmanagedStorage source = src.ndim > dnd ? StrippedSourceView(src, dnd) : src.Storage;
+                UnmanagedStorage source = src.ndim > dnd ? src.Storage.AliasWithoutLeadingAxes(dnd) : src.Storage;
                 NDIter.Copy(dst.Storage, source);
                 return;
             }
 
-            long[] maskStrides = CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+            long[] maskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                 "where mask", stripLeadingUnitAxes: false);
 
             if (dst.size == 0)
@@ -697,7 +697,7 @@ namespace NumSharp
                     throw NDStringCasting.InvalidCast(from, dst.dtype, casting, scalar: true);
                 long[] textMaskStrides = null;
                 if (@where is not null)
-                    textMaskStrides = CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                    textMaskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                         "where mask", stripLeadingUnitAxes: false);
                 if (dst.size == 0 || (@where is not null && !np.any(@where)))
                     return;
@@ -724,7 +724,7 @@ namespace NumSharp
             int nd = dst.ndim;
             long[] maskStrides = null;
             if (@where is not null)
-                maskStrides = CopytoBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
+                maskStrides = Shape.AssignmentBroadcastStrides(dst.Shape.dimensions, @where.Shape.dimensions, @where.Shape.strides,
                     "where mask", stripLeadingUnitAxes: false);
 
             if (dst.size == 0)
@@ -876,104 +876,6 @@ namespace NumSharp
                + (maskStride != 1 && maskStride != 0 ? 1 : 0);
 
         /// <summary>
-        ///     NumPy's <c>broadcast_strides</c>: the strides an operand of <paramref name="dims"/> /
-        ///     <paramref name="strides"/> walks <paramref name="dstDims"/> with (0 on every axis it broadcasts along).
-        /// </summary>
-        /// <param name="dstDims">The destination's dimensions.</param>
-        /// <param name="dims">The operand's dimensions.</param>
-        /// <param name="strides">The operand's ELEMENT strides.</param>
-        /// <param name="name">NumPy's operand name in the error: <c>"input array"</c> or <c>"where mask"</c>.</param>
-        /// <param name="stripLeadingUnitAxes">Whether leading extent-1 axes beyond the destination's rank are dropped first
-        ///     (PyArray_AssignArray does it for the source, "as a special case for backwards compatibility"; never for the
-        ///     mask).</param>
-        /// <returns>A fresh array of <paramref name="dstDims"/>.Length element strides.</returns>
-        /// <exception cref="ValueError">"could not broadcast {name} from shape (…) into shape (…)" — the operand's shape
-        ///     after the stripping, as NumPy prints it.</exception>
-        private static long[] CopytoBroadcastStrides(long[] dstDims, long[] dims, long[] strides, string name, bool stripLeadingUnitAxes)
-        {
-            int ndim = dstDims.Length;
-            int skip = 0;
-            int sndim = dims.Length;
-            if (stripLeadingUnitAxes)
-            {
-                while (sndim - skip > ndim && dims[skip] == 1)
-                    skip++;
-            }
-
-            int ondim = sndim - skip;
-            int start = ndim - ondim;
-            var result = new long[ndim];
-            if (start < 0)
-                throw CopytoBroadcastError(name, dims, skip, dstDims);
-
-            // Process from the end to the start (NumPy's loop); a missing leading axis broadcasts with stride 0.
-            for (int d = ndim - 1; d >= start; d--)
-            {
-                long extent = dims[skip + d - start];
-                if (extent == 1)
-                    result[d] = 0;
-                else if (extent != dstDims[d])
-                    throw CopytoBroadcastError(name, dims, skip, dstDims);
-                else
-                    result[d] = strides[skip + d - start];
-            }
-
-            return result;
-        }
-
-        /// <summary>NumPy's broadcast error text (<c>convert_shape_to_string</c>: <c>(4,)</c>, <c>(2,3)</c>, <c>()</c>).</summary>
-        /// <param name="name">"input array" or "where mask".</param>
-        /// <param name="dims">The operand's dimensions.</param>
-        /// <param name="skip">How many leading axes were stripped (they are not printed).</param>
-        /// <param name="dstDims">The destination's dimensions.</param>
-        /// <returns>The ValueError to throw.</returns>
-        private static ValueError CopytoBroadcastError(string name, long[] dims, int skip, long[] dstDims)
-            => new ValueError($"could not broadcast {name} from shape {PyShape(dims, skip)} into shape {PyShape(dstDims, 0)}");
-
-        /// <summary>A Python shape tuple without spaces: <c>()</c>, <c>(4,)</c>, <c>(2,3)</c>.</summary>
-        /// <param name="dims">The dimensions.</param>
-        /// <param name="skip">Leading entries to leave out.</param>
-        /// <returns>The tuple text.</returns>
-        private static string PyShape(long[] dims, int skip)
-        {
-            int n = dims.Length - skip;
-            if (n == 0)
-                return "()";
-            var sb = new System.Text.StringBuilder("(");
-            for (int d = skip; d < dims.Length; d++)
-            {
-                if (d > skip)
-                    sb.Append(',');
-                sb.Append(dims[d]);
-            }
-            if (n == 1)
-                sb.Append(',');
-            return sb.Append(')').ToString();
-        }
-
-        /// <summary>
-        ///     The source with its leading extent-1 axes beyond <paramref name="ndim"/> dropped — a view (no copy) for
-        ///     <see cref="NDIter.Copy(UnmanagedStorage, UnmanagedStorage)"/>, which broadcasts sources of at most the
-        ///     destination's rank. The broadcast was already validated, so the stripped rank never exceeds
-        ///     <paramref name="ndim"/>.
-        /// </summary>
-        /// <param name="src">The source.</param>
-        /// <param name="ndim">The destination's rank.</param>
-        /// <returns>An alias of the source's storage (no counted reference: the caller's <paramref name="src"/> keeps the
-        ///     buffer alive for the copy).</returns>
-        private static UnmanagedStorage StrippedSourceView(NDArray src, int ndim)
-        {
-            long[] dims = src.Shape.dimensions, strides = src.Shape.strides;
-            int skip = dims.Length - ndim;
-            var nd = new long[ndim];
-            var ns = new long[ndim];
-            Array.Copy(dims, skip, nd, 0, ndim);
-            Array.Copy(strides, skip, ns, 0, ndim);
-            var shape = new Shape(nd, ns, src.Shape.offset, src.Shape.bufferSize);
-            return src.Storage.Alias(ref shape);
-        }
-
-        /// <summary>
         ///     The source copied (and cast) into a raw buffer of dst's dtype: one element per DISTINCT source element (an
         ///     axis along which the source does not move — it broadcasts there, or is itself a stride-0 view — keeps one
         ///     element), laid out densely in dst's memory order (NumPy's <c>PyArray_NewLikeArray(dst, NPY_KEEPORDER)</c>
@@ -1003,7 +905,7 @@ namespace NumSharp
 
             // The axes the source moves along, outermost first by dst's |stride| (an insertion sort that only moves past a
             // strictly smaller stride: C order breaks ties, as NPY_KEEPORDER does). A moving axis always has extent > 1:
-            // CopytoBroadcastStrides gives an extent-1 axis stride 0.
+            // Shape.AssignmentBroadcastStrides gives an extent-1 axis stride 0.
             int* axes = stackalloc int[slots];
             int k = 0;
             for (int d = 0; d < nd; d++)

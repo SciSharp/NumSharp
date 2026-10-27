@@ -1114,10 +1114,11 @@ def _gap_of(c):
     if op in ("harden_mask", "soften_mask") and p.get("facet") == "assign" and err:
         if err.startswith("Cannot cast"):
             return "MS31"
-        # NumSharp's setitem raises NumPy's soft-path text for a C operand ("could not broadcast input array from
-        # shape (2,) into shape (1,3)"); NumPy's hard path words it "operands could not be broadcast together ...", and
-        # a non-C operand gets NumSharp's IncorrectShapeException text.
-        if "broadcast" in err and (err.startswith("operands could not be broadcast together") or parts[1] != "c"):
+        # NumSharp's setitem raises NumPy's soft-path text ("could not broadcast input array from shape (2,) into shape
+        # (1,3)"); NumPy's hard path words it "operands could not be broadcast together ...". (A non-C operand got
+        # NumSharp's IncorrectShapeException text too until the view assignment ran PyArray_AssignArray's rule: those
+        # cases match NumPy since, and only the hard path's text is carved.)
+        if "broadcast" in err and err.startswith("operands could not be broadcast together"):
             return "MS32"
     if op == "corrcoef":
         if e.get("form") == "masked":
