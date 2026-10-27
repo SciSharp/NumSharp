@@ -1081,8 +1081,10 @@ namespace NumSharp
         ///     row's zeros follow input order) and NaN rows are equal for ordering but distinct for the mask.
         ///     </para>
         ///     <para>
-        ///     A numpy.matrix operand is computed as a plain array (the region below). The slab helpers read the moved
-        ///     copy from its base address: an operand that is already C-contiguous is read in place.
+        ///     A numpy.matrix operand is computed as a plain array (the region below). An operand already C-contiguous
+        ///     after the move (a view at an offset included: an np.split child) is read in place, NumPy's
+        ///     <c>np.ascontiguousarray</c>; the slab helpers read it from its first element, its base address plus its
+        ///     offset.
         ///     </para>
         /// </remarks>
         private static NDArray[] uniqueAxisKwargs(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
@@ -1203,7 +1205,8 @@ namespace NumSharp
         ///     The lexicographic order of two slabs (rows) of a C-contiguous array, dispatched on its dtype: the integer
         ///     family and decimal by <c>CompareTo</c>, the float and complex dtypes by IEEE compares with NaN last.
         /// </summary>
-        /// <param name="src">The C-contiguous array whose rows are compared, read from its base address.</param>
+        /// <param name="src">The C-contiguous array whose rows are compared, read from its first element (base address plus
+        ///     offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1237,7 +1240,7 @@ namespace NumSharp
         ///     The lexicographic order of two rows of a dtype without NaN, element by element with <c>CompareTo</c>.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
-        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="src">The C-contiguous array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1245,7 +1248,7 @@ namespace NumSharp
         private static unsafe int CompareSlabsT<T>(NDArray src, int a, int b, long slabSize)
             where T : unmanaged, IComparable<T>
         {
-            T* ptr = (T*)src.Address;
+            T* ptr = (T*)src.Address + src.Shape.offset;
             long aBase = a * slabSize;
             long bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
@@ -1265,7 +1268,7 @@ namespace NumSharp
         ///     The lexicographic order of two float64 rows: IEEE compares (<c>-0.0</c> equals <c>+0.0</c>), a NaN after
         ///     every number, two NaNs equal.
         /// </summary>
-        /// <param name="src">The C-contiguous float64 array, read from its base address.</param>
+        /// <param name="src">The C-contiguous float64 array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1273,7 +1276,7 @@ namespace NumSharp
         ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsDouble(NDArray src, int a, int b, long slabSize)
         {
-            double* ptr = (double*)src.Address;
+            double* ptr = (double*)src.Address + src.Shape.offset;
             long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
@@ -1289,7 +1292,7 @@ namespace NumSharp
         /// <summary>
         ///     <see cref="CompareSlabsDouble"/> for float32 rows.
         /// </summary>
-        /// <param name="src">The C-contiguous float32 array, read from its base address.</param>
+        /// <param name="src">The C-contiguous float32 array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1297,7 +1300,7 @@ namespace NumSharp
         ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsFloat(NDArray src, int a, int b, long slabSize)
         {
-            float* ptr = (float*)src.Address;
+            float* ptr = (float*)src.Address + src.Shape.offset;
             long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
@@ -1313,7 +1316,7 @@ namespace NumSharp
         /// <summary>
         ///     <see cref="CompareSlabsDouble"/> for float16 rows.
         /// </summary>
-        /// <param name="src">The C-contiguous float16 array, read from its base address.</param>
+        /// <param name="src">The C-contiguous float16 array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1321,7 +1324,7 @@ namespace NumSharp
         ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsHalf(NDArray src, int a, int b, long slabSize)
         {
-            Half* ptr = (Half*)src.Address;
+            Half* ptr = (Half*)src.Address + src.Shape.offset;
             long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
@@ -1338,7 +1341,7 @@ namespace NumSharp
         ///     The lexicographic order of two complex128 rows: each element by real part, then imaginary part, with IEEE
         ///     compares; an element with a NaN part after every other, two such elements equal.
         /// </summary>
-        /// <param name="src">The C-contiguous complex128 array, read from its base address.</param>
+        /// <param name="src">The C-contiguous complex128 array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1346,7 +1349,7 @@ namespace NumSharp
         ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsComplex(NDArray src, int a, int b, long slabSize)
         {
-            Complex* ptr = (Complex*)src.Address;
+            Complex* ptr = (Complex*)src.Address + src.Shape.offset;
             long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
@@ -1371,7 +1374,7 @@ namespace NumSharp
         ///     Whether two rows are equal by NumPy's structured <c>!=</c>: element-wise IEEE equality, so a row with a NaN
         ///     never equals any row (itself included) and <c>-0.0</c> equals <c>+0.0</c>.
         /// </summary>
-        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="src">The C-contiguous array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1394,7 +1397,7 @@ namespace NumSharp
                 case NPTypeCode.Decimal: return SlabsEqualT<decimal>(src, a, b, slabSize);
                 case NPTypeCode.Half:
                 {
-                    Half* ptr = (Half*)src.Address;
+                    Half* ptr = (Half*)src.Address + src.Shape.offset;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
                         if (ptr[aBase + k] != ptr[bBase + k]) return false;
@@ -1402,7 +1405,7 @@ namespace NumSharp
                 }
                 case NPTypeCode.Single:
                 {
-                    float* ptr = (float*)src.Address;
+                    float* ptr = (float*)src.Address + src.Shape.offset;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
                         if (ptr[aBase + k] != ptr[bBase + k]) return false;
@@ -1410,7 +1413,7 @@ namespace NumSharp
                 }
                 case NPTypeCode.Double:
                 {
-                    double* ptr = (double*)src.Address;
+                    double* ptr = (double*)src.Address + src.Shape.offset;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
                         if (ptr[aBase + k] != ptr[bBase + k]) return false;
@@ -1418,7 +1421,7 @@ namespace NumSharp
                 }
                 case NPTypeCode.Complex:
                 {
-                    Complex* ptr = (Complex*)src.Address;
+                    Complex* ptr = (Complex*)src.Address + src.Shape.offset;
                     long aBase = a * slabSize, bBase = b * slabSize;
                     for (long k = 0; k < slabSize; k++)
                     {
@@ -1436,7 +1439,7 @@ namespace NumSharp
         ///     <c>Equals</c>, which for decimal is value equality (<c>1.0m</c> equals <c>1.00m</c>).
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
-        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="src">The C-contiguous array, read from its first element (base address plus offset).</param>
         /// <param name="a">The first row's index.</param>
         /// <param name="b">The second row's index.</param>
         /// <param name="slabSize">The elements per row.</param>
@@ -1444,7 +1447,7 @@ namespace NumSharp
         private static unsafe bool SlabsEqualT<T>(NDArray src, int a, int b, long slabSize)
             where T : unmanaged, IEquatable<T>
         {
-            T* ptr = (T*)src.Address;
+            T* ptr = (T*)src.Address + src.Shape.offset;
             long aBase = a * slabSize, bBase = b * slabSize;
             for (long k = 0; k < slabSize; k++)
             {
@@ -1456,7 +1459,7 @@ namespace NumSharp
         /// <summary>
         ///     Gathers the chosen rows of a C-contiguous array into a fresh array, dispatched on its dtype.
         /// </summary>
-        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="src">The C-contiguous array, read from its first element (base address plus offset).</param>
         /// <param name="indices">The rows to copy, in output order.</param>
         /// <param name="slabSize">The elements per row.</param>
         /// <param name="outShape">The result's shape (<c>indices.Length</c> rows of the source's other dimensions).</param>
@@ -1489,7 +1492,7 @@ namespace NumSharp
         ///     Copies the rows <paramref name="indices"/> of a C-contiguous array, element by element, into a fresh buffer.
         /// </summary>
         /// <typeparam name="T">The element type.</typeparam>
-        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="src">The C-contiguous array, read from its first element (base address plus offset).</param>
         /// <param name="indices">The rows to copy, in output order.</param>
         /// <param name="slabSize">The elements per row.</param>
         /// <param name="outShape">The result's shape.</param>
@@ -1501,7 +1504,7 @@ namespace NumSharp
             var block = new UnmanagedMemoryBlock<T>(outN * slabSize);
             var slice = new ArraySlice<T>(block);
             T* dst = block.Address;
-            T* srcPtr = (T*)src.Address;
+            T* srcPtr = (T*)src.Address + src.Shape.offset;
             for (long i = 0; i < outN; i++)
             {
                 long srcBase = (long)indices[i] * slabSize;
@@ -1630,8 +1633,9 @@ namespace NumSharp
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
         /// <remarks>
-        ///     Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). Unlike
-        ///     <see cref="PopulateKeyPerm{T}"/>, a C-contiguous operand is read from its base address without its offset.
+        ///     Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). A C-contiguous
+        ///     operand is read from its first element, its base address plus its offset (as <see cref="PopulateKeyPerm{T}"/>
+        ///     reads it).
         /// </remarks>
         private static unsafe NDArray[] uniqueFlatSortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
@@ -1641,7 +1645,8 @@ namespace NumSharp
 
             if (a.Shape.IsContiguous)
             {
-                Complex* src = (Complex*)a.Address;
+                // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                Complex* src = (Complex*)a.Address + a.Shape.offset;
                 for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
             }
             else
