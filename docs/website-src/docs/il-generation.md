@@ -120,7 +120,9 @@ kernel:
 
 - **`DirectILKernelGenerator.InnerLoop.cs`** - the reusable inner-loop factory
   behind `np.evaluate` (the `NDExpr` DSL) and custom NDIter operations.
-- **`DirectILKernelGenerator.WeightedSum.cs`** - the kernel behind `np.average`.
+- **`DirectILKernelGenerator.WeightedSum.cs`** - a fused weighted-sum kernel
+  (`sum(a * w)` and `sum(w)` in one pass). `np.average` ran it until 2026-10-27;
+  it now runs NumPy's composition, whose sums keep `np.sum`'s pairwise order.
 
 So the class a kernel lives in tells you its *file neighborhood*, but the
 delegate signature tells you its *driving contract*. When in doubt, look at the

@@ -24,7 +24,6 @@ pinned. The last section lists levers that were MEASURED AND REJECTED — do not
 | concatenate | `Creation/np.concatenate.cs` `TryDirectMemcpyConcat` (same dtype, !broadcast, all C-contig with C dst or all F with F dst), `TryUniformTinySlabInterleave` (every per-outer slab the same 1/2/4/8/16 bytes), `TryDirectCastConcat` | tiny-slab interleave ~10–20× over per-slab memcpy | — |
 | tril / triu | `Indexing/np.tril.cs` `TryTriangleBlit`: ndim ≥ 2, unit-stride last axis (1-D → the `where(tri)` composition) | — | — |
 | fill | `Manipulation/NDArray.fill.cs` `TryFillInnerContiguousRuns`: !broadcast, unit-stride inner axis of length > 1 | — | — |
-| average(weights) | `Statistics/AverageEngine.cs` `TryFusedWeightedSum`: a weighted-sum iter kernel exists for the result dtype | — | — |
 | power(scalar exp) | `Backends/Default/Math/Default.Power.cs` `TryScalarExponentFastPath`: exp ∈ {0, 1, 2, 0.5, −1} AND the substitution's dtype equals the general path's | — | — |
 | managed LU (blocked) | `Backends/Default/LinearAlgebra/ManagedLu.cs`: `BlockedThreshold = 256` → panel getf2 + TRSM + Schur GEMM via `SimdMatMul`; double only | n ≤ 16: 2.2–4.7×; n ≥ 256: 0.4–0.6× (managed-GEMM ceiling) | 03884ee9 |
 | correlate / convolve | `Math/NDArray.SlidingDot.cs`: `SmallCorrelateMaxKernel = 11` (NumPy's `small_correlate` regime stays managed even with a backend), `InnerDotSimdMin = 32` (ramp dots go SIMD from length 32) | geomean ~4× | — |
@@ -124,6 +123,7 @@ never timed (`benchmark/O1_EXCLUSIONS.md` keeps them out of every geomean).
 |----|-------------|----------|--------|
 | np.select | `Indexing/np.select.cs` `TrySelectFused` → `Direct/…Select.cs`: kernel supports dtype, non-empty, every condition bool + C-contiguous + exact result shape, every choice result-dtype + C-contiguous + exact shape, default a scalar or a full same-dtype array; else NumPy's own reverse-`copyto(where=)` composition | 8-byte all-array cells 1.22–1.54→1.6–2.4×; 100K 8–18× | — |
 | np.evaluate | `Backends/Iterators/NDExpr*.cs`, `DefaultEngine.Evaluate.cs`: one NDIter pass per expression tree, root-only reductions | 3.2–6.1× NumPy on 4M chains | — |
+| np.average(weights) products' sum | `Statistics/AverageEngine.cs` `SumOfProducts`: operands of the same dimensions, both C- or both F-contiguous, a float32 / float64 / complex128 result, one axis or every axis → `np.evaluate(Sum(Cast(a) * Cast(w), axis))` streams the products into np.sum's pairwise schedule with no product buffer (checked byte-equal to the composition over 11,520 operand pairs + 700 with keepdims); else NumPy's `np.multiply(a, wgt, dtype=result_dtype).sum(axis)` | 1.3–3.3× the formed product at (100, 1000) / (1000, 1000); np.average 3.54× NumPy geomean, min 1.68× | 97a3cc51 |
 | fused bool shift body | `Default.Shift.cs` `ExecuteShiftViaNDIter` + `EmitMixedScalarBody`: the bool operand is never pre-astyped (was two passes over the 8× buffer) | — | 46dbb9c6 |
 | sliding-dot outer vectorization | `Math/NDArray.SlidingDot.cs`: the middle region is vectorized over OUTPUT positions with t-order preserved → byte-identical to the scalar sum | geomean ~4× | — |
 
@@ -157,6 +157,7 @@ operands it implements and can change WHICH implementation computes, never WHETH
 | `Sse.Prefetch0` / a deferred-NaN accumulator in the 10M argmax stream | 2× / 2.3× SLOWER (bandwidth contention / loop-carried dependency) | argmax |
 | 16 accumulators or prefetch in flat int min/max | no faster than 8 (per-core bound, ~36–48 GB/s) | reduction widening |
 | a `[::2]` shuffle-deinterleave isnan kernel | ties NumPy — must touch 2× the address span, memory-bound | predicates |
+| np.average's fused weighted-sum kernel (`Direct/…WeightedSum.cs`, both sums in one 4-operand pass) | faster (4.09× vs 3.54× NumPy geomean) but its several SIMD partial sums are not np.sum's pairwise order: a few ULP off NumPy in most float cases, so np.average runs NumPy's composition since 2026-10-27; a fused route must keep add.reduce's order (the np.evaluate stream above does) | 97a3cc51 |
 | NumPy's lean 4-op in-place `np.vander` | slower in NumSharp (38.9 vs 32.6 µs) — strided-view writes cost more than the contiguous 6-op composition | OpenBLAS bench fix |
 | "sort the whole tiny row once" in the quantile axis path | 2.4× regression — the `InsertionSort` call from a non-`AggressiveOptimization` entry did not inline | quantile |
 | a hardware SIMD gather for `take_along_axis` | ~1.16× before the bounds validation a raise-mode gather still needs | take_along_axis |

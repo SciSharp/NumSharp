@@ -845,7 +845,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     same-dtype copies of every element width (1 / 2 / 4 / 8 / 16 bytes; a bit copy needs no dtype), a broadcast-vector
     path for a stride-0 source, a 1-element source cast once to the destination dtype, and a branch-free scalar select
     for the strided rows.
-- [ ] **X12 `np.sum` / `np.mean` along an axis of a broadcast operand are not NumPy's order.** NumPy's reduction
+- [x] **X12 `np.sum` / `np.mean` along an axis of a broadcast operand are not NumPy's order.** NumPy's reduction
   iterator adds an operand with a stride-0 axis in its own call schedule: a `(k,1)` column broadcast to `(k,m)` and
   reduced over axis 0 is m sequential sums (the stride-0 axis is the inner loop), a float16 sum along the stride-0 axis
   rounds once per call (HALF's float32 accumulator), a cast loop casts in buffered fills. NumSharp's axis kernels add in
@@ -853,7 +853,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   per element; int32 `(1,9)→(4,9)` axis 1 in float32 `0xce2eb2a8` vs `0xce2eb2aa`. A probe over rows, columns, a middle
   stride-0 axis and a 0-d broadcast in every loop found 510 of 5,382 cases differing (the flat ones are finding 10).
   Pinned by `OpenBugsReductionTests.Sum_BroadcastOperand_Axis_IsNumPysOrder`; carved from `ma_meanvar.jsonl`
-  ("broadcast"). Found by A6. Belongs with B1.
+  ("broadcast"). Found by A6. Belongs with B1. Done 2026-10-27 (`da7adc53`, on `strings`, by the np-layer dtype plan's
+  np.average family), with findings 5 and 10 and X14: an inexact loop over an operand with a reversed or a broadcast
+  axis runs the port of NumPy's reduction iterator with NumPy's add loops (`ReduceAddThroughIterator`,
+  `NumPyAddLoops`); the pin moved to `Math/np.sum.ReversedBroadcast.Test.cs`, the `ma_meanvar` carve is gone. Proof
+  and perf: `docs/plans/np-layer-dtype-logic.md` section 9, 2026-10-27.
 - [x] **X13 `np.power(x, scalar, out=o)` misses NumPy's scalar-exponent fast paths.** NumPy's DOUBLE_power /
   FLOAT_power take `1/x`, 1, `sqrt(x)`, `x`, `x*x` for a stride-0 exponent of -1, 0, 0.5, 1, 2 on every route; NumSharp's
   plain call does too, its ufunc out= route calls the CRT `pow`: one ULP off on 116 of 200,000 float64 and 22 of
@@ -908,14 +912,16 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - Varying column exponents: (2, 5000) 1.67×, (16, 8192) 4.4×, (100, 10000) 3.5×. The old route called pow there:
       0.16–0.29×; the scalar body alone gave 0.85× at (2, 5000).
   - Left open, found here: X21, X22, X23.
-- [ ] **X14 The engine's flat mean of a broadcast float16 / complex128 operand ignores `dtype=`.**
+- [x] **X14 The engine's flat mean of a broadcast float16 / complex128 operand ignores `dtype=`.**
   `TensorEngine.Mean(b, null, float32)` of a broadcast float16 `(4,5)` is the float16 `0x3c33` where NumPy's
   `np.mean(b, dtype=np.float32)` is the float32 `0x3f866666`; a broadcast complex128 with `dtype=float64` stays complex
   (NumPy: the real parts' mean). `ReduceMean`'s flat route sends a broadcast float / complex operand, which
   `TryExactFlatMean` declines, to the elementwise fold, which keeps the input dtype. `np.mean` has no flat `dtype=`
   overload yet (B3), so callers meet it through the engine. Pinned by
   `OpenBugsReductionTests.Mean_BroadcastOperand_Flat_HonorsDtype`. Found by A6: the mean_loops tier carves every flat
-  broadcast float cell as finding 10, an order residual, which also hid this dtype bug (finding 18).
+  broadcast float cell as finding 10, an order residual, which also hid this dtype bug (finding 18). Done 2026-10-27
+  (`da7adc53`, with X12): np.mean's flat route sends a broadcast float / complex operand to `MeanLikeNumPy` with the
+  `dtype=` loop; the pin moved to `Math/np.sum.ReversedBroadcast.Test.cs`.
 - [x] **X15 A float16 binary ufunc with a column-broadcast operand is slow.** `np.subtract(float16 (250,400),
   float16 (250,1))` takes 1,141 µs (11 ns per element) where NumPy takes 377 µs and the same-shape float16 subtract takes
   72 µs. Speed only. numpy.ma's anom of float16 along axis 1 meets it (0.86× NumPy). Found by A6's benchmark.
@@ -1491,7 +1497,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     - np.average over a tuple axis reduces one axis at a time: a mean of means, and with weights a sum of sums, where
       NumPy runs ONE add.reduce over the axis set. Its last bits differ on order-sensitive data (pinned:
       `OpenBugsReductionTests.Average_TupleAxis_IsOneReductionOverTheAxisSet`); the fix is that same multi-axis
-      add.reduce;
+      add.reduce (done 2026-10-27, `a2e9fe85` / `97a3cc51`: `DefaultEngine.ReduceAddOverAxes` / `MeanOverAxes`; the
+      test moved to `Statistics/np.average.TupleAxes.Test.cs`);
     - NumPy's broadcast ValueError stays `IncorrectShapeException` (the house convention, kept by the strict tier);
     - `np.split(a, 0)` keeps NumSharp's ValueError where NumPy leaks a ZeroDivisionError;
     - squeeze / rollaxis / expand_dims return a fresh view where NumPy returns `self` (disposal safety);
@@ -1710,7 +1717,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    sum; the deviation sum runs over a fresh array). Belongs with B1. Pinned since X9 by
    `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` (`np.sum(b[::-1], axis=0)` of cancelling float32
    rows: NumPy `[0, 1, 8]`, NumSharp `[1, 0, 8]`); np.mean, held strict since X9, keeps a narrow registry branch for
-   this layout in the older tiers, and the mean_loops tier carves it.
+   this layout in the older tiers, and the mean_loops tier carves it. Fixed 2026-10-27 (`da7adc53`, with finding 10,
+   X12 and X14): the reduction iterator's port adds a reversed axis in its logical order; the pin, the registry branch
+   and the carve are gone.
 6. **`ddof` is an `int?` in NumSharp; NumPy accepts a float** (`np.var(x, ddof=1.5)` divides by `n - 1.5`). Belongs
    with B4 / B7 (`correction=` is NumPy's float alias of `ddof`).
 7. **Removing an excuse is not enough; every branch that can catch the op must be checked** (A2). With V1 gone,
@@ -1737,7 +1746,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    float32 / float16 loop reaches it too, through np.sum's cast copy (one pairwise call over the materialized copy where
    NumPy fills a buffer per row): A7's view-chain probe found it for `nanmean(int32 broadcast row, dtype=float32)`.
    Its axis twin is X12 (A6), and numpy.ma's mean / var / anom reach both wherever `filled(0)` is the view itself
-   (no mask, or an all-False one).
+   (no mask, or an all-False one). Fixed 2026-10-27 with finding 5 (`da7adc53`): one add-loop call per broadcast row.
 11. **Hold the ported function strict across every tier, not only its own** (X9, as finding 7 for A2). The reduce tier's
    mean cases sat under the unbounded summation branch, which had hidden a gross divergence (a broadcast uint64 mean
    of 101.8 for NumPy's 3.69e18) and a dtype one (decimal); the new tier alone would not have reached either.
@@ -1775,7 +1784,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    plain call and copying keeps NumPy's bits.
 18. **A carve can hide a bug of another class** (A6). The mean_loops tier carves every flat broadcast float cell as an
    order residual (finding 10); the cells' uncarved replay showed a dtype bug under them (X14). Replay a tier uncarved
-   and classify every carved divergence before committing the carve (the `ma_meanvar` generator takes `--uncarved`).
+   and classify every carved divergence before committing the carve (the `ma_meanvar` generator took `--uncarved`
+   until its carve went with finding 5's fix on 2026-10-27).
 19. **Benchmark masked operations with a random mask** (A6). X11's first measurement (every 7th element masked) made
    the branchy masked copy look fast for float32 / float64; with a 35 % random mask every same-dtype masked copy costs
    2.5–6 ns per element, in NumPy too.
@@ -1994,6 +2004,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-27**: findings 5 and 10, X12 and X14 done on `strings` by the np-layer dtype plan's np.average family
+  (`docs/plans/np-layer-dtype-logic.md` section 9): np.sum and np.mean over an operand with a reversed or a broadcast
+  axis run the port of NumPy's reduction iterator with NumPy's add loops (`ReduceAddThroughIterator`,
+  `NumPyAddLoops`); the four `[OpenBugs]` pins moved to `Math/np.sum.ReversedBroadcast.Test.cs`, the oracle's
+  finding-5 branches and the mean_loops / ma_meanvar carves are gone. X36's np.average tuple-axis item is fixed by the
+  same family (one add.reduce over the axis set). Commits: `da7adc53`, `a2e9fe85`.
 
 - **2026-10-20**: A4e done on `strings` (indexing is NumPy's one signature per array class: one indexer —
   `NDArray`'s `this[params object[] key]`, virtual, which sorts the key so every call keeps the body the removed

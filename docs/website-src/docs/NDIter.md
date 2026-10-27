@@ -1562,7 +1562,7 @@ The iterator is broader than `np.nditer`, and production code does not enter thr
 | Reductions and scans | `DefaultEngine.ReductionOp.cs`, `Default.Reduction.{Add,CumAdd,Nan}.cs`, `Default.All.cs`, `Default.Any.cs` | `ExecuteReduction`, `ExecuteReducing`, `ForEach`, `NewReduce`, or dedicated axis iterators depending dtype/layout |
 | Selection/indexing/sorting | `np.where.cs`, `Default.BooleanMask.cs`, `Default.NonZero.cs`, `AxisSort.cs` | Chunk `ForEach`/reducing kernels where a direct whole-array kernel does not fit |
 | Copy/cast/fill/pad/concatenate | static `NDIter.Copy`/`CopyAs`, called by `np.copyto`, `NDArray.fill`, `np.pad`, `np.concatenate`, storage cloning/casting | Separate static copy-state core with contiguous, strided-IL, scalar-cast, broadcast, and overlap-temporary tiers |
-| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `AverageEngine.cs` (np.average), `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
+| Other focused consumers | `np.diff.cs`, `NDArray.byteswap.cs`, `np.nan{mean,var,std}.cs` | Lean Tier 3B or chunk/reducing routes tailored to operation semantics |
 
 Three older surfaces remain for compatibility or experiments:
 
@@ -1579,7 +1579,7 @@ Here, **fused** means that one kernel evaluates multiple array operations before
 There are two production shapes:
 
 1. **General expression fusion** through `np.evaluate`: an `NDExpr` tree is typed with NumPy rules and compiled to one cached `NDInnerLoopFunc`, then `NDIterRef` supplies its broadcast/layout-aware chunks.
-2. **Specialized fusion** inside an API such as weighted `np.average`, contiguous `np.diff`, or `np.asarray_chkfinite`: a purpose-built kernel combines the exact passes that operation needs. Some of these use `NDIterRef`; others are whole-array kernels whose own layout gate is cheaper.
+2. **Specialized fusion** inside an API such as contiguous `np.diff` or `np.asarray_chkfinite`: a purpose-built kernel combines the exact passes that operation needs. Some of these use `NDIterRef`; others are whole-array kernels whose own layout gate is cheaper.
 
 That distinction matters when reading benchmark results. The dedicated fusion benchmark compares the same NumSharp expression **with and without** fusion. The unified API benchmark compares NumSharp with NumPy and may include other differences besides fusion.
 
@@ -1654,11 +1654,12 @@ Several APIs use focused kernels because their loop shape is more specific than 
 
 | API / implementation | What is fused | Active boundary | Current benchmark evidence |
 |----------------------|---------------|-----------------|----------------------------|
-| Weighted `np.average` / `DirectILKernelGenerator.WeightedSum.cs` | Accumulates `sum(a * weights)` **and** `sum(weights)` into two outputs in one four-operand pass | Primitive numeric dtypes; a contiguous reduce-all case calls the kernel directly, while axis reductions use `NDIterRef` with pinned or scatter outputs. `Bool`, `Char`, `Half`, `Complex`, and `Decimal` fall back to multiply then sum. | The unified `np.average(a)` rows use `weights == null` and therefore dispatch to `mean`; they do **not** measure this fused kernel. An isolated weighted fusion benchmark is still needed. |
 | `np.diff` / `DirectILKernelGenerator.AdjacentDiff.cs` | Computes `out[i] = a[i+1] - a[i]` from overlapping loads in one whole-array pass, avoiding two slice views and generic binary iteration | `n == 1`, no prepend/append, C-contiguous non-broadcast input, innermost axis, non-Boolean dtype | The unified 100K `float64` case is **0.04747 ms** and **0.490× NumPy**; the 1K case is **0.00306 ms** and **1.343× NumPy**. It is a real fused route, but the larger current case remains a performance gap. |
 | `np.asarray_chkfinite` / `FiniteScan.cs` | Fuses `isfinite(a)` and `all(...)` into one NaN-poison scan with no Boolean temporary | Float-family dtypes; contiguous SIMD plus strided/transposed/negative-stride/broadcast handling | The unified 100K `float64` case is **0.01176 ms**, **1.814× faster than NumPy**. |
 
 The last column uses the [unified benchmark report](https://scisharp.github.io/NumSharp/docs/benchmark-matrix.html), where the ratio is **NumPy ÷ NumSharp**. Do not compare those ratios directly with the dedicated fusion table's unfused-NumSharp baseline.
+
+Weighted `np.average` used a fused weighted-sum kernel (`DirectILKernelGenerator.WeightedSum.cs`, both sums in one four-operand pass) until 2026-10-27. Its several SIMD partial sums are not NumPy's pairwise order, so its results were a few ULP off NumPy's; np.average now runs NumPy's composition (the weight sum, then `np.multiply(a, w, dtype=result_dtype).sum(axis)`), and where both operands share their dimensions and memory order it streams the products into that sum through `np.evaluate`, the general expression fusion above. The kernel remains public API.
 
 ---
 

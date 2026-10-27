@@ -14,8 +14,10 @@ using NumSharp.Backends.Kernels;
 //
 //     do { inner(dataptrs, strides, count, aux); } while (iternext(iter));
 //
-// np.average already builds this shape by hand for its fused 4-operand
-// weighted-sum (Statistics/AverageEngine.cs : TryFusedWeightedSum). This file
+// np.average's fused 4-operand weighted sum built this shape by hand until
+// 2026-10-27, when np.average became NumPy's composition (its partial sums were
+// not np.sum's order); the kernel, DirectILKernelGenerator.WeightedSum.cs, stays
+// as public API. This file
 // hoists that construction into a single reusable factory so every np.*
 // reduction (sum / prod / min / max / mean, single- or multi-axis) shares one
 // audited op_axes builder instead of re-deriving it per call site.

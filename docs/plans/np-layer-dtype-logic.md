@@ -492,6 +492,87 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-27, P2's twelfth family: np.average moved into `AverageEngine`, its statements NumPy's; the np.sum and
+  np.evaluate residuals it met fixed on the way.** Commits on `strings`, developed in a scratch worktree and landed by
+  fast-forward. The referees: the snapshot (np.average / np.average_returned, 33,096 calls), `twin_average.py` (the
+  tool's operands, weights and axis tuples rebuilt in NumPy: dtype, shape, C / F / OWNDATA / WRITEABLE flags and SHA-256
+  per result, or the exception's type and text), `ab_average.py` (parent against fix, each changed line classified by
+  the twin), a random differential (`rand_avg_gen.py` / `rand_avg_check.cs`: 3,000 NumPy 2.4.2 cases over random
+  layouts, axes, weights and dtypes, raw bytes and flags compared), and NumPy probes per fix, written into the unit
+  tests:
+  - `2051e724` the snapshot tool reaches np.average's weights and axis tuples (two roles given only to np.average /
+    np.average_returned's parameters: weights of the operand's shape, along one axis or two in either order, a 0-d, zero
+    sums, NaN, a broadcast view, other dtypes and text, the shapes NumPy refuses; axis tuples unsorted, empty, repeated,
+    out of range). 33,096 calls (16,140 before). Before any fix the twin agreed on 23,129 of the 32,404 comparable lines
+    (692 decimal lines have no NumPy twin).
+  - `e3d51474` the move (D1: NumPy writes average in Python, `numpy/lib/_function_base_impl.py`): the body and its helpers
+    into `Statistics/AverageEngine.cs`, statement for statement; the facades keep the numpy.matrix boundary and the null
+    check. 33,096 calls byte-identical; R1 drops `Statistics/np.average.cs 5 44`.
+  - `35df73cc` (D4, memory safety) NDIterRef's drivers run no inner loop over an empty iteration, as NumPy's callers test
+    `NpyIter_GetIterSize` first: an empty iteration whose empty axis is not the innermost still reported the innermost
+    extent as its inner count, so `np.average(np.zeros((11, 0, 14)), axis=2, weights=...)` read and wrote 14 elements past
+    its empty buffers through the fused weighted-sum kernel (an access violation, or a corrupted heap that ended the
+    process later with exit code 127). Found by the random differential, which died at a random later case. ForEach,
+    ExecuteGeneric, ExecuteReducing, BufferedReduce, ForEachRows and the 2-D block routes; fenced-memory tests.
+  - `79575624` (D4) `_weights_are_valid`'s own types: TypeError without an axis, ValueError along one (both were
+    ArgumentExceptions), and an empty axis tuple is an axis given on a StringDType operand too. 2,934 lines fixed.
+  - `9ea8bc83` (D4) the result dtype is NumPy's `result_type` over the descriptors, so text weights get NumPy's refusals
+    (a sized string the weight sum's dtype= refuses, a DTypePromotionError beside StringDType) where the numeric table
+    raised NotSupportedException. 1,308 lines fixed; 20 char lines name NumSharp's own `CharDType` (NumPy's algorithm
+    for a user dtype; the twin's uint16 proxy names NumPy's classes).
+  - `a2e9fe85` (D4) an axis tuple of two axes or more, and the empty tuple, is ONE add.reduce over the whole set:
+    `DefaultEngine.ReduceAddOverAxes` / `MeanOverAxes` run the port of NumPy's reduction iterator (`NumPyReduceIterator`)
+    with NumPy's add loops (`NumPyAddLoops`); the mean of means and the empty tuple's own operand are gone. 423 lines
+    fixed.
+  - `f25aa817` (D4) np.average_returned's count without weights is NumPy's `avg.dtype.type(a.size / avg.size)`: a scalar
+    beside a scalar mean, a fresh array only beside a mean with dimensions. 492 lines fixed.
+  - `da7adc53` (D4, library) np.sum and np.mean over an operand with a reversed or a broadcast axis run NumPy's reduction
+    iterator: step 2's composition summed views on those layouts, where np.sum still had four residuals (plan
+    api-parameter-parity finding 5: a reversed axis walked in memory order; finding 10: a broadcast operand reduced flat
+    in the fold's own order; X12: a broadcast operand along an axis; X14: the broadcast flat mean ignoring dtype=,
+    `[OpenBugs]` groups 10 to 13). ReduceAdd sends an inexact loop over such an operand to `ReduceAddThroughIterator`;
+    the add loops gained vector forms (contiguous, broadcast value with NumPy's region NaN rule, reversed), a several-rows
+    form, NumPy's pairwise sum of n copies of one value, HALF_add through the house SIMD kernel in place, and the
+    iterator's buffer fill of a stride-0 source. The oracle's finding-5 excuses (mean / ma.mean / ma.anom) and the
+    generators' carves go: mean_loops 6,590 cases (+40), ma_meanvar 26,544 (+165), the relayout tier regenerated (15,117:
+    it had not been since `67293fac`, so the regeneration also met the source tiers' drift since). NPY/NS 2.03x geomean
+    over 47 cells; the one cell under parity is float64 (1000, 1000) reversed rows along axis 0, 0.88x-0.94x, bound by
+    memory on both sides. Random differential: 33 cases better, 0 worse.
+  - `ff8a2fcf` (D4, np.evaluate) the streamed row sums keep the running sum's NaN in a short row (2 to 7 elements, 1 to 3
+    complexes): the inline copy of the fold's base loop left `res += x[k]` to RyuJIT, which returned the later of two
+    NaNs (112 of 21,320 two-NaN rows), so `np.evaluate(Sum(x, axis))` and np.sum disagreed. Found by step 2's identity
+    check of its fast path (49 of 11,520 cases differed, NumPy's answer the composition's in all 24 it could load).
+    complex128's NumPy rule (the real part keeps the running sum's NaN, the imaginary part the element's) is pinned, not
+    fixed: `OpenBugsReductionTests.Sum_Complex128_ShortRun_KeepsNumPysNaNPerPart` (group 8).
+  - `97a3cc51` step 2 (C11): with weights, NumPy's composition statement by statement (the weight sum, its zero check,
+    `np.multiply(a, wgt, dtype=result_dtype).sum(axis)`, the division); the fused weighted-sum kernel's routes, a few ULP
+    from NumPy's pairwise sums, no longer run (the kernel stays: public API since 0.70.0). The products' sum streams
+    through np.evaluate where that is byte-identical (same dimensions, one memory order, float32 / float64 / complex128,
+    one axis or every axis: 11,520 of 11,520 operand pairs identical). The oracle's W6-C excuse (every value divergence
+    of average) goes; `[OpenBugs]` group 14 (a tuple axis) passes and moves to `np.average.TupleAxes.Test.cs`. 4,090 lines
+    fixed. NPY/NS: geomean 3.54x over 35 cells, min 1.68x (float32 (100, 1000) along axis 0 with 1-D weights); the old
+    fused routes measured 4.09x with other bits.
+  - Evidence at `97a3cc51`: the twin agrees with NumPy 2.4.2 on 32,376 of the 32,404 comparable lines (23,129 at
+    `2051e724`). The 28 left: 20 error texts naming `CharDType` (above) and 8 unweighted complex128 means over special
+    values whose real-part NaN sign differs (the complex sum's NaN choice, group 8). The random differential: 2,998 of
+    3,000 identical (1,482 at `35df73cc`, before the D4 fixes); the 2 left are a complex NaN sign and the flags of an
+    empty-input mean (np.mean over an empty (0, 9, 9) along axis 0: NumPy's result is F-ordered, NumSharp's C; np.mean's
+    empty-strides residual).
+  - **Found:**
+    - Group 15 stays open: the plain C-contiguous axis-0 sum runs the axis kernel, whose slab fold keeps the FIRST NaN of
+      a column where NumPy's elementwise add keeps the last (the iterator route of `da7adc53` keeps NumPy's).
+    - NumPy's complex128 pairwise sum chooses its NaN per part (above); the complex block's accumulators and combine are
+      not probed yet, so group 8's complex pin covers the base loop only.
+    - The NDW012 analyzer flags `var ret = ReduceAdd(...); return FinishMeanLikeNumPy(ret, ...)` (MeanOverAxes,
+      MeanLikeNumPy) although the callee disposes or returns `ret`: false positives, unchanged.
+    - The Fuzz README's relayout table was stale (15,108 variants, 35 gap cases under 3 ids); corrected with the
+      regeneration.
+  - Left: a decimal operand with NaN weights raises np.sum's OverflowException (NaN cast into decimal; no NumPy analog)
+    where the old route returned a value; np.average's broadcast-weight cells form the product (np.evaluate would
+    materialize a stride-0 operand anyway).
+  - At `97a3cc51`: NumSharp.Tests net10.0 20,659 passed / 11 skipped and net8.0 20,658 / 11; Oracle net10.0 and net8.0
+    412 passed / 2 skipped, 0 failed.
+  - Next in P2: the files of four lines or fewer.
 - **2026-10-27, P2's eleventh family: np.isin moved into `IsinEngine`, its three paths NumPy's.** Commits on `strings`,
   developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (np.isin, 5,202 calls),
   `twin_isin.py` (the tool's operands, test sets and kinds rebuilt in NumPy: dtype, shape and SHA-256 per result, or the
