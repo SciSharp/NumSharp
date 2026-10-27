@@ -21,10 +21,12 @@ namespace NumSharp.Statistics
     ///     An internal operation class (the np-layer dtype plan's D1: NumPy writes average in Python), moved from the public
     ///     <c>np.average</c> / <c>np.average_returned</c> by P2; the facades keep the numpy.matrix boundary and the null
     ///     check. It sits beside the facades, not under <c>Backends/</c>, because its statements call the public np.*
-    ///     functions NumPy's call (np.mean, np.sum, np.broadcast_to, np.zeros, np.any), which ratchet R2 counts under
-    ///     <c>Backends/</c>. Where the result dtype has a fused weighted-sum kernel
-    ///     (<see cref="DirectILKernelGenerator.GetWeightedSumIterKernel"/>), the weighted sum and the weight sum are computed
-    ///     in one pass in the kernel's summation order, not NumPy's pairwise add.reduce.
+    ///     functions NumPy's call (np.mean, np.sum, np.multiply, np.true_divide, np.broadcast_to, np.evaluate), which
+    ///     ratchet R2 counts under <c>Backends/</c>. With weights it runs NumPy's composition statement by statement (the
+    ///     weight sum, its zero check, the products' sum, the division), so every sum is np.sum's add.reduce; the products'
+    ///     sum streams through np.evaluate where that gives the same bits (<see cref="SumOfProducts"/>). Until the np-layer
+    ///     plan's step 2 for this family a fused weighted-sum kernel computed both sums in one pass in its own SIMD order, a
+    ///     few ULP from NumPy's pairwise sums.
     /// </remarks>
     internal static class AverageEngine
     {
@@ -61,9 +63,9 @@ namespace NumSharp.Statistics
         internal static (NDArray avg, NDArray sumOfWeights) Average(
             NDArray a, int[] axis, NDArray weights, bool keepdims, bool returned)
         {
-            // Boundary scope: reclaims the dtype casts, the fused-kernel numerators, the
-            // weighted products and the broadcast/scalar temps; each tuple component is
-            // yielded individually (a dropped scl on the returned:false paths is reclaimed).
+            // Boundary scope: reclaims the weight view, the products and the weighted sum, the
+            // count and broadcast temps; each tuple component is yielded individually (a dropped
+            // scl on the returned:false paths is reclaimed).
             using var scope = NDScope.Open();
 
             // Text: NumPy's average normalizes the axis tuple first (normalize_axis_tuple with argname "axis": "axis: axis 9
@@ -134,306 +136,113 @@ namespace NumSharp.Statistics
             }
             NPTypeCode resultDtype = resultDescr.GetTypeCode();
 
-            NDArray wgtCast = wgt.typecode == resultDtype ? wgt : wgt.astype(resultDtype);
-            NDArray aCast = a.typecode == resultDtype ? a : a.astype(resultDtype);
-
-            // 0-D scalar fast path: reduce-all (axis=None or axes covers all dims)
-            // bypasses NDIter + NDArray allocation entirely. Accumulates into
-            // two stack-allocated doubles, scalar-divides, wraps once at exit.
-            // Cuts ~13 μs of fixed pipeline overhead per call (np.zeros×2 + iter
-            // setup + scalar HasZero NDArray equality + scalar NDArray divide).
-            bool reduceAll = normalizedAxis is null || normalizedAxis.Length == a.ndim;
-            if (reduceAll && aCast.Shape.IsContiguous && wgtCast.Shape.IsContiguous &&
-                TryFusedWeightedSumScalar(aCast, wgtCast, resultDtype,
-                    out NDArray avgScalar, out NDArray sclScalar))
-            {
-                if (keepdims)
-                {
-                    avgScalar = KeepdimsReshape(avgScalar, a.Shape.dimensions, normalizedAxis);
-                    sclScalar = KeepdimsReshape(sclScalar, a.Shape.dimensions, normalizedAxis);
-                }
-                return (scope.Returns(avgScalar), returned ? scope.Returns(sclScalar) : null);
-            }
-
-            // Fused fast path via DirectILKernelGenerator: NDIter walks a + w in one
-            // pass producing (num, scl) into pre-zeroed output NDArrays. The
-            // cached kernel handles per-dtype specialization (SIMD via Vector256<T>
-            // for SIMD-capable types, scalar otherwise). When the dtype has no
-            // kernel (Bool/Char/Half/Complex/Decimal) we fall back to
-            // `aCast * wgtCast → sum` below.
-            if (TryFusedWeightedSum(aCast, wgtCast, normalizedAxis, resultDtype, out NDArray numFast, out NDArray sclFast))
-            {
-                if (HasZero(sclFast))
-                    throw new DivideByZeroException("Weights sum to zero, can't be normalized");
-
-                NDArray avgFast = numFast / sclFast;
-                if (keepdims)
-                {
-                    avgFast = KeepdimsReshape(avgFast, a.Shape.dimensions, normalizedAxis);
-                    sclFast = KeepdimsReshape(sclFast, a.Shape.dimensions, normalizedAxis);
-                }
-                if (!returned) return (scope.Returns(avgFast), null);
-                if (!sclFast.Shape.dimensions.SequenceEqual(avgFast.Shape.dimensions))
-                    sclFast = np.broadcast_to(sclFast, avgFast).copy();
-                return (scope.Returns(avgFast), scope.Returns(sclFast));
-            }
-
-            // Fallback path for dtypes the IL kernel doesn't cover.
-            NDArray scl_ = SumWithAxes(wgtCast, normalizedAxis, resultDtype, keepdims);
-            if (HasZero(scl_))
-                throw new DivideByZeroException("Weights sum to zero, can't be normalized");
-            NDArray prod = aCast * wgtCast;
-            NDArray num = SumWithAxes(prod, normalizedAxis, resultDtype, keepdims);
-            NDArray avg_ = num / scl_;
-            if (!returned) return (scope.Returns(avg_), null);
-            if (!scl_.Shape.dimensions.SequenceEqual(avg_.Shape.dimensions))
-                scl_ = np.broadcast_to(scl_, avg_).copy();
-            return (scope.Returns(avg_), scope.Returns(scl_));
-        }
-
-        /// <summary>
-        ///     Relabels a reduced result (the reduced axes dropped) with keepdims' shape: every reduced axis back with length
-        ///     1, the kept axes in order.
-        /// </summary>
-        /// <param name="reduced">The reduced result: its dims are the kept axes' extents in order.</param>
-        /// <param name="aShape">The operand's dims.</param>
-        /// <param name="axes">The normalized reduced axes, or null for every axis (each becomes 1).</param>
-        /// <returns>A reshape of <paramref name="reduced"/> (a view sharing its buffer: it does not own its data).</returns>
-        private static NDArray KeepdimsReshape(NDArray reduced, long[] aShape, int[] axes)
-        {
-            int ndim = aShape.Length;
-            long[] kd = new long[ndim];
-            int outIdx = 0;
-            for (int i = 0; i < ndim; i++)
-            {
-                bool isReduced = axes is null || Array.IndexOf(axes, i) >= 0;
-                if (isReduced) kd[i] = 1L;
-                else kd[i] = reduced.Shape.dimensions[outIdx++];
-            }
-            return reduced.reshape(Shape.Adopt(kd));
-        }
-
-        /// <summary>
-        ///     The weighted average over every axis of two C-contiguous operands of the result dtype, without an iterator or
-        ///     an intermediate array: the cached weighted-sum kernel runs once into two stack cells (the weighted sum and the
-        ///     weight sum), the zero check and the division are scalar arithmetic, and each answer is wrapped as a 0-d array.
-        /// </summary>
-        /// <param name="a">The operand, already of <paramref name="resultDtype"/> and C-contiguous.</param>
-        /// <param name="w">The weights, of <paramref name="a"/>'s shape and dtype and C-contiguous.</param>
-        /// <param name="resultDtype">The result dtype (the kernel's dtype).</param>
-        /// <param name="avg">The average (<c>NDArray.Scalar</c>: a writeable 0-d owner), or null when declined.</param>
-        /// <param name="scl">The weight sum (a writeable 0-d owner), or null when declined.</param>
-        /// <returns>False when the dtype has no kernel (bool, char, float16, complex, decimal): the caller's iterator
-        ///     route runs instead.</returns>
-        /// <exception cref="DivideByZeroException">The weights sum to zero (<c>Weights sum to zero, can't be
-        ///     normalized</c>).</exception>
-        /// <remarks>
-        ///     The kernel accumulates with its own SIMD order (several partial sums), not NumPy's pairwise add.reduce. The
-        ///     integer cases of the division are never reached: <see cref="ComputeResultDtype"/> lifts an integer or bool
-        ///     operand to float64, and a float operand keeps a float dtype.
-        /// </remarks>
-        private static unsafe bool TryFusedWeightedSumScalar(
-            NDArray a, NDArray w, NPTypeCode resultDtype,
-            out NDArray avg, out NDArray scl)
-        {
-            NDInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
-                new DirectILKernelGenerator.WeightedSumKernelKey(resultDtype));
-            if (kernel is null) { avg = null; scl = null; return false; }
-
-            int elemSize = a.dtypesize;
-            byte* ap = (byte*)a.Address + a.Shape.offset * elemSize;
-            byte* wp = (byte*)w.Address + w.Shape.offset * elemSize;
-            long count = a.size;
-
-            // Stack scratch: 4 ptrs + 4 strides + 2 output cells (max 16 bytes per cell for Complex).
-            void** ptrs = stackalloc void*[4];
-            long* strs = stackalloc long[4];
-            // 2 cells of 16 bytes is enough for everything up to Complex (16B).
-            byte* outBuf = stackalloc byte[32];
-            byte* numCell = outBuf;
-            byte* sclCell = outBuf + 16;
-            // Zero them — kernel does `+=` into pre-zeroed cells.
-            for (int i = 0; i < 32; i++) outBuf[i] = 0;
-
-            ptrs[0] = ap;       ptrs[1] = wp;
-            ptrs[2] = numCell;  ptrs[3] = sclCell;
-            strs[0] = elemSize; strs[1] = elemSize;
-            strs[2] = 0;        strs[3] = 0;  // pinned outputs → kernel's SIMD fast path
-            kernel(ptrs, strs, count, null);
-
-            // Scalar zero check + divide — primitive arithmetic on the stack cells.
-            bool isZero = IsScalarZero(numCell: sclCell, resultDtype);
-            if (isZero)
+            // scl = wgt.sum(axis=axis, dtype=result_dtype, **keepdims_kw): the weights summed in the result dtype, each
+            // element cast by the reduction's own loop (a cast input is summed one np.getbufsize() fill at a time), not a
+            // cast copy summed in one piece, whose pairwise order differs past one fill. (NumPy's scl / avg are named
+            // weightSum / average here: the branches above declare their own scl and avg.)
+            NDArray weightSum = SumWithAxes(wgt, normalizedAxis, resultDtype, keepdims);
+            // if np.any(scl == 0.0): raise ZeroDivisionError - before the product is formed.
+            if (HasZero(weightSum))
                 throw new DivideByZeroException("Weights sum to zero, can't be normalized");
 
-            // Build the result NDArrays from the stack cells and return.
-            avg = ScalarDivideToNDArray(numCell, sclCell, resultDtype);
-            scl = BuildScalarNDArray(sclCell, resultDtype);
-            return true;
+            // avg = avg_as_array = np.multiply(a, wgt, dtype=result_dtype).sum(axis, **keepdims_kw) / scl
+            NDArray weightedSum = SumOfProducts(a, wgt, resultDtype, normalizedAxis, keepdims);
+            NDArray average = Quotient(weightedSum, weightSum);
+
+            if (!returned) return (scope.Returns(average), null);
+            // if scl.shape != avg_as_array.shape: scl = np.broadcast_to(scl, avg_as_array.shape).copy()
+            if (!weightSum.Shape.dimensions.SequenceEqual(average.Shape.dimensions))
+                weightSum = np.broadcast_to(weightSum, average).copy();
+            return (scope.Returns(average), scope.Returns(weightSum));
         }
 
         /// <summary>
-        ///     The quotient of two stack cells of one dtype as a 0-d array: C# arithmetic in that dtype (an integer dtype
-        ///     divides as integers), without the NDArray binary-operator pipeline.
+        ///     NumPy's weighted sum, <c>np.multiply(a, wgt, dtype=result_dtype).sum(axis, **keepdims_kw)</c>: the products in
+        ///     the result dtype (each operand cast into it first), laid out as NumPy's ufunc lays them out, then np.sum over
+        ///     them in that memory order.
         /// </summary>
-        /// <param name="numCell">The dividend's cell.</param>
-        /// <param name="sclCell">The divisor's cell (not zero: the caller checked).</param>
-        /// <param name="dt">The cells' dtype: one of the ten dtypes the weighted-sum kernel covers.</param>
-        /// <returns>A writeable 0-d owner holding the quotient.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="dt"/> is not one of the kernel's dtypes (a wiring
-        ///     error: the caller only reaches here with a kernel).</exception>
-        private static unsafe NDArray ScalarDivideToNDArray(byte* numCell, byte* sclCell, NPTypeCode dt)
-        {
-            switch (dt)
-            {
-                case NPTypeCode.Double:  return NDArray.Scalar(*(double*)numCell / *(double*)sclCell);
-                case NPTypeCode.Single:  return NDArray.Scalar(*(float*) numCell / *(float*) sclCell);
-                case NPTypeCode.Int32:   return NDArray.Scalar(*(int*)   numCell / *(int*)   sclCell);
-                case NPTypeCode.Int64:   return NDArray.Scalar(*(long*)  numCell / *(long*)  sclCell);
-                case NPTypeCode.UInt32:  return NDArray.Scalar(*(uint*)  numCell / *(uint*)  sclCell);
-                case NPTypeCode.UInt64:  return NDArray.Scalar(*(ulong*) numCell / *(ulong*) sclCell);
-                case NPTypeCode.Int16:   return NDArray.Scalar((short) (*(short*) numCell / *(short*) sclCell));
-                case NPTypeCode.UInt16:  return NDArray.Scalar((ushort)(*(ushort*)numCell / *(ushort*)sclCell));
-                case NPTypeCode.Byte:    return NDArray.Scalar((byte)  (*(byte*)  numCell / *(byte*)  sclCell));
-                case NPTypeCode.SByte:   return NDArray.Scalar((sbyte) (*(sbyte*) numCell / *(sbyte*) sclCell));
-                default: throw new NotSupportedException($"Scalar divide for {dt} not in fast path");
-            }
-        }
-
-        /// <summary>
-        ///     A stack cell as a 0-d array (<c>NDArray.Scalar</c> copies the value into fresh unmanaged storage).
-        /// </summary>
-        /// <param name="cell">The cell.</param>
-        /// <param name="dt">The cell's dtype: one of the ten dtypes the weighted-sum kernel covers.</param>
-        /// <returns>A writeable 0-d owner holding the cell's value.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="dt"/> is not one of the kernel's dtypes (a wiring
-        ///     error).</exception>
-        private static unsafe NDArray BuildScalarNDArray(byte* cell, NPTypeCode dt) => dt switch
-        {
-            NPTypeCode.Double => NDArray.Scalar(*(double*)cell),
-            NPTypeCode.Single => NDArray.Scalar(*(float*)cell),
-            NPTypeCode.Int32  => NDArray.Scalar(*(int*)cell),
-            NPTypeCode.Int64  => NDArray.Scalar(*(long*)cell),
-            NPTypeCode.UInt32 => NDArray.Scalar(*(uint*)cell),
-            NPTypeCode.UInt64 => NDArray.Scalar(*(ulong*)cell),
-            NPTypeCode.Int16  => NDArray.Scalar(*(short*)cell),
-            NPTypeCode.UInt16 => NDArray.Scalar(*(ushort*)cell),
-            NPTypeCode.Byte   => NDArray.Scalar(*(byte*)cell),
-            NPTypeCode.SByte  => NDArray.Scalar(*(sbyte*)cell),
-            _ => throw new NotSupportedException($"BuildScalarNDArray for {dt} not in fast path")
-        };
-
-        /// <summary>
-        ///     Whether a stack cell holds zero: NumPy's <c>np.any(scl == 0.0)</c> for a 0-d weight sum as one comparison
-        ///     (a NaN is not zero; -0.0 is).
-        /// </summary>
-        /// <param name="numCell">The cell.</param>
-        /// <param name="dt">The cell's dtype: one of the ten dtypes the weighted-sum kernel covers.</param>
-        /// <returns>True when the value is zero.</returns>
-        /// <exception cref="NotSupportedException"><paramref name="dt"/> is not one of the kernel's dtypes (a wiring
-        ///     error).</exception>
-        private static unsafe bool IsScalarZero(byte* numCell, NPTypeCode dt) => dt switch
-        {
-            NPTypeCode.Double => *(double*)numCell == 0.0,
-            NPTypeCode.Single => *(float*)numCell == 0f,
-            NPTypeCode.Int32  => *(int*)numCell == 0,
-            NPTypeCode.Int64  => *(long*)numCell == 0L,
-            NPTypeCode.UInt32 => *(uint*)numCell == 0u,
-            NPTypeCode.UInt64 => *(ulong*)numCell == 0UL,
-            NPTypeCode.Int16  => *(short*)numCell == 0,
-            NPTypeCode.UInt16 => *(ushort*)numCell == 0,
-            NPTypeCode.Byte   => *(byte*)numCell == 0,
-            NPTypeCode.SByte  => *(sbyte*)numCell == 0,
-            _ => throw new NotSupportedException($"IsScalarZero for {dt} not in fast path")
-        };
-
-        /// <summary>
-        ///     The weighted sum and the weight sum over <paramref name="axes"/> in one iterator pass: a four-operand NDIter
-        ///     over <c>[a, w, num, scl]</c> whose outputs have stride 0 along the reduced axes (<c>op_axes</c> -1, REDUCE_OK,
-        ///     EXTERNAL_LOOP) drives the cached weighted-sum kernel, which adds into the pre-zeroed outputs.
-        /// </summary>
-        /// <param name="a">The operand, already of <paramref name="resultDtype"/>.</param>
-        /// <param name="w">The weights of <paramref name="resultDtype"/>: <paramref name="a"/>'s shape, or broadcastable to it
-        ///     (the reduced axes' extents with 1 elsewhere, from <see cref="WeightsAreValid"/>).</param>
+        /// <param name="a">The operand (any numeric dtype and layout).</param>
+        /// <param name="wgt">The weights, already of <paramref name="a"/>'s dimensions or broadcastable to them
+        ///     (<see cref="WeightsAreValid"/>'s view).</param>
+        /// <param name="resultDtype">The result dtype: the products' and the sum's loop.</param>
         /// <param name="axes">The normalized reduced axes, or null for every axis.</param>
-        /// <param name="resultDtype">The result dtype (the kernel's dtype).</param>
-        /// <param name="num">The weighted sum (a fresh array of the kept axes; 0-d for every axis), or null when
-        ///     declined.</param>
-        /// <param name="scl">The weight sum, of <paramref name="num"/>'s shape, or null when declined.</param>
-        /// <returns>False when the dtype has no kernel (bool, char, float16, complex, decimal).</returns>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>The weighted sum, a fresh array (0-d for a reduction over every axis without keepdims).</returns>
         /// <remarks>
-        ///     The kernel's summation order is its own (SIMD partial sums along a reduced innermost axis, a running total
-        ///     otherwise), not NumPy's pairwise add.reduce.
+        ///     <para>
+        ///     Where the operands have the same dimensions and one memory order (both C- or both F-contiguous), the result
+        ///     dtype is float32, float64 or complex128 and one axis or every axis is reduced, np.evaluate streams the products
+        ///     into np.sum's pairwise schedule without the product buffer (<c>Sum(Cast(a) * Cast(w), axis)</c>): the same
+        ///     products, rounded in the result dtype, added in the same order, so the same bits. Checked over 11,520
+        ///     operand pairs (every input dtype pair with such a result, 8 shapes, C and F order, every axis, NaN payloads
+        ///     of both signs, infinities and -0.0): all identical, once np.evaluate's short streamed rows kept the running
+        ///     sum's NaN as np.sum's fold does (ff8a2fcf). It is 1.3x-3.3x faster than forming the product (one read of
+        ///     each operand instead of a write and a read of the product), measured at (100, 1000) and (1000, 1000).
+        ///     </para>
+        ///     <para>
+        ///     Everything else forms the product: a broadcast weight vector (1-D weights along the axis, a stride-0 operand
+        ///     np.evaluate would materialize anyway), operands in different orders (the product's layout then follows
+        ///     NumPy's vote), float16 (np.evaluate's float16 sum is not NumPy's HALF loop), an axis tuple of two axes or
+        ///     more, a 0-d operand, and hosts without dynamic code.
+        ///     </para>
         /// </remarks>
-        private static bool TryFusedWeightedSum(
-            NDArray a, NDArray w, int[] axes, NPTypeCode resultDtype,
-            out NDArray num, out NDArray scl)
+        private static NDArray SumOfProducts(NDArray a, NDArray wgt, NPTypeCode resultDtype, int[] axes, bool keepdims)
         {
-            NDInnerLoopFunc kernel = DirectILKernelGenerator.GetWeightedSumIterKernel(
-                new DirectILKernelGenerator.WeightedSumKernelKey(resultDtype));
-            if (kernel is null)
+            bool flat = axes is null || axes.Length == a.ndim;
+            if (DirectILKernelGenerator.Enabled && a.ndim > 0
+                && (resultDtype == NPTypeCode.Single || resultDtype == NPTypeCode.Double || resultDtype == NPTypeCode.Complex)
+                && (flat || axes.Length == 1)
+                && a.Shape.dimensions.SequenceEqual(wgt.Shape.dimensions)
+                && ((a.Shape.IsContiguous && wgt.Shape.IsContiguous) || (a.Shape.IsFContiguous && wgt.Shape.IsFContiguous)))
             {
-                num = null;
-                scl = null;
-                return false;
+                // A Cast node only where an operand is not of the result dtype: np.multiply(dtype=) casts each input into
+                // the loop first, exactly what the node does element by element.
+                NDExpr x = a.typecode == resultDtype ? NDExpr.Arr(a) : NDExpr.Cast(NDExpr.Arr(a), resultDtype);
+                NDExpr y = wgt.typecode == resultDtype ? NDExpr.Arr(wgt) : NDExpr.Cast(NDExpr.Arr(wgt), resultDtype);
+                NDExpr products = x * y;
+                return np.evaluate(flat ? NDExpr.Sum(products, keepdims) : NDExpr.Sum(products, axes[0], keepdims));
             }
 
-            int ndim = a.ndim;
-            bool reduceAll = axes is null || axes.Length == ndim;
+            NDArray product = UfuncResultBuffer(resultDtype, a, wgt);
+            np.multiply(a, wgt, @out: product, dtype: resultDtype);
+            return SumWithAxes(product, axes, resultDtype, keepdims);
+        }
 
-            // Output shape: a.shape with reduce axes removed. axis=None / reduce-all
-            // collapses to a 0-D scalar.
-            long[] outShape;
-            if (reduceAll)
-            {
-                outShape = Array.Empty<long>();
-            }
-            else
-            {
-                outShape = new long[ndim - axes.Length];
-                int oi = 0;
-                for (int i = 0; i < ndim; i++)
-                    if (Array.IndexOf(axes, i) < 0) outShape[oi++] = a.Shape.dimensions[i];
-            }
+        /// <summary>
+        ///     A fresh, uninitialized buffer for the result of a ufunc over <paramref name="x"/> and <paramref name="y"/> (<paramref name="y"/>
+        ///     broadcastable to <paramref name="x"/>), laid out as NumPy's iterator allocates it (<see cref="Shape.NpyIterOutputShape"/>:
+        ///     each operand votes its memory order and abstains on a stride-0 or length-1 axis, C order wins a conflict). The
+        ///     layout is observable: a later sum walks this memory order, and the result keeps it.
+        /// </summary>
+        /// <param name="dtype">The result dtype.</param>
+        /// <param name="x">The operand whose dimensions the result takes.</param>
+        /// <param name="y">The other operand, broadcastable to <paramref name="x"/>.</param>
+        /// <returns>An uninitialized array of <paramref name="x"/>'s dimensions in NumPy's layout.</returns>
+        private static NDArray UfuncResultBuffer(NPTypeCode dtype, NDArray x, NDArray y)
+        {
+            // A private copy of the dimensions: NpyIterOutputShape adopts the array it is handed.
+            var dims = x.ndim == 0 ? Array.Empty<long>() : (long[])x.Shape.dimensions.Clone();
+            return new NDArray(dtype, Shape.NpyIterOutputShape(dims, new[] { x.Shape, y.Shape }), false);
+        }
 
-            num = np.zeros(outShape.Length == 0 ? Shape.Scalar : Shape.Adopt(outShape), resultDtype);
-            scl = np.zeros(outShape.Length == 0 ? Shape.Scalar : Shape.Adopt(outShape), resultDtype);
-
-            // Pre-broadcast w to a's shape so both inputs share the iter shape.
-            NDArray wBcast = w.Shape.dimensions.SequenceEqual(a.Shape.dimensions) ? w : np.broadcast_to(w, a.Shape);
-
-            // op_axes: identity for a/w; -1 in reduce axes for num/scl.
-            int[] aAxes = new int[ndim];
-            int[] wAxes = new int[ndim];
-            int[] numAxes = new int[ndim];
-            int outAxisCounter = 0;
-            for (int i = 0; i < ndim; i++)
-            {
-                aAxes[i] = i;
-                wAxes[i] = i;
-                bool isReduced = reduceAll || Array.IndexOf(axes, i) >= 0;
-                numAxes[i] = isReduced ? -1 : outAxisCounter++;
-            }
-
-            using var iter = NDIterRef.AdvancedNew(
-                4,
-                new[] { a, wBcast, num, scl },
-                NDIterGlobalFlags.REDUCE_OK | NDIterGlobalFlags.EXTERNAL_LOOP,
-                NPY_ORDER.NPY_KEEPORDER,
-                NPY_CASTING.NPY_NO_CASTING,
-                new[]
-                {
-                    NDIterPerOpFlags.READONLY,
-                    NDIterPerOpFlags.READONLY,
-                    NDIterPerOpFlags.READWRITE,
-                    NDIterPerOpFlags.READWRITE,
-                },
-                null,
-                ndim,
-                new[] { aAxes, wAxes, numAxes, numAxes });
-
-            unsafe { iter.ForEach(kernel); }
-            return true;
+        /// <summary>
+        ///     NumPy's <c>num / scl</c> of the weighted average: for two scalars (a reduction over every axis without
+        ///     keepdims) NumPy's scalar division, the same arithmetic as the ufunc loop (CDOUBLE_divide is called by the
+        ///     complex scalars, IEEE division by the real ones, float32 arithmetic by float16), whose result is a scalar
+        ///     (NumSharp's stand-in: a read-only 0-d owner); otherwise <c>true_divide</c>'s result laid out as its ufunc
+        ///     lays it out.
+        /// </summary>
+        /// <param name="num">The weighted sum (the result dtype).</param>
+        /// <param name="scl">The weight sum (the result dtype; broadcastable to <paramref name="num"/>: its kept axes are
+        ///     <paramref name="num"/>'s or 1).</param>
+        /// <returns>The average: a read-only 0-d scalar, or a fresh array of <paramref name="num"/>'s dimensions.</returns>
+        private static NDArray Quotient(NDArray num, NDArray scl)
+        {
+            if (num.ndim == 0 && scl.ndim == 0)
+                return np.true_divide(num, scl).MarkReductionScalar();
+            var r = UfuncResultBuffer(num.GetTypeCode, num, scl);
+            np.true_divide(num, scl, @out: r);
+            return r;
         }
 
         /// <summary>

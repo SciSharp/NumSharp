@@ -415,6 +415,32 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
+        /// Every np.average divergence is a real bug since step 2 of the np.average family (2026-10-27): without weights it is
+        /// np.mean's <c>_mean</c>, with weights NumPy's composition through np.sum. The W6-C summation-order branch that
+        /// excused EVERY value difference of average is gone, and no other branch may take one: a few-ULP value difference
+        /// flat (one operand) or over an axis (two operands, the weighted form), a NaN NumPy has and NumSharp lacks over an
+        /// axis, and a complex difference (the complex unary 3-ULP branch keys on one operand).
+        /// </summary>
+        [TestMethod]
+        public void Average_NoDivergenceIsExcused()
+        {
+            double v = 1.2345;
+            byte[] nan = BitConverter.GetBytes(double.NaN), one = BitConverter.GetBytes(1.0);
+            var nanVsOne = new[] { new BitDiff.Diff(0, "NaN", "000000000000f03f") };
+            MisalignedRegistry.Classify(Case("average", ("float64", new long[] { 8 })), DivergenceKind.Value,
+                BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("average one ULP off flat, without weights, is np.mean's _mean");
+            MisalignedRegistry.Classify(WithAxis(Case("average", ("float64", new long[] { 4, 8 }), ("float64", new long[] { 4, 8 })), 0),
+                DivergenceKind.Value, BitConverter.GetBytes(v), BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                .Should().BeNull("the weighted average one ULP off over an axis is NumPy's composition through np.sum");
+            MisalignedRegistry.Classify(WithAxis(Case("average", ("float64", new long[] { 4, 8 })), 1), DivergenceKind.Value,
+                nan, one, NPTypeCode.Double, nanVsOne).Should().BeNull("average missing NumPy's NaN over an axis");
+            MisalignedRegistry.Classify(Case("average", ("complex128", new long[] { 8 })), DivergenceKind.Value,
+                new byte[16], new byte[16], NPTypeCode.Complex, OneDiff)
+                .Should().BeNull("average of complex off flat (the complex unary 3-ULP branch must not take it)");
+        }
+
+        /// <summary>
         /// No mean layout is excused any more. The last one, an axis reduction over a view with a REVERSED axis (plan
         /// api-parameter-parity finding 5), left with np.sum's reversed-axis route, the port of NumPy's reduction iterator
         /// since 2026-10-27 (pinned by <c>np_sum_ReversedBroadcast_Tests.Sum_ReversedViewAxis_WalksTheLogicalOrder</c>);

@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using static NumSharp.Tests.Utilities.RawBitCases;
 
 namespace NumSharp.Tests.Statistics
 {
@@ -29,6 +31,38 @@ namespace NumSharp.Tests.Statistics
         {
             using var c = np.ascontiguousarray(a);
             return c.ToArray<Complex>().SelectMany(z => new[] { BitConverter.DoubleToInt64Bits(z.Real), BitConverter.DoubleToInt64Bits(z.Imaginary) }).ToArray();
+        }
+
+        /// <summary>
+        ///     <c>np.average(a, axis=(0, 1))</c> must be NumPy's <c>a.mean(axis=(0, 1))</c>: ONE add.reduce over the axis set,
+        ///     divided once by the count (<c>0xc0f49029c6ff513c</c> for the operand below). NumSharp took the mean of the row
+        ///     means (<c>MeanWithAxes</c>: <c>np.mean</c> per axis, each quotient rounded), <c>0xc0f49029c6ff513d</c>. With
+        ///     weights NumPy sums <c>a * w</c> and <c>w</c> over the axis set once each (<c>0xc0f5f8e28597b5a4</c>); NumSharp
+        ///     summed them one axis at a time (<c>SumWithAxes</c>), <c>0xc0f5f8e28597b5a5</c>, and later in the fused kernel's
+        ///     own order.
+        /// </summary>
+        /// <remarks>
+        ///     Was <c>[OpenBugs]</c> group 14 of <c>OpenBugs.Reductions.cs</c> until np.average with weights became NumPy's
+        ///     composition (2026-10-27). Found by the neighbour search of the open-bugs rundown's bug 7 (plan <c>docs/plans/api-parameter-parity.md</c>
+        ///     X36, 2026-10-08): the axis_args tier's operands are small integers, whose sums are exact in any order, so it
+        ///     could not see the order. The fix is a NumPy-exact multi-axis add.reduce (NumPy's reduction NpyIter over the
+        ///     axis set, the add loop's pairwise inner runs), the library-wide tuple-axis gap of np.sum / np.mean; np.median,
+        ///     np.percentile and np.quantile merge their axes first and are exact, np.ptp's max / min are order-free.
+        /// </remarks>
+        [TestMethod]
+        public void Average_TupleAxis_IsOneReductionOverTheAxisSet()
+        {
+            var fails = new List<string>();
+            var a = np.array(new[,]
+            {
+                { 74.815, 324429.477, -736768.368, 6901.486 },
+                { 8898.963, 807.834, 0.139, -70.908 },
+                { -615073.01, 85.581, 1.047, -6.389 },
+            });
+            var w = np.arange(1.0, 13.0).reshape(3, 4);
+            Check(fails, "average (0,1)", () => np.average(a, new[] { 0, 1 }), "float64 () c0f49029c6ff513c");
+            Check(fails, "average (0,1) weighted", () => np.average(a, new[] { 0, 1 }, w), "float64 () c0f5f8e28597b5a4");
+            AssertNoMismatch(fails, "NumPy's average is one add.reduce over the whole axis set");
         }
 
         [TestMethod]

@@ -12,10 +12,10 @@ namespace NumSharp.Tests
     ///     <c>np.trapezoid</c> bit-exact (commit 94c9eb6b, 2026-10-03) and by the 2026-10-04 reduction-start probe —
     ///     plus the probe's wrong shapes (group 6; its trapezoid error, group 7, is fixed), which NaN a flat sum of several NaNs returns
     ///     (group 8, and a complex short run's NaN per part), and an axis sum in a cast loop whose rows are longer than
-    ///     the buffer (group 9); then np.average
-    ///     over a tuple axis reducing one axis at a time (group 14), and which NaN an axis sum along an outer axis keeps
-    ///     (group 15). Groups 10 to 13 (the summation orders np.sum's routes missed over a reversed or a broadcast
-    ///     operand, and the flat broadcast mean ignoring <c>dtype=</c>) are fixed: see the remarks. Each test asserts NumPy
+    ///     the buffer (group 9); then which NaN an axis sum along an outer axis keeps (group 15). Groups 10 to 13 (the
+    ///     summation orders np.sum's routes missed over a reversed or a broadcast operand, and the flat broadcast mean
+    ///     ignoring <c>dtype=</c>) and group 14 (np.average over a tuple axis reducing one axis at a time) are fixed: see
+    ///     the remarks. Each test asserts NumPy
     ///     2.4.2's answer — dtype, shape and the raw bits of every element — so it FAILS while the bug lives and passes
     ///     once it is fixed. Remove <c>[OpenBugs]</c> from a test when its path is fixed, and move the test next to the
     ///     function's own tests.
@@ -85,6 +85,13 @@ namespace NumSharp.Tests
     ///     operand in an inexact loop, and np.mean's flat route sends a broadcast float or complex operand to
     ///     <c>_mean</c>'s statements. Their tests moved to <c>Math/np.sum.ReversedBroadcast.Test.cs</c> without
     ///     <c>[OpenBugs]</c>.
+    ///     </para>
+    ///     <para>
+    ///     Group 14 was np.average over a TUPLE axis reducing one axis at a time (plan api-parameter-parity X36): the mean
+    ///     of means without weights (fixed by D4-c, a2e9fe85: one add.reduce over the axis set), and with weights the
+    ///     fused weighted-sum kernel's own summation order. It is fixed since 2026-10-27: np.average with weights is
+    ///     NumPy's composition, whose sums are np.sum's add.reduce over the whole axis set. Its test moved to
+    ///     <c>Statistics/np.average.TupleAxes.Test.cs</c> without <c>[OpenBugs]</c>.
     ///     </para>
     ///     <para>
     ///     Every expected string below is NumPy 2.4.2's output for the same call (same operands, same arguments),
@@ -556,40 +563,6 @@ namespace NumSharp.Tests
                 np.setbufsize(previous);
             }
             AssertNoMismatch(fails, "NumPy's buffered fills split a pinned row longer than the buffer");
-        }
-
-        // ======================================================================================================
-        //  GROUP 14 — np.average over a TUPLE axis reduces one axis at a time.
-        // ======================================================================================================
-
-        /// <summary>
-        ///     <c>np.average(a, axis=(0, 1))</c> must be NumPy's <c>a.mean(axis=(0, 1))</c>: ONE add.reduce over the axis set,
-        ///     divided once by the count (<c>0xc0f49029c6ff513c</c> for the operand below). NumSharp takes the mean of the row
-        ///     means (<c>MeanWithAxes</c>: <c>np.mean</c> per axis, each quotient rounded), <c>0xc0f49029c6ff513d</c>. With
-        ///     weights NumPy sums <c>a * w</c> and <c>w</c> over the axis set once each (<c>0xc0f5f8e28597b5a4</c>); NumSharp
-        ///     sums them one axis at a time (<c>SumWithAxes</c>), <c>0xc0f5f8e28597b5a5</c>.
-        /// </summary>
-        /// <remarks>
-        ///     Found by the neighbour search of the open-bugs rundown's bug 7 (plan <c>docs/plans/api-parameter-parity.md</c>
-        ///     X36, 2026-10-08): the axis_args tier's operands are small integers, whose sums are exact in any order, so it
-        ///     could not see the order. The fix is a NumPy-exact multi-axis add.reduce (NumPy's reduction NpyIter over the
-        ///     axis set, the add loop's pairwise inner runs), the library-wide tuple-axis gap of np.sum / np.mean; np.median,
-        ///     np.percentile and np.quantile merge their axes first and are exact, np.ptp's max / min are order-free.
-        /// </remarks>
-        [TestMethod, OpenBugs]
-        public void Average_TupleAxis_IsOneReductionOverTheAxisSet()
-        {
-            var fails = new List<string>();
-            var a = np.array(new[,]
-            {
-                { 74.815, 324429.477, -736768.368, 6901.486 },
-                { 8898.963, 807.834, 0.139, -70.908 },
-                { -615073.01, 85.581, 1.047, -6.389 },
-            });
-            var w = np.arange(1.0, 13.0).reshape(3, 4);
-            Check(fails, "average (0,1)", () => np.average(a, new[] { 0, 1 }), "float64 () c0f49029c6ff513c");
-            Check(fails, "average (0,1) weighted", () => np.average(a, new[] { 0, 1 }, w), "float64 () c0f5f8e28597b5a4");
-            AssertNoMismatch(fails, "NumPy's average is one add.reduce over the whole axis set");
         }
 
         // ======================================================================================================

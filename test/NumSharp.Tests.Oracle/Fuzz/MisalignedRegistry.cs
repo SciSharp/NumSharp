@@ -166,7 +166,12 @@ namespace NumSharp.Tests.Fuzz
             "nanmean",
             // ma.anom is numpy.ma's MaskedArray.anom since 2026-10-05 (plan api-parameter-parity A6): ma.mean and numpy.ma's
             // subtract — no platform libm. Its one operand made it look like a unary op.
-            "anom"
+            "anom",
+            // np.average is NumPy's average statement for statement since 2026-10-27 (np-layer dtype plan P2, step 2 of
+            // the np.average family): without weights np.mean (_mean), with weights np.sum of the weights, np.sum of
+            // np.multiply(a, w) in the result dtype and the division — no platform libm. An unweighted case carries ONE
+            // operand, so it must not ride the unary-ULP excuse.
+            "average"
         };
 
         /// <summary>
@@ -763,10 +768,9 @@ namespace NumSharp.Tests.Fuzz
                     return "complex median: NumPy _median_nancheck NaN-propagation vs NumSharp "
                          + "mean-of-middle [documented non-contractual]";
             }
-            // (W6-C) np.average: pairwise (NumPy) vs naive (NumSharp) summation order on large-magnitude
-            // slices -> precision drift.
-            if (c.Op == "average" && kind == DivergenceKind.Value)
-                return "average: summation-order precision divergence (pairwise vs naive) [known bug]";
+            // (W6-C REMOVED 2026-10-27) np.average's summation-order excuse: its sums are np.sum's add.reduce since step 2
+            // of the np.average family (NumPy's composition; the fused weighted-sum kernel's own order is gone), and its
+            // unweighted form is np.mean's _mean, so no average divergence is excused (Average_NoDivergenceIsExcused).
 
             // (W6-D FIXED) np.clip propagates NaN (clip(NaN,lo,hi)=NaN) — fixed together with W11-A by
             // making the clip SIMD min/max NaN-aware (the scalar path already propagated). The
@@ -894,9 +898,10 @@ namespace NumSharp.Tests.Fuzz
                 // axis (vertical/strided) SIMD min/max path still drops NaN; excuse only that.
                 // (mean/std/var/sum propagate NaN on both paths already, via arithmetic.)
                 // var/std/mean (np.*, ndarray.* and ma.*) are NumPy's statements since 2026-10-05 (_var, _mean and
-                // numpy.ma's MaskedArray methods): a NaN they miss is a real bug, not this min/max one.
+                // numpy.ma's MaskedArray methods), average since 2026-10-27: a NaN they miss is a real bug, not this
+                // min/max one.
                 if (kind == DivergenceKind.Value && diffs.Count > 0 && diffs.Count > 0 && diffs.All(d => d.Expected == "NaN")
-                    && c.Op != "var" && c.Op != "std" && c.Op != "mean"
+                    && c.Op != "var" && c.Op != "std" && c.Op != "mean" && c.Op != "average"
                     && c.Params != null
                     && c.Params.TryGetValue("axis", out var axEl)
                     && axEl.ValueKind != System.Text.Json.JsonValueKind.Null)
