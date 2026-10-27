@@ -1556,7 +1556,8 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="AxisError">An axis is out of bounds (thrown; <c>axis: axis 9 is out of bounds …</c>).</exception>
         /// <exception cref="ValueError">An axis appears twice (thrown; <c>repeated axis in `axis` argument</c>).</exception>
         /// <remarks>
-        ///     The weight-shape refusals keep the numeric path's house type (<see cref="ArgumentException"/>) and NumPy's texts.
+        ///     The weight-shape refusals are <c>_weights_are_valid</c>'s, NumPy's types and texts: a <see cref="TypeError"/>
+        ///     without an axis, a <see cref="ValueError"/> for weights not of the reduced axes' shape (returned).
         /// </remarks>
         internal static Exception AverageAnswer(NDArray a, int[] axes, NDArray weights)
         {
@@ -1567,12 +1568,12 @@ namespace NumSharp.Backends.Strings
             if (!SameDimensions(a.Shape.dimensions ?? Array.Empty<long>(), weights.Shape.dimensions ?? Array.Empty<long>()))
             {
                 if (axes is null)
-                    return new ArgumentException("Axis must be specified when shapes of a and weights differ.");
+                    return new TypeError("Axis must be specified when shapes of a and weights differ.");
                 var expected = new long[axes.Length];
                 for (int i = 0; i < axes.Length; i++)
                     expected[i] = a.Shape.dimensions[axes[i] < 0 ? axes[i] + a.ndim : axes[i]];
                 if (!SameDimensions(expected, weights.Shape.dimensions ?? Array.Empty<long>()))
-                    return new ArgumentException("Shape of weights must be consistent with shape of a along specified axis.");
+                    return new ValueError("Shape of weights must be consistent with shape of a along specified axis.");
             }
 
             // result_type(text, weights) is text of a fixed length; the weight sum's dtype= then refuses it by class.

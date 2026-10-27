@@ -70,7 +70,11 @@ namespace NumSharp.Backends.Strings
         ///     instance, not a class).
         /// </summary>
         /// <param name="a">The <c>StringDType</c> array.</param>
-        /// <param name="axes">The normalized axes, or null.</param>
+        /// <param name="axes">The normalized axes, or null (every axis; also a 0-d operand's tuple, see
+        ///     <see cref="NDStringUfuncs.ReducedAxes(NDArray, int[])"/>).</param>
+        /// <param name="axisGiven">Whether the caller passed an axis tuple (NumPy's <c>axis is not None</c>): with one, weights
+        ///     of another shape meet the shape-of-the-axes check even where <paramref name="axes"/> is null (a 0-d
+        ///     operand's tuple), as NumPy's <c>_weights_are_valid</c> tests the tuple, not the reduction.</param>
         /// <param name="weights">The weights, or null.</param>
         /// <param name="keepdims">Keep the reduced axes.</param>
         /// <returns>The mean (see <see cref="Mean"/>; only a NaN-like NA sum returns).</returns>
@@ -78,17 +82,19 @@ namespace NumSharp.Backends.Strings
         /// <exception cref="TypeError">See <see cref="Mean"/>; weights of another shape without an axis; the weights' sum
         ///     refusing the descriptor.</exception>
         /// <exception cref="ValueError">See <see cref="Mean"/>; weights inconsistent with the axis.</exception>
-        internal static NDArray Average(NDArray a, int[] axes, NDArray weights, bool keepdims)
+        internal static NDArray Average(NDArray a, int[] axes, bool axisGiven, NDArray weights, bool keepdims)
         {
             if (weights is null)
                 return Mean("average", a, axes, keepdims, null);
             // _weights_are_valid: the shape checks run before anything promotes.
             if (!a.Shape.Equals(weights.Shape) && !SameDims(a, weights))
             {
-                if (axes is null)
+                if (!axisGiven)
                     throw new TypeError("Axis must be specified when shapes of a and weights differ.");
-                bool consistent = weights.ndim == axes.Length;
-                for (int i = 0; consistent && i < axes.Length; i++)
+                // A 0-d operand's tuple reduces every axis (axes is null) yet is an axis given: its weights must have the
+                // shape of the tuple's axes — none, so any other shape is inconsistent.
+                bool consistent = axes is null ? weights.ndim == 0 : weights.ndim == axes.Length;
+                for (int i = 0; consistent && axes is not null && i < axes.Length; i++)
                     consistent = weights.Shape.dimensions[i] == a.Shape.dimensions[axes[i]];
                 if (!consistent)
                     throw new ValueError("Shape of weights must be consistent with shape of a along specified axis.");

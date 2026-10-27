@@ -43,19 +43,17 @@ namespace NumSharp.Statistics
         ///     0-d for a reduction over every axis without keepdims.</returns>
         /// <exception cref="AxisError">An axis out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>: NumPy names the argument).</exception>
-        /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); a
-        ///     <c>StringDType</c> operand's weights inconsistent with the axes.</exception>
-        /// <exception cref="ArgumentException">Numeric or fixed-width text operands: weights of another shape without an
-        ///     axis (<c>Axis must be specified when shapes of a and weights differ.</c>), or not of the reduced axes' shape
-        ///     (<c>Shape of weights must be consistent with shape of a along specified axis.</c>).</exception>
+        /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not
+        ///     of the reduced axes' shape (<c>Shape of weights must be consistent with shape of a along specified
+        ///     axis.</c>).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
         ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>: NumPy's
         ///     <c>a.size / avg.size</c>).</exception>
         /// <exception cref="NotSupportedException">Text weights beside a numeric operand: the numeric promotion table
         ///     (<see cref="np._FindCommonArrayType(NPTypeCode, NPTypeCode)"/>) has no entry for text.</exception>
-        /// <exception cref="TypeError">A text operand: the mean's add.reduce refusal, the weight sum's refusal of a sized
-        ///     string or <c>StringDType</c> <c>dtype=</c>, or a <c>StringDType</c> operand's weights of another shape
-        ///     without an axis.</exception>
+        /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
+        ///     and weights differ.</c>); a text operand: the mean's add.reduce refusal, or the weight sum's refusal of a
+        ///     sized string or <c>StringDType</c> <c>dtype=</c>.</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand with weights it has no common DType
         ///     with.</exception>
         /// <exception cref="InvalidOperationException">Not reached: a <c>StringDType</c> weight sum NumPy refuses that
@@ -76,7 +74,8 @@ namespace NumSharp.Statistics
                 // StringDType: the axis tuple normalized (average's argument name), then a.mean(axis) — or, with weights,
                 // result_type and the weights' sum — computing until NumPy's statement refuses (NDVStringStatistics.Average).
                 Backends.Strings.NDStringUfuncs.ValidateReduceAxes("average", a.ndim, axis);
-                var avg = Backends.Strings.NDVStringStatistics.Average(a, Backends.Strings.NDStringUfuncs.ReducedAxes(a, axis), weights, keepdims);
+                var avg = Backends.Strings.NDVStringStatistics.Average(a, Backends.Strings.NDStringUfuncs.ReducedAxes(a, axis),
+                    axisGiven: axis is not null, weights, keepdims);
                 if (!returned)
                     return (scope.Returns(avg), null);
                 // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns.
@@ -523,26 +522,28 @@ namespace NumSharp.Statistics
         /// <param name="a">The operand.</param>
         /// <param name="axis">The normalized axes, or null for every axis.</param>
         /// <returns><paramref name="weights"/> itself, or a view of it in the operand's rank.</returns>
-        /// <exception cref="ArgumentException">Weights of another shape without an axis (<c>Axis must be specified when
-        ///     shapes of a and weights differ.</c>), or not of the reduced axes' shape (<c>Shape of weights must be
-        ///     consistent with shape of a along specified axis.</c>).</exception>
+        /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
+        ///     and weights differ.</c>; NumPy's TypeError).</exception>
+        /// <exception cref="ValueError">Weights not of the reduced axes' shape (<c>Shape of weights must be consistent with
+        ///     shape of a along specified axis.</c>). An empty axis tuple is an axis given: weights of another shape then
+        ///     meet this check, not the TypeError.</exception>
         private static NDArray WeightsAreValid(NDArray weights, NDArray a, int[] axis)
         {
             NDArray wgt = weights;
             if (a.Shape.dimensions.SequenceEqual(wgt.Shape.dimensions))
                 return wgt;
 
+            // NumPy's _weights_are_valid: `if axis is None: raise TypeError(...)` — the axis tuple as given (an empty
+            // tuple is not None), then the shape of the reduced axes.
             if (axis is null)
-                throw new ArgumentException(
-                    "Axis must be specified when shapes of a and weights differ.");
+                throw new TypeError("Axis must be specified when shapes of a and weights differ.");
 
             long[] expected = new long[axis.Length];
             for (int i = 0; i < axis.Length; i++)
                 expected[i] = a.Shape.dimensions[axis[i]];
 
             if (!wgt.Shape.dimensions.SequenceEqual(expected))
-                throw new ArgumentException(
-                    "Shape of weights must be consistent with shape of a along specified axis.");
+                throw new ValueError("Shape of weights must be consistent with shape of a along specified axis.");
 
             // wgt = wgt.transpose(np.argsort(axis))
             if (axis.Length > 1)

@@ -23,15 +23,13 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (<c>axis: axis 2 is out of bounds for array
         ///     of dimension 2</c>).</exception>
-        /// <exception cref="ArgumentException">Weights of another shape without an axis, or not of the averaged axis'
-        ///     length (NumPy's texts).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="NotSupportedException">Text weights beside a numeric operand.</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand with weights it has no common DType
         ///     with.</exception>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a <c>StringDType</c> operand's weights inconsistent with the axis.</exception>
-        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); weights not of the averaged axis' length (<c>Shape of weights must be consistent with shape of a along specified axis.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. Weights of another shape without an axis (<c>Axis must be specified when shapes of a and weights differ.</c>). A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
         public static NDArray average(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
         {
             // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
@@ -61,15 +59,13 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>).</exception>
-        /// <exception cref="ArgumentException">Weights of another shape without an axis, or not of the averaged axes'
-        ///     extents (NumPy's texts).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="NotSupportedException">Text weights beside a numeric operand.</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand with weights it has no common DType
         ///     with.</exception>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); an axis that appears twice (<c>repeated axis in `axis` argument</c>); a <c>StringDType</c> operand's weights inconsistent with the axes.</exception>
-        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); an axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not of the averaged axes' extents (<c>Shape of weights must be consistent with shape of a along specified axis.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. Weights of another shape without an axis (<c>Axis must be specified when shapes of a and weights differ.</c>). A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
         public static NDArray average(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
         {
             // a numpy.matrix operand: the matrix with every reduced axis kept, as NumPy's matrix method returns
@@ -190,15 +186,13 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (<c>axis: axis 2 is out of bounds for array
         ///     of dimension 2</c>).</exception>
-        /// <exception cref="ArgumentException">Weights of another shape without an axis, or not of the averaged axis'
-        ///     length (NumPy's texts).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="NotSupportedException">Text weights beside a numeric operand.</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand with weights it has no common DType
         ///     with.</exception>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a <c>StringDType</c> operand's weights inconsistent with the axis.</exception>
-        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); weights not of the averaged axis' length (<c>Shape of weights must be consistent with shape of a along specified axis.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. Weights of another shape without an axis (<c>Axis must be specified when shapes of a and weights differ.</c>). A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
         public static (NDArray avg, NDArray sumOfWeights) average_returned(NDArray a, int? axis = null, NDArray weights = null, bool keepdims = false)
         {
             if (NDMatrixBoundary.Sees(a))   // a numpy.matrix operand: np.average's matrix rule, then NumPy's sum of weights
@@ -228,15 +222,13 @@ namespace NumSharp
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>).</exception>
-        /// <exception cref="ArgumentException">Weights of another shape without an axis, or not of the averaged axes'
-        ///     extents (NumPy's texts).</exception>
         /// <exception cref="DivideByZeroException">Weights that sum to zero, or an empty average without weights (NumPy's
         ///     ZeroDivisionError).</exception>
         /// <exception cref="NotSupportedException">Text weights beside a numeric operand.</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand with weights it has no common DType
         ///     with.</exception>
-        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); an axis that appears twice (<c>repeated axis in `axis` argument</c>); a <c>StringDType</c> operand's weights inconsistent with the axes.</exception>
-        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
+        /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); an axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not of the averaged axes' extents (<c>Shape of weights must be consistent with shape of a along specified axis.</c>).</exception>
+        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>. Weights of another shape without an axis (<c>Axis must be specified when shapes of a and weights differ.</c>). A text operand: NumPy's refusal of its mean or of its weight sum.</exception>
         public static (NDArray avg, NDArray sumOfWeights) average_returned(NDArray a, int[] axis, NDArray weights = null, bool keepdims = false)
         {
             if (NDMatrixBoundary.Sees(a))   // a numpy.matrix operand: np.average's matrix rule, then NumPy's sum of weights
