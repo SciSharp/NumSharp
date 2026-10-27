@@ -242,5 +242,38 @@ namespace NumSharp.Tests.Manipulation
             r[0].array_equal(np.array(new[] { 1, 3, 5 })).Should().BeTrue();
             r[1].array_equal(np.array(new long[] { 1, 1, 2 })).Should().BeTrue();
         }
+
+        /// <summary>
+        ///     The values of the row path are NumPy's <c>reshape_uniq</c> result for every axis: <c>np.moveaxis(uniq, 0,
+        ///     axis)</c> runs for axis 0 too, so they are a VIEW of the gathered rows (probed against NumPy 2.4.2:
+        ///     <c>np.unique(np.arange(12).reshape(3, 4) % 2, axis=0)</c> has flags C, not OWNDATA; an empty <c>(0, 3)</c>
+        ///     operand's <c>(0, 3)</c> values C and F, not OWNDATA). NumSharp skipped the move at axis 0 and returned the
+        ///     owner. The other outputs stay fresh arrays.
+        /// </summary>
+        /// <exception cref="Exception">The assertion framework's failure exception, when a flag or a value differs from
+        ///     NumPy's.</exception>
+        [TestMethod]
+        public void Axis_Values_AreAViewForEveryAxis()
+        {
+            var a = np.arange(12).reshape(3, 4) % 2;
+            foreach (int axis in new[] { 0, 1, -2 })
+            {
+                var r = np.unique(a, return_index: true, return_inverse: true, return_counts: true, axis: axis);
+                r.values.flags.owndata.Should().BeFalse($"axis {axis}: NumPy's reshape_uniq returns a view");
+                r.indices.flags.owndata.Should().BeTrue();
+                r.counts.flags.owndata.Should().BeTrue();
+                np.unique(a, axis: axis).values.flags.owndata.Should().BeFalse();
+                a.unique(axis: axis).flags.owndata.Should().BeFalse("the instance member is the same computation");
+            }
+            var axis0 = np.unique(a, axis: 0).values;
+            axis0.flags.c_contiguous.Should().BeTrue();
+            axis0.array_equal(np.array(new long[,] { { 0, 1, 0, 1 } })).Should().BeTrue();
+
+            var empty = np.unique(np.zeros(new Shape(0, 3)), axis: 0).values;
+            empty.Should().BeShaped(0, 3);
+            empty.flags.c_contiguous.Should().BeTrue();
+            empty.flags.f_contiguous.Should().BeTrue();
+            empty.flags.owndata.Should().BeFalse();
+        }
     }
 }

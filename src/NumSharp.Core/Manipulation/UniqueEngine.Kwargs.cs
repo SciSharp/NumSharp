@@ -1072,8 +1072,9 @@ namespace NumSharp
         /// <param name="return_counts">Also return the counts.</param>
         /// <param name="equal_nan">Ignored: NumPy's structured rows are not of a float kind, so its NaN branch never runs
         ///     and every NaN row is distinct.</param>
-        /// <returns>[values, index?, inverse?, counts?]: the values a fresh array, moved back to the axis (a view) when the
-        ///     axis is not 0; the index outputs int64.</returns>
+        /// <returns>[values, index?, inverse?, counts?]: the values a view of the gathered rows moved back to the axis
+        ///     (<c>flags.owndata</c> False for every axis, as NumPy's <c>reshape_uniq</c> returns), the index outputs fresh
+        ///     int64 arrays.</returns>
         /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones (text takes its own route).</exception>
         /// <remarks>
         ///     <para>
@@ -1146,8 +1147,10 @@ namespace NumSharp
 
             var values = GatherSlabs(movedCopy, sortedKeepIdx.ToArray(), slabSize, Shape.Adopt(resultShapeDims));
 
-            if (axis != 0)
-                values = np.moveaxis(values, 0, axis);
+            // NumPy's reshape_uniq: `np.moveaxis(uniq, 0, axis)` for every axis, axis 0 included, so the values are always
+            // a VIEW of the gathered rows' buffer (flags.owndata False). The gathered owner is left to the caller's scope
+            // (np.unique's boundary scope), its buffer kept alive by the view.
+            values = np.moveaxis(values, 0, axis);
 
             var results = new List<NDArray> { values };
 
