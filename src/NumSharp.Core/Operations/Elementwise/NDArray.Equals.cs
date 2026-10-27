@@ -137,14 +137,16 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     True if this array and <paramref name="rhs"/> have the same shape and all elements are equal.
+        ///     True if this array and <paramref name="rhs"/> have the same shape and all elements are equal: NumSharp's
+        ///     member for <c>np.array_equal(this, rhs, equal_nan)</c> (NumPy has no ndarray method of that name), with the
+        ///     function's answers for every dtype, text and <c>StringDType</c> included.
         /// </summary>
-        /// <param name="rhs">The array to compare against.</param>
+        /// <param name="rhs">The array to compare against; null is never equal.</param>
         /// <param name="equal_nan">
         ///     When <c>false</c> (the NumPy default) NaN never compares equal — an array holding a NaN is NOT
         ///     equal even to itself, so <c>a.array_equal(a)</c> is <c>false</c> when <c>a</c> contains a NaN.
         ///     When <c>true</c>, NaNs at matching positions are treated as equal, and for a complex dtype a
-        ///     value counts as NaN when EITHER component is NaN.
+        ///     value counts as NaN when EITHER component is NaN; a NaN-like NA of <c>StringDType</c> is a NaN.
         /// </param>
         /// <returns>Returns True if the arrays are equal.</returns>
         /// <remarks>
@@ -155,16 +157,20 @@ namespace NumSharp
         ///     here; a same-reference short-circuit is only valid under <paramref name="equal_nan"/>. Dtypes
         ///     that cannot hold NaN (bool / all integer widths / char / decimal) skip the NaN machinery: their
         ///     <c>isnan</c> is uniformly false, so the fast path yields the identical result NumPy would (this
-        ///     also sidesteps calling <c>isnan</c> on Char/Decimal, which have no NumPy analog).
+        ///     also sidesteps calling <c>isnan</c> on Char/Decimal, which have no NumPy analog). Footgun: a
+        ///     fixed-width text operand cannot take <paramref name="equal_nan"/> — NumPy's <c>isnan</c> refuses
+        ///     it unless both operands are the same object (or the shapes differ).
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html
         /// </remarks>
-        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ (their <c>==</c> comparison
-        ///     refuses the pair).</exception>
+        /// <exception cref="TypeError">With <paramref name="equal_nan"/>, a fixed-width string operand and two different
+        ///     arrays of one shape (NumPy's <c>isnan</c> has no string loop); two <c>StringDType</c> operands whose NA
+        ///     objects differ (their comparison refuses the pair).</exception>
         public bool array_equal(NDArray rhs, bool equal_nan = false)
         {
-            // The statements are np.array_equal's numeric ones, in ArrayEqualEngine (Logic/ArrayEqualEngine.cs), the
-            // operation class np.array_equal's facade calls too.
-            return ArrayEqualEngine.ArrayEqualNumeric(this, rhs, equal_nan);
+            using var plain = NDMatrixBoundary.PlainFor(this, rhs);   // the member keeps the plain-array meaning for a matrix object
+            // np.array_equal's statements, in ArrayEqualEngine (Logic/ArrayEqualEngine.cs): the text and StringDType
+            // routes before the numeric ones, so the member answers as the function does.
+            return ArrayEqualEngine.ArrayEqual(this, rhs, equal_nan);
         }
 
     }

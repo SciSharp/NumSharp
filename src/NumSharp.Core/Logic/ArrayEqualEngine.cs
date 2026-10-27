@@ -12,7 +12,7 @@ namespace NumSharp
     /// <remarks>
     ///     An internal operation class (the np-layer dtype plan's D1: NumPy writes both functions in Python), moved from the
     ///     public <c>np.array_equal</c> / <c>np.array_equiv</c> and the member <see cref="NDArray.array_equal(NDArray, bool)"/>
-    ///     by P2; the facades keep the matrix boundary's plain region and one call, the member one call. It sits beside the
+    ///     by P2; the facades and the member keep the matrix boundary's plain region and one call. It sits beside the
     ///     facades, not under <c>Backends/</c>, because its statements call the public np.* functions NumPy's call
     ///     (np.all, np.isnan, np.equal, np.logical_not, np.are_broadcastable), which ratchet R2 counts under
     ///     <c>Backends/</c>.
@@ -20,8 +20,9 @@ namespace NumSharp
     internal static class ArrayEqualEngine
     {
         /// <summary>
-        ///     <c>array_equal(a, b, equal_nan)</c> after the facade's plain region: the null convention, NumPy's statements
-        ///     for a <c>StringDType</c> or fixed-width text operand, the fused equality scan for the common default, and the
+        ///     <c>array_equal(a, b, equal_nan)</c> after its callers' plain region (np.array_equal's facade and the member
+        ///     <see cref="NDArray.array_equal(NDArray, bool)"/>): the null convention, NumPy's statements for a
+        ///     <c>StringDType</c> or fixed-width text operand, the fused equality scan for the common default, and the
         ///     numeric statements (<see cref="ArrayEqualNumeric"/>).
         /// </summary>
         /// <param name="a">The first array, or null.</param>
@@ -116,24 +117,21 @@ namespace NumSharp
         ///     same object is True, two dtypes that cannot hold NaN compare plainly, and otherwise the NaN positions must agree
         ///     and every other element must be equal.
         /// </summary>
-        /// <param name="a">The first array (not null).</param>
-        /// <param name="b">The second array, or null (never equal).</param>
+        /// <param name="a">The first array (not null, not text).</param>
+        /// <param name="b">The second array (not text), or null (never equal).</param>
         /// <param name="equal_nan">NumPy's <c>equal_nan</c>.</param>
         /// <returns>True if the arrays have identical shapes and every element is equal (NaNs at the same places count as
         ///     equal under <paramref name="equal_nan"/>).</returns>
-        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ (the <c>==</c> comparison
-        ///     refuses them; reached through the member <see cref="NDArray.array_equal(NDArray, bool)"/>, which hands any
-        ///     operand here).</exception>
         /// <remarks>
+        ///     Reached only from <see cref="ArrayEqual"/>, after its text and <c>StringDType</c> routes: a text operand here
+        ///     would be compared plainly with <paramref name="equal_nan"/>, where NumPy's <c>isnan</c> refuses it.
         ///     Shape must match EXACTLY (no broadcasting; see <see cref="ArrayEquiv"/> for the broadcasting variant), and the
         ///     shape check runs FIRST. The default path is <c>all(a == b)</c> — deliberately WITHOUT a same-reference
         ///     short-circuit, because NaN ≠ NaN means an array with a NaN is not equal to itself here; a same-reference
         ///     short-circuit is only valid under <paramref name="equal_nan"/>. Dtypes that cannot hold NaN (bool / all
-        ///     integer widths / char / decimal, and text) skip the NaN machinery: their <c>isnan</c> is uniformly false for
-        ///     the numbers, so the plain comparison yields the identical result NumPy would (this also sidesteps calling
-        ///     <c>isnan</c> on Char/Decimal, which have no NumPy analog). The member reaches this method with a text operand
-        ///     as well, which <see cref="ArrayEqual"/> routes elsewhere: with <paramref name="equal_nan"/> such a pair is
-        ///     compared here, where NumPy's <c>isnan</c> refuses it.
+        ///     integer widths / char / decimal) skip the NaN machinery: their <c>isnan</c> is uniformly false, so the plain
+        ///     comparison yields the identical result NumPy would (this also sidesteps calling <c>isnan</c> on Char/Decimal,
+        ///     which have no NumPy analog).
         ///     Scoped by <c>[NDScoped]</c>: every comparison/isnan mask the method builds is released on return
         ///     (it returns a <c>bool</c>, so nothing is yielded), and the operands, built before the scope
         ///     opened, are never touched.

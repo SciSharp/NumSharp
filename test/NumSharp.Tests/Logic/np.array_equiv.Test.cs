@@ -188,6 +188,54 @@ namespace NumSharp.Tests.Logic
                                           np.array(new[] { new Complex(3.0, 4.0) }), equal_nan: true));
         }
 
+        // ------------------------------------------------- the member NDArray.array_equal ----
+
+        /// <summary>
+        ///     <see cref="NDArray.array_equal(NDArray, bool)"/> is NumSharp's member for <c>np.array_equal(self, rhs,
+        ///     equal_nan)</c> (NumPy has no ndarray method of that name), so it gives np.array_equal's answers for text and
+        ///     <c>StringDType</c> operands too. With <c>equal_nan</c>, two different arrays of one shape where one is
+        ///     fixed-width text (S against its copy, U against S or numbers, numbers against U, two empty U arrays, and
+        ///     <c>StringDType</c> against U either way) reach NumPy's <c>isnan</c>, which refuses the text; the same object is
+        ///     True and a shape mismatch False before that; a NaN-like NA of <c>StringDType</c> at the same places is equal
+        ///     only with <c>equal_nan</c>. Probed against NumPy 2.4.2; the member compared the text (True, or False against
+        ///     numbers) and treated the NaN-like NA as unequal before it ran np.array_equal's statements.
+        /// </summary>
+        [TestMethod]
+        public void array_equal_Member_TextAndStringDType_AreNpArrayEqualsAnswers()
+        {
+            const string isnanRefusal = "ufunc 'isnan' not supported for the input types, and the inputs could not be "
+                                        + "safely coerced to any supported types according to the casting rule ''safe''";
+            var s = np.array(new[] { "ab", "cd" }, np.dtype("S2"));
+            var u = np.array(new[] { "ab", "cd" });
+            var ints = np.array(new long[] { 1, 2 });
+            var tNaN = np.dtypes.StringDType(na_object: double.NaN);
+            var tText = np.array(new object[] { "ab", "cd" }, tNaN);
+            var pairs = new (NDArray a, NDArray b)[]
+            {
+                (s, s.copy()), (u, u.copy()), (u, s), (u, ints), (ints, u), (np.array(new[] { 1.0, 2.0 }), u),
+                (np.zeros(new Shape(0), np.dtype("U3")), np.zeros(new Shape(0), np.dtype("U3"))), (tText, u), (u, tText),
+            };
+            foreach (var (a, b) in pairs)
+            {
+                Action member = () => a.array_equal(b, equal_nan: true);
+                member.Should().Throw<TypeError>().WithMessage(isnanRefusal);
+                Action function = () => np.array_equal(a, b, equal_nan: true);
+                function.Should().Throw<TypeError>().WithMessage(isnanRefusal);
+            }
+
+            // >>> np.array_equal(s, s, equal_nan=True) -> True (a1 is a2); a shape mismatch is False before isnan.
+            s.array_equal(s, equal_nan: true).Should().BeTrue();
+            u.array_equal(np.array(new[] { "ab" }), equal_nan: true).Should().BeFalse();
+            // Without equal_nan the text compares: (a1 == a2).all(), the all-False answer against numbers.
+            u.array_equal(u.copy()).Should().BeTrue();
+            u.array_equal(ints).Should().BeFalse();
+            // >>> t = np.array(['ab', np.nan], dtype=StringDType(na_object=np.nan))
+            // >>> np.array_equal(t, t.copy(), equal_nan=True) -> True ; np.array_equal(t, t.copy()) -> False
+            var t = np.array(new object[] { "ab", double.NaN }, tNaN);
+            t.array_equal(t.copy(), equal_nan: true).Should().BeTrue();
+            t.array_equal(t.copy()).Should().BeFalse();
+        }
+
         // -------------------------------------------------------------- layouts ----
 
         [TestMethod]
