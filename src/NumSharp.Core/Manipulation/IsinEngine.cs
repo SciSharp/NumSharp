@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
@@ -95,6 +96,12 @@ namespace NumSharp
                     throw new InvalidOperationException(
                         "You have specified kind='table', but the range of values in `ar2` or `ar1` exceed the "
                         + "maximum integer of the datatype. Please set `kind` to None or 'sort'.");
+                // NumPy then allocates its table, np.zeros(ar2_range + 1, dtype=bool) (np.ones under invert), whatever the
+                // element holds (an empty element too): a length past npy_intp is that call's shape conversion's ValueError.
+                // A length NumPy can address but not allocate (8 EiB) is its MemoryError, which NumSharp does not reproduce:
+                // the membership below needs no table (the documented divergence).
+                if (ar2.size > 0 && TableRange(ar2) >= long.MaxValue)
+                    throw new ValueError("Maximum allowed dimension exceeded");
             }
 
             // Empty element -> empty boolean result shaped like element (value irrelevant). Every NumPy path ends in
@@ -493,6 +500,34 @@ namespace NumSharp
         /// <remarks>A test of kinds only: the membership itself keeps <see cref="IsIntegerOrBool"/>'s routes, which answer a
         ///     char operand exactly.</remarks>
         private static bool IsNumPyIntegerKind(NPTypeCode tc) => tc == NPTypeCode.Char || IsIntegerOrBool(tc);
+
+        /// <summary>
+        ///     NumPy's <c>ar2_range = int(np.max(ar2)) - int(np.min(ar2))</c> of the table method, exactly (a Python int): a
+        ///     bool set reads as NumPy's uint8 0 / 1, a char set as its uint16 values, a uint64 set past 2**63 as itself.
+        /// </summary>
+        /// <param name="ar2">The flattened set: bool, an integer dtype or char, not empty.</param>
+        /// <returns>The range, never negative.</returns>
+        /// <remarks>The two reductions are reclaimed here; the caller's scope covers nothing of them.</remarks>
+        private static BigInteger TableRange(NDArray ar2)
+        {
+            using NDArray min = np.amin(ar2), max = np.amax(ar2);
+            return PythonInt(max.GetAtIndex(0)) - PythonInt(min.GetAtIndex(0));
+        }
+
+        /// <summary>
+        ///     An integer element as the Python int NumPy's <c>int()</c> makes of it: bool as 0 / 1, char as its code (the
+        ///     uint16 value), uint64 without a sign, every other integer through <c>long</c>.
+        /// </summary>
+        /// <param name="value">A boxed element of a bool, integer or char array.</param>
+        /// <returns>Its value.</returns>
+        /// <exception cref="InvalidCastException">A boxed value of another kind (no caller passes one).</exception>
+        private static BigInteger PythonInt(object value) => value switch
+        {
+            bool b => b ? BigInteger.One : BigInteger.Zero,
+            char c => new BigInteger((int)c),
+            ulong u => new BigInteger(u),
+            _ => new BigInteger(Convert.ToInt64(value)),
+        };
 
         // range = max(ar2) - min(ar2); safe iff it fits the positive span of ar2's dtype (NumPy's
         // ar2_range <= iinfo(ar2.dtype).max). Only signed integer test dtypes can overflow: for unsigned
