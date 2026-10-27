@@ -26,7 +26,7 @@ namespace NumSharp
         //   * values dtype is preserved; indices/inverse_indices/counts are int64 (NumPy intp).
         //   * inverse_indices is reshaped to the ORIGINAL input shape (NumPy 2.0 change), so the
         //     input can be reconstructed with np.take(values, inverse_indices). A 0-d input's
-        //     inverse is a 0-d () scalar — see ReshapeInverseToInput.
+        //     inverse is a 0-d () scalar — see UniqueEngine.ReshapeInverseToInput.
         //
         //  ONE deliberate divergence, unique_values only ([Misaligned]): for INTEGER and COMPLEX
         //  dtypes NumPy's sorted=False path dedups through a std::unordered_set (unique.cpp) and
@@ -235,14 +235,8 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(x))
                 return NDCharArrayBoundary.Wrapped(x, static s => unique_values(s));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy hashes text (sorts it with an index output); text of every class computes in the instance unique (this
-            // guard refuses only StringDType's structured axis path, which no axis-less call reaches).
-            NDArray.ThrowIfTextUnique(x, null);
-            // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
-            if (Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x))
-                return x.unique(return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false,
-                                sorted: false)[0];
-            return x.uniqueValuesFast();
+            // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
+            return UniqueEngine.UniqueValues(x);
         }
 
         /// <summary>
@@ -275,12 +269,8 @@ namespace NumSharp
                 return new UniqueCountsResult(kept[0], kept[1]);
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text: text of every class computes in the instance unique (this guard refuses only StringDType's
-            // structured axis path, which no axis-less call reaches).
-            NDArray.ThrowIfTextUnique(x, null);
-            var r = Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x)
-                ? x.unique(return_index: false, return_inverse: false, return_counts: true, axis: null, equal_nan: false)
-                : x.uniqueCountsFast();
+            // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
+            var r = UniqueEngine.UniqueCounts(x);
             return new UniqueCountsResult(r[0], r[1]);
         }
 
@@ -302,7 +292,7 @@ namespace NumSharp
         ///     nan-like value</c>.</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
-        // inverse — the two UniqueInverseResult fields. ReshapeInverseToInput returns a view of r[1]
+        // inverse — the two UniqueInverseResult fields. UniqueEngine.ReshapeInverseToInput returns a view of r[1]
         // (or r[1] itself for 0-d); the un-yielded r[1] base is reclaimed, its buffer kept alive by
         // the yielded view's ARC reference.
         [NDScoped]
@@ -318,12 +308,9 @@ namespace NumSharp
                 return new UniqueInverseResult(kept[0], kept[1]);
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text: text of every class computes in the instance unique below (this guard refuses only
-            // StringDType's structured axis path, which no axis-less call reaches).
-            NDArray.ThrowIfTextUnique(x, null);
-            var r = x.unique(return_index: false, return_inverse: true, return_counts: false,
-                             axis: null, equal_nan: false);
-            return new UniqueInverseResult(r[0], ReshapeInverseToInput(r[1], x));
+            // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
+            var r = UniqueEngine.UniqueInverse(x);
+            return new UniqueInverseResult(r[0], r[1]);
         }
 
         /// <summary>
@@ -358,23 +345,9 @@ namespace NumSharp
                 return new UniqueAllResult(kept[0], kept[1], kept[2], kept[3]);
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy sorts text: text of every class computes in the instance unique below (this guard refuses only
-            // StringDType's structured axis path, which no axis-less call reaches).
-            NDArray.ThrowIfTextUnique(x, null);
-            var r = x.unique(return_index: true, return_inverse: true, return_counts: true,
-                             axis: null, equal_nan: false);
-            return new UniqueAllResult(r[0], r[1], ReshapeInverseToInput(r[2], x), r[3]);
+            // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
+            var r = UniqueEngine.UniqueAll(x);
+            return new UniqueAllResult(r[0], r[1], r[2], r[3]);
         }
-
-        /// <summary>
-        ///     Reshapes the flat inverse-index array to the ORIGINAL input shape, matching NumPy's
-        ///     <c>inv_idx.reshape(ar.shape)</c> so the input can be reconstructed with
-        ///     <c>np.take(values, inverse_indices)</c>. The underlying kwargs path already yields the
-        ///     input shape for ndim ≥ 1; a 0-d input needs its <c>()</c> scalar shape restored (the flat
-        ///     path returns it as <c>(1,)</c>). Reshape is a zero-copy view over the freshly-allocated
-        ///     inverse array.
-        /// </summary>
-        private static NDArray ReshapeInverseToInput(NDArray inverse, NDArray x)
-            => inverse.reshape(Shape.Adopt(x.Shape.dimensions));
     }
 }

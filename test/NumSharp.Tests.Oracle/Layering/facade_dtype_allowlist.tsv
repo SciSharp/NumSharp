@@ -83,11 +83,6 @@ Logic/np.nan_to_num.cs	0	10
 Logic/np.type_checks.cs	2	15
 Manipulation/NDArray.fill.cs	3	1
 Manipulation/NDArray.resize.cs	3	0
-Manipulation/NDArray.unique.Hash.cs	0	24
-Manipulation/NDArray.unique.Kwargs.cs	0	64
-Manipulation/NDArray.unique.Radix.cs	0	5
-Manipulation/NDArray.unique.Text.cs	1	0
-Manipulation/NDArray.unique.cs	4	0
 Manipulation/np.apply_along_axis.cs	0	1
 Manipulation/np.asscalar.cs	0	1
 Manipulation/np.copyto.Strings.cs	15	2
@@ -100,7 +95,6 @@ Manipulation/np.repeat.cs	2	9
 Manipulation/np.resize.cs	1	0
 Manipulation/np.setops.cs	0	2
 Manipulation/np.trim_zeros.cs	2	0
-Manipulation/np.unique_values.cs	2	0
 Math/NDArray.ComplexAccessors.cs	1	2
 Math/NDArray.Convolve.cs	4	0
 Math/NDArray.Correlate.cs	4	1

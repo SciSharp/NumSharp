@@ -7,12 +7,12 @@ using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 namespace NumSharp
 {
-    public partial class NDArray
+    internal static partial class UniqueEngine
     {
         // ============================================================================
         //  RADIX flat sort for np.unique's SORT path.
         //
-        //  np.unique's flat pipeline (NDArray.unique.Kwargs.cs) sorts a managed key buffer
+        //  np.unique's flat pipeline (UniqueEngine.Kwargs.cs) sorts a managed key buffer
         //  (+ perm for return_index/inverse/counts) and then masks/dedups. The sort was
         //  System.Array.Sort — the .NET BCL introsort, a COMPARISON sort (~n·log n comparisons,
         //  ~50% branch-mispredict on random data). This routes it instead through the SAME
@@ -35,6 +35,9 @@ namespace NumSharp
         // ============================================================================
 
         /// <summary>True when dtype <paramref name="tc"/> has a monotonic radix key (see class remarks).</summary>
+        /// <param name="tc">The dtype.</param>
+        /// <returns>True for the 12 fixed-width dtypes the radix routes serve; false for Half, Decimal, Complex and text,
+        ///     which keep the BCL sort.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool CanRadixSortUnique(NPTypeCode tc) => tc switch
         {
@@ -53,6 +56,13 @@ namespace NumSharp
         ///     tail). Same total order as the BCL comparer for every non-NaN value, so the mask/dedup
         ///     that follows produces an identical result.
         /// </summary>
+        /// <typeparam name="T">A radix-able element type (see <see cref="CanRadixSortUnique"/>).</typeparam>
+        /// <param name="keys">The keys; the first <paramref name="count"/> are sorted in place (a NaN among them would
+        ///     sort by its bits, so float callers pass the non-NaN prefix only).</param>
+        /// <param name="count">How many keys to sort; zero or one leaves them as they are.</param>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no radix key (a bug in the caller).</exception>
+        /// <remarks>The key orders <c>-0.0</c> below <c>+0.0</c> (it is the raw bits made monotonic), so the two zeros do
+        ///     not stay in input order.</remarks>
         private static unsafe void RadixSortValues<T>(T[] keys, int count) where T : unmanaged
         {
             if (count <= 1) return;
@@ -92,6 +102,13 @@ namespace NumSharp
         ///     come back through the key's inverse transform (no gather — the sorted key column is
         ///     already in memory order), the sorted permutation from the co-sorted index column.
         /// </summary>
+        /// <typeparam name="T">A radix-able element type (see <see cref="CanRadixSortUnique"/>).</typeparam>
+        /// <param name="keys">The keys; the first <paramref name="count"/> are sorted in place.</param>
+        /// <param name="perm">The permutation, reordered with the keys (stable: equal keys keep their order).</param>
+        /// <param name="count">How many keys to sort; zero or one leaves both arrays as they are.</param>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no radix key (a bug in the caller).</exception>
+        /// <remarks>Stable for equal KEYS, but <c>-0.0</c> and <c>+0.0</c> have different keys: <c>-0.0</c> comes first
+        ///     whatever the input order.</remarks>
         private static unsafe void RadixArgSortKeysPerm<T>(T[] keys, long[] perm, int count) where T : unmanaged
         {
             if (count <= 1) return;
@@ -136,6 +153,12 @@ namespace NumSharp
         ///     path's <c>EmitValuesOnly</c>/<c>EmitOutputs</c> exactly (integer bit patterns bijection
         ///     with value, so this equals the hash result AS A SET, in the same ascending order).
         /// </summary>
+        /// <typeparam name="T">The integer-family element type.</typeparam>
+        /// <param name="sorted">The sorted elements.</param>
+        /// <param name="n">Their count; must be positive (the first element is always kept).</param>
+        /// <param name="wantCounts">Also build the run-length counts.</param>
+        /// <returns>The fresh 1-D distinct values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null
+        ///     otherwise).</returns>
         private static unsafe (NDArray values, NDArray counts) RadixDedupSortedInt<T>(T[] sorted, int n, bool wantCounts)
             where T : unmanaged, IEquatable<T>
         {
@@ -168,10 +191,13 @@ namespace NumSharp
         }
 
         // ----- monotonic key transforms (JIT-const typeof(T) dispatch; exactly one branch survives
-        //       per specialized method — same pattern as HashKey<T> in NDArray.unique.Hash.cs).
+        //       per specialized method — same pattern as HashKey<T> in UniqueEngine.Hash.cs).
         //       These mirror AxisSort's IKey32/IKey64/FKey adapters byte-for-byte. -----
 
         /// <summary>Significant key bytes for the u32 core (1/2/4), or 8 to signal the u64 core.</summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <returns>1, 2, 4 or 8.</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no monotonic radix key.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int RadixKeyBytes<T>() where T : unmanaged
         {
@@ -182,6 +208,14 @@ namespace NumSharp
             throw new NotSupportedException($"RadixKeyBytes: {typeof(T)} has no monotonic radix key.");
         }
 
+        /// <summary>
+        ///     The 32-bit radix key of a 1-, 2- or 4-byte value: unsigned values as they are, signed ones with the sign bit
+        ///     flipped, float32 bits made monotonic (negative values inverted, positive ones with the sign bit set).
+        /// </summary>
+        /// <typeparam name="T">A 1-, 2- or 4-byte radix-able element type.</typeparam>
+        /// <param name="v">The value.</param>
+        /// <returns>A key whose unsigned order is the value order (a NaN keys by its bits).</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no 32-bit radix key.</exception>
         [MethodImpl(OptimizeAndInline)]
         private static uint ToKey32<T>(T v) where T : unmanaged
         {
@@ -196,6 +230,14 @@ namespace NumSharp
             throw new NotSupportedException();
         }
 
+        /// <summary>
+        ///     The 64-bit radix key of an 8-byte value: uint64 as it is, int64 with the sign bit flipped, float64 bits made
+        ///     monotonic.
+        /// </summary>
+        /// <typeparam name="T">long, ulong or double.</typeparam>
+        /// <param name="v">The value.</param>
+        /// <returns>A key whose unsigned order is the value order (a NaN keys by its bits).</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no 64-bit radix key.</exception>
         [MethodImpl(OptimizeAndInline)]
         private static ulong ToKey64<T>(T v) where T : unmanaged
         {
@@ -205,6 +247,11 @@ namespace NumSharp
             throw new NotSupportedException();
         }
 
+        /// <summary>The inverse of <see cref="ToKey32{T}"/>: the value whose key is <paramref name="k"/>, bits exact.</summary>
+        /// <typeparam name="T">A 1-, 2- or 4-byte radix-able element type.</typeparam>
+        /// <param name="k">The key.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no 32-bit radix key.</exception>
         [MethodImpl(OptimizeAndInline)]
         private static T FromKey32<T>(uint k) where T : unmanaged
         {
@@ -219,6 +266,11 @@ namespace NumSharp
             throw new NotSupportedException();
         }
 
+        /// <summary>The inverse of <see cref="ToKey64{T}"/>: the value whose key is <paramref name="k"/>, bits exact.</summary>
+        /// <typeparam name="T">long, ulong or double.</typeparam>
+        /// <param name="k">The key.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="NotSupportedException"><typeparamref name="T"/> has no 64-bit radix key.</exception>
         [MethodImpl(OptimizeAndInline)]
         private static T FromKey64<T>(ulong k) where T : unmanaged
         {

@@ -2,7 +2,7 @@ using NumSharp.Backends;
 using NumSharp.Backends.Sorting;
 
 // =============================================================================
-// NDArray.unique.Text.cs — np.unique over fixed-width text (S / U), NumPy 2.4.2's statements
+// UniqueEngine.Text.cs — np.unique over fixed-width text (S / U), NumPy 2.4.2's statements
 // =============================================================================
 //
 // WHAT NUMPY DOES (numpy/lib/_arraysetops_impl.py, unique + _unique1d)
@@ -34,7 +34,7 @@ using NumSharp.Backends.Sorting;
 
 namespace NumSharp
 {
-    public partial class NDArray
+    internal static partial class UniqueEngine
     {
         /// <summary>
         ///     NumPy 2.4.2's <c>np.unique</c> over fixed-width text (<c>S</c> / <c>U</c>): the flat path for

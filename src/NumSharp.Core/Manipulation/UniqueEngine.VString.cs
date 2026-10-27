@@ -1,7 +1,7 @@
 using NumSharp.Backends.Sorting;
 
 // =============================================================================
-// NDArray.unique.VString.cs — np.unique over NEP 55 StringDType text (T), NumPy 2.4.2's statements
+// UniqueEngine.VString.cs — np.unique over NEP 55 StringDType text (T), NumPy 2.4.2's statements
 // =============================================================================
 //
 // WHAT NUMPY DOES (numpy/lib/_arraysetops_impl.py, unique + _unique1d; unique.cpp unique_vstring)
@@ -14,7 +14,7 @@ using NumSharp.Backends.Sorting;
 //     StringDType's kind is 'T'), and the StringDType `!=` of a NaN-like NA is False, so the NAs (sorted last) join the
 //     run of the greatest text — then values `aux[mask]`, index `perm[mask]`, inverse `cumsum(mask) - 1` scattered by
 //     perm, counts `diff(nonzero(mask) + [n])`.
-//   * An axis of an N-D input takes the structured path, which refuses StringDType (NDArray.unique.cs).
+//   * An axis of an N-D input takes the structured path, which refuses StringDType (UniqueEngine.cs).
 //
 // HOW THIS FILE GETS THE SAME ANSWERS
 //   The values-only route is VStringDistinct (the distinct texts by hashing, the NA entries apart, NumPy's sorted order);
@@ -25,7 +25,7 @@ using NumSharp.Backends.Sorting;
 
 namespace NumSharp
 {
-    public partial class NDArray
+    internal static partial class UniqueEngine
     {
         /// <summary>
         ///     NumPy 2.4.2's flat <c>np.unique</c> over <c>StringDType</c> text (the caller checked the axis: the structured

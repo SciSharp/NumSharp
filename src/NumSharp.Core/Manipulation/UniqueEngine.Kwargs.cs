@@ -7,7 +7,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
-    public partial class NDArray
+    internal static partial class UniqueEngine
     {
         // ============================================================
         //  FLAT (no axis) — sort + mask path (NumPy algorithm)
@@ -22,55 +22,89 @@ namespace NumSharp
         //  Matches numpy/lib/_arraysetops_impl.py::_unique1d exactly.
         // ============================================================
 
-        private NDArray[] uniqueFlatKwargs(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        /// <summary>
+        ///     The flat (<c>axis=None</c>, or a 1-D input) numeric unique: dispatches on the operand's dtype to the
+        ///     sort + mask pipeline of its family (the integer-family generic path, or the NaN-aware Half / Single /
+        ///     Double / Complex paths, which are the only ones <paramref name="equal_nan"/> reaches).
+        /// </summary>
+        /// <param name="a">The numeric operand (any layout; only read).</param>
+        /// <param name="return_index">Also return each unique value's first-occurrence index (flat, C order).</param>
+        /// <param name="return_inverse">Also return the indices into the values that rebuild the flattened input.</param>
+        /// <param name="return_counts">Also return each unique value's occurrence count.</param>
+        /// <param name="equal_nan">For the float and complex dtypes: true collapses every NaN into one value, false keeps
+        ///     each NaN distinct. Ignored by the other dtypes, which hold no NaN.</param>
+        /// <returns>[values, index?, inverse?, counts?] in NumPy's order: the values sorted in <paramref name="a"/>'s dtype,
+        ///     the index outputs int64. The inverse has the input's shape for an N-D input; the caller
+        ///     (<see cref="Compute"/>) reshapes it to the input's shape in every case, as NumPy does.</returns>
+        /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones (a text array reaching this route is a
+        ///     bug in the caller, which routes text first).</exception>
+        private static NDArray[] uniqueFlatKwargs(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
-            switch (typecode)
+            switch (a.typecode)
             {
-                case NPTypeCode.Boolean: return uniqueFlatSorted<bool>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Byte: return uniqueFlatSorted<byte>(return_index, return_inverse, return_counts);
-                case NPTypeCode.SByte: return uniqueFlatSorted<sbyte>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Int16: return uniqueFlatSorted<short>(return_index, return_inverse, return_counts);
-                case NPTypeCode.UInt16: return uniqueFlatSorted<ushort>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Int32: return uniqueFlatSorted<int>(return_index, return_inverse, return_counts);
-                case NPTypeCode.UInt32: return uniqueFlatSorted<uint>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Int64: return uniqueFlatSorted<long>(return_index, return_inverse, return_counts);
-                case NPTypeCode.UInt64: return uniqueFlatSorted<ulong>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Char: return uniqueFlatSorted<char>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Decimal: return uniqueFlatSorted<decimal>(return_index, return_inverse, return_counts);
-                case NPTypeCode.Half: return uniqueFlatSortedHalf(return_index, return_inverse, return_counts, equal_nan);
-                case NPTypeCode.Single: return uniqueFlatSortedFloat(return_index, return_inverse, return_counts, equal_nan);
-                case NPTypeCode.Double: return uniqueFlatSortedDouble(return_index, return_inverse, return_counts, equal_nan);
-                case NPTypeCode.Complex: return uniqueFlatSortedComplex(return_index, return_inverse, return_counts, equal_nan);
+                case NPTypeCode.Boolean: return uniqueFlatSorted<bool>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Byte: return uniqueFlatSorted<byte>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.SByte: return uniqueFlatSorted<sbyte>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Int16: return uniqueFlatSorted<short>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.UInt16: return uniqueFlatSorted<ushort>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Int32: return uniqueFlatSorted<int>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.UInt32: return uniqueFlatSorted<uint>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Int64: return uniqueFlatSorted<long>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.UInt64: return uniqueFlatSorted<ulong>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Char: return uniqueFlatSorted<char>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Decimal: return uniqueFlatSorted<decimal>(a, return_index, return_inverse, return_counts);
+                case NPTypeCode.Half: return uniqueFlatSortedHalf(a, return_index, return_inverse, return_counts, equal_nan);
+                case NPTypeCode.Single: return uniqueFlatSortedFloat(a, return_index, return_inverse, return_counts, equal_nan);
+                case NPTypeCode.Double: return uniqueFlatSortedDouble(a, return_index, return_inverse, return_counts, equal_nan);
+                case NPTypeCode.Complex: return uniqueFlatSortedComplex(a, return_index, return_inverse, return_counts, equal_nan);
                 default: throw new NotSupportedException();
             }
         }
 
         // ----- Generic path for non-NaN-capable types -----
 
-        private unsafe NDArray[] uniqueFlatSorted<T>(bool return_index, bool return_inverse, bool return_counts)
+        /// <summary>
+        ///     The flat unique of a dtype without NaN (bool, the integers, char, decimal): the values-only route
+        ///     (<see cref="uniqueValuesOnly{T}"/>), the counts-only hash route, or the keys + permutation sort followed by the
+        ///     mask and the outputs. The radix argsort is stable, so the first occurrence of each value comes out of the
+        ///     permutation directly; decimal (no monotonic radix key) sorts with the BCL comparer, whose instability the
+        ///     emit's min-permutation scan undoes.
+        /// </summary>
+        /// <typeparam name="T">The operand's element type.</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
+        /// <remarks>
+        ///     The counts-only hash route is taken only up to 2^28 elements: the hash path's own large-array bail-out
+        ///     re-enters np.unique's flat path, which would come back here. Above <see cref="Array.MaxLength"/> elements
+        ///     the long-indexed fallback runs (managed arrays cannot hold the keys).
+        /// </remarks>
+        private static unsafe NDArray[] uniqueFlatSorted<T>(NDArray a, bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
-            long n = this.size;
+            long n = a.size;
             if (n == 0) return BuildEmptyResults<T>(return_index, return_inverse, return_counts);
 
             // Values-only fast path: skip perm allocation + parallel sort when caller doesn't
             // need index/inverse/counts. Saves ~8MB allocation and ~10ms sort overhead on 1M elems.
             if (!return_index && !return_inverse && !return_counts)
-                return new[] { uniqueValuesOnly<T>(n) };
+                return new[] { uniqueValuesOnly<T>(a, n) };
 
             // Counts-only (no index/inverse): the perm is unused (counts are run-lengths of the
             // sorted values). Integer-family → the hash path (fast low/med, radix bail at high card),
             // same routing as np.unique_counts; Decimal keeps the BCL perm path below.
             if (return_counts && !return_index && !return_inverse && typeof(T) != typeof(decimal) && n <= (1L << 28))
             {
-                var (cv, cc) = UniqueHashSortedInt<T>(wantCounts: true);
+                var (cv, cc) = UniqueHashSortedInt<T>(a, wantCounts: true);
                 return new[] { cv, cc };
             }
 
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLong<T>(n, return_index, return_inverse, return_counts, firstNaN: -1);
+                return uniqueFlatSortedLong<T>(a, n, return_index, return_inverse, return_counts, firstNaN: -1);
 
-            var (keys, perm) = ExtractKeysAndPerm<T>(n);
+            var (keys, perm) = ExtractKeysAndPerm<T>(a, n);
             // Radix argsort (LSD, comparison-free) replaces the BCL introsort for every radix-able
             // dtype; Decimal (no monotonic key) keeps Comparer<T>.Default. Radix is stable so ties
             // resolve ascending-index (first occurrence) — which the min-perm-within-run emit also
@@ -78,16 +112,23 @@ namespace NumSharp
             if (typeof(T) != typeof(decimal)) RadixArgSortKeysPerm(keys, perm, (int)n);
             else System.Array.Sort(keys, perm);
 
-            return BuildSortedResults<T>(keys, perm, n, return_index, return_inverse, return_counts, firstNaN: -1);
+            return BuildSortedResults<T>(a, keys, perm, n, return_index, return_inverse, return_counts, firstNaN: -1);
         }
 
         /// <summary>
-        /// Values-only path for non-float types: sort + dedup-emit, no perm tracking.
+        ///     Values-only path for non-float types: sort + dedup-emit, no perm tracking. The integer family (bool and
+        ///     char included) takes the open-addressing hash path up to 2^28 elements (it bails to a radix sort itself at
+        ///     high cardinality); decimal sorts with the BCL comparer, because its bit patterns are not a bijection with
+        ///     its values (<c>1.0m</c> and <c>1.00m</c> are equal).
         /// </summary>
-        private unsafe NDArray uniqueValuesOnly<T>(long n)
+        /// <typeparam name="T">The operand's element type.</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <returns>The sorted distinct values, a fresh 1-D array of <paramref name="a"/>'s dtype.</returns>
+        private static unsafe NDArray uniqueValuesOnly<T>(NDArray a, long n)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
-            // Integer-family values-only: the open-addressing hash path (NDArray.unique.Hash.cs)
+            // Integer-family values-only: the open-addressing hash path (UniqueEngine.Hash.cs)
             // beats any sort at low/medium cardinality and bails to radix at high cardinality —
             // mirroring NumPy's own hash selection for these dtypes, but bailing to radix where
             // NumPy's std::unordered_set thrashes (int32 2M-distinct: NumPy 1540ms → us ~40ms). Its
@@ -95,12 +136,12 @@ namespace NumSharp
             // (else the fallback would re-enter here and recurse). Decimal has no monotonic radix key
             // and no bitwise-hash (1.0m != 1.00m by bits) → BCL sort.
             if (typeof(T) != typeof(decimal) && n <= (1L << 28))
-                return UniqueHashSortedInt<T>(wantCounts: false).values;
+                return UniqueHashSortedInt<T>(a, wantCounts: false).values;
 
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLong<T>(n, false, false, false, firstNaN: -1)[0];
+                return uniqueFlatSortedLong<T>(a, n, false, false, false, firstNaN: -1)[0];
 
-            var keys = ExtractKeysOnly<T>(n);
+            var keys = ExtractKeysOnly<T>(a, n);
             if (typeof(T) != typeof(decimal)) RadixSortValues(keys, (int)n);
             else System.Array.Sort(keys);
             return EmitValuesOnly<T>(keys, n);
@@ -114,36 +155,53 @@ namespace NumSharp
         //  sort time (custom NaN comparer: ~22 ms / 100K doubles, default sort:
         //  ~11 ms; partition cost: ~0.5 ms; net win is ~2× on float types).
 
-        private unsafe NDArray[] uniqueFlatSortedDouble(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        /// <summary>
+        ///     The flat unique of a float64 operand: the NaN values are partitioned to the tail (their original bits
+        ///     kept), the non-NaN prefix is radix-sorted, and the mask collapses the NaN tail to its first element under
+        ///     <paramref name="equal_nan"/>. A values-only call and a counts-only call skip the permutation.
+        /// </summary>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="equal_nan">True: every NaN is one value (the NaN that the partition put first in the tail, its
+        ///     bits kept); false: each NaN is a value of its own.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
+        /// <remarks>
+        ///     The radix key orders <c>-0.0</c> below <c>+0.0</c>, so a run of zeros starts with <c>-0.0</c> whenever the
+        ///     input holds one, and that is the zero the values keep (the run itself is one value: the mask compares with
+        ///     IEEE equality). NumPy sorts with its own order of equal keys and may keep <c>+0.0</c>.
+        /// </remarks>
+        private static unsafe NDArray[] uniqueFlatSortedDouble(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
-            long n = this.size;
+            long n = a.size;
             if (n == 0) return BuildEmptyResults<double>(return_index, return_inverse, return_counts);
 
             // Values-only fast path: skip perm allocation + parallel sort + stabilize when
             // caller doesn't need index/inverse/counts. Saves ~8MB allocation and ~10ms sort
             // overhead on 1M doubles. The mask/emit step also simplifies — no min-perm tracking.
             if (!return_index && !return_inverse && !return_counts)
-                return new[] { uniqueValuesOnlyDouble(n, equal_nan) };
+                return new[] { uniqueValuesOnlyDouble(a, n, equal_nan) };
 
             // Counts-only: skip the perm argsort — counts are run-lengths of the sorted values, which
             // the emit derives from the mask alone (the perm is only read for index/inverse).
             if (return_counts && !return_index && !return_inverse && IsManagedSortableLength(n))
             {
-                var kc = ExtractKeysOnly<double>(n);
+                var kc = ExtractKeysOnly<double>(a, n);
                 long fn = PartitionNaN_DoubleKeysOnly(kc, n);
                 RadixSortValues(kc, (int)fn);
                 return EmitValuesAndCountsFloat<double>(kc, n, fn, equal_nan);
             }
 
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongFloat<double>(n, equal_nan, return_index, return_inverse, return_counts);
+                return uniqueFlatSortedLongFloat<double>(a, n, equal_nan, return_index, return_inverse, return_counts);
 
-            var (keys, perm) = ExtractKeysAndPerm<double>(n);
+            var (keys, perm) = ExtractKeysAndPerm<double>(a, n);
             long firstNaN = PartitionNaN_Double(keys, perm, n);
             RadixArgSortKeysPerm(keys, perm, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             StabilizeNaNTail(perm, firstNaN, n);
 
-            return BuildMaskAndEmit<double>(keys, perm, n, firstNaN, equal_nan,
+            return BuildMaskAndEmit<double>(a, keys, perm, n, firstNaN, equal_nan,
                                              return_index, return_inverse, return_counts);
         }
 
@@ -151,94 +209,148 @@ namespace NumSharp
         /// Values-only optimized path: extract → partition NaN → sort prefix → dedup-emit.
         /// No perm array (skips ~8MB alloc + ~10ms parallel-sort overhead on 1M doubles).
         /// </summary>
-        private unsafe NDArray uniqueValuesOnlyDouble(long n, bool equal_nan)
+        /// <param name="a">The float64 operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
+        /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float64 array.</returns>
+        private static unsafe NDArray uniqueValuesOnlyDouble(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
             {
                 // Fall through to long path; it does its own values-only optimization via flags.
-                return uniqueFlatSortedLongFloat<double>(n, equal_nan, false, false, false)[0];
+                return uniqueFlatSortedLongFloat<double>(a, n, equal_nan, false, false, false)[0];
             }
 
-            var keys = ExtractKeysOnly<double>(n);
+            var keys = ExtractKeysOnly<double>(a, n);
             long firstNaN = PartitionNaN_DoubleKeysOnly(keys, n);
             RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             return EmitValuesOnlyFloat<double>(keys, n, firstNaN, equal_nan);
         }
 
-        private unsafe NDArray[] uniqueFlatSortedFloat(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        /// <summary>
+        ///     The flat unique of a float32 operand: <see cref="uniqueFlatSortedDouble"/>'s pipeline at single precision
+        ///     (NaN partition, radix-sorted non-NaN prefix, NaN tail collapsed under <paramref name="equal_nan"/>).
+        /// </summary>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="equal_nan">True: every NaN is one value; false: each NaN is a value of its own.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
+        private static unsafe NDArray[] uniqueFlatSortedFloat(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
-            long n = this.size;
+            long n = a.size;
             if (n == 0) return BuildEmptyResults<float>(return_index, return_inverse, return_counts);
 
             if (!return_index && !return_inverse && !return_counts)
-                return new[] { uniqueValuesOnlyFloat(n, equal_nan) };
+                return new[] { uniqueValuesOnlyFloat(a, n, equal_nan) };
 
             // Counts-only: skip the perm argsort (see uniqueFlatSortedDouble).
             if (return_counts && !return_index && !return_inverse && IsManagedSortableLength(n))
             {
-                var kc = ExtractKeysOnly<float>(n);
+                var kc = ExtractKeysOnly<float>(a, n);
                 long fn = PartitionNaN_FloatKeysOnly(kc, n);
                 RadixSortValues(kc, (int)fn);
                 return EmitValuesAndCountsFloat<float>(kc, n, fn, equal_nan);
             }
 
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongFloat<float>(n, equal_nan, return_index, return_inverse, return_counts);
+                return uniqueFlatSortedLongFloat<float>(a, n, equal_nan, return_index, return_inverse, return_counts);
 
-            var (keys, perm) = ExtractKeysAndPerm<float>(n);
+            var (keys, perm) = ExtractKeysAndPerm<float>(a, n);
             long firstNaN = PartitionNaN_Float(keys, perm, n);
             RadixArgSortKeysPerm(keys, perm, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             StabilizeNaNTail(perm, firstNaN, n);
 
-            return BuildMaskAndEmit<float>(keys, perm, n, firstNaN, equal_nan,
+            return BuildMaskAndEmit<float>(a, keys, perm, n, firstNaN, equal_nan,
                                             return_index, return_inverse, return_counts);
         }
 
-        private unsafe NDArray uniqueValuesOnlyFloat(long n, bool equal_nan)
+        /// <summary>
+        ///     Values-only float32 path: extract, partition the NaNs to the tail, radix-sort the prefix, dedup-emit; no
+        ///     permutation.
+        /// </summary>
+        /// <param name="a">The float32 operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
+        /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float32 array.</returns>
+        private static unsafe NDArray uniqueValuesOnlyFloat(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongFloat<float>(n, equal_nan, false, false, false)[0];
+                return uniqueFlatSortedLongFloat<float>(a, n, equal_nan, false, false, false)[0];
 
-            var keys = ExtractKeysOnly<float>(n);
+            var keys = ExtractKeysOnly<float>(a, n);
             long firstNaN = PartitionNaN_FloatKeysOnly(keys, n);
             RadixSortValues(keys, (int)firstNaN);   // radix on the non-NaN prefix (NaN stays at the tail)
             return EmitValuesOnlyFloat<float>(keys, n, firstNaN, equal_nan);
         }
 
-        private unsafe NDArray[] uniqueFlatSortedHalf(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        /// <summary>
+        ///     The flat unique of a float16 operand: the NaN partition, then the BCL sort of the non-NaN prefix (Half has
+        ///     no radix key here) and the stabilized NaN tail. The BCL sort is unstable, so which of two equal values
+        ///     survives (a <c>-0.0</c> / <c>+0.0</c> pair) is the sort's choice; the emit's min-permutation scan still
+        ///     returns each value's first occurrence as the index.
+        /// </summary>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="equal_nan">True: every NaN is one value; false: each NaN is a value of its own.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
+        private static unsafe NDArray[] uniqueFlatSortedHalf(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
-            long n = this.size;
+            long n = a.size;
             if (n == 0) return BuildEmptyResults<Half>(return_index, return_inverse, return_counts);
 
             if (!return_index && !return_inverse && !return_counts)
-                return new[] { uniqueValuesOnlyHalf(n, equal_nan) };
+                return new[] { uniqueValuesOnlyHalf(a, n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongFloat<Half>(n, equal_nan, return_index, return_inverse, return_counts);
+                return uniqueFlatSortedLongFloat<Half>(a, n, equal_nan, return_index, return_inverse, return_counts);
 
-            var (keys, perm) = ExtractKeysAndPerm<Half>(n);
+            var (keys, perm) = ExtractKeysAndPerm<Half>(a, n);
             long firstNaN = PartitionNaN_Half(keys, perm, n);
             System.Array.Sort(keys, perm, 0, (int)firstNaN);
             StabilizeNaNTail(perm, firstNaN, n);
 
-            return BuildMaskAndEmit<Half>(keys, perm, n, firstNaN, equal_nan,
+            return BuildMaskAndEmit<Half>(a, keys, perm, n, firstNaN, equal_nan,
                                            return_index, return_inverse, return_counts);
         }
 
-        private unsafe NDArray uniqueValuesOnlyHalf(long n, bool equal_nan)
+        /// <summary>
+        ///     Values-only float16 path: extract, partition the NaNs to the tail, BCL-sort the prefix, dedup-emit; no
+        ///     permutation.
+        /// </summary>
+        /// <param name="a">The float16 operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <param name="equal_nan">True keeps one NaN, false every NaN.</param>
+        /// <returns>The sorted distinct values (NaNs last), a fresh 1-D float16 array.</returns>
+        private static unsafe NDArray uniqueValuesOnlyHalf(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongFloat<Half>(n, equal_nan, false, false, false)[0];
+                return uniqueFlatSortedLongFloat<Half>(a, n, equal_nan, false, false, false)[0];
 
-            var keys = ExtractKeysOnly<Half>(n);
+            var keys = ExtractKeysOnly<Half>(a, n);
             long firstNaN = PartitionNaN_HalfKeysOnly(keys, n);
             System.Array.Sort(keys, 0, (int)firstNaN);
             return EmitValuesOnlyFloat<Half>(keys, n, firstNaN, equal_nan);
         }
 
-        private unsafe NDArray[] uniqueFlatSortedComplex(bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        /// <summary>
+        ///     The flat unique of a complex128 operand. A values-only call under <paramref name="equal_nan"/> is NumPy's
+        ///     hash path (each equality class keeps its first element in C order, every value with a NaN part one
+        ///     class); every other call partitions the values with a NaN part to the tail and sorts the rest
+        ///     lexicographically (real part, then imaginary part).
+        /// </summary>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="equal_nan">True: every value with a NaN part is one value; false: each is a value of its own.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="uniqueFlatKwargs"/>).</returns>
+        private static unsafe NDArray[] uniqueFlatSortedComplex(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
-            long n = this.size;
+            long n = a.size;
             if (n == 0) return BuildEmptyResults<Complex>(return_index, return_inverse, return_counts);
 
             // Values only, equal_nan: NumPy's _unique1d takes its C++ hash path for complex (unique.cpp), whose
@@ -248,13 +360,13 @@ namespace NumSharp
             // the sort path.
             if (!return_index && !return_inverse && !return_counts)
                 return new[] { equal_nan && n <= (1L << 28)
-                    ? UniqueHashSortedComplex(wantCounts: false, equalNan: true).values
-                    : uniqueValuesOnlyComplex(n, equal_nan) };
+                    ? UniqueHashSortedComplex(a, wantCounts: false, equalNan: true).values
+                    : uniqueValuesOnlyComplex(a, n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongComplex(n, equal_nan, return_index, return_inverse, return_counts);
+                return uniqueFlatSortedLongComplex(a, n, equal_nan, return_index, return_inverse, return_counts);
 
-            var (keys, perm) = ExtractKeysAndPerm<Complex>(n);
+            var (keys, perm) = ExtractKeysAndPerm<Complex>(a, n);
             long firstNaN = PartitionNaN_Complex(keys, perm, n);
             // Complex doesn't implement IComparable<Complex>; non-NaN portion needs lex comparer.
             // No NaN-handling inside since partition already moved them out.
@@ -266,16 +378,24 @@ namespace NumSharp
                 }));
             StabilizeNaNTail(perm, firstNaN, n);
 
-            return BuildMaskAndEmit<Complex>(keys, perm, n, firstNaN, equal_nan,
+            return BuildMaskAndEmit<Complex>(a, keys, perm, n, firstNaN, equal_nan,
                                               return_index, return_inverse, return_counts);
         }
 
-        private unsafe NDArray uniqueValuesOnlyComplex(long n, bool equal_nan)
+        /// <summary>
+        ///     Values-only complex128 sort path (taken when <c>equal_nan</c> is false, or above 2^28 elements): partition
+        ///     the values with a NaN part to the tail, sort the rest lexicographically, dedup-emit.
+        /// </summary>
+        /// <param name="a">The complex128 operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <param name="equal_nan">True keeps one value with a NaN part, false every one.</param>
+        /// <returns>The sorted distinct values (those with a NaN part last), a fresh 1-D complex128 array.</returns>
+        private static unsafe NDArray uniqueValuesOnlyComplex(NDArray a, long n, bool equal_nan)
         {
             if (!IsManagedSortableLength(n))
-                return uniqueFlatSortedLongComplex(n, equal_nan, false, false, false)[0];
+                return uniqueFlatSortedLongComplex(a, n, equal_nan, false, false, false)[0];
 
-            var keys = ExtractKeysOnly<Complex>(n);
+            var keys = ExtractKeysOnly<Complex>(a, n);
             long firstNaN = PartitionNaN_ComplexKeysOnly(keys, n);
             System.Array.Sort(keys, 0, (int)firstNaN,
                 Comparer<Complex>.Create((x, y) =>
@@ -293,6 +413,11 @@ namespace NumSharp
         ///     ascending (the keys in that range are all NaN/NaN-component and order-irrelevant).
         ///     Cost: O(k log k) on the NaN-count, negligible vs the main sort.
         /// </summary>
+        /// <param name="perm">The permutation co-sorted with the keys; its tail is sorted in place.</param>
+        /// <param name="firstNaN">The index where the NaN tail starts.</param>
+        /// <param name="n">The element count; a tail of fewer than two entries is left as it is.</param>
+        /// <remarks>Only the permutation moves: the NaN keys of the tail keep the partition's order, so the NaN that
+        ///     <c>equal_nan</c> keeps is the partition's first one, not necessarily the input's first NaN.</remarks>
         private static void StabilizeNaNTail(long[] perm, long firstNaN, long n)
         {
             if (firstNaN >= n - 1) return;
@@ -301,6 +426,15 @@ namespace NumSharp
 
         // ----- Partition helpers (NaN to end via two-pointer swap) -----
 
+        /// <summary>
+        ///     Moves every NaN of <paramref name="keys"/><c>[0..n)</c> to the tail by a two-pointer swap, co-moving
+        ///     <paramref name="perm"/>. Unstable: the NaNs (and the values swapped forward) lose their input order, which
+        ///     the sort of the prefix and <see cref="StabilizeNaNTail"/> repair.
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place (each NaN keeps its bits).</param>
+        /// <param name="perm">The permutation, moved with the keys.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Double(double[] keys, long[] perm, long n)
         {
@@ -319,6 +453,14 @@ namespace NumSharp
             return hi;
         }
 
+        /// <summary>
+        ///     <see cref="PartitionNaN_Double"/> for float32 keys: every NaN to the tail, the permutation co-moved,
+        ///     unstable.
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place.</param>
+        /// <param name="perm">The permutation, moved with the keys.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Float(float[] keys, long[] perm, long n)
         {
@@ -337,6 +479,14 @@ namespace NumSharp
             return hi;
         }
 
+        /// <summary>
+        ///     <see cref="PartitionNaN_Double"/> for float16 keys: every NaN to the tail, the permutation co-moved,
+        ///     unstable.
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place.</param>
+        /// <param name="perm">The permutation, moved with the keys.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Half(Half[] keys, long[] perm, long n)
         {
@@ -355,6 +505,14 @@ namespace NumSharp
             return hi;
         }
 
+        /// <summary>
+        ///     <see cref="PartitionNaN_Double"/> for complex128 keys: every value with a NaN in either part to the tail,
+        ///     the permutation co-moved, unstable.
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place.</param>
+        /// <param name="perm">The permutation, moved with the keys.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first value with a NaN part (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_Complex(Complex[] keys, long[] perm, long n)
         {
@@ -379,8 +537,21 @@ namespace NumSharp
         ///     is sorted ascending, keys[firstNaN..n-1] is a contiguous NaN run (arbitrary
         ///     order, but all "equal" under equal_nan=true).
         /// </summary>
-        private unsafe NDArray[] BuildMaskAndEmit<T>(
-            T[] keys, long[] perm, long n, long firstNaN, bool equal_nan,
+        /// <typeparam name="T">The key type (Half, float, double or Complex).</typeparam>
+        /// <param name="a">The operand (its rank decides the inverse's shape in <see cref="EmitOutputs{T}"/>).</param>
+        /// <param name="keys">The sorted non-NaN prefix followed by the NaN tail.</param>
+        /// <param name="perm">The permutation that sorted the keys (the NaN tail's entries ascending).</param>
+        /// <param name="n">The number of keys (positive).</param>
+        /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
+        /// <param name="equal_nan">True starts one run at the first NaN; false starts a run at every NaN.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputs{T}"/>).</returns>
+        /// <remarks>The prefix's mask uses <c>Equals</c>, which for these types is IEEE equality on non-NaN values: a
+        ///     <c>-0.0</c> next to a <c>+0.0</c> is one run (NumPy's <c>!=</c> says the same).</remarks>
+        private static unsafe NDArray[] BuildMaskAndEmit<T>(
+            NDArray a, T[] keys, long[] perm, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts) where T : unmanaged
         {
             var mask = new bool[n];
@@ -416,7 +587,7 @@ namespace NumSharp
                 }
             }
 
-            return EmitOutputs(keys, perm, mask, n, uniqueCount, return_index, return_inverse, return_counts);
+            return EmitOutputs(a, keys, perm, mask, n, uniqueCount, return_index, return_inverse, return_counts);
         }
 
         // ----- Helpers -----
@@ -426,17 +597,30 @@ namespace NumSharp
         ///     the caller routes to the unmanaged long-indexed fallback
         ///     (<see cref="uniqueFlatSortedLong{T}"/>) which is slower but supports any size.
         /// </summary>
+        /// <param name="n">The element count.</param>
+        /// <returns>True when a managed key array of <paramref name="n"/> elements can be allocated.</returns>
         private static bool IsManagedSortableLength(long n) => n <= System.Array.MaxLength;
 
-        private unsafe (T[] keys, long[] perm) ExtractKeysAndPerm<T>(long n) where T : unmanaged
+        /// <summary>
+        ///     Copies the operand's elements into a managed key array in C order and builds the identity permutation
+        ///     beside it: the sort inputs of every flat path that returns an index or an inverse. A C-contiguous operand is
+        ///     one block copy from its first element (its base address plus its offset); any other layout is read element
+        ///     by element through its strides.
+        /// </summary>
+        /// <typeparam name="T">The operand's element type (the caller dispatched on its dtype).</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="n">Its element count; must not exceed <see cref="Array.MaxLength"/>
+        ///     (see <see cref="IsManagedSortableLength"/>).</param>
+        /// <returns>The keys (C order) and the permutation <c>0..n-1</c>.</returns>
+        private static unsafe (T[] keys, long[] perm) ExtractKeysAndPerm<T>(NDArray a, long n) where T : unmanaged
         {
             var keys = new T[n];
             var perm = new long[n];
 
-            if (Shape.IsContiguous)
+            if (a.Shape.IsContiguous)
             {
                 // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
-                T* src = (T*)this.Address + Shape.offset;
+                T* src = (T*)a.Address + a.Shape.offset;
                 fixed (T* dst = keys)
                 {
                     long byteCount = n * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
@@ -445,7 +629,7 @@ namespace NumSharp
             }
             else
             {
-                var flat = this.flat;
+                var flat = a.flat;
                 T* src = (T*)flat.Address;
                 Func<long, long> getOffset = flat.Shape.GetOffset_1D;
                 for (long i = 0; i < n; i++) keys[i] = src[getOffset(i)];
@@ -458,13 +642,18 @@ namespace NumSharp
         /// <summary>
         /// Values-only extract — skips the perm array allocation+fill (saves ~8N bytes and ~N writes).
         /// </summary>
-        private unsafe T[] ExtractKeysOnly<T>(long n) where T : unmanaged
+        /// <typeparam name="T">The operand's element type (the caller dispatched on its dtype).</typeparam>
+        /// <param name="a">The operand (any layout; only read): a C-contiguous one is one block copy from its first element
+        ///     (base address plus offset), any other is read through its strides.</param>
+        /// <param name="n">Its element count; must not exceed <see cref="Array.MaxLength"/>.</param>
+        /// <returns>The elements in C order, a fresh managed array.</returns>
+        private static unsafe T[] ExtractKeysOnly<T>(NDArray a, long n) where T : unmanaged
         {
             var keys = new T[n];
-            if (Shape.IsContiguous)
+            if (a.Shape.IsContiguous)
             {
                 // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
-                T* src = (T*)this.Address + Shape.offset;
+                T* src = (T*)a.Address + a.Shape.offset;
                 fixed (T* dst = keys)
                 {
                     long byteCount = n * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
@@ -473,7 +662,7 @@ namespace NumSharp
             }
             else
             {
-                var flat = this.flat;
+                var flat = a.flat;
                 T* src = (T*)flat.Address;
                 Func<long, long> getOffset = flat.Shape.GetOffset_1D;
                 for (long i = 0; i < n; i++) keys[i] = src[getOffset(i)];
@@ -483,6 +672,13 @@ namespace NumSharp
 
         // ----- Partition-only helpers (no perm tracking) — used by values-only paths -----
 
+        /// <summary>
+        ///     Moves every NaN of <paramref name="keys"/><c>[0..n)</c> to the tail (two-pointer swap, unstable): the
+        ///     values-only form of <see cref="PartitionNaN_Double"/>, with no permutation to co-move.
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place (each NaN keeps its bits).</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_DoubleKeysOnly(double[] keys, long n)
         {
@@ -496,6 +692,12 @@ namespace NumSharp
             return hi;
         }
 
+        /// <summary>
+        ///     The values-only NaN partition for float32 keys (see <see cref="PartitionNaN_DoubleKeysOnly"/>).
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_FloatKeysOnly(float[] keys, long n)
         {
@@ -509,6 +711,12 @@ namespace NumSharp
             return hi;
         }
 
+        /// <summary>
+        ///     The values-only NaN partition for float16 keys (see <see cref="PartitionNaN_DoubleKeysOnly"/>).
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_HalfKeysOnly(Half[] keys, long n)
         {
@@ -522,6 +730,13 @@ namespace NumSharp
             return hi;
         }
 
+        /// <summary>
+        ///     The values-only NaN partition for complex128 keys: every value with a NaN in either part to the tail (see
+        ///     <see cref="PartitionNaN_DoubleKeysOnly"/>).
+        /// </summary>
+        /// <param name="keys">The keys, partitioned in place.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <returns>The index of the first value with a NaN part (<paramref name="n"/> when there is none).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static long PartitionNaN_ComplexKeysOnly(Complex[] keys, long n)
         {
@@ -542,7 +757,11 @@ namespace NumSharp
         /// <summary>
         /// Values-only emit for non-NaN-capable types: single dedup-scan over sorted keys.
         /// </summary>
-        private unsafe NDArray EmitValuesOnly<T>(T[] keys, long n) where T : unmanaged, IEquatable<T>
+        /// <typeparam name="T">The key type (no NaN: bool, the integers, char, decimal).</typeparam>
+        /// <param name="keys">The sorted keys.</param>
+        /// <param name="n">The number of keys; must be positive (the first key is always kept).</param>
+        /// <returns>The first key of each run of equal keys, a fresh 1-D array.</returns>
+        private static unsafe NDArray EmitValuesOnly<T>(T[] keys, long n) where T : unmanaged, IEquatable<T>
         {
             // First pass: count uniques.
             long uniqueCount = 1;
@@ -565,7 +784,13 @@ namespace NumSharp
         /// Values-only emit for float types (Double/Single/Half/Complex). Handles the NaN tail:
         /// equal_nan=true → one NaN representative; equal_nan=false → every NaN unique.
         /// </summary>
-        private unsafe NDArray EmitValuesOnlyFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+        /// <typeparam name="T">The key type (Half, float, double or Complex).</typeparam>
+        /// <param name="keys">The sorted non-NaN prefix followed by the NaN tail (partition order).</param>
+        /// <param name="n">The number of keys.</param>
+        /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
+        /// <param name="equal_nan">True keeps the tail's first NaN (its bits as they are), false every NaN.</param>
+        /// <returns>The distinct values, NaNs last, a fresh 1-D array.</returns>
+        private static unsafe NDArray EmitValuesOnlyFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
             where T : unmanaged, IEquatable<T>
         {
             // Count uniques in non-NaN prefix.
@@ -614,7 +839,13 @@ namespace NumSharp
         ///     when neither index nor inverse is requested). <paramref name="keys"/>[0..firstNaN) is
         ///     radix-sorted ascending; [firstNaN..n) is the NaN run (original bits, partition order).
         /// </summary>
-        private unsafe NDArray[] EmitValuesAndCountsFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
+        /// <typeparam name="T">The key type (float or double).</typeparam>
+        /// <param name="keys">The sorted non-NaN prefix followed by the NaN tail.</param>
+        /// <param name="n">The number of keys.</param>
+        /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
+        /// <param name="equal_nan">True: one NaN value counted as the whole tail; false: each NaN counted once.</param>
+        /// <returns>[values, counts]: fresh 1-D arrays, the counts int64.</returns>
+        private static unsafe NDArray[] EmitValuesAndCountsFloat<T>(T[] keys, long n, long firstNaN, bool equal_nan)
             where T : unmanaged, IEquatable<T>
         {
             long uniqueCount = firstNaN > 0 ? 1 : 0;
@@ -672,8 +903,19 @@ namespace NumSharp
         ///     Index uses min-perm-within-run for first-occurrence semantics (Array.Sort is
         ///     unstable in .NET; we recover stability cheaply in a single pass).
         /// </summary>
-        private unsafe NDArray[] BuildSortedResults<T>(
-            T[] keys, long[] perm, long n,
+        /// <typeparam name="T">The key type (no NaN).</typeparam>
+        /// <param name="a">The operand (its rank decides the inverse's shape in <see cref="EmitOutputs{T}"/>).</param>
+        /// <param name="keys">The sorted keys.</param>
+        /// <param name="perm">The permutation that sorted them.</param>
+        /// <param name="n">The number of keys (positive).</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="firstNaN">Unused (always -1 here: these types hold no NaN); kept so the call sites read like the
+        ///     float paths'.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputs{T}"/>).</returns>
+        private static unsafe NDArray[] BuildSortedResults<T>(
+            NDArray a, T[] keys, long[] perm, long n,
             bool return_index, bool return_inverse, bool return_counts,
             long firstNaN) where T : unmanaged, IEquatable<T>
         {
@@ -688,11 +930,27 @@ namespace NumSharp
             // BuildSortedResults is only used for non-NaN-capable types (firstNaN always -1).
             // Float/Complex paths use BuildMaskAndEmit instead.
             _ = firstNaN;
-            return EmitOutputs(keys, perm, mask, n, uniqueCount, return_index, return_inverse, return_counts);
+            return EmitOutputs(a, keys, perm, mask, n, uniqueCount, return_index, return_inverse, return_counts);
         }
 
-        private unsafe NDArray[] EmitOutputs<T>(
-            T[] keys, long[] perm, bool[] mask, long n, long uniqueCount,
+        /// <summary>
+        ///     Builds NumPy's outputs from the sorted keys, their permutation and the run-start mask: the values
+        ///     <c>aux[mask]</c>, the index (the smallest permutation entry of each run: the first occurrence, whether or not
+        ///     the sort was stable), the inverse <c>inv[perm[i]] = cumsum(mask)[i] - 1</c> and the counts (the run lengths).
+        /// </summary>
+        /// <typeparam name="T">The key type.</typeparam>
+        /// <param name="a">The operand: for more than one dimension the inverse takes its dimensions.</param>
+        /// <param name="keys">The sorted keys.</param>
+        /// <param name="perm">The permutation that sorted them.</param>
+        /// <param name="mask">True where a run of equal keys starts (<c>mask[0]</c> is true).</param>
+        /// <param name="n">The number of keys (positive).</param>
+        /// <param name="uniqueCount">The number of true mask entries.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
+        private static unsafe NDArray[] EmitOutputs<T>(
+            NDArray a, T[] keys, long[] perm, bool[] mask, long n, long uniqueCount,
             bool return_index, bool return_inverse, bool return_counts) where T : unmanaged
         {
             int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
@@ -744,7 +1002,7 @@ namespace NumSharp
                     if (mask[i]) rank++;
                     invDst[perm[i]] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
+                var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 
@@ -771,7 +1029,17 @@ namespace NumSharp
             return results;
         }
 
-        private NDArray[] BuildEmptyResults<T>(bool return_index, bool return_inverse, bool return_counts) where T : unmanaged
+        /// <summary>
+        ///     The outputs of an empty operand: an empty values array of the operand's element type and empty int64 index
+        ///     outputs, one per requested flag.
+        /// </summary>
+        /// <typeparam name="T">The operand's element type.</typeparam>
+        /// <param name="return_index">Also return an empty index.</param>
+        /// <param name="return_inverse">Also return an empty inverse (1-D: <see cref="Compute"/> reshapes it to the
+        ///     input's shape, e.g. <c>(0, 3)</c>).</param>
+        /// <param name="return_counts">Also return empty counts.</param>
+        /// <returns>[values, index?, inverse?, counts?], every array of shape <c>(0,)</c>.</returns>
+        private static NDArray[] BuildEmptyResults<T>(bool return_index, bool return_inverse, bool return_counts) where T : unmanaged
         {
             int outCount = 1 + (return_index ? 1 : 0) + (return_inverse ? 1 : 0) + (return_counts ? 1 : 0);
             var results = new NDArray[outCount];
@@ -790,15 +1058,42 @@ namespace NumSharp
         //  AXIS-AWARE unique (slab comparison — unchanged)
         // ============================================================
 
-        private NDArray[] uniqueAxisKwargs(int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
+        /// <summary>
+        ///     NumPy's row path of <c>np.unique</c> over a numeric operand (an axis of an N-D input): the axis is moved
+        ///     first, each slab (every other axis flattened, C order) is one row, the rows are sorted lexicographically
+        ///     with a stable tie-break by input index (NumPy's mergesort of the structured rows), and the distinct rows
+        ///     are gathered and moved back to the axis.
+        /// </summary>
+        /// <param name="a">The operand (two or more dimensions; only read).</param>
+        /// <param name="axis">The normalized axis.</param>
+        /// <param name="return_index">Also return the first row of each distinct row.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices (1-D, as NumPy returns them with an
+        ///     axis).</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="equal_nan">Ignored: NumPy's structured rows are not of a float kind, so its NaN branch never runs
+        ///     and every NaN row is distinct.</param>
+        /// <returns>[values, index?, inverse?, counts?]: the values a fresh array, moved back to the axis (a view) when the
+        ///     axis is not 0; the index outputs int64.</returns>
+        /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones (text takes its own route).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     Rows compare with IEEE <c>&lt;</c> / <c>==</c>, so <c>-0.0</c> and <c>+0.0</c> are equal (the surviving
+        ///     row's zeros follow input order) and NaN rows are equal for ordering but distinct for the mask.
+        ///     </para>
+        ///     <para>
+        ///     A numpy.matrix operand is computed as a plain array (the region below). The slab helpers read the moved
+        ///     copy from its base address: an operand that is already C-contiguous is read in place.
+        ///     </para>
+        /// </remarks>
+        private static NDArray[] uniqueAxisKwargs(NDArray a, int axis, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
         {
             // equal_nan has NO EFFECT on the axis path — NumPy consolidates each slab into a
             // structured scalar whose dtype.kind is 'V', so _unique1d's equal_nan branch (guarded by
             // kind in "cfmM") is skipped and the mask is a plain structured `!=`, under which every
             // NaN slab is DISTINCT (nan != nan) regardless of equal_nan. Accepted for API symmetry.
             _ = equal_nan;
-            using var plain = NDMatrixBoundary.PlainFor(this);   // the member keeps the plain-array meaning for a matrix object
-            var moved = axis == 0 ? this : np.moveaxis(this, axis, 0);
+            using var plain = NDMatrixBoundary.PlainFor(a);   // the member keeps the plain-array meaning for a matrix object
+            var moved = axis == 0 ? a : np.moveaxis(a, axis, 0);
             long n = moved.Shape.dimensions[0];
 
             long slabSize = 1;
@@ -811,10 +1106,10 @@ namespace NumSharp
             // Stable tie-break by original index: identical slabs (in particular NaN slabs, which
             // compare EQUAL for ordering but are kept DISTINCT by the != mask below) keep input
             // order — reproducing NumPy's mergesort argsort in the axis path.
-            System.Array.Sort(orig, (a, b) =>
+            System.Array.Sort(orig, (x, y) =>
             {
-                int c = CompareSlabs(movedCopy, a, b, slabSize);
-                return c != 0 ? c : a.CompareTo(b);
+                int c = CompareSlabs(movedCopy, x, y, slabSize);
+                return c != 0 ? c : x.CompareTo(y);
             });
 
             var sortedKeepIdx = new List<int>();
@@ -904,6 +1199,17 @@ namespace NumSharp
             return results.ToArray();
         }
 
+        /// <summary>
+        ///     The lexicographic order of two slabs (rows) of a C-contiguous array, dispatched on its dtype: the integer
+        ///     family and decimal by <c>CompareTo</c>, the float and complex dtypes by IEEE compares with NaN last.
+        /// </summary>
+        /// <param name="src">The C-contiguous array whose rows are compared, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>Negative, zero or positive as row <paramref name="a"/> orders before, with or after row
+        ///     <paramref name="b"/>.</returns>
+        /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones.</exception>
         private static int CompareSlabs(NDArray src, int a, int b, long slabSize)
         {
             switch (src.typecode)
@@ -927,6 +1233,15 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     The lexicographic order of two rows of a dtype without NaN, element by element with <c>CompareTo</c>.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>The first nonzero element comparison, or 0 for equal rows.</returns>
         private static unsafe int CompareSlabsT<T>(NDArray src, int a, int b, long slabSize)
             where T : unmanaged, IComparable<T>
         {
@@ -946,6 +1261,16 @@ namespace NumSharp
         // structured sort, where the surviving zero's sign follows input order. NaN sorts to the end
         // (all NaN equivalent); the stable tie-break then keeps identical NaN slabs in input order.
 
+        /// <summary>
+        ///     The lexicographic order of two float64 rows: IEEE compares (<c>-0.0</c> equals <c>+0.0</c>), a NaN after
+        ///     every number, two NaNs equal.
+        /// </summary>
+        /// <param name="src">The C-contiguous float64 array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>Negative, zero or positive as row <paramref name="a"/> orders before, with or after row
+        ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsDouble(NDArray src, int a, int b, long slabSize)
         {
             double* ptr = (double*)src.Address;
@@ -961,6 +1286,15 @@ namespace NumSharp
             return 0;
         }
 
+        /// <summary>
+        ///     <see cref="CompareSlabsDouble"/> for float32 rows.
+        /// </summary>
+        /// <param name="src">The C-contiguous float32 array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>Negative, zero or positive as row <paramref name="a"/> orders before, with or after row
+        ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsFloat(NDArray src, int a, int b, long slabSize)
         {
             float* ptr = (float*)src.Address;
@@ -976,6 +1310,15 @@ namespace NumSharp
             return 0;
         }
 
+        /// <summary>
+        ///     <see cref="CompareSlabsDouble"/> for float16 rows.
+        /// </summary>
+        /// <param name="src">The C-contiguous float16 array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>Negative, zero or positive as row <paramref name="a"/> orders before, with or after row
+        ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsHalf(NDArray src, int a, int b, long slabSize)
         {
             Half* ptr = (Half*)src.Address;
@@ -991,6 +1334,16 @@ namespace NumSharp
             return 0;
         }
 
+        /// <summary>
+        ///     The lexicographic order of two complex128 rows: each element by real part, then imaginary part, with IEEE
+        ///     compares; an element with a NaN part after every other, two such elements equal.
+        /// </summary>
+        /// <param name="src">The C-contiguous complex128 array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>Negative, zero or positive as row <paramref name="a"/> orders before, with or after row
+        ///     <paramref name="b"/>.</returns>
         private static unsafe int CompareSlabsComplex(NDArray src, int a, int b, long slabSize)
         {
             Complex* ptr = (Complex*)src.Address;
@@ -1013,6 +1366,17 @@ namespace NumSharp
         // so every NaN slab is DISTINCT (independent of equal_nan — see uniqueAxisKwargs), while
         // -0.0 == +0.0 collapses signed-zero slabs. Integer/decimal/char have no NaN/-0 so the
         // generic .Equals path (SlabsEqualT) is exact for them.
+
+        /// <summary>
+        ///     Whether two rows are equal by NumPy's structured <c>!=</c>: element-wise IEEE equality, so a row with a NaN
+        ///     never equals any row (itself included) and <c>-0.0</c> equals <c>+0.0</c>.
+        /// </summary>
+        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>True when every element pair is equal.</returns>
+        /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones.</exception>
         private static unsafe bool SlabsEqual(NDArray src, int a, int b, long slabSize)
         {
             switch (src.typecode)
@@ -1067,6 +1431,16 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     Row equality for a dtype without NaN or signed zeros (bool, the integers, char, decimal): element-wise
+        ///     <c>Equals</c>, which for decimal is value equality (<c>1.0m</c> equals <c>1.00m</c>).
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="a">The first row's index.</param>
+        /// <param name="b">The second row's index.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <returns>True when every element pair is equal.</returns>
         private static unsafe bool SlabsEqualT<T>(NDArray src, int a, int b, long slabSize)
             where T : unmanaged, IEquatable<T>
         {
@@ -1079,6 +1453,15 @@ namespace NumSharp
             return true;
         }
 
+        /// <summary>
+        ///     Gathers the chosen rows of a C-contiguous array into a fresh array, dispatched on its dtype.
+        /// </summary>
+        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="indices">The rows to copy, in output order.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <param name="outShape">The result's shape (<c>indices.Length</c> rows of the source's other dimensions).</param>
+        /// <returns>A fresh C-contiguous array of <paramref name="src"/>'s dtype.</returns>
+        /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones.</exception>
         private static unsafe NDArray GatherSlabs(NDArray src, int[] indices, long slabSize, Shape outShape)
         {
             switch (src.typecode)
@@ -1102,6 +1485,15 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     Copies the rows <paramref name="indices"/> of a C-contiguous array, element by element, into a fresh buffer.
+        /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="src">The C-contiguous array, read from its base address.</param>
+        /// <param name="indices">The rows to copy, in output order.</param>
+        /// <param name="slabSize">The elements per row.</param>
+        /// <param name="outShape">The result's shape.</param>
+        /// <returns>A fresh array that owns its buffer.</returns>
         private static unsafe NDArray GatherSlabsT<T>(NDArray src, int[] indices, long slabSize, Shape outShape)
             where T : unmanaged
         {
@@ -1135,27 +1527,50 @@ namespace NumSharp
         //    which requires 16+ GB just for the input array.
         // ============================================================
 
+        /// <summary>
+        ///     A key and its input position, sorted as one 16-byte record by the long-indexed fallback (one array to sort
+        ///     where the managed path co-sorts two).
+        /// </summary>
+        /// <typeparam name="T">The key type.</typeparam>
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct KeyPerm<T> : IComparable<KeyPerm<T>>
             where T : unmanaged, IComparable<T>
         {
+            /// <summary>The element's value.</summary>
             public T Key;
+
+            /// <summary>The element's flat position in the input (C order).</summary>
             public long Perm;
+
+            /// <summary>Orders by key only, so equal keys keep whatever order the (unstable) introsort leaves.</summary>
+            /// <param name="other">The record to compare with.</param>
+            /// <returns>The keys' <c>CompareTo</c>.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public int CompareTo(KeyPerm<T> other) => Key.CompareTo(other.Key);
         }
 
         /// <summary>
         ///     Long-indexed unique for non-NaN-capable types (or types where the
-        ///     Comparer<T>.Default works correctly: bool/byte/short/int/long/decimal/char/etc).
+        ///     <c>Comparer&lt;T&gt;.Default</c> works correctly: bool/byte/short/int/long/decimal/char/etc).
         /// </summary>
-        private unsafe NDArray[] uniqueFlatSortedLong<T>(long n,
+        /// <typeparam name="T">The operand's element type.</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="n">Its element count.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="firstNaN">-1 to sort every record; otherwise the length of an already partitioned non-NaN prefix,
+        ///     the only part sorted.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
+        /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). The
+        ///     record block is not disposed: its buffer returns through the block's finalizer.</remarks>
+        private static unsafe NDArray[] uniqueFlatSortedLong<T>(NDArray a, long n,
             bool return_index, bool return_inverse, bool return_counts,
             long firstNaN) where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
             KeyPerm<T>* kp = block.Address;
-            PopulateKeyPerm(kp, n);
+            PopulateKeyPerm(a, kp, n);
 
             if (firstNaN < 0)
             {
@@ -1168,7 +1583,7 @@ namespace NumSharp
                 Utilities.LongIntroSort.Sort(kp, firstNaN);
             }
 
-            return BuildMaskAndEmitLong<T>(kp, n, firstNaN, equal_nan: true,
+            return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan: true,
                                             return_index, return_inverse, return_counts);
         }
 
@@ -1177,19 +1592,28 @@ namespace NumSharp
         ///     Partitions NaN to the tail, sorts non-NaN portion with default compare,
         ///     stabilizes the NaN-tail's perm order (ascending) to match NumPy mergesort.
         /// </summary>
-        private unsafe NDArray[] uniqueFlatSortedLongFloat<T>(long n, bool equal_nan,
+        /// <typeparam name="T">The operand's element type (Half, float or double).</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="n">Its element count.</param>
+        /// <param name="equal_nan">True: every NaN is one value; false: each NaN is a value of its own.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
+        /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests).</remarks>
+        private static unsafe NDArray[] uniqueFlatSortedLongFloat<T>(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
             KeyPerm<T>* kp = block.Address;
-            PopulateKeyPerm(kp, n);
+            PopulateKeyPerm(a, kp, n);
 
             long firstNaN = PartitionNaN_Long<T>(kp, n);
             Utilities.LongIntroSort.Sort(kp, firstNaN);
             StabilizeNaNTailLong<T>(kp, firstNaN, n);
 
-            return BuildMaskAndEmitLong<T>(kp, n, firstNaN, equal_nan,
+            return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan,
                                             return_index, return_inverse, return_counts);
         }
 
@@ -1198,20 +1622,31 @@ namespace NumSharp
         ///     so we use a dedicated <see cref="ComplexKeyPerm"/> struct and explicit lex
         ///     comparison via Comparison&lt;&gt; delegate.
         /// </summary>
-        private unsafe NDArray[] uniqueFlatSortedLongComplex(long n, bool equal_nan,
+        /// <param name="a">The complex128 operand (any layout; only read).</param>
+        /// <param name="n">Its element count.</param>
+        /// <param name="equal_nan">True: every value with a NaN part is one value; false: each is a value of its own.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
+        /// <remarks>
+        ///     Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). Unlike
+        ///     <see cref="PopulateKeyPerm{T}"/>, a C-contiguous operand is read from its base address without its offset.
+        /// </remarks>
+        private static unsafe NDArray[] uniqueFlatSortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
             var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
             ComplexKeyPerm* kp = block.Address;
 
-            if (Shape.IsContiguous)
+            if (a.Shape.IsContiguous)
             {
-                Complex* src = (Complex*)this.Address;
+                Complex* src = (Complex*)a.Address;
                 for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
             }
             else
             {
-                var flat = this.flat;
+                var flat = a.flat;
                 Complex* src = (Complex*)flat.Address;
                 Func<long, long> getOffset = flat.Shape.GetOffset_1D;
                 for (long i = 0; i < n; i++) { kp[i].Key = src[getOffset(i)]; kp[i].Perm = i; }
@@ -1245,19 +1680,37 @@ namespace NumSharp
                     (x, y) => x.Perm.CompareTo(y.Perm));
             }
 
-            return BuildMaskAndEmitLongComplex(kp, n, firstNaN, equal_nan,
+            return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan,
                                                 return_index, return_inverse, return_counts);
         }
 
+        /// <summary>A complex128 key and its input position: the long-indexed complex path's sort record.</summary>
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct ComplexKeyPerm
         {
+            /// <summary>The element's value.</summary>
             public Complex Key;
+
+            /// <summary>The element's flat position in the input (C order).</summary>
             public long Perm;
         }
 
-        private unsafe NDArray[] BuildMaskAndEmitLongComplex(
-            ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
+        /// <summary>
+        ///     The mask and the outputs of the long-indexed complex path (<see cref="BuildMaskAndEmitLong{T}"/> and
+        ///     <see cref="EmitOutputsLong{T}"/> in one, reading <see cref="ComplexKeyPerm"/> records).
+        /// </summary>
+        /// <param name="a">The operand: for more than one dimension the inverse takes its dimensions.</param>
+        /// <param name="kp">The records: the sorted prefix, then the tail of values with a NaN part.</param>
+        /// <param name="n">The number of records (positive).</param>
+        /// <param name="firstNaN">The index where the NaN tail starts.</param>
+        /// <param name="equal_nan">True starts one run at the tail; false a run at every tail record.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
+        /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
+        private static unsafe NDArray[] BuildMaskAndEmitLongComplex(
+            NDArray a, ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
             long nanStart = firstNaN;
@@ -1326,7 +1779,7 @@ namespace NumSharp
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
+                var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 
@@ -1347,23 +1800,38 @@ namespace NumSharp
             return results;
         }
 
-        private unsafe void PopulateKeyPerm<T>(KeyPerm<T>* kp, long n) where T : unmanaged, IComparable<T>
+        /// <summary>
+        ///     Fills the long-indexed sort records with the operand's elements in C order and their positions: a
+        ///     C-contiguous operand from its first element (base address plus offset), any other through its strides.
+        /// </summary>
+        /// <typeparam name="T">The operand's element type.</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="kp">The record block to fill (<paramref name="n"/> records).</param>
+        /// <param name="n">The element count.</param>
+        private static unsafe void PopulateKeyPerm<T>(NDArray a, KeyPerm<T>* kp, long n) where T : unmanaged, IComparable<T>
         {
-            if (Shape.IsContiguous)
+            if (a.Shape.IsContiguous)
             {
                 // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
-                T* src = (T*)this.Address + Shape.offset;
+                T* src = (T*)a.Address + a.Shape.offset;
                 for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
             }
             else
             {
-                var flat = this.flat;
+                var flat = a.flat;
                 T* src = (T*)flat.Address;
                 Func<long, long> getOffset = flat.Shape.GetOffset_1D;
                 for (long i = 0; i < n; i++) { kp[i].Key = src[getOffset(i)]; kp[i].Perm = i; }
             }
         }
 
+        /// <summary>
+        ///     Whether a long-path key is NaN (a NaN part, for complex): the <c>typeof(T)</c> tests are JIT constants, so
+        ///     one branch survives per instantiation, and a type without NaN folds to false.
+        /// </summary>
+        /// <typeparam name="T">The key type.</typeparam>
+        /// <param name="key">The key.</param>
+        /// <returns>True for a NaN key.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private static unsafe bool IsNaNKey<T>(T key) where T : unmanaged
         {
@@ -1378,6 +1846,13 @@ namespace NumSharp
             return false;
         }
 
+        /// <summary>
+        ///     Moves every NaN record to the tail of the long-indexed record block (two-pointer swap, unstable).
+        /// </summary>
+        /// <typeparam name="T">The key type.</typeparam>
+        /// <param name="kp">The records, partitioned in place.</param>
+        /// <param name="n">The number of records.</param>
+        /// <returns>The index of the first NaN record (<paramref name="n"/> when there is none).</returns>
         private static unsafe long PartitionNaN_Long<T>(KeyPerm<T>* kp, long n)
             where T : unmanaged, IComparable<T>
         {
@@ -1400,6 +1875,10 @@ namespace NumSharp
         ///     to match NumPy's stable mergesort semantics. We sort the KeyPerm structs
         ///     by Perm using LongIntroSort with a comparer.
         /// </summary>
+        /// <typeparam name="T">The key type.</typeparam>
+        /// <param name="kp">The records; the tail from <paramref name="firstNaN"/> is sorted by position in place.</param>
+        /// <param name="firstNaN">The index where the NaN tail starts.</param>
+        /// <param name="n">The number of records; a tail of fewer than two records is left as it is.</param>
         private static unsafe void StabilizeNaNTailLong<T>(KeyPerm<T>* kp, long firstNaN, long n)
             where T : unmanaged, IComparable<T>
         {
@@ -1412,8 +1891,19 @@ namespace NumSharp
         ///     Long-indexed mask + emit. Mirrors BuildMaskAndEmit but reads from
         ///     KeyPerm&lt;T&gt;* and uses UnmanagedMemoryBlock&lt;byte&gt; for the mask.
         /// </summary>
-        private unsafe NDArray[] BuildMaskAndEmitLong<T>(
-            KeyPerm<T>* kp, long n, long firstNaN, bool equal_nan,
+        /// <typeparam name="T">The key type.</typeparam>
+        /// <param name="a">The operand: for more than one dimension the inverse takes its dimensions.</param>
+        /// <param name="kp">The sorted records (a NaN tail after <paramref name="firstNaN"/> when it is not -1).</param>
+        /// <param name="n">The number of records (positive).</param>
+        /// <param name="firstNaN">The index where the NaN tail starts, or -1 for a type without NaN.</param>
+        /// <param name="equal_nan">True starts one run at the tail; false a run at every tail record.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
+        /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
+        private static unsafe NDArray[] BuildMaskAndEmitLong<T>(
+            NDArray a, KeyPerm<T>* kp, long n, long firstNaN, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
@@ -1446,11 +1936,25 @@ namespace NumSharp
                 }
             }
 
-            return EmitOutputsLong<T>(kp, mask, n, uniqueCount, return_index, return_inverse, return_counts);
+            return EmitOutputsLong<T>(a, kp, mask, n, uniqueCount, return_index, return_inverse, return_counts);
         }
 
-        private unsafe NDArray[] EmitOutputsLong<T>(
-            KeyPerm<T>* kp, byte* mask, long n, long uniqueCount,
+        /// <summary>
+        ///     The long-indexed form of <see cref="EmitOutputs{T}"/>: the values, the index (smallest position of each run),
+        ///     the inverse and the counts, read from the sorted records and the byte mask.
+        /// </summary>
+        /// <typeparam name="T">The key type.</typeparam>
+        /// <param name="a">The operand: for more than one dimension the inverse takes its dimensions.</param>
+        /// <param name="kp">The sorted records.</param>
+        /// <param name="mask">Nonzero where a run starts (<c>mask[0]</c> nonzero).</param>
+        /// <param name="n">The number of records (positive).</param>
+        /// <param name="uniqueCount">The number of nonzero mask entries.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
+        private static unsafe NDArray[] EmitOutputsLong<T>(
+            NDArray a, KeyPerm<T>* kp, byte* mask, long n, long uniqueCount,
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>
         {
@@ -1503,7 +2007,7 @@ namespace NumSharp
                     if (mask[i] != 0) rank++;
                     invDst[kp[i].Perm] = rank;
                 }
-                var invShape = ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(Storage.Shape.dimensions);
+                var invShape = a.ndim <= 1 ? Shape.Vector(n) : Shape.Adopt(a.Storage.Shape.dimensions);
                 results[outPos++] = new NDArray(invSlice, invShape);
             }
 

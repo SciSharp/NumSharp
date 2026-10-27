@@ -8,7 +8,7 @@ using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 namespace NumSharp
 {
-    public partial class NDArray
+    internal static partial class UniqueEngine
     {
         // ============================================================================
         //  HASH fast path for unique_values / unique_counts on INTEGER-FAMILY dtypes.
@@ -31,26 +31,31 @@ namespace NumSharp
         ///     Sorted unique values for <c>np.unique_values</c>. Integer-family dtypes take the
         ///     hash path; everything else routes through the existing sort path (equal_nan=False).
         /// </summary>
-        internal NDArray uniqueValuesFast()
+        /// <param name="a">The numeric operand (any layout; only read).</param>
+        /// <returns>The sorted distinct values, a fresh 1-D array of <paramref name="a"/>'s dtype (a float's NaNs last,
+        ///     each distinct).</returns>
+        /// <remarks>NumPy returns its hash set's iteration order for the integer and complex dtypes; this returns them
+        ///     sorted (the same set: the documented divergence of <c>np.unique_values</c>).</remarks>
+        internal static NDArray uniqueValuesFast(NDArray a)
         {
-            switch (typecode)
+            switch (a.typecode)
             {
-                case NPTypeCode.Boolean: return UniqueHashSortedInt<bool>(wantCounts: false).values;
-                case NPTypeCode.Byte: return UniqueHashSortedInt<byte>(wantCounts: false).values;
-                case NPTypeCode.SByte: return UniqueHashSortedInt<sbyte>(wantCounts: false).values;
-                case NPTypeCode.Int16: return UniqueHashSortedInt<short>(wantCounts: false).values;
-                case NPTypeCode.UInt16: return UniqueHashSortedInt<ushort>(wantCounts: false).values;
-                case NPTypeCode.Int32: return UniqueHashSortedInt<int>(wantCounts: false).values;
-                case NPTypeCode.UInt32: return UniqueHashSortedInt<uint>(wantCounts: false).values;
-                case NPTypeCode.Int64: return UniqueHashSortedInt<long>(wantCounts: false).values;
-                case NPTypeCode.UInt64: return UniqueHashSortedInt<ulong>(wantCounts: false).values;
-                case NPTypeCode.Char: return UniqueHashSortedInt<char>(wantCounts: false).values;
-                case NPTypeCode.Complex: return UniqueHashSortedComplex(wantCounts: false).values;
+                case NPTypeCode.Boolean: return UniqueHashSortedInt<bool>(a, wantCounts: false).values;
+                case NPTypeCode.Byte: return UniqueHashSortedInt<byte>(a, wantCounts: false).values;
+                case NPTypeCode.SByte: return UniqueHashSortedInt<sbyte>(a, wantCounts: false).values;
+                case NPTypeCode.Int16: return UniqueHashSortedInt<short>(a, wantCounts: false).values;
+                case NPTypeCode.UInt16: return UniqueHashSortedInt<ushort>(a, wantCounts: false).values;
+                case NPTypeCode.Int32: return UniqueHashSortedInt<int>(a, wantCounts: false).values;
+                case NPTypeCode.UInt32: return UniqueHashSortedInt<uint>(a, wantCounts: false).values;
+                case NPTypeCode.Int64: return UniqueHashSortedInt<long>(a, wantCounts: false).values;
+                case NPTypeCode.UInt64: return UniqueHashSortedInt<ulong>(a, wantCounts: false).values;
+                case NPTypeCode.Char: return UniqueHashSortedInt<char>(a, wantCounts: false).values;
+                case NPTypeCode.Complex: return UniqueHashSortedComplex(a, wantCounts: false).values;
                 // Half/Single/Double take the SORT path (NumPy's own choice — floats are NOT in its
                 // hash map): NumPy sorts them with SIMD vqsort, and a hash regresses ~2x on all-unique
                 // input (insert N + scalar-sort N) with no cheap way to detect that cardinality. Decimal
                 // needs value-equality (1.0m != 1.00m by bits), so it sorts too.
-                default: return unique(false, false, false, axis: null, equal_nan: false)[0];
+                default: return Compute(a, false, false, false, axis: null, equal_nan: false)[0];
             }
         }
 
@@ -58,23 +63,25 @@ namespace NumSharp
         ///     Sorted unique values + counts for <c>np.unique_counts</c>. Integer-family dtypes
         ///     take the hash path; everything else routes through the sort path (equal_nan=False).
         /// </summary>
-        internal NDArray[] uniqueCountsFast()
+        /// <param name="a">The numeric operand (any layout; only read).</param>
+        /// <returns>[values, counts]: the sorted distinct values and their int64 occurrence counts.</returns>
+        internal static NDArray[] uniqueCountsFast(NDArray a)
         {
-            switch (typecode)
+            switch (a.typecode)
             {
-                case NPTypeCode.Boolean: { var (v, c) = UniqueHashSortedInt<bool>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.Byte: { var (v, c) = UniqueHashSortedInt<byte>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.SByte: { var (v, c) = UniqueHashSortedInt<sbyte>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.Int16: { var (v, c) = UniqueHashSortedInt<short>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.UInt16: { var (v, c) = UniqueHashSortedInt<ushort>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.Int32: { var (v, c) = UniqueHashSortedInt<int>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.UInt32: { var (v, c) = UniqueHashSortedInt<uint>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.Int64: { var (v, c) = UniqueHashSortedInt<long>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.UInt64: { var (v, c) = UniqueHashSortedInt<ulong>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.Char: { var (v, c) = UniqueHashSortedInt<char>(wantCounts: true); return new[] { v, c }; }
-                case NPTypeCode.Complex: { var (v, c) = UniqueHashSortedComplex(wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Boolean: { var (v, c) = UniqueHashSortedInt<bool>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Byte: { var (v, c) = UniqueHashSortedInt<byte>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.SByte: { var (v, c) = UniqueHashSortedInt<sbyte>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Int16: { var (v, c) = UniqueHashSortedInt<short>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.UInt16: { var (v, c) = UniqueHashSortedInt<ushort>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Int32: { var (v, c) = UniqueHashSortedInt<int>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.UInt32: { var (v, c) = UniqueHashSortedInt<uint>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Int64: { var (v, c) = UniqueHashSortedInt<long>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.UInt64: { var (v, c) = UniqueHashSortedInt<ulong>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Char: { var (v, c) = UniqueHashSortedInt<char>(a, wantCounts: true); return new[] { v, c }; }
+                case NPTypeCode.Complex: { var (v, c) = UniqueHashSortedComplex(a, wantCounts: true); return new[] { v, c }; }
                 // Half/Single/Double/Decimal take the SORT path — see uniqueValuesFast.
-                default: return unique(false, false, true, axis: null, equal_nan: false);
+                default: return Compute(a, false, false, true, axis: null, equal_nan: false);
             }
         }
 
@@ -83,10 +90,22 @@ namespace NumSharp
         ///     distinct values and — when <paramref name="wantCounts"/> — the aligned occurrence counts
         ///     (int64). The table grows on demand (load factor ≤ 0.5) so memory stays O(unique), not O(n).
         /// </summary>
-        private unsafe (NDArray values, NDArray counts) UniqueHashSortedInt<T>(bool wantCounts)
+        /// <typeparam name="T">The integer-family element type (bool and char included).</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="wantCounts">Also count each distinct value's occurrences.</param>
+        /// <returns>The sorted values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null
+        ///     otherwise).</returns>
+        /// <remarks>
+        ///     <para>
+        ///     Past 131,072 distinct values the table stops (it no longer fits a core's L2) and an LSD radix sort of the
+        ///     whole extract finishes the job: the same sorted set. Past 2^28 elements the method hands the operand to
+        ///     np.unique's flat path; that path's own hash routes stop at the same bound, so the two cannot recurse.
+        ///     </para>
+        /// </remarks>
+        private static unsafe (NDArray values, NDArray counts) UniqueHashSortedInt<T>(NDArray a, bool wantCounts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
-            long n = size;
+            long n = a.size;
             if (n == 0)
             {
                 var emptyV = new NDArray(new ArraySlice<T>(new UnmanagedMemoryBlock<T>(0)), Shape.Vector(0));
@@ -100,11 +119,11 @@ namespace NumSharp
             // (correct, and n this large means the whole-array sort is not the bottleneck anyway).
             if (n > (1L << 28))
             {
-                var r = unique(false, false, wantCounts, axis: null, equal_nan: false);
+                var r = Compute(a, false, false, wantCounts, axis: null, equal_nan: false);
                 return (r[0], wantCounts ? r[1] : null);
             }
 
-            var data = ExtractKeysOnly<T>(n);   // resolves any layout (strided/transposed/reversed) to C-order
+            var data = ExtractKeysOnly<T>(a, n);   // resolves any layout (strided/transposed/reversed) to C-order
 
             // High-cardinality bail-out: once the distinct set grows past ~L2 the open-addressing
             // table becomes a cache-miss per insert, so an LSD radix sort of `data` (sequential,
@@ -193,6 +212,9 @@ namespace NumSharp
         ///     4.0 …) carry their discriminating bits high and have ZERO low bits, so a low-bits table
         ///     index off a single multiply collapsed them all into one bucket (~500 probes/element).
         /// </summary>
+        /// <typeparam name="T">The element type (1, 2, 4 or 8 bytes).</typeparam>
+        /// <param name="v">The value.</param>
+        /// <returns>The 64-bit hash; the table index is its low bits.</returns>
         [MethodImpl(OptimizeAndInline)]
         private static ulong HashKey<T>(T v) where T : unmanaged
         {
@@ -205,6 +227,8 @@ namespace NumSharp
         }
 
         /// <summary>splitmix64 finalizer — avalanches every input bit into the low bits used as the table index.</summary>
+        /// <param name="k">The raw key bits.</param>
+        /// <returns>The mixed bits.</returns>
         [MethodImpl(OptimizeAndInline)]
         private static ulong Splitmix(ulong k)
         {
@@ -214,6 +238,10 @@ namespace NumSharp
         }
 
         /// <summary>Wraps a managed <typeparamref name="T"/><c>[]</c> as a fresh 1-D <see cref="NDArray"/> (unmanaged copy).</summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="arr">The source; only its first <paramref name="count"/> elements are copied.</param>
+        /// <param name="count">The element count of the result.</param>
+        /// <returns>A fresh 1-D array that owns a copy of the elements (the managed array may be reused or dropped).</returns>
         private static unsafe NDArray VectorFromManaged<T>(T[] arr, long count) where T : unmanaged
         {
             var block = new UnmanagedMemoryBlock<T>(count);
@@ -244,6 +272,7 @@ namespace NumSharp
         //  (IEEE per component: -0.0 == +0.0). The finite set is lex-sorted (real, then imaginary).
         // ============================================================================
 
+        /// <summary>The lexicographic complex order (real part, then imaginary part) the finite set is sorted by.</summary>
         private static readonly IComparer<Complex> ComplexLexComparer = Comparer<Complex>.Create((x, y) =>
         {
             int c = x.Real.CompareTo(y.Real);
@@ -255,6 +284,7 @@ namespace NumSharp
         ///     <c>hash_complex</c> / <c>equal_complex</c>), then the sort of the distinct values: each equality class keeps
         ///     its FIRST element in C order (bits included, so the first of <c>+0.0</c> / <c>-0.0</c>).
         /// </summary>
+        /// <param name="a">The complex128 operand (any layout; only read).</param>
         /// <param name="wantCounts">Also count each class's elements.</param>
         /// <param name="equalNan">NumPy's <c>equal_nan</c>: true makes every value with a NaN part ONE class (kept as the
         ///     first such value in C order, sorted last); false keeps each NaN distinct, appended in C order.</param>
@@ -263,9 +293,9 @@ namespace NumSharp
         ///     With <paramref name="equalNan"/> the caller (np.unique's values-only path) keeps arrays above 2^28 elements on
         ///     the sort path: this method's own large-array bail-out re-enters np.unique, which would come back here.
         /// </remarks>
-        private unsafe (NDArray values, NDArray counts) UniqueHashSortedComplex(bool wantCounts, bool equalNan = false)
+        private static unsafe (NDArray values, NDArray counts) UniqueHashSortedComplex(NDArray a, bool wantCounts, bool equalNan = false)
         {
-            long n = size;
+            long n = a.size;
             if (n == 0)
             {
                 var ev = new NDArray(new ArraySlice<Complex>(new UnmanagedMemoryBlock<Complex>(0)), Shape.Vector(0));
@@ -274,11 +304,11 @@ namespace NumSharp
             }
             if (n > (1L << 28))
             {
-                var r = unique(false, false, wantCounts, axis: null, equal_nan: false);
+                var r = Compute(a, false, false, wantCounts, axis: null, equal_nan: false);
                 return (r[0], wantCounts ? r[1] : null);
             }
 
-            var data = ExtractKeysOnly<Complex>(n);
+            var data = ExtractKeysOnly<Complex>(a, n);
             List<Complex> nans = null;
             // equal_nan: NumPy's hash_complex sends every value with a NaN part to bucket 0 and equal_complex calls two such
             // values equal, so the class keeps the first one inserted; its count is every NaN-part value.
@@ -342,6 +372,15 @@ namespace NumSharp
         }
 
         /// <summary>Builds the value array (sorted finite set + each distinct NaN appended, input order) and, when requested, aligned int64 counts (finite counts + 1 per NaN).</summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="finite">The sorted finite values.</param>
+        /// <param name="finiteCnt">Their counts (read only when <paramref name="wantCounts"/>).</param>
+        /// <param name="finiteCount">How many entries of <paramref name="finite"/> are used.</param>
+        /// <param name="nans">The NaN values to append, in input order (null when there are none).</param>
+        /// <param name="nanCount">How many of them.</param>
+        /// <param name="wantCounts">Also build the counts.</param>
+        /// <returns>The fresh 1-D values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null
+        ///     otherwise).</returns>
         private static unsafe (NDArray values, NDArray counts) AppendNaNsAndBuild<T>(
             T[] finite, long[] finiteCnt, int finiteCount, List<T> nans, int nanCount, bool wantCounts) where T : unmanaged
         {
@@ -365,11 +404,16 @@ namespace NumSharp
         }
 
         /// <summary>Collapses signed zeros (-0.0→+0.0) per component so ±0 variants share a hash bucket.</summary>
+        /// <param name="c">A complex value without NaN.</param>
+        /// <returns>The value with each zero part made <c>+0.0</c> (used for hashing only; the table keeps the original
+        ///     bits).</returns>
         [MethodImpl(OptimizeAndInline)]
         private static Complex NormalizeZeros(Complex c)
             => new Complex(c.Real == 0.0 ? 0.0 : c.Real, c.Imaginary == 0.0 ? 0.0 : c.Imaginary);
 
         /// <summary>Hashes a normalized (-0.0→+0.0, non-NaN) complex value by its two components' raw bits.</summary>
+        /// <param name="v">The normalized value.</param>
+        /// <returns>The 64-bit hash; the table index is its low bits.</returns>
         [MethodImpl(OptimizeAndInline)]
         private static ulong HashKeyComplex(Complex v)
         {

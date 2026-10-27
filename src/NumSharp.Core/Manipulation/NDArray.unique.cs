@@ -96,18 +96,10 @@ namespace NumSharp
         ///     path refuses it).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, with an NA
         ///     among two or more distinct values (NumPy's sort refuses to compare it).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is
+        ///     <see cref="UniqueEngine.Bare"/>).</remarks>
         public NDArray unique(int? axis = null, bool equal_nan = true, bool sorted = true)
-        {
-            // NumPy's axis checks for text (StringDType's structured-path refusal included).
-            ThrowIfTextUnique(this, axis);
-            // Delegate to the tuple path with all return flags false, then take the values. The
-            // kwargs path uses the optimized sort+mask algorithm (NaN-partition for floats, plain
-            // Array.Sort for integers, IL-vectorizable mask scan) and carries the axis handling —
-            // substantially faster than the legacy Hashset+LongIntroSort path above ~1K elements.
-            return unique(return_index: false, return_inverse: false, return_counts: false,
-                          axis: axis, equal_nan: equal_nan, sorted: sorted)[0];
-        }
+            => UniqueEngine.Bare(this, axis, equal_nan, sorted);
 
         /// <summary>
         ///     Find the unique elements of an array with full NumPy keyword argument support.
@@ -134,9 +126,10 @@ namespace NumSharp
         /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (NumPy's structured
         ///     path refuses it).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, where
-        ///     NumPy's sort compares an NA (<see cref="UniqueVString"/>). Text computes NumPy's answer: fixed-width text through
-        ///     <see cref="UniqueText"/>, <c>StringDType</c> through <see cref="UniqueVString"/>.</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
+        ///     NumPy's sort compares an NA. Text computes NumPy's answer: fixed-width text through NumPy's statements,
+        ///     <c>StringDType</c> through NumPy's flat path (see <see cref="UniqueEngine.Compute"/>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is
+        ///     <see cref="UniqueEngine.Compute"/>).</remarks>
         public NDArray[] unique(
             bool return_index,
             bool return_inverse = false,
@@ -144,125 +137,7 @@ namespace NumSharp
             int? axis = null,
             bool equal_nan = true,
             bool sorted = true)
-        {
-            // sorted does not change the values: NumSharp cannot reproduce NumPy's non-portable sorted=False hash
-            // order (integer/complex/text, values-only), so it always returns the deterministic sorted
-            // result — identical AS A SET, and consistent with the unique_values family. Over StringDType it decides one
-            // thing NumPy's does: without the sort, a None-like NA is never compared (and never refused).
-
-            // Text: NumPy's axis check first. StringDType is tested first (IsString refuses it: its fixed-width readers would
-            // misread the 16-byte cells) and computes NumPy's flat path (NDArray.unique.VString.cs); fixed-width text
-            // computes NumPy's statements (NDArray.unique.Text.cs).
-            ThrowIfTextUnique(this, axis);
-            if (Backends.Strings.NDStringUfuncs.IsVString(this))
-            {
-                var vstringOutputs = UniqueVString(this, return_index, return_inverse, return_counts, equal_nan, sorted);
-                // The flat path reshapes the inverse to the input's shape, as the numeric path.
-                if (return_inverse)
-                    ReshapeFlatInverseToInput(vstringOutputs, return_index ? 2 : 1);
-                return vstringOutputs;
-            }
-            if (Backends.Strings.NDStringUfuncs.IsString(this))
-            {
-                var textOutputs = UniqueText(this, return_index, return_inverse, return_counts, axis);
-                // The flat path (axis=None or a 1-D input) reshapes the inverse to the input's shape, as the numeric path.
-                if (return_inverse && (axis is null || ndim == 1))
-                    ReshapeFlatInverseToInput(textOutputs, return_index ? 2 : 1);
-                return textOutputs;
-            }
-
-            // NumPy: `if axis is None or ar.ndim == 1` takes the flat path — a given axis normalized first — so a 1-D input
-            // with axis 0 is the flat unique (its inverse the reshaped view below), not the slab path.
-            if (axis is { } given)
-            {
-                int resolved = given < 0 ? given + ndim : given;
-                if (resolved < 0 || resolved >= ndim)
-                    throw new AxisError(given, ndim);
-                if (ndim != 1)
-                    return uniqueAxisKwargs(resolved, return_index, return_inverse, return_counts, equal_nan);
-            }
-
-            var outputs = uniqueFlatKwargs(return_index, return_inverse, return_counts, equal_nan);
-            if (return_inverse)
-                ReshapeFlatInverseToInput(outputs, return_index ? 2 : 1);
-            return outputs;
-        }
-
-        /// <summary>
-        ///     The checks of <c>np.unique</c> over text that come before its computation: an explicit axis must be in range
-        ///     (NumPy's <c>np.moveaxis</c> re-raised as <c>AxisError(axis, ndim)</c>, or <c>normalize_axis_index</c> for a 1-D
-        ///     input: the same text), and a <c>StringDType</c> array refuses the structured path of an axis over two or more
-        ///     dimensions (<see cref="ThrowIfVStringUnique"/>). Does nothing for a numeric array.
-        /// </summary>
-        /// <param name="a">The array <c>unique</c> was called on.</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <exception cref="AxisError">A string array with an out-of-range <paramref name="axis"/> (<c>axis 9 is out of
-        ///     bounds for array of dimension 1</c>; a 0-d array refuses every axis).</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis (see
-        ///     <see cref="ThrowIfVStringUnique"/>).</exception>
-        internal static void ThrowIfTextUnique(NDArray a, int? axis)
-        {
-            // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a))
-            {
-                ThrowIfVStringUnique(a, axis);
-                return;
-            }
-            if (!Backends.Strings.NDStringUfuncs.IsString(a))
-                return;
-            if (axis is { } ax && (ax < -a.ndim || ax >= a.ndim))
-                throw new AxisError(ax, a.ndim);
-        }
-
-        /// <summary>
-        ///     The guard of <c>np.unique</c> (and the Array-API family) over NEP 55 <c>StringDType</c> text, in NumPy 2.4.2's
-        ///     order: the flat path (<c>axis=None</c>, or a 1-D input whose axis passed <c>normalize_axis_index</c>) computes
-        ///     (<see cref="UniqueVString"/>); an axis over two or more dimensions takes the structured path, which cannot hold
-        ///     <c>StringDType</c> fields.
-        /// </summary>
-        /// <param name="a">The <c>StringDType</c> array.</param>
-        /// <param name="axis">The axis, or null for the flattened array.</param>
-        /// <exception cref="AxisError">The axis is out of bounds (<c>np.moveaxis</c>'s check re-raised as
-        ///     <c>AxisError(axis, ndim)</c>, or <c>normalize_axis_index</c> for a 1-D input: the same text).</exception>
-        /// <exception cref="TypeError">An axis over two or more dimensions: <c>The axis argument to unique is not supported
-        ///     for dtype StringDType()</c> (the structured view of the rows refuses <c>StringDType</c> fields), or — for rows of
-        ///     zero width, which skip that view — <c>Cannot change data-type for array of references.</c> (the field-less
-        ///     result's view back as <c>StringDType</c>).</exception>
-        private static void ThrowIfVStringUnique(NDArray a, int? axis)
-        {
-            if (axis is { } ax)
-            {
-                if (ax < -a.ndim || ax >= a.ndim)
-                    throw new AxisError(ax, a.ndim);
-                if (a.ndim != 1)
-                {
-                    // `ar = moveaxis(ar, axis, 0).reshape(n, prod(rest))`: the row width is every other axis's extent.
-                    int norm = ax < 0 ? ax + a.ndim : ax;
-                    long width = 1;
-                    for (int d = 0; d < a.ndim; d++)
-                        if (d != norm)
-                            width *= a.Shape.dimensions[d];
-                    if (width > 0)
-                        throw new TypeError($"The axis argument to unique is not supported for dtype {a.dtype}");
-                    throw new TypeError("Cannot change data-type for array of references.");
-                }
-            }
-        }
-
-        /// <summary>
-        ///     NumPy's <c>inv_idx.reshape(inverse_shape)</c> for the flat path (<c>axis=None</c>, or a 1-D input): the inverse
-        ///     is always a VIEW with the input's shape (<c>flags.owndata</c> False, as NumPy's reshape returns) — <c>()</c> for a
-        ///     0-d input (the flat path makes <c>(1,)</c>), <c>(0, 3)</c> for an empty <c>(0, 3)</c> one (it makes <c>(0,)</c>).
-        /// </summary>
-        /// <param name="outputs">The flat path's outputs; the inverse at <paramref name="at"/> is replaced by its reshaped view.</param>
-        /// <param name="at">The inverse's position (1 without <c>return_index</c>, 2 with it).</param>
-        private void ReshapeFlatInverseToInput(NDArray[] outputs, int at)
-        {
-            var inverse = outputs[at];
-            outputs[at] = inverse.reshape(Shape.Adopt((long[])Shape.dimensions.Clone()));
-            // The view holds its own reference to the inverse's buffer; the flat wrapper is released.
-            inverse.Dispose();
-        }
+            => UniqueEngine.Compute(this, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
 
         /// <summary>
         ///     Find the unique elements of an array.<br></br>

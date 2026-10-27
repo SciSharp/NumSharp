@@ -216,13 +216,8 @@ namespace NumSharp
                         stripRuns: return_index || return_inverse || return_counts),
                     return_index, return_inverse, return_counts);
             using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy's one check before it reads text, the axis range, then StringDType's refusal of the structured axis path
-            // (an axis over two or more dimensions). Text of every class then computes in the instance unique.
-            NDArray.ThrowIfTextUnique(ar, axis);
-            // Boundary scope: the instance unique's sort/argsort/mask internals are reclaimed at
-            // exit; the present outputs are yielded (the UniqueResult carries only those arrays).
-            using var scope = NDScope.Open();
-            NDArray[] outputs = scope.Returns(ar.unique(return_index, return_inverse, return_counts, axis, equal_nan, sorted));
+            // NumPy's statements after the class boundary (the text checks, the boundary scope, the computation).
+            NDArray[] outputs = UniqueEngine.Unique(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
             return new UniqueResult(outputs, return_index, return_inverse, return_counts);
         }
     }
