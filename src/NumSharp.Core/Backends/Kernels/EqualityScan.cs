@@ -32,9 +32,10 @@ namespace NumSharp.Backends.Kernels
     ///
     ///     <para><b>Not handled here (the caller falls back to the <c>np.all(a == b)</c> composition):</b>
     ///     differing shapes (broadcasting), mixed dtypes, non-dense or mixed C/F layouts, <see cref="Half"/>
-    ///     (no <c>Vector&lt;Half&gt;</c> arithmetic, and a raw-bits scan would mis-handle NaN), and
-    ///     <see cref="decimal"/> (no <c>Vector&lt;decimal&gt;</c>). Those are the rarer cases; the
-    ///     composition already computes them correctly.</para>
+    ///     (no <c>Vector&lt;Half&gt;</c> arithmetic, and a raw-bits scan would mis-handle NaN),
+    ///     <see cref="decimal"/> (no <c>Vector&lt;decimal&gt;</c>), and text (fixed-width item sizes differ
+    ///     within one typecode; a <c>StringDType</c> element is a reference, not its text). Those are the rarer
+    ///     cases; the composition already computes them correctly.</para>
     /// </summary>
     internal static unsafe class EqualityScan
     {
@@ -45,7 +46,7 @@ namespace NumSharp.Backends.Kernels
         ///     corresponding elements), and a dtype the fused scan supports. Returns false — leaving
         ///     <paramref name="allEqual"/> unspecified — for every other case, signalling the caller to use
         ///     the <c>np.all(a == b)</c> composition (which handles broadcasting, mixed dtypes, strided
-        ///     views, Half and Decimal correctly).
+        ///     views, Half, Decimal and text correctly).
         /// </summary>
         /// <param name="a">First operand (non-null).</param>
         /// <param name="b">Second operand (non-null).</param>
@@ -58,6 +59,12 @@ namespace NumSharp.Backends.Kernels
             // Same dtype only. Mixed dtypes need the comparison kernel's per-element NEP50 promotion
             // (e.g. int64 vs float64 past 2^53), which a same-width byte/value scan cannot reproduce.
             if (a.typecode != b.typecode)
+                return false;
+
+            // Text is never scanned: two string arrays of one typecode can differ in item size (S2 against S3, where a
+            // scan of the first's width over the second would read past its buffer), and a StringDType element is a
+            // reference to its text, not the text. The == operator compares them.
+            if (a.typecode == NPTypeCode.String)
                 return false;
 
             // Same shape only — this fast path never broadcasts. array_equiv routes a genuine broadcast

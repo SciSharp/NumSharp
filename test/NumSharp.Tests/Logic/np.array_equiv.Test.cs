@@ -236,6 +236,33 @@ namespace NumSharp.Tests.Logic
             t.array_equal(t.copy()).Should().BeFalse();
         }
 
+        /// <summary>
+        ///     Two fixed-width text arrays of one class and different widths (S2 against S3, U2 against U3) hold the same
+        ///     text and are equal either way round, through np.array_equal, the member and np.array_equiv; StringDType
+        ///     copies are equal and a changed element is not. Probed against NumPy 2.4.2. Text never takes the fused equality
+        ///     scan: a byte scan of the first operand's width would compare its text against the second's padding (and read
+        ///     past a narrower second operand's buffer), and a StringDType element is a reference, not its text.
+        /// </summary>
+        [TestMethod]
+        public void array_equal_TextOfTwoWidths_ComparesTheText()
+        {
+            var s2 = np.array(new[] { "ab", "cd" }, np.dtype("S2"));
+            var s3 = np.array(new[] { "ab", "cd" }, np.dtype("S3"));
+            var u2 = np.array(new[] { "ab", "cd" }, np.dtype("U2"));
+            var u3 = np.array(new[] { "ab", "cd" }, np.dtype("U3"));
+            foreach (var (a, b) in new[] { (s2, s3), (s3, s2), (u2, u3), (u3, u2) })
+            {
+                // >>> np.array_equal(s2, s3), np.array_equiv(s2, s3) -> True, True (and U2 / U3 either way)
+                np.array_equal(a, b).Should().BeTrue();
+                a.array_equal(b).Should().BeTrue();
+                np.array_equiv(a, b).Should().BeTrue();
+            }
+            np.array_equal(s3, np.array(new[] { "ab", "cdx" }, np.dtype("S3"))).Should().BeFalse();
+            var t = np.array(new object[] { "ab", "cd" }, np.dtypes.StringDType());
+            np.array_equal(t, t.copy()).Should().BeTrue();
+            np.array_equal(t, np.array(new object[] { "ab", "ce" }, np.dtypes.StringDType())).Should().BeFalse();
+        }
+
         // -------------------------------------------------------------- layouts ----
 
         [TestMethod]

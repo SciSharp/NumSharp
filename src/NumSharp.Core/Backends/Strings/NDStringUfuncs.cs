@@ -973,6 +973,36 @@ namespace NumSharp.Backends.Strings
                 "numeric or bool results to np.evaluate.");
 
         /// <summary>
+        ///     Whether NumPy's <c>equal</c> / <c>not_equal</c> has a loop for a pair with a string operand, so the <c>==</c> /
+        ///     <c>!=</c> operators compare elements: two strings of one class (<see cref="ComparesText"/>), or a NEP 55
+        ///     <c>StringDType</c> operand with a <c>StringDType</c> or <c>U</c> one. Any other pair with a string operand has
+        ///     no loop, and the operators answer all-False / all-True without reading an element
+        ///     (<see cref="FailedComparison"/>).
+        /// </summary>
+        /// <param name="d1">The first operand's descriptor.</param>
+        /// <param name="d2">The second operand's descriptor.</param>
+        /// <returns>True when the ufunc compares the pair's text.</returns>
+        /// <remarks>
+        ///     Footgun: ask it only for a pair with a string operand (the operators' test is a String typecode on either
+        ///     side) — two numeric descriptors answer false here, though <c>equal</c> has a loop for every numeric pair.
+        ///     <c>StringDType</c> registers <c>equal</c> / <c>not_equal</c> loops for <c>(T, T)</c>, <c>(T, U)</c> and
+        ///     <c>(U, T)</c> only (probed 2.4.2). One predicate serves <see cref="FailedComparison"/> and
+        ///     <c>np.array_equal</c> / <c>np.array_equiv</c>, whose all-False answer it decides without the array.
+        /// </remarks>
+        internal static bool EqualHasStringLoop(DType d1, DType d2)
+        {
+            if (ComparesText(d1, d2))
+                return true;
+            if (d1.Meta is VStringDTypeMeta || d2.Meta is VStringDTypeMeta)
+            {
+                // StringDType with StringDType or U.
+                var other = d1.Meta is VStringDTypeMeta ? d2 : d1;
+                return other.Meta is VStringDTypeMeta || other.Meta == DTypeRegistry.Str;
+            }
+            return false;
+        }
+
+        /// <summary>
         ///     The comparison operators <c>==</c> / <c>!=</c> with a string operand and an operand of another class: NumPy's
         ///     <c>_failed_comparison_workaround</c>. The ufunc has no loop, so the operator answers "never equal" without
         ///     reading an element: an all-False (<c>==</c>) or all-True (<c>!=</c>) bool array of the broadcast shape.
@@ -993,17 +1023,10 @@ namespace NumSharp.Backends.Strings
         /// </remarks>
         internal static NumSharp.Generic.NDArray<bool> FailedComparison(NDArray lhs, NDArray rhs, bool notEqual)
         {
-            DType d1 = lhs.dtype, d2 = rhs.dtype;
-            if (d1.Meta is StringDTypeMeta && d2.Meta is StringDTypeMeta && d1.Meta == d2.Meta)
+            // Two strings of one class, or StringDType with StringDType or U: NumPy's equal / not_equal loop compares the
+            // text (the engine's string guard runs it, an empty broadcast included).
+            if (EqualHasStringLoop(lhs.dtype, rhs.dtype))
                 return null;
-            if (d1.Meta is VStringDTypeMeta || d2.Meta is VStringDTypeMeta)
-            {
-                // StringDType with StringDType or U: NumPy's equal / not_equal loop compares the text (the engine's string
-                // guard runs it, an empty broadcast included).
-                var other = d1.Meta is VStringDTypeMeta ? d2 : d1;
-                if (other.Meta is VStringDTypeMeta || other.Meta == DTypeRegistry.Str)
-                    return null;
-            }
             // The workaround allocates its result through an iterator over both operands (NpyIter_MultiNew with
             // NPY_KEEPORDER), so a broadcast failure is still reported and the result is laid out as a ufunc output over
             // the two operands: an F-ordered pair gives an F result. The values are a constant that needs no element of
