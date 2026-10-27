@@ -300,10 +300,18 @@ namespace NumSharp
             if (indices.Length == 0)
             {
                 // NumPy still runs `new[tuple(slobj)] = values` with the empty index, whose fancy setitem converts the values
-                // into arr's dtype first: None and a C# literal are packed even though nothing is inserted
-                // (np.insert(int_array, [], None) raises int(None)'s TypeError, np.insert(int8_array, [], 1000) the
-                // OverflowError, probed 2.4.2). The packed 0-d is the caller's scope's.
-                NDArray.PackForStore(values, arr.dtype, pyArrayPackRoute: false);
+                // into arr's dtype first: None and a C# literal are packed, and an array or a C# collection is cast, even
+                // though nothing is inserted (np.insert(int_array, [], None) raises int(None)'s TypeError,
+                // np.insert(int8_array, [], 1000) the OverflowError, np.insert(int_array, [], [7, 'x']) int()'s ValueError,
+                // probed 2.4.2) — the conversion CoerceValuesForMultiIndex starts with. The converted values are the caller's
+                // scope's.
+                NDArray converted = values is null
+                    ? NDArray.NoneForStore(arr.dtype)
+                    : arr.Storage.IsVString
+                        ? Backends.Strings.NDVStringMove.StoreValue(values, arr.dtype)
+                        : NDArray.PackForStore(values, arr.typecode, pyArrayPackRoute: false);
+                if (!converted.HasSameElementType(arr))
+                    converted.astype(arr.dtype, copy: true);
                 return DuplicateArray(arr);
             }
 
@@ -456,21 +464,28 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Wraps a scalar value as an NDArray of <paramref name="dtype"/>.
-        ///     Used by the <c>insert(arr, obj, value, axis)</c> overloads that
-        ///     accept an unboxed scalar so callers don't have to construct
-        ///     a 0-D ndarray themselves.
+        ///     The array an object value stands for, for the <c>insert(arr, obj, value, axis)</c> overloads, NOT yet converted
+        ///     to the target array's dtype: the NDArray overload converts it where NumPy converts its values
+        ///     (<c>array(values, dtype=arr.dtype)</c> after the single-index bounds check, the fancy setitem of the
+        ///     multi-index branch), so an axis or index error comes first, as in NumPy.
         /// </summary>
         /// <param name="value">The scalar, C# array or collection, or an <see cref="NDArray"/> passed as object; <c>null</c>
         ///     is Python's <c>None</c>.</param>
         /// <param name="dtype">The target array's dtype.</param>
-        /// <returns><paramref name="value"/> itself when it is an <see cref="NDArray"/>; <c>null</c> for <c>None</c> (the
-        ///     array overload converts it AFTER the index checks, NumPy's order: <c>np.insert(int_array, 10, None)</c> is the
-        ///     IndexError); otherwise its conversion, cast to <paramref name="dtype"/> when the inferred dtype differs.</returns>
+        /// <returns><paramref name="value"/> itself when it is an <see cref="NDArray"/>; <c>null</c> for <c>None</c>; a C#
+        ///     number, bool or string as the marked 0-d array its implicit conversion makes
+        ///     (<see cref="NDArray.FromPythonOperand"/>: a Python int / float / complex / bool / str, or a NumPy scalar for
+        ///     <see cref="Half"/> and <c>char</c>), which <c>CoerceValuesForSingleIndex</c> / <c>CoerceValuesForMultiIndex</c>
+        ///     pack with NumPy's <c>PyArray_Pack</c> rules; a C# array or collection as <c>np.asanyarray(value)</c>, cast
+        ///     there too. A <c>StringDType</c> target, and a <see cref="System.Numerics.BigInteger"/> (a Python int past the
+        ///     machine types, which has no marked 0-d form), are converted here, as before.</returns>
+        /// <exception cref="OverflowException">A <see cref="System.Numerics.BigInteger"/> outside the target dtype's range
+        ///     (NumPy's OverflowError: raised here, before the index checks, where NumPy raises it after them).</exception>
+        /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> target and a non-text value (its setitem refusal,
+        ///     raised here).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> object-value
-        ///     <c>insert</c> overloads, so the conversion that a cast supersedes, and the returned conversion itself,
-        ///     are released by the caller's scope. An <see cref="NDArray"/> returned as-is is the caller's and is never
-        ///     disposed.</remarks>
+        ///     <c>insert</c> overloads, so the array it builds is released by the caller's scope. An <see cref="NDArray"/>
+        ///     returned as-is is the caller's and is never disposed.</remarks>
         [NDScopedCovered]
         internal static NDArray ScalarValueAsArray(object value, DType dtype)
         {
@@ -480,20 +495,17 @@ namespace NumSharp
             // A StringDType target: NumPy's array(values, dtype=arr.dtype) stores Python objects by setitem.
             if (dtype.Meta is VStringDTypeMeta)
                 return Backends.Strings.NDVStringMove.StoreValue(value, dtype);
-            // A C# number is a Python (or NumPy) scalar in the boundary map: NumPy's array(values, dtype=arr.dtype) packs
-            // it with PyArray_Pack (a Python int range-checked, a float truncated then range-checked, a complex refused
-            // by a real dtype). A C# string into a NUMERIC array is a Python str, which PyArray_Pack parses with the dtype's
-            // setitem (int() / float() / complex(); its errors quote the str '1.5', not np.str_('1.5')). The packed 0-d
-            // belongs to the caller's scope.
-            if ((NDArray.IsStoreScalar(value) || value is string) && !Backends.Strings.NDStringStorage.IsString(dtype))
+            // A Python int past the machine types has no marked 0-d array, so it is packed now (PyArray_Pack's range check),
+            // the one value converted before NumPy's index checks.
+            if (value is System.Numerics.BigInteger && !Backends.Strings.NDStringStorage.IsString(dtype))
                 return NDArray.AsStoreValue(value, dtype.GetTypeCode());
-            var asArr = np.asanyarray(value);
-            if (!Equals(asArr.dtype, dtype))
-            {
-                var casted = asArr.astype(dtype, copy: true);
-                return casted;
-            }
-            return asArr;
+            // Every other value keeps its kind until the array overload converts it, after the axis and index checks:
+            // a C# number is a Python (or NumPy) scalar in the boundary map, which PyArray_Pack packs there (a Python int
+            // range-checked, a float truncated then range-checked, a complex refused by a real dtype); a C# string into a
+            // NUMERIC array is a Python str, which PyArray_Pack parses there with the dtype's setitem (its errors quote the
+            // str '1.5', not np.str_('1.5')); a C# array or collection is cast there. The 0-d or array belongs to the
+            // caller's scope.
+            return NDArray.FromPythonOperand(value);
         }
 
         /// <summary>
