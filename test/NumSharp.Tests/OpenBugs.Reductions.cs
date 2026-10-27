@@ -11,7 +11,8 @@ namespace NumSharp.Tests
     ///     Open bugs in how NumSharp STARTS a reduction, a scan or a size-1 product — found while making
     ///     <c>np.trapezoid</c> bit-exact (commit 94c9eb6b, 2026-10-03) and by the 2026-10-04 reduction-start probe —
     ///     plus the probe's wrong shapes (group 6; its trapezoid error, group 7, is fixed), which NaN a flat sum of several NaNs returns
-    ///     (group 8), and an axis sum in a cast loop whose rows are longer than the buffer (group 9); then np.average
+    ///     (group 8, and a complex short run's NaN per part), and an axis sum in a cast loop whose rows are longer than
+    ///     the buffer (group 9); then np.average
     ///     over a tuple axis reducing one axis at a time (group 14), and which NaN an axis sum along an outer axis keeps
     ///     (group 15). Groups 10 to 13 (the summation orders np.sum's routes missed over a reversed or a broadcast
     ///     operand, and the flat broadcast mean ignoring <c>dtype=</c>) are fixed: see the remarks. Each test asserts NumPy
@@ -476,6 +477,42 @@ namespace NumSharp.Tests
             Check(fails, "sum f32 NaN payloads 1..8", () => np.sum(NaNs32(8)), "float32 () 7fc00008", rawNaN: true);
             Check(fails, "sum f32 NaN payloads 1..130", () => np.sum(NaNs32(130)), "float32 () 7fc00048", rawNaN: true);
             AssertNoMismatch(fails, "NumPy's compiled pairwise_sum keeps the accumulator's NaN in the loop and the second operand's in the combine");
+        }
+
+        /// <summary>
+        ///     A complex128 <c>np.sum</c> of a run shorter than four complexes (NumPy's <c>CDOUBLE_pairwise_sum</c> base loop,
+        ///     <c>*rr += a[i]; *ri += a[i + 1]</c> from <c>-0.0</c>) must keep NumPy's NaN in each part. The win-amd64 wheel
+        ///     keeps the running sum's NaN in the REAL part and the element's in the IMAGINARY part (MSVC compiled the two
+        ///     statements with opposite operand orders), so three complexes with real NaN payloads 1, -, 2 and imaginary
+        ///     payloads -, 5, 6 sum to <c>1 : 6</c>, and two with payloads <c>1 : 11</c> and <c>2 : 12</c> to
+        ///     <c>1 : 12</c>. NumSharp keeps the running sum's NaN in both parts (<c>1 : 5</c>, <c>1 : 11</c>): its emitted
+        ///     complex fold adds one <c>[re, im]</c> vector with the running sum as its first source, and np.evaluate's
+        ///     streamed short rows give the same bits.
+        /// </summary>
+        /// <remarks>
+        ///     Found while proving np.average's fused weighted sum (np-layer dtype plan P2, the np.average family): the
+        ///     inline copy of the base loop in np.evaluate's streamed rows kept the LATER NaN in both parts and was brought to
+        ///     the fold's bits (<c>DefaultEngine.Evaluate.Stream.cs</c>, <c>RowFoldComplex</c>). The value is NaN either way
+        ///     and the fuzz oracle tokenizes NaN, so only a raw-bit comparison sees it. Fix: the per-part rule written out in
+        ///     the complex fold's base loop and its block tail (the same two statements), after NumPy's rule for the block's
+        ///     accumulators and its combine has been probed too; then the streamed copy follows. A win-amd64 pin, like the
+        ///     rest of this group.
+        /// </remarks>
+        [TestMethod, OpenBugs]
+        public void Sum_Complex128_ShortRun_KeepsNumPysNaNPerPart()
+        {
+            static System.Numerics.Complex Bits(ulong re, ulong im)
+                => new(System.BitConverter.UInt64BitsToDouble(re), System.BitConverter.UInt64BitsToDouble(im));
+
+            const ulong one = 0x3ff0000000000000, two = 0x4000000000000000;
+            var c3 = np.array(new[] { Bits(0x7ff8000000000001, one), Bits(two, 0x7ff8000000000005), Bits(0x7ff8000000000002, 0x7ff8000000000006) });
+            var c2 = np.array(new[] { Bits(0x7ff8000000000001, 0x7ff800000000000b), Bits(0x7ff8000000000002, 0x7ff800000000000c) });
+            var fails = new List<string>();
+            Check(fails, "sum c128 (3,) flat", () => np.sum(c3), "complex128 () 7ff8000000000001 7ff8000000000006", rawNaN: true);
+            Check(fails, "sum c128 (1,3) axis 1", () => np.sum(c3.reshape(1, 3), 1),
+                  "complex128 (1,) 7ff8000000000001 7ff8000000000006", rawNaN: true);
+            Check(fails, "sum c128 (2,) flat", () => np.sum(c2), "complex128 () 7ff8000000000001 7ff800000000000c", rawNaN: true);
+            AssertNoMismatch(fails, "NumPy's complex base loop keeps the running sum's NaN in the real part and the element's in the imaginary part");
         }
 
         // ======================================================================================================

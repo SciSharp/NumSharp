@@ -1587,20 +1587,32 @@ namespace NumSharp.Backends
         /// <param name="x">The row's first element (in scratch).</param>
         /// <param name="m">Row length.</param>
         /// <returns><c>pairwise_sum(row)</c>.</returns>
+        /// <remarks>
+        /// The NaN of a row holding several is written out: once the running sum is NaN it stays (it is quiet already,
+        /// from the addition that produced it). That is NumPy's BASE loop on win-amd64 (MSVC's <c>addsd res, x[k]</c>
+        /// returns its first source) and the bits np.sum's fold gives for the same row. A plain <c>res += x[k]</c> here
+        /// left the choice to RyuJIT, which swapped the commutative operands in this inlined copy: 112 of 21,320 rows of
+        /// 2 to 7 elements holding two NaNs came back with the LATER NaN, so <c>np.evaluate(Sum(x, axis))</c> and
+        /// np.sum of the same rows disagreed. Rows of 8 elements or more run the fold itself, the same compiled code as
+        /// the materialize route.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe double RowFoldDouble(ref NDExprChildStream stream, double* x, long m)
         {
             if (m < 8)
             {
                 double res = -0.0;
-                for (long k = 0; k < m; k++) res += x[k];
+                for (long k = 0; k < m; k++)
+                    if (!double.IsNaN(res))
+                        res += x[k];
                 return res;
             }
 
             return stream.FoldDouble(x, m, 1);
         }
 
-        /// <summary>float32 twin of <see cref="RowFoldDouble"/> (BASE seed <c>-0.0f</c>, float32 adds).</summary>
+        /// <summary>float32 twin of <see cref="RowFoldDouble"/> (BASE seed <c>-0.0f</c>, float32 adds, the running sum's
+        ///     NaN kept as written out there).</summary>
         /// <param name="stream">The bound stream (FoldSingle set).</param>
         /// <param name="x">The row's first element (in scratch).</param>
         /// <param name="m">Row length.</param>
@@ -1611,7 +1623,9 @@ namespace NumSharp.Backends
             if (m < 8)
             {
                 float res = -0.0f;
-                for (long k = 0; k < m; k++) res += x[k];
+                for (long k = 0; k < m; k++)
+                    if (!float.IsNaN(res))
+                        res += x[k];
                 return res;
             }
 
@@ -1626,6 +1640,14 @@ namespace NumSharp.Backends
         /// <param name="x">The row's first complex, as interleaved <c>(re, im)</c> doubles.</param>
         /// <param name="m">Row length in complexes.</param>
         /// <returns><c>[reSum, imSum]</c> of the row.</returns>
+        /// <remarks>
+        /// Each part keeps its running sum's NaN, written out as in <see cref="RowFoldDouble"/>: the bits of the emitted
+        /// complex fold np.sum runs (one <c>[re, im]</c> vector add a complex, the running sum its first source). The plain
+        /// <c>re += x; im += y</c> came back with the later NaN in both parts. NumPy's MSVC loop keeps the running sum's NaN
+        /// in the real part but the element's in the imaginary part, which neither route reproduces (pinned by
+        /// <c>OpenBugsReductionTests.Sum_Complex128_ShortRun_KeepsNumPysNaNPerPart</c>); this copy follows the fold
+        /// so that streaming stays the materialize route's bits.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector128<double> RowFoldComplex(ref NDExprChildStream stream, double* x, long m)
         {
@@ -1634,8 +1656,10 @@ namespace NumSharp.Backends
                 double re = -0.0, im = -0.0;
                 for (long k = 0; k < m; k++)
                 {
-                    re += x[2 * k];
-                    im += x[2 * k + 1];
+                    if (!double.IsNaN(re))
+                        re += x[2 * k];
+                    if (!double.IsNaN(im))
+                        im += x[2 * k + 1];
                 }
 
                 return Vector128.Create(re, im);

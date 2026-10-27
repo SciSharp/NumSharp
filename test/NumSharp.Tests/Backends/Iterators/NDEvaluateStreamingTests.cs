@@ -8,8 +8,11 @@ namespace NumSharp.Tests.Backends.Iterators
     /// Plan P2 M3 — the streaming (no-temp) exact reductions (DefaultEngine.Evaluate.Stream.cs). The contract is
     /// that streaming is byte-identical to the M1/M2 materialize-then-reduce path it replaces for contiguous
     /// inputs (every non-NaN bit, the sign of zero included; a NaN stays NaN — which of two DISTINCT NaN payloads
-    /// survives is not contractual, as the oracle tokenizes NaN, because the JIT may commute a float add), that it
-    /// actually ENGAGES where it applies, and that every other layout falls back to the materialize path.
+    /// survives is not contractual in general, as the oracle tokenizes NaN, because the JIT may commute a float add),
+    /// that it actually ENGAGES where it applies, and that every other layout falls back to the materialize path.
+    /// The streamed row sums pin the payload too (<see cref="ShortRows_SeveralNaNs_KeepTheRunningSumsNaN"/>): rows of
+    /// eight elements or more run the very fold the materialize path runs, and the short rows' inline copy of its base
+    /// loop writes the NaN choice out.
     /// </summary>
     [TestClass]
     public class NDEvaluateStreamingTests
@@ -977,6 +980,67 @@ namespace NumSharp.Tests.Backends.Iterators
             CollectionAssert.AreEqual(np.ascontiguousarray(want).Unsafe.ReadOnlyBytes().ToArray(),
                 np.ascontiguousarray(got).Unsafe.ReadOnlyBytes().ToArray(), "raw bytes");
             Assert.AreEqual(expectStream, NDExpr.StreamingReductions > 0, "streaming engagement");
+        }
+
+        /// <summary>
+        /// Streamed rows shorter than the fold's base threshold (8 elements; 4 complexes) holding several NaNs keep the
+        /// running sum's NaN: the bits np.sum gives for the same rows, and NumPy 2.4.2's for float64 / float32 (MSVC's base
+        /// loop <c>res += a[i]</c> returns its accumulator's NaN). The inline copy used to leave the choice to RyuJIT,
+        /// which returned the LATER NaN (np-layer dtype plan P2, found while proving np.average's fused weighted sum).
+        /// complex128 is held to np.sum's bits, whose imaginary part is not NumPy's (pinned by
+        /// <c>OpenBugsReductionTests.Sum_Complex128_ShortRun_KeepsNumPysNaNPerPart</c>).
+        /// </summary>
+        [TestMethod]
+        public void ShortRows_SeveralNaNs_KeepTheRunningSumsNaN()
+        {
+            static double N64(long p) => BitConverter.Int64BitsToDouble(0x7FF8000000000000 | p);
+            static float N32(int p) => BitConverter.Int32BitsToSingle(0x7FC00000 | p);
+            static byte[] Bytes(NDArray r) => np.ascontiguousarray(r).Unsafe.ReadOnlyBytes().ToArray();
+            static byte[] Words64(params ulong[] v)
+            {
+                var b = new byte[v.Length * 8];
+                for (int i = 0; i < v.Length; i++)
+                    BitConverter.GetBytes(v[i]).CopyTo(b, i * 8);
+                return b;
+            }
+            static byte[] Words32(params uint[] v)
+            {
+                var b = new byte[v.Length * 4];
+                for (int i = 0; i < v.Length; i++)
+                    BitConverter.GetBytes(v[i]).CopyTo(b, i * 4);
+                return b;
+            }
+
+            // float64 rows of 3 (C order along axis 1, F order along axis 0): NumPy keeps payloads 1 and 3.
+            var x = np.array(new[,] { { N64(1), 2.0, N64(2) }, { 1.0, N64(3), N64(4) } });
+            var f64 = Words64(0x7ff8000000000001, 0x7ff8000000000003);
+            NDExpr.StreamingReductions = 0;
+            var r = np.evaluate(NDExpr.Sum((NDExpr)x * 1.0, 1));
+            Assert.IsTrue(NDExpr.StreamingReductions > 0, "the C-ordered rows streamed");
+            CollectionAssert.AreEqual(f64, Bytes(r), "float64 rows, C order");
+            CollectionAssert.AreEqual(Bytes(np.sum(x, 1)), Bytes(r), "np.sum's bits, C order");
+            var xF = np.asfortranarray(x.T);
+            NDExpr.StreamingReductions = 0;
+            r = np.evaluate(NDExpr.Sum((NDExpr)xF * 1.0, 0));
+            Assert.IsTrue(NDExpr.StreamingReductions > 0, "the F-ordered rows streamed");
+            CollectionAssert.AreEqual(f64, Bytes(r), "float64 rows, F order");
+
+            // float32 rows of 7: NumPy keeps payloads 1 and 3.
+            var xf = np.array(new[,] { { N32(1), 2f, N32(2), 3f, 4f, 5f, N32(9) }, { 1f, N32(3), N32(4), 0f, 0f, 0f, 0f } });
+            r = np.evaluate(NDExpr.Sum((NDExpr)xf * 1.0f, 1));
+            CollectionAssert.AreEqual(Words32(0x7fc00001, 0x7fc00003), Bytes(r), "float32 rows");
+            CollectionAssert.AreEqual(Bytes(np.sum(xf, 1)), Bytes(r), "np.sum's bits, float32");
+
+            // complex128 rows of 3 (the bare leaf: a product would mix NaNs across the parts): np.sum's bits.
+            var c = np.array(new[,]
+            {
+                {
+                    new Complex(N64(1), 1.0), new Complex(2.0, N64(5)), new Complex(N64(2), N64(6)),
+                },
+            });
+            r = np.evaluate(NDExpr.Sum(NDExpr.Arr(c), 1));
+            CollectionAssert.AreEqual(Words64(0x7ff8000000000001, 0x7ff8000000000005), Bytes(r), "complex128 rows");
+            CollectionAssert.AreEqual(Bytes(np.sum(c, 1)), Bytes(r), "np.sum's bits, complex128");
         }
 
         [TestMethod]
