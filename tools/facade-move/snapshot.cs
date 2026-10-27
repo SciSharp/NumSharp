@@ -52,7 +52,9 @@
 // spacing (one, one per axis, or the varargs list: scalars, 0-d arrays, coordinates of the operand's axis lengths) and
 // edge_order, and np.linalg's second operand b, multi_dot's array list, the orders ord / p, UPLO, qr's mode, matrix_power's
 // n, tensorinv's ind, tensordot's axes (a count, or the two axis lists), tensorsolve's axes and the nullable tolerances
-// rcond / rtol / tol); an overload with a required parameter of another kind is reported once as SKIP. An int axis
+// rcond / rtol / tol, and np.insert / np.delete's positions obj (a C# int / long, a slice, an int[] / long[] sequence, an
+// index array or a boolean mask) and np.insert's values (an array, or any object: a number, a string, a bool, null, a C#
+// array, an NDArray passed as object)); an overload with a required parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand. An np.linalg function runs on pools of matrices
 // (LinalgLayouts, 20 layouts in phase A: square ones in C, F, transposed, strided, reversed and broadcast form, a stack, a
@@ -254,8 +256,22 @@ static class Snapshot
         // infinity, a name), eigh's UPLO, qr's mode, matrix_power's exponent n, tensordot's two axis lists, and the
         // nullable tolerances (pinv's rcond / rtol, matrix_rank's tol / rtol, lstsq's rcond).
         LinalgArrays, Ord, Uplo, QrMode, Power, AxesPairArg, NullableDouble,
+        // np.insert / np.delete: the positions obj as a C# int / long, a slice, an int[] / long[] sequence, or an index array
+        // or boolean mask; np.insert's values as an array, or as any object (a C# number, string, bool, null, a C# array, an
+        // NDArray passed as object).
+        InsertObj, InsertObjSlice, InsertObjSeq, InsertObjArray, InsertValues, InsertValue,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.insert or np.delete, whose <c>obj</c> / <c>values</c> / <c>value</c> roles are
+    ///     theirs alone: other functions name parameters <c>value</c> or <c>obj</c> with other meanings (np.can_cast,
+    ///     np.min_scalar_type, np.isscalar), and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.insert or np.delete overload.</returns>
+    private static bool IsInsertOrDelete(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "insert" or "delete";
 
     /// <summary>
     ///     Classifies a parameter.
@@ -288,6 +304,9 @@ static class Snapshot
                 : n == "aweights" ? Role.AWeights
                 // a2: np.array_equiv(a1, a2) and the legacy polyadd / polysub / polymul (a1, the first array, is the operand).
                 : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" or "a2" ? Role.Operand2
+                // np.insert / np.delete's index array or mask, and np.insert's values array.
+                : n == "obj" && IsInsertOrDelete(p) ? Role.InsertObjArray
+                : n == "values" && IsInsertOrDelete(p) ? Role.InsertValues
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -338,6 +357,15 @@ static class Snapshot
         if (n == "n" && t == typeof(int) && inLinalg) return Role.Power;
         if (n is "axesA" or "axesB" && t == typeof(int[])) return Role.AxesPairArg;
         if (n is "rcond" or "rtol" or "tol" && t == typeof(double?)) return Role.NullableDouble;
+        // np.insert / np.delete's positions in their other C# forms, and np.insert's object value (only theirs: other
+        // functions name an object parameter value too, np.can_cast and np.min_scalar_type among them).
+        if (IsInsertOrDelete(p))
+        {
+            if (n == "obj" && (t == typeof(int) || t == typeof(long))) return Role.InsertObj;
+            if (n == "obj" && t == typeof(Slice)) return Role.InsertObjSlice;
+            if (n == "obj" && (t == typeof(int[]) || t == typeof(long[]))) return Role.InsertObjSeq;
+            if (n == "value" && t == typeof(object)) return Role.InsertValue;
+        }
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -679,6 +707,86 @@ static class Snapshot
                              ("nan", BitConverter.Int64BitsToDouble(0x7FF8000000000000)), ("inf", double.PositiveInfinity),
                          })
                     Add(label, () => (double?)d);
+                break;
+            case Role.InsertObj:
+            {
+                // One position: before the second element first, then the first, the last (negative), a position inside
+                // every axis of the pool, one inside some axes only and its negative, the append position of a (3, 4)
+                // operand's flattening (12), one past it and its negative. A long parameter gets the same values as long.
+                bool asLong = p.ParameterType == typeof(long);
+                foreach (var o in new[] { 1, 0, -1, 3, 4, -4, 12, 13, -13 })
+                    Add(o.ToString(CultureInfo.InvariantCulture), asLong ? (Func<object>)(() => (long)o) : () => o);
+                break;
+            }
+            case Role.InsertObjSlice:
+                // Two positions first, then the whole axis, every other position, the reversed axis (NumPy's
+                // arange(*obj.indices(N)) runs backwards), an empty slice, the last two, a stepped reversed slice and one
+                // past the end (empty).
+                foreach (var s in new[] { "1:3", ":", "::2", "::-1", "1:1", "-2:", "10:2:-3", "100:" })
+                    Add(s, () => new Slice(s));
+                break;
+            case Role.InsertObjSeq:
+            {
+                // Two sorted positions first, then none, one (NumPy's single-index branch, without the scalar moveaxis),
+                // two unsorted, a repeated one, the first and the last, three, one past a (3, 4) operand's flattening and
+                // its negative. A long[] parameter gets the same values as long[].
+                bool asLong = p.ParameterType == typeof(long[]);
+                foreach (var seq in new[]
+                         {
+                             new[] { 1, 3 }, Array.Empty<int>(), new[] { 1 }, new[] { 3, 1 }, new[] { 1, 1 }, new[] { 0, -1 },
+                             new[] { 1, 2, 3 }, new[] { 13 }, new[] { -13 },
+                         })
+                    Add("[" + string.Join(",", seq) + "]",
+                        asLong ? (Func<object>)(() => seq.Select(v => (long)v).ToArray()) : () => seq.ToArray());
+                break;
+            }
+            case Role.InsertObjArray:
+                // An int64 pair first, then a 0-d index (NumPy's scalar branch), a one-element index (the single-index
+                // branch without the moveaxis), unsorted int32 and uint8 indices, a boolean mask of three (positions 0
+                // and 2), and the forms NumPy refuses or reads otherwise: two-dimensional masks and indices, one and two
+                // float indices, text indices of one and two elements, a complex index, an empty index array and one past
+                // the end.
+                Add("i64[1,3]", () => np.array(new long[] { 1, 3 }));
+                Add("0d_i64_1", () => np.array(1L));
+                Add("i64[1]", () => np.array(new long[] { 1 }));
+                Add("i32[3,1]", () => np.array(new[] { 3, 1 }));
+                Add("u8[0,2]", () => np.array(new byte[] { 0, 2 }));
+                Add("bool[T,F,T]", () => np.array(new[] { true, false, true }));
+                Add("bool2d", () => np.array(new[] { true, false }).reshape(new Shape(1, 2)));
+                Add("i64_2d", () => np.array(new long[] { 1 }).reshape(new Shape(1, 1)));
+                Add("f64[1]", () => np.array(new[] { 1.0 }));
+                Add("f64[1,2]", () => np.array(new[] { 1.0, 2.0 }));
+                Add("U[1]", () => np.array(new[] { "1" }));
+                Add("U[1,2]", () => np.array(new[] { "1", "2" }));
+                Add("c128[1]", () => np.array(new[] { new Complex(1, 0) }));
+                Add("i64[]", () => np.empty(new Shape(0), np.dtype("int64")));
+                Add("i64[13]", () => np.array(new long[] { 13 }));
+                break;
+            case Role.InsertValues:
+                // A 0-d int64 first (one value, broadcast), then two int64 values, two float64 values, a 0-d float64, a
+                // column of two, text values of both classes (a numeric operand parses them), a 0-d bool, an empty array,
+                // and None (null).
+                Add("0d_i64_7", () => np.array(7L));
+                Add("i64[7,8]", () => np.array(new long[] { 7, 8 }));
+                Add("f64[1.5,2.5]", () => np.array(new[] { 1.5, 2.5 }));
+                Add("0d_f64", () => np.array(1.5));
+                Add("col[[7],[8]]", () => np.array(new long[] { 7, 8 }).reshape(new Shape(2, 1)));
+                Add("U[7]", () => np.array(new[] { "7" }));
+                Add("T[7]", () => np.array(new[] { "7" }).astype(np.dtype("T")));
+                Add("0d_bool", () => np.array(true));
+                Add("f64[]", () => np.empty(new Shape(0), np.dtype("float64")));
+                Add("null", () => null);
+                break;
+            case Role.InsertValue:
+                // A C# int first (NumPy's Python int), then a double, a string, a bool, null (None), an int out of the
+                // small integer ranges, a C# int[] (a Python list), a mixed object[] and an NDArray passed as object.
+                foreach (var (label, value) in new (string, Func<object>)[]
+                         {
+                             ("7", () => 7), ("1.5", () => 1.5), ("'7'", () => "7"), ("true", () => true),
+                             ("null", () => null), ("1000", () => 1000), ("int[7,8]", () => new[] { 7, 8 }),
+                             ("obj[7,'x']", () => new object[] { 7, "x" }), ("nd[7,8]", () => np.array(new long[] { 7, 8 })),
+                         })
+                    Add(label, value);
                 break;
             case Role.Default:
                 Add("default", () => p.DefaultValue is DBNull ? null : p.DefaultValue);
