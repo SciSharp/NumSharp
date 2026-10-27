@@ -492,6 +492,74 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-27, P2's thirteenth family: np.logical_and / or / xor / not moved into `TensorEngine.LogicalAnd` /
+  `LogicalOr` / `LogicalXor` / `LogicalNot`; the ufunc machinery's NumPy orders and layouts fixed on the way; one pass
+  for the common call.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees:
+  the snapshot (the four functions, 39,048 calls) run under `NUMSHARP_DEBUG_GUARD_PAGES=1` (every buffer comes fresh and
+  zeroed, so the masked-off slots of a where= result are zeros on both sides: without it the pool handed out other
+  garbage once the move dropped the facades' scopes, and 2,202 where= lines differed by those slots alone),
+  `twin_logical.py` (each line rebuilt in NumPy: dtype, shape, C / F / OWNDATA / WRITEABLE flags and SHA-256, or the
+  exception's type and text; NumPy's masked-off slots zeroed too), `ab_logical.py` (parent against fix, each changed line
+  classified by the twin), and a ufunc matrix (`ufunc_matrix.py` / `.cs`: 55 ufuncs x 14 cases, 738 cells, each call
+  bound by reflection to the ufunc's NumPy-shaped overload: a read-only out= / a non-bool where= / a refused dtype= in
+  every pair, broadcast failures with out= and where=, a 0-d result's flags, a where= result's layout over F operands):
+  - `780ba0a7` the move (D1: NumPy's logical ufuncs are C loops): four abstract TensorEngine members, implemented in
+    `Backends/Default/Logic/Default.Logical.cs` statement for statement; the facades keep the numpy.matrix and
+    numpy.char.chararray boundaries. 39,048 calls byte-identical under guard pages; R1 drops `Logic/np.logical.cs 4 3`.
+    Before any fix the twin agreed on 34,459 of the 38,436 comparable lines (612 decimal lines have no NumPy twin).
+  - `e39ad6a6` (D4) logical_not answers a text operand under dtype= / out= / where= as NumPy does: the parse errors
+    first, then a fixed-width operand under a dtype other than bool finds no loop (logical_not's loops are bool-output
+    only), under dtype=bool fails the input cast, and a StringDType operand's no-loop text names the requested class. 522
+    lines fixed.
+  - `c04e16ec` (D4) logical_not's broadcast error lists only its own operands: the comparison computing a numeric NOT
+    listed its hidden 0-d zero ("(3,4) () (3,4,2) "); the operand is joined with out= / where= first, after NumPy's parse
+    checks. 184 lines fixed. Its first form joined before the parse checks; the A/B showed 20 regressions (an int64 mask
+    reported after the broadcast) before it landed.
+  - `1006659f` (D4, library; plan api-parameter-parity X22) a ufunc's shape errors with out= / where= list every operand
+    and come in NumPy's two phases (`npyiter_fill_axisdata`): the joint broadcast of the inputs, out= and where=, then
+    out's no-stretch check against the joint shape (`ResolveUfuncIterationShape`, `BroadcastUfuncInputs`). The binary /
+    comparison / power routes listed the inputs only, the out-join failure left where= out, and the stretch was checked
+    before the mask joined. 162 matrix cells and 1,104 lines fixed.
+  - `73e80d21` (D4, library) every ufunc parses out= and where= before it resolves its loop: `UfuncLoopCode` runs the
+    read-only and mask checks after the dtype= class check for every operand (they ran for text only), so they come ahead
+    of a no-loop dtype= and an input cast. 126 matrix cells and 777 lines fixed; no exception text of the family differs
+    from NumPy's any more.
+  - `00da3f93` (D4, library) a fresh where= result takes NumPy's iterator layout, the mask voting (`WhereResultShape`
+    over `Shape.NpyIterOutputShape`): F operands under an F mask, a row or a column give an F result, a permuted operand's
+    order is kept; the three out= / where= routes and np.power's two where= routes allocated C. 108 matrix cells and 28
+    lines fixed (2 decimal).
+  - `e41c90dc` step 2 (C11): NumPy's loops are one C pass each; the composition made three passes, two bool temporaries
+    and a 0-d zero (logical_and / or / xor at 1,000 numeric elements x0.53-x0.91 NumPy, logical_not x1.03-x1.43). One-pass
+    routes in front of it (`TryLogicalRun` /
+    `TryLogicalNotRun`): per 4,096-element block the comparison engine's `x != 0` (`x == 0`) run writes the truth values
+    on the stack and one `Vector<byte>` AND / OR / XOR combines them, for contiguous operands of one shape (or one of one
+    value), no mask, and no out= or a bool out= of that layout sharing no memory. The same bytes, layout and result type
+    by construction (a bool operand's truth included: the bitwise ufunc reads a nonzero byte as True); the snapshot
+    byte-identical, 11 planted bugs killed. NPY/NS over 72 cells (float64 / int32 / bool x 1K / 100K / 10M, plain and
+    out=): geomean x3.04 (x2.02), min x0.79 (x0.53), 21 cells under x1.5 (39); numeric 1K x1.81-x2.85 plain and x4.0-x10.9
+    into an out=.
+  - Evidence at `e41c90dc`: the twin agrees with NumPy 2.4.2 on 37,074 of the 38,436 comparable lines (34,459 at
+    `780ba0a7`); the 1,362 left are each a 0-d result's WRITEABLE flag (VF01, below). The ufunc matrix: 684 of 738 cells
+    NumPy's (288 at `c04e16ec`), the 54 left VF01's.
+  - **Found:**
+    - ldexp, divmod, modf and frexp handle out= themselves and keep their own shape texts and parse order: ldexp's input
+      broadcast lists the inputs only, divmod composes floor_divide and remainder (a failure lists one output; out=(o,
+      read_only) computes the quotient before the remainder's refusal), ldexp and frexp report an out= that does not fit
+      as np.copyto's text, and all four check a non-bool mask before a read-only out (`probe_multiout.py`). Plan
+      api-parameter-parity X39, open.
+    - VF01 reaches every elementwise ufunc: a 0-d result is a writeable 0-d array where NumPy returns a read-only scalar
+      (the matrix's 54 cells; recorded since the gufunc family).
+    - NumPy's logical_or over float64 reads its operands faster at 10M (7.5-9.1 ms for 170 MB) than the blocked route
+      (9.3-9.4 ms whatever the block, 512 to 8,192 elements measured): the two cells under x1.0 (x0.79 into an out=, x0.97
+      plain).
+    - A helper inserted in front of a member's signature lands between the member's doc comment and the signature (CS1572
+      / CS1571 caught it in `00da3f93` before it landed): insert in front of the doc comment.
+  - Left: X39; VF01 for the elementwise ufuncs; the bool-bool cells and logical_not of bool stay on the composition's one
+    SIMD pass (x1.14-x1.44 at 1K / 100K, x1.0-x1.07 into an out= at 10M, memory-bound on both sides).
+  - At `e41c90dc`: NumSharp.Tests net10.0 20,669 passed / 11 skipped and net8.0 20,668 / 11; Oracle net10.0 and net8.0
+    412 / 2 skipped, 0 failed; the carved-gap replays find every carved case of their 82 gaps still diverging.
+  - Next in P2: np.unique's text route (`Manipulation/NDArray.unique.cs` 4), then np.convolve / np.correlate
+    (`Math/NDArray.Convolve.cs` 4, `Math/NDArray.Correlate.cs` 4).
 - **2026-10-27, P2's twelfth family: np.average moved into `AverageEngine`, its statements NumPy's; the np.sum and
   np.evaluate residuals it met fixed on the way.** Commits on `strings`, developed in a scratch worktree and landed by
   fast-forward. The referees: the snapshot (np.average / np.average_returned, 33,096 calls), `twin_average.py` (the

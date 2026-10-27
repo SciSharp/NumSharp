@@ -1732,7 +1732,8 @@ setup stops the core), H (27: empties and power's errors in NumPy's order; 11 er
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `power_fast` op. The generator leaves out classes
 that are other items: a 0-d float32 / float16 base with a Python-scalar exponent (NumSharp reads every 0-d operand as a
 weak scalar: the documented NEP 50 0-d divergence), complex bases with non-integer exponents (F5, `npy_cpow`), unsigned
-bases with -1 (plan X21: NumPy's OverflowError) and an out= that does not broadcast (plan X22: the text).
+bases with -1 (plan X21: NumPy's OverflowError) and an out= that does not broadcast (plan X22: the text, NumPy's since
+2026-10-27, pinned by `UfuncOutWhereTests`).
 
 **What it replaced** (fixed 2026-10-06): 1,785 of the first 7,773 cases differ on the parent (`6f00ae14`). The out= and
 where= routes called pow for a 0-d exponent; a `(1,) ** (1,)` call took the fast path where NumPy's trivial loop calls

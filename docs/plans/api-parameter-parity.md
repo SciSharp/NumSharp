@@ -1079,10 +1079,17 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
   in NumSharp and the same OverflowError in NumPy. The `power_fast` generator leaves these cases out. Found by X13.
   Done 2026-10-07 with X2 (`d0a6f4c8`): `Default.Power.cs` runs the read-only out check, the mask check and X2's pack
   check before the negative-power error, in NumPy's order. Gate: `BinaryUfuncWeakIntPackTests`.
-- [ ] **X22 A binary ufunc's out= broadcast error omits the out's shape.** `np.power(ones(3), ones(4), out=empty(3))`:
+- [x] **X22 A binary ufunc's out= broadcast error omits the out's shape.** `np.power(ones(3), ones(4), out=empty(3))`:
   NumPy "operands could not be broadcast together with shapes (3,) (4,) (3,) " (every operand, the out included),
   NumSharp "… with shapes (3,) (4,) " (`IncorrectShapeException`). The 0-d exponent form and the "non-broadcastable
   output operand" text match. Text only. Found by X13; the `power_fast` generator leaves the case out.
+  Done 2026-10-27 (`1006659f`, the np-layer dtype plan's logical family): every ufunc's shape check with out= / where=
+  is NumPy's two phases (`npyiter_fill_axisdata`): the joint broadcast of the inputs, out= and where=, its failure
+  listing every operand (`BroadcastUfuncInputs` for the inputs, `ResolveUfuncIterationShape` for the join), then out's
+  no-stretch check against the joint shape. Two more gaps of the same check went with it: a failing out join left
+  where= out of the list, and the stretch was checked before the mask joined. Gate:
+  `UfuncOutWhereTests.ShapeErrors_ListEveryOperand_InNumPysTwoPhases`. The four ufuncs that handle out= themselves are
+  X39.
 - [ ] **X23 np.evaluate's Power node misses NumPy's scalar-exponent fast path, and np.kaiser inherits it.**
   `np.evaluate(NDExpr.Power(x, 2.0))` computes pow (`757.7617475757002 ** 2` = `...03c2`, `-0.0 ** 0.5` = +0.0) where
   NumPy's unfused `x ** 2.0` takes DOUBLE_power's fast path (`x*x` `...03c1`, sqrt -0.0). np.kaiser evaluates NumPy's
@@ -1695,6 +1702,22 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
     `op_axes` broadcast pass allocated per operand); `itershape` 562 → 531–540 | 1,189 (2.2×). Under the 1.5× bar:
     three broadcast operands, ~1.0× before the item too — the engine's general multi-operand setup (per-operand
     broadcast shapes, the axis sort, coalescing), not these checks; its own item.
+- [ ] **X39 The ufuncs that handle out= themselves (ldexp, divmod, modf, frexp) keep their own shape texts and parse
+  order.** Found 2026-10-27 by the np-layer dtype plan's logical-ufunc family (its ufunc probes, `probe_multiout.py`).
+  - Proof (NumPy 2.4.2):
+    - `np.ldexp(ones((3,4)), ones(7, int), out=zeros((3,4)))`: NumPy "operands could not be broadcast together with
+      shapes (3,4) (7,) (3,4) ", NumSharp "… (3,4) (7,) " (ldexp broadcasts its inputs with the two-shape text; X22's
+      fix reached the shared out= / where= routes only);
+    - `np.ldexp(a, ai, out=zeros(4))`, `np.ldexp(a, ai, out=zeros((3,4,2)), where=m)` and `np.frexp(a,
+      out=(zeros((3,5)), …))`: NumSharp reports np.copyto's "could not broadcast input array from shape (3,4) into
+      shape (4,)" (they compute a fresh result and copy it into out), NumPy its iterator's texts ("non-broadcastable
+      output operand …", the full operand list);
+    - `np.divmod` composes floor_divide and remainder, so a broadcast failure lists one output where NumPy lists both
+      (`(3,4) (7,) (3,4) (3,4) `), and `out=(o, read_only)` computes the quotient into `o` before the remainder's
+      read-only refusal (NumPy refuses before it computes);
+    - all four check a non-bool mask before a read-only out, and divmod a dtype= input cast before it.
+  - The fix: each runs NumPy's parse (every out, then the mask) at its entry and joins its operands through
+    `ResolveUfuncIterationShape` with every output listed (an overload taking the outputs).
 
 ## 6. Findings
 
@@ -2004,6 +2027,12 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done (commit), `[-]` closed without
    one, test the cases where the old one would answer differently.
 
 ## 7. State log
+
+- **2026-10-27**: X22 done on `strings` by the np-layer dtype plan's logical-ufunc family
+  (`docs/plans/np-layer-dtype-logic.md` section 9): a ufunc's shape errors with out= / where= list every operand and
+  come in NumPy's two phases (`1006659f`). The same family made every ufunc parse out= and where= before its loop
+  (`73e80d21`) and gave a fresh where= result NumPy's iterator layout (`00da3f93`). X39 found there, open: the four
+  ufuncs that handle out= themselves.
 
 - **2026-10-27**: findings 5 and 10, X12 and X14 done on `strings` by the np-layer dtype plan's np.average family
   (`docs/plans/np-layer-dtype-logic.md` section 9): np.sum and np.mean over an operand with a reversed or a broadcast
