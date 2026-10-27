@@ -12,6 +12,8 @@ namespace NumSharp.Tests.Math
     /// Key probed semantics:
     ///  • out joins the broadcast — inputs broadcast UP to a larger out
     ///    (add((4,),(4,),out=(2,4)) repeats rows); out itself never stretches.
+    ///  • a shape error lists every operand (the inputs, then out, then where),
+    ///    and every operand broadcasts together before out's stretch is checked.
     ///  • the loop dtype comes from the INPUTS; out only needs a same_kind
     ///    cast from it (f64 result → i32 out raises; → f32/i16 fine).
     ///  • the out instance is returned (reference identity).
@@ -130,6 +132,72 @@ namespace NumSharp.Tests.Math
                 "non-broadcastable output operand with shape (4,) doesn't match the " +
                 "broadcast shape (2,4)",
                 ex2.Message);
+        }
+
+        [TestMethod]
+        public void ShapeErrors_ListEveryOperand_InNumPysTwoPhases()
+        {
+            // NumPy's iterator (npyiter_fill_axisdata) broadcasts every operand together first — the inputs, then out=,
+            // then where= — and its failure lists all of them; only then is an out checked for a stretch, against the
+            // joint shape. Texts probed against NumPy 2.4.2.
+            static void Throws<T>(Action call, string text) where T : Exception
+                => Assert.AreEqual(text, Assert.ThrowsException<T>(call).Message);
+
+            var a = np.ones(new Shape(3, 4), np.float64);
+            var m = np.ones(new Shape(3, 4), np.@bool);
+            var bad = np.ones(new Shape(5), np.float64);
+            var one3 = np.ones(new Shape(3), np.float64);
+            var one4 = np.ones(new Shape(4), np.float64);
+
+            // The inputs do not broadcast: out= and where= are listed after them (an input failure keeps its house type,
+            // IncorrectShapeException). The two-shape text listed the inputs only (plan api-parameter-parity X22).
+            Throws<IncorrectShapeException>(() => np.add(a, bad, np.zeros(new Shape(3, 4))),
+                "operands could not be broadcast together with shapes (3,4) (5,) (3,4) ");
+            Throws<IncorrectShapeException>(() => np.add(a, bad, np.zeros(new Shape(3, 4)), m),
+                "operands could not be broadcast together with shapes (3,4) (5,) (3,4) (3,4) ");
+            Throws<IncorrectShapeException>(() => np.add(a, bad, where: m),
+                "operands could not be broadcast together with shapes (3,4) (5,) (3,4) ");
+            Throws<IncorrectShapeException>(() => np.add(a, bad, np.zeros(new Shape(4))),
+                "operands could not be broadcast together with shapes (3,4) (5,) (4,) ");
+            Throws<IncorrectShapeException>(() => np.power(one3, one4, np.empty(new Shape(3))),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) ");
+            Throws<IncorrectShapeException>(() => np.less(one3, one4, np.zeros(new Shape(3), np.@bool), np.ones(new Shape(3), np.@bool)),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) (3,) ");
+            Throws<IncorrectShapeException>(
+                () => np.bitwise_and(np.ones(new Shape(3), np.int64), np.ones(new Shape(4), np.int64), np.zeros(new Shape(3), np.int64)),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) ");
+            Throws<IncorrectShapeException>(() => np.add(one3, one4, np.zeros(new Shape(3), np.dtype("U5"))),
+                "operands could not be broadcast together with shapes (3,) (4,) (3,) ");
+            // Without out= or where= the text is NumPy's two-shape one, as before.
+            Throws<IncorrectShapeException>(() => np.add(a, bad),
+                "operands could not be broadcast together with shapes (3,4) (5,) ");
+
+            // The out= join fails: the mask is listed too (it was left out).
+            Throws<ArgumentException>(() => np.add(a, a, np.zeros(new Shape(3, 5)), m),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (3,5) (3,4) ");
+            Throws<ArgumentException>(() => np.sqrt(a, np.zeros(new Shape(3, 5)), m),
+                "operands could not be broadcast together with shapes (3,4) (3,5) (3,4) ");
+            Throws<ArgumentException>(() => np.less(a, a, np.zeros(new Shape(3, 5), np.@bool), m),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (3,5) (3,4) ");
+
+            // Phase order: an out that would be stretched next to a mask that broadcasts with nothing reports the
+            // broadcast (the stretch was reported first).
+            var badMask = np.ones(new Shape(5), np.@bool);
+            Throws<ArgumentException>(() => np.add(a, a, np.zeros(new Shape(4)), badMask),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (4,) (5,) ");
+            Throws<ArgumentException>(() => np.sqrt(a, np.zeros(new Shape(4)), badMask),
+                "operands could not be broadcast together with shapes (3,4) (4,) (5,) ");
+            Throws<ArgumentException>(() => np.less(a, a, np.zeros(new Shape(4), np.@bool), badMask),
+                "operands could not be broadcast together with shapes (3,4) (3,4) (4,) (5,) ");
+
+            // The stretch text names the joint shape, the mask's axes included (it named the inputs' and out's join).
+            var mask3 = np.ones(new Shape(2, 3, 4), np.@bool);
+            Throws<ArgumentException>(() => np.add(a, a, np.zeros(new Shape(4)), mask3),
+                "non-broadcastable output operand with shape (4,) doesn't match the broadcast shape (2,3,4)");
+            Throws<ArgumentException>(() => np.sqrt(a, np.zeros(new Shape(4)), mask3),
+                "non-broadcastable output operand with shape (4,) doesn't match the broadcast shape (2,3,4)");
+            Throws<ArgumentException>(() => np.add(one4, one4, np.zeros(new Shape(4)), mask3),
+                "non-broadcastable output operand with shape (4,) doesn't match the broadcast shape (2,3,4)");
         }
 
         [TestMethod]

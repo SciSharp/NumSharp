@@ -279,25 +279,15 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Resolve the iteration (= output) shape for a ufunc call with
-        /// optional out/where, with NumPy's exact error texts:
-        ///   • out joins the broadcast: inputs may broadcast UP to out's shape.
-        ///   • out itself may never be stretched ("non-broadcastable output
-        ///     operand with shape (1,) doesn't match the broadcast shape (4,)").
-        ///   • an out incompatible with the inputs raises "operands could not
-        ///     be broadcast together with shapes (4,) (4,) (5,) " (NumPy lists
-        ///     every operand shape, trailing space included).
-        ///   • where broadcasts with everything and, when out is absent,
-        ///     participates in the output shape (verified: add((4,),(4,),
-        ///     where=(2,4)-mask) returns shape (2,4)).
-        /// </summary>
-        /// <summary>
         /// True when two shapes have the same rank and identical dimensions — the case in
         /// which the ufunc's broadcast and out/where joins are identity transforms, so the
-        /// out= routes skip <see cref="Broadcast"/> and <see cref="ResolveUfuncIterationShape"/>
+        /// out= routes skip <see cref="Broadcast(Shape, Shape)"/> and <see cref="ResolveUfuncIterationShape"/>
         /// (which allocate and cannot raise there). Strides are irrelevant to that decision:
         /// <see cref="Shape.Equals(Shape)"/>, which the join validates with, compares dims only.
         /// </summary>
+        /// <param name="a">The first shape.</param>
+        /// <param name="b">The second shape.</param>
+        /// <returns>True when the ranks and every dimension agree (two shapes without a dimension array agree).</returns>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private static bool SameDims(in Shape a, in Shape b)
         {
@@ -313,69 +303,109 @@ namespace NumSharp.Backends
             return true;
         }
 
+        /// <summary>
+        ///     NumPy's operand list in a ufunc's broadcast error: each operand's shape (<see cref="NumPyShapeRepr"/>) and a
+        ///     space, in the iterator's operand order — the inputs, then <paramref name="out"/>, then <paramref name="where"/>
+        ///     when given. A call without <c>out=</c> lists no output: NumPy's iterator allocates that operand itself.
+        /// </summary>
+        /// <param name="inputs">The inputs, in operand order.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The shapes, each followed by a space: <c>"(3,4) (5,) (3,4) "</c>.</returns>
+        private static string UfuncOperandShapes(NDArray[] inputs, NDArray? @out, NDArray? where)
+        {
+            string shapes = string.Empty;
+            foreach (var inp in inputs)
+                shapes += NumPyShapeRepr(inp.Shape) + " ";
+            if (@out is not null)
+                shapes += NumPyShapeRepr(@out.Shape) + " ";
+            if (where is not null)
+                shapes += NumPyShapeRepr(where.Shape) + " ";
+            return shapes;
+        }
+
+        /// <summary>
+        ///     The broadcast of a binary ufunc's two inputs in a call with <c>out=</c> or <c>where=</c>. NumPy broadcasts every
+        ///     iterator operand at once, so its error lists all of them: the inputs, then <paramref name="out"/> and
+        ///     <paramref name="where"/> when given (probed 2.4.2: <c>np.power(ones(3), ones(4), out=empty(3))</c> is
+        ///     "operands could not be broadcast together with shapes (3,) (4,) (3,) "). The engine's two-shape
+        ///     <see cref="Broadcast(Shape, Shape)"/> lists the inputs only, which is NumPy's text for a call without them.
+        /// </summary>
+        /// <param name="lhs">The first input.</param>
+        /// <param name="rhs">The second input.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The two inputs' broadcast shapes, as <see cref="Broadcast(Shape, Shape)"/> returns them.</returns>
+        /// <exception cref="IncorrectShapeException">The inputs do not broadcast together (NumPy's ValueError; the house
+        ///     type of an input broadcast failure, as <see cref="Broadcast(Shape, Shape)"/> raises it).</exception>
+        /// <remarks>The try/catch costs nothing on the success path; it only unwinds when the broadcast fails.</remarks>
+        private static (Shape LeftShape, Shape RightShape) BroadcastUfuncInputs(NDArray lhs, NDArray rhs, NDArray? @out,
+            NDArray? where)
+        {
+            try
+            {
+                return Shape.Broadcast(lhs.Shape, rhs.Shape);
+            }
+            catch (IncorrectShapeException e)
+            {
+                throw new IncorrectShapeException(
+                    $"operands could not be broadcast together with shapes {UfuncOperandShapes(new[] { lhs, rhs }, @out, where)}", e);
+            }
+        }
+
+        /// <summary>
+        ///     The iteration (= output) shape of a ufunc call with <c>out=</c> and / or <c>where=</c>, in the two phases of
+        ///     NumPy's iterator (<c>npyiter_fill_axisdata</c>) and with its texts:
+        ///     <list type="number">
+        ///         <item>Every operand broadcasts together: the inputs (joined into <paramref name="inputBroadcast"/>), then
+        ///         <paramref name="out"/>, then <paramref name="where"/>. Inputs may broadcast UP to out's shape, and the mask
+        ///         joins the shape even without an out (<c>np.add((4,), (4,), where=(2,4)-mask)</c> is (2,4)). A failure lists
+        ///         every operand's shape, trailing space included: "operands could not be broadcast together with shapes
+        ///         (4,) (4,) (5,) ".</item>
+        ///         <item>An output is never stretched to the joint shape: "non-broadcastable output operand with shape (1,)
+        ///         doesn't match the broadcast shape (4,)", naming the joint shape (a mask's extra axes included).</item>
+        ///     </list>
+        /// </summary>
+        /// <param name="inputBroadcast">The inputs' broadcast shape. The caller computes it, and its own failure lists every
+        ///     operand too (<see cref="BroadcastUfuncInputs"/>).</param>
+        /// <param name="inputs">The inputs, for the error text.</param>
+        /// <param name="out">The <c>out=</c> operand, or null.</param>
+        /// <param name="where">The <c>where=</c> mask, or null.</param>
+        /// <returns>The joint shape: out's dimensions when an out is given. It may be an operand's own shape (strides
+        ///     included), so a caller allocating from it takes <see cref="Shape.Clean"/> first.</returns>
+        /// <exception cref="ArgumentException">An operand that does not broadcast with the others, or an out that would be
+        ///     stretched (NumPy's ValueError texts; ArgumentException is the house type of these two checks).</exception>
+        /// <remarks>
+        ///     The phase order shows only when both checks would fail: an out that would be stretched next to a mask that
+        ///     broadcasts with nothing reports the broadcast (probed 2.4.2: <c>np.add(ones((3,4)), ones((3,4)),
+        ///     out=zeros(4), where=ones(5, bool))</c> lists all four shapes). Checking the stretch before the mask joined
+        ///     reported the stretch there, and an out-join failure left the mask out of the list.
+        /// </remarks>
         private static Shape ResolveUfuncIterationShape(
             Shape inputBroadcast, NDArray[] inputs, NDArray? @out, NDArray? where)
         {
+            // Phase 1: the joint broadcast. ResolveReturnShape is the pairwise broadcast, so folding out= and then the mask
+            // into the inputs' shape is the N-way broadcast NumPy's iterator computes.
             Shape full = inputBroadcast;
-
-            if (@out is not null)
+            try
             {
-                Shape withOut;
-                try
-                {
-                    withOut = Shape.ResolveReturnShape(full, @out.Shape);
-                }
-                catch (Exception e)
-                {
-                    string shapes = string.Empty;
-                    foreach (var inp in inputs)
-                        shapes += NumPyShapeRepr(inp.Shape) + " ";
-                    shapes += NumPyShapeRepr(@out.Shape) + " ";
-                    throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}", e);
-                }
-
-                // out can absorb the inputs but may not be stretched itself.
-                if (!withOut.Equals(@out.Shape))
-                {
-                    throw new ArgumentException(
-                        $"non-broadcastable output operand with shape {NumPyShapeRepr(@out.Shape)} " +
-                        $"doesn't match the broadcast shape {NumPyShapeRepr(withOut)}");
-                }
-
-                full = withOut;
+                if (@out is not null)
+                    full = Shape.ResolveReturnShape(full, @out.Shape);
+                if (where is not null)
+                    full = Shape.ResolveReturnShape(full, where.Shape);
+            }
+            catch (Exception e)
+            {
+                throw new ArgumentException(
+                    $"operands could not be broadcast together with shapes {UfuncOperandShapes(inputs, @out, where)}", e);
             }
 
-            if (where is not null)
-            {
-                Shape withWhere;
-                try
-                {
-                    withWhere = Shape.ResolveReturnShape(full, where.Shape);
-                }
-                catch (Exception e)
-                {
-                    string shapes = string.Empty;
-                    foreach (var inp in inputs)
-                        shapes += NumPyShapeRepr(inp.Shape) + " ";
-                    if (@out is not null)
-                        shapes += NumPyShapeRepr(@out.Shape) + " ";
-                    shapes += NumPyShapeRepr(where.Shape) + " ";
-                    throw new ArgumentException(
-                        $"operands could not be broadcast together with shapes {shapes}", e);
-                }
-
-                if (@out is not null && !withWhere.Equals(full))
-                {
-                    // The mask would stretch the provided out — same
-                    // non-broadcastable-output rule as above.
-                    throw new ArgumentException(
-                        $"non-broadcastable output operand with shape {NumPyShapeRepr(@out.Shape)} " +
-                        $"doesn't match the broadcast shape {NumPyShapeRepr(withWhere)}");
-                }
-
-                full = withWhere;
-            }
+            // Phase 2: an output operand may not be stretched (NumPy's iterator flags it NO_BROADCAST), so the joint shape
+            // must be out's own dimensions.
+            if (@out is not null && !full.Equals(@out.Shape))
+                throw new ArgumentException(
+                    $"non-broadcastable output operand with shape {NumPyShapeRepr(@out.Shape)} " +
+                    $"doesn't match the broadcast shape {NumPyShapeRepr(full)}");
 
             return full;
         }
@@ -536,8 +566,8 @@ namespace NumSharp.Backends
             string name = UfuncName(op);
             // A text out= (no input is text — the string guard answered those): the numeric loop's results formatted into it.
             if (@out is not null && @out.typecode == NPTypeCode.String)
-                return IntoTextOut(name, resultType, Broadcast(lhs.Shape, rhs.Shape).Item1, new[] { lhs, rhs }, @out, where,
-                    w => ExecuteBinaryUfuncInto(lhs, rhs, op, lhsType, rhsType, resultType, null, w));
+                return IntoTextOut(name, resultType, BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape, new[] { lhs, rhs },
+                    @out, where, w => ExecuteBinaryUfuncInto(lhs, rhs, op, lhsType, rhsType, resultType, null, w));
             if (@out is not null)
                 ValidateOutCast(resultType, @out.typecode, name);
 
@@ -552,9 +582,9 @@ namespace NumSharp.Backends
             }
             else
             {
-                // Inputs broadcast first (their own incompatibility raises the
-                // pre-existing broadcast error), then out/where join per NumPy.
-                var (leftShape, rightShape) = Broadcast(lhs.Shape, rhs.Shape);
+                // Inputs broadcast first (a failure lists every operand, out= and where= included, as NumPy's iterator
+                // does), then out/where join per NumPy.
+                var (leftShape, rightShape) = BroadcastUfuncInputs(lhs, rhs, @out, where);
                 var iterShape = ResolveUfuncIterationShape(
                     leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 
@@ -712,8 +742,8 @@ namespace NumSharp.Backends
             string name = UfuncName(op);
             // A text out= (no input is text): the bools formatted into it ('True' / 'False', cut to its width).
             if (@out is not null && @out.typecode == NPTypeCode.String)
-                return IntoTextOut(name, NPTypeCode.Boolean, Broadcast(lhs.Shape, rhs.Shape).Item1, new[] { lhs, rhs }, @out,
-                    where, w => ExecuteComparisonUfuncInto(lhs, rhs, op, lhsType, rhsType, null, w));
+                return IntoTextOut(name, NPTypeCode.Boolean, BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape,
+                    new[] { lhs, rhs }, @out, where, w => ExecuteComparisonUfuncInto(lhs, rhs, op, lhsType, rhsType, null, w));
             if (@out is not null)
                 ValidateOutCast(NPTypeCode.Boolean, @out.typecode, name);
 
@@ -725,7 +755,8 @@ namespace NumSharp.Backends
             }
             else
             {
-                var (leftShape, _) = Broadcast(lhs.Shape, rhs.Shape);
+                // A failure lists every operand (see the binary route).
+                var (leftShape, _) = BroadcastUfuncInputs(lhs, rhs, @out, where);
                 var iterShape = ResolveUfuncIterationShape(
                     leftShape.Clean(), new[] { lhs, rhs }, @out, where);
 

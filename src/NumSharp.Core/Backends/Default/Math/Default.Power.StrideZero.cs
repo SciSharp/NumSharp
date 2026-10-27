@@ -163,9 +163,10 @@ namespace NumSharp.Backends
         /// <param name="out">The out= array, or null.</param>
         /// <param name="where">The where= mask, or null.</param>
         /// <returns>The clean (C-order, offset 0) iteration shape: the out's dims when one is given.</returns>
-        /// <exception cref="ArgumentException">An input cast, the mask dtype, a read-only out or the out cast is
-        /// refused.</exception>
-        /// <exception cref="IncorrectShapeException">The shapes do not broadcast, or the out / mask does not fit.</exception>
+        /// <exception cref="ArgumentException">An input cast, the mask dtype, a read-only out (<see cref="ValueError"/>) or
+        /// the out cast is refused, or the out / mask does not fit the inputs (NumPy's texts).</exception>
+        /// <exception cref="IncorrectShapeException">The inputs do not broadcast (NumPy's text, which lists out= and where=
+        /// too when given).</exception>
         private static Shape ValidatePowerUfuncCall(NDArray lhs, NDArray rhs, NPTypeCode loop, NPTypeCode? typeCode,
                                                     NDArray @out, NDArray where)
         {
@@ -182,7 +183,7 @@ namespace NumSharp.Backends
             ValidateWhereMask(where);
             if (@out is not null)
                 ValidateOutCast(loop, @out.typecode, UfuncName(BinaryOp.Power));
-            var (leftShape, _) = Broadcast(lhs.Shape, rhs.Shape);
+            var (leftShape, _) = BroadcastUfuncInputs(lhs, rhs, @out, where);
             return ResolveUfuncIterationShape(leftShape.Clean(), new[] { lhs, rhs }, @out, where).Clean();
         }
 

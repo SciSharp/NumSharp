@@ -82,7 +82,8 @@ namespace NumSharp.Backends
             if (@out is not null && @out.typecode == NPTypeCode.String && where is not null)
             {
                 ThrowIfTextOutCastFails("power", "output", promotedLoop, @out);
-                ResolveUfuncIterationShape(Broadcast(lhs.Shape, rhs.Shape).Item1.Clean(), new[] { lhs, rhs }, @out, where);
+                ResolveUfuncIterationShape(BroadcastUfuncInputs(lhs, rhs, @out, where).LeftShape.Clean(), new[] { lhs, rhs },
+                    @out, where);
                 ReadMaskedTextOut(@out, promotedLoop, where);
             }
 
