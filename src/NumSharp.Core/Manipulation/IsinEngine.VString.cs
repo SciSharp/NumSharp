@@ -8,7 +8,7 @@ using NumSharp.Backends.Sorting;
 using NumSharp.Backends.Strings;
 
 // =============================================================================
-// np.isin.VString.cs — np.isin when an operand is NEP 55 StringDType text (T), NumPy 2.4.2's loop path
+// IsinEngine.VString.cs — np.isin when an operand is NEP 55 StringDType text (T), NumPy 2.4.2's loop path
 // =============================================================================
 //
 // WHAT NUMPY DOES (numpy/lib/_arraysetops_impl.py, _isin; probed)
@@ -38,7 +38,7 @@ using NumSharp.Backends.Strings;
 
 namespace NumSharp
 {
-    public static partial class np
+    internal static partial class IsinEngine
     {
         /// <summary>
         ///     NumPy's <c>_isin</c> when <paramref name="element"/> or <paramref name="test_elements"/> is a
