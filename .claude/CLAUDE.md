@@ -3139,28 +3139,47 @@ See `Logic/np.is.cs` (`signbit`), `Backends/Default/Logic/Default.SignBit.cs`,
 
 `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` is the element-wise membership
 test — a bool array of `element`'s shape, True where `element[i]` is a value in the (flattened) `test_elements`
-set (NumPy `_arraysetops_impl.py`). Comparison happens in `result_type(element, test)`, matching NumPy's
-brute/sort/table methods (which all agree on the RESULT — `kind` only trades speed for memory). The engine picks
-its own method by the test set's value range, always returning the correct membership: an integer/bool pair with a
-range ≤ `6·(|element|+|test|)` takes a **counting-table gather** (build a bool lookup over `[min,max]`, then one
-`take(mode='clip')` per element with a range mask — no widening of the element array, staying in its own dtype),
-otherwise a **sort + `searchsorted` + equality probe** (which also covers float/complex/decimal/char — complex
-sorts lexicographically like NumPy). NaN is never a member (NaN ≠ NaN falls out of the equality probe). The one
-exact-integer trap is handled explicitly: **uint64 paired with a signed integer** promotes to float64 under NEP50,
-which would call two distinct integers equal past 2^53, so that pair is routed through the uint64 domain with a
-sign filter (`isin(uint64[2^63+1], int64[2^63-1])` is correctly `False`, matching NumPy's table method — pinned).
-`kind` is validated verbatim: `Invalid kind: '…'. Please use None, 'sort' or 'table'.` (ValueError), and for
-`kind='table'` a non-integer input raises `The 'table' method is only supported for boolean or integer arrays…`
-(ValueError) and a signed range exceeding the dtype max raises NumPy's RuntimeError text (as
-`InvalidOperationException`). Non-contiguous `element` (transposed/strided/negative-stride/broadcast) is read in
-logical C-order and the bool result is reshaped to a C-contiguous copy of `element`'s dimensions. **Perf (NPY/NS,
-Release, best-of-21, warm):** integer isin **1.9–3.0×**, float64 **2.4–3.4×**, large-range int **3.3×** — faster
-than NumPy at every measured cell. **Two deliberate divergences** (`[Misaligned]`): with `assume_unique=true` on
-NON-unique inputs NumPy documents "incorrect results" and its output depends on the internal method it picks;
-NumSharp always returns the correct membership. And `kind='table'` with a large-but-range-safe integer range
-computes via `searchsorted` (no table allocation), so it does not raise `MemoryError` where NumPy's literal table
-allocation would. See `Manipulation/np.isin.cs`; gate: `Manipulation/np.isin.Test.cs` (37) + the `isin` cases in the
-`groupa` differential-fuzz tier (22, across int32/float64/uint8/complex128 × invert/assume_unique/kind/layouts).
+set — and runs NumPy's `_isin` (`numpy/lib/_arraysetops_impl.py`) after the facade's class boundary, in
+`Manipulation/IsinEngine.cs` (`IsinEngine.VString.cs` holds the `StringDType` route; moved there by the np-layer
+dtype plan's P2, 2026-10-27). NumPy answers on one of three paths, and NumSharp takes the same one (`NumPyPath`):
+- **The table method** (an integer or bool pair — a char array is NumPy's uint16 —, `kind` None or `'table'`, the
+  set's range safe for its dtype and at most `6·(len(ar1)+len(ar2))`, or `kind='table'`) runs as one pass
+  (`TableMembership`). Elements of one byte, and of two bytes from 8,192 on, read a table over their dtype's whole
+  domain (256 or 65,536 flags indexed by the element's bits, a negative value by its two's complement): one load per
+  element. Wider elements read NumPy's bool table over the set's range (inverted under `invert`): each element read as
+  its 64 bits, one `(ulong)(v - min) <= range` test and one load, four per step — exact modulo 2**64, so a uint64
+  operand past 2**63 beside another unsigned one runs too; a uint64 operand beside a signed one is declined.
+- **The loop path** (`len(ar2) < 10·len(ar1)**0.145`) runs as one pass (`LoopProbe`, hosts with 256-bit vectors): four
+  element vectors per step against every broadcast set value, at most 9 values per vector lane (36 float64, 72
+  float32, 288 uint8 — the crossover against the hash, measured over 6 dtypes); float16 / complex / decimal and the
+  int64 / uint64 pair decline.
+- **The sort path** runs NumPy's statements (`SortPathFlat`: unique, one concatenate, a stable argsort, the
+  adjacent-equality flags) where they are not the exact membership: a 64-bit integer past 2**53 concatenated in
+  float64 / complex128 (two values merge and the first is flagged: `np.isin(uint64 [2**64-1, 2**64-2, 3],
+  np.arange(24.))` is `[False, True, True]`), and `assume_unique` (an element is flagged when an equal value follows
+  it or lies in the set).
+Every other case, and each pair a kernel declines, is the exact membership in `result_type(ar1, ar2)`
+(`ComputeMembership`: a counting table for a narrow integer range, else an open-addressing hash with a splitmix64
+finalizer for the integer and float32 / float64 dtypes, else sort + `searchsorted`; uint64 beside a signed integer
+through the uint64 domain with a sign filter), which is NumPy's answer there. NaN is never a member; -0.0 equals 0.0.
+A non-contiguous `element` (transposed / strided / negative-stride / broadcast) is read in logical C order, and the
+answer is a view of a fresh 1-D array reshaped to `element`'s dimensions, as NumPy's `reshape` returns it. Text: fixed-width `S` / `U` and `StringDType` run NumPy's loop and sort statements over the text kernels (a number
+beside text compares unequal on the loop path but EQUAL on the sort path, whose concatenation formats it into text —
+NumPy's own disagreement). Errors in NumPy's order and texts: `Invalid kind: '…'. Please use None, 'sort' or
+'table'.` (ValueError, case-sensitive), `kind='table'` on a non-integer array (ValueError), a range past the set
+dtype's maximum (NumPy's RuntimeError text, as `InvalidOperationException`), a range of `2**63 - 1` or more
+(`ValueError: Maximum allowed dimension exceeded`, NumPy's table allocation; an empty element too). **One deliberate
+divergence** (`[Misaligned]`): a `kind='table'` range NumPy can address but not allocate (its `MemoryError`, 8 EiB) is
+answered, the membership needing no table. **Perf (NPY/NS, two pinned P-cores, best of rounds, 26 cells at 1K–1M):**
+geomean **4.21×** (2.14× before the one-pass kernels, `276c9676`): the table method **1.87–34.7×** (100K int32 1.87×,
+uint8 3.40×, bool 34.7×; 1M int32 6.07×), the loop path **1.74–6.41×** (100K float64 at 16 values 2.23×), the sort path
+**1.50–11.6×** (the hash membership, whose time moves 2–3× from run to run with where its code and data land — the
+same source measured 270 and 940 µs), and `assume_unique` over presorted floats **0.42×** (NumPy's own statements
+against NumPy's timsort, which finds the two sorted runs; 5.17× over a permutation). An AVX2 gather of the range table
+measured 1.7× faster and is not taken: Intel's GDS microcode mitigation slows gathers on 6th–11th-generation cores. See
+`Manipulation/np.isin.cs` (facade), `Manipulation/IsinEngine.cs`; gates: `Manipulation/np.isin.Test.cs` (42) +
+`np.isin.NumPyPort.Test.cs` (4) + the `isin` cases of the `groupa` tier (22) + the facade-move snapshot's NumPy twin
+(5,069 comparable calls, every one NumPy's outcome).
 
 `np.iterable(y)` is NumPy's pure iterability predicate — `try: iter(y); return True; except TypeError: return False` (`numpy/lib/_function_base_impl.py`). It is NOT an iteration op: it never touches element data, so it uses **no kernel/NDIter/loop** (O(1) rank/type check in `Logic/np.is.cs`, mirroring `isscalar`). C# mapping, each matching NumPy 2.4.2's `iter()` outcome: `null`→false; **`NDArray`→`ndim != 0`** (the one surprise NumPy documents — a 0-d array is the *only* non-iterable array: `iter()` on it raises `TypeError`, exactly as `NDArray.GetEnumerator()` does, while every rank≥1 array incl. empties is iterable); `string`→true (Python strings are iterable); any `IEnumerable` (C# arrays/lists/dicts/sets)→true; every scalar value type (int/double/bool/char/Half/decimal/Complex/…)→false. The `NDArray` case precedes the `IEnumerable` catch because `NDArray` implements `IEnumerable`. Being a bool predicate over an arbitrary object rather than a value-producing kernel over array data, it is unit-test-only (`Logic/np.iterable.Test.cs`, 33 cases) and deliberately absent from the differential-fuzz corpus — same rationale as `isscalar`/`nditer`/`ndindex`. **Deliberate C# divergences** (adversarially probed, pinned `[Misaligned]`): NumSharp maps Python `iter()`-ability onto C# `foreach`-ability (`IEnumerable`), so four inputs iterable in Python but NOT `foreach`-able in C# return false where NumPy returns true — a bare `IEnumerator`/`IEnumerator<T>` cursor (no `GetEnumerator`) and `ValueTuple`/`Tuple`/`ITuple` (no `IEnumerable`). Real ported code passes the collection (array/`List`/`NDArray`), which is foreach-able and matches. Construction traps are clean: NumSharp's `np.array(5)`, `NDArray x = 5`, and `a[0,0]` all build genuine 0-d arrays (→false), and a bare scalar literal boxes to its own type rather than firing an `int→NDArray` implicit conversion into the `object` overload.
 
@@ -4759,7 +4778,7 @@ StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
 
 **Text set routines and statistics are NumPy's statements over the sort and search engines** (strings phase 2, P2.2
 milestone C, 2026-10-16; `Manipulation/NDArray.unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
-`Manipulation/np.isin.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/np.{lexsort,
+`Manipulation/IsinEngine.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/np.{lexsort,
 sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
 `QuantileEngine.Functions.cs` (`QuantileOfText`); gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
 `Backends/Strings/StringSetsTests.cs` (18); plan `docs/plans/strings-phase2.md`):

@@ -492,6 +492,59 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-27, P2's eleventh family: np.isin moved into `IsinEngine`, its three paths NumPy's.** Commits on `strings`,
+  developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (np.isin, 5,202 calls),
+  `twin_isin.py` (the tool's operands, test sets and kinds rebuilt in NumPy: dtype, shape and SHA-256 per result, or the
+  exception's type and text), `ab_isin.py` (parent against fix, each changed line classified by the twin), and NumPy
+  probes per fix, written into the unit tests:
+  - `ed738514` the snapshot tool reaches np.isin's test set and kind (two roles, given only to np.isin's parameters: np.sort,
+    np.argsort and np.partition name a parameter kind too): test_elements as the operand's own values and sets chosen by
+    NumPy's path decision (int32 / float64 ramps, U5 / StringDType / S5 text, a 0-d, an empty set, narrow and wide
+    integer ranges, NaN / signed-zero / infinite floats, uint64 past 2**63, a complex set, a broadcast set, a stepped
+    view), kind as NumPy's names and two it refuses ("x", and "Sort": the check is case-sensitive). 5,202 calls where the
+    function was one SKIP line. Before any fix the twin agreed on 5,034 of the 5,069 comparable lines (133 decimal lines
+    have no NumPy twin).
+  - `36dcf448` the move (D1: NumPy writes isin in Python, `numpy/lib/_arraysetops_impl.py`): the body and the helpers into
+    `Manipulation/IsinEngine.cs`, statement for statement, and `np.isin.VString.cs` into `IsinEngine.VString.cs`; the
+    facade keeps its signature, documentation, class boundary and one call. 5,202 calls byte-identical; R1's two rows go
+    (np.isin.cs 3 text and 38 numeric, np.isin.VString.cs 15 text and 1 numeric).
+  - `51d51d58` (D4) a char array is NumPy's uint16: `kind='table'` takes it (NumSharp refused it as not an integer
+    array), and a char set read by the StringDType route holds numbers, which no text equals
+    (`np.isin(StringDType ['a', 'zz'], char ['a', 'b'])` is `[False, False]`; it was `[True, False]`). The char lead of the
+    searchsorted entry. 5 lines, all fixed.
+  - `af32cde3` (D4) `kind='table'` over a set whose range is `2**63 - 1` or more raises NumPy's `ValueError: Maximum
+    allowed dimension exceeded` (its table allocation, an empty element too), after the RuntimeError of a range unsafe
+    for the set's dtype. 21 lines, all fixed. A range NumPy can address but not allocate (its MemoryError, 8 EiB) is
+    still answered: the documented divergence (`[Misaligned]`).
+  - `d5672a4d` (D4) NumPy's sort path runs its statements where they are not the exact membership: a concatenation that
+    merges values (a 64-bit integer past 2**53 in float64 or complex128: `np.isin(uint64 [2**64 - 1, 2**64 - 2, 3],
+    np.arange(24.))` is `[False, True, True]`) and `assume_unique` (repeated values meet as neighbours; it was a
+    documented divergence). The sort statements move out of the text route into `SortPathFlat`, shared. 9 lines, all
+    fixed.
+  - `276c9676` step 2 (C11): NumPy's composition through public calls (the table method's helper table, masks, compaction
+    and fancy gather; the loop path's one comparison pass per set value; the sort statements) against the routes, in one
+    process, rounds interleaved, on two pinned P-cores: x0.54-x5.21 NumPy, geomean x1.25, slower than the routes in 23 of 26 cells and within 3% in the three where the routes already are NumPy's statements (U5 text, assume_unique over a permutation, a 64-bit integer past 2**53 beside float64). The table method and the loop path now run as one
+    pass each. `TableMembership`: elements of one byte (of two from 8,192 on) read a table over their dtype's whole domain,
+    one load each; wider ones NumPy's bool table over the set's range (inverted under invert), one 64-bit range test and
+    one load, uint64 included beside an unsigned operand. `LoopProbe`: four element vectors per step against every
+    broadcast set value, up to 9 values per vector lane (a crossover sweep over 6 dtypes and 10 set sizes). 5,202 calls
+    byte-identical. NPY/NS: geomean x4.21 over 26 cells (x2.14 before): the table method x1.87-x34.7 (100K int32 x0.49 -> x1.87, uint8 x0.48 -> x3.40, bool x4.93 -> x34.7, 1M int32 x1.24 -> x6.07), the loop path x1.74-x6.41 (100K float64 at 16 values x0.90 -> x2.23, 1M float32 at 64 values x3.23 -> x6.41), the sort path's unchanged routes x1.50-x11.6, and assume_unique over presorted floats x0.42 (below). 22 planted bugs, all killed (one survived the first two-byte test, whose elements missed the negative members).
+  - Evidence at `276c9676`: the twin agrees with NumPy 2.4.2 on all 5,069 comparable lines (5,034 at `ed738514`).
+  - **Found:**
+    - The hash membership (`HashMembership`, unchanged by the family) runs 2.5 to 3.5 times slower on one instantiation
+      or another, by where its code or data lands: over 100K int64 elements against 1,000 values 620-990 us with the
+      default runtime settings and 264-280 us with dynamic PGO or tiered compilation off, and
+      `[MethodImpl(AggressiveOptimization)]` moves the slowdown onto int32 (287 -> 933 us) and float32 at 1M elements
+      (11.5 -> 15.4 ms). Not changed; the sort-path cells' before / after differences are this, not the step. Open.
+    - An AVX2 gather of the range table's bytes measured 1.7x faster than the scalar probe over 100K int32 elements; not
+      taken: Intel's GDS microcode mitigation slows gathers on the 6th to 11th generation cores (the take kernels
+      rejected a gather for the same CPU dependence).
+    - `assume_unique` over 100K presorted floats runs NumPy's statements at 0.42x NumPy: its argsort is a timsort, which
+      finds the two sorted runs (270 us), where NumSharp's radix argsort takes 2 ms whatever the order; over a
+      permutation of the same values NumPy's argsort takes 15.9 ms and the call runs at x5.17.
+  - Left: the `kind='table'` MemoryError divergence (above); the hash membership's placement sensitivity (above).
+  - At `276c9676`: NumSharp.Tests net10.0 20,629 passed / 11 skipped and net8.0 20,628 / 11; Oracle net10.0 and net8.0 411 / 2 skipped, 0 failed; the carved-gap replays find every carved case of their 82 gaps still diverging.
+  - Next in P2: `np.average` (NDW012 at np.average.cs 148 / 163), then the files of four lines or fewer.
 - **2026-10-27, P2's tenth family: np.insert moved into `InsertEngine`, its two branches NumPy's statements.** Commits on
   `strings`, developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (np.insert's twelve
   overloads, 79,584 calls), `twin_insert.py` (the tool's operands, positions and values rebuilt in NumPy: dtype, shape,
