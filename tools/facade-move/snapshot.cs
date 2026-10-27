@@ -55,8 +55,11 @@
 // rcond / rtol / tol, and np.insert / np.delete's positions obj (a C# int / long, a slice, an int[] / long[] sequence, an
 // index array or a boolean mask) and np.insert's values (an array, or any object: a number, a string, a bool, null, a C#
 // array, an NDArray passed as object), and np.isin's test set test_elements (the operand's own values, sets of other
-// dtypes, sizes, ranges and layouts that reach NumPy's table, loop and sort paths) and its algorithm name kind); an
-// overload with a required parameter of another kind is reported once as SKIP. An int axis
+// dtypes, sizes, ranges and layouts that reach NumPy's table, loop and sort paths) and its algorithm name kind, and
+// np.average / np.average_returned's weights (of the operand's shape, along one axis or two in either order, a 0-d, zero
+// sums, other dtypes, the forms NumPy refuses) and axis tuple (single axes, both orders of a pair, the empty tuple, a
+// repeated and an out-of-range axis)); an overload with a required parameter of another kind is reported once as SKIP.
+// An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand. An np.linalg function runs on pools of matrices
 // (LinalgLayouts, 20 layouts in phase A: square ones in C, F, transposed, strided, reversed and broadcast form, a stack, a
@@ -265,8 +268,22 @@ static class Snapshot
         // np.isin: the test set test_elements (built from the operand: its own values, sets of other dtypes, sizes, ranges
         // and layouts, so NumPy's table, loop and sort paths are all reached) and the algorithm name kind.
         IsinTest, IsinKind,
+        // np.average / np.average_returned: the weights (built from the operand: of its shape, along one axis or two in
+        // either order, a 0-d, sums that are zero, and the forms NumPy refuses) and the axis tuple (NumPy's
+        // normalize_axis_tuple forms, an unsorted pair included, so _weights_are_valid's transpose is reached).
+        AverageWeights, AverageAxes,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.average or np.average_returned, whose <c>weights</c> / <c>axis</c> tuple roles
+    ///     are theirs alone: the histogram family names a parameter <c>weights</c> and np.sum / np.mean name an axis list
+    ///     with other variants, and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.average or np.average_returned overload.</returns>
+    private static bool IsAverage(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "average" or "average_returned";
 
     /// <summary>
     ///     Whether a parameter belongs to np.insert or np.delete, whose <c>obj</c> / <c>values</c> / <c>value</c> roles are
@@ -303,6 +320,8 @@ static class Snapshot
         if (t == typeof(NDArray) || t == typeof(NDMatrix))
             return isFirstArray ? Role.Operand
                 : n == "out" ? Role.Out
+                // np.average's weights before the general weights role (its variants follow the reduced axes).
+                : n == "weights" && IsAverage(p) ? Role.AverageWeights
                 : n == "weights" ? Role.Weights
                 : n == "where" ? Role.Where
                 // np.trapezoid's x is optional (null = evenly spaced), unlike a binary function's second operand x: tested
@@ -345,6 +364,8 @@ static class Snapshot
         if (n == "q" && t == typeof(long)) return Role.QLong;
         if (n == "axis" && t == typeof(int?)) return Role.Axis;
         if (n == "axis" && t == typeof(int)) return Role.AxisInt;
+        // np.average's axis tuple (its own variants: an unsorted pair reaches _weights_are_valid's transpose).
+        if (n == "axis" && t == typeof(int[]) && IsAverage(p)) return Role.AverageAxes;
         // An axis list, and np.linalg.tensorsolve's axes (the axes of a to move to the end; null = none).
         if ((n == "axis" || n == "axes") && t == typeof(int[])) return Role.AxisArray;
         // np.trace / np.diagonal's integer arguments, numpy.matrix's var / std ddof, np.linalg.tensorinv's ind and
@@ -437,6 +458,19 @@ static class Snapshot
                 // capitalized name (the check is case-sensitive).
                 foreach (var s in new[] { null, "sort", "table", "x", "Sort" })
                     Add(s ?? "null", () => s);
+                break;
+            case Role.AverageWeights:
+                // The base is no weights (the mean); the variants follow from the operand (MakeAverageWeights).
+                Add("null", () => null);
+                break;
+            case Role.AverageAxes:
+                // No axes (every axis) first, then single axes, both orders of a pair (an unsorted one reaches
+                // _weights_are_valid's argsort transpose), the empty tuple (no axis reduced), and the forms
+                // normalize_axis_tuple refuses (a repeated axis, an out-of-range one).
+                Add("null", () => null);
+                foreach (var a in new[] { new[] { 0 }, new[] { 1 }, new[] { -1 }, new[] { 0, 1 }, new[] { 1, 0 }, new[] { 1, 2 },
+                             new[] { 2, 0 }, Array.Empty<int>(), new[] { 0, 0 }, new[] { 9 } })
+                    Add("[" + string.Join(",", a) + "]", () => a.ToArray());
                 break;
             case Role.KeyInt:
                 // A key inside the pool's values, the ends of the int32 range, a key below and above every value.
@@ -941,6 +975,7 @@ static class Snapshot
             Role.Spacing => SpacingVariantLabels.Length - 1,
             Role.Keys => KeysVariantLabels.Length - 1,
             Role.IsinTest => IsinTestVariantLabels.Length - 1,
+            Role.AverageWeights => AverageWeightVariantLabels.Length - 1,
             Role.Sorter => SorterVariantLabels.Length - 1,
             Role.Variables => VariablesVariantLabels.Length - 1,
             Role.FWeights => FWeightVariantLabels.Length - 1,
@@ -1039,6 +1074,7 @@ static class Snapshot
             Role.Spacing => SpacingVariantLabels[v],
             Role.Keys => KeysVariantLabels[v],
             Role.IsinTest => IsinTestVariantLabels[v],
+            Role.AverageWeights => AverageWeightVariantLabels[v],
             Role.Sorter => SorterVariantLabels[v],
             Role.Variables => VariablesVariantLabels[v],
             Role.FWeights => FWeightVariantLabels[v],
@@ -1097,6 +1133,9 @@ static class Snapshot
                         break;
                     case Role.IsinTest:
                         argv[p] = MakeIsinTest(IsinTestVariantLabels[v], operand);
+                        break;
+                    case Role.AverageWeights:
+                        argv[p] = MakeAverageWeights(AverageWeightVariantLabels[v], operand);
                         break;
                     case Role.Sorter:
                         argv[p] = MakeSorter(SorterVariantLabels[v], operand);
@@ -1652,6 +1691,91 @@ static class Snapshot
             case "bcast": return np.broadcast_to(np.array(new long[] { 1, 3 }), new Shape(3, 2));
             case "strided": return np.array(Enumerable.Range(0, 20).Select(i => (long)i).ToArray())["::3"];
             default: throw new ArgumentException("unknown test-set variant " + label);
+        }
+    }
+
+    /// <summary>np.average's weights variants, built from the operand (see <see cref="MakeAverageWeights"/>); the first,
+    ///     null (no weights: the mean), is the base.</summary>
+    private static readonly string[] AverageWeightVariantLabels =
+    {
+        "null", "ones", "pattern", "zeros", "zeroslice", "negative", "nan", "firstaxis", "lastaxis", "axes01", "axes10",
+        "axes12", "axes20", "0d", "bcast", "int", "int8", "bool", "float32", "float16", "complex", "U5", "T", "wrongshape",
+    };
+
+    /// <summary>
+    ///     Builds np.average's weights for an operand: arrays of its shape, arrays along the axes NumPy's
+    ///     <c>_weights_are_valid</c> reshapes (<c>wgt.shape == tuple(a.shape[ax] for ax in axis)</c>, then
+    ///     <c>wgt.transpose(np.argsort(axis))</c>), weight sums that are zero, and the forms NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant: <c>ones</c> / <c>pattern</c> (float64 1, or 0.5, 2, 1, 3, ... so the weighted
+    ///     average differs from the mean) / <c>zeros</c> (every sum zero: NumPy's ZeroDivisionError) / <c>zeroslice</c> (ones
+    ///     with the first slice along axis 0 zero: zero sums for a reduction over the other axes only) / <c>negative</c> /
+    ///     <c>nan</c> (the pattern with a NaN first, Python's positive quiet NaN) of the operand's shape; <c>firstaxis</c> /
+    ///     <c>lastaxis</c> (the pattern along axis 0 / the last axis: one axis' weights), <c>axes01</c> / <c>axes10</c> /
+    ///     <c>axes12</c> / <c>axes20</c> (the pattern of shape <c>(shape[i], shape[j])</c>: two axes' weights in the order of
+    ///     the axis tuple, an unsorted one transposed by NumPy; a missing axis counts as length 1), <c>0d</c> (a float64 2),
+    ///     <c>bcast</c> (the last axis' pattern broadcast to the operand's shape: stride-0 weights); ones of another dtype
+    ///     (<c>int</c> int64, <c>int8</c>, <c>bool</c>, <c>float32</c>, <c>float16</c>, <c>complex</c> 1+0.5j, the text "1"
+    ///     in <c>U5</c> / <c>T</c>); <c>wrongshape</c> (one more axis).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh array (or a broadcast view), or null for the base label.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeAverageWeights(string label, NDArray operand)
+    {
+        if (label == "null")
+            return null;
+        long[] dims = operand.Shape.Dimensions;
+        var shape = new Shape(dims);
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        long Dim(int axis) => axis < dims.Length ? dims[axis] : 1;
+        double PatternValue(int i) => new[] { 0.5, 2.0, 1.0, 3.0 }[i % 4];
+        NDArray Values(long[] of, Func<int, double> value)
+        {
+            long count = 1;
+            foreach (long d in of) count *= d;
+            return np.array(Enumerable.Range(0, (int)count).Select(value).ToArray()).reshape(new Shape(of));
+        }
+        NDArray Pattern(params long[] of) => Values(of, PatternValue);
+        NDArray Text(string dt) => size == 0
+            ? np.empty(shape, np.dtype(dt))
+            : np.array(Enumerable.Repeat("1", (int)size).ToArray()).astype(np.dtype(dt)).reshape(shape);
+        switch (label)
+        {
+            case "ones": return np.ones(shape, np.dtype("float64"));
+            case "pattern": return Pattern(dims);
+            case "zeros": return np.zeros(shape, np.dtype("float64"));
+            case "zeroslice":
+            {
+                var w = np.ones(shape, np.dtype("float64"));
+                if (dims.Length >= 1 && dims[0] > 0)
+                    w["0"] = 0.0;
+                return w;
+            }
+            case "negative": return np.ones(shape, np.dtype("float64")) * -1.0;
+            case "nan":
+                return Values(dims, i => i == 0 ? BitConverter.Int64BitsToDouble(0x7FF8000000000000) : PatternValue(i));
+            case "firstaxis": return Pattern(Dim(0));
+            case "lastaxis": return Pattern(dims.Length == 0 ? 1 : dims[^1]);
+            case "axes01": return Pattern(Dim(0), Dim(1));
+            case "axes10": return Pattern(Dim(1), Dim(0));
+            case "axes12": return Pattern(Dim(1), Dim(2));
+            case "axes20": return Pattern(Dim(2), Dim(0));
+            case "0d": return np.array(2.0);
+            // a 0-d operand has no axis to broadcast along: its own 0-d pattern
+            case "bcast": return dims.Length == 0 ? Pattern() : np.broadcast_to(Pattern(dims[^1]), shape);
+            case "int": return np.ones(shape, np.dtype("int64"));
+            case "int8": return np.ones(shape, np.dtype("int8"));
+            case "bool": return np.ones(shape, np.dtype("bool"));
+            case "float32": return Pattern(dims).astype(np.dtype("float32"));
+            case "float16": return Pattern(dims).astype(np.dtype("float16"));
+            case "complex":
+                return np.array(Enumerable.Repeat(new Complex(1.0, 0.5), (int)size).ToArray()).reshape(shape);
+            case "U5": return Text("U5");
+            case "T": return Text("T");
+            case "wrongshape":
+                return np.ones(new Shape(dims.Concat(new long[] { 2 }).ToArray()), np.dtype("float64"));
+            default: throw new ArgumentException("unknown average weights variant " + label);
         }
     }
 
