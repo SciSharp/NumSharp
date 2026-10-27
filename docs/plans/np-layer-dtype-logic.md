@@ -492,6 +492,37 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-27, P2's ninth family: np.array_equal and np.array_equiv moved into `ArrayEqualEngine`, their statements
+  NumPy's for every dtype.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The
+  referees: the snapshot (np.array_equal, NDArray.array_equal and np.array_equiv, 3,426 calls), `twin_array_equal.py`
+  (the tool's operands and second operands rebuilt in NumPy: the bool, or the exception's type and text), and NumPy
+  probes per step, written into the unit tests:
+  - `34d1531f` the snapshot tool reaches np.array_equiv's second operand `a2` (954 new lines). Before any fix the twin
+    agreed on 3,224 of the 3,257 comparable lines (169 decimal lines have no NumPy twin); the 33 left were all
+    NDArray.array_equal with `equal_nan=true` and an S / U operand.
+  - `282b4167` the move (D1: NumPy writes both functions in Python): the facades' bodies and the member's numeric
+    statements into `Logic/ArrayEqualEngine.cs`, statement for statement. np.array_equal's last statement called the
+    member NDArray.array_equal, so its `CanHoldNaN` switch (§9's P1c entry had left it for P5) moved with the family.
+    3,426 calls byte-identical; R1's three rows go (np.array_equal 6 text, np.array_equiv 3 text, NDArray.Equals.cs 5
+    numeric).
+  - `69d6b55d` (D4) the member runs np.array_equal's statements: with `equal_nan` a fixed-width text operand meets
+    NumPy's isnan refusal (it compared the text), and a StringDType NaN-like NA is a NaN (an array holding one was
+    unequal to its own copy). 33 lines change, all to NumPy's answers.
+  - `953de977` step 2: one NumPy statement sequence for every dtype through the `==` operator and np.isnan, probed on
+    both sides to give the replays' answers; the shapes answer only for a pair `==` has no loop for (C11: NumPy builds
+    the all-False array there). `NDStringUfuncs.EqualHasStringLoop` is that rule for the operator's
+    `FailedComparison` too, and `EqualityScan.TryAllEqual` declines text, which the old routes had kept away from its
+    byte scan (S2 against S3 share a typecode: the scan would compare text against padding and read past a narrower
+    buffer). 3,426 calls byte-identical; the StringDType NaN path 2.2x faster without its gather, no cell slower.
+  - Evidence at `953de977`: the twin agrees with NumPy 2.4.2 on all 3,257 comparable lines (3,224 at `34d1531f`).
+  - **Found:** a text operand reached the fused equality scan's byte loop only by the routing order; nothing reachable
+    computed a wrong answer, but the step-2 composition needed the decline in the kernel itself.
+  - Left: nothing in the snapshot; NumPy's `asarray` of a Python object (a list, None) is the C# conversion to NDArray,
+    and a null is C#'s convention (two nulls equal, a null and an array not).
+  - At `953de977`: NumSharp.Tests net10.0 20,612 passed / 11 skipped and net8.0 20,611 / 11; Oracle net10.0 and net8.0
+    411 / 2 skipped, 0 failed.
+  - Next in P2: `np.insert`, then `np.isin` (VString; the char lead of the searchsorted entry), `np.average`, then the
+    files of four lines or fewer.
 - **2026-10-26 / 27, P2's eighth family: np.linalg moved into `LinalgEngine`, np.dot into `TensorEngine.Dot`, their
   statements NumPy's.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees:
   the snapshot (np.linalg's 35 overloads, 65,876 calls per mode: managed, and with the bundled OpenBLAS at one thread;
