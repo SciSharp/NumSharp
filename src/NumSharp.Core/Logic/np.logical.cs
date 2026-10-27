@@ -2,48 +2,12 @@ namespace NumSharp
 {
     public static partial class np
     {
-        // NumPy's logical_and/or/xor/not are bool-output ufuncs whose loops are ??->? .. GG->? (and
-        // OO->O for object). Two facts drive the C# shape (both probed against NumPy 2.4.2):
-        //   • The output dtype is ALWAYS bool, so — like the comparison ufuncs — dtype= is validate-only:
-        //     any non-bool request raises "No loop matching the specified signature and casting was found
-        //     for ufunc logical_X". bool is safe-castable to every dtype, so a provided out never fails
-        //     the same_kind out-cast — which is why composing over the bitwise engine (whose out-cast
-        //     error would name "bitwise_and") is fully NumPy-faithful: that error can never fire.
-        //   • The inputs are reduced to their truth value (nonzero) first, then combined. A fused
-        //     "nonzero(a) OP nonzero(b)" IL kernel would need EmitConvertTo(float->bool), which mixes an
-        //     int-0 compare against a float on the IL stack — a landmine — so the truth reduction stays
-        //     the proven `x != 0` comparison (NaN is truthy: `nan != 0` is True, matching NumPy) and the
-        //     bitwise engine with out=/where= does the combine + masked write in one validated path.
-        // Return type is NDArray (not NDArray<bool>) to match the comparison-op shape: a plain call still
-        // yields a bool array, but out=<numeric> returns that numeric out (True->1). No caller relied on
-        // the NDArray<bool> return (verified), so this is a benign breaking change.
-
-        /// <summary>
-        /// bool-only dtype= gate shared by the four logical ufuncs. Their loops emit a bool output, so a
-        /// non-bool dtype= has no loop to bind — NumPy raises the verbatim no-loop TypeError (dtype=bool
-        /// is a legal no-op). Mirrors <c>DefaultEngine.ValidateBoolLoopDtype</c> at the np layer so the
-        /// error names the LOGICAL ufunc rather than the bitwise op the call composes over.
-        /// </summary>
-        /// <param name="dtype">The requested loop dtype, or null.</param>
-        /// <param name="ufuncName">The logical ufunc name for the error text (e.g. "logical_and").</param>
-        /// <exception cref="IncorrectTypeException">When <paramref name="dtype"/> is a non-bool dtype.</exception>
-        private static void ValidateLogicalDtype(DType dtype, string ufuncName)
-        {
-            if (dtype is not null && dtype.GetTypeCode() != NPTypeCode.Boolean)
-                throw new IncorrectTypeException(
-                    $"No loop matching the specified signature and casting was found for ufunc {ufuncName}");
-        }
-
-        /// <summary>
-        /// Reduce an operand to its element-wise truth value (nonzero) as a bool array — the identity for
-        /// a bool input, else the <c>x != 0</c> comparison (NaN is truthy, matching NumPy's logical loops;
-        /// a complex value is truthy when either component is nonzero).
-        /// </summary>
-        /// <param name="x">The operand to reduce.</param>
-        /// <returns>A bool array of <paramref name="x"/>'s truth values (or <paramref name="x"/> itself if
-        /// already bool).</returns>
-        private static NDArray AsTruthOperand(NDArray x)
-            => x.typecode == NPTypeCode.Boolean ? x : (x != 0);
+        // NumPy's logical_and/or/xor/not are C ufuncs, so their calls are TensorEngine members (LogicalAnd / LogicalOr /
+        // LogicalXor / LogicalNot, Backends/Default/Logic/Default.Logical.cs: the text guard, the bool-only dtype= gate,
+        // the truth reduction and the bitwise combine). These facades keep what sits above the engine: the numpy.matrix
+        // boundary and the numpy.char.chararray boundary, which must see the operands' classes before any loop runs.
+        // Return type is NDArray (not NDArray<bool>) to match the comparison-op shape: a plain call still yields a bool
+        // array, but out=<numeric> returns that numeric out (True->1).
 
         /// <summary>
         /// Compute the truth value of x1 AND x2 element-wise.
@@ -68,7 +32,16 @@ namespace NumSharp
         ///     that is not string data — bool for the logical ufuncs, StringDType beside a
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
-        [NDScoped]
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (NumPy's no-loop text).</exception>
+        /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
+        ///     string loop refuses.</exception>
+        /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF (NumPy's bool cast of the
+        ///     text).</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
+        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
+        ///     not broadcast with the operands.</exception>
+        /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_and(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -77,18 +50,7 @@ namespace NumSharp
             // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(x1, x2, @out))
                 return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_and(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
-            // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
-            // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
-            // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
-            if (Backends.Strings.NDStringUfuncs.BinaryGuard("logical_and", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_and", x1, x2, @out, where), where) is { } textResult)
-                return textResult;
-            ValidateLogicalDtype(dtype, "logical_and");
-            // Reduce both operands to bool truth values, then AND them through the bitwise engine's
-            // out=/where= path (bool & bool == logical and; the masked write + same_kind out cast are
-            // handled there). The b1/b2 temps are reclaimed by the [NDScoped] weaver.
-            var b1 = AsTruthOperand(x1);
-            var b2 = AsTruthOperand(x2);
-            return x1.TensorEngine.BitwiseAnd(b1, b2, null, @out, where);
+            return x1.TensorEngine.LogicalAnd(x1, x2, dtype, @out, where);
         }
 
         /// <summary>
@@ -112,7 +74,15 @@ namespace NumSharp
         ///     that is not string data — bool for the logical ufuncs, StringDType beside a
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
-        [NDScoped]
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (NumPy's no-loop text).</exception>
+        /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
+        ///     string loop refuses.</exception>
+        /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
+        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
+        ///     not broadcast with the operands.</exception>
+        /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_or(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -121,15 +91,7 @@ namespace NumSharp
             // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(x1, x2, @out))
                 return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_or(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
-            // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
-            // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
-            // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
-            if (Backends.Strings.NDStringUfuncs.BinaryGuard("logical_or", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_or", x1, x2, @out, where), where) is { } textResult)
-                return textResult;
-            ValidateLogicalDtype(dtype, "logical_or");
-            var b1 = AsTruthOperand(x1);
-            var b2 = AsTruthOperand(x2);
-            return x1.TensorEngine.BitwiseOr(b1, b2, null, @out, where);
+            return x1.TensorEngine.LogicalOr(x1, x2, dtype, @out, where);
         }
 
         /// <summary>
@@ -153,7 +115,15 @@ namespace NumSharp
         ///     that is not string data — bool for the logical ufuncs, StringDType beside a
         ///     StringDType operand — without a <paramref name="where"/> mask: the finalize error
         ///     (<c>Can only create a chararray from string data.</c>).</exception>
-        [NDScoped]
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (NumPy's no-loop text).</exception>
+        /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
+        ///     string loop refuses.</exception>
+        /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
+        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
+        ///     not broadcast with the operands.</exception>
+        /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
         public static NDArray logical_xor(NDArray x1, NDArray x2, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
@@ -162,15 +132,7 @@ namespace NumSharp
             // a numpy.char.chararray operand or out=: chararray.__array_wrap__'s view of a text result, as from NumPy (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(x1, x2, @out))
                 return NDCharArrayBoundary.WrappedUfunc((x1, x2, @out, where, dtype), static s => logical_xor(s.x1, s.x2, s.@out, s.where, s.dtype), x1, x2, @out);
-            // logical_* read a string's truth value (non-empty is True) through NumPy's bool cast: the guard computes the
-            // call over the operands' truth arrays and returns it (an empty broadcast reads nothing: NumPy's empty bool
-            // result, or out=). A text out= stays deferred (it receives formatted 'True' / 'False').
-            if (Backends.Strings.NDStringUfuncs.BinaryGuard("logical_xor", x1, x2, @out, Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_xor", x1, x2, @out, where), where) is { } textResult)
-                return textResult;
-            ValidateLogicalDtype(dtype, "logical_xor");
-            var b1 = AsTruthOperand(x1);
-            var b2 = AsTruthOperand(x2);
-            return x1.TensorEngine.BitwiseXor(b1, b2, null, @out, where);
+            return x1.TensorEngine.LogicalXor(x1, x2, dtype, @out, where);
         }
 
         /// <summary>
@@ -186,24 +148,19 @@ namespace NumSharp
         /// <returns>The element-wise NOT of <paramref name="x"/>'s truth values (bool, or <paramref name="out"/>).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.logical_not.html</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
-        [NDScoped]
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (NumPy's no-loop text).</exception>
+        /// <exception cref="TypeError">A text operand (no string loop in NumPy), or a detailed or non-legacy
+        ///     <paramref name="dtype"/> descriptor.</exception>
+        /// <exception cref="System.ArgumentException">A <paramref name="where"/> that is not bool, an
+        ///     <paramref name="out"/> the bool result cannot be cast into, or a mask or <paramref name="out"/> that does
+        ///     not broadcast with the operand.</exception>
         public static NDArray logical_not(NDArray x, NDArray @out = null, NDArray where = null, DType dtype = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => logical_not(s.x, s.@out, s.where, s.dtype), @out);
-            // The dtype= class check, then for text the out= / where= parse and a string request's no-loop text; logical_not
-            // has no string loop in NumPy (unlike logical_and/or/xor).
-            Backends.DefaultEngine.UfuncLoopCode(dtype, "logical_not", x, null, @out, where);
-            Backends.Strings.NDStringUfuncs.ThrowIfUnary("logical_not", x);
-            ValidateLogicalDtype(dtype, "logical_not");
-            // A bool input's logical NOT is exactly its bitwise invert (~True == False); route through the
-            // invert ufunc so the bool→bool loop is used (np.negative(bool) is a TypeError, so Invert, not
-            // Negate). For any other dtype, logical NOT is the truth test `x == 0` (zero→True, nonzero→False;
-            // NaN != 0 so logical_not(NaN)→False), which the equality comparison computes with out=/where=.
-            if (x.typecode == NPTypeCode.Boolean)
-                return x.TensorEngine.Invert(x, null, @out, where);
-            return x.TensorEngine.Compare(x, NDArray.Scalar(0), null, @out, where);
+            return x.TensorEngine.LogicalNot(x, dtype, @out, where);
         }
     }
 }

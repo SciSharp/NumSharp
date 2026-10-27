@@ -555,6 +555,109 @@ namespace NumSharp
         public abstract NDArray BitwiseOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray BitwiseXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
 
+        /// <summary>
+        ///     NumPy's <c>logical_and</c> ufunc, the whole call: the element-wise AND of the operands' truth values, NumPy's
+        ///     <c>logical_and(x1, x2, /, out=None, *, where=True, dtype=None)</c>. A text operand reads true when
+        ///     non-empty (NumPy's string loop computes over the operands' truth arrays).
+        /// </summary>
+        /// <param name="lhs">The first operand (any dtype, text included; any layout).</param>
+        /// <param name="rhs">The second operand; broadcasts against <paramref name="lhs"/>.</param>
+        /// <param name="dtype">The <c>dtype=</c> loop request: the logical loops are bool-output only, so it validates and
+        ///     selects nothing; a non-bool request raises NumPy's no-loop error.</param>
+        /// <param name="out">A location into which the result is stored (any numeric dtype: bool casts same_kind to all,
+        ///     True to 1), or null; returned itself when given.</param>
+        /// <param name="where">A bool mask: only its true elements are computed; masked-off slots of <paramref name="out"/>
+        ///     keep their contents (of a fresh result they are unspecified, as in NumPy).</param>
+        /// <returns>A bool array of the broadcast shape, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (<c>No loop matching the specified
+        ///     signature and casting was found for ufunc logical_and</c>).</exception>
+        /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
+        ///     string loop refuses.</exception>
+        /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF (NumPy's bool cast of the
+        ///     text).</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
+        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the
+        ///     operands (NumPy's ValueError text).</exception>
+        /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
+        /// <remarks>NumPy's loop is C (<c>@TYPE@_logical_and</c>), so the call is an engine member, as every ufunc's is; the
+        ///     numpy.matrix and numpy.char.chararray boundaries stay with <c>np.logical_and</c>.</remarks>
+        public abstract NDArray LogicalAnd(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>logical_or</c> ufunc, the whole call: the element-wise OR of the operands' truth values, NumPy's
+        ///     <c>logical_or(x1, x2, /, out=None, *, where=True, dtype=None)</c>. A text operand reads true when non-empty.
+        /// </summary>
+        /// <param name="lhs">The first operand (any dtype, text included; any layout).</param>
+        /// <param name="rhs">The second operand; broadcasts against <paramref name="lhs"/>.</param>
+        /// <param name="dtype">The <c>dtype=</c> loop request: validate-only (bool loops); a non-bool request raises NumPy's
+        ///     no-loop error.</param>
+        /// <param name="out">A location into which the result is stored (any numeric dtype), or null; returned itself when
+        ///     given.</param>
+        /// <param name="where">A bool mask: only its true elements are computed; masked-off slots of <paramref name="out"/>
+        ///     keep their contents.</param>
+        /// <returns>A bool array of the broadcast shape, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (<c>No loop matching the specified
+        ///     signature and casting was found for ufunc logical_or</c>).</exception>
+        /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
+        ///     string loop refuses.</exception>
+        /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
+        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the
+        ///     operands (NumPy's ValueError text).</exception>
+        /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
+        public abstract NDArray LogicalOr(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>logical_xor</c> ufunc, the whole call: the element-wise XOR of the operands' truth values, NumPy's
+        ///     <c>logical_xor(x1, x2, /, out=None, *, where=True, dtype=None)</c>. A text operand reads true when non-empty.
+        /// </summary>
+        /// <param name="lhs">The first operand (any dtype, text included; any layout).</param>
+        /// <param name="rhs">The second operand; broadcasts against <paramref name="lhs"/>.</param>
+        /// <param name="dtype">The <c>dtype=</c> loop request: validate-only (bool loops); a non-bool request raises NumPy's
+        ///     no-loop error.</param>
+        /// <param name="out">A location into which the result is stored (any numeric dtype), or null; returned itself when
+        ///     given.</param>
+        /// <param name="where">A bool mask: only its true elements are computed; masked-off slots of <paramref name="out"/>
+        ///     keep their contents.</param>
+        /// <returns>A bool array of the broadcast shape, or <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (<c>No loop matching the specified
+        ///     signature and casting was found for ufunc logical_xor</c>).</exception>
+        /// <exception cref="TypeError">A detailed or non-legacy <paramref name="dtype"/> descriptor, or a text call NumPy's
+        ///     string loop refuses.</exception>
+        /// <exception cref="SystemError">A <c>U</c> operand holding a unit above U+10FFFF.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
+        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the
+        ///     operands (NumPy's ValueError text).</exception>
+        /// <exception cref="IncorrectShapeException">Operands that do not broadcast together.</exception>
+        public abstract NDArray LogicalXor(NDArray lhs, NDArray rhs, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>logical_not</c> ufunc, the whole call: the element-wise NOT of the operand's truth value (zero is
+        ///     True, nonzero False; a NaN is truthy), NumPy's <c>logical_not(x, /, out=None, *, where=True, dtype=None)</c>.
+        ///     Unlike the binary three it has no string loop in NumPy, so a text operand is refused.
+        /// </summary>
+        /// <param name="nd">The operand (any numeric dtype; any layout).</param>
+        /// <param name="dtype">The <c>dtype=</c> loop request: validate-only (bool loops); a non-bool request raises NumPy's
+        ///     no-loop error.</param>
+        /// <param name="out">A location into which the result is stored (any numeric dtype), or null; returned itself when
+        ///     given.</param>
+        /// <param name="where">A bool mask: only its true elements are computed; masked-off slots of <paramref name="out"/>
+        ///     keep their contents.</param>
+        /// <returns>A bool array of the operand's shape (broadcast with the mask and <paramref name="out"/>), or
+        ///     <paramref name="out"/>.</returns>
+        /// <exception cref="IncorrectTypeException">A non-bool <paramref name="dtype"/> (<c>No loop matching the specified
+        ///     signature and casting was found for ufunc logical_not</c>).</exception>
+        /// <exception cref="TypeError">A text operand (NumPy's no-loop refusal), or a detailed or non-legacy
+        ///     <paramref name="dtype"/> descriptor.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A <paramref name="where"/> that is not bool, an <paramref name="out"/> the
+        ///     bool result cannot be cast into, or a mask or <paramref name="out"/> that does not broadcast with the operand
+        ///     (NumPy's ValueError text).</exception>
+        public abstract NDArray LogicalNot(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+
         // Bit shift operations (integer types only). dtype (ufunc dtype=) selects the loop among the
         // bool/integer loops; a float/complex/decimal request raises NumPy's no-loop TypeError (shifts
         // have no such loops). out/where follow the standard ufunc contract (same_kind cast into out,

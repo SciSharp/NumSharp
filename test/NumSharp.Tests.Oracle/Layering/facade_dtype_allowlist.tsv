@@ -78,7 +78,6 @@ Logic/np.find_common_type.cs	2	10
 Logic/np.isneginf.cs	0	1
 Logic/np.isposinf.cs	0	1
 Logic/np.isreal_iscomplex.cs	1	5
-Logic/np.logical.cs	4	3
 Logic/np.min_scalar_type.cs	1	0
 Logic/np.nan_to_num.cs	0	10
 Logic/np.type_checks.cs	2	15
