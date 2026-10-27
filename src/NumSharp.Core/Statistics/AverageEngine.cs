@@ -78,8 +78,10 @@ namespace NumSharp.Statistics
                     axisGiven: axis is not null, weights, keepdims);
                 if (!returned)
                     return (scope.Returns(avg), null);
-                // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns.
-                var sclValue = NDArray.Scalar((double)a.size / avg.size);
+                // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): only a NaN-like NA mean (np.float64) returns,
+                // always 0-d (an axis or keepdims meets the divide's refusal first), so the count is NumPy's float64 SCALAR
+                // (NumSharp's stand-in: a read-only 0-d owner) and needs no broadcast.
+                var sclValue = NDArray.Scalar((double)a.size / avg.size).MarkReductionScalar();
                 return (scope.Returns(avg), scope.Returns(sclValue));
             }
             if (Backends.Strings.NDStringUfuncs.IsString(a))
@@ -106,8 +108,11 @@ namespace NumSharp.Statistics
 
                 if (!returned) return (scope.Returns(avg), null);
 
+                // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): a NumPy SCALAR of the mean's dtype (NumSharp's
+                // stand-in: a read-only 0-d owner); `np.broadcast_to(scl, avg_as_array.shape).copy()` then makes it a fresh
+                // array wherever the mean has dimensions.
                 double count = (double)a.size / avg.size;
-                NDArray scl = NDArray.Scalar(count).astype(avg.typecode);
+                NDArray scl = NDArray.Scalar(count).astype(avg.typecode).MarkReductionScalar();
                 if (!scl.Shape.dimensions.SequenceEqual(avg.Shape.dimensions))
                     scl = np.broadcast_to(scl, avg).copy();
                 return (scope.Returns(avg), scope.Returns(scl));

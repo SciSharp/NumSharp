@@ -5,7 +5,8 @@ namespace NumSharp.Tests.Statistics
     /// <summary>
     ///     np.average's statements against NumPy 2.4.2 (<c>numpy/lib/_function_base_impl.py</c>, <c>average</c> and
     ///     <c>_weights_are_valid</c>), one test per D4 fix of the np-layer dtype plan's P2 family: NumPy's exception types,
-    ///     NumPy's promotion of text weights and the refusals that follow it.
+    ///     NumPy's promotion of text weights and the refusals that follow it, the count np.average_returned gives without
+    ///     weights (a scalar beside a scalar mean).
     /// </summary>
     [TestClass]
     public class np_average_NumPyPort_Tests
@@ -39,6 +40,81 @@ namespace NumSharp.Tests.Statistics
             new Action(() => np.average(np.array(2.5), Array.Empty<int>(), np.ones(new Shape(1)))).Should().ThrowExactly<ValueError>().WithMessage(text);
             new Action(() => np.average(np.array(new[] { "a" }).astype(np.dtype("T")).reshape(Shape.Scalar), Array.Empty<int>(), np.ones(new Shape(1))))
                 .Should().ThrowExactly<ValueError>().WithMessage(text);
+        }
+
+        // ------------------------------------------------------------------------------- the count without weights
+
+        [TestMethod]
+        public void ReturnedCount_WithoutWeights_IsAScalarBesideAScalarMean()
+        {
+            // scl = avg_as_array.dtype.type(a.size / avg_as_array.size): NumPy's scalar beside a scalar mean (every axis, as
+            // None or as a tuple of them), a fresh array (np.broadcast_to(scl, avg.shape).copy()) beside a mean with
+            // dimensions. It was a writeable 0-d array beside a scalar mean.
+            using var x = np.arange(6.0).reshape(2, 3);
+            foreach (var (label, call) in new (string, Func<(NDArray, NDArray)>)[]
+                     {
+                         ("axis=None", () => np.average_returned(x)),
+                         ("axis=(0, 1)", () => np.average_returned(x, new[] { 0, 1 })),
+                         ("an int32 operand", () => np.average_returned(np.arange(6).reshape(2, 3))),
+                     })
+            {
+                var (avg, scl) = call();
+                using (avg)
+                using (scl)
+                {
+                    scl.ndim.Should().Be(0, label);
+                    scl.dtype.Should().Be(np.float64, label);
+                    scl.GetDouble().Should().Be(6.0, label);
+                    scl.flags.writeable.Should().BeFalse($"{label}: NumPy's count is a scalar");
+                    avg.flags.writeable.Should().BeFalse($"{label}: and so is the mean");
+                }
+            }
+
+            var (avg0, scl0) = np.average_returned(x, 0);
+            using (avg0)
+            using (scl0)
+            {
+                scl0.shape.Should().Equal(3);
+                scl0.flags.writeable.Should().BeTrue("the broadcast copy is a fresh array");
+                scl0.flags.owndata.Should().BeTrue();
+                scl0.ToArray<double>().Should().Equal(2.0, 2.0, 2.0);
+            }
+
+            var (avgK, sclK) = np.average_returned(x, keepdims: true);
+            using (avgK)
+            using (sclK)
+            {
+                sclK.shape.Should().Equal(1, 1);
+                sclK.flags.writeable.Should().BeTrue("keepdims gives the mean dimensions, so the count is broadcast and copied");
+                sclK.GetDouble(0, 0).Should().Be(6.0);
+            }
+
+            // The mean's dtype: a complex128 mean gives a complex128 count, a float16 mean a float16 one.
+            var (avgC, sclC) = np.average_returned(np.ones(new Shape(2, 2), np.complex128));
+            using (avgC)
+            using (sclC)
+            {
+                sclC.dtype.Should().Be(np.complex128);
+                sclC.flags.writeable.Should().BeFalse();
+            }
+        }
+
+        [TestMethod]
+        public void ReturnedCount_OfAStringDTypeNaMean_IsAScalar()
+        {
+            // A NaN-like NA sum is the one StringDType mean that returns (np.float64(nan)); NumPy's count beside it is
+            // np.float64(3.0), a scalar.
+            using var a = np.array(new object[] { "a", double.NaN, "b" }, np.dtypes.StringDType(na_object: double.NaN));
+            var (avg, scl) = np.average_returned(a);
+            using (avg)
+            using (scl)
+            {
+                double.IsNaN(avg.GetDouble()).Should().BeTrue();
+                avg.flags.writeable.Should().BeFalse();
+                scl.dtype.Should().Be(np.float64);
+                scl.GetDouble().Should().Be(3.0);
+                scl.flags.writeable.Should().BeFalse("NumPy's count is a scalar");
+            }
         }
 
         // ------------------------------------------------------------------------------- result_type over descriptors
