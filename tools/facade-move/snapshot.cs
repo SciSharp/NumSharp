@@ -43,7 +43,7 @@
 // 3d, 0d), where checks that meet only when two arguments are off their defaults show. Parameters are recognized by type
 // and name (axis, out, where, q, weights, method, dtype, bool flags, the int offset / axis1 / axis2 / ddof, a second array
 // operand named lhs / rhs / left / right / x / y / other / a2 (np.array_equiv's and the legacy poly arithmetic's
-// a1 / a2), the histogram family's bins as an int, an estimator name, an
+// a1 / a2) / ar2 (the set routines' ar1 / ar2), the histogram family's bins as an int, an estimator name, an
 // array or a double[], and its (lower, upper) range, np.histogramdd / np.histogram2d's sample as a sequence of columns,
 // their per-dimension bins as an int[], an NDArray[] or an object[], and their per-dimension ranges, np.trapezoid's
 // optional sample points x and its spacing dx, np.searchsorted's keys v (an array, or a C# int / double), its side
@@ -65,8 +65,9 @@
 // (LinalgLayouts, 20 layouts in phase A: square ones in C, F, transposed, strided, reversed and broadcast form, a stack, a
 // positive definite and a singular matrix, rectangles, empties; 7 in phase B, a square matrix and a rectangle in phase C),
 // and multi_dot's array list is built from the operand (MakeLinalgArrays). A result that is a struct of arrays (np.histogram's
-// HistogramResult, np.histogramdd's HistogramddResult) renders each array field; np.gradient's GradientResult renders as
-// GRAD1(array) or GRADN(array; ...).
+// HistogramResult, np.histogramdd's HistogramddResult) renders each array field, and one that keeps its arrays in
+// properties (np.unique's UniqueResult, np.unique_all / unique_counts / unique_inverse's result structs) each NDArray
+// property, null for an output not requested; np.gradient's GradientResult renders as GRAD1(array) or GRADN(array; ...).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -336,7 +337,9 @@ static class Snapshot
                 : n == "fweights" ? Role.FWeights
                 : n == "aweights" ? Role.AWeights
                 // a2: np.array_equiv(a1, a2) and the legacy polyadd / polysub / polymul (a1, the first array, is the operand).
-                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" or "a2" ? Role.Operand2
+                // ar2: the set routines np.union1d / np.intersect1d / np.setxor1d / np.setdiff1d (ar1 is the operand), which
+                // run np.unique's body over their concatenation.
+                : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" or "a2" or "ar2" ? Role.Operand2
                 // np.insert / np.delete's index array or mask, and np.insert's values array.
                 : n == "obj" && IsInsertOrDelete(p) ? Role.InsertObjArray
                 : n == "values" && IsInsertOrDelete(p) ? Role.InsertValues
@@ -2393,6 +2396,19 @@ static class Snapshot
                     && arrayFields.All(fi => typeof(NDArray).IsAssignableFrom(fi.FieldType) || fi.FieldType == typeof(NDArray[])))
                     return "STRUCT " + result.GetType().Name + "(" +
                            string.Join("; ", arrayFields.Select(fi => fi.Name + "=" + Render(fi.GetValue(result), outArray))) + ")";
+                // A struct that keeps its arrays in properties (np.unique's UniqueResult, the Array-API UniqueAllResult /
+                // UniqueCountsResult / UniqueInverseResult): each public NDArray property in declaration order, an output
+                // that was not requested rendering as null. Only the NDArray properties count: UniqueResult also forwards
+                // values' size / shape / dtype, which repeat what the values array's own rendering holds, and its indexer
+                // (a property with parameters) is a view of the same outputs.
+                var arrayProperties = arrayFields.Length == 0 && result.GetType().IsValueType
+                    ? result.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                        .Where(pi => pi.GetIndexParameters().Length == 0 && typeof(NDArray).IsAssignableFrom(pi.PropertyType))
+                        .OrderBy(pi => pi.MetadataToken).ToArray()
+                    : Array.Empty<PropertyInfo>();
+                if (arrayProperties.Length > 0)
+                    return "STRUCT " + result.GetType().Name + "(" +
+                           string.Join("; ", arrayProperties.Select(pi => pi.Name + "=" + Render(pi.GetValue(result), outArray))) + ")";
                 return "VAL " + result.GetType().Name + " " + Convert.ToString(result, CultureInfo.InvariantCulture);
         }
     }
