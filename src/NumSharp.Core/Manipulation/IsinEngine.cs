@@ -1,7 +1,9 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 // =============================================================================
@@ -17,8 +19,11 @@ using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 //
 // HOW THIS CLASS ANSWERS
 //   StringDType and fixed-width text run NumPy's own statements (IsinVString in IsinEngine.VString.cs, IsinText here).
-//   Every other dtype pair computes the membership in result_type(ar1, ar2) by a hash set, a counting table or a sorted
-//   search (ComputeMembership), an exact uint64 / signed pair included.
+//   Every other dtype pair takes NumPy's path decision (NumPyPath). The table method and the loop path run as one-pass
+//   kernels (TableMembership, LoopMembership), whose answer is NumPy's: the exact membership. The sort path runs NumPy's
+//   statements where they are not the exact membership (SortPathFlat: a lossy concatenation, assume_unique). Everything
+//   else, and each pair a kernel declines, computes the exact membership in result_type(ar1, ar2) by a hash set, a
+//   counting table or a sorted search (ComputeMembership), an exact uint64 / signed pair included.
 //
 // An internal operation class (the np-layer dtype plan's D1: NumPy writes isin in Python), moved from the public np.isin
 // by P2. It sits beside the facade, not under Backends/, because its statements call the public np.* functions NumPy's
@@ -48,14 +53,16 @@ namespace NumSharp
         /// </summary>
         /// <param name="element">The tested values (not null; the result has their shape).</param>
         /// <param name="test_elements">The set (not null; flattened).</param>
-        /// <param name="assume_unique">NumPy's speed hint: the text route's sort path skips its <c>np.unique</c> calls; the
-        ///     numeric membership needs no deduplication and ignores it.</param>
+        /// <param name="assume_unique">NumPy's speed hint: where NumPy takes its sort path, the <c>np.unique</c> calls are
+        ///     skipped, so repeated values get NumPy's answer for them (an element is flagged when an equal value follows it
+        ///     in the elements or lies in the set); the table method and the loop path ignore it.</param>
         /// <param name="invert">Whether the answer is <c>element not in test_elements</c>.</param>
         /// <param name="kind">The algorithm name: null (automatic), <c>"sort"</c> or <c>"table"</c>.</param>
         /// <returns>A bool array of <paramref name="element"/>'s shape: a view of a fresh 1-D answer, as NumPy's reshape
         ///     returns it.</returns>
         /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>Invalid kind: 'x'. Please use None, 'sort' or
-        ///     'table'.</c>), or <c>kind='table'</c> for an array that is not boolean or integer.</exception>
+        ///     'table'.</c>), <c>kind='table'</c> for an array that is not boolean or integer, or <c>kind='table'</c> over a
+        ///     set whose range is <c>2**63 - 1</c> or more (<c>Maximum allowed dimension exceeded</c>).</exception>
         /// <exception cref="InvalidOperationException"><c>kind='table'</c> with a set whose range exceeds its dtype's maximum
         ///     (NumPy's RuntimeError text).</exception>
         /// <exception cref="UnicodeDecodeError">The text route's sort path decodes <c>S</c> text holding a byte that is not
@@ -114,17 +121,31 @@ namespace NumSharp
             if (ar2.size == 0)
                 return np.full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
 
-            // NumPy's _isin answers on one of three paths (the table method, the loop path, the sort path), and each gives
-            // the exact membership the routes below compute, except NumPy's SORT path in two cases: its np.concatenate casts
-            // both unique arrays to their common dtype, where two 64-bit integers past 2**53 can become one float64, and
-            // under assume_unique it skips the np.unique calls, so repeated values meet as neighbours. Its adjacent-equality
-            // step then flags the first of two equal neighbours as a member. Where NumPy takes the sort path in either case
-            // its statements run (SortPathFlat); the answer is a view of the 1-D flags, as NumPy's reshape returns it.
-            if ((assume_unique || !ConcatenationIsLossless(ar1, ar2)) && TakesSortPath(ar1, ar2, kind))
+            // NumPy's _isin answers on one of three paths (the table method, the loop path, the sort path; NumPyPath), and
+            // each gives the exact membership, except NumPy's SORT path in two cases: its np.concatenate casts both unique
+            // arrays to their common dtype, where two 64-bit integers past 2**53 can become one float64, and under
+            // assume_unique it skips the np.unique calls, so repeated values meet as neighbours. Its adjacent-equality step
+            // then flags the first of two equal neighbours as a member. Where NumPy takes the sort path in either case its
+            // statements run (SortPathFlat); the answer is a view of the 1-D flags, as NumPy's reshape returns it.
+            IsinPath path = NumPyPath(ar1, ar2, kind, out long tableMin, out long tableRange);
+            if (path == IsinPath.Sort && (assume_unique || !ConcatenationIsLossless(ar1, ar2)))
             {
                 using NDArray flat = SortPathFlat(ar1, ar2, assume_unique, invert);
                 return flat.reshape(outShape);
             }
+
+            // The table method and the loop path run as one pass each (NumPy's statements fused, the same exact
+            // membership): NumPy's table masks, compaction and fancy indexing, or its one comparison pass per set value,
+            // cost more than the pass. Each declines (null) the pairs it does not take: they and NumPy's lossless sort path
+            // keep ComputeMembership, whose hash set outruns NumPy's sort.
+            using NDArray fused = path switch
+            {
+                IsinPath.Table => TableMembership(ar1, ar2, tableMin, tableRange, invert),
+                IsinPath.Loop => LoopMembership(ar1, ar2, invert),
+                _ => null,
+            };
+            if (fused is not null)
+                return fused.reshape(outShape);
 
             // Every other case: NumPy's answer is the exact membership in result_type(ar1, ar2) (the loop path's
             // comparisons, exact for an int64 / uint64 pair too), which ComputeMembership computes without NumPy's
@@ -277,31 +298,559 @@ namespace NumSharp
             return assume_unique ? ret[$":{ar1.size}"] : ret[revIdx];
         }
 
+        /// <summary>The path NumPy's <c>_isin</c> answers two numeric operands on (see <see cref="NumPyPath"/>).</summary>
+        private enum IsinPath
+        {
+            /// <summary>The table method: a bool table over the set's range, read at each element (the exact
+            ///     membership).</summary>
+            Table,
+
+            /// <summary>The loop path: <c>mask |= ar1 == a</c> for each set value <c>a</c> (the exact membership in the
+            ///     comparisons' dtypes; exact for an int64 / uint64 pair).</summary>
+            Loop,
+
+            /// <summary>The sort path: <c>np.unique</c> of each operand, one concatenate in their common dtype, a stable
+            ///     argsort and the adjacent-equality flags (<see cref="SortPathFlat"/>).</summary>
+            Sort,
+        }
+
         /// <summary>
-        ///     Whether NumPy's <c>_isin</c> answers on its sort path for two flattened numeric operands (its <c>kind</c> errors
-        ///     already raised): neither the table method (an integer or bool pair, <c>kind</c> None or <c>'table'</c>, a range
-        ///     safe for the set's dtype and at most <c>6 * (len(ar1) + len(ar2))</c>, or <c>kind='table'</c>) nor the loop path
-        ///     (<c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c>).
+        ///     The path NumPy's <c>_isin</c> answers two flattened numeric operands on (its <c>kind</c> errors already raised):
+        ///     the table method for an integer or bool pair with <c>kind</c> None or <c>'table'</c> whose set range is safe for
+        ///     the set's dtype and at most <c>6 * (len(ar1) + len(ar2))</c> (or <c>kind='table'</c>), else the loop path while
+        ///     <c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c>, else the sort path.
         /// </summary>
         /// <param name="ar1">The flattened tested values, not empty.</param>
         /// <param name="ar2">The flattened set, not empty.</param>
         /// <param name="kind">The validated <c>kind</c>: null, <c>"sort"</c> (no table method) or <c>"table"</c>.</param>
-        /// <returns>True when NumPy takes the sort path.</returns>
-        /// <remarks>Reads the set's range (two reductions) only for an integer or bool pair.</remarks>
-        private static bool TakesSortPath(NDArray ar1, NDArray ar2, string kind)
+        /// <param name="tableMin">For the table method within NumPy's memory constraint, the set's minimum (NumPy's
+        ///     <c>ar2_min</c>; a uint64 minimum past <c>long.MaxValue</c> as its 64 bits); otherwise 0.</param>
+        /// <param name="tableRange">For the table method within NumPy's memory constraint, the set's range
+        ///     (<c>ar2_max - ar2_min</c>); otherwise -1 (a <c>kind='table'</c> table past the constraint, which NumPy
+        ///     allocates and <see cref="TableMembership"/> declines: the documented divergence).</param>
+        /// <returns>NumPy's path.</returns>
+        /// <remarks>Reads the set's bounds (two reductions) only for an integer or bool pair.</remarks>
+        private static IsinPath NumPyPath(NDArray ar1, NDArray ar2, string kind, out long tableMin, out long tableRange)
         {
+            tableMin = 0;
+            tableRange = -1;
             long n1 = ar1.size, n2 = ar2.size;
             if (kind != "sort" && IsNumPyIntegerKind(ar1.typecode) && IsNumPyIntegerKind(ar2.typecode))
             {
                 // The table method's two constraints, on the range as a Python int (kind='table' with an unsafe range has
                 // raised already, so it reaches the table here).
-                BigInteger range = TableRange(ar2);
-                if (RangeFitsDtype(range, ar2.typecode) && (range <= 6 * ((BigInteger)n1 + n2) || kind == "table"))
-                    return false;
+                var (min, max) = TableBounds(ar2);
+                BigInteger range = max - min;
+                bool belowMemory = range <= 6 * ((BigInteger)n1 + n2);
+                if (RangeFitsDtype(range, ar2.typecode) && (belowMemory || kind == "table"))
+                {
+                    if (belowMemory)
+                    {
+                        // The table kernel's offsets are 64-bit arithmetic modulo 2**64, so a uint64 set's minimum past
+                        // long.MaxValue rides as its bits (TableMembership).
+                        tableMin = min <= long.MaxValue ? (long)min : unchecked((long)(ulong)min);
+                        tableRange = (long)range;
+                    }
+                    return IsinPath.Table;
+                }
             }
             // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
-            return !(n2 < 10.0 * Math.Pow(n1, 0.145));
+            return n2 < 10.0 * Math.Pow(n1, 0.145) ? IsinPath.Loop : IsinPath.Sort;
         }
+
+        /// <summary>
+        ///     NumPy's table method in one pass: the set scattered into a bool table over <c>[min, min + range]</c> (NumPy's
+        ///     <c>isin_helper_ar</c>: zeros with the set marked True, or under <paramref name="invert"/> ones with the set
+        ///     marked False), then each element's flag is its table entry when it lies in that range and
+        ///     <paramref name="invert"/> otherwise (NumPy's outgoing array).
+        /// </summary>
+        /// <param name="ar1">The flattened tested values (bool, an integer dtype or char).</param>
+        /// <param name="ar2">The flattened set (bool, an integer dtype or char).</param>
+        /// <param name="min">The set's minimum (<see cref="NumPyPath"/>'s <c>tableMin</c>: a uint64 minimum past
+        ///     <c>long.MaxValue</c> as its 64 bits).</param>
+        /// <param name="range">The set's range, or -1 for no table (<see cref="NumPyPath"/>'s <c>tableRange</c>).</param>
+        /// <param name="invert">Whether the answer is <c>not in</c>.</param>
+        /// <returns>A fresh 1-D bool array, one flag per element; null to decline (no table, or a uint64 operand beside a
+        ///     signed one, whose 64 bits read as one number in one operand and another in the other: the membership routes
+        ///     answer that pair exactly).</returns>
+        /// <remarks>
+        ///     Exact like NumPy's statements: an element is read as its 64 bits and tested by
+        ///     <c>(ulong)(v - min) &lt;= range</c>, 64-bit arithmetic modulo 2**64. Without a uint64 / signed pair every value
+        ///     lies in one span of 2**64 numbers (<c>[-2**63, 2**63)</c> when an operand is signed, <c>[0, 2**64)</c>
+        ///     otherwise; bool reads as 0 / 1, char as its code), and <c>min + range</c> is the set's maximum, so
+        ///     <c>v - min</c> lands in <c>[0, range]</c> exactly when <c>v</c> lies in <c>[min, min + range]</c>. Reads each
+        ///     operand once, where NumPy's statements make two comparisons, an AND, a compaction, a subtraction, a fancy
+        ///     gather and a masked store. Elements of one byte, and of two bytes from <see cref="DomainTableMinElements"/>
+        ///     on, read a table over their dtype's whole domain instead (<see cref="DomainTableMembership"/>): the same
+        ///     flags, one load per element. The tables are released before returning; a contiguous copy of an operand is
+        ///     reclaimed by the caller's scope.
+        /// </remarks>
+        private static unsafe NDArray TableMembership(NDArray ar1, NDArray ar2, long min, long range, bool invert)
+        {
+            if (range < 0 || UInt64BesideSigned(ar1.typecode, ar2.typecode))
+                return null;
+            ar1 = ContiguousRun(ar1);
+            ar2 = ContiguousRun(ar2);
+            void* s = (byte*)ar2.Address + ar2.Shape.offset * ar2.dtypesize;
+            long m = ar2.size;
+            bool mark = !invert;
+            if (ar1.dtypesize == 1 || (ar1.dtypesize == 2 && ar1.size >= DomainTableMinElements))
+                return DomainTableMembership(ar1, ar2.typecode, s, m, mark, invert);
+
+            // NumPy's table: np.zeros with the set marked 1, or under invert np.ones with the set marked 0, so the probe reads
+            // the flag itself. The table is scratch, released here: the using also keeps it reachable while its raw pointer
+            // is read.
+            using NDArray table = np.full(new Shape(range + 1), invert, NPTypeCode.Boolean);
+            bool* tb = (bool*)table.Address + table.Shape.offset;
+            switch (ar2.typecode)
+            {
+                case NPTypeCode.Boolean: ScatterSet((byte*)s, m, min, mark, tb); break;
+                case NPTypeCode.Byte: ScatterSet((byte*)s, m, min, mark, tb); break;
+                case NPTypeCode.SByte: ScatterSet((sbyte*)s, m, min, mark, tb); break;
+                case NPTypeCode.Int16: ScatterSet((short*)s, m, min, mark, tb); break;
+                case NPTypeCode.UInt16: ScatterSet((ushort*)s, m, min, mark, tb); break;
+                case NPTypeCode.Char: ScatterSet((ushort*)s, m, min, mark, tb); break;
+                case NPTypeCode.Int32: ScatterSet((int*)s, m, min, mark, tb); break;
+                case NPTypeCode.UInt32: ScatterSet((uint*)s, m, min, mark, tb); break;
+                case NPTypeCode.Int64: ScatterSet((long*)s, m, min, mark, tb); break;
+                case NPTypeCode.UInt64: ScatterSet((ulong*)s, m, min, mark, tb); break;
+                default: return null;
+            }
+
+            long n = ar1.size;
+            var result = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            bool* r = (bool*)result.Address;
+            void* e = (byte*)ar1.Address + ar1.Shape.offset * ar1.dtypesize;
+            ulong urange = (ulong)range;
+            switch (ar1.typecode)
+            {
+                // One-byte elements (bool, int8, uint8) took the domain table above; char reads as its uint16 value.
+                case NPTypeCode.Int16: TableProbe((short*)e, n, tb, min, urange, invert, r); break;
+                case NPTypeCode.UInt16: TableProbe((ushort*)e, n, tb, min, urange, invert, r); break;
+                case NPTypeCode.Char: TableProbe((ushort*)e, n, tb, min, urange, invert, r); break;
+                case NPTypeCode.Int32: TableProbe((int*)e, n, tb, min, urange, invert, r); break;
+                case NPTypeCode.UInt32: TableProbe((uint*)e, n, tb, min, urange, invert, r); break;
+                case NPTypeCode.Int64: TableProbe((long*)e, n, tb, min, urange, invert, r); break;
+                case NPTypeCode.UInt64: TableProbe((ulong*)e, n, tb, min, urange, invert, r); break;
+                default:
+                    result.Dispose();
+                    return null;
+            }
+            return result;
+        }
+
+        /// <summary>
+        ///     The elements of two bytes from which <see cref="DomainTableMembership"/> replaces the range table: filling its
+        ///     65,536 flags costs about 1.3 us, which the saved range test (about 0.23 ns per element) repays from about
+        ///     5,900 elements (measured over uint16 at 1K / 10K / 100K elements: 1.72 / 3.86 / 27.4 us against the range
+        ///     probe's 0.49 / 4.87 / 49.0). One-byte elements fill 256 flags, which always pays.
+        /// </summary>
+        private const long DomainTableMinElements = 8192;
+
+        /// <summary>
+        ///     NumPy's table method over elements of one or two bytes: a table over the element dtype's whole domain (256 or
+        ///     65,536 flags, indexed by the element's bits) holds the outgoing flag everywhere and the members' flag at every
+        ///     set value of the domain, so each element's flag is one load, without the range test.
+        /// </summary>
+        /// <param name="ar1">The flattened tested values, contiguous: bool, int8, uint8, int16, uint16 or char.</param>
+        /// <param name="setType">The set's dtype (bool, an integer dtype or char; a uint64 set beside a signed element was
+        ///     declined by the caller).</param>
+        /// <param name="s">The set's first element (contiguous).</param>
+        /// <param name="m">The set's length.</param>
+        /// <param name="mark">The flag of a member: True, or False under invert.</param>
+        /// <param name="invert">Whether the answer is <c>not in</c>: the flag of every value the set does not hold.</param>
+        /// <returns>A fresh 1-D bool array, one flag per element; null to decline (a set dtype the switch does not
+        ///     read).</returns>
+        /// <remarks>
+        ///     The answer is NumPy's table answer: an element value the set holds is a member, every other value is not (a
+        ///     set value outside the element dtype's domain names no element and is skipped). A negative int8 / int16 is
+        ///     indexed by its two's complement bits, the bits the probe reads. Measured over 100K elements: uint8 27.4 us
+        ///     and uint16 27.4 us, against the range probe's 48.8 and 49.0. The table is released before returning.
+        /// </remarks>
+        private static unsafe NDArray DomainTableMembership(NDArray ar1, NPTypeCode setType, void* s, long m, bool mark,
+            bool invert)
+        {
+            int width = ar1.dtypesize;
+            int size = width == 1 ? 256 : 65536;
+            // The element dtype's domain [lo, hi]: its values are exactly the 256 or 65,536 bit patterns.
+            long lo = ar1.typecode switch
+            {
+                NPTypeCode.SByte => sbyte.MinValue,
+                NPTypeCode.Int16 => short.MinValue,
+                _ => 0,
+            };
+            long hi = lo + size - 1;
+            // Scratch, released here: the using also keeps it reachable while its raw pointer is read.
+            using NDArray domain = np.full(new Shape(size), invert, NPTypeCode.Boolean);
+            bool* table = (bool*)domain.Address + domain.Shape.offset;
+            switch (setType)
+            {
+                case NPTypeCode.Boolean: ScatterDomain((byte*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.Byte: ScatterDomain((byte*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.SByte: ScatterDomain((sbyte*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.Int16: ScatterDomain((short*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.UInt16: ScatterDomain((ushort*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.Char: ScatterDomain((ushort*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.Int32: ScatterDomain((int*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.UInt32: ScatterDomain((uint*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.Int64: ScatterDomain((long*)s, m, lo, hi, mark, table); break;
+                case NPTypeCode.UInt64: ScatterDomain((ulong*)s, m, lo, hi, mark, table); break;
+                default: return null;
+            }
+            long n = ar1.size;
+            var result = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            void* e = (byte*)ar1.Address + ar1.Shape.offset * width;
+            if (width == 1)
+                DomainProbe((byte*)e, n, table, (bool*)result.Address);
+            else
+                DomainProbe((ushort*)e, n, table, (bool*)result.Address);
+            return result;
+        }
+
+        /// <summary>Marks every set value of the element domain <c>[lo, hi]</c> in the domain table, at the value's bits
+        ///     (<c>v &amp; (hi - lo)</c>: a negative value's two's complement).</summary>
+        /// <typeparam name="T">The set's element type (an integer type; bool read as byte, char as ushort).</typeparam>
+        /// <param name="s">The set's first element (contiguous).</param>
+        /// <param name="m">The set's length.</param>
+        /// <param name="lo">The element dtype's smallest value.</param>
+        /// <param name="hi">The element dtype's largest value (<c>lo + 255</c> or <c>lo + 65535</c>).</param>
+        /// <param name="mark">The flag of a member: True, or False under invert.</param>
+        /// <param name="table">The domain table, <c>hi - lo + 1</c> entries.</param>
+        /// <remarks>A uint64 set value past <c>long.MaxValue</c> reads as negative bits, below every unsigned element
+        ///     domain: skipped, as it names no element.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void ScatterDomain<T>(T* s, long m, long lo, long hi, bool mark, bool* table)
+            where T : unmanaged
+        {
+            long bits = hi - lo;
+            for (long i = 0; i < m; i++)
+            {
+                long v = AsLong(s + i);
+                if (v >= lo && v <= hi)
+                    table[v & bits] = mark;
+            }
+        }
+
+        /// <summary>Each element's flag from the domain table: one load at the element's bits.</summary>
+        /// <typeparam name="TBits">byte (one-byte elements) or ushort (two-byte elements): the elements read as their
+        ///     bits.</typeparam>
+        /// <param name="e">The first element (contiguous).</param>
+        /// <param name="n">The number of elements.</param>
+        /// <param name="table">The domain table (256 or 65,536 flags).</param>
+        /// <param name="r">The 1-D bool output, one flag per element.</param>
+        /// <remarks>Four elements per step: their loads are independent of each other, and the loop's compare and branch
+        ///     run once per four. Optimized at its first call (see <see cref="TableProbe"/>).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void DomainProbe<TBits>(TBits* e, long n, bool* table, bool* r) where TBits : unmanaged
+        {
+            long i = 0;
+            for (; i + 4 <= n; i += 4)
+            {
+                r[i] = table[ElementBits(e + i)];
+                r[i + 1] = table[ElementBits(e + i + 1)];
+                r[i + 2] = table[ElementBits(e + i + 2)];
+                r[i + 3] = table[ElementBits(e + i + 3)];
+            }
+            for (; i < n; i++)
+                r[i] = table[ElementBits(e + i)];
+        }
+
+        /// <summary>An element of one or two bytes as its bits, the domain table's index.</summary>
+        /// <typeparam name="TBits">byte or ushort.</typeparam>
+        /// <param name="p">The element's address.</param>
+        /// <returns>Its bits, zero-extended.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        private static unsafe nuint ElementBits<TBits>(TBits* p) where TBits : unmanaged
+        {
+            if (typeof(TBits) == typeof(byte)) return *(byte*)p;
+            return *(ushort*)p;
+        }
+
+        /// <summary>Marks every set value in the table: <c>isin_helper_ar[ar2 - ar2_min] = 1</c> (<c>= 0</c> under
+        ///     invert).</summary>
+        /// <typeparam name="T">The set's element type (an integer type; bool read as byte, char as ushort).</typeparam>
+        /// <param name="s">The set's first element (contiguous).</param>
+        /// <param name="m">The set's length.</param>
+        /// <param name="min">The set's minimum, so every offset lies in the table.</param>
+        /// <param name="mark">The flag of a member: True, or False under invert.</param>
+        /// <param name="table">The table, <c>max - min + 1</c> entries.</param>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void ScatterSet<T>(T* s, long m, long min, bool mark, bool* table) where T : unmanaged
+        {
+            for (long i = 0; i < m; i++)
+                table[AsLong(s + i) - min] = mark;
+        }
+
+        /// <summary>Each element's flag: its table entry when <c>v - min</c> lies in <c>[0, range]</c>, else
+        ///     <paramref name="invert"/> (NumPy's outgoing array: np.zeros, or np.ones under invert).</summary>
+        /// <typeparam name="T">The elements' type: an integer type of two bytes or more (char read as ushort).</typeparam>
+        /// <param name="e">The first element (contiguous).</param>
+        /// <param name="n">The number of elements.</param>
+        /// <param name="table">The set's table (inverted under <paramref name="invert"/>).</param>
+        /// <param name="min">The set's minimum.</param>
+        /// <param name="range">The set's range: the table has <c>range + 1</c> entries.</param>
+        /// <param name="invert">Whether the flags are <c>not in</c>: the flag of an element outside the range.</param>
+        /// <param name="r">The 1-D bool output, one flag per element.</param>
+        /// <remarks>Optimized at its first call and not inlined (as the other kernels): it runs once per np.isin call,
+        ///     which a short program never tiers up. The inverted table keeps an XOR out of the loop (it cost 14% at 100K
+        ///     elements, measured), and four elements per step 10% more. An AVX2 gather of the table bytes measured 1.7x
+        ///     faster over 100K int32 elements and is not taken: Intel's GDS microcode mitigation slows gathers on the 6th
+        ///     to 11th generation cores, so it could lose to this loop there.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void TableProbe<T>(T* e, long n, bool* table, long min, ulong range, bool invert, bool* r)
+            where T : unmanaged
+        {
+            // A value below min wraps to an offset past the range (the range is small), so one compare decides both sides;
+            // the select reads the table only inside it.
+            long i = 0;
+            for (; i + 4 <= n; i += 4)
+            {
+                ulong o0 = unchecked((ulong)(AsLong(e + i) - min));
+                ulong o1 = unchecked((ulong)(AsLong(e + i + 1) - min));
+                ulong o2 = unchecked((ulong)(AsLong(e + i + 2) - min));
+                ulong o3 = unchecked((ulong)(AsLong(e + i + 3) - min));
+                r[i] = o0 <= range ? table[o0] : invert;
+                r[i + 1] = o1 <= range ? table[o1] : invert;
+                r[i + 2] = o2 <= range ? table[o2] : invert;
+                r[i + 3] = o3 <= range ? table[o3] : invert;
+            }
+            for (; i < n; i++)
+            {
+                ulong offset = unchecked((ulong)(AsLong(e + i) - min));
+                r[i] = offset <= range ? table[offset] : invert;
+            }
+        }
+
+        /// <summary>An integer element as 64 bits: its value for every integer type but uint64, whose values past
+        ///     <c>long.MaxValue</c> come back as their bits (the table's arithmetic is modulo 2**64, see
+        ///     <see cref="TableMembership"/>), read through its pointer.</summary>
+        /// <typeparam name="T">byte, sbyte, short, ushort, int, uint, long or ulong.</typeparam>
+        /// <param name="p">The element's address.</param>
+        /// <returns>Its value (or bits).</returns>
+        /// <remarks>A pointer, not the value: <c>Unsafe.As</c> of a value's <c>ref</c> makes the JIT keep it in memory.</remarks>
+        [MethodImpl(OptimizeAndInline)]
+        private static unsafe long AsLong<T>(T* p) where T : unmanaged
+        {
+            if (typeof(T) == typeof(byte)) return *(byte*)p;
+            if (typeof(T) == typeof(sbyte)) return *(sbyte*)p;
+            if (typeof(T) == typeof(short)) return *(short*)p;
+            if (typeof(T) == typeof(ushort)) return *(ushort*)p;
+            if (typeof(T) == typeof(int)) return *(int*)p;
+            if (typeof(T) == typeof(uint)) return *(uint*)p;
+            if (typeof(T) == typeof(ulong)) return unchecked((long)*(ulong*)p);
+            return *(long*)p;
+        }
+
+        /// <summary>Whether a uint64 operand meets a signed one (int8, int16, int32 or int64): their 64 bits are not one
+        ///     number line, so the table kernel declines the pair.</summary>
+        /// <param name="a">One operand's dtype.</param>
+        /// <param name="b">The other's.</param>
+        /// <returns>True for a uint64 / signed pair, either way round.</returns>
+        private static bool UInt64BesideSigned(NPTypeCode a, NPTypeCode b)
+        {
+            static bool Signed(NPTypeCode t) => t is NPTypeCode.SByte or NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64;
+            return (a == NPTypeCode.UInt64 && Signed(b)) || (b == NPTypeCode.UInt64 && Signed(a));
+        }
+
+        /// <summary>
+        ///     The most set values per vector lane the one-pass loop kernel compares an element with (a float64 set of 36
+        ///     values, a float32 set of 72, a uint8 set of 288): past it the membership routes' per-element cost (2 to 3 ns
+        ///     over 100K elements) is below the kernel's, which grows by about a quarter of a nanosecond per vector
+        ///     comparison, <c>m / lanes</c> of them per element. Measured over 6 dtypes and 10 set sizes, the crossover lies
+        ///     between 8.3 values per lane (int32) and 11 (float32), so 9 keeps every set size within 10% of the faster
+        ///     route.
+        /// </summary>
+        private const int LoopKernelMaxValuesPerLane = 9;
+
+        /// <summary>
+        ///     NumPy's loop path in one pass: each element compared with every set value in vector registers, OR-ed (the flag
+        ///     XOR <paramref name="invert"/>, NumPy's AND of <c>!=</c>), both operands in <c>result_type(ar1, ar2)</c> as
+        ///     NumPy's comparisons promote them.
+        /// </summary>
+        /// <param name="ar1">The flattened tested values.</param>
+        /// <param name="ar2">The flattened set (NumPy's loop path: few values).</param>
+        /// <param name="invert">Whether the answer is <c>not in</c>.</param>
+        /// <returns>A fresh 1-D bool array, one flag per element; null to decline: a host without 256-bit vectors, more than
+        ///     <see cref="LoopKernelMaxValuesPerLane"/> values per vector lane of the common dtype, a common dtype without
+        ///     vector equality (float16, complex128, decimal), or an int64 / uint64 pair, which NumPy's comparison loops
+        ///     answer exactly where the common dtype is NEP 50's float64 (the membership routes' exact uint64 route answers
+        ///     it).</returns>
+        /// <remarks>Equality is IEEE's: NaN is never a member, -0.0 equals 0.0 (NumPy's == and the hash set agree). The casts
+        ///     are NDArrays, reclaimed by the caller's scope.</remarks>
+        private static unsafe NDArray LoopMembership(NDArray ar1, NDArray ar2, bool invert)
+        {
+            // Without 256-bit vectors (arm64, an x86 host without AVX2) the kernel would compare one element with one value
+            // at a time, m times per element: the membership routes' constant cost per element is lower.
+            if (!Vector256.IsHardwareAccelerated)
+                return null;
+            NPTypeCode t = np.result_type(ar1.typecode, ar2.typecode);
+            if (t == NPTypeCode.Double && IsIntegerOrBool(ar1.typecode) && IsIntegerOrBool(ar2.typecode))
+                return null;
+            if (t is NPTypeCode.Half or NPTypeCode.Complex or NPTypeCode.Decimal)
+                return null;
+            // The kernel's cost per element grows with m / lanes (one vector comparison per value per vector of elements).
+            if (ar2.size > LoopKernelMaxValuesPerLane * (32 / t.SizeOf()))
+                return null;
+            NDArray e = ContiguousRun(ar1.typecode == t ? ar1 : ar1.astype(t));
+            NDArray s = ContiguousRun(ar2.typecode == t ? ar2 : ar2.astype(t));
+            long n = e.size;
+            int m = (int)s.size;
+            var result = new NDArray(NPTypeCode.Boolean, Shape.Vector(n), false);
+            bool* r = (bool*)result.Address;
+            void* ep = (byte*)e.Address + e.Shape.offset * e.dtypesize;
+            void* sp = (byte*)s.Address + s.Shape.offset * s.dtypesize;
+            switch (t)
+            {
+                // bool compares as its bytes 0 / 1, char as its uint16 value.
+                case NPTypeCode.Boolean: LoopProbe((byte*)ep, n, (byte*)sp, m, invert, r); break;
+                case NPTypeCode.Byte: LoopProbe((byte*)ep, n, (byte*)sp, m, invert, r); break;
+                case NPTypeCode.SByte: LoopProbe((sbyte*)ep, n, (sbyte*)sp, m, invert, r); break;
+                case NPTypeCode.Int16: LoopProbe((short*)ep, n, (short*)sp, m, invert, r); break;
+                case NPTypeCode.UInt16: LoopProbe((ushort*)ep, n, (ushort*)sp, m, invert, r); break;
+                case NPTypeCode.Char: LoopProbe((ushort*)ep, n, (ushort*)sp, m, invert, r); break;
+                case NPTypeCode.Int32: LoopProbe((int*)ep, n, (int*)sp, m, invert, r); break;
+                case NPTypeCode.UInt32: LoopProbe((uint*)ep, n, (uint*)sp, m, invert, r); break;
+                case NPTypeCode.Int64: LoopProbe((long*)ep, n, (long*)sp, m, invert, r); break;
+                case NPTypeCode.UInt64: LoopProbe((ulong*)ep, n, (ulong*)sp, m, invert, r); break;
+                case NPTypeCode.Single: LoopProbe((float*)ep, n, (float*)sp, m, invert, r); break;
+                case NPTypeCode.Double: LoopProbe((double*)ep, n, (double*)sp, m, invert, r); break;
+                default:
+                    result.Dispose();
+                    return null;
+            }
+            return result;
+        }
+
+        /// <summary>
+        ///     The loop kernel: for each vector of elements, the OR of its equality with each broadcast set value, then one
+        ///     flag per lane; four vectors per step, then one, then a scalar tail (and a scalar loop without 256-bit vectors,
+        ///     which its caller does not send here).
+        /// </summary>
+        /// <typeparam name="T">A primitive numeric type with vector equality.</typeparam>
+        /// <param name="e">The first element (contiguous, in the common dtype).</param>
+        /// <param name="n">The number of elements.</param>
+        /// <param name="s">The first set value (contiguous, in the common dtype).</param>
+        /// <param name="m">The number of set values, at most <see cref="LoopKernelMaxValuesPerLane"/> per vector lane.</param>
+        /// <param name="invert">Whether the flags are <c>not in</c>.</param>
+        /// <param name="r">The 1-D bool output, one flag per element.</param>
+        /// <remarks>Optimized at its first call (see <see cref="TableProbe"/>). The set values sit on the stack, one vector
+        ///     each: at most 9 KB (288 one-byte values).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static unsafe void LoopProbe<T>(T* e, long n, T* s, int m, bool invert, bool* r) where T : unmanaged
+        {
+            long i = 0;
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && n >= Vector256<T>.Count)
+            {
+                // The set values broadcast once (m is small: the stack holds them).
+                Vector256<T>* values = stackalloc Vector256<T>[m];
+                for (int j = 0; j < m; j++)
+                    values[j] = Vector256.Create(s[j]);
+                int lanes = Vector256<T>.Count;
+                // Four element vectors per step: each set value is loaded once for all four, and their four OR chains run
+                // side by side. One vector per step waits on its own chain: 2.2x slower over float64 at 16 values
+                // (measured; two vectors per step 1.6x).
+                for (; i + 4 * lanes <= n; i += 4 * lanes)
+                {
+                    var v0 = Vector256.Load(e + i);
+                    var v1 = Vector256.Load(e + i + lanes);
+                    var v2 = Vector256.Load(e + i + 2 * lanes);
+                    var v3 = Vector256.Load(e + i + 3 * lanes);
+                    var h0 = Vector256<T>.Zero;
+                    var h1 = Vector256<T>.Zero;
+                    var h2 = Vector256<T>.Zero;
+                    var h3 = Vector256<T>.Zero;
+                    for (int j = 0; j < m; j++)
+                    {
+                        var c = values[j];
+                        h0 |= Vector256.Equals(v0, c);
+                        h1 |= Vector256.Equals(v1, c);
+                        h2 |= Vector256.Equals(v2, c);
+                        h3 |= Vector256.Equals(v3, c);
+                    }
+                    StoreFlags(h0, invert, r + i);
+                    StoreFlags(h1, invert, r + i + lanes);
+                    StoreFlags(h2, invert, r + i + 2 * lanes);
+                    StoreFlags(h3, invert, r + i + 3 * lanes);
+                }
+                for (; i + lanes <= n; i += lanes)
+                {
+                    var v = Vector256.Load(e + i);
+                    var hit = Vector256<T>.Zero;
+                    for (int j = 0; j < m; j++)
+                        hit |= Vector256.Equals(v, values[j]);
+                    StoreFlags(hit, invert, r + i);
+                }
+            }
+            for (; i < n; i++)
+            {
+                bool hit = false;
+                for (int j = 0; j < m; j++)
+                    hit |= ScalarEquals(e[i], s[j]);
+                r[i] = hit != invert;
+            }
+        }
+
+        /// <summary>One vector's flags as bytes 0 / 1: True where a lane compared equal (False under
+        ///     <paramref name="invert"/>).</summary>
+        /// <typeparam name="T">The lanes' type.</typeparam>
+        /// <param name="hit">The OR of the lane equalities: each lane all ones or zero.</param>
+        /// <param name="invert">Whether the flags are <c>not in</c>.</param>
+        /// <param name="r">Where the <c>Vector256&lt;T&gt;.Count</c> flags go.</param>
+        [MethodImpl(OptimizeAndInline)]
+        private static unsafe void StoreFlags<T>(Vector256<T> hit, bool invert, bool* r) where T : unmanaged
+        {
+            if (sizeof(T) == 1)
+            {
+                // One-byte lanes are all-ones or zero: their low bit is the flag itself.
+                var flags = hit.AsByte() & Vector256.Create((byte)1);
+                if (invert)
+                    flags ^= Vector256.Create((byte)1);
+                flags.Store((byte*)r);
+                return;
+            }
+            uint bits = hit.ExtractMostSignificantBits();
+            if (invert)
+                bits = ~bits;
+            // The lanes' flags as bytes 0 / 1, eight lanes per bit spread (one PDEP with BMI2; the comparison kernels'
+            // helper, which reads the low eight bits). Four lanes keep the low four bytes of the spread.
+            int lanes = Vector256<T>.Count;
+            if (lanes == 4)
+                SysUnsafe.WriteUnaligned(r, (uint)DirectILKernelGenerator.SpreadBitsToBytes(bits));
+            else if (lanes == 8)
+                SysUnsafe.WriteUnaligned(r, DirectILKernelGenerator.SpreadBitsToBytes(bits));
+            else
+            {
+                SysUnsafe.WriteUnaligned(r, DirectILKernelGenerator.SpreadBitsToBytes(bits));
+                SysUnsafe.WriteUnaligned(r + 8, DirectILKernelGenerator.SpreadBitsToBytes(bits >> 8));
+            }
+        }
+
+        /// <summary>IEEE equality of two primitive numbers (NaN is unequal to itself, -0.0 equals 0.0), which
+        ///     <c>EqualityComparer&lt;T&gt;</c> is not for floats.</summary>
+        /// <typeparam name="T">A primitive numeric type.</typeparam>
+        /// <param name="a">The first value.</param>
+        /// <param name="b">The second value.</param>
+        /// <returns>True when NumPy's <c>==</c> is.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        private static bool ScalarEquals<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(double)) return SysUnsafe.As<T, double>(ref a) == SysUnsafe.As<T, double>(ref b);
+            if (typeof(T) == typeof(float)) return SysUnsafe.As<T, float>(ref a) == SysUnsafe.As<T, float>(ref b);
+            if (typeof(T) == typeof(byte)) return SysUnsafe.As<T, byte>(ref a) == SysUnsafe.As<T, byte>(ref b);
+            if (typeof(T) == typeof(sbyte)) return SysUnsafe.As<T, sbyte>(ref a) == SysUnsafe.As<T, sbyte>(ref b);
+            if (typeof(T) == typeof(short)) return SysUnsafe.As<T, short>(ref a) == SysUnsafe.As<T, short>(ref b);
+            if (typeof(T) == typeof(ushort)) return SysUnsafe.As<T, ushort>(ref a) == SysUnsafe.As<T, ushort>(ref b);
+            if (typeof(T) == typeof(int)) return SysUnsafe.As<T, int>(ref a) == SysUnsafe.As<T, int>(ref b);
+            if (typeof(T) == typeof(uint)) return SysUnsafe.As<T, uint>(ref a) == SysUnsafe.As<T, uint>(ref b);
+            if (typeof(T) == typeof(long)) return SysUnsafe.As<T, long>(ref a) == SysUnsafe.As<T, long>(ref b);
+            return SysUnsafe.As<T, ulong>(ref a) == SysUnsafe.As<T, ulong>(ref b);
+        }
+
+        /// <summary>An operand as one contiguous run the kernels read from <c>Address + offset</c>: itself when C-contiguous
+        ///     (np.ravel's results are, a view at an offset included), else a C-ordered copy.</summary>
+        /// <param name="a">A flattened operand.</param>
+        /// <returns>A C-contiguous array with the same values.</returns>
+        private static NDArray ContiguousRun(NDArray a) => a.Shape.IsContiguous ? a : np.ascontiguousarray(a);
 
         /// <summary>
         ///     NumPy's <c>ar2_range &lt;= np.iinfo(ar2.dtype).max</c>, the table method's overflow constraint (bool read as
@@ -641,11 +1190,23 @@ namespace NumSharp
         /// </summary>
         /// <param name="ar2">The flattened set: bool, an integer dtype or char, not empty.</param>
         /// <returns>The range, never negative.</returns>
-        /// <remarks>The two reductions are reclaimed here; the caller's scope covers nothing of them.</remarks>
         private static BigInteger TableRange(NDArray ar2)
         {
+            var (min, max) = TableBounds(ar2);
+            return max - min;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>int(np.min(ar2))</c> and <c>int(np.max(ar2))</c> of the table method, exactly (Python ints), read as
+        ///     <see cref="TableRange"/> reads them.
+        /// </summary>
+        /// <param name="ar2">The flattened set: bool, an integer dtype or char, not empty.</param>
+        /// <returns>The set's minimum and maximum.</returns>
+        /// <remarks>The two reductions are reclaimed here; the caller's scope covers nothing of them.</remarks>
+        private static (BigInteger Min, BigInteger Max) TableBounds(NDArray ar2)
+        {
             using NDArray min = np.amin(ar2), max = np.amax(ar2);
-            return PythonInt(max.GetAtIndex(0)) - PythonInt(min.GetAtIndex(0));
+            return (PythonInt(min.GetAtIndex(0)), PythonInt(max.GetAtIndex(0)));
         }
 
         /// <summary>

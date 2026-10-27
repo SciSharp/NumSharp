@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace NumSharp.Tests.Manipulation
@@ -287,6 +288,165 @@ namespace NumSharp.Tests.Manipulation
             using var floats = np.isin(np.zeros(new Shape(2, 0)), np.array(new[] { 1.5 }));
             floats.shape.Should().Equal(2L, 0L);
             floats.flags.owndata.Should().BeFalse();
+        }
+
+        /// <summary>
+        ///     NumPy's table method and loop path run as one-pass kernels (a bool table over the set's range; every element
+        ///     compared with each set value in vector registers). Their answer is the membership itself, so a seeded sweep holds
+        ///     them to its definition: an element is a member when some set value equals it (NaN never, -0.0 equal to 0.0).
+        ///     Sizes straddle every vector width (4, 8, 16 and 32 lanes), the loop kernel's four-vector step and the tails;
+        ///     the larger sets take NumPy's sort path at these sizes (24 values or more), which the membership routes answer;
+        ///     the operands include views at an offset and reversed ones; <c>kind='sort'</c> sends integer pairs to the loop
+        ///     path. The loop kernel's value limit is <see cref="LoopKernel_AtItsValueLimit_IsTheMembership"/>'s.
+        /// </summary>
+        [TestMethod]
+        public void OnePassKernels_AgreeWithTheMembershipDefinition()
+        {
+            var rng = new System.Random(20261027);
+            DType[] dtypes = { np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32, np.int64, np.uint64, np.@bool,
+                np.@char, np.float32, np.float64 };
+            int[] sizes = { 1, 3, 7, 31, 32, 33, 63, 100, 257 };
+            int[] setSizes = { 1, 2, 5, 16, 24, 25, 40 };
+            int checkedCalls = 0;
+            foreach (var ed in dtypes)
+            foreach (var sd in dtypes)
+            {
+                int n = sizes[rng.Next(sizes.Length)], m = setSizes[rng.Next(setSizes.Length)];
+                bool floatPair = ed == np.float32 || ed == np.float64 || sd == np.float32 || sd == np.float64;
+                // Small values, so every dtype holds them exactly and the definition can be checked in double; an
+                // unsigned or char dtype gets non-negative ones, a float pair a NaN and a negative zero.
+                double[] Values(int count, DType dt) => Enumerable.Range(0, count).Select(_ =>
+                {
+                    if (dt == np.@bool) return (double)rng.Next(2);
+                    bool unsigned = dt == np.uint8 || dt == np.uint16 || dt == np.uint32 || dt == np.uint64 || dt == np.@char;
+                    double v = unsigned ? rng.Next(0, 40) : rng.Next(-20, 20);
+                    if (floatPair && (dt == np.float32 || dt == np.float64))
+                    {
+                        int pick = rng.Next(12);
+                        if (pick == 0) v = double.NaN;
+                        else if (pick == 1) v = -0.0;
+                    }
+                    return v;
+                }).ToArray();
+                NDArray Build(double[] v, DType dt) => dt == np.@char
+                    ? np.array(v.Select(x => (char)(int)x).ToArray())
+                    : np.array(v).astype(dt);
+                double[] ev = Values(n + 4, ed), sv = Values(m, sd);
+                // The element as a view at an offset of a longer array, and reversed: both reach the kernels' pointers.
+                NDArray full = Build(ev, ed);
+                var forms = new[] { (Label: "offset", Array: full[$"4:"], Values: ev.Skip(4).ToArray()),
+                    (Label: "reversed", Array: full["::-1"], Values: Enumerable.Reverse(ev).ToArray()) };
+                NDArray set = Build(sv, sd);
+                double[] setValues = sv.Select(x => sd == np.@bool ? (x != 0 ? 1 : 0) : x).ToArray();
+                foreach (var (label, element, values) in forms)
+                foreach (bool invert in new[] { false, true })
+                foreach (string kind in new[] { null, "sort" })
+                {
+                    // kind='sort' takes an integer pair off the table method, onto the loop path (the one-byte lanes too).
+                    var expected = values.Select(x => setValues.Any(s => s == (ed == np.@bool ? (x != 0 ? 1 : 0) : x)) != invert)
+                        .ToArray();
+                    var got = np.isin(element, set, invert: invert, kind: kind).ToArray<bool>();
+                    got.Should().Equal(expected,
+                        $"isin({ed.name} {label} n={values.Length}, {sd.name} m={m}, invert={invert}, kind={kind ?? "None"})");
+                    checkedCalls++;
+                }
+            }
+            checkedCalls.Should().Be(dtypes.Length * dtypes.Length * 8);
+        }
+
+        /// <summary>
+        ///     The table kernel reads a uint64 operand as its 64 bits and computes the offsets modulo 2**64, which is exact for
+        ///     values past 2**63 beside another unsigned operand; a uint64 operand beside a signed one is declined to the
+        ///     membership routes (its bits name another number there). NumPy 2.4.2's answers, probed.
+        /// </summary>
+        [TestMethod]
+        public void TableKernel_UInt64PastTwoToThe63_IsNumPysAnswer()
+        {
+            var e = np.array(new ulong[] { ulong.MaxValue, ulong.MaxValue - 1, 1UL << 63, 0, ulong.MaxValue - 2 });
+            var s = np.array(new ulong[] { ulong.MaxValue - 2, ulong.MaxValue });
+            np.isin(e, s).ToArray<bool>().Should().Equal(true, false, false, false, true);
+            np.isin(e, s, invert: true).ToArray<bool>().Should().Equal(false, true, true, true, false);
+            np.isin(e, s, kind: "table").ToArray<bool>().Should().Equal(true, false, false, false, true);
+            // Beside int64, -1 is not 2**64 - 1 (whose bits it shares), in either operand.
+            np.isin(np.array(new long[] { -1, 3 }), np.array(new ulong[] { ulong.MaxValue, 3 })).ToArray<bool>()
+                .Should().Equal(false, true);
+            np.isin(np.array(new ulong[] { ulong.MaxValue, 3 }), np.array(new long[] { -1, 3 })).ToArray<bool>()
+                .Should().Equal(false, true);
+            // Beside uint8, every value is non-negative: the kernel runs.
+            np.isin(np.array(new ulong[] { ulong.MaxValue, 255, 7 }), np.array(new byte[] { 255, 7 })).ToArray<bool>()
+                .Should().Equal(false, true, true);
+        }
+
+        /// <summary>
+        ///     Elements of two bytes from 8,192 on read a table over their dtype's whole domain (65,536 flags, indexed by the
+        ///     element's bits): a negative int16 sits at its two's complement, and a set value outside the element dtype's
+        ///     domain names no element. Fewer elements read NumPy's table over the set's range. Every set keeps NumPy's table
+        ///     constraints (its range within its dtype's maximum and at most <c>6 * (len(ar1) + len(ar2))</c>), so NumPy takes
+        ///     its table method, whose answer is the membership; held to the definition, with invert, at 10,000 and 100
+        ///     elements. Each element array starts with its domain's extremes and every set value of the domain with both
+        ///     neighbours, so a member the table misses shows; the rest is spread over the whole domain.
+        /// </summary>
+        [TestMethod]
+        public void TableKernel_TwoByteElementsOverTheirWholeDomain_IsTheMembership()
+        {
+            var cases = new (DType Dtype, long Lo, long Hi, NDArray Set, long[] Members, int N)[]
+            {
+                (np.int16, short.MinValue, short.MaxValue, np.array(new[] { -32770, -30000, -1, 0, 5, 20000 }),
+                    new long[] { -30000, -1, 0, 5, 20000 }, 10_000),
+                (np.uint16, 0, ushort.MaxValue, np.array(new[] { -5, 3, 50000, 55000 }), new long[] { 3, 50000, 55000 }, 10_000),
+                (np.@char, 0, char.MaxValue, np.array(new ulong[] { 3, 100, 40000 }), new long[] { 3, 100, 40000 }, 10_000),
+                (np.int16, short.MinValue, short.MaxValue, np.array(new sbyte[] { -100, -1, 0, 27 }),
+                    new long[] { -100, -1, 0, 27 }, 10_000),
+                (np.uint16, 0, ushort.MaxValue, np.array(new long[] { 65535, 70000 }), new long[] { 65535 }, 10_000),
+                (np.int16, short.MinValue, short.MaxValue, np.array(new[] { true }), new long[] { 1 }, 10_000),
+                // Below DomainTableMinElements: NumPy's table over the set's range.
+                (np.int16, short.MinValue, short.MaxValue, np.array(new sbyte[] { -100, -1, 0, 27 }),
+                    new long[] { -100, -1, 0, 27 }, 100),
+                (np.uint16, 0, ushort.MaxValue, np.array(new short[] { 0, 3, 200 }), new long[] { 0, 3, 200 }, 100),
+                (np.@char, 0, char.MaxValue, np.array(new ulong[] { 3, 100, 300 }), new long[] { 3, 100, 300 }, 100),
+            };
+            foreach (var (dtype, lo, hi, set, members, n) in cases)
+            {
+                var head = new[] { lo, hi }.Concat(members.SelectMany(v => new[] { v - 1, v, v + 1 }))
+                    .Where(v => v >= lo && v <= hi).ToArray();
+                long[] values = head.Concat(Enumerable.Range(0, n - head.Length).Select(i => lo + (long)i * 7919 % 65536))
+                    .ToArray();
+                NDArray element = dtype == np.@char
+                    ? np.array(values.Select(v => (char)v).ToArray())
+                    : np.array(values).astype(dtype);
+                foreach (bool invert in new[] { false, true })
+                {
+                    var got = np.isin(element, set, invert: invert).ToArray<bool>();
+                    for (int i = 0; i < n; i++)
+                        if (got[i] != (members.Contains(values[i]) != invert))
+                            Assert.Fail($"isin({dtype.name} n={n} [{i}] = {values[i]}, {set.dtype.name} set, invert={invert})");
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The loop kernel's value limit grows with the common dtype's vector lanes (9 values per lane: 36 for float64 and
+        ///     int64, 72 for float32); both sides of it answer the membership. The element counts make each set NumPy's loop
+        ///     path (<c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c>: 38.0 at 10,000 elements, 74.1 at 1,000,000);
+        ///     <c>kind='sort'</c> keeps the integer pair off the table method.
+        /// </summary>
+        [TestMethod]
+        public void LoopKernel_AtItsValueLimit_IsTheMembership()
+        {
+            foreach (var (dt, m, n) in new[] { (np.float64, 36, 10_000), (np.float64, 37, 10_000), (np.int64, 36, 10_000),
+                (np.int64, 37, 10_000), (np.float32, 72, 1_000_000), (np.float32, 73, 1_000_000) })
+            {
+                var element = (np.arange(n) % 997).astype(dt);
+                var set = (np.arange(m) * 7).astype(dt);
+                var members = new System.Collections.Generic.HashSet<long>(Enumerable.Range(0, m).Select(j => (long)j * 7));
+                foreach (bool invert in new[] { false, true })
+                {
+                    var got = np.isin(element, set, invert: invert, kind: dt == np.int64 ? "sort" : null).ToArray<bool>();
+                    for (int i = 0; i < n; i++)
+                        if (got[i] != (members.Contains(i % 997) != invert))
+                            Assert.Fail($"isin({dt.name} n={n}, m={m}, invert={invert}) differs at {i}");
+                }
+            }
         }
     }
 }
