@@ -34,8 +34,8 @@ How a case is re-emitted (``gen``):
      C-ordered copy; the others are held by FuzzCorpusTests.RelayoutLayoutInvariance to the contract that NumSharp's
      outcome does not change either (no excuse table in between). ``_upstream_residual`` drops the variants that
      would only repeat a divergence another tier documents (NEP50's weak 0-d promotion in a ufunc / np.where call --
-     the relayout tiers take no NEP50 excuse --, the flat np.mean of a broadcast float operand), and ``_gap_of``
-     carves the known NumSharp gaps (``GAPS``) by emulating each bug, so the carve is exact.
+     the relayout tiers take no NEP50 excuse), and ``_gap_of`` carves the known NumSharp gaps (``GAPS``) by emulating
+     each bug, so the carve is exact.
 
 The variants keep the source's op key, params and valueclass (so the replay dispatches them through the same
 OpRegistry entry, under the same excuse rules but the NEP50 0-d branches), with ``layout`` =
@@ -888,12 +888,9 @@ def _empty_gap(case, op, pos):
 def _upstream_residual(case, view, expected_outcome):
     """True when a variant lands in a NumSharp divergence another tier already owns and documents.
 
-    Two such divergences reach the relayout matrix, and a variant there would only repeat them, so it is not emitted
-    and its cell stays open for a source that does not hit them:
+    One such divergence reaches the relayout matrix, and a variant there would only repeat it, so it is not emitted
+    and its cell stays open for a source that does not hit it:
 
-      * the flat np.mean of a float / complex operand with a stride-0 axis (the plan's finding 10: NumSharp folds a
-        broadcast operand in its own order, NumPy per row), unless the sum is order-free -- the mean_loops tier drops
-        exactly these cases with the same predicate, and OpenBugs.Reductions.cs pins them;
       * a multi-operand ufunc or np.where call whose NumPy answer changes once every 0-d operand is a Python scalar
         of its value (NEP 50's weak promotion, which NumSharp applies to 0-d arrays where NumPy promotes them as
         arrays: the registry's documented NEP50 branches). The relayout tier takes NO such excuse
@@ -902,6 +899,11 @@ def _upstream_residual(case, view, expected_outcome):
         a 0-d operand, which hid np.logaddexp returning its empty int32 operand where NumPy returns float64. Only
         ufuncs and np.where have NEP 50's weak scalars; another function converts a Python scalar its own way
         (np.searchsorted discovers int64), so no such model applies to it and its 0-d variants are simply kept.
+
+    A second rule dropped the flat np.mean of a float / complex operand with a broadcast axis unless its sum was
+    order-free (plan api-parameter-parity finding 10: NumSharp folded a broadcast operand in its own order, NumPy per
+    row). It left on 2026-10-27, when np.sum's routes over an operand with a reversed or a broadcast axis became NumPy's
+    reduction iterator (plan np-layer-dtype-logic P2, the np.average family's D4-e).
 
     Parameters:
         case: the finished variant case.
@@ -919,12 +921,7 @@ def _upstream_residual(case, view, expected_outcome):
         weak = [o.item() if o.ndim == 0 else o for o in ops]
         if _outcome(case["op"], p, weak) != expected_outcome:
             return True
-    if case["op"] != "mean" or p.get("axis") is not None or view.dtype.kind not in "fc":
-        return False
-    if not any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape)):
-        return False
-    import gen_oracle as go  # noqa: E402 -- the mean_loops tier's own predicates, so both tiers draw one line
-    return not go._mean_order_free(view, None, go._mean_loop_of(view, p.get("dtype")))
+    return False
 
 
 # =============================================================================================================

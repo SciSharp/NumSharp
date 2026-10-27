@@ -335,9 +335,10 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// The number of float16 elements a strided run is gathered in at a time (<see cref="HalfArithRun"/>): two
-        /// 512-byte stack blocks, small enough to stay in L1 next to the destination run.
+        /// 512-byte stack blocks, small enough to stay in L1 next to the destination run. Internal so a caller of
+        /// <see cref="HalfArithRun"/> outside this file (np.sum's reduction iterator) sizes its blocks by it.
         /// </summary>
-        private const int HalfArithGatherBlock = 256;
+        internal const int HalfArithGatherBlock = 256;
 
         /// <summary>
         /// Strided / broadcast (Half,Half)→Half arithmetic (SimdChunk / General paths): the result is written
@@ -428,11 +429,22 @@ namespace NumSharp.Backends.Kernels
         /// <param name="stageA">A scratch block of <see cref="HalfArithGatherBlock"/> elements for the left operand.</param>
         /// <param name="stageB">A scratch block of <see cref="HalfArithGatherBlock"/> elements for the right operand.</param>
         /// <remarks>
-        /// The result is a fresh array, never an operand (the direct route allocates it), so reading the operands
-        /// ahead of the stores — a vector at a time, or a gathered block — cannot observe a write.
+        /// <para>
+        /// The direct route's result is a fresh array, never an operand (it allocates it), so reading the operands ahead
+        /// of the stores — a vector at a time, or a gathered block — cannot observe a write.
+        /// </para>
+        /// <para>
+        /// The one aliasing a caller may use: <paramref name="r"/> equal to <paramref name="a"/> with
+        /// <paramref name="sa"/> 1, the IN-PLACE form np.sum's reduction iterator runs (<c>o = o + x</c>, NumPy's
+        /// elementwise HALF_add call into the out). Every kernel this method calls reads a vector (8 lanes) or a block
+        /// (<see cref="HalfPowerBlock"/>) of left elements, then stores the results at exactly those indices, and only
+        /// then reads the next vector or block, so the in-place run is the out-of-place run. Any
+        /// other overlap (<paramref name="b"/> aliasing <paramref name="r"/>, or <paramref name="a"/> at another
+        /// stride) is not supported: a gathered block or a vector load could read a value already overwritten.
+        /// </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void HalfArithRun(
+        internal static unsafe void HalfArithRun(
             ushort* a, long sa, ushort* b, long sb, ushort* r, long n, BinaryOp op, ushort* stageA, ushort* stageB)
         {
             if (sa == 1 && sb == 1)

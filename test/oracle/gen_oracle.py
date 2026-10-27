@@ -8963,16 +8963,14 @@ def gen_nanvarstd(dtypes=None):
 #   M  order-sensitive values: float32 / float64 / complex128 / float16 offsets plus noise (129 / 1031 / 2049 elements,
 #      2-D C / F / transposed 3-D), int64 / uint64 near 2**62 (float64 rounding: slab vs innermost order)
 #   B  np.setbufsize(16 / 32): the buffered fills of a cast loop, flat and per axis
-# Carved (none excused):
-#   - an axis reduction over a view with a reversed axis whose sum is NOT order-free (np.sum's axis kernel walks memory
-#     order there, NumPy the logical order: finding 5, pinned by
-#     OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder); order-free = every value an integer in the loop
-#     and the largest possible sum inside the loop's exact-integer range;
-#   - a pinned row (the reduced axis innermost) longer than the buffer in a cast loop under np.setbufsize (X6, pinned by
-#     OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills);
-#   - a FLAT reduction of a float / complex operand with a broadcast (stride-0) axis whose sum is not order-free (np.sum's
-#     exact flat engine declines a broadcast operand, and the elementwise fold it falls back to is not NumPy's call
-#     schedule of one pairwise sum per row; pinned by OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule).
+# Carved (none excused): a pinned row (the reduced axis innermost) longer than the buffer in a cast loop under
+#   np.setbufsize, unless its sum is order-free (X6, pinned by
+#   OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills); order-free = every value an
+#   integer in the loop and the largest possible sum inside the loop's exact-integer range. Two more carves left on
+#   2026-10-27, when np.sum's routes over an operand with a reversed or a broadcast axis became NumPy's reduction
+#   iterator (plan np-layer-dtype-logic P2, the np.average family's D4-e): an axis reduction over a view with a reversed
+#   axis (16 cells, plan api-parameter-parity finding 5) and the FLAT reduction of a float / complex operand with a
+#   broadcast axis (24 cells, finding 10); their pins are Math/np.sum.ReversedBroadcast.Test.cs since.
 # Params: axis (int or null), keepdims, dtype (a NumPy dtype name or null) and, in section B, bufsize.
 
 MEAN_LOOPS = ["float16", "float32", "float64", "complex128", "int8", "uint8", "int32", "int64", "bool"]
@@ -9037,29 +9035,10 @@ def gen_mean_loops(dtypes=None):
     dtypes = ALL_DTYPES if dtypes is None else dtypes
     cases = []
     n = 0
-    carved = {"finding5": 0, "x6": 0, "broadcast": 0}
-
-    def reversed_axis(view):
-        return any(st < 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
-
-    def broadcast_axis(view):
-        return any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
+    carved = {"x6": 0}
 
     def emit(base, view, axis, keepdims, dt, ln, tag, bufsize=None):
         nonlocal n
-        loop = _mean_loop_of(view, dt)
-        # The broadcast flat residual (carved): a float / complex operand with a stride-0 axis, reduced flat in a float
-        # loop, unless the sum is order-free.
-        if axis is None and view.dtype.kind in "fc" and broadcast_axis(view) and not _mean_order_free(view, None, loop):
-            carved["broadcast"] += 1
-            return
-        # Finding 5 (carved): an axis reduction over a view with a reversed axis, unless its sum is order-free.
-        if axis is not None and reversed_axis(view) and view.ndim >= 2 \
-                and not (isinstance(axis, int) and -view.ndim <= axis < view.ndim
-                         and _mean_order_free(view, axis, loop)):
-            if isinstance(axis, int) and -view.ndim <= axis < view.ndim:
-                carved["finding5"] += 1
-                return
         params = {"axis": axis, "keepdims": keepdims, "dtype": dt}
         if bufsize is not None:
             params["bufsize"] = bufsize
@@ -9222,7 +9201,7 @@ def gen_mean_loops(dtypes=None):
                         carved["x6"] += 1
                         continue
                     emit(base, view, axis, False, dt, ln, f"B/{src}->{dt}", bufsize)
-    print(f"  mean_loops carved: finding 5 {carved['finding5']}, X6 {carved['x6']}, broadcast {carved['broadcast']}",
+    print(f"  mean_loops carved: X6 {carved['x6']}",
           file=sys.stderr)
     return cases
 
@@ -9244,10 +9223,11 @@ def gen_mean_loops(dtypes=None):
 #   B  np.setbufsize(16 / 32): the buffered fills of a cast loop with NaNs
 #   M  order-sensitive values (offsets plus noise, NaN every 7th; 129 / 1031 / 2049 elements; 2-D C / F / transposed)
 #   E  empty inputs; Z  0-d inputs with axis 0 / -1 / 1 (flat for an inexact input, np.mean's AxisError otherwise)
-# Carved (none excused): an integer / bool input is np.mean, so it inherits the mean_loops carves (finding 5: a reversed
-# view along an axis; finding 10: a broadcast operand reduced flat; X6), each unless order-free; an inexact input's
-# cast-loop rows longer than the buffer (X6). Params: axis (int or null), keepdims, dtype (a NumPy dtype name or null)
-# and, in section B, bufsize.
+# Carved (none excused): an inexact input's cast-loop rows longer than the buffer (X6). An integer / bool input is
+# np.mean, and until 2026-10-27 it inherited np.mean's two other carves (finding 5: a reversed view along an axis;
+# finding 10: a broadcast operand reduced flat), which left when np.sum's routes over an operand with a reversed or a
+# broadcast axis became NumPy's reduction iterator (plan np-layer-dtype-logic P2, D4-e). Params: axis (int or null),
+# keepdims, dtype (a NumPy dtype name or null) and, in section B, bufsize.
 
 
 def gen_nanmean(dtypes=None):
@@ -9255,26 +9235,10 @@ def gen_nanmean(dtypes=None):
     dtypes = ALL_DTYPES if dtypes is None else dtypes
     cases = []
     n = 0
-    carved = {"finding5": 0, "finding10": 0, "x6": 0}
-
-    def reversed_axis(view):
-        return any(st < 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
-
-    def broadcast_axis(view):
-        return any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape))
+    carved = {"x6": 0}
 
     def emit(base, view, axis, keepdims, dt, ln, tag, bufsize=None):
         nonlocal n
-        if view.dtype.kind in "biu":
-            # np.mean's route: its residuals, unless the sum is order-free.
-            loop = _mean_loop_of(view, dt)
-            valid_axis = isinstance(axis, int) and -view.ndim <= axis < view.ndim
-            if valid_axis and view.ndim >= 2 and reversed_axis(view) and not _mean_order_free(view, axis, loop):
-                carved["finding5"] += 1
-                return
-            if axis is None and broadcast_axis(view) and not _mean_order_free(view, None, loop):
-                carved["finding10"] += 1
-                return
         params = {"axis": axis, "keepdims": keepdims, "dtype": dt}
         if bufsize is not None:
             params["bufsize"] = bufsize
@@ -9452,7 +9416,7 @@ def gen_nanmean(dtypes=None):
             nanv = np.array(complex(np.nan, 0) if s == "complex128" else np.nan, dtype=s)
             for axis in (None, 0, -1):
                 emit(nanv, nanv, axis, True, None, "scalar_0d", f"Z/{s}/nan")
-    print(f"  nanmean carved: finding 5 {carved['finding5']}, finding 10 {carved['finding10']}, X6 {carved['x6']}",
+    print(f"  nanmean carved: X6 {carved['x6']}",
           file=sys.stderr)
     return cases
 

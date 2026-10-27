@@ -137,6 +137,15 @@ namespace NumSharp.Backends
                            && arr.size * IntegerMaxMagnitude(inT) <= 9007199254740992.0))
                     return MeanLikeNumPy(arr, null, keepdims, meanType, float16Result: false);
 
+                // A broadcast float or complex operand: _mean's statements as well. Its sum runs np.sum's route, which
+                // reduces a broadcast operand with NumPy's reduction iterator (one add-loop call per broadcast row, a
+                // dtype= loop's casts included); the fold below adds the elements in its own order and read the operand
+                // as its own dtype under a float16 / complex128 dtype= loop (plan api-parameter-parity finding 10, X14).
+                if (portable && shape.IsBroadcasted
+                    && (inT == NPTypeCode.Half || inT == NPTypeCode.Single || inT == NPTypeCode.Double || inT == NPTypeCode.Complex))
+                    return MeanLikeNumPy(arr, null, keepdims, typeCode ?? (inT == NPTypeCode.Half ? NPTypeCode.Single : meanType),
+                                         float16Result: MeanIsFloat16Result(arr, dtype));
+
                 var result = mean_elementwise_il(arr, typeCode);
                 var r = NDArray.Scalar(result);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(Shape.Adopt(ks)); }

@@ -169,6 +169,25 @@ namespace NumSharp.Backends
                     return counted;
             }
 
+            // An operand with a REVERSED or a BROADCAST axis (a stride <= 0 on an axis longer than 1) in an inexact loop:
+            // NumPy's reduction iterator keeps every axis in its logical order (DONT_NEGATE_STRIDES) and lets a stride-0
+            // operand abstain from its axis sort, so a reversed axis is added from its first logical element and a
+            // broadcast row is one call of the add loop. The axis kernels below walk memory order (plan
+            // api-parameter-parity finding 5, X12 for a broadcast axis), and the flat engine above declines a broadcast
+            // operand (finding 10: NumPy's per-row calls). ReduceAddThroughIterator is the port of that iterator with
+            // NumPy's add loops, a cast loop's buffer fills included. Integer and bool loops are exact in any order and keep
+            // their kernels; a decimal input, or a cast without dynamic code, keeps the routes the flat engine keeps them on.
+            if (@out is null && shape.size > 1 && NumPyAddReduce.SupportsLoop(loopType) && HasReversedOrBroadcastAxis(shape)
+                && inputType != NPTypeCode.Decimal && (inputType == loopType || DirectILKernelGenerator.Enabled))
+            {
+                var flags = new bool[shape.NDim];
+                if (axis_ is null)
+                    Array.Fill(flags, true);
+                else
+                    flags[NormalizeAxis(axis_.Value, shape.NDim)] = true;
+                return ReduceAddThroughIterator(arr, flags, keepdims, loopType);
+            }
+
             // A loop dtype that is neither the input's own nor its default accumulator: NumPy casts every element into it
             // before the add loop runs, so the cast copy is reduced in its own dtype (no kernel converts per element for
             // every such pair — see the remarks). The axis kernels' own widening paths are NOT the cast copy's order in
@@ -229,6 +248,23 @@ namespace NumSharp.Backends
             }
 
             return ExecuteAxisReduction(arr, axis, keepdims, outputType, @out, ReductionOp.Sum);
+        }
+
+        /// <summary>
+        ///     Whether some axis of <paramref name="shape"/> longer than 1 has a stride of 0 (a broadcast view) or a negative
+        ///     one (a reversed view): the layouts whose sum NumPy's reduction iterator orders differently from the axis
+        ///     kernels' memory walk and the flat engine's broadcast decline.
+        /// </summary>
+        /// <param name="shape">The operand's shape.</param>
+        /// <returns>True when such an axis exists; extent-1 axes never count (NumPy's iterator drops them).</returns>
+        private static bool HasReversedOrBroadcastAxis(Shape shape)
+        {
+            var dims = shape.dimensions;
+            var strides = shape.strides;
+            for (int d = 0; d < dims.Length; d++)
+                if (dims[d] > 1 && strides[d] <= 0)
+                    return true;
+            return false;
         }
 
         /// <summary>

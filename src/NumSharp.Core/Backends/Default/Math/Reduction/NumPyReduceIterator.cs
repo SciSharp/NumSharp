@@ -1154,7 +1154,54 @@ namespace NumSharp.Backends
                     }
                 }
 
+                // A broadcast run (stride 0) into a contiguous buffer is one value repeated: convert it once and replicate
+                // the converted bytes, as NumPy's stride-0 source copy loops do. Converting each copy gives the same bytes
+                // (the same conversion of the same value); the strided kernel cost a load and a store per element.
+                if (srcStrideBytes == 0 && dstStrideBytes == _dstSize && n > 1)
+                {
+                    Run(src, _srcSize, dst, _dstSize, 1);
+                    Replicate(dst, _dstSize, n);
+                    return;
+                }
+
                 _strided(src, srcStrideBytes, dst, dstStrideBytes, n);
+            }
+
+            /// <summary>
+            ///     Copies the element at <paramref name="dst"/> into the <paramref name="n"/> - 1 slots after it: a typed
+            ///     fill for the 1 / 2 / 4 / 8 / 16-byte elements of the dtypes, doubling block copies for any other size.
+            /// </summary>
+            /// <param name="dst">The first element, already written; the run is contiguous.</param>
+            /// <param name="size">The element size in bytes.</param>
+            /// <param name="n">The run's element count.</param>
+            private static void Replicate(byte* dst, int size, long n)
+            {
+                switch (size)
+                {
+                    case 1:
+                        new Span<byte>(dst, checked((int)n)).Fill(*dst);
+                        return;
+                    case 2:
+                        new Span<ushort>(dst, checked((int)n)).Fill(*(ushort*)dst);
+                        return;
+                    case 4:
+                        new Span<uint>(dst, checked((int)n)).Fill(*(uint*)dst);
+                        return;
+                    case 8:
+                        new Span<ulong>(dst, checked((int)n)).Fill(*(ulong*)dst);
+                        return;
+                    case 16:
+                        new Span<UInt128>(dst, checked((int)n)).Fill(*(UInt128*)dst);
+                        return;
+                }
+                // Doubling: [0, done) holds copies; append min(done, n - done) of them until the run is full.
+                long done = 1;
+                while (done < n)
+                {
+                    long take = Math.Min(done, n - done);
+                    Buffer.MemoryCopy(dst, dst + done * size, take * size, take * size);
+                    done += take;
+                }
             }
         }
     }

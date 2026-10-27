@@ -44,8 +44,9 @@ namespace NumSharp.Tests.Fuzz
 
         // Reductions (sum/prod/mean/min/max/ptp/var/std/all/any/anom/median/average) + count/argmin/
         // argmax(->array). Float sum/prod accumulation order is excused via the shared reduce branch
-        // (prefix-stripped); mean/var/std are held to NumPy's bits (plan api-parameter-parity A6) but for
-        // the reversed-view axis layout they inherit from np.sum (finding 5); the MASK is bit-exact.
+        // (prefix-stripped); mean/var/std/anom are held to NumPy's bits (plan api-parameter-parity A6, and on the
+        // reversed-view axis layout too since np.sum's reversed-axis route became NumPy's reduction iterator,
+        // 2026-10-27); the MASK is bit-exact.
         [TestMethod]
         [TestCategory("FuzzMatrix")]
         public void MaReduce() => RunMaCorpus("ma_reduce.jsonl");
@@ -58,8 +59,10 @@ namespace NumSharp.Tests.Fuzz
         ///     object NumPy returned (the masked singleton, a scalar, an array with nomask or with a mask array).
         /// </summary>
         /// <remarks>
-        ///     The cells that inherit np.sum's residuals (findings 5 and 10, X12) are carved by the generator
-        ///     (<c>gen_ma_oracle._mv_carved</c>), never excused here; a failure is a real divergence of the port.
+        ///     Nothing is carved and nothing is excused: a failure is a real divergence of the port. The 165 cells the
+        ///     generator carved until 2026-10-27 (the mean summing the data view on a layout np.sum summed in another
+        ///     order: findings 5 and 10, X12) are in the tier since np.sum's routes over an operand with a reversed or a
+        ///     broadcast axis became NumPy's reduction iterator.
         /// </remarks>
         [TestMethod]
         [TestCategory("FuzzMatrix")]

@@ -956,7 +956,7 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | unary hyperbolic/inverse-trig/angle: no Half kernel | sinh…arctan × {bool,i8,u8,f16} (+deg2rad/rad2deg×c128) × Threw | 0 | |
 | unary preserve-dtype pending: square/floor/ceil/trunc widen int→float64 | those 4 ops × Dtype | 78 | F3b |
 | ~~reduction result dtype differs (NEP50 accumulator / complex→real)~~ — **REMOVED 2026-10-06.** sum/prod/cumprod became bit-exact on dtype on every size on 2026-09-13, np. / ndarray. var / std / mean on 2026-10-05 (the 11 decimal `mean` cases with plan X9, the 18 empty means with the identity-seeded add reduction), and its last 88 cases — the masked mean of a float32 (float64 in NumPy) and two float32 `ma.var` slices — went with numpy.ma's statements (plan A6). It then excused nothing in any tier; a reduction's dtype divergence is red (the ma harness's own `MaDtypeExcuse` for `ma.median` / `ma.average` runs after the registry, unchanged) | — | 0 (88 on 2026-10-05) | #10 |
-| np.mean along an axis of a view with a reversed axis: np.sum's order there (plan `docs/plans/api-parameter-parity.md` finding 5, pinned by `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder`). np.mean left the summation blanket with plan X9, `ma.mean` and `ma.anom` with A6 (their nomask or all-False-mask path sums the view itself); this narrow branch keeps only the layout np.sum's own cases share (`IsReversedAxisReduction`; anom its own branch) | mean / ma.mean / ma.anom × an axis reduction of an operand with a negative stride × float-family result × Value | 5 (2026-10-06: 4 mean, 1 anom) | #10 |
+| ~~np.mean along an axis of a view with a reversed axis: np.sum's order there (plan `docs/plans/api-parameter-parity.md` finding 5)~~ — **REMOVED 2026-10-27.** np.sum's routes over an operand with a reversed or a broadcast axis are the port of NumPy's reduction iterator since then (plan `docs/plans/np-layer-dtype-logic.md` P2, the np.average family's D4-e), so the layout this branch kept for np.mean, `ma.mean` and `ma.anom` is held to NumPy's bits (`Mean_ReversedAndBroadcastLayouts_AreNotExcused` pins that no mean layout is excused; the test moved to `Math/np.sum.ReversedBroadcast.Test.cs`), and the flat classifier `IsExactFlatAddReduce` no longer leaves a broadcast operand out | — | 0 (5 on 2026-10-06: 4 mean, 1 anom) | #10 |
 | axis-reduction NaN propagation: axis SIMD min/max skips NaN (flat fixed) — DEAD since 2026-10-04: every hit it still had was a var/std one-element case (fixed 2026-10-05, np.var / np.std are NumPy's `_var`; the branch skips them now, `ma.var` / `ma.std` excepted), and no min/max case reaches it; removal candidate | min/max × axis≠null × all-NaN diffs | 0 (2026-10-05) | #10 |
 | bool min/max along axis diverges | min/max × Boolean × Value | 0 | #10 |
 | complex 1-D axis reduction throws (NDCoordinatesAxisIncrementor) — FIXED 2026-10-04 (the complex axis nansum is NumPy's composition, np.sum of the NaN-replaced array); both registry branches removed, now regression-guarded | (nan)reductions × complex 1-D × Threw | 0 | #10 |
@@ -987,12 +987,8 @@ rather than portable IEEE parity — the same status as the "Host-dependent valu
 | `gen_nanquantile` finite+NaN (no inf) | percentile interpolation across ±inf is ill-defined (inf−inf) | documented out-of-scope |
 | `_rs_carved` (`gen_reduce_start`) | 838 all-`-0.0` cells (1,506 at delivery, 862 after the identity-seeded add reduction fixed the sum / mean / average / nansum / nanmean / trapezoid / np.evaluate-sum cells; the 24 one-element std/var dtype cells joined the gate on 2026-10-05, when np.var / np.std became NumPy's `_var`, and the 56 nanstd/nanvar cells the same day, when they became NumPy's `nanvar`; 782 cells now), one rule per root cause: complex prod/nanprod of one element (np.evaluate's too); every median/nanmedian cell; flat cumsum/nancumsum; complex and N-D size-1 cumprod/nancumprod; dot/inner with a size-1 operand; einsum's zero-filled accumulator (`i,i->i`, `i,j->ij`) | `OpenBugsReductionTests.*` (each rule names its test) |
 | `gen_varstd` and `gen_nanvarstd` section B, "pinned row longer than the buffer" | 12 cells each: var/std (nanvar/nanstd) with `dtype=` (a cast loop) along the axis that is innermost in memory, `c_contiguous_2d` (8, 25) along axis 1 under `np.setbufsize(16)`. NumPy splits each 25-element row across two buffer fills; np.sum's cast-loop axis route sums it in one pairwise call (9 of the 12 differ by 1 ULP). An np.sum residual both sums of `_var` and of `nanvar` inherit (plan `docs/plans/api-parameter-parity.md` X6) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
-| `gen_mean_loops`, "finding 5" | 16 cells: np.mean along an axis of a view with a reversed axis whose sum is not order-free (some value cast to the loop is not an integer, or the largest possible sum leaves the loop's exact-integer range). NumPy adds in the view's logical order, np.sum's axis kernel in memory order (plan `docs/plans/api-parameter-parity.md` finding 5) | `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` |
 | `gen_mean_loops` section B, "pinned row longer than the buffer" | 5 cells: a cast-loop np.mean along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer, unless order-free (np.sum's X6 residual, as in the varstd tiers) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
-| `gen_mean_loops`, "broadcast" | 24 cells (12 differ by 1 ULP): the FLAT np.mean of a float / complex operand with a broadcast (stride-0) axis whose sum is not order-free. NumPy calls the add loop once per broadcast row (`out += pairwise(row)`); np.sum's exact flat engine declines a broadcast operand and the elementwise fold sums in its own order | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule` |
 | `gen_nanmean` section B, "pinned row longer than the buffer" | 5 cells: an inexact nanmean with `dtype=` (a cast loop) along the axis innermost in memory under `np.setbufsize(16 / 32)`, rows longer than the buffer (np.sum's X6 residual over the K-order copy) | `OpenBugsReductionTests.Sum_CastLoopAxis_RowLongerThanTheBuffer_SplitsAcrossFills` |
-| `gen_ma_oracle._mv_carved` (`ma_meanvar`), "finding5" | 38 cells: ma.mean / var / std / anom along an axis of a 2-D view with a reversed axis, without a mask or with an all-False one (`filled(0)` is the view itself then), whose mean's sum is not order-free (`_mv_order_free`: the elements as multiples of their lowest set bit, every partial sum exact) | `OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder` |
-| `gen_ma_oracle._mv_carved` (`ma_meanvar`), "broadcast" | 127 cells: the same functions over a broadcast operand reduced flat or along its stride-0 axis, without a mask or with an all-False one, unless order-free (plan finding 10 and X12). Replaying the tier uncarved (`gen_ma_oracle.py meanvar --uncarved <path>`), 64 of the 165 carved cells differ, every one of them float32 / float64 / complex128 on those layouts | `OpenBugsReductionTests.Sum_BroadcastOperand_Flat_IsNumPysCallSchedule`, `Sum_BroadcastOperand_Axis_IsNumPysOrder` |
 | `gen_viewflags_oracle._gap_of` (view_flags / out_flags / shape_args / array_args) | 444 cells under 30 gap ids since VO01 (np.linalg.multi_dot copying into an out= np.dot refuses) was fixed on 2026-10-26; 448 under 31 since VF27 (np.matvec / np.vecmat returning views) and VF01's np.matmul case were fixed the same day; 461 under 32 since VA01 (np.searchsorted's offset keys and sorter) was fixed on 2026-10-25; 465 under 33 after the numpy.char phase 2 of 2026-10-15 (VF31 and VF26's getfield part fixed); 474 under 34 after the strings rebase of 2026-10-12 (VF03, VF05, VF11, VF18, VF23-VF25, VF28, VF33, VF35, VF39 and VF40 fixed; VF01, VF08, VF12, VF26 and VF32 narrowed); 705 cells under 46 gap ids before it (VF15, np.asmatrix returning its operand, was fixed with NDMatrix on 2026-10-09), written to `corpus/gaps/<tier>_gaps.jsonl` instead of the gate: the returned object's flags / strides / view-copy-identity facet where NumSharp differs (the other VF ids, VS01, VA02, VA04; VO01 is fixed), and silent WRONG VALUES from C-contiguous views at a non-zero offset (VA03 where, VA05 ldexp, VF22 a[:, idx] throws, VF30 nansum / nanprod; VA01 searchsorted, VF39 repeat and VF40 unique + the set routines are fixed). The carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests` `*_KnownGaps` (per-gap open counts), `OpenBugs.ViewFlags.cs` (18 public-call repros, 10 of them still open; a fixed gap's pin stays untagged) |
 | `gen_relayout_oracle._gap_of` (relayout / relayout_host) | 20 cells under 2 gap ids since RL01 was fixed on 2026-10-25 (35 under 3 after RL07 was fixed on 2026-10-24; 75 under 4 after the strings rebase of 2026-10-12 fixed RL04, RL05 and RL06; 179 under 7 at delivery), written to `corpus/gaps/relayout_gaps.jsonl`: the C-contiguous-offset misreads RL01 (searchsorted, digitize, complex / float16 isin; fixed), RL02 (where, float16 / complex nancumsum / nancumprod), RL03 (ldexp), RL04 (unique, unique_values, the set routines; fixed), RL05 (repeat of a 0-d offset view; fixed), and the empty-operand early returns RL06 (comparison operators; fixed) and RL07 (logaddexp / logaddexp2; fixed). Drawn by emulating each bug (the misread window, the early return), so the carve is exact; also DROPPED (not carved): ufunc / where variants whose answer depends on NEP50's weak 0-d promotion (the registry's NEP50 branches document that divergence in every other tier), and the flat np.mean of a broadcast float operand that is not order-free (the mean_loops tier owns that residual) | `FuzzCorpusTests.Relayout_KnownGaps` (both verdicts), `OpenBugs.Relayout.cs` (8 public-call repros, 3 of them still open) |
 | `gen_surface_oracle._gap_of` (surface) | 204 cells under 15 gap ids since the strings rebase of 2026-10-12 fixed SU1, SU25-SU34, SU40, SU41, SU42 and SU4's 'auto' / 'fd', SU17 (dtype.newbyteorder's explicit byte order) was fixed on 2026-10-14 and the port of NumPy's dragon4.c fixed SU6-SU9, SU18 and SU19 on 2026-10-18 (SU5 found fixed by 287c3e2e the same day; 986 cells under 42 ids before), and the scan accumulator cast fixed SU38 on 2026-10-24 (the same regeneration found SU39 fixed by f44c9579), and np.linalg.cross as np.cross fixed SU2 on 2026-10-26 (the same regeneration found SU3 and SU4 fixed by 98ea7bcf, np.histogram's complex statements), written to `corpus/gaps/surface_gaps.jsonl`: error texts and refusals (SU10, SU11, SU15, SU16, SU22, SU35), silent wrong values (SU12-SU14 finfo, SU20 broadcast.iters), reporting (SU21, SU23, SU24) and the cumulative_* aliases (SU36 / SU37). Drawn by fixed predicates and models where a bug is not a fixed set (the edgeitems=0 format from the last element), so the carve is exact: replayed uncarved, every carved cell diverges and no kept cell does | `FuzzCorpusTests.Surface_KnownGaps`, `OpenBugs.Surface.cs` (36 public-call repros, 22 of them untagged regression pins) |
@@ -1270,8 +1266,8 @@ decide its bits:
   cases diverge before the fix (plan `docs/plans/api-parameter-parity.md`, item X5).
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the tier's valueclass (`sum_identity`). It also
-excuses nothing for a FLAT float `sum` / `mean` over a non-broadcast operand in any other tier
-(`IsExactFlatAddReduce`). A signed-zero flip of `sum` / `mean` / `nansum` / `nanmean` no longer reaches the
+excuses nothing for a FLAT float `sum` / `mean` in any other tier (`IsExactFlatAddReduce`; an operand with a broadcast
+axis was left out until 2026-10-27, when np.sum began reducing it through the port of NumPy's reduction iterator). A signed-zero flip of `sum` / `mean` / `nansum` / `nanmean` no longer reaches the
 summation-order or nan-family blankets (`IsIdentitySumSignedZeroFlip`), because an identity-seeded sum cannot be
 `-0.0` in any summation order. `FuzzCorpusTests.SumIdentity` replays the tier.
 
@@ -1397,7 +1393,7 @@ exist. The nanreduce tier hid all of it under the nan-family branches: 841 shape
 
 ### np.mean as NumPy's `_mean` (`mean_loops` tier) — 2026-10-05
 
-`mean_loops.jsonl` (`gen_oracle.py mean_loops`, 6,550 cases, floor 6,400) gates `np.mean` (and `ndarray.mean`) as
+`mean_loops.jsonl` (`gen_oracle.py mean_loops`, 6,590 cases, floor 6,400) gates `np.mean` (and `ndarray.mean`) as
 NumPy 2.4.2's `_methods._mean`:
 
 1. `rcount = _count_reduce_items(arr, axis)`: the reduced extent as an `np.intp` (a STRONG int64). It normalizes the
@@ -1426,10 +1422,12 @@ NumPy 2.4.2's `_methods._mean`:
 
 Char rides through the uint16 proxy (float64 like an unsigned integer). **Bit-exact, 0 excused.** `MisalignedRegistry`
 returns null for the `meanloops` valueclass, and `mean` joined `ByteExactArithmeticUnaryOps` and left the reduction
-dtype, axis-NaN and summation branches, so no branch excuses it in any tier except the narrow finding-5 row of Table 1
-(`Mean_NoDivergenceIsExcused`, `Mean_ReversedViewAxis_IsTheOnlyExcusedLayout`, `MaMean_KeepsTheReductionBlankets_OnlyForMaIds`
-pin it). `FuzzCorpusTests.MeanLoops` replays the tier. **The carves** (Table 2): finding 5 (16 cells), X6 (5), and the
-broadcast flat order (24), each np.sum's own residual.
+dtype, axis-NaN and summation branches, so no branch excuses it in any tier (`Mean_NoDivergenceIsExcused` and
+`Mean_ReversedAndBroadcastLayouts_AreNotExcused` pin it; the narrow finding-5 row of Table 1 left on 2026-10-27).
+`FuzzCorpusTests.MeanLoops` replays the tier. **The carve** (Table 2): X6 (5 cells), np.sum's own residual. Two more
+carves left on 2026-10-27, when np.sum's routes over an operand with a reversed or a broadcast axis became the port of
+NumPy's reduction iterator (plan `docs/plans/np-layer-dtype-logic.md` P2, D4-e): finding 5 (16 cells, a reversed view
+along an axis) and the broadcast flat order (24 cells, finding 10). Their cells are in the tier since (6,550 before).
 
 **What it replaced** (fixed 2026-10-05, plan `docs/plans/api-parameter-parity.md` X9, found while porting nanmean, A7).
 np.mean along an axis ran its own kernel: a cast loop read each element as a double and summed in one sequential pass
@@ -1460,8 +1458,8 @@ nine loops), S (special values in one element, a length-1 axis and a row), B (`n
 layouts), E (empty inputs), Z (0-d inputs with an axis). Char rides through the uint16 proxy (np.mean's route).
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `nanmean` valueclass; `nanmean` left `NanReduceOps`
 and joined `ByteExactArithmeticUnaryOps` (`NanMean_NoDivergenceIsExcused` pins it). `FuzzCorpusTests.NanMean` replays
-the tier. **The carve:** 5 X6 cells in section B (Table 2). An integer input inherits np.mean's carves (finding 5, the
-broadcast flat schedule) unless order-free; the tier's integer values are, so none was needed.
+the tier. **The carve:** 5 X6 cells in section B (Table 2). An integer input is np.mean's route, whose finding-5 and
+broadcast carves left on 2026-10-27; the tier's integer values were order-free, so it never carved one.
 
 **What it replaced** (fixed 2026-10-05, plan `docs/plans/api-parameter-parity.md` A7). The old implementation ran its own
 struct kernels in double: an integer or bool input dropped keepdims for a flat reduction, float16 / float32 were summed
@@ -1470,7 +1468,7 @@ nanreduce tier hid it under the nan-family branches: 117 shape and 45 value case
 
 ### numpy.ma's mean / var / std / anom (`ma_meanvar` tier) — 2026-10-06
 
-`ma_meanvar.jsonl` (`gen_ma_oracle.py meanvar`, 26,379 cases, floor 21,000) gates `np.ma.mean` / `np.ma.var` /
+`ma_meanvar.jsonl` (`gen_ma_oracle.py meanvar`, 26,544 cases, floor 21,000) gates `np.ma.mean` / `np.ma.var` /
 `np.ma.std` / `np.ma.anom` as numpy.ma's statements (`numpy/ma/core.py`, plan `docs/plans/api-parameter-parity.md` A6):
 without a mask, ndarray's `_mean` / `_var` run on the masked array (their `true_divide(out=...)` meets
 `MaskedArray.__array_wrap__`'s divide domain); with a mask (an all-False one too), `sum * 1. / count` through
@@ -1496,9 +1494,13 @@ mean that does not broadcast; std with two of them, which it ignores), S (non-fi
 E (empty inputs), Z (0-d inputs with an axis, out-of-range axes).
 
 **Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `mameanvar` valueclass and `CompareMasked` runs none
-of the ma harness's own excuses for it (`strict`); `ma_reduce` holds the four functions strict too, but for the
-finding-5 branch (3 cases). The carve (Table 2): 165 cells whose mean sums the operand view on a layout np.sum still
-orders differently. **Planted bugs:** 14 edits to the port (the mask not replaced, squares into a C-order buffer, the
+of the ma harness's own excuses for it (`strict`); `ma_reduce` holds the four functions strict too, its 3 finding-5
+cases included since 2026-10-27. **Nothing is carved** since then: the 165 cells carved until 2026-10-27 (26,379
+cases before), whose mean sums the operand view on a layout np.sum summed in another order (a reversed view along an
+axis, finding 5: 38; a broadcast operand reduced flat or along its stride-0 axis, finding 10 and X12: 127), are in
+the tier since np.sum's routes over those operands became the port of NumPy's reduction iterator (plan
+`docs/plans/np-layer-dtype-logic.md` P2, D4-e), and the carve's machinery (`_mv_carved`, `--uncarved`) left with them.
+**Planted bugs:** 14 edits to the port (the mask not replaced, squares into a C-order buffer, the
 domain fill 0, no `* 1.`, no put-back, no non-finite square mask, a strong `mean=` without a mask, `cnt < 0`, C-order
 intermediates, no mask shrink, no float16 cast back, anom expanding axis 0, no zero-count `masked`, no domain without a
 mask), each killed by the tier (2 to 3,197 cases) and separately by `Ma/np.ma.meanvar.NumPyPort.Test.cs`.
@@ -1862,10 +1864,10 @@ NumSharp a `byte[]`).
 
 | File | Cases | Replayed by |
 |---|---|---|
-| `relayout.jsonl` | 15,108 variants of 329 op keys from 47 portable tiers (14,964 until the 104 RL04-RL06 cases returned on 2026-10-12, 15,068 until RL07's 40 returned on 2026-10-24) | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
+| `relayout.jsonl` | 15,117 variants of 297 op keys from 40 portable tiers (14,964 until the 104 RL04-RL06 cases returned on 2026-10-12, 15,068 until RL07's 40 returned on 2026-10-24, 15,123 until the regeneration of 2026-10-27, which dropped the broadcast-mean rule and met the source tiers changed since 2026-10-25: 43 variants added, 49 cells retired because their own tiers cover them now) | `FuzzCorpusTests.Relayout` (the source tiers' rules) |
 | `relayout_host.jsonl` | 1,728 variants of the host-libm tiers | `FuzzCorpusTests.RelayoutHost` (`RunHostLibmCorpus`) |
-| both | 16,776 compared, 60 skipped (16,632 at delivery) | `FuzzCorpusTests.RelayoutLayoutInvariance` (no excuse table) |
-| `gaps/relayout_gaps.jsonl` | 35 carved under 3 ids (179 under 7 until 2026-10-12, 75 under 4 until 2026-10-24) | `Relayout_KnownGaps` (`[OpenBugs]`) |
+| both | 16,785 compared, 60 skipped (16,632 at delivery) | `FuzzCorpusTests.RelayoutLayoutInvariance` (no excuse table) |
+| `gaps/relayout_gaps.jsonl` | 20 carved under 2 ids, RL02 and RL03 (179 under 7 until 2026-10-12, 75 under 4 until 2026-10-24, 35 under 3 until RL01 was fixed on 2026-10-25) | `Relayout_KnownGaps` (`[OpenBugs]`) |
 
 **Two validation holes closed.** (1) A variant inherits its source tier's excuses, and an unbounded excuse swallows a
 layout misread as readily as the divergence it was written for: the "[known bug]" `repeat` branch excused five 0-d
@@ -1878,8 +1880,9 @@ registry's two NEP50 0-d branches excuse ANY dtype or value difference of a mult
 they hid `np.logaddexp` returning its empty int32 operand where NumPy returns float64. The relayout tiers are exempt
 from them (`MisalignedRegistry.IsRelayoutCase`); instead the generator drops every ufunc / np.where variant whose
 NumPy answer changes when its 0-d operands become Python scalars (the documented weak-promotion divergence), so a
-difference left there is real. It also drops the flat np.mean of a broadcast float operand that is not order-free
-(the mean_loops tier owns that residual and drops the same cells).
+difference left there is real. Until 2026-10-27 it also dropped the flat np.mean of a broadcast float operand that
+was not order-free (finding 10, owned by the mean_loops tier); that residual is fixed (plan
+`docs/plans/np-layer-dtype-logic.md` P2, D4-e) and the rule left with it.
 
 **Harness change.** An empty operand descriptor that carries a buffer is rebuilt as an empty VIEW over it
 (`FuzzCorpus.Reconstruct`; it used to be a fresh empty array whatever the descriptor said). That made 176 existing

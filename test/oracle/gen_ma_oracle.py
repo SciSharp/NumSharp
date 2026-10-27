@@ -823,21 +823,17 @@ def gen_ma_extras():
 # (non-finite, huge, -0.0, integer extremes); M sizes where the pairwise order of the sums shows (130 / 1031 elements,
 # a 19x13 block in C, F and a permuted 3-D layout); E empty inputs; Z 0-d inputs with an axis and out-of-range axes.
 #
-# Carved (_mv_carved, counted per rule): a case whose mean sums the operand VIEW itself, because the operand has no
-# mask or an all-False one (filled(0) returns the data unchanged then; a mask with a True slot makes a K-order copy,
-# whose forward strides np.sum walks in NumPy's order), on a layout np.sum still sums in another order:
-#   finding5  - an axis reduction over a view with a reversed axis and several outputs (plan finding 5,
-#               OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder);
-#   broadcast - a broadcast operand reduced flat (plan finding 10, Sum_BroadcastOperand_Flat_IsNumPysCallSchedule) or
-#               along a stride-0 axis (plan X12, Sum_AlongBroadcastAxis_IsNumPysOrder);
-# each only where that sum is not exact in every order (_mv_order_free).
+# Nothing is carved. Until 2026-10-27 the generator left out the 165 cells whose mean sums the operand VIEW itself (no
+# mask, or an all-False one: filled(0) returns the data unchanged then) on a layout np.sum summed in another order: an
+# axis reduction over a view with a reversed axis (38 cells, plan api-parameter-parity finding 5) and a broadcast
+# operand reduced flat or along its stride-0 axis (127 cells, finding 10 and X12). Those routes are NumPy's reduction
+# iterator since then (plan np-layer-dtype-logic P2, the np.average family's D4-e), so the cells are in the tier, and
+# the carve's machinery (the order-free test, the --uncarved replay) left with them.
 # ---------------------------------------------------------------------------------------------
 MV_DTYPES = ["bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64",
              "float16", "float32", "float64", "complex128"]
 # The dtype= loops of section T: every kind of arithmetic a loop selects (float widths, complex, integer widths, bool).
 MV_LOOPS = ["float16", "float32", "float64", "complex128", "int32", "int64", "uint8", "bool"]
-# The largest integer each float loop holds exactly: a float sum of integers inside it is exact in every order.
-_MV_EXACT_INT = {"float16": 2.0 ** 11, "float32": 2.0 ** 24, "float64": 2.0 ** 53, "complex128": 2.0 ** 53}
 # A mean= argument left out (None is a valid NumPy value for nothing here, so a sentinel marks "not passed").
 _MV_NO_MEAN = object()
 
@@ -938,74 +934,6 @@ def _mv_expected(r):
     return e
 
 
-def _mv_order_free(view, axis, loop):
-    """Whether np.sum(view, axis, dtype=loop) is exact in every summation order: an integer / bool loop (modular add,
-    logical OR), or a float loop where every element cast to it is finite and every partial sum is representable. The
-    elements are all multiples of 2**E (E: the exponent of the lowest set bit over every element), so every partial sum
-    is a multiple of 2**E no larger than extent * max|x|; with K = max|x| / 2**E, extent * K <= 2**precision makes every
-    partial sum exact, and then no addition rounds in any order. (gen_oracle._mean_order_free, generalized from integers
-    to any binary scale for this generator's carve: a float16 mean sums in float32, where such sums are exact.)"""
-    if np.dtype(loop).kind in "biu" or view.size == 0:
-        return True
-    with warnings.catch_warnings(), np.errstate(all="ignore"):
-        warnings.simplefilter("ignore")
-        v = view.astype(loop)
-        parts = [v.real, v.imag] if np.dtype(loop).kind == "c" else [v]
-        extent = view.size if axis is None else view.shape[axis]
-        for p in parts:
-            p64 = np.asarray(p, dtype=np.float64).ravel()
-            if not np.all(np.isfinite(p64)):
-                return False
-            nz = p64[p64 != 0]
-            if nz.size == 0:
-                continue
-            mant, exp = np.frexp(np.abs(nz))                           # |x| = mant * 2**exp, 0.5 <= mant < 1
-            ints = (mant * 2.0 ** 53).astype(np.int64)                  # the 53-bit significand as an integer
-            low = np.log2((ints & -ints).astype(np.float64)).astype(np.int64)   # its trailing zero bits
-            e_min = int(np.min(exp - 53 + low))                          # every element is a multiple of 2**e_min
-            k = float(np.max(np.abs(nz))) / 2.0 ** e_min                 # max|x| in units of 2**e_min (exact)
-            if k * extent > _MV_EXACT_INT[np.dtype(loop).name]:
-                return False
-            # A partial sum past the loop's range overflows in some orders and not in others (inf - inf is nan).
-            if float(np.max(np.abs(nz))) * extent > float(np.finfo(np.dtype(loop)).max):
-                return False
-    return True
-
-
-def _mv_sum_loops(view, dtype, op, has_mask):
-    """The loop dtypes of the sums that walk the operand view: the mean's (numpy.ma's masked mean and ndarray's _mean:
-    dtype=, else float64 for bool / integers, float32 for float16, else the input's) and, for var / std without a
-    mask, _var's first sum (dtype=, else float64 for bool / integers, else the input's: float16 sums in float16)."""
-    k = view.dtype.kind
-    if dtype is not None:
-        return [np.dtype(dtype).name]
-    loops = ["float64" if k in "biu" else ("float32" if view.dtype == np.float16 else view.dtype.name)]
-    if op in ("var", "std") and not has_mask:
-        loops.append("float64" if k in "biu" else view.dtype.name)
-    return loops
-
-
-def _mv_carved(view, mask, axis, dtype, op):
-    """The np.sum residual a case inherits ("finding5" / "broadcast", see the section header), or None."""
-    if mask is not None and mask.any():
-        return None                       # filled(0) is a forward K-order copy: np.sum walks it in NumPy's order
-    if view.ndim == 0 or view.size == 0:
-        return None
-    ax = axis
-    if ax is not None:
-        if not -view.ndim <= ax < view.ndim:
-            return None                   # NumPy raises before any sum
-        ax %= view.ndim
-    if all(_mv_order_free(view, ax, loop) for loop in _mv_sum_loops(view, dtype, op, mask is not None)):
-        return None
-    if ax is not None and view.ndim >= 2 and any(st < 0 and sh > 1 for st, sh in zip(view.strides, view.shape)):
-        return "finding5"
-    if any(st == 0 and sh > 1 for st, sh in zip(view.strides, view.shape)):
-        if ax is None or (view.strides[ax] == 0 and view.shape[ax] > 1):
-            return "broadcast"
-    return None
-
-
 def _mv_call(op, m, params, mean_obj):
     """NumPy's call for one case: np.ma.<op>(m, axis=, dtype=, ddof=, keepdims=, mean=) with only the keywords the
     case sets (keepdims only when True; ddof always for var / std; mean only when a form is given)."""
@@ -1035,31 +963,13 @@ def _mv_axes(view, last=True):
     return axes
 
 
-def gen_ma_meanvar(carve=True):
-    """ma.mean / ma.var / ma.std / ma.anom cases (valueclass "mameanvar"); see the section header.
-
-    carve: True (the committed tier) leaves out the cells _mv_carved names; False emits them too, for a check that
-    every carved cell is one the replay gets wrong for the named reason (python gen_ma_oracle.py meanvar --uncarved
-    <path>).
-    """
+def gen_ma_meanvar():
+    """ma.mean / ma.var / ma.std / ma.anom cases (valueclass "mameanvar"); see the section header."""
     cases, n = [], _N()
-    carved = {"finding5": 0, "broadcast": 0}
 
     def emit(op, base, view, mask, params, ln, tag, mean=None):
         """Record one case. `mean` is None (no mean=) or (param descriptor, NumPy object, extra operand or None)."""
         mean_param, mean_obj, extra = (None, _MV_NO_MEAN, None) if mean is None else mean
-        if carve and mean is None:
-            # A given mean= replaces the computed mean (var's masked path) or reaches _var as given (nomask path), so
-            # no sum walks the view in the mean's loop; only a computed mean inherits np.sum's order.
-            rule = _mv_carved(view, mask, params.get("axis"), params.get("dtype"), op)
-            if rule is not None:
-                carved[rule] += 1
-                return
-        if carve and mean is not None and op == "std":
-            rule = _mv_carved(view, mask, params.get("axis"), params.get("dtype"), op)
-            if rule is not None:          # std ignores mean=: its variance computes the mean
-                carved[rule] += 1
-                return
         p = dict(params)
         if mean_param is not None:
             p["mean"] = mean_param
@@ -1281,7 +1191,6 @@ def gen_ma_meanvar(carve=True):
                 for op in ("mean", "var", "std", "anom"):
                     emit(op, b2, b2, mask, {"axis": ax}, "c_contiguous_2d", f"Z/{s}.{mk}")
 
-    print(f"  (ma_meanvar carved: {carved})")
     return cases
 
 
@@ -2237,10 +2146,6 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     corpus_dir = os.path.normpath(os.path.join(here, "..", "NumSharp.Tests.Oracle", "Fuzz", "corpus"))
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
-    if mode == "meanvar" and len(sys.argv) > 3 and sys.argv[2] == "--uncarved":
-        # The carve check: every cell, carved ones included, written to the given path (never the corpus).
-        write_jsonl(os.path.abspath(sys.argv[3]), gen_ma_meanvar(carve=False))
-        return
     tiers = TIERS.keys() if mode == "all" else [mode]
     for t in tiers:
         if t not in TIERS:

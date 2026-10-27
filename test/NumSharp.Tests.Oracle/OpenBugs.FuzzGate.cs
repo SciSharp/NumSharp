@@ -415,52 +415,35 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        /// The one mean layout still excused: an axis reduction over a view with a REVERSED axis, which inherits np.sum's
-        /// order there (plan api-parameter-parity finding 5, pinned by
-        /// <c>OpenBugsReductionTests.Sum_ReversedViewAxis_WalksTheLogicalOrder</c>). The same values over a forward view
-        /// are not excused. <c>ma.mean</c> and <c>ma.anom</c> share the branch since plan item A6: with nomask or an
-        /// all-False mask numpy.ma sums the data view itself, so they meet np.sum's residual on the same layout.
+        /// No mean layout is excused any more. The last one, an axis reduction over a view with a REVERSED axis (plan
+        /// api-parameter-parity finding 5), left with np.sum's reversed-axis route, the port of NumPy's reduction iterator
+        /// since 2026-10-27 (pinned by <c>np_sum_ReversedBroadcast_Tests.Sum_ReversedViewAxis_WalksTheLogicalOrder</c>);
+        /// <c>ma.mean</c> and <c>ma.anom</c>, which sum the data view itself with nomask or an all-False mask, are held to
+        /// NumPy's bits on that layout too. The FLAT sum and mean of an operand with a broadcast axis (finding 10) take the
+        /// same iterator and are no longer left out of the exact flat classifier.
         /// </summary>
         [TestMethod]
-        public void Mean_ReversedViewAxis_IsTheOnlyExcusedLayout()
+        public void Mean_ReversedAndBroadcastLayouts_AreNotExcused()
         {
             double v = 1.2345;
-            var reversed = WithAxis(Case("mean", ("float32", new long[] { 4, 5 })), 0);
-            reversed.Operands[0].Strides = new long[] { -5, -1 };
-            reversed.Operands[0].Offset = 19;
-            MisalignedRegistry.Classify(reversed, DivergenceKind.Value, BitConverter.GetBytes(v),
-                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
-                .Should().Contain("finding 5", "a reversed view along an axis is np.sum's open order residual");
-            var forward = WithAxis(Case("mean", ("float32", new long[] { 4, 5 })), 0);
-            MisalignedRegistry.Classify(forward, DivergenceKind.Value, BitConverter.GetBytes(v),
-                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
-                .Should().BeNull("a forward view has no residual left");
-            var flatReversed = Case("mean", ("float32", new long[] { 4, 5 }));
-            flatReversed.Operands[0].Strides = new long[] { -5, -1 };
-            flatReversed.Operands[0].Offset = 19;
-            MisalignedRegistry.Classify(flatReversed, DivergenceKind.Value, BitConverter.GetBytes(v),
-                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
-                .Should().BeNull("the flat mean of a reversed view runs the exact flat engine");
-            // ma.mean shares it (A6): with nomask or an all-False mask numpy.ma sums the data view itself.
-            var maReversed = WithAxis(Case("mean", ("float32", new long[] { 4, 5 })), 0);
-            maReversed.Id = "ma.mean/selftest";
-            maReversed.Operands[0].Strides = new long[] { -5, -1 };
-            maReversed.Operands[0].Offset = 19;
-            MisalignedRegistry.Classify(maReversed, DivergenceKind.Value, BitConverter.GetBytes(v),
-                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
-                .Should().Contain("finding 5", "ma.mean of a reversed view sums it through np.sum");
-            var maAnom = WithAxis(Case("anom", ("float32", new long[] { 4, 5 })), 0);
-            maAnom.Id = "ma.anom/selftest";
-            maAnom.Operands[0].Strides = new long[] { -5, -1 };
-            maAnom.Operands[0].Offset = 19;
-            MisalignedRegistry.Classify(maAnom, DivergenceKind.Value, BitConverter.GetBytes(v),
-                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
-                .Should().Contain("finding 5", "ma.anom subtracts that mean");
-            var maAnomForward = WithAxis(Case("anom", ("float32", new long[] { 4, 5 })), 0);
-            maAnomForward.Id = "ma.anom/selftest";
-            MisalignedRegistry.Classify(maAnomForward, DivergenceKind.Value, BitConverter.GetBytes(v),
-                BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
-                .Should().BeNull("ma.anom of a forward view is numpy.ma's statements bit for bit");
+            foreach (var (op, id) in new[] { ("mean", "selftest/mean"), ("mean", "ma.mean/selftest"), ("anom", "ma.anom/selftest") })
+            {
+                var reversed = WithAxis(Case(op, ("float32", new long[] { 4, 5 })), 0);
+                reversed.Id = id;
+                reversed.Operands[0].Strides = new long[] { -5, -1 };
+                reversed.Operands[0].Offset = 19;
+                MisalignedRegistry.Classify(reversed, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"{id} along an axis of a reversed view adds in NumPy's order");
+            }
+            foreach (var op in new[] { "mean", "sum" })
+            {
+                var broadcast = Case(op, ("float64", new long[] { 4, 5 }));
+                broadcast.Operands[0].Strides = new long[] { 0, 1 };
+                MisalignedRegistry.Classify(broadcast, DivergenceKind.Value, BitConverter.GetBytes(v),
+                    BitConverter.GetBytes(UlpUp(v)), NPTypeCode.Double, OneDiff)
+                    .Should().BeNull($"the flat {op} of a broadcast operand is NumPy's add.reduce through its reduction iterator");
+            }
         }
 
         /// <summary>

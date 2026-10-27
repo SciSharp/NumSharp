@@ -315,7 +315,9 @@ namespace NumSharp.Tests.Fuzz
                 return null;
             // mean_loops.jsonl (np.mean as NumPy's _mean, plan api-parameter-parity X9: every layout, dtype and dtype= loop,
             // empty and 0-d inputs, special values, order-sensitive sizes, np.setbufsize fills) is held to ZERO excuses too;
-            // the cells that inherit np.sum's residuals (finding 5, X6) are carved by the generator, each pinned.
+            // the cells that inherit np.sum's X6 residual (a cast-loop row longer than the buffer) are carved by the
+            // generator, pinned. Its finding-5 and finding-10 carves (a reversed view along an axis, a broadcast operand
+            // reduced flat) left on 2026-10-27, when np.sum's routes over those operands became NumPy's reduction iterator.
             if (c.Valueclass == "meanloops")
                 return null;
             // nanmean.jsonl (np.nanmean as NumPy's nanmean, plan api-parameter-parity A7: every layout, dtype, NaN pattern
@@ -324,8 +326,9 @@ namespace NumSharp.Tests.Fuzz
                 return null;
             // ma_meanvar.jsonl (np.ma.mean / var / std / anom as numpy.ma's statements, plan api-parameter-parity A6: every
             // layout, dtype, mask class, ddof, dtype= loop and mean= form, special values, empty and 0-d inputs, NumPy's
-            // errors) is held to ZERO excuses too; the cells that inherit np.sum's residuals (findings 5 and 10, X12) are
-            // carved by the generator (gen_ma_oracle._mv_carved), each pinned.
+            // errors) is held to ZERO excuses too, and nothing is carved since 2026-10-27: the 165 cells gen_ma_oracle carved
+            // until then (the mean summing the data view on a reversed or a broadcast layout, findings 5 and 10, X12) are in
+            // the tier since np.sum's routes over those operands became NumPy's reduction iterator.
             if (c.Valueclass == "mameanvar")
                 return null;
             // ma_setops.jsonl (numpy.ma's arraysetops as NumPy's statements: unique / in1d / isin / intersect1d / setxor1d /
@@ -427,9 +430,10 @@ namespace NumSharp.Tests.Fuzz
             if (c.Valueclass == "negzero")
                 return null;
 
-            // The FLAT np.sum / np.mean of a float loop over a non-broadcast operand is NumPy's add.reduce bit for bit
-            // (NumPyAddReduce, Default.Reduction.Add.Exact.cs: the identity start, NpyIter's call schedule over the
-            // operand's layout, a pairwise sum per call, _mean's loop dtype and its float64 division by the count), so
+            // The FLAT np.sum / np.mean of a float loop is NumPy's add.reduce bit for bit (NumPyAddReduce,
+            // Default.Reduction.Add.Exact.cs: the identity start, NpyIter's call schedule over the operand's layout, a
+            // pairwise sum per call, _mean's loop dtype and its float64 division by the count; an operand with a broadcast
+            // axis through the port of NumPy's reduction iterator since 2026-10-27, Default.Reduction.Add.Axes.cs), so
             // no branch below describes a divergence it may have. The summation-order blanket used to excuse these
             // cases while the flat route was a multi-accumulator fold; a value or dtype difference is now a real bug.
             if (IsExactFlatAddReduce(c, tc))
@@ -900,16 +904,11 @@ namespace NumSharp.Tests.Fuzz
                 // bool min/max along an axis returns True where NumPy returns False.
                 if (kind == DivergenceKind.Value && (c.Op == "min" || c.Op == "max") && tc == NPTypeCode.Boolean)
                     return "bool min/max along axis diverges [known bug]";
-                // (X9) np.mean along an axis of a view with a REVERSED axis inherits np.sum's order there (plan
-                //      api-parameter-parity finding 5): NumPy walks the reversed axis in logical order, the axis kernel in
-                //      memory order, which shows where the values cancel. Everything else of np.mean is NumPy's _mean bit
-                //      for bit (plan item X9), so the unbounded summation blanket below no longer takes mean: only this
-                //      layout, which np.sum's own cases (still under the blanket) share. ma.mean (prefix stripped)
-                //      reaches it too since A6: with nomask or an all-False mask numpy.ma sums the data view itself
-                //      (ma.anom, which subtracts that mean, has its own branch after this block).
-                if (kind == DivergenceKind.Value && c.Op == "mean" && IsReversedAxisReduction(c)
-                    && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
-                    return "mean along an axis of a reversed view: np.sum's order there (finding 5) [known bug]";
+                // np.mean (and ma.mean, its prefix stripped) is NumPy's _mean bit for bit (plan item X9), and the one mean
+                // layout this block excused until 2026-10-27 — an axis reduction over a view with a REVERSED axis, which
+                // inherited np.sum's memory-order walk there (plan api-parameter-parity finding 5) — is NumPy's reduction
+                // iterator since then, so no mean divergence is excused: the unbounded summation blanket below never takes
+                // mean.
                 // Floating accumulation: NumPy pairwise summation / two-pass var vs NumSharp order.
                 // Scoped to FLOAT-FAMILY result dtypes (B1/F9): integer/bool accumulation is exact
                 // (modular) on both sides — an integer-result sum/prod value divergence is a REAL
@@ -925,13 +924,6 @@ namespace NumSharp.Tests.Fuzz
                     && !IsIdentitySumSignedZeroFlip(c.Op, expected, actual, tc, diffs))
                     return "reduction summation/two-pass precision (algorithm order)";
             }
-
-            // (A6) ma.anom (prefix stripped) is numpy.ma's MaskedArray.anom — `self - self.mean(axis)` — so along an axis
-            //      of a view with a REVERSED axis it inherits ma.mean's finding-5 residual above (np.sum's order there).
-            //      Nothing else of anom is excused: it is in ByteExactArithmeticUnaryOps, out of the unary ULP branches.
-            if (kind == DivergenceKind.Value && c.Op == "anom" && IsReversedAxisReduction(c)
-                && (tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex))
-                return "anom along an axis of a reversed view: its mean's np.sum order there (finding 5) [known bug]";
 
             // Decimal std (surfaced by scoping B1 to float-family): var — the exact decimal
             // mean-of-squared-deviations — is bit-exact, so the divergence is purely sqrt(var):
@@ -1465,39 +1457,20 @@ namespace NumSharp.Tests.Fuzz
             => c.Layout != null && c.Layout.StartsWith("matrix@", StringComparison.Ordinal);
 
         /// <summary>
-        ///     Whether case <paramref name="c"/> reduces along an axis (an <c>axis</c> param that is not null) of an operand
-        ///     with a reversed axis (a negative stride on an axis of extent &gt; 1): the layout of plan
-        ///     <c>docs/plans/api-parameter-parity.md</c> finding 5, where np.sum's axis kernel walks memory order and
-        ///     NumPy the logical order.
-        /// </summary>
-        /// <param name="c">The case.</param>
-        /// <returns>True for an axis reduction over a view with a reversed axis.</returns>
-        private static bool IsReversedAxisReduction(FuzzCorpus.Case c)
-        {
-            if (c.Params == null || !c.Params.TryGetValue("axis", out var axis)
-                || axis.ValueKind == System.Text.Json.JsonValueKind.Null || c.Operands.Length != 1)
-                return false;
-            var o = c.Operands[0];
-            if (o.Shape == null || o.Strides == null)
-                return false;
-            for (int d = 0; d < o.Shape.Length; d++)
-                if (o.Strides[d] < 0 && o.Shape[d] > 1)
-                    return true;
-            return false;
-        }
-
-        /// <summary>
-        ///     Whether case <paramref name="c"/> is a FLAT (<c>axis=None</c>) <c>sum</c> / <c>mean</c> with a float result
-        ///     over a non-broadcast operand — exactly the cells NumSharp's exact add.reduce engine (NumPyAddReduce) computes,
-        ///     so the classifier excuses nothing there.
+        ///     Whether case <paramref name="c"/> is a FLAT (<c>axis=None</c>) <c>sum</c> / <c>mean</c> with a float result —
+        ///     exactly the cells NumSharp computes with NumPy's add.reduce (the exact flat engine NumPyAddReduce, and for an
+        ///     operand with a broadcast axis the port of NumPy's reduction iterator, <c>ReduceAddThroughIterator</c>), so
+        ///     the classifier excuses nothing there.
         /// </summary>
         /// <remarks>
-        ///     Broadcast operands (a stride-0 axis of extent &gt; 1) are left to the old route by the engine (NpyIter's axis
-        ///     sort skips their comparisons, a schedule the engine does not model), and Decimal has no NumPy dtype, so both
-        ///     keep the branches below. An integer or bool result is exact in any order and never reaches the summation
-        ///     branches anyway. The <c>ma.</c> tier reaches this classifier with its prefix stripped
-        ///     (<c>FuzzCorpusTests.Ma.StripMa</c>) but runs <c>NDMaskedArray</c>'s own reductions, not this engine, so its
-        ///     cases (ids <c>ma.*</c>) keep their documented gaps.
+        ///     A broadcast operand (a stride-0 axis of extent &gt; 1) was left out until 2026-10-27: the flat engine declines
+        ///     it (NpyIter's axis sort skips its comparisons, a schedule the engine does not model) and the elementwise fold
+        ///     it fell back to summed in its own order (plan api-parameter-parity finding 10); np.sum and np.mean send it
+        ///     through the reduction iterator since. Decimal has no NumPy dtype, so it keeps the branches below. An integer
+        ///     or bool result is exact in any order and never reaches the summation branches anyway. The <c>ma.</c> tier
+        ///     reaches this classifier with its prefix stripped (<c>FuzzCorpusTests.Ma.StripMa</c>) but runs
+        ///     <c>NDMaskedArray</c>'s own reductions, not this engine, so its cases (ids <c>ma.*</c>) keep their documented
+        ///     gaps.
         /// </remarks>
         /// <param name="c">The case.</param>
         /// <param name="tc">The result dtype the classifier compares in.</param>
@@ -1516,9 +1489,6 @@ namespace NumSharp.Tests.Fuzz
             var o = c.Operands[0];
             if (o.Dtype == "decimal" || o.Shape == null || o.Strides == null)
                 return false;
-            for (int d = 0; d < o.Shape.Length; d++)
-                if (o.Strides[d] == 0 && o.Shape[d] > 1)
-                    return false;
             return true;
         }
 
