@@ -63,11 +63,12 @@ namespace NumSharp
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IndexOutOfRangeException"><paramref name="obj"/> is outside <c>[-N, N]</c>.</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slot.</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError,
         ///     <c>Python integer 1000 out of bounds for int8</c>).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
-        /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
+        /// <exception cref="ValueError">The values do not broadcast into the insertion slot (NumPy's view-assignment text,
+        ///     <c>could not broadcast input array from shape (3,1) into shape (2,1)</c>); text values that do not parse as a
+        ///     numeric array's number type.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only callers are the <c>[NDScoped]</c> np.insert overloads,
         ///     whose scope releases the ravel work array, the converted values and the intermediates.</remarks>
         [NDScopedCovered]
@@ -88,7 +89,9 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
+        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
+        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
+        ///     ...</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
@@ -121,7 +124,9 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c> (one position: NumPy's text
         ///     prints the sequence, <c>index [13] is out of bounds ...</c>).</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
+        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
+        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
+        ///     ...</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
@@ -151,7 +156,9 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
         /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c> (one position: NumPy's text
         ///     prints the sequence, <c>index [13] is out of bounds ...</c>).</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
+        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
+        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
+        ///     ...</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="ValueError">Text values that do not parse as a numeric array's number type.</exception>
@@ -189,7 +196,9 @@ namespace NumSharp
         ///     out of bounds.</exception>
         /// <exception cref="IndexOutOfRangeException">An integer position is outside <c>[-N, N]</c>, or a mask's one True is
         ///     past <c>N</c> (one position: NumPy's text prints the array or the mask, <c>index [13] ...</c>).</exception>
-        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
+        /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots of several
+        ///     positions (one position: NumPy's ValueError, <c>could not broadcast input array from shape ... into shape
+        ///     ...</c>).</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>; the
         ///     boolean mask's flatnonzero temp is released by the same scope.</remarks>
@@ -256,6 +265,8 @@ namespace NumSharp
         /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside <c>[-N, N]</c>: NumPy's
         ///     <c>f"index {obj} is out of bounds for axis {axis} with size {N}"</c>, which prints the ARGUMENT (<c>index [13]</c>
         ///     for a one-element sequence or array, the whole mask for a boolean mask), not the position.</exception>
+        /// <exception cref="ValueError">The values do not broadcast into the slot (see
+        ///     <see cref="BroadcastValuesToInsertSlot"/>), or text values do not parse as the array's number type.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>insert</c> overloads,
         ///     so the coerced values and the pre/post views are released by the caller's scope, exceptions
         ///     included.</remarks>
@@ -495,8 +506,10 @@ namespace NumSharp
                 long N = arr.Shape.dimensions[axis];
                 if (index < -N || index > N)
                     return new IndexError($"index {obj} is out of bounds for axis {axis} with size {N}");
-                // values = array(values, ndmin=arr.ndim, dtype=arr.dtype) runs before the slice is built.
-                CoerceValuesForSingleIndex(arr, values, axis, scalarObj: obj.ndim == 0);
+                // values = array(values, ndmin=arr.ndim, dtype=arr.dtype) (and the 0-d index's moveaxis) runs before the
+                // slice is built; the values are never assigned, so their broadcast is not checked (a column of two into
+                // one position still reports the slice's TypeError, probed 2.4.2).
+                ConvertValuesForSingleIndex(arr, values, axis, scalarObj: obj.ndim == 0);
                 return new TypeError("slice indices must be integers or None or have an __index__ method");
             }
 
@@ -555,10 +568,11 @@ namespace NumSharp
         ///     Coerces <paramref name="values"/> to <paramref name="arr"/>'s dtype
         ///     and aligns its shape for the single-index path. Matches NumPy's
         ///     <c>values = array(values, copy=None, ndmin=arr.ndim, dtype=arr.dtype);
-        ///     if scalar_obj: values = np.moveaxis(values, 0, axis); numnew = values.shape[axis]</c>.
-        ///     The final shape is broadcast to <c>arr.shape</c> with the axis dim
-        ///     replaced by <c>numnew</c>, so the concatenate path can splice it
-        ///     in without further shape gymnastics.
+        ///     if scalar_obj: values = np.moveaxis(values, 0, axis); numnew = values.shape[axis]</c>
+        ///     (<see cref="ConvertValuesForSingleIndex"/>). The final shape is broadcast to <c>arr.shape</c> with the axis
+        ///     dim replaced by <c>numnew</c> (<see cref="BroadcastValuesToInsertSlot"/>, the rule of NumPy's
+        ///     <c>new[..., index:index+numnew, ...] = values</c>), so the concatenate path can splice it in without further
+        ///     shape gymnastics.
         /// </summary>
         /// <param name="arr">The working array whose dtype and shape the values adopt.</param>
         /// <param name="values">The values to insert.</param>
@@ -566,6 +580,8 @@ namespace NumSharp
         /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
         /// <returns>The values, cast and broadcast to the insertion slot; <paramref name="values"/> itself when it
         ///     already has the dtype and the slot's shape.</returns>
+        /// <exception cref="ValueError">The values do not broadcast into the slot: NumPy's view-assignment text (see
+        ///     <see cref="BroadcastValuesToInsertSlot"/>); text values that do not parse as the array's number type.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered <see cref="InsertSingleIndex"/>,
         ///     under the <c>[NDScoped]</c> <c>insert</c> overloads. The cast, the ndmin reshape, the moveaxis view and the
         ///     broadcast copy are released by that scope, and <paramref name="values"/> is never disposed. (The
@@ -575,6 +591,39 @@ namespace NumSharp
         [NDScopedCovered]
         private static NDArray CoerceValuesForSingleIndex(
             NDArray arr, NDArray values, int axis, bool scalarObj)
+        {
+            var v = ConvertValuesForSingleIndex(arr, values, axis, scalarObj);
+
+            // Broadcast to arr.shape with axis dim = v.shape[axis].
+            long numNew = arr.ndim == 0 ? v.size : v.Shape.dimensions[axis];
+            var broadcasted = BroadcastValuesToInsertSlot(arr, v, axis, numNew);
+            return broadcasted;
+        }
+
+        /// <summary>
+        ///     NumPy's first two statements of the single-index branch, without the assignment that broadcasts the result:
+        ///     <c>values = array(values, copy=None, ndmin=arr.ndim, dtype=arr.dtype)</c>, then for a 0-d index
+        ///     <c>values = np.moveaxis(values, 0, axis)</c>.
+        /// </summary>
+        /// <param name="arr">The working array whose dtype and rank the values adopt.</param>
+        /// <param name="values">The values to insert; null is Python's None.</param>
+        /// <param name="axis">The normalized insertion axis.</param>
+        /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
+        /// <returns>The converted values with at least <c>arr.ndim</c> axes, the first one moved to <paramref name="axis"/>
+        ///     for a scalar obj; <paramref name="values"/> itself when nothing changed.</returns>
+        /// <exception cref="OverflowException">A C# number literal outside the array dtype's range.</exception>
+        /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError), or a complex literal into a
+        ///     real one.</exception>
+        /// <exception cref="ValueError">Text values that do not parse as the array's number type.</exception>
+        /// <remarks>
+        ///     Separate from the broadcast because NumPy can fail between the two: with a one-element FLOAT index the
+        ///     conversion runs, and then the slice NumPy builds from the float refuses it ("slice indices must be integers
+        ///     ...", <see cref="InsertNonIntegerObj"/>) before the values are assigned anywhere, so a value that does not
+        ///     broadcast is never reported there. Covered by <c>[NDScopedCovered]</c>: its callers are covered members under
+        ///     the <c>[NDScoped]</c> <c>insert</c> overloads, which release the conversions.
+        /// </remarks>
+        [NDScopedCovered]
+        private static NDArray ConvertValuesForSingleIndex(NDArray arr, NDArray values, int axis, bool scalarObj)
         {
             // Cast dtype if needed — NumPy's array(values, dtype=arr.dtype): by ELEMENT type, so a string value of
             // another width is truncated / NUL-padded to arr's (insert('QQQQQQ') into <U4 stores 'QQQQ'). A C# literal
@@ -614,10 +663,7 @@ namespace NumSharp
                 v = moved;
             }
 
-            // Broadcast to arr.shape with axis dim = v.shape[axis].
-            long numNew = arr.ndim == 0 ? v.size : v.Shape.dimensions[axis];
-            var broadcasted = BroadcastValuesToInsertSlot(arr, v, axis, numNew);
-            return broadcasted;
+            return v;
         }
 
         /// <summary>
@@ -632,10 +678,12 @@ namespace NumSharp
         /// <param name="numNew">The extent of the insertion slot along <paramref name="axis"/>.</param>
         /// <returns><paramref name="values"/> itself when it already has the target shape; otherwise a C-contiguous
         ///     copy of its broadcast.</returns>
-        /// <exception cref="IncorrectShapeException"><paramref name="values"/> cannot broadcast to the slot.</exception>
+        /// <exception cref="ValueError"><paramref name="values"/> cannot broadcast to the slot: NumPy's assignment text,
+        ///     <c>could not broadcast input array from shape (2,1) into shape (2,)</c> (the shape after the leading
+        ///     extent-1 axes beyond the slot's rank are stripped).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the covered
-        ///     <see cref="CoerceValuesForSingleIndex"/>, so the stride-0 broadcast view is released by the
-        ///     <c>insert</c> overload's scope.</remarks>
+        ///     <see cref="CoerceValuesForSingleIndex"/>, so the stride-0 broadcast view (and the stripped view of a value
+        ///     with extra leading axes) is released by the <c>insert</c> overload's scope.</remarks>
         [NDScopedCovered]
         private static NDArray BroadcastValuesToInsertSlot(
             NDArray arr, NDArray values, int axis, long numNew)
@@ -656,6 +704,15 @@ namespace NumSharp
             var targetDims = new long[arr.ndim];
             for (int i = 0; i < arr.ndim; i++) targetDims[i] = arr.Shape.dimensions[i];
             targetDims[axis] = numNew;
+
+            // NumPy writes the values with new[..., index:index+numnew, ...] = values, a view assignment
+            // (PyArray_AssignArray): leading extent-1 axes beyond the slot's rank are stripped, then the values must
+            // broadcast to the slot, else "could not broadcast input array from shape (2,1) into shape (2,)", the stripped
+            // shape printed. np.broadcast_to alone refused every extra axis and raised its own remapped-shapes text.
+            Shape.AssignmentBroadcastStrides(targetDims, values.Shape.dimensions, values.Shape.strides, "input array",
+                stripLeadingUnitAxes: true);
+            if (values.ndim > targetDims.Length)
+                values = new NDArray(values.Storage.AliasWithoutLeadingAxes(targetDims.Length));
 
             var bcast = np.broadcast_to(values, Shape.Adopt(targetDims));
             // Materialise to a contig owning copy — broadcast_to returns a

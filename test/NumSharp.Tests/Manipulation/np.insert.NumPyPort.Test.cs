@@ -119,5 +119,50 @@ namespace NumSharp.Tests.Manipulation
             mask.Should().Throw<IndexOutOfRangeException>()
                 .WithMessage("index [False False False False False False  True] is out of bounds for axis 0 with size 4");
         }
+
+        /// <summary>
+        ///     The single-index branch writes its values with <c>new[..., index:index+numnew, ...] = values</c>, a view
+        ///     assignment: leading extent-1 axes beyond the slot's rank are stripped, then the values must broadcast to the
+        ///     slot, and a refusal is NumPy's ValueError with the stripped shape. NumSharp broadcast them with
+        ///     <c>np.broadcast_to</c>, which refused every extra axis and raised its own IncorrectShapeException text.
+        /// </summary>
+        [TestMethod]
+        public void SingleIndexValues_AreAssignedAsNumPysViewAssignment()
+        {
+            var a = np.array(new long[] { 0, 1, 2, 3 });
+            var b = np.array(new long[] { 0, 1, 2, 3, 4, 5 }).reshape(2, 3);
+            // >>> np.insert(np.arange(4), 1, [[7, 8]])
+            // ValueError: could not broadcast input array from shape (2,) into shape (1,)
+            Action stripped = () => np.insert(a, 1, np.array(new long[] { 7, 8 }).reshape(1, 2));
+            stripped.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (2,) into shape (1,)");
+            // >>> np.insert(np.arange(4), [1], [[7], [8]])
+            // ValueError: could not broadcast input array from shape (2,1) into shape (2,)
+            Action column = () => np.insert(a, new[] { 1 }, np.array(new long[] { 7, 8 }).reshape(2, 1));
+            column.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (2,1) into shape (2,)");
+            // >>> np.insert(b, 1, [7, 8, 9], axis=1)  (the scalar obj moves the values' first axis to the insertion axis)
+            // ValueError: could not broadcast input array from shape (3,1) into shape (2,1)
+            Action moved = () => np.insert(b, 1, np.array(new long[] { 7, 8, 9 }), axis: 1);
+            moved.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (3,1) into shape (2,1)");
+            // >>> np.insert(b, 1, [[[7, 8]]], axis=1)
+            // ValueError: could not broadcast input array from shape (1,2) into shape (2,1)
+            Action extraAxes = () => np.insert(b, 1, np.array(new long[] { 7, 8 }).reshape(1, 1, 2), axis: 1);
+            extraAxes.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (1,2) into shape (2,1)");
+            // >>> np.insert(b, 1, np.zeros(0), axis=1)  (an empty value fills no slot of two rows)
+            // ValueError: could not broadcast input array from shape (0,1) into shape (2,1)
+            Action empty = () => np.insert(b, 1, np.zeros(new Shape(0)), axis: 1);
+            empty.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (0,1) into shape (2,1)");
+            // >>> np.insert(np.arange(4), np.array([1.0]), [[7], [8]])  (a float index: the values are converted, then the
+            // slice built from the float refuses before they are assigned)
+            // TypeError: slice indices must be integers or None or have an __index__ method
+            Action floatIndex = () => np.insert(a, np.array(new[] { 1.0 }), np.array(new long[] { 7, 8 }).reshape(2, 1));
+            floatIndex.Should().Throw<TypeError>().WithMessage("slice indices must be integers or None or have an __index__ method");
+
+            // >>> np.insert(np.arange(4), 1, [[7]])  array([0, 7, 1, 2, 3])
+            np.insert(a, 1, np.array(new long[] { 7 }).reshape(1, 1))
+                .array_equal(np.array(new long[] { 0, 7, 1, 2, 3 })).Should().BeTrue();
+            // >>> np.insert(b, 1, [[[7, 8, 9]]], axis=0)  array([[0, 1, 2], [7, 8, 9], [3, 4, 5]])
+            np.insert(b, 1, np.array(new long[] { 7, 8, 9 }).reshape(1, 1, 3), axis: 0)
+                .array_equal(np.array(new long[,] { { 0, 1, 2 }, { 7, 8, 9 }, { 3, 4, 5 } })).Should().BeTrue();
+        }
     }
 }
