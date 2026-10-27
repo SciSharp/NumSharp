@@ -55,5 +55,69 @@ namespace NumSharp.Tests.Manipulation
             np.insert(np.zeros(new Shape(3)), 2, (object)"1.5").array_equal(np.array(new[] { 0.0, 0.0, 1.5, 0.0 }))
                 .Should().BeTrue();
         }
+
+        /// <summary>
+        ///     NumPy enters the single-index branch on <c>indices.size == 1</c> whatever the positions argument is, so a slice
+        ///     or a boolean mask that names one position inserts EVERY value there, the values keeping their shape (the
+        ///     slice's arange and the mask's flatnonzero are 1-D: no moveaxis). NumSharp sent every slice and every mask to
+        ///     the multi-index branch, which refuses two values for one position.
+        /// </summary>
+        [TestMethod]
+        public void OnePositionSliceOrMask_TakesTheSingleIndexBranch()
+        {
+            var a = np.array(new long[] { 0, 1, 2, 3 });
+            var b = np.array(new long[] { 0, 1, 2, 3, 4, 5 }).reshape(2, 3);
+            // >>> np.insert(np.arange(4), slice(1, 2), [7, 8])  array([0, 7, 8, 1, 2, 3])
+            np.insert(a, new Slice(1, 2), np.array(new long[] { 7, 8 }))
+                .array_equal(np.array(new long[] { 0, 7, 8, 1, 2, 3 })).Should().BeTrue();
+            // >>> np.insert(b, slice(1, 2), [[7], [8]], axis=1)  array([[0, 7, 1, 2], [3, 8, 4, 5]])
+            np.insert(b, new Slice(1, 2), np.array(new long[] { 7, 8 }).reshape(2, 1), axis: 1)
+                .array_equal(np.array(new long[,] { { 0, 7, 1, 2 }, { 3, 8, 4, 5 } })).Should().BeTrue();
+            // >>> np.insert(b, slice(1, 2), [7, 8], axis=1)  array([[0, 7, 8, 1, 2], [3, 7, 8, 4, 5]])
+            np.insert(b, new Slice(1, 2), np.array(new long[] { 7, 8 }), axis: 1)
+                .array_equal(np.array(new long[,] { { 0, 7, 8, 1, 2 }, { 3, 7, 8, 4, 5 } })).Should().BeTrue();
+            // >>> np.insert(b, slice(0, 1), [7, 8, 9], axis=0)  array([[7, 8, 9], [0, 1, 2], [3, 4, 5]])
+            np.insert(b, new Slice(0, 1), np.array(new long[] { 7, 8, 9 }), axis: 0)
+                .array_equal(np.array(new long[,] { { 7, 8, 9 }, { 0, 1, 2 }, { 3, 4, 5 } })).Should().BeTrue();
+            // >>> np.insert(np.arange(4), np.array([False, True]), [7, 8])  array([0, 7, 8, 1, 2, 3])
+            np.insert(a, np.array(new[] { false, true }), np.array(new long[] { 7, 8 }))
+                .array_equal(np.array(new long[] { 0, 7, 8, 1, 2, 3 })).Should().BeTrue();
+            // >>> np.insert(np.arange(4), np.array([False, False, False, False, True]), 9)  array([0, 1, 2, 3, 9])
+            np.insert(a, np.array(new[] { false, false, false, false, true }), (object)9)
+                .array_equal(np.array(new long[] { 0, 1, 2, 3, 9 })).Should().BeTrue();
+        }
+
+        /// <summary>
+        ///     The single-index branch's IndexError prints the positions ARGUMENT, as NumPy's <c>f"index {obj} ..."</c> does:
+        ///     a number or a 0-d array as itself, a one-element sequence or array as <c>[13]</c>, a boolean mask whole.
+        ///     NumSharp printed the position, so <c>np.insert(a, [10], 7)</c> read "index 10" where NumPy reads "index [10]".
+        /// </summary>
+        [TestMethod]
+        public void SingleIndexBoundsError_PrintsThePositionsArgument()
+        {
+            var a = np.array(new long[] { 0, 1, 2, 3 });
+            var seven = np.array(7L);
+            // >>> np.insert(np.arange(4), [10], 7)  IndexError: index [10] is out of bounds for axis 0 with size 4
+            Action intList = () => np.insert(a, new[] { 10 }, seven);
+            intList.Should().Throw<IndexOutOfRangeException>().WithMessage("index [10] is out of bounds for axis 0 with size 4");
+            // >>> np.insert(np.arange(4), [-13], 7)
+            Action longList = () => np.insert(a, new long[] { -13 }, seven);
+            longList.Should().Throw<IndexOutOfRangeException>().WithMessage("index [-13] is out of bounds for axis 0 with size 4");
+            // >>> np.insert(np.arange(4), np.array([10]), 7) and np.array([10], np.uint8)
+            Action array = () => np.insert(a, np.array(new long[] { 10 }), seven);
+            array.Should().Throw<IndexOutOfRangeException>().WithMessage("index [10] is out of bounds for axis 0 with size 4");
+            Action uint8 = () => np.insert(a, np.array(new byte[] { 10 }), seven);
+            uint8.Should().Throw<IndexOutOfRangeException>().WithMessage("index [10] is out of bounds for axis 0 with size 4");
+            // >>> np.insert(np.arange(4), np.array(10), 7) and np.insert(np.arange(4), 10, 7)
+            Action zeroD = () => np.insert(a, np.array(10L), seven);
+            zeroD.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 4");
+            Action number = () => np.insert(a, 10, seven);
+            number.Should().Throw<IndexOutOfRangeException>().WithMessage("index 10 is out of bounds for axis 0 with size 4");
+            // >>> np.insert(np.arange(4), np.array([False] * 6 + [True]), 7)
+            // IndexError: index [False False False False False False  True] is out of bounds for axis 0 with size 4
+            Action mask = () => np.insert(a, np.array(new[] { false, false, false, false, false, false, true }), seven);
+            mask.Should().Throw<IndexOutOfRangeException>()
+                .WithMessage("index [False False False False False False  True] is out of bounds for axis 0 with size 4");
+        }
     }
 }

@@ -74,12 +74,13 @@ namespace NumSharp
         internal static NDArray Insert(NDArray arr, long obj, NDArray values, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true));
+            return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj, values, ctx.axis, scalarObj: true, obj));
         }
 
         /// <summary>
         ///     <c>insert(arr, obj, values, axis)</c> with the positions as a slice: the axis context, the slice expanded with
-        ///     Python's <c>slice.indices(N)</c>, then the multi-index branch.
+        ///     Python's <c>slice.indices(N)</c>, then the single-index branch for one position (without the scalar-obj
+        ///     <c>moveaxis</c>, so every value is inserted there) or the multi-index branch.
         /// </summary>
         /// <param name="arr">Input array (not null).</param>
         /// <param name="obj">The insertion positions (not null).</param>
@@ -98,9 +99,12 @@ namespace NumSharp
             var ctx = PrepareAxisContext(arr, axis);
             long N = ctx.work.Shape.dimensions[ctx.axis];
             var indices = InsertExpandSliceObj(obj, N);
-            // Slice obj is never treated as scalar for the broadcast quirk
-            // (matches NumPy: ``isinstance(obj, slice)`` short-circuits the
-            // scalar check).
+            // NumPy's `if indices.size == 1:` holds for a slice's arange too, so one position takes the single-index branch.
+            // A slice obj is never scalar for the broadcast quirk (its arange is 1-D, indices.ndim == 1): the values keep
+            // their shape there, so np.insert(arange(4), slice(1, 2), [7, 8]) inserts both values at 1 (probed 2.4.2), where
+            // the multi-index branch would refuse two values for one position.
+            if (indices.Length == 1)
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, indices[0], values, ctx.axis, scalarObj: false, obj));
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
         }
 
@@ -115,7 +119,8 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c> (one position: NumPy's text
+        ///     prints the sequence, <c>index [13] is out of bounds ...</c>).</exception>
         /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
@@ -128,8 +133,9 @@ namespace NumSharp
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
 
             var ctx = PrepareAxisContext(arr, axis);
+            // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
             if (longs.Length == 1)
-                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, longs[0], values, ctx.axis, scalarObj: false));
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, longs[0], values, ctx.axis, scalarObj: false, longs));
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, longs, values, ctx.axis));
         }
 
@@ -143,7 +149,8 @@ namespace NumSharp
         /// <param name="axis">The axis to insert along; <c>null</c> inserts into the flattened array.</param>
         /// <returns>A fresh array with the values inserted (F-ordered when <paramref name="arr"/> is).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException">A position is outside <c>[-N, N]</c> (one position: NumPy's text
+        ///     prints the sequence, <c>index [13] is out of bounds ...</c>).</exception>
         /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <exception cref="TypeError">None into an integer array (<c>int()</c>'s TypeError).</exception>
@@ -153,14 +160,16 @@ namespace NumSharp
         internal static NDArray Insert(NDArray arr, long[] obj, NDArray values, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
+            // One position: the single-index branch, whose IndexError prints the sequence as a Python list (index [13]).
             if (obj.Length == 1)
-                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj[0], values, ctx.axis, scalarObj: false));
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, obj[0], values, ctx.axis, scalarObj: false, obj));
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, (long[])obj.Clone(), values, ctx.axis));
         }
 
         /// <summary>
         ///     <c>insert(arr, obj, values, axis)</c> with the positions as an array: a 1-D boolean mask is its
-        ///     <c>flatnonzero</c> (the multi-index branch); an index array of more than one dimension is NumPy's ValueError;
+        ///     <c>flatnonzero</c> (the single-index branch without the <c>moveaxis</c> for one True, else the multi-index
+        ///     branch); an index array of more than one dimension is NumPy's ValueError;
         ///     an index array that is not integer takes NumPy's statements up to their refusal; a 0-d integer index is the
         ///     scalar single-index branch, a one-element one the single-index branch without the <c>moveaxis</c>, and any other
         ///     the multi-index branch.
@@ -178,7 +187,8 @@ namespace NumSharp
         ///     integer array (<c>int()</c>'s TypeError).</exception>
         /// <exception cref="IndexError">A float or complex <paramref name="obj"/> of any size but one, or a one-element float
         ///     out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">An integer position is outside <c>[-N, N]</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException">An integer position is outside <c>[-N, N]</c>, or a mask's one True is
+        ///     past <c>N</c> (one position: NumPy's text prints the array or the mask, <c>index [13] ...</c>).</exception>
         /// <exception cref="IncorrectShapeException">The values do not broadcast into the insertion slots.</exception>
         /// <exception cref="OverflowException">A C# number literal outside the array dtype's range (NumPy's OverflowError).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>, as <see cref="Insert(NDArray, long, NDArray, int?)"/>; the
@@ -195,6 +205,11 @@ namespace NumSharp
                 // nzIdx is released by this method's scope (exceptions included).
                 var nzIdx = np.flatnonzero(obj);
                 long[] indices = ToInt64Vector(nzIdx, "insert");
+                // A mask with one True is one position (NumPy's `if indices.size == 1:` follows the flatnonzero): the
+                // single-index branch, the values keeping their shape (flatnonzero is 1-D: no moveaxis), and an
+                // IndexError that prints the whole mask, as NumPy's f"index {obj} ..." does.
+                if (indices.Length == 1)
+                    return WithSourceOrder(arr, InsertSingleIndex(ctx.work, indices[0], values, ctx.axis, scalarObj: false, obj));
                 return WithSourceOrder(arr, InsertMultiIndex(ctx.work, indices, values, ctx.axis));
             }
 
@@ -205,19 +220,19 @@ namespace NumSharp
             if (!IsIntegerIndexDtype(obj.typecode))
                 throw InsertNonIntegerObj(ctx.work, obj, values, ctx.axis);
 
-            // 0-D integer ⇒ scalar path (true scalar semantics).
+            // 0-D integer ⇒ scalar path (true scalar semantics); its IndexError prints the array (index 13).
             if (obj.ndim == 0)
             {
                 long idx = ToInt64Scalar(obj, "insert");
-                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, idx, values, ctx.axis, scalarObj: true));
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, idx, values, ctx.axis, scalarObj: true, obj));
             }
 
             // 1-D with size==1 still uses the single-index broadcast path but
             // with scalarObj=false (mirrors NumPy: indices.ndim == 1 prevents
-            // the moveaxis quirk).
+            // the moveaxis quirk). Its IndexError prints the array (index [13]).
             long[] objIndices = ToInt64Vector(obj, "insert");
             if (objIndices.Length == 1)
-                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false));
+                return WithSourceOrder(arr, InsertSingleIndex(ctx.work, objIndices[0], values, ctx.axis, scalarObj: false, obj));
 
             return WithSourceOrder(arr, InsertMultiIndex(ctx.work, objIndices, values, ctx.axis));
         }
@@ -234,19 +249,26 @@ namespace NumSharp
         /// <param name="values">The values to insert.</param>
         /// <param name="axis">The normalized axis.</param>
         /// <param name="scalarObj">True when NumPy's scalar-obj quirk applies (moveaxis of the values' first axis).</param>
+        /// <param name="obj">The caller's positions argument as the IndexError prints it (<see cref="PythonStr"/>): the
+        ///     <c>long</c> of a number, the <c>long[]</c> of a sequence, the index array or boolean mask itself, or the
+        ///     <see cref="Slice"/>.</param>
         /// <returns>A fresh array with the values inserted.</returns>
-        /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside <c>[-N, N]</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside <c>[-N, N]</c>: NumPy's
+        ///     <c>f"index {obj} is out of bounds for axis {axis} with size {N}"</c>, which prints the ARGUMENT (<c>index [13]</c>
+        ///     for a one-element sequence or array, the whole mask for a boolean mask), not the position.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>insert</c> overloads,
         ///     so the coerced values and the pre/post views are released by the caller's scope, exceptions
         ///     included.</remarks>
         [NDScopedCovered]
         private static NDArray InsertSingleIndex(
-            NDArray arr, long index, NDArray values, int axis, bool scalarObj)
+            NDArray arr, long index, NDArray values, int axis, bool scalarObj, object obj)
         {
             long N = arr.Shape.dimensions[axis];
-            if (index < -N || index > N) // Insert allows index == N (append-at-end).
+            // Insert allows index == N (append-at-end). The text is built only here, on the error path: a mask's str() is
+            // NumPy's array printing.
+            if (index < -N || index > N)
                 throw new IndexOutOfRangeException(
-                    $"index {index} is out of bounds for axis {axis} with size {N}");
+                    $"index {PythonStr(obj)} is out of bounds for axis {axis} with size {N}");
             if (index < 0) index += N;
 
             // Cast values to arr.dtype (NumPy: values = array(values, dtype=arr.dtype))
@@ -391,6 +413,27 @@ namespace NumSharp
         }
 
         // ---------------------------- helpers ----------------------------
+
+        /// <summary>
+        ///     Python's <c>str(obj)</c> of np.insert's positions argument, as the single-index branch's IndexError prints it
+        ///     (<c>f"index {obj} is out of bounds ..."</c>): a number as itself (<c>index 13</c>), a sequence as a Python list
+        ///     (<c>index [13]</c>; a C# <c>int[]</c> arrives widened to <c>long[]</c>), an index array or a boolean mask as
+        ///     NumPy's <c>ndarray.__str__</c> (<c>[13]</c>, <c>13</c> for a 0-d array, <c>[False  True]</c>).
+        /// </summary>
+        /// <param name="obj">The argument: a boxed <c>long</c>, a <c>long[]</c>, an <see cref="NDArray"/>, or a
+        ///     <see cref="Slice"/>.</param>
+        /// <returns>The text.</returns>
+        /// <remarks>A <see cref="Slice"/> never reaches the error: <c>slice.indices(N)</c> clamps its positions to
+        ///     <c>[0, N]</c>, so its one position is always in bounds; it falls to <see cref="object.ToString"/>.</remarks>
+        private static string PythonStr(object obj) => obj switch
+        {
+            long number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            // repr() of a Python list of ints: "[a, b]" (only a one-element list reaches the single-index branch).
+            long[] list => "[" + string.Join(", ", Array.ConvertAll(list,
+                v => v.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "]",
+            NDArray array => array.ToString(),
+            _ => obj?.ToString(),
+        };
 
         /// <summary>
         ///     Whether NumPy indexes with an array of this dtype as integers (dtype kind <c>'u'</c> or <c>'i'</c>; NumSharp's
