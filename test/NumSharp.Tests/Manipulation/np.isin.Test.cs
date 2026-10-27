@@ -126,9 +126,11 @@ namespace NumSharp.Tests.Manipulation
 
         /// <summary>
         /// uint64 paired with a signed integer promotes to float64 (NEP50), which loses precision past
-        /// 2^53. Membership between integers must nonetheless be EXACT — two distinct integers that
-        /// collide as float64 must not compare equal. Regression pin: uint64(2^63+1) and int64(2^63-1)
-        /// are distinct integers that both round to 2^63 as float64.
+        /// 2^53. NumPy's table method and its loop path (whose int64 / uint64 comparisons are exact) still
+        /// answer the EXACT membership — two distinct integers that collide as float64 do not compare
+        /// equal — and these sets take one of them. Regression pin: uint64(2^63+1) and int64(2^63-1) are
+        /// distinct integers that both round to 2^63 as float64. (NumPy's sort path concatenates in
+        /// float64 and does merge them: np.isin.NumPyPort.Test.cs.)
         /// </summary>
         [TestMethod]
         public void Mixed_UInt64_Signed_ExactInteger()
@@ -247,19 +249,22 @@ namespace NumSharp.Tests.Manipulation
         }
 
         /// <summary>
-        /// DELIBERATE DIVERGENCE (documented in MisalignedRegistry): when assume_unique=True but the
-        /// inputs are NOT actually unique, NumPy documents that "incorrect results ... could result",
-        /// and its actual output depends on the internal method chosen (sort-path returns garbage).
-        /// NumSharp always returns the CORRECT membership. Here NumPy returns [True, False]; NumSharp
-        /// returns [False, False] (5.0 is genuinely not in the test set).
+        /// When assume_unique=True but the inputs are NOT actually unique, NumPy documents that "incorrect
+        /// results ... could result": its sort path skips np.unique, so the two 5.0 are neighbours after the
+        /// stable sort and the first is flagged a member. NumSharp gives NumPy's answer, [True, False] (it
+        /// returned the membership, [False, False], as a documented divergence until the np-layer dtype
+        /// plan's np.isin family). The loop path ignores assume_unique: a short set answers [False, False].
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void AssumeUnique_NonUnique_ReturnsCorrectMembership_NotNumPyGarbage()
+        public void AssumeUnique_NonUnique_IsNumPysSortPathAnswer()
         {
             var element = np.array(new[] { 5.0, 5.0 });
             var test = np.arange(20).astype(NPTypeCode.Double) + 100.0;   // large -> NumPy's sort path
+            // >>> np.isin(np.array([5.0, 5.0]), np.arange(20.) + 100, assume_unique=True)  array([ True, False])
             np.isin(element, test, assume_unique: true)
+                .array_equal(np.array(new[] { true, false })).Should().BeTrue();
+            // >>> np.isin(np.array([5.0, 5.0]), np.array([100.0]), assume_unique=True)  array([False, False])
+            np.isin(element, np.array(new[] { 100.0 }), assume_unique: true)
                 .array_equal(np.array(new[] { false, false })).Should().BeTrue();
         }
 

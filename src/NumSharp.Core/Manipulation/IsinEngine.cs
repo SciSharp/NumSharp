@@ -114,9 +114,21 @@ namespace NumSharp
             if (ar2.size == 0)
                 return np.full(new Shape(ar1.size), invert, NPTypeCode.Boolean).reshape(outShape);
 
-            // assume_unique is a NumPy speed hint that skips deduplication; our sort/table paths need no
-            // dedup, so it changes nothing here and the result is ALWAYS the correct membership (see the
-            // documented divergence for assume_unique=true on genuinely non-unique inputs).
+            // NumPy's _isin answers on one of three paths (the table method, the loop path, the sort path), and each gives
+            // the exact membership the routes below compute, except NumPy's SORT path in two cases: its np.concatenate casts
+            // both unique arrays to their common dtype, where two 64-bit integers past 2**53 can become one float64, and
+            // under assume_unique it skips the np.unique calls, so repeated values meet as neighbours. Its adjacent-equality
+            // step then flags the first of two equal neighbours as a member. Where NumPy takes the sort path in either case
+            // its statements run (SortPathFlat); the answer is a view of the 1-D flags, as NumPy's reshape returns it.
+            if ((assume_unique || !ConcatenationIsLossless(ar1, ar2)) && TakesSortPath(ar1, ar2, kind))
+            {
+                using NDArray flat = SortPathFlat(ar1, ar2, assume_unique, invert);
+                return flat.reshape(outShape);
+            }
+
+            // Every other case: NumPy's answer is the exact membership in result_type(ar1, ar2) (the loop path's
+            // comparisons, exact for an int64 / uint64 pair too), which ComputeMembership computes without NumPy's
+            // per-value passes or sort.
             NDArray member = ComputeMembership(ar1, ar2);
             NDArray result = invert ? np.logical_not(member) : member;
             return result.reshape(outShape);
@@ -212,7 +224,35 @@ namespace NumSharp
                 return mask;
             }
 
-            // The sort path. Without assume_unique each array is deduplicated (ar1 with its inverse, to map the flags back).
+            // The sort path, shared with the numeric route (SortPathFlat).
+            return SortPathFlat(ar1, ar2, assume_unique, invert);
+        }
+
+        /// <summary>
+        ///     NumPy's sort path of <c>_isin</c> over two flattened operands: <c>np.unique</c> of each (unless
+        ///     <paramref name="assume_unique"/>), one <c>np.concatenate</c> in their common dtype, a stable argsort, the
+        ///     adjacent-equality flags scattered back in the sorted order, and the inverse's gather (or the first
+        ///     <c>len(ar1)</c> flags).
+        /// </summary>
+        /// <param name="ar1">The flattened tested values.</param>
+        /// <param name="ar2">The flattened set.</param>
+        /// <param name="assume_unique">Whether the <c>np.unique</c> calls are skipped: the answer is then NumPy's for inputs
+        ///     that are not unique too (repeated values meet as neighbours).</param>
+        /// <param name="invert">Whether the answer is <c>not in</c>.</param>
+        /// <returns>The 1-D answer, one flag per element of <paramref name="ar1"/>: a fresh gather, or under
+        ///     <paramref name="assume_unique"/> a view of the flags (NumPy's slice).</returns>
+        /// <exception cref="UnicodeDecodeError">The concatenation decodes <c>S</c> text holding a byte that is not ASCII
+        ///     beside <c>U</c> text.</exception>
+        /// <remarks>
+        ///     NumPy's answer, which is the exact membership only when the concatenation keeps every value apart: its cast to
+        ///     the common dtype can merge two values (two 64-bit integers past 2**53 in float64, a number formatted into the
+        ///     text it equals), and "my successor in the sorted order equals me" then flags the first of them. Scoped: the
+        ///     unique arrays, the joined values, the order and the flags are reclaimed; only the answer survives.
+        /// </remarks>
+        [NDScoped]
+        private static NDArray SortPathFlat(NDArray ar1, NDArray ar2, bool assume_unique, bool invert)
+        {
+            // Without assume_unique each array is deduplicated (ar1 with its inverse, to map the flags back).
             NDArray revIdx = null;
             if (!assume_unique)
             {
@@ -221,7 +261,9 @@ namespace NumSharp
                 revIdx = u1[1];
                 ar2 = ar2.unique();
             }
-            // ar = concatenate((ar1, ar2)) formats numbers into text and decodes bytes beside str (NumPy's promotion).
+            // ar = concatenate((ar1, ar2)) casts both to their common dtype: it formats numbers into text and decodes bytes
+            // beside str, and makes float64 of a 64-bit integer beside a float or (uint64 beside a signed integer) beside
+            // the other sign (NumPy's promotion).
             NDArray ar = np.concatenate((ar1, ar2), 0);
             // "We need this to be a stable sort, so always use 'mergesort'": ar1's values come before ar2's equal ones.
             NDArray order = np.argsort(ar, -1, kind: "mergesort");
@@ -233,6 +275,98 @@ namespace NumSharp
             // assume_unique keeps the first len(ar1) flags (NumPy's slice: a view); otherwise the inverse maps each original
             // element to its flag (a fresh gather).
             return assume_unique ? ret[$":{ar1.size}"] : ret[revIdx];
+        }
+
+        /// <summary>
+        ///     Whether NumPy's <c>_isin</c> answers on its sort path for two flattened numeric operands (its <c>kind</c> errors
+        ///     already raised): neither the table method (an integer or bool pair, <c>kind</c> None or <c>'table'</c>, a range
+        ///     safe for the set's dtype and at most <c>6 * (len(ar1) + len(ar2))</c>, or <c>kind='table'</c>) nor the loop path
+        ///     (<c>len(ar2) &lt; 10 * len(ar1) ** 0.145</c>).
+        /// </summary>
+        /// <param name="ar1">The flattened tested values, not empty.</param>
+        /// <param name="ar2">The flattened set, not empty.</param>
+        /// <param name="kind">The validated <c>kind</c>: null, <c>"sort"</c> (no table method) or <c>"table"</c>.</param>
+        /// <returns>True when NumPy takes the sort path.</returns>
+        /// <remarks>Reads the set's range (two reductions) only for an integer or bool pair.</remarks>
+        private static bool TakesSortPath(NDArray ar1, NDArray ar2, string kind)
+        {
+            long n1 = ar1.size, n2 = ar2.size;
+            if (kind != "sort" && IsNumPyIntegerKind(ar1.typecode) && IsNumPyIntegerKind(ar2.typecode))
+            {
+                // The table method's two constraints, on the range as a Python int (kind='table' with an unsafe range has
+                // raised already, so it reaches the table here).
+                BigInteger range = TableRange(ar2);
+                if (RangeFitsDtype(range, ar2.typecode) && (range <= 6 * ((BigInteger)n1 + n2) || kind == "table"))
+                    return false;
+            }
+            // Python evaluates 10 * len(ar1) ** 0.145 in double precision, as Math.Pow does.
+            return !(n2 < 10.0 * Math.Pow(n1, 0.145));
+        }
+
+        /// <summary>
+        ///     NumPy's <c>ar2_range &lt;= np.iinfo(ar2.dtype).max</c>, the table method's overflow constraint (bool read as
+        ///     NumPy's uint8, char as its uint16).
+        /// </summary>
+        /// <param name="range">The set's range (<see cref="TableRange"/>).</param>
+        /// <param name="tc">The set's dtype: bool, an integer dtype or char.</param>
+        /// <returns>True when the range fits the dtype's maximum.</returns>
+        private static bool RangeFitsDtype(BigInteger range, NPTypeCode tc) => range <= tc switch
+        {
+            NPTypeCode.Boolean or NPTypeCode.Byte => (BigInteger)byte.MaxValue,
+            NPTypeCode.SByte => (BigInteger)sbyte.MaxValue,
+            NPTypeCode.Int16 => (BigInteger)short.MaxValue,
+            NPTypeCode.UInt16 or NPTypeCode.Char => (BigInteger)ushort.MaxValue,
+            NPTypeCode.Int32 => (BigInteger)int.MaxValue,
+            NPTypeCode.UInt32 => (BigInteger)uint.MaxValue,
+            NPTypeCode.Int64 => (BigInteger)long.MaxValue,
+            _ => (BigInteger)ulong.MaxValue,
+        };
+
+        /// <summary>
+        ///     Whether NumPy's <c>np.concatenate((ar1, ar2))</c> keeps every value of both operands apart. It casts both to
+        ///     <c>result_type(ar1, ar2)</c>, which can merge values here only as float64 or complex128, for a 64-bit integer
+        ///     past 2**53 (uint64 beside a signed integer is NEP 50's float64 too): two such integers can round to one
+        ///     double.
+        /// </summary>
+        /// <param name="ar1">The flattened tested values.</param>
+        /// <param name="ar2">The flattened set.</param>
+        /// <returns>True when the cast is exact for every value present. Conservative: a 64-bit integer beyond 2**53 in
+        ///     magnitude counts as lossy (NumPy's statements then run, which are right either way).</returns>
+        private static bool ConcatenationIsLossless(NDArray ar1, NDArray ar2)
+        {
+            NPTypeCode t = np.result_type(ar1.typecode, ar2.typecode);
+            if (t != NPTypeCode.Double && t != NPTypeCode.Complex)
+                return true;
+            return WithinDoublePrecision(ar1) && WithinDoublePrecision(ar2);
+        }
+
+        /// <summary>
+        ///     Whether every value of a 64-bit integer array lies in <c>[-2**53, 2**53]</c>, where a double holds each one
+        ///     exactly; true for every other dtype and for an empty array.
+        /// </summary>
+        /// <param name="a">A flattened operand.</param>
+        /// <returns>True when the array's values survive a cast to float64 apart.</returns>
+        /// <remarks>The reductions are reclaimed here.</remarks>
+        private static bool WithinDoublePrecision(NDArray a)
+        {
+            const long exact = 1L << 53;
+            if (a.size == 0)
+                return true;
+            switch (a.typecode)
+            {
+                case NPTypeCode.Int64:
+                {
+                    using NDArray min = np.amin(a), max = np.amax(a);
+                    return Convert.ToInt64(min.GetAtIndex(0)) >= -exact && Convert.ToInt64(max.GetAtIndex(0)) <= exact;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    using NDArray max = np.amax(a);
+                    return (ulong)max.GetAtIndex(0) <= (ulong)exact;
+                }
+                default:
+                    return true;
+            }
         }
 
         /// <summary>
