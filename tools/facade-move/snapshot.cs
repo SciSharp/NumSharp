@@ -57,6 +57,9 @@
 // index array or a boolean mask) and np.insert's values (an array, or any object: a number, a string, a bool, null, a C#
 // array, an NDArray passed as object), and np.isin's test set test_elements (the operand's own values, sets of other
 // dtypes, sizes, ranges and layouts that reach NumPy's table, loop and sort paths) and its algorithm name kind, and
+// the max / min family's initial= (np.max / np.amax / np.min / np.amin / np.nanmax / np.nanmin and NDArray's max / min: C#
+// numbers as Python's int and float, NumPy scalars, a 0-d array, NaN and infinities, values past a narrow loop's range,
+// text and a sequence), so a where= mask meets its masked reduction,
 // the sort family's kind (np.sort / np.argsort's sort kinds, np.partition / np.argpartition's select kind), stable,
 // order, kth (an int, an int[] or an index array) and np.lexsort's key list built from the operand, and
 // np.average / np.average_returned's weights (of the operand's shape, along one axis or two in either order, a 0-d, zero
@@ -324,6 +327,9 @@ static class Snapshot
         // list (built from the operand: it alone, two keys, keys of other dtypes, a mismatched shape, none; see
         // MakeLexKeys).
         SortKind, PartitionKind, Stable, SortOrder, Kth, KthSeq, KthArray, LexKeys,
+        // The max / min family's initial= (np.max / np.amax / np.min / np.amin / np.nanmax / np.nanmin and NDArray's max /
+        // min): the value every output starts from, which a where= mask needs (see the Initial variants).
+        Initial,
         Default, Unsupported,
     }
 
@@ -384,6 +390,17 @@ static class Snapshot
     /// </summary>
     /// <param name="p">The parameter.</param>
     /// <returns>True for a parameter of one of the nine public members.</returns>
+    /// <summary>
+    ///     Whether a parameter belongs to the max / min family with NumPy's keywords - np.max, np.amax, np.min, np.amin,
+    ///     np.nanmax, np.nanmin and NDArray's max and min - whose <c>initial</c> role is theirs alone: np.sum / np.prod
+    ///     take an <c>initial</c> too, and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of one of the eight public members.</returns>
+    private static bool IsMaxMinFamily(ParameterInfo p) =>
+        (p.Member.DeclaringType == typeof(np) && p.Member.Name is "max" or "amax" or "min" or "amin" or "nanmax" or "nanmin")
+        || (p.Member.DeclaringType == typeof(NDArray) && p.Member.Name is "max" or "min");
+
     private static bool IsSortFamily(ParameterInfo p) =>
         (p.Member.DeclaringType == typeof(np) && p.Member.Name is "sort" or "argsort" or "partition" or "argpartition" or "lexsort")
         || (p.Member.DeclaringType == typeof(NDArray) && p.Member.Name is "sort" or "argsort" or "partition" or "argpartition");
@@ -527,6 +544,8 @@ static class Snapshot
         }
         // np.isin's algorithm name (only its: the sort family's kind takes the roles below).
         if (n == "kind" && t == typeof(string) && IsIsin(p)) return Role.IsinKind;
+        // The max / min family's initial= (an object: NumPy's array_like scalar).
+        if (n == "initial" && t == typeof(object) && IsMaxMinFamily(p)) return Role.Initial;
         // The sort family: the sort kind of sort / argsort, the select kind of partition / argpartition, stable, order
         // (an object for sort / argsort, a string for the partitions: one role, field names), and kth as an int / int[].
         if (IsSortFamily(p))
@@ -698,6 +717,19 @@ static class Snapshot
             case Role.LexKeys:
                 // Built from the operand (MakeLexKeys); the factory here is never called. The base is the operand alone.
                 Add(LexKeysVariantLabels[0], () => null);
+                break;
+            case Role.Initial:
+                // None first (no initial: a where= mask then meets NumPy's no-identity error), then C# numbers as Python's int
+                // and float (zero, a negative, a fraction, a value past int8 / uint8 and one past int64's range as a
+                // ulong), NaN and an infinity (refused by an integer loop), NumPy scalars (a float16, a char), a bool, a 0-d
+                // array, and what NumPy refuses (text, a sequence).
+                foreach (var (label, value) in new (string, object)[]
+                         {
+                             ("null", null), ("0", 0), ("-1", -1), ("2.5", 2.5), ("300", 300), ("u64max", ulong.MaxValue),
+                             ("nan", double.NaN), ("-inf", double.NegativeInfinity), ("f16_1.5", (Half)1.5), ("char_A", 'A'),
+                             ("true", true), ("0d_i64_7", null), ("text", "7"), ("seq", new[] { 1, 2 }),
+                         })
+                    Add(label, label == "0d_i64_7" ? () => np.array(7L) : () => value);
                 break;
             case Role.NditerOps:
             case Role.NditerOpAxes:
