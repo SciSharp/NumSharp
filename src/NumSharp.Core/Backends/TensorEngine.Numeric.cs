@@ -1,5 +1,5 @@
-// The functions of numpy/_core/numeric.py that compute: isclose, allclose, argwhere, flatnonzero, count_nonzero
-// and correlate (with NumPy's multiarray.correlate / correlate2 behind it).
+// The functions of numpy/_core/numeric.py that compute: isclose, allclose, argwhere, flatnonzero, count_nonzero,
+// array_equal, array_equiv, convolve and correlate (with NumPy's multiarray.correlate / correlate2 behind the last two).
 
 using System;
 using NumSharp.Backends;
@@ -41,7 +41,7 @@ namespace NumSharp
         ///     object array, which NumSharp does not have).</exception>
         /// <remarks>NumPy's function is C (<c>multiarraymodule.c</c>), so the call is an engine member; np.convolve's Python
         ///     statements (the 0-d promotion, its own emptiness checks, the swap by length, the reversal) run before it in
-        ///     <c>ConvolveEngine</c>.</remarks>
+        ///     <see cref="Convolve"/>.</remarks>
         public abstract NDArray Correlate(NDArray a, NDArray v, string mode = "valid");
 
         /// <summary>
@@ -96,5 +96,79 @@ namespace NumSharp
         /// <remarks>The public <c>np.count_nonzero</c> only opens the matrix boundary's plain region and calls this (the
         ///     np-layer dtype plan, P1b).</remarks>
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.array_equal(a1, a2, equal_nan=False)</c>: whether two arrays have the same shape and equal
+        ///     elements. No broadcasting (that is <see cref="ArrayEquiv"/>).
+        /// </summary>
+        /// <param name="a1">The first array, or null (NumSharp's null convention: two nulls are equal, a null and an array
+        ///     are not).</param>
+        /// <param name="a2">The second array, or null.</param>
+        /// <param name="equal_nan">
+        ///     Count NaNs at the same places as equal (a complex value is NaN when either part is; a <c>StringDType</c>
+        ///     NaN-like NA is a NaN). Without it NaN equals nothing, so an array holding a NaN is not equal to itself.
+        /// </param>
+        /// <returns>True when the shapes are equal and every element compares equal.</returns>
+        /// <exception cref="TypeError">
+        ///     With <paramref name="equal_nan"/>, a fixed-width string operand and two different arrays of one shape (NumPy's
+        ///     <c>isnan</c> has no string loop); two <c>StringDType</c> operands whose NA objects differ (their comparison
+        ///     refuses the pair).
+        /// </exception>
+        /// <remarks>
+        ///     NumPy writes array_equal in Python (<c>numpy/_core/numeric.py</c>); DefaultEngine's override runs those
+        ///     statements for every dtype, text included, with a fused early-exiting equality scan for two dense operands of
+        ///     one dtype. <c>np.array_equal</c> and the member <see cref="NDArray.array_equal(NDArray, bool)"/> call it after
+        ///     the matrix boundary's plain region, on the engine of the first operand that is not null; an override replaces
+        ///     both for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     class <c>ArrayEqualEngine</c>.
+        /// </remarks>
+        public abstract bool ArrayEqual(NDArray a1, NDArray a2, bool equal_nan = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.array_equiv(a1, a2)</c>: whether two arrays broadcast together and every element of the
+        ///     broadcast comparison is equal.
+        /// </summary>
+        /// <param name="a1">The first array, or null (two nulls are equivalent, a null and an array are not).</param>
+        /// <param name="a2">The second array, or null.</param>
+        /// <returns>
+        ///     True when the shapes broadcast and every element compares equal (NaN never does: there is no
+        ///     <c>equal_nan</c>). An empty broadcast is equivalent.
+        /// </returns>
+        /// <exception cref="TypeError">Two <c>StringDType</c> operands whose NA objects differ.</exception>
+        /// <remarks>
+        ///     NumPy writes array_equiv in Python (<c>numpy/_core/numeric.py</c>). <c>np.array_equiv</c> calls this after the
+        ///     matrix boundary's plain region, on the engine of the first operand that is not null; an override replaces it
+        ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     class <c>ArrayEqualEngine</c>.
+        /// </remarks>
+        public abstract bool ArrayEquiv(NDArray a1, NDArray a2);
+
+        /// <summary>
+        ///     NumPy's <c>np.convolve(a, v, mode='full')</c>: the discrete linear convolution of two one-dimensional
+        ///     sequences, <c>multiarray.correlate(a, v[::-1], mode)</c> after NumPy's Python statements.
+        /// </summary>
+        /// <param name="a">The first sequence (any dtype, any layout; a 0-d one is one element, NumPy's <c>ndmin=1</c>).</param>
+        /// <param name="v">The second sequence (likewise). The longer of the two is the data, the other is reversed.</param>
+        /// <param name="mode"><c>full</c> (the default), <c>same</c> or <c>valid</c>, matched exactly.</param>
+        /// <returns>A fresh 1-D array of the operands' common dtype.</returns>
+        /// <exception cref="ValueError">
+        ///     <c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before the swap), then
+        ///     <see cref="Correlate"/>'s errors in its order: an unknown <paramref name="mode"/>, an operand of two or more
+        ///     dimensions, a fixed-width string operand.
+        /// </exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (after the emptiness
+        ///     checks).</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (after the emptiness checks), or a <c>StringDType</c>
+        ///     operand's refusal or first-product error.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes.</exception>
+        /// <remarks>
+        ///     NumPy writes convolve in Python (<c>numpy/_core/numeric.py</c>); its last statement is the C function behind
+        ///     <see cref="Correlate"/>, whose kernels reproduce NumPy's dot products bit for bit, except long float products
+        ///     without the OpenBLAS backend (a bounded ULP difference). Unlike <see cref="Correlate2"/>
+        ///     a complex kernel is not conjugated. <c>np.convolve</c> and the member <see cref="NDArray.convolve"/> call it;
+        ///     an override replaces both for every array whose engine it is (the engine of <paramref name="a"/>). New in
+        ///     0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>ConvolveEngine</c>.
+        /// </remarks>
+        public abstract NDArray Convolve(NDArray a, NDArray v, string mode = "full");
     }
 }

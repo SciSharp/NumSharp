@@ -168,9 +168,9 @@ namespace NumSharp
         public bool array_equal(NDArray rhs, bool equal_nan = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(this, rhs);   // the member keeps the plain-array meaning for a matrix object
-            // np.array_equal's statements, in ArrayEqualEngine (Logic/ArrayEqualEngine.cs), for every dtype: the member
-            // answers as the function does.
-            return ArrayEqualEngine.ArrayEqual(this, rhs, equal_nan);
+            // np.array_equal's statements, this array's TensorEngine.ArrayEqual (DefaultEngine's in
+            // Logic/Default.ArrayEqual.cs), for every dtype: the member answers as the function does.
+            return TensorEngine.ArrayEqual(this, rhs, equal_nan);
         }
 
     }

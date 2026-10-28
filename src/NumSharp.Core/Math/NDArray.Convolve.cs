@@ -17,9 +17,9 @@ namespace NumSharp
         /// <remarks>
         /// NumPy Reference: https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
         ///
-        /// convolve is <c>correlate(a, v[::-1], mode)</c> (numpy/_core/numeric.py): NumPy's Python statements run in
-        /// <see cref="ConvolveEngine.Convolve"/>, which reverses the kernel and calls the engine's correlation
-        /// (<see cref="Backends.TensorEngine.Correlate"/>, the shared sliding multiply-accumulate kernels).
+        /// convolve is <c>correlate(a, v[::-1], mode)</c> (numpy/_core/numeric.py): NumPy's Python statements run in this
+        /// array's <see cref="TensorEngine.Convolve"/>, which reverses the kernel and calls the engine's correlation
+        /// (<see cref="TensorEngine.Correlate"/>, the shared sliding multiply-accumulate kernels).
         /// Unlike correlate it does NOT conjugate a complex kernel and is commutative, so the
         /// "swap if v longer" needs no output reversal. See <c>np.correlate.cs</c> for the
         /// float bit-parity notes (both share the same kernel).
@@ -37,9 +37,9 @@ namespace NumSharp
         ///     object array, which NumSharp does not have).</exception>
         // Scope: the facade keeps its scope over the call, so the weaver roots this array and v at the public entry (the
         // lifetime oracle's gap LT22: an unrooted operand could be finalized while the kernels read its buffer);
-        // ConvolveEngine.Convolve reclaims its own temporaries.
+        // the engine member (DefaultEngine's Convolve, [NDScoped]) reclaims its own temporaries.
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
-            => ConvolveEngine.Convolve(this, v, mode);
+            => TensorEngine.Convolve(this, v, mode);
     }
 }

@@ -145,9 +145,10 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
         ///
-        /// NumPy's Python body (<c>numpy/_core/numeric.py</c>) runs in <see cref="ConvolveEngine.Convolve"/>; its last
+        /// NumPy's Python body (<c>numpy/_core/numeric.py</c>) runs in the engine member
+        /// <see cref="TensorEngine.Convolve"/> (the engine of <paramref name="a"/>); its last
         /// statement, <c>multiarray.correlate(a, v[::-1], mode)</c>, is the engine member
-        /// <see cref="Backends.TensorEngine.Correlate"/>. Unlike <see cref="correlate"/>, a complex kernel is NOT
+        /// <see cref="TensorEngine.Correlate"/>. Unlike <see cref="correlate"/>, a complex kernel is NOT
         /// conjugated, and the swap needs no reversal of the result (convolution is commutative). The order of the errors
         /// is NumPy's: the two emptiness texts (on the operands as given) come before the mode, and the mode before the
         /// depth check. Both functions share one kernel; see <see cref="correlate"/> for its bit parity.
@@ -166,7 +167,7 @@ namespace NumSharp
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         public static NDArray convolve(NDArray a, NDArray v, string mode = "full")
-            => ConvolveEngine.Convolve(a, v, mode);
+            => a.TensorEngine.Convolve(a, v, mode);
 
         /// <summary>
         ///     Return the product of array elements over a given axis.
