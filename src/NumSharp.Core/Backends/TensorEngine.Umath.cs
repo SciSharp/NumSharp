@@ -294,6 +294,38 @@ namespace NumSharp
         public abstract NDArray Square(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Deg2Rad(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Rad2Deg(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.radians</c> ufunc: the same conversion as <see cref="Deg2Rad"/> (degrees to radians), but a ufunc of its
+        ///     own, so a refusal (text, an operand type with no loop) names <c>radians</c>.
+        /// </summary>
+        /// <param name="nd">The angles.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the operand's float tier.</param>
+        /// <param name="out">The array to write into (<c>out=</c>), or null.</param>
+        /// <param name="where">The bool mask of the positions to compute (<c>where=</c>), or null for all.</param>
+        /// <returns>The converted angles: <paramref name="out"/> when given, else a new array of the float tier (float16
+        ///     for bool / int8 / uint8, float32 for int16 / uint16, float64 for wider integers; floats keep theirs).</returns>
+        /// <exception cref="TypeError">A text or complex operand (no radians loop), with NumPy's texts.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or a <paramref name="dtype"/> the
+        ///     operand cannot reach.</exception>
+        public abstract NDArray Radians(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.degrees</c> ufunc: the same conversion as <see cref="Rad2Deg"/> (radians to degrees), but a ufunc of its
+        ///     own, so a refusal (text, an operand type with no loop) names <c>degrees</c>.
+        /// </summary>
+        /// <param name="nd">The angles.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the operand's float tier.</param>
+        /// <param name="out">The array to write into (<c>out=</c>), or null.</param>
+        /// <param name="where">The bool mask of the positions to compute (<c>where=</c>), or null for all.</param>
+        /// <returns>The converted angles: <paramref name="out"/> when given, else a new array of the float tier (float16
+        ///     for bool / int8 / uint8, float32 for int16 / uint16, float64 for wider integers; floats keep theirs).</returns>
+        /// <exception cref="TypeError">A text or complex operand (no degrees loop), with NumPy's texts.</exception>
+        /// <exception cref="ValueError">A read-only <paramref name="out"/>.</exception>
+        /// <exception cref="ArgumentException">A non-bool <paramref name="where"/>, or a <paramref name="dtype"/> the
+        ///     operand cannot reach.</exception>
+        public abstract NDArray Degrees(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         public abstract NDArray Invert(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);
         // np.bitwise_count — set-bit count of |x|; integer/bool input, uint8 output (dtype= accepts only uint8).
         public abstract NDArray BitwiseCount(NDArray nd, DType dtype = null, NDArray @out = null, NDArray where = null);

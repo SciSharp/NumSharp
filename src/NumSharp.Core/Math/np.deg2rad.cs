@@ -30,9 +30,7 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.Wrapped((x, @out, where, dtype), static s => radians(s.x, s.@out, s.where, s.dtype), @out);
-            // radians is its own NumPy ufunc (not an alias object of deg2rad), so a refusal names it.
-            Backends.Strings.NDStringUfuncs.ThrowIfUnary("radians", x, Backends.DefaultEngine.UfuncLoopCode(dtype, "radians", x, null, @out, where), @out, where);
-            return deg2rad(x, @out, where, dtype);
+            return np.EngineOf(x).Radians(x, dtype, @out, where);
         }
     }
 }
