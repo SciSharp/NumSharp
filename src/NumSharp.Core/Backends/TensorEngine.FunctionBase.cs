@@ -396,5 +396,33 @@ namespace NumSharp
         /// <exception cref="OverflowException">On the integer path, a bound or the period that does not fit the input
         ///     dtype (NumPy's OverflowError).</exception>
         public abstract NDArray Unwrap(NDArray p, double? discont = null, int axis = -1, object period = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.interp(x, xp, fp, left=None, right=None, period=None)</c>: the piecewise-linear interpolant
+        ///     through the points (xp, fp), evaluated at x. NumPy picks the loop from fp alone (complex128 for a complex fp,
+        ///     float64 otherwise); with a period, x and xp are taken modulo it and the fill values are ignored.
+        /// </summary>
+        /// <param name="x">The coordinates to evaluate at, any shape.</param>
+        /// <param name="xp">The sample points, 1-D, increasing unless a period is given (not checked: NumPy's loop answers
+        ///     other points deterministically).</param>
+        /// <param name="fp">The sample values, 1-D, as many as xp.</param>
+        /// <param name="left">The value below <c>xp[0]</c>, NumPy's Python object: null (None, meaning <c>fp[0]</c>), a
+        ///     double (a float) or a Complex (a complex, which the real loop refuses).</param>
+        /// <param name="right">The value above <c>xp[-1]</c>, as <paramref name="left"/> (null means <c>fp[-1]</c>).</param>
+        /// <param name="period">The period of the x-coordinates, or null; it must not be zero.</param>
+        /// <returns>A new array of x's shape (0-d for a 0-d x): complex128 for a complex fp, float64 otherwise.</returns>
+        /// <exception cref="ArgumentException"><paramref name="left"/> or <paramref name="right"/> is neither null, a
+        ///     double nor a Complex.</exception>
+        /// <exception cref="NullReferenceException">An operand is null.</exception>
+        /// <exception cref="ValueError">fp or xp not 1-D (<c>object too deep for desired array</c> / <c>object of too
+        ///     small depth for desired array</c>), empty sample points, lengths that differ, a zero period; with a period,
+        ///     points that are not 1-D (<c>Data points must be 1-D sequences</c>) or text that does not parse as a
+        ///     float.</exception>
+        /// <exception cref="InvalidCastException">Without a period, an operand that does not cast 'safely' to the loop's
+        ///     dtype (NumPy's TypeError text).</exception>
+        /// <exception cref="TypeError">A real fp, no period and a complex fill value (<c>must be real number, not
+        ///     complex</c>), raised after the operand and length checks.</exception>
+        public abstract NDArray Interp(NDArray x, NDArray xp, NDArray fp, object left = null, object right = null,
+            double? period = null);
     }
 }
