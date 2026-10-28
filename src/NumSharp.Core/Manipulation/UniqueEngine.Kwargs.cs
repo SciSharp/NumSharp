@@ -381,11 +381,11 @@ namespace NumSharp
 
         /// <summary>
         ///     The values-only complex128 route above 2^28 elements, where the hash path bails: the hash path's answer from
-        ///     the stable argsort (<see cref="uniqueFlatArgsorted{T}"/> without outputs). The sorted distinct values, each
-        ///     class represented by its first element in input order (the stable order's run start); the values with a NaN
-        ///     part sorted last in NumPy's complex order, each a value without <paramref name="equal_nan"/> and one value
-        ///     with it, represented by the first of them in C order as NumPy's hash set keeps it
-        ///     (<see cref="KeepFirstNaNPartInCOrder"/>).
+        ///     the stable argsort (<see cref="ArgsortedHashAnswer"/>: <see cref="uniqueFlatArgsorted{T}"/> without outputs).
+        ///     The sorted distinct values, each class represented by its first element in input order (the stable order's
+        ///     run start); the values with a NaN part sorted last in NumPy's complex order, each a value without
+        ///     <paramref name="equal_nan"/> and one value with it, represented by the first of them in C order as NumPy's
+        ///     hash set keeps it (<see cref="KeepFirstNaNPartInCOrder"/>).
         /// </summary>
         /// <param name="a">The complex128 operand (any layout; only read).</param>
         /// <param name="n">Its element count (positive).</param>
@@ -396,10 +396,7 @@ namespace NumSharp
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongComplex(a, n, equal_nan, false, false, false)[0];
 
-            var values = uniqueFlatArgsorted<Complex>(a, n, false, false, false, equal_nan)[0];
-            if (equal_nan)
-                KeepFirstNaNPartInCOrder(values, a);
-            return values;
+            return ArgsortedHashAnswer(a, n, wantCounts: false, equalNan: equal_nan).values;
         }
 
         /// <summary>
@@ -453,6 +450,8 @@ namespace NumSharp
         /// <param name="return_counts">Also return the counts.</param>
         /// <param name="equal_nan">True: the NaNs (sorted last; for complex, every value with a NaN part) are one run from
         ///     the first of them in sorted order; false: each is a run of its own.</param>
+        /// <param name="values">The elements of <paramref name="a"/> in C order when the caller extracted them already (the
+        ///     complex hash path handing a line over); null extracts them here. Only read.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputs{T}"/>): each value bitwise
         ///     <c>ar[index]</c>.</returns>
         /// <remarks>
@@ -473,10 +472,10 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         private static unsafe NDArray[] uniqueFlatArgsorted<T>(NDArray a, long n, bool return_index, bool return_inverse,
-            bool return_counts, bool equal_nan) where T : unmanaged
+            bool return_counts, bool equal_nan, T[] values = null) where T : unmanaged
         {
             // ar = np.asanyarray(ar).flatten(): the elements in C order, bits kept.
-            var values = ExtractKeysOnly<T>(a, n);
+            values ??= ExtractKeysOnly<T>(a, n);
             // perm = ar.argsort(kind=...): one stable order, NumPy's mergesort order, for every kind (see remarks).
             var perm = new long[n];
             using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))

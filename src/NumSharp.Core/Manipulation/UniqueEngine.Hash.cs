@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Sorting;
 using NumSharp.Backends.Unmanaged;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
@@ -323,49 +324,69 @@ namespace NumSharp
             var cnt = wantCounts ? new long[cap] : null;
             int mask = cap - 1;
             int uniqueCount = 0;
+            // One look at the cardinality a sixteenth of the way through a long line (ComplexHashCheckpointMinLength's
+            // remarks): more than 90% distinct so far means the argsort route is faster for the whole line.
+            long checkpoint = n >= ComplexHashCheckpointMinLength && !DisableComplexHashCheckpoint ? n / 16 : -1;
 
-            for (int i = 0; i < n; i++)
+            // The insert loop runs to the checkpoint, the test runs once, and the loop resumes to the end: the hot loop
+            // carries no per-element test (with one inside, the 1,000-element high-cardinality cells ran ~10 µs slower).
+            long stop = checkpoint > 0 ? checkpoint : n;
+            int i = 0;
+            while (true)
             {
-                Complex c = data[i];
-                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
+                for (; i < stop; i++)
                 {
-                    // equal_nan: one class, the first NaN-part value kept; otherwise each NaN is distinct.
-                    if (!equalNan || nans is null)
-                        (nans ??= new List<Complex>()).Add(c);
-                    nanClassCount++;
-                    continue;
-                }
-                Complex normed = NormalizeZeros(c);                        // -0.0 -> +0.0 per component, for HASHING only
-
-                if (uniqueCount >= (cap >> 1))
-                {
-                    int ncap = cap << 1;
-                    var nt = new Complex[ncap]; var nu = new bool[ncap]; var nc = wantCounts ? new long[ncap] : null;
-                    int nmask = ncap - 1;
-                    for (int s = 0; s < cap; s++)
+                    Complex c = data[i];
+                    if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
                     {
-                        if (!used[s]) continue;
-                        int hh = (int)(HashKeyComplex(NormalizeZeros(table[s])) & (ulong)nmask);
-                        while (nu[hh]) hh = (hh + 1) & nmask;
-                        nu[hh] = true; nt[hh] = table[s]; if (wantCounts) nc[hh] = cnt[s];
+                        // equal_nan: one class, the first NaN-part value kept; otherwise each NaN is distinct.
+                        if (!equalNan || nans is null)
+                            (nans ??= new List<Complex>()).Add(c);
+                        nanClassCount++;
+                        continue;
                     }
-                    table = nt; used = nu; cnt = nc; cap = ncap; mask = nmask;
-                }
+                    Complex normed = NormalizeZeros(c);                        // -0.0 -> +0.0 per component, for HASHING only
 
-                int h = (int)(HashKeyComplex(normed) & (ulong)mask);
-                while (used[h])
-                {
-                    if (table[h] == c) { if (wantCounts) cnt[h]++; goto matched; }   // Complex ==: -0.0 == +0.0 per component
-                    h = (h + 1) & mask;
+                    if (uniqueCount >= (cap >> 1))
+                    {
+                        int ncap = cap << 1;
+                        var nt = new Complex[ncap]; var nu = new bool[ncap]; var nc = wantCounts ? new long[ncap] : null;
+                        int nmask = ncap - 1;
+                        for (int s = 0; s < cap; s++)
+                        {
+                            if (!used[s]) continue;
+                            int hh = (int)(HashKeyComplex(NormalizeZeros(table[s])) & (ulong)nmask);
+                            while (nu[hh]) hh = (hh + 1) & nmask;
+                            nu[hh] = true; nt[hh] = table[s]; if (wantCounts) nc[hh] = cnt[s];
+                        }
+                        table = nt; used = nu; cnt = nc; cap = ncap; mask = nmask;
+                    }
+
+                    int h = (int)(HashKeyComplex(normed) & (ulong)mask);
+                    while (used[h])
+                    {
+                        if (table[h] == c) { if (wantCounts) cnt[h]++; goto matched; }   // Complex ==: -0.0 == +0.0 per component
+                        h = (h + 1) & mask;
+                    }
+                    used[h] = true; table[h] = c; if (wantCounts) cnt[h] = 1; uniqueCount++;   // store FIRST-occurrence bits
+                    matched: ;
                 }
-                used[h] = true; table[h] = c; if (wantCounts) cnt[h] = 1; uniqueCount++;   // store FIRST-occurrence bits
-                matched: ;
+                if (stop == n)
+                    break;
+                // At the checkpoint: more than 90% distinct so far hands the line over.
+                if (uniqueCount * 10L > checkpoint * 9L)
+                {
+                    ComplexHashCheckpointHandOffs++;
+                    // The same answer, faster from here; the extracted elements go along (no second copy of the line).
+                    return ArgsortedHashAnswer(a, n, wantCounts, equalNan, data);
+                }
+                stop = n;
             }
 
             var uv = new Complex[uniqueCount]; var uc = wantCounts ? new long[uniqueCount] : null;
             int j = 0;
             for (int s = 0; s < cap; s++) { if (!used[s]) continue; uv[j] = table[s]; if (wantCounts) uc[j] = cnt[s]; j++; }
-            if (wantCounts) System.Array.Sort(uv, uc, ComplexLexComparer); else System.Array.Sort(uv, ComplexLexComparer);
+            SortDistinctComplex(uv, uc, uniqueCount);
             // NumPy sorts the whole hash result, so distinct NaN-part values come out in its complex order, not input order
             // (np.unique([1+nanj, nan+2j], equal_nan=False) and the reverse input both give [1+nanj, nan+2j]).
             if (!equalNan && nans is not null && nans.Count > 1)
@@ -408,6 +429,98 @@ namespace NumSharp
                 counts = new NDArray(new ArraySlice<long>(cblock), Shape.Vector(total));
             }
             return (values, counts);
+        }
+
+        /// <summary>
+        ///     The shortest line the complex hash path checks the cardinality of: a sixteenth of it (the checkpoint) is then
+        ///     at least 2,048 elements. Below it the hash runs to the end (a short line's routes differ by microseconds).
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///     The rule (the checkpoint test in <see cref="UniqueHashSortedComplex"/>): a sixteenth of the way through a line
+        ///     of at least this many elements, more than 90% of the elements seen being distinct hands the line to the stable
+        ///     argsort route (<see cref="ArgsortedHashAnswer"/>), which gives the same values and counts.
+        ///     </para>
+        ///     <para>
+        ///     Why there: over 100K and 1M elements drawn uniformly from D values (1% NaN parts, two P-cores) the hash costs
+        ///     about 15 ns an element plus about 110 ns per distinct value (an insert that misses the caches, its share of
+        ///     the sort), the argsort route about 50-70 ns an element: D/n = 0.001 hash 1.9 / 21 ms, argsort 4.3 / 53 ms;
+        ///     D/n = 0.2 hash 4.4 / 53 ms, argsort 5.0 / 61 ms; D/n = 0.9 hash 9.3 / 121 ms, argsort 6.0 / 73 ms. The routes
+        ///     break even near D = 0.3 n. For uniformly drawn values, the share of distinct elements among the first n/16 is
+        ///     (1 - e^-x) / x with x = n / (16 D): 91% for D = 0.32 n, 79% for D = 0.13 n, 97% for D = 0.9 n. A line that is
+        ///     not uniform can be misjudged; both routes give the same answer, and the worse one costs at most about twice
+        ///     the better one near the boundary.
+        ///     </para>
+        /// </remarks>
+        private const long ComplexHashCheckpointMinLength = 32768;
+
+        /// <summary>
+        ///     Test and benchmark hook: true runs the complex hash path to the end whatever the cardinality (no checkpoint),
+        ///     so the two routes can be compared on one line. Per thread, false by default.
+        /// </summary>
+        [ThreadStatic] internal static bool DisableComplexHashCheckpoint;
+
+        /// <summary>Test hook: how many lines this thread's complex hash path handed to the argsort route at its checkpoint.</summary>
+        [ThreadStatic] internal static int ComplexHashCheckpointHandOffs;
+
+        /// <summary>
+        ///     The complex hash path's answer computed from the stable argsort instead (what the hash path hands a high-
+        ///     cardinality line to, and what <see cref="uniqueValuesOnlyComplex"/> computes above 2^28 elements): the
+        ///     argsort statements without an index or an inverse, then, under <paramref name="equalNan"/>, the collapsed NaN
+        ///     class represented by its first value in C order as NumPy's hash set keeps it.
+        /// </summary>
+        /// <param name="a">The complex128 operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive, at most <see cref="Array.MaxLength"/>).</param>
+        /// <param name="wantCounts">Also return the counts.</param>
+        /// <param name="equalNan">NumPy's <c>equal_nan</c>.</param>
+        /// <param name="values">The elements in C order when the caller extracted them already; null extracts them.</param>
+        /// <returns>The sorted values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null otherwise).</returns>
+        private static (NDArray values, NDArray counts) ArgsortedHashAnswer(NDArray a, long n, bool wantCounts, bool equalNan,
+            Complex[] values = null)
+        {
+            var r = uniqueFlatArgsorted<Complex>(a, n, false, false, wantCounts, equalNan, values);
+            if (equalNan)
+                KeepFirstNaNPartInCOrder(r[0], a);
+            return (r[0], wantCounts ? r[1] : null);
+        }
+
+        /// <summary>
+        ///     From this many distinct values on the hash path sorts them with the radix argsort
+        ///     (<see cref="SortDistinctComplex"/>); below it with <see cref="ComplexLexComparer"/>. Measured on distinct
+        ///     values (i9-13900K, one core, best of 9): the comparison sort 25 µs for 1,000 values, 179 µs for 2,000, 14.4 ms
+        ///     for 80,000; the radix route (an NDArray copy, the argsort, the gather) 40 µs, 91 µs and 4.8 ms.
+        /// </summary>
+        private const int RadixDistinctComplexMin = 2048;
+
+        /// <summary>
+        ///     Sorts the hash path's distinct complex values lexicographically (real part, then imaginary part), carrying
+        ///     their counts along. The values are NaN-free and pairwise unequal (the hash merged both zeros into one class),
+        ///     so every correct sort gives the same order: the comparison sort for few values, the stable radix argsort
+        ///     (<c>AxisSort.ArgSort</c>, whose complex order is lexicographic there) for many.
+        /// </summary>
+        /// <param name="uv">The distinct values; sorted in place. Its length is <paramref name="count"/>.</param>
+        /// <param name="uc">Their counts, moved with them; null when no counts are wanted.</param>
+        /// <param name="count">The number of distinct values.</param>
+        private static unsafe void SortDistinctComplex(Complex[] uv, long[] uc, int count)
+        {
+            if (count < RadixDistinctComplexMin)
+            {
+                if (uc != null) System.Array.Sort(uv, uc, ComplexLexComparer); else System.Array.Sort(uv, ComplexLexComparer);
+                return;
+            }
+            // The radix argsort reads an NDArray: a copy of the values. Then the gather, the counts in step.
+            using var arr = np.array(uv);
+            using var perm = AxisSort.ArgSort(arr, null, NPY_SORTKIND.NPY_STABLESORT);
+            long* p = (long*)perm.Address;   // a fresh C-contiguous int64 array: its first element is at its base
+            var sorted = new Complex[count];
+            for (int i = 0; i < count; i++) sorted[i] = uv[p[i]];
+            sorted.CopyTo(uv, 0);
+            if (uc != null)
+            {
+                var sortedCounts = new long[count];
+                for (int i = 0; i < count; i++) sortedCounts[i] = uc[p[i]];
+                sortedCounts.CopyTo(uc, 0);
+            }
         }
 
         /// <summary>

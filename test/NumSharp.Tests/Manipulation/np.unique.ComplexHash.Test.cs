@@ -136,6 +136,87 @@ namespace NumSharp.Tests.Manipulation
         }
 
         /// <summary>
+        ///     A line of <paramref name="n"/> values with about <c>0.8 n</c> distinct ones (reals from <c>n</c> halves,
+        ///     imaginary parts from 8 quarters), both zeros of a class early (the class keeps its first bits), and 1% values
+        ///     with a NaN part of every class.
+        /// </summary>
+        /// <param name="n">The length.</param>
+        /// <param name="rng">The generator.</param>
+        /// <returns>The values.</returns>
+        private static Complex[] ManyDistinct(int n, System.Random rng)
+        {
+            var v = new Complex[n];
+            for (int i = 0; i < n; i++)
+            {
+                double re = rng.Next(0, n) * 0.5, im = rng.Next(0, 8) * 0.25;
+                int k = rng.Next(100);
+                if (k == 0) re = D(Nan);
+                else if (k == 1) im = D(Pay);
+                else if (k == 2) { re = D(Neg); im = D(Nan); }
+                v[i] = C(re, im);
+            }
+            v[1] = C(-0.0, 0.0);
+            v[2] = C(0.0, -0.0);
+            return v;
+        }
+
+        /// <summary>
+        ///     With thousands of distinct values np.unique_counts (the hash path, its distinct values sorted by radix from
+        ///     <c>RadixDistinctComplexMin</c> on) gives what the argsort route gives,
+        ///     <c>np.unique(a, return_counts=True, equal_nan=False)</c>: the same values bit for bit and the same counts.
+        /// </summary>
+        [TestMethod]
+        public void UniqueCounts_ManyDistinctValues_EqualTheArgsortRoute()
+        {
+            var rng = new System.Random(77);
+            foreach (int n in new[] { 1000, 5000, 40000 })
+            {
+                var a = np.array(ManyDistinct(n, rng));
+                var hash = np.unique_counts(a);
+                var sorted = np.unique(a, return_counts: true, equal_nan: false);
+                Bits(hash.values).Should().Equal(Bits(sorted[0]), $"n={n}");
+                hash.counts.ToArray<long>().Should().Equal(sorted[1].ToArray<long>(), $"n={n}");
+            }
+        }
+
+        /// <summary>
+        ///     A long line whose first eighth is more than 80% distinct is handed from the hash path to the argsort route at
+        ///     the checkpoint (the counter proves it), and the answer is the one the hash path gives when it runs to the end
+        ///     (the checkpoint switched off): np.unique's values (with and without <c>equal_nan</c>) and np.unique_counts,
+        ///     byte for byte. A line of few distinct values keeps the hash.
+        /// </summary>
+        [TestMethod]
+        public void HashCheckpoint_HandsHighCardinalityToTheArgsortRoute_WithTheSameAnswer()
+        {
+            var rng = new System.Random(4242);
+            var high = np.array(ManyDistinct(40000, rng));
+            var low = np.array(Enumerable.Range(0, 40000).Select(i => C(i % 37, (i % 5) * 0.5)).ToArray());
+            try
+            {
+                foreach (var (a, expectHandOff) in new[] { (high, true), (low, false) })
+                {
+                    UniqueEngine.DisableComplexHashCheckpoint = true;
+                    var refValuesEn = Bits(np.unique(a).values);
+                    var refValues = Bits(np.unique(a, equal_nan: false).values);
+                    var refCounts = np.unique_counts(a);
+                    UniqueEngine.DisableComplexHashCheckpoint = false;
+
+                    int before = UniqueEngine.ComplexHashCheckpointHandOffs;
+                    Bits(np.unique(a).values).Should().Equal(refValuesEn);
+                    Bits(np.unique(a, equal_nan: false).values).Should().Equal(refValues);
+                    var counts = np.unique_counts(a);
+                    Bits(counts.values).Should().Equal(Bits(refCounts.values));
+                    counts.counts.ToArray<long>().Should().Equal(refCounts.counts.ToArray<long>());
+                    (UniqueEngine.ComplexHashCheckpointHandOffs - before).Should().Be(expectHandOff ? 3 : 0);
+                }
+            }
+            finally
+            {
+                UniqueEngine.DisableComplexHashCheckpoint = false;
+            }
+        }
+
+        /// <summary>
         ///     Above 2^28 elements the hash path bails, and the values-only call takes the stable argsort (the managed
         ///     <c>uniqueValuesOnlyComplex</c>, and past <see cref="Array.MaxLength"/> the long-indexed
         ///     <c>uniqueFlatSortedLongComplex</c>): both, called by reflection on small lines, give the hash path's values
@@ -154,6 +235,9 @@ namespace NumSharp.Tests.Manipulation
             double[] pool = { 0.0, -0.0, 1.0, -2.5, double.PositiveInfinity, D(Nan), D(Neg), D(Pay) };
             foreach (int n in new[] { 9, 200, 3000 })
                 lines.Add(Enumerable.Range(0, n).Select(_ => C(pool[rng.Next(pool.Length)], pool[rng.Next(pool.Length)])).ToArray());
+            // Thousands of distinct values: the hash path sorts them by radix from RadixDistinctComplexMin on.
+            foreach (int n in new[] { 5000, 40000 })
+                lines.Add(ManyDistinct(n, rng));
 
             foreach (var line in lines)
             foreach (bool en in new[] { true, false })
