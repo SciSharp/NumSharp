@@ -7,6 +7,43 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.NanVar"/>: NumPy's <c>nanvar</c>, run by
+        ///     <see cref="NanVarStdNumPy"/>.
+        /// </summary>
+        /// <param name="a">The array to reduce, any layout.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
+        /// <param name="ddof">Delta degrees of freedom.</param>
+        /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <returns>The variance of the non-NaN elements (see <see cref="NanVarStdNumPy"/>).</returns>
+        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <remarks>
+        ///     A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope: the count, the
+        ///     NaN-zeroed copy, the deviations and the sums are reclaimed here even when no scoped facade called it.
+        /// </remarks>
+        [NDScoped] // every intermediate of nanvar is this call's own; the variance is yielded
+        public override NDArray NanVar(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false)
+            => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false);
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.NanStd"/>: NumPy's <c>nanstd</c>, the square root of
+        ///     <c>nanvar</c>, run by <see cref="NanVarStdNumPy"/>.
+        /// </summary>
+        /// <param name="a">The array to reduce, any layout.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="dtype">The loop of both sums (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
+        /// <param name="ddof">Delta degrees of freedom.</param>
+        /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <returns>The standard deviation of the non-NaN elements (see <see cref="NanVarStdNumPy"/>).</returns>
+        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <remarks>A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope.</remarks>
+        [NDScoped] // every intermediate of nanstd is this call's own; the deviation is yielded
+        public override NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false)
+            => NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: true);
+
+        /// <summary>
         ///     NumPy 2.4.2's <c>nanvar</c> / <c>nanstd</c> (<c>numpy/lib/_nanfunctions_impl.py</c>) statement for
         ///     statement, the engine behind <see cref="np.nanvar"/> and <see cref="np.nanstd"/>. For an inexact input NumPy
         ///     runs, in this order:

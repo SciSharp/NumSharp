@@ -18,8 +18,8 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.nancumprod.html
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumprod: <c>_replace_nan(a, 1)</c> then <c>np.cumprod</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumprod"/>.
-        /// The whole function is <c>DefaultEngine.NanCumProd</c> (the np-layer dtype plan, P1b); this applies the matrix
-        /// rule and calls it.
+        /// The whole function is the engine's <c>TensorEngine.NanCumProd</c> (the np-layer dtype plan, P1b and PE);
+        /// this applies the matrix rule and calls it.
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/>; text a numeric dtype cannot parse.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
@@ -32,8 +32,8 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumprod(s.a, s.axis, s.dtype, s.@out), @out);
             // NumPy's nancumprod is _replace_nan(a, 1) then np.cumprod(a, axis, dtype, out); the whole function, its text
-            // routes included, is the engine's: DefaultEngine.NanCumProd.
-            return DefaultEngine.NanCumProd(a, axis, dtype, @out);
+            // routes included, is the engine's: TensorEngine.NanCumProd.
+            return a.TensorEngine.NanCumProd(a, axis, dtype, @out);
         }
     }
 }

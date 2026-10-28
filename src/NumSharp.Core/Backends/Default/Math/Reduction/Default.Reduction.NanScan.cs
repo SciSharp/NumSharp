@@ -19,12 +19,12 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">A text operand or request NumPy's loop resolution refuses.</exception>
         /// <exception cref="ValueError">A read-only <paramref name="out"/>, or text a numeric loop cannot parse.</exception>
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
-        /// <remarks>Moved from the public <c>np.nancumsum</c> by the np-layer dtype plan's P1b, statement for statement.
-        ///     NumPy's nancumsum is a Python function, so its body is an internal member here (decision D1, as np.ptp's);
+        /// <remarks>Moved from the public <c>np.nancumsum</c> by the np-layer dtype plan's P1b, statement for statement;
         ///     its <c>np.cumsum</c> call became the engine member it reaches for a plain operand,
-        ///     <see cref="ReduceCumAdd"/>.</remarks>
+        ///     <see cref="ReduceCumAdd"/>. The plan's phase PE (E1) made it DefaultEngine's override of
+        ///     <see cref="TensorEngine.NanCumSum"/>; it was an internal static.</remarks>
         [NDScoped] // reclaims the full-size NaN-replaced copy; the scan result (or the caller's out) is yielded
-        internal static NDArray NanCumSum(NDArray a, int? axis, DType dtype, NDArray @out)
+        public override NDArray NanCumSum(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // StringDType is not inexact: _replace_nan leaves it alone and nancumsum IS np.cumsum, which computes.
             if (Strings.NDStringUfuncs.VStringReduces("nancumsum", a, axis, dtype, @out))
@@ -64,9 +64,10 @@ namespace NumSharp.Backends
         /// <exception cref="IncorrectShapeException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <remarks>Moved from the public <c>np.nancumprod</c> by the np-layer dtype plan's P1b, statement for statement;
         ///     its <c>np.cumprod</c> calls became <see cref="ReduceCumMul"/>, the member they reach for a plain
-        ///     operand.</remarks>
+        ///     operand. The plan's phase PE (E1) made it DefaultEngine's override of <see cref="TensorEngine.NanCumProd"/>;
+        ///     it was an internal static.</remarks>
         [NDScoped] // reclaims the NaN-replaced copy and a parse of text; the scan result (or the caller's out) is yielded
-        internal static NDArray NanCumProd(NDArray a, int? axis, DType dtype, NDArray @out)
+        public override NDArray NanCumProd(NDArray a, int? axis = null, DType dtype = null, NDArray @out = null)
         {
             // Text, or a string dtype= request: NumPy's _replace_nan leaves text alone and its accumulate validates the
             // axis (a 0-d input ravels first), then refuses with its verbatim text; see NDStringUfuncs.ReduceError.

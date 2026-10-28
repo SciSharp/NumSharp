@@ -18,8 +18,8 @@ namespace NumSharp
         /// https://numpy.org/doc/stable/reference/generated/numpy.nancumsum.html
         /// Port of numpy/lib/_nanfunctions_impl.py::nancumsum: <c>_replace_nan(a, 0)</c> then <c>np.cumsum</c>.
         /// Only float-family dtypes can contain NaN, so integer/bool/decimal inputs are equivalent to <see cref="cumsum"/>.
-        /// The whole function is <c>DefaultEngine.NanCumSum</c> (the np-layer dtype plan, P1b); this applies the matrix
-        /// rule and calls it.
+        /// The whole function is the engine's <c>TensorEngine.NanCumSum</c> (the np-layer dtype plan, P1b and PE);
+        /// this applies the matrix rule and calls it.
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>); a read-only <paramref name="out"/>; text a numeric loop cannot parse.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
@@ -32,8 +32,8 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, dtype, @out), static s => nancumsum(s.a, s.axis, s.dtype, s.@out), @out);
             // NumPy's nancumsum is _replace_nan(a, 0) then np.cumsum(a, axis, dtype, out); the whole function, its text
-            // routes included, is the engine's: DefaultEngine.NanCumSum.
-            return DefaultEngine.NanCumSum(a, axis, dtype, @out);
+            // routes included, is the engine's: TensorEngine.NanCumSum.
+            return a.TensorEngine.NanCumSum(a, axis, dtype, @out);
         }
     }
 }

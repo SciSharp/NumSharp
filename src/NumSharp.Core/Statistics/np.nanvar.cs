@@ -27,7 +27,7 @@ namespace NumSharp
         ///     <para>
         ///     An array that cannot hold NaN (integer, bool, char, decimal) has no NaN to ignore: the result is
         ///     <see cref="var(NDArray, int, bool, int?, DType)"/>'s, keywords included. For a float or complex array the
-        ///     arithmetic is NumPy's <c>_nanfunctions_impl.nanvar</c> (see <c>DefaultEngine.NanVarStdNumPy</c>), which
+        ///     arithmetic is NumPy's <c>_nanfunctions_impl.nanvar</c> (see <c>TensorEngine.NanVar</c>), which
         ///     differs from np.var in three observable ways: the deviations are rounded into the input's dtype before they
         ///     are squared (with <c>dtype=float64</c>, a float32 input squares float32 deviations), a complex square is the
         ///     real part of the complex product <c>x * conj(x)</c>, and a slice without degrees of freedom is NaN (np.var
@@ -40,6 +40,6 @@ namespace NumSharp
         public static NDArray nanvar(NDArray a, int? axis = null, bool keepdims = false, int ddof = 0, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, keepdims, ddof, dtype), static s => nanvar(s.a, s.axis, s.keepdims, s.ddof, s.dtype), axis, keepdims, (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex) ? "sum" : "var")
-            : DefaultEngine.NanVarStdNumPy(a, axis, keepdims, ddof, dtype, takeSqrt: false);
+            : a.TensorEngine.NanVar(a, axis, dtype, ddof, keepdims);
     }
 }

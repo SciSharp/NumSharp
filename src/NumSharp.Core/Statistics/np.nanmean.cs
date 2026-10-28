@@ -24,7 +24,7 @@ namespace NumSharp
         ///     <para>
         ///     An array that cannot hold NaN (integer, bool, char, decimal) has no NaN to ignore: the result is
         ///     <c>np.mean</c>'s, keywords included. For a float or complex array the arithmetic is NumPy's
-        ///     <c>_nanfunctions_impl.nanmean</c> (see <c>DefaultEngine.NanMeanNumPy</c>): the NaN-free sum in the input's
+        ///     <c>_nanfunctions_impl.nanmean</c> (see <c>TensorEngine.NanMean</c>): the NaN-free sum in the input's
         ///     dtype (a float16 or float32 input sums in its own dtype, not in double), then the division by the int64 count,
         ///     which for complex is NumPy's complex division (an infinite part turns the other part into NaN).
         ///     </para>
@@ -35,6 +35,6 @@ namespace NumSharp
         public static NDArray nanmean(NDArray a, int? axis = null, bool keepdims = false, DType dtype = null)
             => NDMatrixBoundary.Sees(a)   // a numpy.matrix operand: a row, a column or the scalar, as NumPy's matrix method returns
             ? NDMatrixBoundary.Reduced((a, axis, keepdims, dtype), static s => nanmean(s.a, s.axis, s.keepdims, s.dtype), axis, keepdims, (a.typecode is NPTypeCode.Half or NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Complex) ? "sum" : "mean")
-            : DefaultEngine.NanMeanNumPy(a, axis, keepdims, dtype);
+            : a.TensorEngine.NanMean(a, axis, dtype, keepdims);
     }
 }

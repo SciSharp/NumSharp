@@ -6,6 +6,25 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.NanMean"/>: NumPy's <c>nanmean</c>, run by
+        ///     <see cref="NanMeanNumPy"/>.
+        /// </summary>
+        /// <param name="a">The array to reduce, any layout.</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for a flat reduction.</param>
+        /// <param name="dtype">The loop of the sum (NumPy's <c>dtype=</c>), or null for the input's dtype.</param>
+        /// <param name="keepdims">Keep the reduced axis as a length-1 dimension.</param>
+        /// <returns>The mean of the non-NaN elements (see <see cref="NanMeanNumPy"/>).</returns>
+        /// <exception cref="TypeError">An inexact input with a non-inexact <paramref name="dtype"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> outside the operand.</exception>
+        /// <remarks>
+        ///     A public entry point since the np-layer dtype plan's phase PE (E1), so it owns its scope: the count, the
+        ///     NaN-zeroed copy and the sums are reclaimed here even when no scoped facade called it.
+        /// </remarks>
+        [NDScoped] // the count, the K-order copy and the sum before the division are this call's own; the mean is yielded
+        public override NDArray NanMean(NDArray a, int? axis = null, DType dtype = null, bool keepdims = false)
+            => NanMeanNumPy(a, axis, keepdims, dtype);
+
+        /// <summary>
         ///     NumPy 2.4.2's <c>nanmean</c> (<c>numpy/lib/_nanfunctions_impl.py</c>) statement for statement, the engine
         ///     behind <see cref="np.nanmean"/>. For an inexact input NumPy runs, in this order:
         ///     <code>
