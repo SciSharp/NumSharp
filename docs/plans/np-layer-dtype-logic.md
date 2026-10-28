@@ -665,7 +665,8 @@ The gates are §6's, plus three rules:
 
 ### P4. numpy.polynomial and numpy.ma (K5, 61 lines in 14 files)
 
-- [ ] The legacy facades `np.polyval`, `np.polyint`, `np.polyarithmetic`, `np.poly` and `poly1d` move their bodies into
+- [x] (2026-10-28, `39ae0ffb`; the D4 fixes the twin names are open, see the state log) The legacy facades
+      `np.polyval`, `np.polyint`, `np.polyarithmetic`, `np.poly` and `poly1d` move their bodies into
       `TensorEngine` members in `TensorEngine.Polynomial.cs`, after `lib/_polynomial_impl.py` (D1). The package internals
       (`NDPolySeries`, `NDPolyCalc`, `NDPolyVander`, `NDPolyEval`,
       `NDMaskedArray`) are O already: their dtype statements are NumPy's Python statements, and they stay.
@@ -718,6 +719,33 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-28, P4: the legacy polynomial functions are abstract `TensorEngine` members (`TensorEngine.Polynomial.cs`);
+  their D4 fixes are open.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The
+  referees: the snapshot (np.poly, np.polyval, np.polyint, np.polyadd, np.polysub, np.polymul, np.polydiv: 8,221 calls)
+  with `DOTNET_TieredCompilation=0` under `NUMSHARP_DEBUG_GUARD_PAGES=1`, and `twin_poly.py` (each line rebuilt in
+  NumPy, the outcome rendered the snapshot's way):
+  - `0b55cdd4` the snapshot tool varies np.polyint's `m` (IntArg: 0, 1, 2, -1, 5) and `k` (None, a 0-d, one value, five,
+    two, integers, text; the C# double of the convenience overload). The other functions were reached already
+    (np.polydiv's `v` through np.searchsorted's Keys role, by its name). The twin agrees on 5,590 of 7,806 comparable
+    lines and 17 are VF01 (414 decimal lines have no twin).
+  - `39ae0ffb` the move: `TensorEngine.Poly`, `Polyval`, `Polyint`, `Polyadd`, `Polysub`, `Polymul` and `Polydiv`,
+    abstract and documented in full; `DefaultEngine`'s overrides in `Polynomial/Default.Polynomial.cs` beside the
+    facades, with `PolyAddSub`, `NaiveComplexScalarMultiply` and `PolyMinType`; the facades keep their boundary
+    statements (np.polyval's matrix and chararray rules) and one call. 8,221 calls byte-identical; R1 drops the four
+    rows (np.poly.cs 1 / 3, np.polyarithmetic.cs 3 / 1, np.polyint.cs 4 / 0, np.polyval.cs 5 / 0). `poly1d` is a class
+    (Appendix D) and keeps its constructor's text line.
+  - **Open, D4** (found by the twin, not fixed; each wants its own commit):
+    - NumSharp measures a coefficient array by its SIZE where NumPy takes `len()` (its first axis): np.polyval iterates
+      `p.size` elements (an N-D p raises IndexError where NumPy evaluates row by row and broadcasts), np.polyint divides
+      by `arange(size, 0, -1)` (`(3,4) (12,)` in the broadcast error where NumPy says `(3,4) (3,)`), np.polyadd /
+      np.polysub pad by the size difference (a (3,4) and a (4,3) pad nothing and subtract; NumPy pads one row and
+      np.concatenate refuses the ranks), np.polydiv loops `size(u) - size(v) + 1` times (a (3,4) u with a 7-element v
+      raises where NumPy returns q (1,) and r (3,4)). One root cause, about 1,900 twin lines.
+    - np.polydiv stores `q[k:k+1] = atleast_1d(d)` where NumPy stores `q[k] = d`: a row d raises NumSharp's broadcast
+      text where NumPy raises `setting an array element with a sequence.`.
+    - np.poly(0-d): NumPy's `__array_function__` dispatcher returns the 0-d argument itself, which is not iterable
+      (`TypeError: dispatcher for __array_function__ did not return an iterable`); NumSharp computes the one root.
+  - Left otherwise: NumSharp's char class name in no-loop texts (the twin's uint16 proxy).
 - **2026-10-28, P2's eighteenth family: np.einsum's contraction is the abstract `TensorEngine.Einsum`
   (`TensorEngine.EinsumFunc.cs`); three D4 fixes, the largest NumPy's iterator taking `out=` in.** Commits on `strings`,
   developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (np.einsum's three overloads:
