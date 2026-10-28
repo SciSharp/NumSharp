@@ -214,9 +214,9 @@ namespace NumSharp
 
             /// <summary>
             ///     The port of NumPy's <c>npyiter_init</c> (<c>nditer_pywrap.c</c>) and of the descriptor half of
-            ///     <c>NpyIter_AdvancedNew</c>: the arguments are converted in NumPy's order (flags, order, casting, op_flags,
-            ///     op_dtypes, op_axes) and the itershape rank rule applied, the op_axes entries checked
-            ///     (<c>npyiter_check_op_axes</c>), the global flags checked, every operand prepared in turn
+            ///     <c>NpyIter_AdvancedNew</c>: the arguments are converted in NumPy's order (flags, order, casting, then the
+            ///     operand count, then op_flags, op_dtypes, op_axes) and the itershape rank rule applied, the op_axes entries
+            ///     checked (<c>npyiter_check_op_axes</c>), the global flags checked, every operand prepared in turn
             ///     (<c>npyiter_prepare_operands</c>: its flags, its writeability, its size, its requested dtype adapted to it),
             ///     the iteration shape broadcast and checked (<c>npyiter_fill_axisdata</c>'s shape pass, then its stride pass's
             ///     refusals), the dtypes an allocation or <c>common_dtype</c> needs resolved (<c>npyiter_get_common_dtype</c>),
@@ -254,6 +254,13 @@ namespace NumSharp
                 long[] itershape,
                 long buffersize)
             {
+                // PyArg_ParseTupleAndKeywords' converters, in NumPy's argument order. They run while NumPy parses the
+                // arguments, before npyiter_prepare_ops looks at the operand list, so a bad flag, order or casting is the
+                // error even when there is no operand.
+                var globalFlags = ParseGlobalFlags(flags);
+                var npyOrder = ParseOrder(order);
+                var npyCasting = ParseCasting(casting);
+
                 // npyiter_prepare_ops.
                 if (op == null || op.Length == 0)
                     throw new ValueError("Must provide at least one operand");
@@ -263,11 +270,8 @@ namespace NumSharp
                 op = (NDArray[])op.Clone();
                 int nop = op.Length;
 
-                // PyArg_ParseTupleAndKeywords' converters, in NumPy's argument order, then npyiter_convert_ops (op_flags),
-                // npyiter_convert_dtypes and npyiter_convert_op_axes.
-                var globalFlags = ParseGlobalFlags(flags);
-                var npyOrder = ParseOrder(order);
-                var npyCasting = ParseCasting(casting);
+                // npyiter_convert_ops (op_flags), npyiter_convert_dtypes and npyiter_convert_op_axes: after the operand
+                // count, so with no operand a bad op_flags / op_dtypes / op_axes is never reached.
                 var perOpFlags = ParseOpFlags(op_flags, op, nop);
                 var requests = ConvertDtypes(op_dtypes, nop);
                 int oaNDim = ConvertOpAxes(op_axes, nop);

@@ -444,6 +444,30 @@ namespace NumSharp.Tests.APIs
                 .Should().Throw<ArgumentException>()
                 .WithMessage("Must provide at least one operand");
 
+        /// <summary>
+        ///     NumPy converts <c>flags</c>, <c>order</c> and <c>casting</c> while it parses the arguments, before it looks
+        ///     at the operand list (<c>npyiter_init</c>: <c>PyArg_ParseTupleAndKeywords</c>' converters, then
+        ///     <c>npyiter_prepare_ops</c>), so with no operand a bad one of them is the error. <c>op_flags</c> and
+        ///     <c>op_dtypes</c> are converted after the operand count and are not. Probed against NumPy 2.4.2; NumSharp
+        ///     reported the operand count first.
+        /// </summary>
+        [TestMethod]
+        public void NdIter_NoOperands_ArgumentConvertersComeFirst()
+        {
+            var none = Array.Empty<NDArray>();
+            new Action(() => np.nditer(none, flags: new[] {"bogus"}))
+                .Should().Throw<ValueError>().WithMessage("Unexpected iterator global flag \"bogus\"");
+            new Action(() => np.nditer(none, order: 'Z'))
+                .Should().Throw<ValueError>().WithMessage("order must be one of 'C', 'F', 'A', or 'K' (got 'Z')");
+            new Action(() => np.nditer(none, casting: "bogus"))
+                .Should().Throw<ValueError>()
+                .WithMessage("casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe' (got 'bogus')");
+            new Action(() => np.nditer(none, op_flags: new[] {new[] {"bogus"}}))
+                .Should().Throw<ValueError>().WithMessage("Must provide at least one operand");
+            new Action(() => np.nditer(none, op_dtypes: new DType[] {np.float64}))
+                .Should().Throw<ValueError>().WithMessage("Must provide at least one operand");
+        }
+
         [TestMethod]
         public void NdIter_GrowInnerAlias_IsAccepted()
         {
