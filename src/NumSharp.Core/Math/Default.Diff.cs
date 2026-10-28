@@ -1,0 +1,278 @@
+// NumPy's np.diff (numpy/lib/_function_base_impl.py) as DefaultEngine's member, with the adjacent-difference stencil
+// helpers np.diff and np.ediff1d share. The file sits beside its facade while it calls np.*: ratchet R2 counts np.*
+// calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+
+using System;
+using System.Collections.Generic;
+using System.Reflection.Emit;
+using NumSharp.Backends.Iteration;
+using NumSharp.Backends.Kernels;
+
+namespace NumSharp.Backends
+{
+    public partial class DefaultEngine
+    {
+        /// <inheritdoc />
+        [NDScoped] // the concatenation and every intermediate difference are this call's own
+        public override NDArray Diff(NDArray a, int n = 1, int axis = -1, object prepend = null, object append = null)
+        {
+            if (a is null) throw new ArgumentNullException(nameof(a));
+
+            // n == 0 returns the input unchanged (NumPy returns the same object).
+            if (n == 0) return a;
+            if (n < 0)
+                throw new ArgumentException(
+                    $"order must be non-negative but got {n}", nameof(n));
+
+            int nd = a.ndim;
+            int ax = np.DiffAxis(a, axis);
+
+            // Fast path: a single difference along a C-contiguous innermost axis with no
+            // prepend/append is an adjacent-difference stencil — one fused kernel over the
+            // source (overlapping SIMD loads), no slice views, no NDIter. Covers 1-D and
+            // last-axis N-D. Boolean (not_equal), n>1, prepend/append, non-contiguous or
+            // non-innermost-axis diffs fall through to the general path below. Returns null
+            // when the dtype kernel is unavailable (→ general path).
+            if (n == 1 && prepend is null && append is null
+                && ax == nd - 1
+                && a.GetTypeCode != NPTypeCode.Boolean
+                && a.GetTypeCode != NPTypeCode.String
+                && a.Shape.IsContiguous && !a.Shape.IsBroadcasted
+                && a.Shape.dimensions[ax] >= 2)
+            {
+                var fast = DiffAdjacentContiguous(a, ax);
+                if (fast is not null) return fast;
+            }
+
+            // Build [prepend?, a, append?] and concatenate along the axis when
+            // anything was supplied. `a` itself is never disposed here.
+            NDArray work;
+            bool workOwned;
+            if (prepend is null && append is null)
+            {
+                work = a;
+                workOwned = false;
+            }
+            else
+            {
+                var parts = new List<NDArray>(3);
+                var toDispose = new List<NDArray>(4);
+                if (prepend is not null)
+                    parts.Add(DiffPrepareEnd(prepend, a, ax, toDispose));
+                parts.Add(a);
+                if (append is not null)
+                    parts.Add(DiffPrepareEnd(append, a, ax, toDispose));
+
+                work = np.concatenate(parts.ToArray(), ax);
+                workOwned = true;
+
+                // Dispose intermediates view-before-owner (reverse insertion).
+                for (int i = toDispose.Count - 1; i >= 0; i--)
+                    toDispose[i].Dispose();
+            }
+
+            // op = not_equal if a.dtype == bool else subtract — decided from the
+            // POST-concatenation dtype (a bool array with an int prepend promotes
+            // to int and therefore subtracts).
+            bool useNotEqual = work.GetTypeCode == NPTypeCode.Boolean;
+            // Text: subtract has no string loop, so NumPy's first op(a[1:], a[:-1]) refuses whatever the size, an empty
+            // array included (both slices carry the post-concatenation dtype).
+            if (work.GetTypeCode == NPTypeCode.String)
+            {
+                var refusal = Backends.Strings.NDStringUfuncs.BinaryError("subtract", work, work, null, null);
+                if (workOwned)
+                    work.Dispose();
+                throw refusal;
+            }
+
+            NDArray current = work;
+            bool currentOwned = workOwned;
+            for (int it = 0; it < n; it++)
+            {
+                long len = current.Shape.dimensions[ax];
+                long m = len > 0 ? len - 1 : 0;                      // result length along axis
+                var hi = np.SliceAlongAxis(current, ax, len - m, len);  // a[1:]  (last  m)
+                var lo = np.SliceAlongAxis(current, ax, 0, m);          // a[:-1] (first m)
+                // Bool diffs via not_equal (the `!=` IL kernel). Numeric diffs go
+                // through the lean NDIter subtract (DiffSubtractViaNDIter), which
+                // writes into an uninitialised output and skips the type-promotion /
+                // broadcast / F-analysis the `-` operator would re-derive — operands
+                // here are always equal-shape, equal-dtype, non-broadcast. Falls back
+                // to the `-` operator for any dtype the kernel emitter rejects.
+                NDArray next = useNotEqual
+                    ? (hi != lo)
+                    : (DiffSubtractViaNDIter(hi, lo) ?? (hi - lo));
+                hi.Dispose();
+                lo.Dispose();
+                if (currentOwned) current.Dispose();
+                current = next;
+                currentOwned = true;
+            }
+
+            return current;
+        }
+
+        /// <summary>
+        ///     Fused single-difference along the innermost axis of a C-contiguous array via
+        ///     <see cref="DirectILKernelGenerator.AdjacentDiffKernel"/>: for each row,
+        ///     <c>out[i] = a[i+1] - a[i]</c>. The result is a fresh, uninitialised
+        ///     C-contiguous array of <paramref name="a"/>'s shape with the innermost axis
+        ///     shrunk by one. Returns <c>null</c> when the dtype has no adjacent-diff kernel
+        ///     (Boolean, or a dtype the emitter rejects), signalling the caller to use the
+        ///     general slice-subtract path. Shared by <c>np.diff</c> and
+        ///     <c>np.ediff1d</c> (both are the same stencil).
+        ///     <para>
+        ///     Preconditions (asserted by callers): <paramref name="a"/> is C-contiguous,
+        ///     non-broadcast, <paramref name="axis"/> is the innermost axis, and that axis
+        ///     has length ≥ 2.
+        ///     </para>
+        /// </summary>
+        internal static unsafe NDArray DiffAdjacentContiguous(NDArray a, int axis)
+        {
+            NPTypeCode dt = a.GetTypeCode;
+            var kernel = DirectILKernelGenerator.GetAdjacentDiffKernel(dt);
+            if (kernel is null) return null;
+
+            var s = a.Shape;
+            int nd = a.ndim;
+            long inLen = s.dimensions[nd - 1];
+
+            // Output shape: identical except the innermost axis loses one element. Rows =
+            // product of the outer axes (1 for a 1-D input).
+            long[] outDims = new long[nd];
+            long rows = 1;
+            for (int i = 0; i < nd - 1; i++)
+            {
+                outDims[i] = s.dimensions[i];
+                rows *= s.dimensions[i];
+            }
+            outDims[nd - 1] = inLen - 1;
+
+            var outp = new NDArray(a.dtype, Shape.Adopt(outDims), false);
+            if (outp.size == 0) return outp;
+
+            int elemSize = a.dtypesize;
+            byte* src = (byte*)a.Address + s.offset * elemSize;
+            kernel((void*)src, (void*)outp.Address, rows, inLen);
+            return outp;
+        }
+
+        /// <summary>
+        ///     Normalises a prepend/append operand: converts scalars/array-likes
+        ///     to an <see cref="NDArray"/>, and broadcasts 0-D values to
+        ///     <paramref name="a"/>'s shape with the diff axis set to length 1
+        ///     (NumPy expands scalar prepend/append to length-1 along the axis).
+        ///     Any array allocated here is registered in
+        ///     <paramref name="toDispose"/> for cleanup after the concatenate.
+        /// </summary>
+        private static NDArray DiffPrepareEnd(object value, NDArray a, int axis, List<NDArray> toDispose)
+        {
+            NDArray v;
+            if (value is NDArray nd)
+                v = nd;                       // caller-owned; do not dispose
+            else
+            {
+                v = np.asanyarray(value);
+                toDispose.Add(v);
+            }
+
+            if (v.ndim == 0)
+            {
+                long[] dims = new long[a.ndim];
+                for (int i = 0; i < a.ndim; i++) dims[i] = a.Shape.dimensions[i];
+                dims[axis] = 1;
+                var bcast = np.broadcast_to(v, Shape.Adopt(dims));
+                toDispose.Add(bcast);
+                return bcast;
+            }
+
+            return v;
+        }
+
+        // [hi(READONLY), lo(READONLY), out(WRITEONLY)] operand flags, hoisted so
+        // the per-iteration subtract doesn't re-allocate the flags array.
+        private static readonly NDIterPerOpFlags[] _diffRRW =
+        {
+            NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.READONLY,
+            NDIterPerOpFlags.WRITEONLY,
+        };
+
+        /// <summary>
+        ///     Lean NDIter subtract used by the diff loop: computes
+        ///     <c>hi - lo</c> into a freshly-allocated, <b>uninitialised</b>
+        ///     C-contiguous output via the NDIter Tier-3B inner-loop kernel
+        ///     (4×-unrolled SIMD + scalar-strided shell). <paramref name="hi"/>
+        ///     and <paramref name="lo"/> are always equal-shape, equal-dtype and
+        ///     non-broadcast, so this skips the type-promotion, broadcast
+        ///     resolution and F-contig analysis that <see cref="DefaultEngine"/>'s
+        ///     general binary path performs. Returns <c>null</c> when the kernel
+        ///     emitter rejects the dtype, signalling the caller to fall back to
+        ///     the <c>-</c> operator.
+        /// </summary>
+        internal static unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
+        {
+            NPTypeCode dt = hi.GetTypeCode;
+
+            // Fresh C-contiguous, uninitialised output with hi's dimensions.
+            int nd = hi.ndim;
+            long[] dims = new long[nd];
+            for (int i = 0; i < nd; i++) dims[i] = hi.Shape.dimensions[i];
+            var outp = new NDArray(hi.dtype, Shape.Adopt(dims), false);
+
+            // Empty result: the NDIter element-wise path must not run over zero
+            // elements (it walks broadcast dims as if non-empty). Nothing to do.
+            if (outp.size == 0) return outp;
+
+            bool simd = DirectILKernelGenerator.CanUseSimd(dt)
+                        && DirectILKernelGenerator.CanUseSimdForOp(BinaryOp.Subtract);
+            Action<ILGenerator> scalarBody =
+                il => DirectILKernelGenerator.EmitScalarOperation(il, BinaryOp.Subtract, dt);
+            Action<ILGenerator> vectorBody = simd
+                ? il => DirectILKernelGenerator.EmitVectorOperation(il, BinaryOp.Subtract, dt)
+                : null;
+
+            try
+            {
+                using var iter = NDIterRef.MultiNew(
+                    3, new[] { hi, lo, outp },
+                    NDIterGlobalFlags.EXTERNAL_LOOP,
+                    NPY_ORDER.NPY_CORDER,
+                    NPY_CASTING.NPY_SAFE_CASTING,
+                    _diffRRW);
+
+                iter.ExecuteElementWiseBinary(dt, dt, dt, scalarBody, vectorBody, DiffSubKey(dt));
+            }
+            catch (NotSupportedException)
+            {
+                outp.Dispose();
+                return null; // fall back to the `-` operator
+            }
+
+            return outp;
+        }
+
+        /// <summary>
+        ///     Allocation-free, per-dtype kernel cache key for the diff subtract.
+        ///     Returns interned literals so the hot loop never allocates a string.
+        /// </summary>
+        private static string DiffSubKey(NPTypeCode dt) => dt switch
+        {
+            NPTypeCode.Byte => "npy_diff_sub_Byte",
+            NPTypeCode.SByte => "npy_diff_sub_SByte",
+            NPTypeCode.Int16 => "npy_diff_sub_Int16",
+            NPTypeCode.UInt16 => "npy_diff_sub_UInt16",
+            NPTypeCode.Int32 => "npy_diff_sub_Int32",
+            NPTypeCode.UInt32 => "npy_diff_sub_UInt32",
+            NPTypeCode.Int64 => "npy_diff_sub_Int64",
+            NPTypeCode.UInt64 => "npy_diff_sub_UInt64",
+            NPTypeCode.Char => "npy_diff_sub_Char",
+            NPTypeCode.Half => "npy_diff_sub_Half",
+            NPTypeCode.Single => "npy_diff_sub_Single",
+            NPTypeCode.Double => "npy_diff_sub_Double",
+            NPTypeCode.Decimal => "npy_diff_sub_Decimal",
+            NPTypeCode.Complex => "npy_diff_sub_Complex",
+            _ => "npy_diff_sub_" + dt,
+        };
+    }
+}

@@ -330,5 +330,27 @@ namespace NumSharp
         /// <exception cref="OverflowException">A decimal result past the decimal range (<c>|x|</c> above about 72).</exception>
         /// <remarks>DefaultEngine runs the series per element in one fused <c>np.evaluate</c> pass.</remarks>
         public abstract NDArray I0(NDArray x);
+
+        /// <summary>
+        ///     NumPy's <c>np.diff(a, n=1, axis=-1, prepend=&lt;no value&gt;, append=&lt;no value&gt;)</c>: the n-th
+        ///     discrete difference along an axis, <c>a = op(a[1:], a[:-1])</c> repeated n times after concatenating
+        ///     prepend / append along the axis, where op is <c>!=</c> for bool and <c>-</c> otherwise.
+        /// </summary>
+        /// <param name="a">The input, at least 1-D (not null).</param>
+        /// <param name="n">How many times to difference; 0 returns <paramref name="a"/> itself.</param>
+        /// <param name="axis">The axis to difference along (negative counts from the end).</param>
+        /// <param name="prepend">Values to put before <paramref name="a"/> along the axis (a scalar is broadcast to
+        ///     length 1), or null for none.</param>
+        /// <param name="append">Values to put after <paramref name="a"/> along the axis, or null for none.</param>
+        /// <returns><paramref name="a"/> itself for <paramref name="n"/> 0; otherwise a new array, the axis shorter
+        ///     by <paramref name="n"/>, in the subtraction's dtype (bool for a bool input).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ArgumentException">A negative <paramref name="n"/> (<c>order must be non-negative but got
+        ///     -1</c>).</exception>
+        /// <exception cref="ValueError">A 0-D <paramref name="a"/> (<c>diff requires input that is at least one
+        ///     dimensional</c>).</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range.</exception>
+        /// <exception cref="TypeError">Text with <paramref name="n"/> above 0: subtract has no string loop.</exception>
+        public abstract NDArray Diff(NDArray a, int n = 1, int axis = -1, object prepend = null, object append = null);
     }
 }

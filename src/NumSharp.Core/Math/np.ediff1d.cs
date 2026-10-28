@@ -98,7 +98,7 @@ namespace NumSharp
             // here (boolean threw above). Falls back to the slice-subtract for L<2 or an
             // unavailable dtype kernel.
             if (L >= 2)
-                middle = DiffAdjacentContiguous(flat, 0);
+                middle = Backends.DefaultEngine.DiffAdjacentContiguous(flat, 0);
             if (middle is null)
             {
                 long m = L > 0 ? L - 1 : 0;
@@ -106,7 +106,7 @@ namespace NumSharp
                 var lo = SliceAlongAxis(flat, 0, 0, m);     // flat[:-1]
                 // Same lean NDIter subtract as np.diff (uninitialised output,
                 // no promotion/broadcast re-derivation); `-` operator as fallback.
-                middle = DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
+                middle = Backends.DefaultEngine.DiffSubtractViaNDIter(hi, lo) ?? (hi - lo);
             }
 
             // Fast path: nothing to bracket — return the middle directly (the scope yields it).
