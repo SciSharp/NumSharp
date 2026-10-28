@@ -58,10 +58,13 @@
 // dtypes, sizes, ranges and layouts that reach NumPy's table, loop and sort paths) and its algorithm name kind, and
 // np.average / np.average_returned's weights (of the operand's shape, along one axis or two in either order, a 0-d, zero
 // sums, other dtypes, the forms NumPy refuses) and axis tuple (single axes, both orders of a pair, the empty tuple, a
-// repeated and an out-of-range axis)); an overload with a required parameter of another kind is reported once as SKIP.
-// An int axis
+// repeated and an out-of-range axis), and np.convolve / np.correlate's second sequence v (the operand's copy, other dtypes
+// and lengths, one-element arrays of either stride sign, special values, text, the shapes NumPy refuses, strided and
+// reversed views) and their mode name (the three names, near misses, other strings, null)); an overload with a required
+// parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
-// strided, reversed, unsorted and empty ones beside one 2-D operand. An np.linalg function runs on pools of matrices
+// strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
+// and a 24-element one (long1d), whose float products reach the BLAS-shaped vector regimes. An np.linalg function runs on pools of matrices
 // (LinalgLayouts, 20 layouts in phase A: square ones in C, F, transposed, strided, reversed and broadcast form, a stack, a
 // positive definite and a singular matrix, rectangles, empties; 7 in phase B, a square matrix and a rectangle in phase C),
 // and multi_dot's array list is built from the operand (MakeLinalgArrays). A result that is a struct of arrays (np.histogram's
@@ -273,6 +276,11 @@ static class Snapshot
         // either order, a 0-d, sums that are zero, and the forms NumPy refuses) and the axis tuple (NumPy's
         // normalize_axis_tuple forms, an unsorted pair included, so _weights_are_valid's transpose is reached).
         AverageWeights, AverageAxes,
+        // np.convolve / np.correlate and their NDArray members: the second sequence v (built from the operand: its copy,
+        // sequences of other dtypes and lengths, one-element arrays of either stride sign, special values, text, a 0-d, a
+        // 2-D, an empty one, strided and reversed views; see MakeSlidingKernel) and the mode name (the three names, the near
+        // misses and other strings NumPy refuses with two different texts, and null).
+        SlidingKernel, SlidingMode,
         Default, Unsupported,
     }
 
@@ -306,6 +314,17 @@ static class Snapshot
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "isin";
 
     /// <summary>
+    ///     Whether a parameter belongs to np.convolve / np.correlate or their NDArray members, whose <c>v</c> / <c>mode</c>
+    ///     roles are theirs alone: np.searchsorted names its keys <c>v</c> and np.take / np.linalg.qr name a parameter
+    ///     <c>mode</c> with other meanings, and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public np.convolve / np.correlate overload or of NDArray's convolve / correlate.</returns>
+    private static bool IsSliding(ParameterInfo p) =>
+        (p.Member.DeclaringType == typeof(np) || p.Member.DeclaringType == typeof(NDArray))
+        && p.Member.Name is "convolve" or "correlate";
+
+    /// <summary>
     ///     Classifies a parameter.
     /// </summary>
     /// <param name="p">The parameter.</param>
@@ -328,6 +347,8 @@ static class Snapshot
                 // np.trapezoid's x is optional (null = evenly spaced), unlike a binary function's second operand x: tested
                 // before the operand names so its base stays the default.
                 : n == "x" && p.HasDefaultValue ? Role.Spacing
+                // np.convolve / np.correlate's second sequence, before np.searchsorted's keys of the same name.
+                : n == "v" && IsSliding(p) ? Role.SlidingKernel
                 // np.searchsorted's keys and sorter.
                 : n == "v" ? Role.Keys
                 : n == "sorter" ? Role.Sorter
@@ -388,10 +409,12 @@ static class Snapshot
         if (n == "varargs" && t == typeof(object[])) return Role.GradVarargs;
         if (n == "edge_order" && t == typeof(int)) return Role.EdgeOrder;
         // np.linalg: the norm / cond order (typed object: NumPy's ord / p takes numbers and names), eigh's UPLO, qr's mode
-        // (only np.linalg's: np.convolve's and np.take's modes keep their defaults), matrix_power's exponent (required),
-        // tensordot's two axis lists (required), and the nullable tolerances.
+        // (only np.linalg's and np.convolve / np.correlate's, below: np.take's mode keeps its default), matrix_power's
+        // exponent (required), tensordot's two axis lists (required), and the nullable tolerances.
         if ((n == "ord" || n == "p") && t == typeof(object)) return Role.Ord;
         if (n == "UPLO" && t == typeof(char)) return Role.Uplo;
+        // np.convolve / np.correlate's mode name.
+        if (n == "mode" && t == typeof(string) && IsSliding(p)) return Role.SlidingMode;
         bool inLinalg = p.Member.DeclaringType == typeof(np.linalg);
         if (n == "mode" && t == typeof(string) && inLinalg) return Role.QrMode;
         if (n == "n" && t == typeof(int) && inLinalg) return Role.Power;
@@ -452,6 +475,30 @@ static class Snapshot
                 // The base is the operand's own copy (MakeKeys "same"); the variants follow from the operand.
                 Add("same", () => null);
                 break;
+            case Role.SlidingKernel:
+                // The base is the operand's own copy (MakeSlidingKernel "same"); the variants follow from the operand.
+                Add("same", () => null);
+                break;
+            case Role.SlidingMode:
+            {
+                // The overload's default first (np.convolve's 'full', np.correlate's 'valid'), the other two names, then the
+                // strings NumPy's correlatemode_parser refuses: near misses (the right first letter: a capital, one letter, a
+                // trailing space) with its own text, and other strings (one holding a quote, which NumPy's %R prints in
+                // double quotes; the empty one) with the string converter's text quoting them; and null, Python's None, which
+                // is neither a str nor an int ("convolve/correlate mode not understood").
+                string baseMode = (string)p.DefaultValue;
+                Add(baseMode, () => baseMode);
+                foreach (var s in new[] { "valid", "same", "full" })
+                    if (s != baseMode)
+                        Add(s, () => s);
+                foreach (var (label, s) in new[]
+                         {
+                             ("Full", "Full"), ("v", "v"), ("same_", "same "), ("x", "x"), ("quote", "it's"), ("empty", ""),
+                             ("null", (string)null),
+                         })
+                    Add(label, () => s);
+                break;
+            }
             case Role.IsinTest:
                 // The base is the operand's own copy (MakeIsinTest "same"); the variants follow from the operand.
                 Add("same", () => null);
@@ -902,20 +949,34 @@ static class Snapshot
     /// <summary>The small pool of an np.linalg overload (phase C): a square matrix and a rectangle.</summary>
     private static readonly string[] LinalgPairLayouts = { "sq3", "c2d" };
 
+    /// <summary>The reduced pool of np.convolve / np.correlate (phase B): the 1-D layouts (plain, sorted, special, strided,
+    ///     reversed and the 24-element one, whose float products reach the vector regimes of NumPy's dot functions), a 0-d
+    ///     operand (np.convolve makes it one element, np.correlate refuses it), an empty 1-D one and a 2-D one (too
+    ///     deep).</summary>
+    private static readonly string[] SlidingReducedLayouts =
+        { "1d", "sorted1d", "sorted1d_special", "strided1d", "reversed1d", "long1d", "0d", "empty1d", "c2d" };
+
+    /// <summary>The small pool of np.convolve / np.correlate (phase C).</summary>
+    private static readonly string[] SlidingPairLayouts = { "1d", "long1d", "0d", "c2d" };
+
     /// <summary>
     ///     The operand layouts of the three phases for an overload: the general pools; for np.searchsorted /
     ///     NDArray.searchsorted, pools of 1-D haystacks (every other operand of the general pools fails NumPy's 1-D check
-    ///     before anything else is read, so the varied keys, sides and sorters would never reach the search); for np.linalg,
-    ///     pools of square matrices, stacks and rectangles (<see cref="LinalgLayouts"/>).
+    ///     before anything else is read, so the varied keys, sides and sorters would never reach the search); for
+    ///     np.convolve / np.correlate and their NDArray members, the same 1-D layouts and a 24-element one (a general pool's
+    ///     2-D operand fails their depth check first); for np.linalg, pools of square matrices, stacks and rectangles
+    ///     (<see cref="LinalgLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>The layouts of phase A, phase B and phase C.</returns>
     private static (string[] Full, string[] Reduced, string[] Pair) PoolsFor(MethodInfo m) =>
         m.Name == "searchsorted"
             ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
-            : m.DeclaringType == typeof(np.linalg)
-                ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
-                : (Layouts, ReducedLayouts, PairLayouts);
+            : m.Name is "convolve" or "correlate" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray))
+                ? (Layouts.Concat(SortedLayouts).Append("long1d").ToArray(), SlidingReducedLayouts, SlidingPairLayouts)
+                : m.DeclaringType == typeof(np.linalg)
+                    ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
+                    : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
@@ -977,6 +1038,7 @@ static class Snapshot
             Role.Operand2 => Operand2VariantLabels.Length - 1,
             Role.Spacing => SpacingVariantLabels.Length - 1,
             Role.Keys => KeysVariantLabels.Length - 1,
+            Role.SlidingKernel => SlidingKernelVariantLabels.Length - 1,
             Role.IsinTest => IsinTestVariantLabels.Length - 1,
             Role.AverageWeights => AverageWeightVariantLabels.Length - 1,
             Role.Sorter => SorterVariantLabels.Length - 1,
@@ -1076,6 +1138,7 @@ static class Snapshot
             Role.Operand2 => Operand2VariantLabels[v],
             Role.Spacing => SpacingVariantLabels[v],
             Role.Keys => KeysVariantLabels[v],
+            Role.SlidingKernel => SlidingKernelVariantLabels[v],
             Role.IsinTest => IsinTestVariantLabels[v],
             Role.AverageWeights => AverageWeightVariantLabels[v],
             Role.Sorter => SorterVariantLabels[v],
@@ -1106,6 +1169,7 @@ static class Snapshot
                 argv[i] = i == operandIndex ? operand
                     : roles[i] == Role.Operand2 ? MakeOperand2(Operand2VariantLabels[0], operand)
                     : roles[i] == Role.Keys ? MakeKeys(KeysVariantLabels[0], operand)
+                    : roles[i] == Role.SlidingKernel ? MakeSlidingKernel(SlidingKernelVariantLabels[0], operand)
                     : roles[i] == Role.IsinTest ? MakeIsinTest(IsinTestVariantLabels[0], operand)
                     : roles[i] == Role.LinalgArrays ? MakeLinalgArrays(LinalgArraysVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
@@ -1133,6 +1197,9 @@ static class Snapshot
                         break;
                     case Role.Keys:
                         argv[p] = MakeKeys(KeysVariantLabels[v], operand);
+                        break;
+                    case Role.SlidingKernel:
+                        argv[p] = MakeSlidingKernel(SlidingKernelVariantLabels[v], operand);
                         break;
                     case Role.IsinTest:
                         argv[p] = MakeIsinTest(IsinTestVariantLabels[v], operand);
@@ -1275,6 +1342,9 @@ static class Snapshot
             case "sorted1d": return SortedOrNull(Values(6));
             case "strided1d": return SortedOrNull(Values(12))?["::2"];
             case "reversed1d": return SortedOrNull(Values(6))?["::-1"];
+            // np.convolve / np.correlate's long sequence: the whole 24-value prefix, so a product of it with a long kernel
+            // reaches the vector regimes of NumPy's dot functions (ddot from 16 terms, zdotu from 8).
+            case "long1d": return Values(24);
             // np.linalg's square matrices, stacks and rectangles (LinalgLayouts). The plain prefixes give nonsingular
             // matrices (sq3's determinant is 48, sq3s's 1, sq2's 2, the stack's 48 and -472).
             case "sq3": return Values(9).reshape(new Shape(3, 3));
@@ -1626,6 +1696,68 @@ static class Snapshot
             case "row":
                 return np.array(Enumerable.Range(0, (int)(dims.Length == 0 ? 1 : dims[^1])).Select(i => i % 4).ToArray());
             default: throw new ArgumentException("unknown key variant " + label);
+        }
+    }
+
+    /// <summary>np.convolve / np.correlate's second-sequence variants, built from the operand (see
+    ///     <see cref="MakeSlidingKernel"/>); the first is the base.</summary>
+    private static readonly string[] SlidingKernelVariantLabels =
+    {
+        "same", "int32", "float64", "short", "int8", "uint64", "float16", "complex", "one", "one_c", "one_c_rev", "long",
+        "special", "bool", "U5", "T", "S5", "0d", "2d", "empty", "strided", "reversed",
+    };
+
+    /// <summary>
+    ///     Builds np.convolve / np.correlate's second sequence for an operand: its own values, sequences of other dtypes
+    ///     (the result dtype is their promotion) and lengths (longer than the operand: NumPy swaps the operands, and
+    ///     np.correlate reverses its result), the one-element arrays whose stride decides NumPy's complex dot route, special
+    ///     values, text, and the shapes NumPy refuses.
+    /// </summary>
+    /// <param name="label">The variant: <c>same</c> (a copy of the operand: equal lengths), <c>int32</c> / <c>float64</c>
+    ///     (seven values -6 to 6 / -3 to 3: one longer than the pool's 1-D operands), <c>short</c> (float64 1.5, -2: a
+    ///     kernel shorter than the data, so the ramps of every mode), <c>int8</c> / <c>uint64</c> / <c>float16</c> (three
+    ///     values: small-integer promotion, int64 with uint64 giving float64, the HALF loop), <c>complex</c> (three complex
+    ///     values: np.correlate conjugates them), <c>one</c> (one float64 element), <c>one_c</c> (one fresh complex element:
+    ///     a positive stride, which np.convolve's reversal makes negative) and <c>one_c_rev</c> (the reversed view of one
+    ///     complex element: a negative stride, which the reversal makes positive) — NumPy's complex dot takes cblas only for
+    ///     positive strides, and its result rule differs for non-finite values —, <c>long</c> (twenty float64 values with
+    ///     fractional parts: beside the 24-element operand a dot of up to twenty terms, past ddot's and zdotu's scalar
+    ///     regimes), <c>special</c> (seven float64 values with NaN, signed zeros and infinities), <c>bool</c>, <c>U5</c> /
+    ///     <c>T</c> / <c>S5</c> (seven text values), <c>0d</c> (a 0-d int64 2: np.convolve makes it one element,
+    ///     np.correlate refuses it), <c>2d</c> (a (2, 3) float64 block: too deep), <c>empty</c> (no element),
+    ///     <c>strided</c> / <c>reversed</c> (every other element of 0..13 / 6 down to 0, as views: NumPy copies a
+    ///     non-contiguous operand into a fresh array).</param>
+    /// <param name="operand">The operand (the first sequence).</param>
+    /// <returns>A fresh array, or a view of one (<c>one_c_rev</c>, <c>strided</c>, <c>reversed</c>).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray MakeSlidingKernel(string label, NDArray operand)
+    {
+        string[] text = { "-1", "0", "2", "3", "10", "x", "" };
+        switch (label)
+        {
+            case "same": return operand.copy();
+            case "int32": return np.array(Enumerable.Range(0, 7).Select(i => 2 * i - 6).ToArray());
+            case "float64": return np.array(Enumerable.Range(0, 7).Select(i => i - 3.0).ToArray());
+            case "short": return np.array(new[] { 1.5, -2.0 });
+            case "int8": return np.array(new sbyte[] { 1, -2, 3 });
+            case "uint64": return np.array(new ulong[] { 1, 2, 3 });
+            case "float16": return np.array(new[] { (Half)0.5, (Half)(-1.5), (Half)2.0 });
+            case "complex": return np.array(new[] { new Complex(1, 1), new Complex(-1, 0), new Complex(2, -1) });
+            case "one": return np.array(new[] { 2.5 });
+            case "one_c": return np.array(new[] { new Complex(1, 2) });
+            case "one_c_rev": return np.array(new[] { new Complex(1, 2) })["::-1"];
+            case "long": return np.array(Enumerable.Range(0, 20).Select(i => i % 7 - 3.0 + 0.25 * (i % 3)).ToArray());
+            case "special": return np.array(Special.Take(7).ToArray());
+            case "bool": return np.array(new[] { true, false, true });
+            case "U5": return np.array(text).astype(np.dtype("U5"));
+            case "T": return np.array(text).astype(np.dtype("T"));
+            case "S5": return np.array(text).astype(np.dtype("S5"));
+            case "0d": return np.array(2L);
+            case "2d": return np.array(Enumerable.Range(0, 6).Select(i => i - 3.0).ToArray()).reshape(new Shape(2, 3));
+            case "empty": return np.empty(new Shape(0), np.dtype("float64"));
+            case "strided": return np.arange(14.0)["::2"];
+            case "reversed": return np.arange(7.0)["::-1"];
+            default: throw new ArgumentException("unknown sliding kernel variant " + label);
         }
     }
 
