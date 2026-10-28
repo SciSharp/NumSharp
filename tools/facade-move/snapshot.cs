@@ -66,7 +66,10 @@
 // broadcast, none), flags (each tracking and loop flag, the buffered forms, refs_ok, common_dtype, reduce_ok, ranged,
 // two refused forms), op_flags (one list, or one per operand), op_dtypes (numbers, the unsized 'U' / 'S' NumPy adapts, a
 // sized 'U5', StringDType, two refused forms), op_axes and itershape (built from the operand's rank and shape) and
-// buffersize, its order and casting taking the general roles); an overload with a required
+// buffersize, its order and casting taking the general roles), and np.einsum's subscripts (built from the operand's rank:
+// views, sums, a diagonal, ellipses, two- and three-operand contractions, an outer product, refused forms), its operand
+// list (built from the operand, see MakeEinsumOps) and optimize, its out / dtype / order / casting taking the general
+// roles; an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -302,8 +305,23 @@ static class Snapshot
         // general Order / Casting roles.
         NditerOps, NditerFlags, NditerOpFlags, NditerOpFlagsList, NditerOpDtypes, NditerOpAxes, NditerItershape,
         NditerBuffersize,
+        // np.einsum: the subscripts (built from the operand's rank: the identity view, sums, a transpose, the implicit
+        // output, a diagonal, ellipses, two- and three-operand contractions, an outer product, and the forms NumPy
+        // refuses; see MakeEinsumSubscripts), the operand list (built from the operand: it alone, with a copy, with an
+        // int32 ramp, with text, with a 0-d, three of it, none; see MakeEinsumOps) and optimize. out, dtype, order and
+        // casting take the general roles.
+        EinsumSubscripts, EinsumOps, EinsumOptimize,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.einsum, whose <c>subscripts</c> / <c>operands</c> / <c>optimize</c> roles are its
+    ///     alone: no other snapshot target declares them.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.einsum overload.</returns>
+    private static bool IsEinsum(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "einsum";
 
     /// <summary>
     ///     Whether a parameter belongs to np.nditer, whose <c>op</c> list, <c>flags</c>, <c>op_flags</c>, <c>op_dtypes</c>,
@@ -485,6 +503,12 @@ static class Snapshot
             if (n == "itershape" && t == typeof(long[])) return Role.NditerItershape;
             if (n == "buffersize" && t == typeof(long)) return Role.NditerBuffersize;
         }
+        // np.einsum's subscripts and optimize (only its; its out, dtype, order and casting take the general roles).
+        if (IsEinsum(p))
+        {
+            if (n == "subscripts" && t == typeof(string)) return Role.EinsumSubscripts;
+            if (n == "optimize" && t == typeof(object)) return Role.EinsumOptimize;
+        }
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -569,6 +593,27 @@ static class Snapshot
                 // Built from the operand (MakeNditerOps / MakeNditerOpAxes / MakeNditerItershape); the factory here is never
                 // called. The base is the operand alone / no op_axes / no itershape.
                 Add(role == Role.NditerOps ? "one" : "null", () => null);
+                break;
+            case Role.EinsumSubscripts:
+            case Role.EinsumOps:
+                // Built from the operand (MakeEinsumSubscripts / MakeEinsumOps); the factory here is never called. The base is
+                // the identity of the operand's labels / the operand alone.
+                Add(role == Role.EinsumSubscripts ? EinsumSubscriptsVariantLabels[0] : EinsumOpsVariantLabels[0], () => null);
+                break;
+            case Role.EinsumOptimize:
+                // The default (NumPy's False) first, then the forms NumPy accepts (True, a path name, a name it tolerates and
+                // treats as greedy, a (name, memory) pair, a pair whose memory is a bool, which NumPy's isinstance(x, (int,
+                // float)) takes for an int) and the ones it refuses (a number, a pair whose memory is text: "Did not
+                // understand the path").
+                Add("null", () => null);
+                Add("true", () => true);
+                Add("greedy", () => "greedy");
+                Add("optimal", () => "optimal");
+                Add("x", () => "x");
+                Add("pair", () => ("greedy", 100));
+                Add("pairbool", () => ("greedy", true));
+                Add("pairtext", () => ("greedy", "100"));
+                Add("int", () => 5);
                 break;
             case Role.NditerFlags:
                 // No flags first, then each tracking and loop flag alone, the buffered forms (with the external loop, with
@@ -1150,6 +1195,13 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.einsum's operand list carries the operand too (MakeEinsumOps).
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "operands" && IsEinsum(ps[i]))
+            {
+                roles[i] = Role.EinsumOps;
+                sawArray = true;
+                continue;
+            }
             roles[i] = Classify(ps[i], !sawArray && ps[i].ParameterType == typeof(NDArray));
             if (ps[i].ParameterType == typeof(NDArray)) sawArray = true;
         }
@@ -1187,6 +1239,8 @@ static class Snapshot
             Role.NditerOps => NditerOpsVariantLabels.Length - 1,
             Role.NditerOpAxes => NditerOpAxesVariantLabels.Length - 1,
             Role.NditerItershape => NditerItershapeVariantLabels.Length - 1,
+            Role.EinsumSubscripts => EinsumSubscriptsVariantLabels.Length - 1,
+            Role.EinsumOps => EinsumOpsVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -1290,6 +1344,8 @@ static class Snapshot
             Role.NditerOps => NditerOpsVariantLabels[v],
             Role.NditerOpAxes => NditerOpAxesVariantLabels[v],
             Role.NditerItershape => NditerItershapeVariantLabels[v],
+            Role.EinsumSubscripts => EinsumSubscriptsVariantLabels[v],
+            Role.EinsumOps => EinsumOpsVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -1314,6 +1370,8 @@ static class Snapshot
                     : roles[i] == Role.IsinTest ? MakeIsinTest(IsinTestVariantLabels[0], operand)
                     : roles[i] == Role.LinalgArrays ? MakeLinalgArrays(LinalgArraysVariantLabels[0], operand)
                     : roles[i] == Role.NditerOps ? MakeNditerOps(NditerOpsVariantLabels[0], operand)
+                    : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
+                    : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -1376,6 +1434,12 @@ static class Snapshot
                         break;
                     case Role.NditerOps:
                         argv[p] = MakeNditerOps(NditerOpsVariantLabels[v], operand);
+                        break;
+                    case Role.EinsumSubscripts:
+                        argv[p] = MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[v], operand);
+                        break;
+                    case Role.EinsumOps:
+                        argv[p] = MakeEinsumOps(EinsumOpsVariantLabels[v], operand);
                         break;
                     case Role.NditerOpAxes:
                         argv[p] = MakeNditerOpAxes(NditerOpAxesVariantLabels[v], operand);
@@ -2465,6 +2529,89 @@ static class Snapshot
             case "badshape": return new[] { operand, np.ones(new Shape(7), np.dtype("float64")) };
             case "none": return Array.Empty<NDArray>();
             default: throw new ArgumentException("unknown nditer operand-list variant " + label);
+        }
+    }
+
+    /// <summary>np.einsum's subscripts variants (see <see cref="MakeEinsumSubscripts"/>); the first, the identity of the
+    ///     operand's labels (NumPy's view path), is the base.</summary>
+    private static readonly string[] EinsumSubscriptsVariantLabels =
+        { "id", "sum", "first", "rev", "implicit", "diag", "ellipsis", "ellsum", "pair", "pairsum", "outer", "triple", "badlabel", "badchar", "noarrow" };
+
+    /// <summary>np.einsum's operand-list variants (see <see cref="MakeEinsumOps"/>); the first, the operand alone, is the
+    ///     base.</summary>
+    private static readonly string[] EinsumOpsVariantLabels = { "one", "pair", "int32", "text", "zero_d", "triple", "none" };
+
+    /// <summary>
+    ///     Builds np.einsum's subscripts for an operand from its rank: the identity of its labels (<c>ab-&gt;ab</c>, the view
+    ///     path), a sum over every axis, a sum over all but the first, the labels reversed (a transposed view), the implicit
+    ///     output, a diagonal (<c>aa-&gt;a</c> on a matrix: its first two labels the same), an ellipsis identity, a sum over
+    ///     the last axis behind an ellipsis, a two-operand product of equal labels, its full contraction, an outer product
+    ///     (the second operand's labels in upper case), a three-operand product, and three forms NumPy refuses: an output
+    ///     label no input has, a digit among the labels, and an arrow without its <c>&gt;</c>.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="EinsumSubscriptsVariantLabels"/>).</param>
+    /// <param name="operand">The pool operand (its rank).</param>
+    /// <returns>The subscripts.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static string MakeEinsumSubscripts(string label, NDArray operand)
+    {
+        int rank = operand.ndim;
+        string l = "abcdefgh".Substring(0, rank);
+        string upper = l.ToUpperInvariant();
+        string rev = new string(l.Reverse().ToArray());
+        return label switch
+        {
+            "id" => l + "->" + l,
+            "sum" => l + "->",
+            "first" => l + "->" + (rank == 0 ? "" : l.Substring(0, 1)),
+            "rev" => l + "->" + rev,
+            "implicit" => l,
+            // A matrix's diagonal: its first two labels the same (aab->ab for a 3-D operand); a 1-D or 0-d operand keeps
+            // its identity, which has no repeated label.
+            "diag" => rank >= 2 ? "a" + l.Substring(1).Replace('b', 'a') + "->" + ("a" + l.Substring(2)) : l + "->" + l,
+            "ellipsis" => "...->...",
+            "ellsum" => rank == 0 ? "...->..." : "..." + l.Substring(rank - 1) + "->...",
+            "pair" => l + "," + l + "->" + l,
+            "pairsum" => l + "," + l + "->",
+            "outer" => l + "," + upper + "->" + l + upper,
+            "triple" => l + "," + l + "," + l + "->" + l,
+            "badlabel" => l + "->z",
+            "badchar" => l + "1",
+            "noarrow" => l + "-" + l,
+            _ => throw new ArgumentException("unknown einsum subscripts variant " + label),
+        };
+    }
+
+    /// <summary>
+    ///     Builds np.einsum's operand list for an operand: the operand alone, with a copy of itself, with an int32 ramp of its
+    ///     shape (another dtype: the loop dtype is the operands' result type), with U5 text of its shape, with a 0-d float64,
+    ///     three of it, and no operand at all.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="EinsumOpsVariantLabels"/>).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh operand list (its first entry is the operand itself).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeEinsumOps(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        switch (label)
+        {
+            case "one": return new[] { operand };
+            case "pair": return new[] { operand, operand.copy() };
+            case "int32": return new[] { operand, np.arange(size).astype(np.dtype("int32")).reshape(new Shape(dims)) };
+            case "text":
+            {
+                var words = new string[size];
+                for (long i = 0; i < size; i++)
+                    words[i] = (i % 3).ToString(CultureInfo.InvariantCulture);
+                return new[] { operand, np.array(words).astype(np.dtype("U5")).reshape(new Shape(dims)) };
+            }
+            case "zero_d": return new[] { operand, np.array(2.0) };
+            case "triple": return new[] { operand, operand.copy(), operand.copy() };
+            case "none": return Array.Empty<NDArray>();
+            default: throw new ArgumentException("unknown einsum operand-list variant " + label);
         }
     }
 
