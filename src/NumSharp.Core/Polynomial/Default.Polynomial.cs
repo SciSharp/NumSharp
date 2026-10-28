@@ -96,13 +96,22 @@ namespace NumSharp.Backends
                     p.ndim == 1 ? Backends.Strings.NDStringArrays.ScalarDescr(p.Storage.GetAtIndex(0)) : p.dtype);
 
             // An N-D p: each coefficient is a row that NumPy's `y = y * x + pv` broadcasts against x, so the result takes
-            // the broadcast shape (rows that do not broadcast with x raise the add's error) and the dtype each step
-            // promotes to. NumPy's statements, literally: the fixed-dtype loop below assumes y keeps x's shape.
+            // the broadcast shape (rows that do not broadcast with x raise the add's error). NumPy's statements,
+            // literally (the fixed-dtype loop below assumes y keeps x's shape), each in the dtype NumPy's promotion gives
+            // it, passed explicitly: NumSharp's operators would take a 0-d x or y as a weak scalar, where NumPy's are
+            // strong. y starts as zeros_like(x), so the first product is in x's dtype (0 * inf is a real NaN that the
+            // add then widens, not complex arithmetic's NaN + NaNj); every add and every later product is in
+            // result_type(p, x).
             if (p.ndim > 1)
             {
-                NDArray yy = np.zeros_like(x);
+                NPTypeCode loop = np.result_type(p, x);
+                NDArray yy = np.multiply(np.zeros_like(x), x, dtype: x.dtype);
                 for (long k = 0; k < n; k++)
-                    yy = yy * x + p[k.ToString()];
+                {
+                    if (k > 0)
+                        yy = np.multiply(yy, x, dtype: loop);
+                    yy = np.add(yy, p[k.ToString()], dtype: loop);
+                }
                 return yy;
             }
 
