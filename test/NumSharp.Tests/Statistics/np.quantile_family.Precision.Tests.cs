@@ -7,7 +7,7 @@ namespace NumSharp.Tests.Statistics;
 ///     NumPy 2.4.2's quantile index arithmetic in the precision of q's dtype, the lerp's dtype, the <c>out=</c> routes and
 ///     the nan forms' result objects: every expected value, bit pattern and text probed against <c>numpy==2.4.2</c>. The
 ///     oracle section <c>qprec</c> gates the whole matrix; these pin the rules a reader of <c>QuantileIndexes</c> and
-///     <c>QuantileEngine</c> needs first.
+///     DefaultEngine's quantile core (<c>QuantileCompute</c>, <c>Default.Quantile.cs</c>) needs first.
 /// </summary>
 [TestClass]
 public class np_quantile_family_Precision_Tests

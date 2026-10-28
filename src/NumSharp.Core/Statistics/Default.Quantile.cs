@@ -4,6 +4,29 @@ using System.Collections.Generic;
 using System.Linq;
 using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
+using NumSharp.Statistics;
+
+// =============================================================================
+// Default.Quantile.cs - DefaultEngine's quantile family core (numpy/lib/_function_base_impl.py: _quantile_unchecked,
+// _quantile_ureduce_func, _quantile, _lerp, _compute_virtual_index; numpy/lib/_nanfunctions_impl.py: the nan forms)
+// =============================================================================
+//
+// The core behind np.median, np.percentile, np.quantile and their nan forms (TensorEngine.Median, Percentile, Quantile,
+// NanMedian, NanPercentile, NanQuantile; Default.Quantile.Functions.cs and Default.Quantile.Median.cs hold the entries).
+// Responsibilities split:
+//   * this file: input validation, axis normalization, the dtype-promotion rule, the output-shape computation, the
+//     keepdims / out plumbing, scratch rental (QuantileCompute and its helpers);
+//   * DirectILKernelGenerator.Quantile: the per-dtype IL-emitted kernel that owns the outer row loop and dispatches into
+//     a JIT-specialized generic row processor. No per-dtype switch executes per call after the first cache miss.
+//
+// History: the np-layer dtype plan's P0 / P1a moved the family's bodies into the internal operation class QuantileEngine;
+// its phase PE (E1) made that class these DefaultEngine partials. Two members were renamed in the merge, because
+// DefaultEngine is one namespace of member names: Compute is QuantileCompute (the name alone said nothing beside the
+// engine's other members), and BooleanSubtractError is QuantileBooleanSubtractError (np.var's statements have a helper
+// of that name and signature). The files stay beside the facades because their statements call public np.* functions,
+// which ratchet R2 counts under Backends/. The family's types (QuantileMethod, QuantileArgument, UReduced) stay in
+// NumSharp.Statistics: QuantileMethod is public there.
+// =============================================================================
 
 namespace NumSharp.Statistics
 {
@@ -27,20 +50,11 @@ namespace NumSharp.Statistics
         MedianUnbiased,               // H&F R-8, α=β=1/3
         NormalUnbiased,               // H&F R-9, α=β=3/8
     }
+}
 
-    /// <summary>
-    ///     Orchestrator for <c>np.median</c>, <c>np.percentile</c>, <c>np.quantile</c>.
-    ///     Responsibilities split:
-    ///       <list type="bullet">
-    ///         <item>This file: input validation, axis normalization, dtype-promotion rule,
-    ///               output-shape computation, keepdims/out plumbing, scratch rental.</item>
-    ///         <item><see cref="DirectILKernelGenerator.Quantile"/>: per-dtype IL-emitted kernel
-    ///               that owns the outer row-loop and dispatches into a JIT-specialized
-    ///               generic row processor. No per-dtype switch executes per call after
-    ///               the first cache miss.</item>
-    ///       </list>
-    /// </summary>
-    internal static partial class QuantileEngine
+namespace NumSharp.Backends
+{
+    public partial class DefaultEngine
     {
         internal static bool IsDiscrete(QuantileMethod m) =>
             m == QuantileMethod.Lower ||
@@ -73,7 +87,7 @@ namespace NumSharp.Statistics
 
         /// <summary>
         ///     <see cref="ParseMethod"/> without the error: whether <paramref name="method"/> is one of NumPy's thirteen
-        ///     names. <see cref="Compute"/> uses it to raise the unknown-name error where NumPy's <c>_quantile</c> does.
+        ///     names. <see cref="QuantileCompute"/> uses it to raise the unknown-name error where NumPy's <c>_quantile</c> does.
         /// </summary>
         /// <param name="method">The method name (case-sensitive; null is not a name).</param>
         /// <param name="parsed">The method, or <see cref="QuantileMethod.Linear"/> when the name is unknown.</param>
@@ -215,7 +229,7 @@ namespace NumSharp.Statistics
         ///     with casting rule 'same_kind'</c> (the house type of the ufunc out= routes). The legacy routes: an
         ///     <paramref name="out"/> of another shape than the result.</exception>
         [NDScoped]
-        public static NDArray Compute(
+        internal static NDArray QuantileCompute(
             NDArray a, double[] q, int[] axisArr, NDArray @out,
             bool overwrite_input, QuantileMethod method, bool keepdims, bool qIsScalar,
             bool emptyReturnsNaN = false, bool ignoreNaN = false, bool allowBooleanContinuous = false,
@@ -427,7 +441,7 @@ namespace NumSharp.Statistics
                     CheckLookups(raw, qLen, 0, n);
                     CheckLookups(raw, qLen, 1, n);
                     if (booleanSubtract)
-                        throw BooleanSubtractError();
+                        throw QuantileBooleanSubtractError();
                     if (outRoute == 2)
                         LerpOutChecks(target, outTypeCode, outShape);
                 }
@@ -450,7 +464,7 @@ namespace NumSharp.Statistics
                 }
             }
             if (booleanSubtract)
-                throw BooleanSubtractError();
+                throw QuantileBooleanSubtractError();
 
             // out's checks before anything is written: the take's (shape, safe cast, writeable), or the lerp's add (writeable,
             // same_kind cast, broadcast). A float / complex out other than the lerp's dtype receives the lerp itself: its
@@ -1394,7 +1408,7 @@ namespace NumSharp.Statistics
 
         /// <summary>NumPy's TypeError for <c>_lerp</c>'s <c>b - a</c> over bool data.</summary>
         /// <returns>The exception to throw.</returns>
-        private static TypeError BooleanSubtractError()
+        private static TypeError QuantileBooleanSubtractError()
             => new TypeError("numpy boolean subtract, the `-` operator, is not supported, use the "
                              + "bitwise_xor, the `^` operator, or the logical_xor function instead.");
 

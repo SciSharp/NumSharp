@@ -734,7 +734,7 @@ namespace NumSharp.Tests.Fuzz
             // (DirectILKernelGenerator.cs). The classifier branches are removed so the matrix verifies
             // maximum_out / minimum_out / clip_out NaN propagation bit-exact.
 
-            // --- T12 statistics: the QuantileEngine ops (median/percentile/quantile) ---
+            // --- T12 statistics: the quantile family's ops (median/percentile/quantile; DefaultEngine) ---
             //   FIXED (were W6-A/B/C, now bit-exact vs NumPy 2.4.2 — verified over tens of
             //   thousands of differential cases across every dtype × method × axis × layout):
             //     * W6-C float interpolation precision — the _lerp is now NumPy's TWO-branch form

@@ -52,9 +52,11 @@ namespace NumSharp
             // partition (NDCharArrayBoundary): NumPy's TypeError, or the string partition's own answer (MedianOfChararray)
             if (NDCharArrayBoundary.Sees(a))
                 throw MedianOfChararray(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input, keepdims);
-            // NumPy's np.median body (the text routes, then the numeric median) is QuantileEngine.Median's: the facade
+            // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
-            return QuantileEngine.Median(a, axis, @out, overwrite_input, keepdims);
+            // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
+            return QuantileFamilyEngine(a).Median(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
+                keepdims);
         }
 
         /// <summary>
@@ -103,9 +105,9 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(a))
                 throw MedianOfChararray(a, axis, @out, overwrite_input, keepdims);
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy's np.median body (the text routes, then the numeric median) is QuantileEngine.Median's: the facade
+            // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
-            return QuantileEngine.Median(a, axis, @out, overwrite_input, keepdims);
+            return QuantileFamilyEngine(a).Median(a, axis, @out, overwrite_input, keepdims);
         }
 
         /// <summary>
@@ -134,11 +136,11 @@ namespace NumSharp
             int nd = a.ndim;
             // The plain view the remaining statements read: no subclass rule may run on them.
             using var region = NDCharArrayBoundary.Inside();
-            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): `axis = normalize_axis_tuple(axis,
+            // _ureduce's prologue, the quantile family's one copy (DefaultEngine.UReduce): `axis = normalize_axis_tuple(axis,
             // nd)` (every axis checked, then the repeats), keepdims' `out[(Ellipsis,) + index_out]` (index 0 on every reduced
             // axis, every axis without one), then the merge of several reduced axes (`reshape(kept + (-1,))`, whose -1 NumPy
             // cannot resolve beside a kept axis of length 0). Only its errors matter here: the arrays it makes are reclaimed.
-            QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
+            DefaultEngine.UReduceChecks(a, axes, @out, keepdims);
             // An axis argument (the empty tuple included) reaches `np.partition(a, kth, axis=...)` or `a.partition(kth,
             // axis=axis)`, the string partition's keyword refusal; only overwrite_input without one partitions the text.
             if (!overwrite_input || axes is not null)
@@ -154,7 +156,7 @@ namespace NumSharp
             // The string partition computed and left `part` as it was: `mean(part[indexer], axis=0, out=out)` refuses the text
             // as the median of plain text does — except a U chararray into a StringDType out, whose mean concatenates the
             // elements at the middle POSITIONS (nothing was moved) into the out before its division refuses.
-            if (QuantileEngine.MedianSumsIntoText(a, @out))
+            if (DefaultEngine.MedianSumsIntoText(a, @out))
             {
                 using var part = np.ravel(a);
                 long half = n / 2;

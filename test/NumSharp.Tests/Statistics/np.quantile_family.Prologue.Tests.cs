@@ -10,7 +10,7 @@ namespace NumSharp.Tests.Statistics;
 ///     <c>np.quantile</c>, <c>np.percentile</c>, <c>np.nanquantile</c>, <c>np.nanpercentile</c> — runs before the reduction
 ///     function's checks: the axes, keepdims' <c>out[(Ellipsis,) + index_out]</c>, then the merge of several reduced axes
 ///     (<c>reshape(kept + (-1,))</c>, which cannot resolve its -1 beside a kept axis of length 0). Each route of the family
-///     had its own copy of it until the np-layer dtype plan's P1a step 2 (<see cref="QuantileEngine.UReduce"/>), and the
+///     had its own copy of it until the np-layer dtype plan's P1a step 2 (<see cref="DefaultEngine.UReduce"/>), and the
 ///     copies disagreed (the plan's Appendix B1). Every expected outcome and text was probed against <c>numpy==2.4.2</c>;
 ///     the oracle section <c>qprologue</c> gates the whole matrix.
 /// </summary>
@@ -185,7 +185,7 @@ public class np_quantile_family_Prologue_Tests
     }
 
     /// <summary>
-    ///     <see cref="QuantileEngine.UReduce"/> hands the reduction what NumPy's hands it: the caller's data for no axis or
+    ///     <see cref="DefaultEngine.UReduce"/> hands the reduction what NumPy's hands it: the caller's data for no axis or
     ///     one axis; for several axes the kept ones first and the reduced ones merged into one LAST axis in their original
     ///     order (<c>np.moveaxis(a, keep, range(nkeep)).reshape(kept + (-1,))</c>), the axis given in any order; under
     ///     keepdims a view of out with each reduced axis taken at 0. The quantiles over <c>axis=(2, 0)</c> of
@@ -197,22 +197,22 @@ public class np_quantile_family_Prologue_Tests
         using var b = np.arange(24.0).reshape(2, 3, 4);
         using (var scope = NDScope.Open())
         {
-            UReduced none = QuantileEngine.UReduce(b, null, null, false);
+            UReduced none = DefaultEngine.UReduce(b, null, null, false);
             ReferenceEquals(none.Data, b).Should().BeTrue();
             none.Axis.Should().BeNull();
             none.Reduced.Should().BeNull();
-            UReduced one = QuantileEngine.UReduce(b, new[] { -2 }, null, false);
+            UReduced one = DefaultEngine.UReduce(b, new[] { -2 }, null, false);
             ReferenceEquals(one.Data, b).Should().BeTrue();
             one.Axis.Should().Be(1);
             one.Reduced.Should().Equal(1);
-            UReduced two = QuantileEngine.UReduce(b, new[] { 2, 0 }, null, false);
+            UReduced two = DefaultEngine.UReduce(b, new[] { 2, 0 }, null, false);
             two.Reduced.Should().Equal(2, 0);
             two.Data.shape.Should().Equal(3L, 8L);
             two.Axis.Should().Be(1);
             // Row k of the merged data is b[:, k, :] in C order: the reduced axes keep their original order.
             two.Data[Slice.Index(1)].ToArray<double>().Should().Equal(4, 5, 6, 7, 16, 17, 18, 19);
             var outArray = np.zeros(new Shape(1, 3, 1));
-            UReduced kept = QuantileEngine.UReduce(b, new[] { 2, 0 }, outArray, true);
+            UReduced kept = DefaultEngine.UReduce(b, new[] { 2, 0 }, outArray, true);
             kept.Target.shape.Should().Equal(3L);
         }
         using var q = np.quantile(b, new[] { 0.0, 1.0 }, new[] { 2, 0 });
@@ -230,12 +230,12 @@ public class np_quantile_family_Prologue_Tests
     {
         using var b = np.arange(24.0).reshape(2, 3, 4);
         using var scope = NDScope.Open();
-        QuantileEngine.UReduce(b, null, null, false).NumPyAxis.Should().BeNull();
-        QuantileEngine.UReduce(b, new[] { -1 }, null, false).NumPyAxis.Should().Be(2);
-        UReduced merged = QuantileEngine.UReduce(b, new[] { 1, 2 }, null, false);
+        DefaultEngine.UReduce(b, null, null, false).NumPyAxis.Should().BeNull();
+        DefaultEngine.UReduce(b, new[] { -1 }, null, false).NumPyAxis.Should().Be(2);
+        UReduced merged = DefaultEngine.UReduce(b, new[] { 1, 2 }, null, false);
         merged.NumPyAxis.Should().Be(-1);
         merged.Axis.Should().Be(1);
-        QuantileEngine.UReduce(b, Array.Empty<int>(), null, false).NumPyAxis.Should().Be(-1);
+        DefaultEngine.UReduce(b, Array.Empty<int>(), null, false).NumPyAxis.Should().Be(-1);
     }
 
     /// <summary>

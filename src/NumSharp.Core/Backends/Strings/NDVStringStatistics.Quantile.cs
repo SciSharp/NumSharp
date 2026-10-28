@@ -140,9 +140,9 @@ namespace NumSharp.Backends.Strings
         internal static NDArray Median(NDArray a, int[] axes, NDArray @out, bool keepdims)
         {
             int nd = a.ndim;
-            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): the axes (every axis checked, then
+            // _ureduce's prologue, the quantile family's one copy (DefaultEngine.UReduce): the axes (every axis checked, then
             // the repeats), keepdims' view of out, then several reduced axes merged into one last axis behind the kept ones.
-            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            UReduced prologue = DefaultEngine.UReduce(a, axes, @out, keepdims);
             int[] reduced = prologue.Reduced;
             NDArray target = prologue.Target;
             NDArray work = prologue.Data;
@@ -251,9 +251,9 @@ namespace NumSharp.Backends.Strings
             // nanmean is np.mean — whose axis normalization comes first (`_count_reduce_items`).
             if (a.size == 0)
                 return EmptyNanMean(a, axes, @out, keepdims);
-            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): the axes, keepdims' view of out,
+            // _ureduce's prologue, the quantile family's one copy (DefaultEngine.UReduce): the axes, keepdims' view of out,
             // the merge of several reduced axes (data that is not empty always merges).
-            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            UReduced prologue = DefaultEngine.UReduce(a, axes, @out, keepdims);
             int[] reduced = prologue.Reduced;
             NDArray target = prologue.Target;
             NDArray work = prologue.Data;
@@ -384,9 +384,9 @@ namespace NumSharp.Backends.Strings
             int nd = a.ndim;
             if (a.size == 0)
                 return EmptyNanMean(a, axes, @out, keepdims);
-            // _ureduce's prologue, the quantile family's one copy (QuantileEngine.UReduce): the axes, keepdims' view of out,
+            // _ureduce's prologue, the quantile family's one copy (DefaultEngine.UReduce): the axes, keepdims' view of out,
             // the merge of several reduced axes (data that is not empty always merges).
-            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            UReduced prologue = DefaultEngine.UReduce(a, axes, @out, keepdims);
             int[] reduced = prologue.Reduced;
             NDArray target = prologue.Target;
             NDArray work = prologue.Data;
@@ -408,7 +408,7 @@ namespace NumSharp.Backends.Strings
                 // `from_ax = [axis + i for i in range(q.ndim)]; np.moveaxis(result, from_ax, list(range(q.ndim)))` with the
                 // axis _ureduce handed the function (prologue.NumPyAxis): the reduced axis, or the UNnormalized -1 for merged
                 // axes, which for a q of two or more dimensions moves q's last axis and the first kept axes to the front
-                // (NumPy 2.4.2's answer, reproduced; QuantileEngine.AlongAxisLayout's remarks).
+                // (NumPy 2.4.2's answer, reproduced; DefaultEngine.AlongAxisLayout's remarks).
                 if (qShape.Length != 0)
                 {
                     int numpyAxis = prologue.NumPyAxis.Value;
@@ -751,7 +751,7 @@ namespace NumSharp.Backends.Strings
                 }
                 // _ureduce's prologue (the family's one copy): the axes, keepdims' out index (non-empty data cannot fail the
                 // merge).
-                QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
+                DefaultEngine.UReduceChecks(a, axes, @out, keepdims);
                 // Fixed-width text has no isnan loop; StringDType text does (its NaN-like NAs), and goes on to the virtual
                 // index of what is left. (IsVString first: IsString refuses a StringDType operand by design.)
                 if (!NDStringUfuncs.IsVString(a) && NDStringUfuncs.IsString(a))
@@ -761,12 +761,12 @@ namespace NumSharp.Backends.Strings
             {
                 // _ureduce's prologue: the axes, keepdims' out index, the merge of several axes (a kept axis of length 0
                 // beside them is NumPy's reshape error) — all before q's rank, the method and the virtual index.
-                QuantileEngine.UReduceChecks(a, axes, @out, keepdims);
+                DefaultEngine.UReduceChecks(a, axes, @out, keepdims);
             }
             // _quantile_ureduce_func: `if q.ndim > 2: raise ValueError("q must be a scalar or 1d")`.
             if (q.ndim > 2)
                 return new ValueError("q must be a scalar or 1d");
-            QuantileMethod parsed = QuantileEngine.ParseMethod(method);
+            QuantileMethod parsed = DefaultEngine.ParseMethod(method);
             long n = ValuesCount(a, axes);
             try
             {

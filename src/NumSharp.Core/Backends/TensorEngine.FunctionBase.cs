@@ -36,5 +36,120 @@ namespace NumSharp
         ///     so it must keep NumPy's dtype tiers and the real-input values above.</para>
         /// </remarks>
         public abstract NDArray Angle(NDArray z, bool deg = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.quantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *,
+        ///     weights=None)</c>: the q-th quantiles of the data, flattened or along the given axes.
+        /// </summary>
+        /// <param name="a">The data, a plain array (any real dtype; text takes NumPy's take path or its refusal).</param>
+        /// <param name="q">
+        ///     The quantiles in [0, 1], NumPy's array_like: a <see cref="double"/> or <see cref="float"/> is a Python float
+        ///     (the result keeps a float data's dtype), a C# integer a Python int (an integer virtual index is TAKEN, not
+        ///     interpolated), a <see cref="double"/> array a list, an <see cref="NDArray"/> an ndarray (q's axes lead the
+        ///     result); anything else is converted with <c>np.asanyarray</c>.
+        /// </param>
+        /// <param name="axis">The reduced axes (negative counts from the end), or null for the flattened data; an EMPTY array
+        ///     reduces nothing. A one-axis call passes a one-element array.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place (DefaultEngine stages a copy anyway).</param>
+        /// <param name="method">One of NumPy's thirteen estimation methods (<c>linear</c>, <c>lower</c>, <c>higher</c>,
+        ///     <c>nearest</c>, <c>midpoint</c>, <c>inverted_cdf</c>, ...), matched exactly.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (only with <c>inverted_cdf</c>), or null for equal weights.</param>
+        /// <returns>The quantiles (q's axes first); <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex (<c>a must be an array of real numbers</c>, NumPy's
+        ///     first statement); a text q; text data with an interpolating method, an out that does not cast safely, or
+        ///     keepdims over a 0-d result; bool data with an interpolating method; weights of another shape without an
+        ///     axis, or text weights.</exception>
+        /// <exception cref="ValueError">A quantile outside [0, 1] (<c>Quantiles must be in the range [0, 1]</c>); an empty q
+        ///     of rank other than 1; a repeated axis; a q of rank above 2; a <c>StringDType</c> line holding a None-like NA;
+        ///     the weights' checks (another method, a wrong shape, a negative weight, a sum that is NaN, inf or
+        ///     zero).</exception>
+        /// <exception cref="AxisError">An axis is out of range for <paramref name="a"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, a null q, or <paramref name="method"/> is
+        ///     null.</exception>
+        /// <exception cref="ArgumentException">An unknown method name, or an <paramref name="out"/> of another shape than
+        ///     the result.</exception>
+        /// <exception cref="IndexError">keepdims with an <paramref name="out"/> NumPy cannot index (<c>_ureduce</c>'s
+        ///     prologue); text data with an empty reduced axis.</exception>
+        /// <exception cref="IndexOutOfRangeException">Numeric data whose reduced axes hold no element (NumPy's IndexError
+        ///     texts).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0 (NumPy's ValueError
+        ///     <c>cannot reshape array of size 0 into shape (0,newaxis)</c>).</exception>
+        /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
+        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <remarks>
+        ///     NumPy writes quantile in Python; DefaultEngine's override runs its statements in NumPy's order (the complex
+        ///     check, q's checks, the weighted branch, the text routes, then <c>_ureduce</c> and the numeric quantile).
+        ///     <c>np.quantile</c> calls it after its class rules (a <c>numpy.char.chararray</c> operand takes DefaultEngine's
+        ///     internal form, which keeps the class boundary's flag); an override replaces it for every array whose engine
+        ///     it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
+        /// </remarks>
+        public abstract NDArray Quantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.percentile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *,
+        ///     weights=None)</c>: <see cref="Quantile"/> with q given in percent, <c>q = np.true_divide(q, 100)</c> first.
+        /// </summary>
+        /// <param name="a">The data, a plain array.</param>
+        /// <param name="q">The percentiles in [0, 100], NumPy's array_like (the forms of <see cref="Quantile"/>'s q; the
+        ///     division by 100 is float64 for a number, q's own dtype for an array, so an integer index is never
+        ///     taken).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">One of NumPy's thirteen estimation methods, matched exactly.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (only with <c>inverted_cdf</c>), or null.</param>
+        /// <returns>The percentiles (q's axes first); <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="ValueError">A percentile outside [0, 100] (<c>Percentiles must be in the range [0, 100]</c>, on
+        ///     the quotient), and the other ValueErrors of <see cref="Quantile"/>.</exception>
+        /// <exception cref="TypeError">The TypeErrors of <see cref="Quantile"/> (a text q is refused by the division).</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, a null q, or <paramref name="method"/> is
+        ///     null.</exception>
+        /// <exception cref="ArgumentException">An unknown method name, or an out of another shape.</exception>
+        /// <exception cref="IndexError">keepdims with an out NumPy cannot index; text data with an empty reduced
+        ///     axis.</exception>
+        /// <exception cref="IndexOutOfRangeException">Numeric data whose reduced axes hold no element.</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0.</exception>
+        /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
+        /// <remarks>
+        ///     NumPy writes percentile in Python; <c>np.percentile</c> calls this after its class rules. An override
+        ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     internal class <c>QuantileEngine</c>.
+        /// </remarks>
+        public abstract NDArray Percentile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.median(a, axis=None, out=None, overwrite_input=False, keepdims=False)</c>: the median of the data,
+        ///     flattened or along the given axes; an even-sized slice gives the MEAN of its two central values.
+        /// </summary>
+        /// <param name="a">The data, a plain array (bool computes as its 0 / 1 values; text is refused as NumPy refuses it,
+        ///     a <c>StringDType</c> array is sorted first).</param>
+        /// <param name="axis">The reduced axes (negative counts from the end), or null for the flattened data; an EMPTY array
+        ///     reduces nothing. A one-axis call passes a one-element array (NumPy turns an int axis into a 1-tuple).</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The median (NaN for an empty slice); <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError">An axis repeats; or, for a <c>StringDType</c> array, a None-like NA in a sorted line,
+        ///     an empty reduced axis or a read-only out.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Text data or a text out that NumPy's closing mean refuses (its verbatim
+        ///     text).</exception>
+        /// <exception cref="IncorrectShapeException">Several reduced axes beside a kept axis of length 0.</exception>
+        /// <exception cref="IndexError">keepdims with an out NumPy cannot index, before the text refusals.</exception>
+        /// <remarks>
+        ///     NumPy writes median in Python (<c>_ureduce</c> over <c>_median</c>); <c>np.median</c> calls this after its
+        ///     class rules. An override replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype
+        ///     plan, phase PE); it was the internal class <c>QuantileEngine</c>.
+        /// </remarks>
+        public abstract NDArray Median(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
+            bool keepdims = false);
     }
 }

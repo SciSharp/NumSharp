@@ -1,5 +1,5 @@
-// The functions of numpy/lib/_nanfunctions_impl.py: nansum, nanprod, nanmin and nanmax so far; the plan's
-// phase PE moves the rest of the family here (nanquantile, nanmedian, nancumsum, nanmean, nanvar, ...).
+// The functions of numpy/lib/_nanfunctions_impl.py: nansum, nanprod, nanmin, nanmax, nancumsum, nancumprod, nanmean,
+// nanvar, nanstd, nanquantile, nanpercentile and nanmedian (the np-layer dtype plan's phase PE moved the last eight here).
 
 using System;
 using NumSharp.Backends;
@@ -149,5 +149,108 @@ namespace NumSharp
         ///     phase PE).
         /// </remarks>
         public abstract NDArray NanStd(NDArray a, int? axis = null, DType dtype = null, int ddof = 0, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanquantile(a, q, axis=None, out=None, overwrite_input=False, method='linear', keepdims=False, *,
+        ///     weights=None)</c>: <see cref="Quantile"/> of the values that are not NaN; a slice holding nothing but NaN
+        ///     gives NaN.
+        /// </summary>
+        /// <param name="a">The data, a plain array (a <c>StringDType</c> array computes the quantile of what its NaN-like
+        ///     NAs leave; fixed-width text meets <c>isnan</c>'s refusal).</param>
+        /// <param name="q">The quantiles in [0, 1], NumPy's array_like (the forms of <see cref="Quantile"/>'s q).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">One of NumPy's thirteen estimation methods, matched exactly.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (only with <c>inverted_cdf</c>), or null. With weights, empty data
+        ///     answers <c>np.nanmean</c>; other data runs the weighted branch over each line's non-NaN values.</param>
+        /// <returns>The quantiles of the non-NaN values (NaN for an all-NaN slice; for q of two or more dimensions over
+        ///     merged axes, q's axes are moved as NumPy's <c>_nanquantile_ureduce_func</c> moves them);
+        ///     <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="TypeError"><paramref name="a"/> is complex; a text q; fixed-width text data (<c>isnan</c> has no
+        ///     text loop, or <c>np.nanmean</c>'s add.reduce refuses empty text); bool data with an interpolating method;
+        ///     weights of another shape without an axis, or text weights.</exception>
+        /// <exception cref="ValueError">A quantile out of range; an empty q of rank other than 1; a repeated axis; a q of rank
+        ///     above 2 (except over data that is NaN everywhere); the weights' checks.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, a null q, or <paramref name="method"/> is
+        ///     null.</exception>
+        /// <exception cref="ArgumentException">An unknown method name (except over data that is NaN everywhere), or an out
+        ///     of another shape.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under keepdims, with an out NumPy cannot index
+        ///     (<c>_ureduce</c>'s prologue), before the text refusals.</exception>
+        /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
+        /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype.</exception>
+        /// <remarks>
+        ///     NumPy writes nanquantile in Python; DefaultEngine's override runs its statements in NumPy's order.
+        ///     <c>np.nanquantile</c> calls it after its class rule; an override replaces it for every array whose engine it
+        ///     is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>QuantileEngine</c>.
+        /// </remarks>
+        public abstract NDArray NanQuantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanpercentile(a, q, axis=None, out=None, overwrite_input=False, method='linear',
+        ///     keepdims=False, *, weights=None)</c>: <see cref="NanQuantile"/> with q given in percent,
+        ///     <c>q = np.true_divide(q, 100)</c> first.
+        /// </summary>
+        /// <param name="a">The data, a plain array.</param>
+        /// <param name="q">The percentiles in [0, 100], NumPy's array_like (the forms of <see cref="Quantile"/>'s q).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">One of NumPy's thirteen estimation methods, matched exactly.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c> (only with <c>inverted_cdf</c>), or null.</param>
+        /// <returns>The percentiles of the non-NaN values (NaN for an all-NaN slice); <paramref name="out"/> itself when one
+        ///     is given.</returns>
+        /// <exception cref="ValueError">A percentile outside [0, 100] (on the quotient), and the other ValueErrors of
+        ///     <see cref="NanQuantile"/>.</exception>
+        /// <exception cref="TypeError">The TypeErrors of <see cref="NanQuantile"/>.</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/>, a null q, or <paramref name="method"/> is
+        ///     null.</exception>
+        /// <exception cref="ArgumentException">An unknown method name, or an out of another shape.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under keepdims, with an out NumPy cannot index.</exception>
+        /// <exception cref="InvalidCastException">A q array of a complex dtype.</exception>
+        /// <remarks>
+        ///     NumPy writes nanpercentile in Python; <c>np.nanpercentile</c> calls this after its class rule. An override
+        ///     replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the
+        ///     internal class <c>QuantileEngine</c>.
+        /// </remarks>
+        public abstract NDArray NanPercentile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=False)</c>: the median of the
+        ///     values that are not NaN (the mean of the two central values of an even count); a slice that is entirely NaN,
+        ///     or empty, gives NaN.
+        /// </summary>
+        /// <param name="a">The data, a plain array (bool computes as its 0 / 1 values; text is refused as NumPy refuses it,
+        ///     a <c>StringDType</c> array drops its NaN-like NAs and takes the median of the rest).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing. A one-axis
+        ///     call passes a one-element array.</param>
+        /// <param name="out">An optional output array of the result's shape, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <returns>The NaN-ignoring median; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="ValueError">An axis repeats; a <c>StringDType</c> array's errors (a None-like NA in a sorted
+        ///     line, an empty input's mean, the store into out).</exception>
+        /// <exception cref="AxisError">An axis is out of range.</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <exception cref="TypeError">Text data that NumPy's NaN test (or, for empty data, its <c>nanmean</c>)
+        ///     refuses.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> row result NumPy stores in an OBJECT
+        ///     array.</exception>
+        /// <exception cref="IndexError">Data that is not empty, under keepdims, with an out NumPy cannot index.</exception>
+        /// <remarks>
+        ///     NumPy writes nanmedian in Python; <c>np.nanmedian</c> calls this after its class rule. An override replaces it
+        ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     class <c>QuantileEngine</c>.
+        /// </remarks>
+        public abstract NDArray NanMedian(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
+            bool keepdims = false);
     }
 }

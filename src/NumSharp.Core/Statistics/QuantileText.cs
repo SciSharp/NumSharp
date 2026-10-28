@@ -44,7 +44,7 @@ namespace NumSharp.Statistics
     {
         /// <summary>
         ///     NumPy's take path of <c>_quantile</c> over text, wrapped in <c>_ureduce</c>'s keepdims and out handling, with the
-        ///     checks between them in NumPy's order: <c>_ureduce</c>'s prologue (<see cref="QuantileEngine.UReduce"/>: the
+        ///     checks between them in NumPy's order: <c>_ureduce</c>'s prologue (<see cref="DefaultEngine.UReduce"/>: the
         ///     axes, the out index under keepdims, the merge of several axes), q's rank (<c>_quantile_ureduce_func</c>), the
         ///     method and the interpolating methods' refusal (<c>_quantile</c>), then the take.
         /// </summary>
@@ -111,11 +111,11 @@ namespace NumSharp.Statistics
             NDArray @out, string method, bool keepdims, bool partitionRaises = false, NPTypeCode qType = NPTypeCode.Double)
         {
             int nd = a.ndim;
-            // _ureduce, the family's one prologue (QuantileEngine.UReduce): the axes normalized, keepdims' view of out (the
+            // _ureduce, the family's one prologue (DefaultEngine.UReduce): the axes normalized, keepdims' view of out (the
             // reduced axes taken at 0, every axis for axis=None), then the merge of several reduced axes into one last axis
             // behind the kept ones — `a.reshape(a.shape[:nkeep] + (-1,))`, whose -1 NumPy refuses to resolve when a kept axis
             // is 0 long ("cannot reshape array of size 0 into shape (0,newaxis)"), before q's rank is looked at.
-            UReduced prologue = QuantileEngine.UReduce(a, axes, @out, keepdims);
+            UReduced prologue = DefaultEngine.UReduce(a, axes, @out, keepdims);
             int[] reduced = prologue.Reduced;
             NDArray target = prologue.Target;
 
@@ -142,7 +142,7 @@ namespace NumSharp.Statistics
             // routes call arr.partition(..., axis=0) on the chararray copy — chararray.partition(sep) takes no axis.
             if (partitionRaises)
             {
-                QuantileEngine.ParseMethod(method);
+                DefaultEngine.ParseMethod(method);
                 throw NDCharArrayBoundary.PartitionKeywordError();
             }
 
@@ -157,7 +157,7 @@ namespace NumSharp.Statistics
             // skips it) comes before the interpolating methods' subtraction — so it runs before their refusal. Text is not
             // inexact: the take path's list is the indexes alone, and a NaN virtual index stays INT64_MIN.
             long[] plan = null;
-            if (QuantileEngine.TryParseMethod(method, out QuantileMethod known))
+            if (DefaultEngine.TryParseMethod(method, out QuantileMethod known))
             {
                 QuantileMethod planned = qIsInteger && known == QuantileMethod.Linear ? QuantileMethod.Lower : known;
                 plan = Plan(planned, n, q, qType);
@@ -171,7 +171,7 @@ namespace NumSharp.Statistics
                     {
                         fixed (long* planPtr = plan)
                         {
-                            if (QuantileEngine.IsDiscrete(planned))
+                            if (DefaultEngine.IsDiscrete(planned))
                                 QuantileIndexes.CheckTakeKth(planPtr, q.Length, 2, n);
                             else
                                 QuantileIndexes.CheckInterpolationKth(planPtr, 2 * q.Length, n);
@@ -186,10 +186,10 @@ namespace NumSharp.Statistics
             var refusal = Backends.Strings.NDStringUfuncs.QuantileAnswer(op, a, method, axes, qShape.Length == 0, qIsInteger, q);
             if (refusal is not null)
                 throw refusal;
-            QuantileMethod parsed = QuantileEngine.ParseMethod(method);
+            QuantileMethod parsed = DefaultEngine.ParseMethod(method);
 
             bool vstring = Backends.Strings.NDStringUfuncs.IsVString(a);
-            if (vstring && !(QuantileEngine.IsDiscrete(parsed) || (parsed == QuantileMethod.Linear && qIsInteger)))
+            if (vstring && !(DefaultEngine.IsDiscrete(parsed) || (parsed == QuantileMethod.Linear && qIsInteger)))
                 // StringDType's interpolating branch: the sort, the neighbours, and _lerp's Python subtraction of them.
                 return Backends.Strings.NDVStringStatistics.QuantileInterpolate(arr, q, qShape, parsed, target, @out, keepdims,
                     nd, reduced, qType);

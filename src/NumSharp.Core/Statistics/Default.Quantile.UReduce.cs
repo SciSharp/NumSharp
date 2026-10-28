@@ -1,4 +1,13 @@
 using System;
+using NumSharp.Statistics;
+
+// =============================================================================
+// Default.Quantile.UReduce.cs - NumPy's _ureduce prologue for the quantile family (numpy/lib/_function_base_impl.py)
+// =============================================================================
+//
+// UReduce (DefaultEngine, internal static) is the ONE prologue of np.median, np.quantile, np.percentile and their nan
+// forms; the text routes (Backends/Strings, QuantileText) call it too. UReduced is what it hands the reduction function.
+// =============================================================================
 
 namespace NumSharp.Statistics
 {
@@ -66,8 +75,11 @@ namespace NumSharp.Statistics
         ///     weights without a merge, or null.</summary>
         internal NDArray Weights { get; }
     }
+}
 
-    internal static partial class QuantileEngine
+namespace NumSharp.Backends
+{
+    public partial class DefaultEngine
     {
         /// <summary>
         ///     NumPy's <c>_ureduce</c> up to its call of the reduction function — the ONE prologue of <c>np.median</c>,
@@ -95,7 +107,7 @@ namespace NumSharp.Statistics
         ///     (0,newaxis)</c>).</exception>
         /// <remarks>
         ///     The np-layer dtype plan's P1a (step 2) made this the family's one copy: the numeric route
-        ///     (<see cref="Compute"/>) merged the axes with an explicit length after q's rank and the method were checked, so a
+        ///     (<see cref="QuantileCompute"/>) merged the axes with an explicit length after q's rank and the method were checked, so a
         ///     kept axis of length 0 gave an empty result (plan Appendix B1), and the fixed-width text routes of np.median /
         ///     np.nanmedian / np.nanquantile refused the text before keepdims' out was indexed.
         /// </remarks>

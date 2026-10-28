@@ -16,9 +16,9 @@ using NumSharp.Backends;
 // numpy.matrix operand inside NDMatrixBoundary's plain region).
 //
 // Two helpers were renamed in the merge, because DefaultEngine shares one namespace of member names: Compute is
-// UniqueCompute (QuantileEngine has a Compute too), and Splitmix is UniqueSplitmix (np.isin's helper of the same name
-// joined DefaultEngine first). The files stay beside the facades because their statements call public np.* functions,
-// which ratchet R2 counts under Backends/.
+// UniqueCompute (QuantileEngine had a Compute too, QuantileCompute since it joined DefaultEngine), and Splitmix is
+// UniqueSplitmix (np.isin's helper of the same name joined DefaultEngine first). The files stay beside the facades
+// because their statements call public np.* functions, which ratchet R2 counts under Backends/.
 //
 // The routes, in NumPy's order:
 //   * text first: the axis range check, StringDType's refusal of the structured axis path (ThrowIfTextUnique), then

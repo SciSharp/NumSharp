@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 using NumSharp.Statistics;
 
 namespace NumSharp
@@ -63,15 +64,18 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // a numpy.char.chararray operand: with weights= NumPy's result is empty_like of the chararray, the plain call
             // kept as a chararray (its checks run inside it, so an invalid argument raises the same error); without
-            // weights the flag goes down, where NumPy's text route meets the STRING partition (QuantileEngine.Quantile).
+            // weights the flag goes down, where NumPy's text route meets the STRING partition (DefaultEngine.QuantileFunction).
             bool chararray = NDCharArrayBoundary.Sees(a);   // the user's call decides the chararray rule (before any PlainFor region hides it)
             if (chararray && weights is not null)
                 return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
             // NumPy's np.quantile body (q's checks, the weighted branch, the text routes, the numeric quantile) is
-            // QuantileEngine.Quantile's: the facade holds only the class rules above.
-            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
-                @out, overwrite_input, method, keepdims, weights, chararray);
+            // TensorEngine.Quantile's: the facade holds only the class rules above.
+            int[] axes = axis.HasValue ? new[] { axis.Value } : null;
+            return chararray
+                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
+                    overwrite_input, method, keepdims, weights, chararray: true)
+                : QuantileFamilyEngine(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -134,9 +138,12 @@ namespace NumSharp
             if (chararray && weights is not null)
                 return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-            // NumPy's np.quantile body is QuantileEngine.Quantile's (a null q is reported there, after the complex check).
-            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
-                @out, overwrite_input, method, keepdims, weights, chararray);
+            // NumPy's np.quantile body is TensorEngine.Quantile's (a null q is reported there, after the complex check).
+            int[] axes = axis.HasValue ? new[] { axis.Value } : null;
+            return chararray
+                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
+                    overwrite_input, method, keepdims, weights, chararray: true)
+                : QuantileFamilyEngine(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -207,9 +214,11 @@ namespace NumSharp
             if (chararray && weights is not null)
                 return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-            // NumPy's np.quantile body is QuantileEngine.Quantile's.
-            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
-                keepdims, weights, chararray);
+            // NumPy's np.quantile body is TensorEngine.Quantile's.
+            return chararray
+                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
+                    overwrite_input, method, keepdims, weights, chararray: true)
+                : QuantileFamilyEngine(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -281,9 +290,11 @@ namespace NumSharp
             if (chararray && weights is not null)
                 return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-            // NumPy's np.quantile body is QuantileEngine.Quantile's (a null q is reported there, after the complex check).
-            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
-                keepdims, weights, chararray);
+            // NumPy's np.quantile body is TensorEngine.Quantile's (a null q is reported there, after the complex check).
+            return chararray
+                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
+                    overwrite_input, method, keepdims, weights, chararray: true)
+                : QuantileFamilyEngine(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -348,10 +359,13 @@ namespace NumSharp
             if (chararray && weights is not null)
                 return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-            // NumPy's np.quantile body is QuantileEngine.Quantile's: a null or text q, the range check at any rank, an
+            // NumPy's np.quantile body is TensorEngine.Quantile's: a null or text q, the range check at any rank, an
             // integer q's index taken instead of interpolated, a weak C# literal, q's rank, all in NumPy's order.
-            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis.HasValue ? new[] { axis.Value } : null,
-                @out, overwrite_input, method, keepdims, weights, chararray);
+            int[] axes = axis.HasValue ? new[] { axis.Value } : null;
+            return chararray
+                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
+                    overwrite_input, method, keepdims, weights, chararray: true)
+                : QuantileFamilyEngine(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -421,9 +435,11 @@ namespace NumSharp
             if (chararray && weights is not null)
                 return NDCharArrayBoundary.Kept((a, q, axis, @out, overwrite_input, method, keepdims, weights),
                     static s => quantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), @out);
-            // NumPy's np.quantile body is QuantileEngine.Quantile's (see the one-axis overload).
-            return QuantileEngine.Quantile("quantile", a, new QuantileArgument(q), axis, @out, overwrite_input, method,
-                keepdims, weights, chararray);
+            // NumPy's np.quantile body is TensorEngine.Quantile's (see the one-axis overload).
+            return chararray
+                ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
+                    overwrite_input, method, keepdims, weights, chararray: true)
+                : QuantileFamilyEngine(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -528,5 +544,20 @@ namespace NumSharp
             using NDArray qArray = NDArray.PythonLiteral(q);
             return quantile(a, qArray, axis, @out, overwrite_input, method, keepdims, weights);
         }
+
+        /// <summary>
+        ///     The engine a quantile-family facade (<c>np.quantile</c>, <c>np.percentile</c>, <c>np.median</c> and their nan
+        ///     forms) hands its call to: the data's own engine, or the default engine when the data is null.
+        /// </summary>
+        /// <param name="a">The data, or null.</param>
+        /// <returns><paramref name="a"/>'s engine, or <see cref="BackendFactory.GetEngine"/>'s default engine for a null
+        ///     <paramref name="a"/>.</returns>
+        /// <remarks>
+        ///     A null data must reach the engine's statements rather than fail at the dispatch: NumPy's order checks q and
+        ///     the method before the data is read, and the engine reports the null data as
+        ///     <see cref="ArgumentNullException"/> where its statements first need it, as the family did before its bodies
+        ///     became engine members (the np-layer dtype plan, phase PE). <c>np.evaluate</c> resolves an engine the same way.
+        /// </remarks>
+        internal static TensorEngine QuantileFamilyEngine(NDArray a) => a?.TensorEngine ?? BackendFactory.GetEngine();
     }
 }

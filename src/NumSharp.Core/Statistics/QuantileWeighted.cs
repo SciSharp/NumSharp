@@ -281,7 +281,7 @@ namespace NumSharp.Statistics
         ///     few dimensions; the subscript of a Python object result under keepdims (<c>'float' object is not
         ///     subscriptable</c> for the NaN NA object of an all-NaN <c>StringDType</c> slice).</exception>
         /// <remarks>
-        ///     The prologue is the quantile family's one copy (<see cref="QuantileEngine.UReduce"/>, since the np-layer dtype
+        ///     The prologue is the quantile family's one copy (<see cref="DefaultEngine.UReduce"/>, since the np-layer dtype
         ///     plan's P1a step 2); this class had its own until then, with the same order and texts. The merged axis reaches
         ///     the reduction as a non-negative axis (NumPy passes <c>-1</c>): the functions below normalize either form.
         /// </remarks>
@@ -294,7 +294,7 @@ namespace NumSharp.Statistics
             // an axis argument), then for several axes (or an empty tuple) the kept axes first and the reduced ones merged
             // into one last axis, the data and the weights alike (`reshape_arr`); the reduction runs along it. The axes were
             // normalized by Prologue already (with argname "axis"), so normalizing them again here cannot raise.
-            UReduced prologue = QuantileEngine.UReduce(a, reduced, @out, keepdims, wgt);
+            UReduced prologue = DefaultEngine.UReduce(a, reduced, @out, keepdims, wgt);
             (NDArray r, bool pyObject) = nan
                 ? NanUreduceFunc(prologue.Data, q, prologue.Weights, prologue.Axis, prologue.Target)
                 : (UreduceFunc(prologue.Data, q, prologue.Weights, prologue.Axis, prologue.Target), false);
@@ -357,7 +357,7 @@ namespace NumSharp.Statistics
                 arr = np.moveaxis(arr, ax, -1);
                 weights = np.moveaxis(weights, ax, -1);
             }
-            bool supportsNans = QuantileEngine.IsFloatTc(arr.typecode);
+            bool supportsNans = DefaultEngine.IsFloatTc(arr.typecode);
             // `index_array = np.argsort(arr, axis=0)`: the default kind (see the file header for the order of ties).
             NDArray order = np.argsort(arr, -1);
             // One line (1-D data, the flattened data of axis=None, every line of the nan forms) takes the route that reads
@@ -388,7 +388,7 @@ namespace NumSharp.Statistics
                     throw new ValueError("Weights included NaN, inf or were all zero.");
             }
             // `if quantiles.dtype.kind == "f": cdf = cdf.astype(quantiles.dtype)` — a float32 q searches float32 values.
-            if (QuantileEngine.IsFloatTc(q.typecode) && q.typecode != NPTypeCode.Double)
+            if (DefaultEngine.IsFloatTc(q.typecode) && q.typecode != NPTypeCode.Double)
                 cdf = cdf.astype(q.dtype);
             // `if np.any(cdf[0, ...] == 0): cdf[cdf == 0] = -1`: leading zero weights never answer q = 0.
             using (var first = cdf[Slice.Ellipsis, Slice.Index(0)])
@@ -618,7 +618,7 @@ namespace NumSharp.Statistics
             np.true_divide(cumulative, total, @out: cumulative);
             NDArray cdf = cumulative;
             // `if quantiles.dtype.kind == "f": cdf = cdf.astype(quantiles.dtype)` — a float32 q searches float32 values.
-            if (QuantileEngine.IsFloatTc(q.typecode) && q.typecode != NPTypeCode.Double)
+            if (DefaultEngine.IsFloatTc(q.typecode) && q.typecode != NPTypeCode.Double)
                 cdf = cdf.astype(q.dtype);
             // `if np.any(cdf[0, ...] == 0): cdf[cdf == 0] = -1`: leading zero weights never answer q = 0.
             NDArray zero = NDArray.PythonLiteral(0L);
@@ -964,7 +964,7 @@ namespace NumSharp.Statistics
         /// <summary>
         ///     NumPy's <c>target[...] = value</c> as the nan forms store a line's answer: an array value by the unsafe cast and
         ///     broadcast, a Python object (the NaN NA object) or a NumPy scalar (a 0-d q's answer) by the destination's setitem
-        ///     (<see cref="QuantileEngine.StoreNumPyScalar"/>: an integer destination refuses NaN and infinity).
+        ///     (<see cref="DefaultEngine.StoreNumPyScalar"/>: an integer destination refuses NaN and infinity).
         /// </summary>
         /// <param name="target">The destination (out, its view, or the result's slice).</param>
         /// <param name="value">The value.</param>
@@ -976,7 +976,7 @@ namespace NumSharp.Statistics
                 NDVStringStatistics.PyAssign(target, value);
             else if (value.ndim == 0)
                 // A 0-d q's answer is a NumPy SCALAR: stored by the target's setitem (an integer target refuses NaN).
-                QuantileEngine.StoreNumPyScalar(target, value);
+                DefaultEngine.StoreNumPyScalar(target, value);
             else
                 np.copyto(target, value, "unsafe");
         }

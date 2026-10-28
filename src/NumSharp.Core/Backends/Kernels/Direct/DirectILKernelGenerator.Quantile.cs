@@ -120,7 +120,7 @@ namespace NumSharp.Backends.Kernels
             public readonly QuantileMethod Method;
             public readonly bool IgnoreNaN;
             /// <summary>Bakes NumPy's mean-of-middle <c>np.median</c> reduction into the kernel (see
-            /// <see cref="QuantileEngine.Compute"/>'s <c>medianMean</c>). Part of the cache key so the
+            /// <see cref="DefaultEngine.QuantileCompute"/>'s <c>medianMean</c>). Part of the cache key so the
             /// median and quantile(0.5) kernels are distinct compiled bodies.</summary>
             public readonly bool MedianMean;
 
@@ -397,7 +397,7 @@ namespace NumSharp.Backends.Kernels
                 QuantileIndexes.IntegerPlan<TQ>(method, n, q, nQs, inexact != 0, raw, weight);
                 return;
             }
-            bool take = QuantileEngine.IsDiscrete(method);
+            bool take = DefaultEngine.IsDiscrete(method);
             for (int j = 0; j < nQs; j++)
             {
                 if (take)
@@ -666,7 +666,7 @@ namespace NumSharp.Backends.Kernels
                 // NaN virtual index reads its last element), then partition_prep_kth_array's validation, in NumPy's list
                 // order.
                 BuildQuantilePlan<TQ>((int)method, m, q, nQs, 1, rowRaw, rowWeight);
-                if (QuantileEngine.IsDiscrete(method))
+                if (DefaultEngine.IsDiscrete(method))
                     QuantileIndexes.CheckTakeKth(rowRaw, nQs, 2, m);
                 else
                     QuantileIndexes.CheckInterpolationKth(rowRaw, 2 * nQs, m);

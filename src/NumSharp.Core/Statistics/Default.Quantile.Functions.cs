@@ -1,4 +1,19 @@
 using System;
+using NumSharp.Statistics;
+
+// =============================================================================
+// Default.Quantile.Functions.cs - DefaultEngine's np.quantile, np.percentile, np.nanquantile and np.nanpercentile
+// (numpy/lib/_function_base_impl.py: quantile, percentile; numpy/lib/_nanfunctions_impl.py: nanquantile, nanpercentile)
+// =============================================================================
+//
+// DefaultEngine's overrides of TensorEngine.Quantile and Percentile (TensorEngine.FunctionBase.cs) and NanQuantile and
+// NanPercentile (TensorEngine.NanFunctions.cs): NumPy's statements after the facades' class rules - the complex check on
+// the data, q's checks (percentile's division by 100), the weighted branch, the text routes and the numeric quantile.
+// The four overrides share two bodies, QuantileFunction and NanQuantileFunction, which take the function's name (every
+// refusal names it, percentile divides by 100) and q in the C# form the caller passed (QuantileArgument). A
+// numpy.char.chararray operand keeps its class-boundary flag on QuantileFunction, which np.quantile / np.percentile call
+// directly for one (the engine members take plain arrays).
+// =============================================================================
 
 namespace NumSharp.Statistics
 {
@@ -74,14 +89,186 @@ namespace NumSharp.Statistics
         /// <summary>The array of a <see cref="QuantileForm.Array"/> q, possibly null (null for the other forms).</summary>
         internal NDArray Array { get; }
     }
+}
 
-    internal static partial class QuantileEngine
+namespace NumSharp.Backends
+{
+    public partial class DefaultEngine
     {
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.Quantile"/>: <see cref="QuantileFunction"/> named
+        ///     <c>quantile</c>, over a plain operand (a <c>numpy.char.chararray</c> operand reaches
+        ///     <see cref="QuantileFunction"/> from the facade, with its flag).
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">q as NumPy reads it (<see cref="QuantileQ"/>).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method name.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c>, or null.</param>
+        /// <returns>The quantiles; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="Exception">The errors of <see cref="QuantileFunction"/>, in its order.</exception>
+        /// <remarks>An array <see cref="QuantileQ"/> makes from <paramref name="q"/> is read into the quantile list and never
+        ///     returned, so it is disposed when the call ends; the caller's own arrays are never disposed.</remarks>
+        public override NDArray Quantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
+        {
+            using var made = QuantileQ(q, out var argument);
+            return QuantileFunction("quantile", a, argument, axis, @out, overwrite_input, method, keepdims, weights,
+                chararray: false);
+        }
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.Percentile"/>: <see cref="QuantileFunction"/> named
+        ///     <c>percentile</c> (q divided by 100 first), over a plain operand (a <c>numpy.char.chararray</c> operand
+        ///     reaches <see cref="QuantileFunction"/> from the facade, with its flag).
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">The percentiles as NumPy reads them (<see cref="QuantileQ"/>).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method name.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c>, or null.</param>
+        /// <returns>The percentiles; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="Exception">The errors of <see cref="QuantileFunction"/>, in its order.</exception>
+        /// <remarks>An array <see cref="QuantileQ"/> makes is disposed when the call ends (see <see cref="Quantile"/>).</remarks>
+        public override NDArray Percentile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
+        {
+            using var made = QuantileQ(q, out var argument);
+            return QuantileFunction("percentile", a, argument, axis, @out, overwrite_input, method, keepdims, weights,
+                chararray: false);
+        }
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.NanQuantile"/>: <see cref="NanQuantileFunction"/> named
+        ///     <c>nanquantile</c>.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">q as NumPy reads it (<see cref="QuantileQ"/>).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method name.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c>, or null.</param>
+        /// <returns>The quantiles of the non-NaN values; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="Exception">The errors of <see cref="NanQuantileFunction"/>, in its order.</exception>
+        /// <remarks>An array <see cref="QuantileQ"/> makes is disposed when the call ends (see <see cref="Quantile"/>).</remarks>
+        public override NDArray NanQuantile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
+        {
+            using var made = QuantileQ(q, out var argument);
+            return NanQuantileFunction("nanquantile", a, argument, axis, @out, overwrite_input, method, keepdims, weights);
+        }
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.NanPercentile"/>: <see cref="NanQuantileFunction"/> named
+        ///     <c>nanpercentile</c> (q divided by 100 first).
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="q">The percentiles as NumPy reads them (<see cref="QuantileQ"/>).</param>
+        /// <param name="axis">The reduced axes, or null for the flattened data; an EMPTY array reduces nothing.</param>
+        /// <param name="out">An optional output array, written and returned itself.</param>
+        /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
+        /// <param name="method">The estimation method name.</param>
+        /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
+        /// <param name="weights">NumPy's <c>weights=</c>, or null.</param>
+        /// <returns>The percentiles of the non-NaN values; <paramref name="out"/> itself when one is given.</returns>
+        /// <exception cref="Exception">The errors of <see cref="NanQuantileFunction"/>, in its order.</exception>
+        /// <remarks>An array <see cref="QuantileQ"/> makes is disposed when the call ends (see <see cref="Quantile"/>).</remarks>
+        public override NDArray NanPercentile(NDArray a, object q, int[] axis = null, NDArray @out = null,
+            bool overwrite_input = false, string method = "linear", bool keepdims = false, NDArray weights = null)
+        {
+            using var made = QuantileQ(q, out var argument);
+            return NanQuantileFunction("nanpercentile", a, argument, axis, @out, overwrite_input, method, keepdims,
+                weights);
+        }
+
+        /// <summary>
+        ///     The engine members' <c>q</c> (an <see cref="object"/>, NumPy's array_like) in the C# form the shared bodies
+        ///     read (<see cref="QuantileArgument"/>), by the house NEP 50 map, so that each form takes NumPy's statements
+        ///     for the Python object it stands for: <c>weak_q = type(q) in (int, float)</c>, then
+        ///     <c>q = np.asanyarray(q)</c>.
+        /// </summary>
+        /// <param name="q">
+        ///     The caller's q. A <see cref="double"/> or <see cref="float"/> is a Python float (the number form); a
+        ///     <see cref="double"/> array a Python list of floats (the list form); an <see cref="NDArray"/> (null included,
+        ///     reported later in NumPy's order) an ndarray, or a C# literal's weak array; a C# integer a Python int (the weak
+        ///     0-d int64 array the facades' <see cref="long"/> overloads make; a <see cref="ulong"/> past
+        ///     <see cref="long.MaxValue"/> is NumPy's uint64 array of it); a <see cref="bool"/> a Python bool, which is
+        ///     not weak (<c>type(True)</c> is <c>bool</c>); anything else whatever <c>np.asanyarray</c> makes of it.
+        /// </param>
+        /// <param name="argument">The form <paramref name="q"/> takes.</param>
+        /// <returns>
+        ///     The array this conversion made, for the caller to dispose (it is read into the quantile list and never
+        ///     returned); null when <paramref name="q"/> needed no new array.
+        /// </returns>
+        /// <exception cref="Exception">Whatever <c>np.asanyarray</c> raises for an object it cannot convert.</exception>
+        /// <remarks>The facades pass exactly the first three forms (a C# integer arrives as the array its overload made),
+        ///     so their calls take the forms they took before the plan's phase PE.</remarks>
+        internal static NDArray QuantileQ(object q, out QuantileArgument argument)
+        {
+            switch (q)
+            {
+                case null:
+                    // NumPy's None: asanyarray(None) is an object array; the bodies report a null q after the complex check.
+                    argument = new QuantileArgument((NDArray)null);
+                    return null;
+                case NDArray array:
+                    argument = new QuantileArgument(array);
+                    return null;
+                case double number:
+                    argument = new QuantileArgument(number);
+                    return null;
+                case float single:
+                    argument = new QuantileArgument((double)single);
+                    return null;
+                case double[] list:
+                    argument = new QuantileArgument(list);
+                    return null;
+                case bool truth:
+                {
+                    // A Python bool is an int subclass but not weak: NumPy's q is the strong 0-d bool array.
+                    var made = NDArray.Scalar(truth);
+                    argument = new QuantileArgument(made);
+                    return made;
+                }
+                case ulong big when big > long.MaxValue:
+                {
+                    // A Python int past int64: np.asanyarray makes a uint64 array of it (weak: it was an int).
+                    var made = NDArray.PythonLiteral(big);
+                    argument = new QuantileArgument(made);
+                    return made;
+                }
+                case sbyte or byte or short or ushort or int or uint or long or ulong:
+                {
+                    // A Python int: the weak 0-d int64 array (NDArray.WasPythonLiteral), as the facades' long overloads.
+                    var made = NDArray.PythonLiteral(Convert.ToInt64(q));
+                    argument = new QuantileArgument(made);
+                    return made;
+                }
+                default:
+                {
+                    // Any other array_like (a list, a typed array, text): np.asanyarray(q), a strong array.
+                    var made = np.asanyarray(q);
+                    argument = new QuantileArgument(made);
+                    return made;
+                }
+            }
+        }
+
         /// <summary>
         ///     NumPy's <c>np.quantile</c> / <c>np.percentile</c> body after the class rules: the complex check on the data,
         ///     q's checks (and percentile's division by 100), the weighted branch, the text routes and the numeric quantile,
-        ///     in the order every public overload runs them. The facade applies the <c>numpy.matrix</c> rule and, with
-        ///     weights, the <c>numpy.char.chararray</c> rule, then calls this.
+        ///     in the order every public overload runs them. <see cref="Quantile"/> and <see cref="Percentile"/> call it for
+        ///     a plain operand; the facade calls it directly, with <paramref name="chararray"/> set, for a
+        ///     <c>numpy.char.chararray</c> operand without weights (the class boundary's flag; with weights the facade's
+        ///     chararray rule runs the plain call and keeps the class).
         /// </summary>
         /// <param name="op">The NumPy function, <c>quantile</c> or <c>percentile</c>: percentile divides q by 100 and checks
         ///     the quotient against [0, 1] with its own text, and every refusal names the function.</param>
@@ -126,7 +313,7 @@ namespace NumSharp.Statistics
         ///     q's rank, the method and the data's refusals.</exception>
         /// <exception cref="InvalidCastException">A q array of a dtype without a real value (complex).</exception>
         /// <exception cref="OverflowException">An integer q array whose virtual indexes leave its dtype (see
-        ///     <see cref="Compute"/>).</exception>
+        ///     <see cref="QuantileCompute"/>).</exception>
         /// <remarks>
         ///     Moved from the sixteen public overloads of <c>np.quantile</c> and <c>np.percentile</c> by the np-layer dtype
         ///     plan's P1a (step 1), statement for statement in each overload's order: the facade's outcome is unchanged
@@ -136,7 +323,7 @@ namespace NumSharp.Statistics
         ///     NumPy's one <c>_ureduce</c> prologue (<see cref="UReduce"/>), so the axes, keepdims' out index and the merge are
         ///     reported before anything the reduction function checks (plan Appendix B1).
         /// </remarks>
-        internal static NDArray Quantile(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
+        internal static NDArray QuantileFunction(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
         {
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
@@ -169,7 +356,7 @@ namespace NumSharp.Statistics
                     if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                         return QuantileOfText(op, a, new[] { value }, System.Array.Empty<long>(), false, axes, @out, method,
                             keepdims, chararray);
-                    return Compute(a, new[] { value }, axes, @out, overwrite_input,
+                    return QuantileCompute(a, new[] { value }, axes, @out, overwrite_input,
                         default, keepdims, qIsScalar: true, methodName: method);
                 }
                 case QuantileForm.List:
@@ -198,7 +385,7 @@ namespace NumSharp.Statistics
                     if (chararray || Backends.Strings.NDStringUfuncs.IsText(a))
                         return QuantileOfText(op, a, values, new long[] { values.Length }, false, axes, @out, method,
                             keepdims, chararray);
-                    return Compute(a, values, axes, @out, overwrite_input,
+                    return QuantileCompute(a, values, axes, @out, overwrite_input,
                         default, keepdims, qIsScalar: false, methodName: method);
                 }
                 default:
@@ -221,7 +408,7 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     <see cref="Quantile"/> for an <c>np.quantile</c> q array (after the complex check and the text-q answers):
+        ///     <see cref="QuantileFunction"/> for an <c>np.quantile</c> q array (after the complex check and the text-q answers):
         ///     the range check at any rank, then the weighted branch, the text route and the numeric quantile. An integer or
         ///     bool q makes 'linear' take the element at its integer virtual index.
         /// </summary>
@@ -234,12 +421,12 @@ namespace NumSharp.Statistics
         /// <param name="method">The method name.</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
         /// <param name="weights">NumPy's <c>weights=</c>, or null.</param>
-        /// <param name="chararray">The chararray flag (see <see cref="Quantile"/>).</param>
+        /// <param name="chararray">The chararray flag (see <see cref="QuantileFunction"/>).</param>
         /// <returns>The quantiles; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="ValueError">A quantile outside [0, 1], an empty q of rank other than 1, and the other
-        ///     errors of <see cref="Quantile"/>.</exception>
+        ///     errors of <see cref="QuantileFunction"/>.</exception>
         /// <exception cref="InvalidCastException">A q dtype without a real value (complex).</exception>
-        /// <exception cref="Exception">The errors of the weighted branch, the text route and <see cref="Compute"/>.</exception>
+        /// <exception cref="Exception">The errors of the weighted branch, the text route and <see cref="QuantileCompute"/>.</exception>
         private static NDArray QuantileOfArray(string op, NDArray a, NDArray q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
         {
@@ -264,13 +451,13 @@ namespace NumSharp.Statistics
             // type(q) in (int, float): only a C# number (its 0-d array marked WasPythonLiteral) keeps float16 / float32
             // data's dtype under interpolation; an array q, 0-d included, is a strong float64. The method name and q's
             // rank (a 2-d q keeps both axes) are checked inside, in NumPy's order.
-            return Compute(a, values, axes, @out, overwrite_input, default, keepdims, qIsScalar,
+            return QuantileCompute(a, values, axes, @out, overwrite_input, default, keepdims, qIsScalar,
                 weakQ: q.WasPythonLiteral, qShape: qIsScalar ? null : (long[])q.Shape.dimensions.Clone(),
                 methodName: method, integerQ: IsIntegerQuantile(q), qType: QuantileIndexes.IndexDtypeOf(q));
         }
 
         /// <summary>
-        ///     <see cref="Quantile"/> for an <c>np.percentile</c> q array (after the complex check and the text-q answers):
+        ///     <see cref="QuantileFunction"/> for an <c>np.percentile</c> q array (after the complex check and the text-q answers):
         ///     NumPy's <c>np.true_divide(q, 100)</c> and range check, then the weighted branch, the text route and the
         ///     numeric quantile. A percentile never takes the integer index (the quotient is a float).
         /// </summary>
@@ -283,12 +470,12 @@ namespace NumSharp.Statistics
         /// <param name="method">The method name.</param>
         /// <param name="keepdims">Whether the reduced axes are kept with length one.</param>
         /// <param name="weights">NumPy's <c>weights=</c>, or null.</param>
-        /// <param name="chararray">The chararray flag (see <see cref="Quantile"/>).</param>
+        /// <param name="chararray">The chararray flag (see <see cref="QuantileFunction"/>).</param>
         /// <returns>The percentiles; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="ValueError">A percentile outside [0, 100], an empty q of rank other than 1, and the other
-        ///     errors of <see cref="Quantile"/>.</exception>
+        ///     errors of <see cref="QuantileFunction"/>.</exception>
         /// <exception cref="InvalidCastException">A q dtype without a real value (complex).</exception>
-        /// <exception cref="Exception">The errors of the weighted branch, the text route and <see cref="Compute"/>.</exception>
+        /// <exception cref="Exception">The errors of the weighted branch, the text route and <see cref="QuantileCompute"/>.</exception>
         private static NDArray PercentileOfArray(string op, NDArray a, NDArray q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights, bool chararray)
         {
@@ -308,7 +495,7 @@ namespace NumSharp.Statistics
                 return QuantileOfText(op, a, fractions, (long[])q.Shape.dimensions.Clone(), false, axes, @out, method,
                     keepdims, chararray, QuantileIndexes.PrecisionOf(q));
             // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64.
-            return Compute(a, fractions, axes, @out, overwrite_input,
+            return QuantileCompute(a, fractions, axes, @out, overwrite_input,
                 default, keepdims, qIsScalar: q.ndim == 0, weakQ: q.WasPythonLiteral, methodName: method,
                 qShape: q.ndim == 0 ? null : (long[])q.Shape.dimensions.Clone(), qType: QuantileIndexes.PrecisionOf(q));
         }
@@ -357,7 +544,7 @@ namespace NumSharp.Statistics
         ///     (NumPy's <c>np.nanmean</c> comes first) and before the reduction function's checks; non-empty data cannot fail
         ///     its merge.
         /// </remarks>
-        internal static NDArray NanQuantile(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
+        internal static NDArray NanQuantileFunction(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
             // `if a.dtype.kind == "c": raise TypeError(...)` — NumPy's first statement, before q is read.
@@ -395,7 +582,7 @@ namespace NumSharp.Statistics
                             System.Array.Empty<long>(), false, axes, @out, method, keepdims);
                     if (Backends.Strings.NDStringUfuncs.IsString(a))
                         throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, true);
-                    return Compute(a, new[] { value }, axes, @out, overwrite_input,
+                    return QuantileCompute(a, new[] { value }, axes, @out, overwrite_input,
                         default, keepdims, qIsScalar: true,
                         emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
                 }
@@ -428,7 +615,7 @@ namespace NumSharp.Statistics
                             false, axes, @out, method, keepdims);
                     if (Backends.Strings.NDStringUfuncs.IsString(a))
                         throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, false);
-                    return Compute(a, values, axes, @out, overwrite_input,
+                    return QuantileCompute(a, values, axes, @out, overwrite_input,
                         default, keepdims, qIsScalar: false,
                         emptyReturnsNaN: true, ignoreNaN: true, methodName: method);
                 }
@@ -440,17 +627,17 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     NumPy's <c>np.nanquantile</c> for a q ARRAY, statement for statement (after <see cref="NanQuantile"/>'s complex
+        ///     NumPy's <c>np.nanquantile</c> for a q ARRAY, statement for statement (after <see cref="NanQuantileFunction"/>'s complex
         ///     refusal): a null q; a text q answered by its [0, 1] check (an empty text q passes it, and only empty numeric
         ///     data goes on, to <c>np.nanmean</c>); <c>_quantile_is_valid(q)</c> at any rank; the weighted branch; then the
         ///     data — <c>StringDType</c> through its NaN-like NAs, fixed-width text refused by <c>isnan</c> after the axis
-        ///     checks, numbers through <see cref="Compute"/>, which checks q's rank, the method name and the axes in NumPy's
+        ///     checks, numbers through <see cref="QuantileCompute"/>, which checks q's rank, the method name and the axes in NumPy's
         ///     order.
         /// </summary>
         /// <param name="op">The NumPy function (<c>nanquantile</c>).</param>
         /// <param name="a">The data.</param>
         /// <param name="q">q as received (<see cref="QuantileForm.Array"/>); the weighted branch's empty-data answer
-        ///     re-enters <see cref="NanQuantile"/> with it.</param>
+        ///     re-enters <see cref="NanQuantileFunction"/> with it.</param>
         /// <param name="axes">The reduced axes, or null.</param>
         /// <param name="out">An optional output array.</param>
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
@@ -460,7 +647,7 @@ namespace NumSharp.Statistics
         /// <returns>The quantiles of the non-NaN values; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="ArgumentNullException">The q array is null.</exception>
         /// <exception cref="TypeError">A text q (NumPy's [0, 1] check or the reduction after it).</exception>
-        /// <exception cref="Exception">The other errors of <see cref="NanQuantile"/>.</exception>
+        /// <exception cref="Exception">The other errors of <see cref="NanQuantileFunction"/>.</exception>
         private static NDArray NanQuantileOfArray(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
@@ -476,7 +663,7 @@ namespace NumSharp.Statistics
                     : Backends.Strings.NDStringUfuncs.QuantileTextQAnswer(op, a, qArray, method, axes, @out, keepdims);
                 if (textQ is not null)
                     throw textQ;
-                return Compute(a, System.Array.Empty<double>(), axes, @out, overwrite_input, QuantileMethod.Linear,
+                return QuantileCompute(a, System.Array.Empty<double>(), axes, @out, overwrite_input, QuantileMethod.Linear,
                     keepdims, qIsScalar: true, emptyReturnsNaN: true, ignoreNaN: true);
             }
             double[] values = QArrayFromNDArray(qArray);
@@ -503,24 +690,24 @@ namespace NumSharp.Statistics
             // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. An integer
             // (or bool) q takes the element at the integer virtual index (integerQ). q's rank (a 2-d q keeps both axes) and
             // the method name are checked inside, in NumPy's order.
-            return Compute(a, values, axes, @out, overwrite_input, default, keepdims, qIsScalar,
+            return QuantileCompute(a, values, axes, @out, overwrite_input, default, keepdims, qIsScalar,
                 emptyReturnsNaN: true, ignoreNaN: true, weakQ: qArray.WasPythonLiteral,
                 qShape: qIsScalar ? null : (long[])qArray.Shape.dimensions.Clone(), methodName: method,
                 integerQ: IsIntegerQuantile(qArray), qType: QuantileIndexes.IndexDtypeOf(qArray));
         }
 
         /// <summary>
-        ///     NumPy's <c>np.nanpercentile</c> for a q ARRAY, statement for statement (after <see cref="NanQuantile"/>'s
+        ///     NumPy's <c>np.nanpercentile</c> for a q ARRAY, statement for statement (after <see cref="NanQuantileFunction"/>'s
         ///     complex refusal): a null q; a text q refused by <c>np.true_divide(q, 100)</c>; the division and
         ///     <c>_quantile_is_valid(q)</c> at any rank; the weighted branch (q divided by 100 in its own dtype); then the
         ///     data — <c>StringDType</c> through its NaN-like NAs, fixed-width text refused by <c>isnan</c> after the axis
-        ///     checks, numbers through <see cref="Compute"/>, which checks q's rank, the method name and the axes in NumPy's
+        ///     checks, numbers through <see cref="QuantileCompute"/>, which checks q's rank, the method name and the axes in NumPy's
         ///     order.
         /// </summary>
         /// <param name="op">The NumPy function (<c>nanpercentile</c>).</param>
         /// <param name="a">The data.</param>
         /// <param name="q">q as received (<see cref="QuantileForm.Array"/>); the weighted branch's empty-data answer
-        ///     re-enters <see cref="NanQuantile"/> with it.</param>
+        ///     re-enters <see cref="NanQuantileFunction"/> with it.</param>
         /// <param name="axes">The reduced axes, or null.</param>
         /// <param name="out">An optional output array.</param>
         /// <param name="overwrite_input">Whether the data may be partitioned in place.</param>
@@ -530,7 +717,7 @@ namespace NumSharp.Statistics
         /// <returns>The percentiles of the non-NaN values; <paramref name="out"/> itself when one is given.</returns>
         /// <exception cref="ArgumentNullException">The q array is null.</exception>
         /// <exception cref="TypeError">A text q (the division's refusal).</exception>
-        /// <exception cref="Exception">The other errors of <see cref="NanQuantile"/>.</exception>
+        /// <exception cref="Exception">The other errors of <see cref="NanQuantileFunction"/>.</exception>
         private static NDArray NanPercentileOfArray(string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out,
             bool overwrite_input, string method, bool keepdims, NDArray weights)
         {
@@ -567,7 +754,7 @@ namespace NumSharp.Statistics
                 throw NanQuantileTextAnswer(op, a, method, axes, @out, keepdims, qIsScalar);
             // weak_q: only a C# number (WasPythonLiteral) is weak; an array q, 0-d included, is a strong float64. q's rank
             // (a 2-d q keeps both axes) and the method name are checked inside, in NumPy's order.
-            return Compute(a, fractions, axes, @out, overwrite_input, default, keepdims, qIsScalar,
+            return QuantileCompute(a, fractions, axes, @out, overwrite_input, default, keepdims, qIsScalar,
                 emptyReturnsNaN: true, ignoreNaN: true, weakQ: qArray.WasPythonLiteral,
                 qShape: qIsScalar ? null : (long[])qArray.Shape.dimensions.Clone(), methodName: method,
                 qType: QuantileIndexes.PrecisionOf(qArray));
@@ -581,13 +768,13 @@ namespace NumSharp.Statistics
         /// </summary>
         /// <param name="s">The call's arguments: the function, the data, q as received, the axes, out, overwrite_input,
         ///     the method and keepdims.</param>
-        /// <returns><see cref="NanQuantile"/>'s answer without weights.</returns>
-        /// <exception cref="Exception">The errors of <see cref="NanQuantile"/> (NumPy's checks run again, and pass, before
+        /// <returns><see cref="NanQuantileFunction"/>'s answer without weights.</returns>
+        /// <exception cref="Exception">The errors of <see cref="NanQuantileFunction"/> (NumPy's checks run again, and pass, before
         ///     the empty input is answered; text data refuses as <c>np.nanmean</c> does).</exception>
         private static NDArray NanQuantileWithoutWeights(
             (string op, NDArray a, QuantileArgument q, int[] axes, NDArray @out, bool overwrite_input, string method,
                 bool keepdims) s)
-            => NanQuantile(s.op, s.a, s.q, s.axes, s.@out, s.overwrite_input, s.method, s.keepdims, null);
+            => NanQuantileFunction(s.op, s.a, s.q, s.axes, s.@out, s.overwrite_input, s.method, s.keepdims, null);
 
         /// <summary>
         ///     NumPy's answer for <c>np.nanquantile</c> / <c>np.nanpercentile</c> of fixed-width text (<c>S</c> / <c>U</c>) once
@@ -676,7 +863,7 @@ namespace NumSharp.Statistics
         ///     <c>if a.dtype.kind == "c": raise TypeError("a must be an array of real numbers")</c>. np.median and
         ///     np.nanmedian do not have it (a complex median sorts lexicographically).
         /// </summary>
-        /// <param name="a">The data operand (null passes; the null check of <see cref="Compute"/> reports it).</param>
+        /// <param name="a">The data operand (null passes; the null check of <see cref="QuantileCompute"/> reports it).</param>
         /// <exception cref="TypeError"><paramref name="a"/> is complex.</exception>
         internal static void RejectComplexQuantileData(NDArray a)
         {
