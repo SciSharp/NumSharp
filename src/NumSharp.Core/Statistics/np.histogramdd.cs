@@ -18,7 +18,7 @@ namespace NumSharp
             /// <summary>The D bin-edge arrays, one per dimension.</summary>
             public readonly NDArray[] edges;
 
-            /// <summary>Pairs the two results; <see cref="Statistics.HistogramEngine"/> builds them.</summary>
+            /// <summary>Pairs the two results; the engine member <see cref="TensorEngine.Histogramdd"/> builds them.</summary>
             /// <param name="h">The histogram (the result owns it).</param>
             /// <param name="edges">The per-dimension edges (an explicit 1-D edge array the caller passed comes back as is).</param>
             internal HistogramddResult(NDArray h, NDArray[] edges) { H = h; this.edges = edges; }
@@ -54,7 +54,7 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogramdd(HistogramEngine.SampleColumns(sample), bins, range, density, weights);
+            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         /// <summary>Compute the D-dimensional histogram with a per-dimension bin count.</summary>
@@ -69,7 +69,7 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogramdd(HistogramEngine.SampleColumns(sample), bins, range, density, weights);
+            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         /// <summary>Compute the D-dimensional histogram with explicit per-dimension bin edges.</summary>
@@ -85,7 +85,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(bins);
-            return HistogramEngine.Histogramdd(HistogramEngine.SampleColumns(sample), bins, range, density, weights);
+            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         /// <summary>Compute the D-dimensional histogram with a mixed per-dimension bin spec (each entry an int count or an edge array).</summary>
@@ -100,7 +100,7 @@ namespace NumSharp
         public static HistogramddResult histogramdd(NDArray sample, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(sample, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogramdd(HistogramEngine.SampleColumns(sample), bins, range, density, weights);
+            return EngineOf(sample).Histogramdd(DefaultEngine.SampleColumns(sample), bins, range, density, weights);
         }
 
         // ---------------------------------------------------------------------
@@ -123,7 +123,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(sample);
-            return HistogramEngine.Histogramdd(HistogramEngine.ColumnsFromSequence(sample), bins, range, density, weights);
+            return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 
         /// <summary>Sequence-of-columns form with a per-dimension bin count.</summary>
@@ -139,7 +139,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(sample);
-            return HistogramEngine.Histogramdd(HistogramEngine.ColumnsFromSequence(sample), bins, range, density, weights);
+            return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 
         /// <summary>Sequence-of-columns form with explicit per-dimension edge arrays.</summary>
@@ -156,7 +156,7 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(sample);
             using var plain3 = NDMatrixBoundary.PlainFor(bins);
-            return HistogramEngine.Histogramdd(HistogramEngine.ColumnsFromSequence(sample), bins, range, density, weights);
+            return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
 
         /// <summary>Sequence-of-columns form with a mixed per-dimension bin spec.</summary>
@@ -172,7 +172,18 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(sample);
-            return HistogramEngine.Histogramdd(HistogramEngine.ColumnsFromSequence(sample), bins, range, density, weights);
+            return SequenceEngine(sample).Histogramdd(DefaultEngine.ColumnsFromSequence(sample), bins, range, density, weights);
         }
+
+        /// <summary>
+        ///     The engine a sequence sample's <c>np.histogramdd</c> call computes on: the first column's engine (the operand
+        ///     NumPy's statements read first), or the default engine for a null or empty sequence, whose refusal the column
+        ///     conversion then reports as before.
+        /// </summary>
+        /// <param name="sample">The caller's sequence of D coordinate arrays, or null.</param>
+        /// <returns>The engine of <c>sample[0]</c>, or the default engine (see <see cref="EngineOf"/>).</returns>
+        /// <remarks>Chosen before the columns are converted (the conversion may make new arrays, bound to the default
+        ///     engine), and without side effects, so the conversion's errors keep their order.</remarks>
+        private static TensorEngine SequenceEngine(NDArray[] sample) => EngineOf(sample is { Length: > 0 } ? sample[0] : null);
     }
 }

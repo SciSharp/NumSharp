@@ -3,9 +3,9 @@ using System.Numerics;
 using NumSharp.Backends;
 using static NumSharp.np;
 
-namespace NumSharp.Statistics
+namespace NumSharp.Backends
 {
-    internal static partial class HistogramEngine
+    public partial class DefaultEngine
     {
         // ---------------------------------------------------------------------
         //  Complex data: NumPy's equal-width statements in complex128
@@ -76,7 +76,7 @@ namespace NumSharp.Statistics
                 (double first, double last) = range.Value;
                 if (first > last)
                     throw new ValueError("max must be larger than min in range parameter.");
-                if (!(IsFinite(first) && IsFinite(last)))
+                if (!(HistogramIsFinite(first) && HistogramIsFinite(last)))
                     throw new ValueError($"supplied range of [{FormatEdge(first)}, {FormatEdge(last)}] is not finite");
                 // Python floats: the widening is real arithmetic.
                 if (first == last) { first -= 0.5; last += 0.5; }
@@ -88,7 +88,7 @@ namespace NumSharp.Statistics
             using NDArray min = np.amin(a);
             using NDArray max = np.amax(a);
             Complex lo = min.GetAtIndex<Complex>(0), hi = max.GetAtIndex<Complex>(0);
-            if (!(IsFinite(lo) && IsFinite(hi)))
+            if (!(HistogramIsFinite(lo) && HistogramIsFinite(hi)))
                 throw new ValueError($"autodetected range of [{min.ToString(false)}, {max.ToString(false)}] is not finite");
             if (lo == hi)
             {
@@ -121,7 +121,7 @@ namespace NumSharp.Statistics
         /// <summary>NumPy's <c>np.isfinite</c> of a complex scalar: both parts finite.</summary>
         /// <param name="z">The scalar.</param>
         /// <returns>False when either part is NaN or infinite.</returns>
-        private static bool IsFinite(Complex z) => IsFinite(z.Real) && IsFinite(z.Imaginary);
+        private static bool HistogramIsFinite(Complex z) => HistogramIsFinite(z.Real) && HistogramIsFinite(z.Imaginary);
 
         /// <summary>
         ///     The estimator branch of NumPy's <c>_get_bin_edges</c> for complex data: the outer edges, the data trimmed to a
@@ -212,7 +212,7 @@ namespace NumSharp.Statistics
                     // has no width, which the inner histogram widens the same way: the caller's range gives the same calls.
                     int upperBound = Math.Max(100, (int)Math.Sqrt(n));
                     for (int nbins = 1; nbins <= upperBound; nbins++)
-                        Histogram(x, nbins, range, false, null);
+                        HistogramFunction(x, nbins, range, false, null);
                     throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("ceil");
                 }
                 default:

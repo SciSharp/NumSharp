@@ -6,23 +6,34 @@ using NumSharp.Utilities;
 // np.bincount, np.can_cast, np.promote_types, ...); importing np's statics keeps them verbatim.
 using static NumSharp.np;
 
-namespace NumSharp.Statistics
+// =============================================================================
+// Default.Histogram*.cs - DefaultEngine's np.histogram, np.histogram_bin_edges, np.histogramdd and np.histogram2d
+// (numpy/lib/_histograms_impl.py; histogram2d is numpy/lib/_twodim_base_impl.py's wrapper of histogramdd)
+// =============================================================================
+//
+// DefaultEngine's overrides of TensorEngine.HistogramBinEdges, Histogram, Histogramdd and Histogram2d
+// (TensorEngine.Histograms.cs): _ravel_and_check_weights, _get_bin_edges with its outer edges and bin-width estimators,
+// the equal-width (bincount) and cumulative (sort + searchsorted) counting paths, the text routes and the density; and
+// histogramdd's per-dimension statements. np.histogramdd shares the outer edges, the edge linspace, the monotonic checks
+// and the contiguous cast (GetOuterEdges, HistogramLinspace, AnyDecreasing, TextEdgesDecrease, EnsureContiguousDtype,
+// FloatPromoteBinType). The public overloads only open the matrix boundary's plain region, convert their C# bins form
+// and call the members.
+//
+// Histogram, Histogramdd and Histogram2d run static bodies (HistogramFunction, HistogramddFunction,
+// Histogram2dFunction): Stone's estimator and the complex estimators call NumPy's histogram again, and histogram2d calls
+// histogramdd, from static helpers. The overrides own the [NDScoped] scope those bodies run under.
+//
+// History: moved from Statistics/np.histogram*.cs statement for statement by the np-layer dtype plan's P2 into the
+// internal operation class HistogramEngine (decision D1: NumPy writes these functions in Python); its phase PE (E1) made
+// that class these DefaultEngine partials. Two helpers were renamed, because DefaultEngine is one namespace of member
+// names: IsFinite is HistogramIsFinite and Ptp is HistogramPtp (DefaultEngine has members of both names, np.isfinite's
+// and np.ptp's). The files stay beside the facades because their statements call public np.* functions, which ratchet
+// R2 counts under Backends/.
+// =============================================================================
+
+namespace NumSharp.Backends
 {
-    /// <summary>
-    ///     The bodies of NumPy's <c>histogram</c> and <c>histogram_bin_edges</c> (<c>numpy/lib/_histograms_impl.py</c>):
-    ///     <c>_ravel_and_check_weights</c>, <c>_get_bin_edges</c> with its outer edges and bin-width estimators, the
-    ///     equal-width (bincount) and cumulative (sort + searchsorted) counting paths, the text routes and the density.
-    ///     The public <c>np.histogram</c> / <c>np.histogram_bin_edges</c> overloads only open the matrix boundary's plain
-    ///     region, convert their C# <c>bins</c> form and call <see cref="Histogram"/> / <see cref="HistogramBinEdges"/>.
-    /// </summary>
-    /// <remarks>
-    ///     Moved from <c>Statistics/np.histogram.cs</c> statement for statement by the np-layer dtype plan's P2 (an operation
-    ///     class, decision D1: NumPy writes these functions in Python). <c>np.histogramdd</c> shares the outer edges, the
-    ///     edge linspace, the monotonic checks and the contiguous cast (<see cref="GetOuterEdges"/>,
-    ///     <see cref="HistogramLinspace"/>, <see cref="AnyDecreasing"/>, <see cref="TextEdgesDecrease"/>,
-    ///     <see cref="EnsureContiguousDtype"/>, <see cref="FloatPromoteBinType"/>).
-    /// </remarks>
-    internal static partial class HistogramEngine
+    public partial class DefaultEngine
     {
         /// <summary>
         ///     NumPy's <c>BLOCK</c> of <c>histogram</c> (65536 samples): the counting paths walk the data in blocks of this
@@ -84,7 +95,8 @@ namespace NumSharp.Statistics
         }
 
         /// <summary>
-        ///     <c>histogram_bin_edges</c>: NumPy's <c>_ravel_and_check_weights</c> then <c>_get_bin_edges</c>. Text data or text
+        ///     DefaultEngine's <see cref="TensorEngine.HistogramBinEdges"/>, <c>histogram_bin_edges</c>: NumPy's
+        ///     <c>_ravel_and_check_weights</c> then <c>_get_bin_edges</c>. Text data or text
         ///     edges are answered inside those two steps, at the statement where NumPy's code first touches them (see
         ///     <see cref="GetBinEdges"/>): explicit edges never read the data, so a text <paramref name="a"/> with numeric
         ///     edges returns the edges.
@@ -96,11 +108,35 @@ namespace NumSharp.Statistics
         /// <returns>The bin edges.</returns>
         /// <exception cref="ValueError">See <see cref="GetBinEdges"/>; a weights shape that differs from <paramref name="a"/>'s.</exception>
         /// <exception cref="TypeError">See <see cref="GetBinEdges"/>.</exception>
-        internal static NDArray HistogramBinEdges(NDArray a, object bins, (double, double)? range, NDArray weights)
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE; np.histogram_bin_edges's scope covered it
+        ///     before): the raveled input, the weights' ravel and every estimator / linspace intermediate are reclaimed; an
+        ///     explicit edge array the caller passed comes back as that array.</remarks>
+        [NDScoped]
+        public override NDArray HistogramBinEdges(NDArray a, object bins, (double, double)? range = null,
+            NDArray weights = null)
         {
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
             return GetBinEdges(raveled, bins, range, w).Edges;
         }
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.Histogram"/>: <see cref="HistogramFunction"/> under this member's
+        ///     scope.
+        /// </summary>
+        /// <param name="a">The data.</param>
+        /// <param name="bins">An <see cref="int"/>, an estimator name, or an <see cref="NDArray"/> (0-d count or 1-D edges).</param>
+        /// <param name="range">The optional outer edges.</param>
+        /// <param name="density">Whether to normalize to a density.</param>
+        /// <param name="weights">The optional weights.</param>
+        /// <returns>The counts (or summed weights, or density) and the edges.</returns>
+        /// <exception cref="Exception">The errors of <see cref="HistogramFunction"/>, in its order.</exception>
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE; np.histogram's scope covered the body
+        ///     before): the raveled input and weights, the bin indices, the counting scratch and the density quotients are
+        ///     reclaimed; only the histogram and its edges leave.</remarks>
+        [NDScoped]
+        public override HistogramResult Histogram(NDArray a, object bins, (double, double)? range = null,
+            bool density = false, NDArray weights = null)
+            => HistogramFunction(a, bins, range, density, weights);
 
         /// <summary>
         ///     <c>histogram</c>: the edges as <see cref="HistogramBinEdges"/> finds them, then NumPy's equal-width
@@ -118,7 +154,8 @@ namespace NumSharp.Statistics
         ///     <c>U</c> common descriptor (<see cref="HistogramTextAnswer"/>).</exception>
         /// <exception cref="ArgumentException">Bool weights over data on explicit edges: the in-place update of the bool total
         ///     (<see cref="HistogramCumulative"/>, <see cref="HistogramCumulativeLoop"/>).</exception>
-        internal static HistogramResult Histogram(NDArray a, object bins, (double, double)? range, bool density, NDArray weights)
+        internal static HistogramResult HistogramFunction(NDArray a, object bins, (double, double)? range, bool density,
+            NDArray weights)
         {
             (NDArray raveled, NDArray w) = RavelAndCheckWeights(a, weights);
             BinEdgesResult be = GetBinEdges(raveled, bins, range, w);
@@ -867,7 +904,7 @@ namespace NumSharp.Statistics
                 (first, last) = range.Value;
                 if (first > last)
                     throw new ValueError("max must be larger than min in range parameter.");
-                if (!(IsFinite(first) && IsFinite(last)))
+                if (!(HistogramIsFinite(first) && HistogramIsFinite(last)))
                     throw new ValueError($"supplied range of [{FormatEdge(first)}, {FormatEdge(last)}] is not finite");
             }
             else if (a.size == 0)
@@ -899,7 +936,7 @@ namespace NumSharp.Statistics
             {
                 first = ScalarDouble(np.amin(a));
                 last = ScalarDouble(np.amax(a));
-                if (!(IsFinite(first) && IsFinite(last)))
+                if (!(HistogramIsFinite(first) && HistogramIsFinite(last)))
                     throw new ValueError($"autodetected range of [{FormatEdge(first)}, {FormatEdge(last)}] is not finite");
             }
 
@@ -939,11 +976,11 @@ namespace NumSharp.Statistics
             switch (name)
             {
                 case "sqrt":
-                    return Ptp(x) / System.Math.Sqrt(n);
+                    return HistogramPtp(x) / System.Math.Sqrt(n);
                 case "sturges":
-                    return Ptp(x) / (System.Math.Log2(n) + 1.0);
+                    return HistogramPtp(x) / (System.Math.Log2(n) + 1.0);
                 case "rice":
-                    return Ptp(x) / (2.0 * System.Math.Cbrt(n));
+                    return HistogramPtp(x) / (2.0 * System.Math.Cbrt(n));
                 case "scott":
                     return System.Math.Cbrt(24.0 * System.Math.Sqrt(System.Math.PI) / n) * ScalarDouble(np.std(x));
                 case "fd":
@@ -953,8 +990,8 @@ namespace NumSharp.Statistics
                 case "auto":
                 {
                     double fd = BinWidthFd(x, n);
-                    double sturges = Ptp(x) / (System.Math.Log2(n) + 1.0);
-                    double sqrt = Ptp(x) / System.Math.Sqrt(n);
+                    double sturges = HistogramPtp(x) / (System.Math.Log2(n) + 1.0);
+                    double sqrt = HistogramPtp(x) / System.Math.Sqrt(n);
                     double fdCorrected = System.Math.Max(fd, sqrt / 2);
                     return System.Math.Min(fdCorrected, sturges);
                 }
@@ -993,7 +1030,7 @@ namespace NumSharp.Statistics
                     NDArray temp = (x.astype(NPTypeCode.Double) - NDArray.Scalar(mean)) / NDArray.Scalar(sigma);
                     temp = np.power(temp, NDArray.Scalar(3.0));
                     double g1 = ScalarDouble(np.mean(temp));
-                    return Ptp(x) / (1.0 + System.Math.Log2(n) + System.Math.Log2(1.0 + System.Math.Abs(g1) / sg1));
+                    return HistogramPtp(x) / (1.0 + System.Math.Log2(n) + System.Math.Log2(1.0 + System.Math.Abs(g1) / sg1));
                 }
             }
             return 0.0;
@@ -1013,7 +1050,7 @@ namespace NumSharp.Statistics
         private static double BinWidthStone(NDArray x, double first, double last, (double, double)? range)
         {
             long n = x.size;
-            double ptp = Ptp(x);
+            double ptp = HistogramPtp(x);
             if (n <= 1 || ptp == 0) return 0;
 
             (double, double) rng = range ?? (first, last);
@@ -1040,7 +1077,7 @@ namespace NumSharp.Statistics
         /// <summary>Peak-to-peak (max − min) of <paramref name="x"/> computed in double (no signed-int overflow).</summary>
         /// <param name="x">The non-empty data.</param>
         /// <returns>The maximum minus the minimum, both read as float64.</returns>
-        private static double Ptp(NDArray x) => ScalarDouble(np.amax(x)) - ScalarDouble(np.amin(x));
+        private static double HistogramPtp(NDArray x) => ScalarDouble(np.amax(x)) - ScalarDouble(np.amin(x));
 
         /// <summary>
         ///     The float width the equal-width bin edges (and the index arithmetic) use, matching NumPy's
@@ -1303,7 +1340,7 @@ namespace NumSharp.Statistics
         /// <summary>Python's <c>math.isfinite</c> of an outer edge.</summary>
         /// <param name="v">The edge.</param>
         /// <returns>False for NaN and both infinities.</returns>
-        private static bool IsFinite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
+        private static bool HistogramIsFinite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
 
         /// <summary>
         ///     Render an edge value the way NumPy's f-string prints it inside the "supplied/autodetected range

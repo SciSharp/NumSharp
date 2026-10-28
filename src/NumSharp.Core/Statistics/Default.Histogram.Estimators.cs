@@ -4,9 +4,9 @@ using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 using static NumSharp.np;
 
-namespace NumSharp.Statistics
+namespace NumSharp.Backends
 {
-    internal static partial class HistogramEngine
+    public partial class DefaultEngine
     {
         // ---------------------------------------------------------------------
         //  The bin-width estimators in NumPy's dtypes
@@ -350,7 +350,7 @@ namespace NumSharp.Statistics
             {
                 NpScalar hh = DivideByPython(ptp, nbins);
                 double j;
-                HistogramResult h = Histogram(x, nbins, range, false, null);
+                HistogramResult h = HistogramFunction(x, nbins, range, false, null);
                 using (h.hist)
                 using (h.bin_edges)
                 using (NDArray count = NDArray.Scalar((double)n))

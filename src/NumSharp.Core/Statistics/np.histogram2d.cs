@@ -20,7 +20,7 @@ namespace NumSharp
             /// <summary>The bin edges along the second (y) dimension.</summary>
             public readonly NDArray yedges;
 
-            /// <summary>Groups the three results; <see cref="Statistics.HistogramEngine"/> builds them.</summary>
+            /// <summary>Groups the three results; the engine member <see cref="TensorEngine.Histogram2d"/> builds them.</summary>
             /// <param name="h">The histogram (the result owns it).</param>
             /// <param name="xedges">The x edges.</param>
             /// <param name="yedges">The y edges.</param>
@@ -56,7 +56,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int bins = 10, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
+            return EngineOf(x).Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a per-dimension bin count <c>[nx, ny]</c>.</summary>
@@ -72,7 +72,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, int[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
+            return EngineOf(x).Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a single edge array shared by both dimensions (<c>x_edges = y_edges = bins</c>).</summary>
@@ -88,7 +88,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, NDArray bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, bins);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
+            return EngineOf(x).Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with explicit per-dimension edge arrays <c>[x_edges, y_edges]</c> (or a mixed <c>[int, array]</c>).</summary>
@@ -105,7 +105,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             using var plain2 = NDMatrixBoundary.PlainFor(bins);
-            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
+            return EngineOf(x).Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a mixed per-dimension bin spec <c>[nx, y_edges]</c> or <c>[x_edges, ny]</c>.</summary>
@@ -121,7 +121,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, object[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
+            return EngineOf(x).Histogram2d(x, y, bins, range, density, weights);
         }
 
         /// <summary>2-D histogram with a single edge array (C# <c>double[]</c>) shared by both dimensions.</summary>
@@ -137,7 +137,7 @@ namespace NumSharp
         public static Histogram2dResult histogram2d(NDArray x, NDArray y, double[] bins, (double, double)?[] range = null, bool density = false, NDArray weights = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(x, y, weights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return HistogramEngine.Histogram2d(x, y, bins, range, density, weights);
+            return EngineOf(x).Histogram2d(x, y, bins, range, density, weights);
         }
     }
 }

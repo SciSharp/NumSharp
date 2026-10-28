@@ -5,9 +5,9 @@ using NumSharp.Backends.Kernels;
 // return np's result structs (HistogramddResult, Histogram2dResult); importing np's statics keeps them verbatim.
 using static NumSharp.np;
 
-namespace NumSharp.Statistics
+namespace NumSharp.Backends
 {
-    internal static partial class HistogramEngine
+    public partial class DefaultEngine
     {
         // ---------------------------------------------------------------------
         //  histogramdd / histogram2d
@@ -16,13 +16,52 @@ namespace NumSharp.Statistics
         // The bodies of NumPy's histogramdd and histogram2d (numpy/lib/_histograms_impl.py, numpy/lib/_twodim_base_impl.py):
         // the sample statement (np.atleast_2d(sample).T), the per-dimension bin specs and edges, the bin search, the
         // flattened bincount, the outlier strip and the density, and histogram2d's length check and bins dispatch. The
-        // public np.histogramdd / np.histogram2d overloads only open the matrix boundary's plain region and call Histogramdd
-        // (through SampleColumns or ColumnsFromSequence) / Histogram2d.
+        // public np.histogramdd / np.histogram2d overloads only open the matrix boundary's plain region and call the
+        // Histogramdd member (through SampleColumns or ColumnsFromSequence) / the Histogram2d member.
         //
         // Moved from Statistics/np.histogramdd.cs and Statistics/np.histogram2d.cs statement for statement by the np-layer
-        // dtype plan's P2 (an operation class, decision D1: NumPy writes these functions in Python). They share np.histogram's
+        // dtype plan's P2 (an operation class, decision D1: NumPy writes these functions in Python); its phase PE made them
+        // DefaultEngine members over the static bodies HistogramddFunction / Histogram2dFunction. They share np.histogram's
         // outer edges, edge linspace, monotonic checks and contiguous cast (GetOuterEdges, HistogramLinspace, AnyDecreasing,
         // TextEdgesDecrease, EnsureContiguousDtype, FloatPromoteBinType).
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.Histogramdd"/>: <see cref="HistogramddFunction"/> under this member's
+        ///     scope.
+        /// </summary>
+        /// <param name="sample">The D coordinate columns (each 1-D, length N): the facades' <c>SampleColumns</c> /
+        ///     <c>ColumnsFromSequence</c> form of NumPy's sample.</param>
+        /// <param name="bins">The bin spec (int, int[], NDArray, NDArray[], or object[]).</param>
+        /// <param name="range">Optional per-dimension outer edges.</param>
+        /// <param name="density">When true, normalize to a probability density.</param>
+        /// <param name="weights">Optional per-point weights.</param>
+        /// <returns>The histogram and its per-dimension edges.</returns>
+        /// <exception cref="Exception">The errors of <see cref="HistogramddFunction"/>, in its order.</exception>
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE; the body was <c>[NDScopedCovered]</c> under
+        ///     np.histogramdd's scope): every binning temporary is reclaimed, the histogram and the edges leave.</remarks>
+        [NDScoped]
+        public override HistogramddResult Histogramdd(NDArray[] sample, object bins, (double, double)?[] range = null,
+            bool density = false, NDArray weights = null)
+            => HistogramddFunction(sample, bins, range, density, weights);
+
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.Histogram2d"/>: <see cref="Histogram2dFunction"/> under this member's
+        ///     scope.
+        /// </summary>
+        /// <param name="x">The x coordinates.</param>
+        /// <param name="y">The y coordinates.</param>
+        /// <param name="bins">The polymorphic bin argument.</param>
+        /// <param name="range">Optional per-dimension outer edges.</param>
+        /// <param name="density">When true, return the probability density.</param>
+        /// <param name="weights">Optional per-point weights.</param>
+        /// <returns>The 2-D histogram and its two edge arrays.</returns>
+        /// <exception cref="Exception">The errors of <see cref="Histogram2dFunction"/>, in its order.</exception>
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE; the body was <c>[NDScopedCovered]</c> under
+        ///     np.histogram2d's scope): the stacked column and every binning temporary are reclaimed.</remarks>
+        [NDScoped]
+        public override Histogram2dResult Histogram2d(NDArray x, NDArray y, object bins, (double, double)?[] range = null,
+            bool density = false, NDArray weights = null)
+            => Histogram2dFunction(x, y, bins, range, density, weights);
 
         // ---------------------------------------------------------------------
         //  Core
@@ -81,8 +120,9 @@ namespace NumSharp.Statistics
         ///     change no count, so its histogram is the all-zero one of an empty numeric sample.
         ///     </para>
         /// </remarks>
-        [NDScopedCovered] // only callers: the eight [NDScoped] histogramdd overloads and Histogram2d (covered by the six [NDScoped] histogram2d overloads)
-        internal static HistogramddResult Histogramdd(NDArray[] cols, object bins, (double, double)?[] range, bool density, NDArray weights)
+        [NDScopedCovered] // only callers: the [NDScoped] Histogramdd and Histogram2d overrides (Histogram2dFunction)
+        internal static HistogramddResult HistogramddFunction(NDArray[] cols, object bins, (double, double)?[] range,
+            bool density, NDArray weights)
         {
             // NumPy builds the internal sample via `atleast_2d(sample).T`, which STACKS the D coordinate
             // columns into ONE array and thereby promotes every column to their common dtype. An (N, D)
@@ -474,7 +514,7 @@ namespace NumSharp.Statistics
         /// </summary>
         /// <param name="bins">The bin spec as received.</param>
         /// <param name="D">The sample's dimension count.</param>
-        /// <returns>One raw spec per dimension; <see cref="Histogramdd"/> checks each in NumPy's order.</returns>
+        /// <returns>One raw spec per dimension; <see cref="HistogramddFunction"/> checks each in NumPy's order.</returns>
         /// <exception cref="ValueError">A sequence whose length is not D (<c>The dimension of bins must be equal to the
         ///     dimension of the sample x.</c>), or an entry of an unsupported C# type.</exception>
         /// <remarks>
@@ -724,8 +764,9 @@ namespace NumSharp.Statistics
         ///     array has an inhomogeneous shape after N dimensions. ...</c>); two 2-D arrays of one shape
         ///     (<c>too many values to unpack (expected 2)</c>); and every refusal of the histogramdd engine the two arrays and
         ///     the arguments then meet.</exception>
-        [NDScopedCovered] // only callers: the six [NDScoped] histogram2d overloads (the stacked column and every binning temporary are scope-reclaimed)
-        internal static Histogram2dResult Histogram2d(NDArray x, NDArray y, object bins, (double, double)?[] range, bool density, NDArray weights)
+        [NDScopedCovered] // only caller: the [NDScoped] Histogram2d override (the stacked column and every binning temporary are reclaimed)
+        internal static Histogram2dResult Histogram2dFunction(NDArray x, NDArray y, object bins, (double, double)?[] range,
+            bool density, NDArray weights)
         {
             if (x is null) throw new ArgumentNullException(nameof(x));
             if (y is null) throw new ArgumentNullException(nameof(y));
@@ -748,7 +789,7 @@ namespace NumSharp.Statistics
 
             // `histogramdd([x, y], ...)`: the pair is a sequence sample, so its stacking statement runs on it — two arrays of
             // one length but different shapes are refused there, and two 2-D arrays of one shape leave three values to unpack.
-            HistogramddResult dd = Histogramdd(ColumnsFromSequence(new[] { x, y }), ddBins, range, density, weights);
+            HistogramddResult dd = HistogramddFunction(ColumnsFromSequence(new[] { x, y }), ddBins, range, density, weights);
             return new Histogram2dResult(dd.H, dd.edges[0], dd.edges[1]);
         }
 
