@@ -97,7 +97,7 @@ namespace NumSharp.Tests.Lifetime
         [DataRow("LT09", "NDIter", "Copy", "NDArray,NDArray")]
         [DataRow("LT09", "NDIter", "CopyAs", "DType,NDArray,Char,TensorEngine")]
         [DataRow("LT10", "DefaultEngine", "MaxMinNumPy", "NDArray,Nullable`1,NDArray,Boolean,Object,NDArray,MinMaxOp")]
-        [DataRow("LT11", "DefaultEngine", "ReduceAMax", "NDArray,Nullable`1,Boolean,DType")]
+        [DataRow("LT11", "DefaultEngine", "ReduceAMax", "NDArray,Nullable`1,Boolean,DType,NDArray,Object,NDArray")]
         [DataRow("LT12", "np", "cumsum", "NDArray,Nullable`1,DType,NDArray")]
         [DataRow("LT12", "np", "cumprod", "NDArray,Nullable`1,DType,NDArray")]
         [DataRow("LT13", "np", "nancumsum", "NDArray,Nullable`1,DType,NDArray")]

@@ -310,8 +310,87 @@ namespace NumSharp
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, P1b).</remarks>
         public abstract NDArray Any(NDArray a, int[] axis, NDArray @out, bool keepdims = false, NDArray where = null);
 
-        public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
-        public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null);
+        /// <summary>
+        ///     NumPy's <c>np.max</c> / <c>np.amax</c> (<c>np.maximum.reduce</c>) over <paramref name="axis_"/>, or over every
+        ///     axis when it is null, with <c>ufunc.reduce</c>'s <c>dtype=</c> and NumPy's <c>out=</c>, <c>initial=</c> and
+        ///     <c>where=</c>: the whole call of <c>np.max</c> and <c>ndarray.max</c>.
+        /// </summary>
+        /// <param name="arr">The array (any dtype; <c>StringDType</c> computes, fixed-width text is refused).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d array accepts
+        ///     0 and -1 and nothing else.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>, NumPy's <c>np.maximum.reduce</c> keyword), or null for the
+        ///     input's. <c>np.max</c> itself has none.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the array that receives the result (any dtype: the loop is
+        ///     <c>promote_types(out, arr)</c> and its result is cast in), or null for a fresh result.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the value every output starts from, packed into the loop dtype as
+        ///     NumPy's <c>PyArray_Pack</c> does (a C# integer or float is a Python int or float, range-checked, never
+        ///     wrapped), or null for none.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask broadcast against <paramref name="arr"/>, only the selected
+        ///     elements reduce; it needs <paramref name="initial"/>. Null, or a 0-d true mask, is no mask.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one (NumPy's scalar)
+        ///     for a full reduction without keepdims.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
+        ///     reduction operation maximum which has no identity</c>, NumPy's ValueError); a non-bool mask (NumPy's TypeError
+        ///     text).</exception>
+        /// <exception cref="TypeError">Fixed-width text, a string <paramref name="dtype"/>, or a complex
+        ///     <paramref name="initial"/> for a real loop.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> together with <paramref name="out"/>,
+        ///     <paramref name="initial"/> or <paramref name="where"/> (NumPy's <c>ufunc.reduce</c> takes them together;
+        ///     NumSharp's keyword path computes in <c>promote_types(out, arr)</c> only).</exception>
+        /// <exception cref="ValueError">With a keyword: a read-only or misshapen <paramref name="out"/>, a mask with more axes
+        ///     than <paramref name="arr"/>, a mask without <paramref name="initial"/> or an empty reduced axis without it
+        ///     (NumPy's no-identity texts), an <paramref name="initial"/> the loop cannot hold (a NaN into an integer loop, a
+        ///     sequence).</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
+        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
+        ///     (the np-layer dtype plan, phase PE, E5: D2): the keyword path was the static
+        ///     <c>DefaultEngine.MaxMinNumPy</c>, which the public functions called past the engine.</remarks>
+        public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
+            NDArray @out = null, object initial = null, NDArray @where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.min</c> / <c>np.amin</c> (<c>np.minimum.reduce</c>) over <paramref name="axis_"/>, or over every
+        ///     axis when it is null, with <c>ufunc.reduce</c>'s <c>dtype=</c> and NumPy's <c>out=</c>, <c>initial=</c> and
+        ///     <c>where=</c>: the whole call of <c>np.min</c> and <c>ndarray.min</c>.
+        /// </summary>
+        /// <param name="arr">The array (any dtype; <c>StringDType</c> computes, fixed-width text is refused).</param>
+        /// <param name="axis_">The reduced axis (negative counts from the end), or null for every axis. A 0-d array accepts
+        ///     0 and -1 and nothing else.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="dtype">The loop dtype (<c>dtype=</c>, NumPy's <c>np.minimum.reduce</c> keyword), or null for the
+        ///     input's. <c>np.min</c> itself has none.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the array that receives the result (any dtype: the loop is
+        ///     <c>promote_types(out, arr)</c> and its result is cast in), or null for a fresh result.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the value every output starts from, packed into the loop dtype as
+        ///     NumPy's <c>PyArray_Pack</c> does (a C# integer or float is a Python int or float, range-checked, never
+        ///     wrapped), or null for none.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask broadcast against <paramref name="arr"/>, only the selected
+        ///     elements reduce; it needs <paramref name="initial"/>. Null, or a 0-d true mask, is no mask.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one (NumPy's scalar)
+        ///     for a full reduction without keepdims.</returns>
+        /// <exception cref="AxisError"><paramref name="axis_"/> is out of range.</exception>
+        /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
+        ///     reduction operation minimum which has no identity</c>, NumPy's ValueError); a non-bool mask (NumPy's TypeError
+        ///     text).</exception>
+        /// <exception cref="TypeError">Fixed-width text, a string <paramref name="dtype"/>, or a complex
+        ///     <paramref name="initial"/> for a real loop.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> together with <paramref name="out"/>,
+        ///     <paramref name="initial"/> or <paramref name="where"/> (NumPy's <c>ufunc.reduce</c> takes them together;
+        ///     NumSharp's keyword path computes in <c>promote_types(out, arr)</c> only).</exception>
+        /// <exception cref="ValueError">With a keyword: a read-only or misshapen <paramref name="out"/>, a mask with more axes
+        ///     than <paramref name="arr"/>, a mask without <paramref name="initial"/> or an empty reduced axis without it
+        ///     (NumPy's no-identity texts), an <paramref name="initial"/> the loop cannot hold (a NaN into an integer loop, a
+        ///     sequence).</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
+        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
+        ///     (the np-layer dtype plan, phase PE, E5: D2): the keyword path was the static
+        ///     <c>DefaultEngine.MaxMinNumPy</c>, which the public functions called past the engine.</remarks>
+        public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
+            NDArray @out = null, object initial = null, NDArray @where = null);
         public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false);
         public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false);
         /// <summary>

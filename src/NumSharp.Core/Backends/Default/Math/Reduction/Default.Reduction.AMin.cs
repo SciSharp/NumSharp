@@ -15,7 +15,12 @@ namespace NumSharp.Backends
         ///     accepts 0 and -1 (NumPy's backward-compatibility rule) and nothing else.</param>
         /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
         /// <param name="dtype">The loop dtype (<c>dtype=</c>), or null for the input's.</param>
-        /// <returns>The minimum (a read-only 0-d scalar for a full reduction).</returns>
+        /// <param name="out">NumPy's <c>out=</c>, or null; any keyword takes <see cref="MaxMinNumPy"/>.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or null.</param>
+        /// <returns>The minimum (a read-only 0-d scalar for a full reduction), or
+        ///     <paramref name="out"/> itself when given.</returns>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> together with a keyword.</exception>
         /// <exception cref="AxisError"><paramref name="axis_"/> is out of range — checked before any shortcut.</exception>
         /// <exception cref="ArgumentException">An empty reduction ("zero-size array to reduction operation minimum which has
         ///     no identity", NumPy's ValueError).</exception>
@@ -28,8 +33,20 @@ namespace NumSharp.Backends
         ///     through this method, which opens no scope; the weaver roots <paramref name="arr"/> until it returns (see
         ///     <see cref="ReduceAMax"/>).</remarks>
         [NDAnchored]
-        public override NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null)
+        public override NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, DType dtype = null,
+            NDArray @out = null, object initial = null, NDArray @where = null)
         {
+            // NumPy's out= / initial= / where=: ufunc.reduce's keyword path, the reduction iterator and the seeded exact
+            // engines (MaxMinNumPy), whose prologue checks the arguments in NumPy's order. A keyword-less call keeps the
+            // route below. dtype= has no keyword route: the keyword path's loop is promote_types(out, arr).
+            if (@out is not null || initial is not null || @where is not null)
+            {
+                if (dtype is not null)
+                    throw new NotSupportedException(
+                        "TensorEngine.ReduceAMin: dtype= together with out=, initial= or where= is not implemented " +
+                        "(np.minimum.reduce takes them together; the keyword path computes in promote_types(out, arr))");
+                return MaxMinNumPy(arr, axis_, @out, keepdims, initial, @where, MinMaxOp.Min);
+            }
             // Text, or a string dtype= request: NumPy's min checks its arguments first (the axis, and the dtype= class where
             // NumPy reads it), then refuses with its verbatim text (fixed width) or computes on the text (StringDType).
             // A numeric dtype= over text: NumPy casts the text to that number type first (a parse), then reduces the numbers.

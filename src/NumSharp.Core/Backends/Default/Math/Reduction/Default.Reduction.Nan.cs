@@ -135,12 +135,21 @@ namespace NumSharp.Backends
         /// <param name="a">The array to reduce.</param>
         /// <param name="axis">The axis to reduce (null = all axes).</param>
         /// <param name="keepdims">Keep the reduced axes as size 1.</param>
-        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims).</returns>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or null.</param>
+        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims), or <paramref name="out"/>
+        /// itself when given.</returns>
         /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmin which
         /// has no identity", NumPy's ValueError.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        public override NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false)
-            => NanMinMax(a, axis, keepdims, MinMaxOp.FMin);
+        /// <exception cref="ValueError">With a keyword, NumPy's keyword errors (see <see cref="MaxMinNumPy"/>).</exception>
+        public override NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+            object initial = null, NDArray @where = null)
+            // A keyword takes np.fmin.reduce's keyword path (MaxMinNumPy); a keyword-less call the NaN-aware schedules.
+            => @out is not null || initial is not null || @where is not null
+                ? MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.FMin)
+                : NanMinMax(a, axis, keepdims, MinMaxOp.FMin);
 
         /// <summary>
         /// Return maximum of an array or maximum along an axis, ignoring NaNs — NumPy's <c>np.nanmax</c>, which on an
@@ -149,12 +158,21 @@ namespace NumSharp.Backends
         /// <param name="a">The array to reduce.</param>
         /// <param name="axis">The axis to reduce (null = all axes).</param>
         /// <param name="keepdims">Keep the reduced axes as size 1.</param>
-        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims).</returns>
+        /// <param name="out">NumPy's <c>out=</c>, or null.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>, or null.</param>
+        /// <param name="where">NumPy's <c>where=</c> bool mask, or null.</param>
+        /// <returns>The reduced array (a 0-d scalar for a flat reduction without keepdims), or <paramref name="out"/>
+        /// itself when given.</returns>
         /// <exception cref="ArgumentException">The reduction is empty — "zero-size array to reduction operation fmax which
         /// has no identity", NumPy's ValueError.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        public override NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false)
-            => NanMinMax(a, axis, keepdims, MinMaxOp.FMax);
+        /// <exception cref="ValueError">With a keyword, NumPy's keyword errors (see <see cref="MaxMinNumPy"/>).</exception>
+        public override NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+            object initial = null, NDArray @where = null)
+            // A keyword takes np.fmax.reduce's keyword path (MaxMinNumPy); a keyword-less call the NaN-aware schedules.
+            => @out is not null || initial is not null || @where is not null
+                ? MaxMinNumPy(a, axis, @out, keepdims, initial, @where, MinMaxOp.FMax)
+                : NanMinMax(a, axis, keepdims, MinMaxOp.FMax);
 
         /// <summary>
         /// The shared body of <see cref="NanMax"/> / <see cref="NanMin"/>. NumPy's <c>nanmax(a)</c> for a plain ndarray is

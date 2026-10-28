@@ -14,8 +14,63 @@ namespace NumSharp
         // NaN-aware reductions
         public abstract NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false);
         public abstract NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false);
-        public abstract NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false);
-        public abstract NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false);
+        /// <summary>
+        ///     NumPy's <c>np.nanmin</c>, the whole call: the minimum ignoring NaNs, which on an ndarray IS
+        ///     <c>np.fmin.reduce</c> (NumPy's "All-NaN slice" RuntimeWarning is not modeled), with NumPy's <c>out=</c>,
+        ///     <c>initial=</c> and <c>where=</c>.
+        /// </summary>
+        /// <param name="a">The array (integer, bool, char and decimal arrays hold no NaN: the plain <c>np.min</c>).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the array that receives the result (the loop is
+        ///     <c>promote_types(out, a)</c>), or null for a fresh result.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the value every output starts from, packed into the loop dtype as
+        ///     NumPy's <c>PyArray_Pack</c> does, or null for none.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask, only the selected elements reduce; it needs
+        ///     <paramref name="initial"/>.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one for a full
+        ///     reduction without keepdims. An all-NaN slice gives its first NaN, bits intact.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
+        ///     reduction operation fmin which has no identity</c>, NumPy's ValueError); a non-bool mask.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
+        ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
+        /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
+        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
+        ///     (the np-layer dtype plan, phase PE, E5).</remarks>
+        public abstract NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+            object initial = null, NDArray @where = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanmax</c>, the whole call: the maximum ignoring NaNs, which on an ndarray IS
+        ///     <c>np.fmax.reduce</c> (NumPy's "All-NaN slice" RuntimeWarning is not modeled), with NumPy's <c>out=</c>,
+        ///     <c>initial=</c> and <c>where=</c>.
+        /// </summary>
+        /// <param name="a">The array (integer, bool, char and decimal arrays hold no NaN: the plain <c>np.max</c>).</param>
+        /// <param name="axis">The reduced axis (negative counts from the end), or null for every axis.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <param name="out">NumPy's <c>out=</c>: the array that receives the result (the loop is
+        ///     <c>promote_types(out, a)</c>), or null for a fresh result.</param>
+        /// <param name="initial">NumPy's <c>initial=</c>: the value every output starts from, packed into the loop dtype as
+        ///     NumPy's <c>PyArray_Pack</c> does, or null for none.</param>
+        /// <param name="where">NumPy's <c>where=</c>: a bool mask, only the selected elements reduce; it needs
+        ///     <paramref name="initial"/>.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise a fresh array, a read-only 0-d one for a full
+        ///     reduction without keepdims. An all-NaN slice gives its first NaN, bits intact.</returns>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="ArgumentException">An empty reduction without <paramref name="initial"/> (<c>zero-size array to
+        ///     reduction operation fmax which has no identity</c>, NumPy's ValueError); a non-bool mask.</exception>
+        /// <exception cref="ValueError">A read-only or misshapen <paramref name="out"/>, a mask without
+        ///     <paramref name="initial"/>, an <paramref name="initial"/> the loop cannot hold.</exception>
+        /// <exception cref="OverflowException">An integer <paramref name="initial"/> past the loop's range.</exception>
+        /// <exception cref="TypeError">Text, or a complex <paramref name="initial"/> for a real loop.</exception>
+        /// <exception cref="IncorrectShapeException">The mask or <paramref name="out"/> does not broadcast.</exception>
+        /// <remarks>Widened with <paramref name="out"/>, <paramref name="initial"/> and <paramref name="where"/> in 0.71.0
+        ///     (the np-layer dtype plan, phase PE, E5).</remarks>
+        public abstract NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false, NDArray @out = null,
+            object initial = null, NDArray @where = null);
 
         /// <summary>
         ///     NumPy's <c>np.nancumsum</c>: the running sum with every NaN counted as zero (<c>_replace_nan(a, 0)</c>, then
