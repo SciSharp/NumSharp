@@ -2048,13 +2048,31 @@ namespace NumSharp
                     slice = new StringArraySlice(new ArraySlice<byte>(block), descr);
                 }
                 if (scalar)
-                    return new NDArray(new UnmanagedStorage(slice, Shape.NewScalar()));
+                {
+                    var scalarStorage = new UnmanagedStorage(slice, Shape.NewScalar());
+                    // NumPy's view has the iterator for its base, so it does not own its data (see AliasView<T>).
+                    scalarStorage.ExternalBase = true;
+                    scalarStorage.OnReshaped();
+                    return new NDArray(scalarStorage);
+                }
 
                 var storage = new UnmanagedStorage(slice, Shape.Vector(blockCount));
                 var shape = new Shape(new[] {count}, new[] {stride}, -low, blockCount);
                 return new NDArray(storage, shape);
             }
 
+            /// <summary>
+            ///     Wraps the iterator's memory at <paramref name="ptr"/> as a non-owning view of element type
+            ///     <typeparamref name="T"/>: the 0-d per-element view, or the 1-D inner-loop chunk under
+            ///     <c>external_loop</c>.
+            /// </summary>
+            /// <typeparam name="T">The element type of the operand's iteration lane.</typeparam>
+            /// <param name="ptr">The first element the view starts at.</param>
+            /// <param name="count">The element count.</param>
+            /// <param name="stride">The element stride (in elements; negative walks backward).</param>
+            /// <param name="scalar">True for the 0-d per-element view.</param>
+            /// <returns>The view. Neither form owns its data (<c>flags.owndata</c> is false, as NumPy's views of an iterator
+            ///     report), and both are invalid once the iterator moves past them or closes.</returns>
             private static NDArray AliasView<T>(void* ptr, long count, long stride, bool scalar) where T : unmanaged
             {
                 // The block must span every element the view can touch. With a negative stride the
@@ -2073,7 +2091,16 @@ namespace NumSharp
                 // measured 2x cheaper than the storage ctor below, which re-aliases the storage
                 // into a second UnmanagedStorage (NDArray.cs: `storage.Alias(ref shape)`).
                 if (scalar)
-                    return new NDArray(slice, Shape.NewScalar());
+                {
+                    var view = new NDArray(slice, Shape.NewScalar());
+                    // NumPy builds the view with PyArray_NewFromDescrAndBase over the iterator's pointer, the iterator its
+                    // base: the view does not own its data. The slice ctor wraps the block as an OWNER (no base storage),
+                    // so the storage is marked as having a foreign owner and the OWNDATA mirror re-synced. The 1-D form
+                    // below needs neither: its alias of the wrap storage has a base. A struct copy, no allocation.
+                    view.Storage.ExternalBase = true;
+                    view.Storage.OnReshaped();
+                    return view;
+                }
 
                 // external_loop: a strided inner loop spans more slots than it has elements
                 // (count=2, stride=2 covers 3), which the slice ctor rejects — it demands

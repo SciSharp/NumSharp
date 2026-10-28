@@ -190,6 +190,41 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
+        ///     No view of the iterator owns its data: NumPy builds each one over the iterator's pointer with the iterator for
+        ///     its base, so <c>flags.owndata</c> is False for the 0-d element view of a read-only and of a written operand,
+        ///     of a fixed-width string operand and of a <c>StringDType</c> one, and for the 1-D chunk under
+        ///     <c>external_loop</c> (probed against NumPy 2.4.2: <c>next(np.nditer(a)).flags.owndata</c> is False). The
+        ///     0-d views are both C- and F-contiguous. NumSharp's 0-d views reported OWNDATA, the chunks did not.
+        /// </summary>
+        [TestMethod]
+        public void Views_DoNotOwnTheirData()
+        {
+            using var src = np.arange(3.0);
+            using var dst = np.zeros(new Shape(3));
+            using (var it = np.nditer(new[] { src, dst }, op_flags: new[] { new[] { "readonly" }, new[] { "readwrite" } }))
+            {
+                foreach (var v in it)
+                {
+                    v[0].flags.owndata.Should().BeFalse();
+                    v[1].flags.owndata.Should().BeFalse();
+                    v[0].flags.c_contiguous.Should().BeTrue();
+                    v[0].flags.f_contiguous.Should().BeTrue();
+                }
+            }
+
+            using var u = np.array(new[] { "ab", "c" });
+            using (var it = np.nditer(u))
+                it[0].flags.owndata.Should().BeFalse();
+
+            using var t = np.array(new[] { "ab", "c" }, dtype: np.dtypes.StringDType());
+            using (var it = np.nditer(t, flags: new[] { "refs_ok" }))
+                it[0].flags.owndata.Should().BeFalse();
+
+            using (var it = np.nditer(src, flags: new[] { "external_loop" }))
+                it[0].flags.owndata.Should().BeFalse();
+        }
+
+        /// <summary>
         ///     <c>it[i] = v</c> packs a Python int into the operand's dtype with NumPy's range check ("Python integer 300 out
         ///     of bounds for int8"), and refuses a read-only operand ("Iterator operand 0 is not writeable").
         /// </summary>
