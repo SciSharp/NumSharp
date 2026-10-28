@@ -207,7 +207,17 @@ namespace NumSharp
             }
         }
 
-        private static bool IsNumber(object o) =>
+        /// <summary>
+        ///     Whether a boxed value is a C# number that stands for NumPy's <c>(int, float)</c> in the
+        ///     <c>optimize=(name, memory_limit)</c> tuple: any integer or floating type, but not a bool, which NumPy's
+        ///     <c>isinstance(x, (int, float))</c> accepts.
+        /// </summary>
+        /// <param name="o">The tuple's second item.</param>
+        /// <returns>True for <c>int</c>, <c>long</c>, <c>short</c>, <c>byte</c>, <c>sbyte</c>, <c>uint</c>, <c>ulong</c>,
+        ///     <c>ushort</c>, <c>float</c>, <c>double</c> or <c>decimal</c>.</returns>
+        /// <remarks>Shared by <c>np.einsum_path</c> and <c>DefaultEngine</c>'s check of <c>np.einsum</c>'s
+        ///     <c>optimize=</c>, so it is internal.</remarks>
+        internal static bool IsNumber(object o) =>
             o is int or long or short or byte or sbyte or uint or ulong or ushort or float or double or decimal;
 
         /// <summary>
@@ -240,7 +250,13 @@ namespace NumSharp
         };
 
         /// <summary>A best-effort Python-style repr for the "Did not understand the path" message.</summary>
-        private static string PyRepr(object o)
+        /// <param name="o">The value to render: None, a str, a bool, a tuple, an <c>object[]</c> list (both rendered
+        ///     item by item), or anything else through its invariant-culture string.</param>
+        /// <returns>The rendering, e.g. <c>None</c>, <c>'greedy'</c>, <c>True</c>, <c>('greedy', 100)</c>,
+        ///     <c>[1, 2]</c>.</returns>
+        /// <remarks>Shared by <c>np.einsum_path</c> and <c>DefaultEngine</c>'s check of <c>np.einsum</c>'s
+        ///     <c>optimize=</c>, so it is internal.</remarks>
+        internal static string PyRepr(object o)
         {
             switch (o)
             {

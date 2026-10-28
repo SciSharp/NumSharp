@@ -1,54 +1,34 @@
+// NumPy's numpy/_core/einsumfunc.py (np.einsum's optimize= path, bmm_einsum) as DefaultEngine's Einsum: the argument
+// checks, the parse, the view path, then a left-to-right pairwise fold over the matrix products. The file sits beside
+//   its
+// facade (LinearAlgebra/np.einsum.cs) while its statements call np.*: ratchet R2 counts np.* calls against every file
+// under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public static partial class np
+    public partial class DefaultEngine
     {
-        /// <summary>
-        ///     <c>np.einsum</c> — the contraction itself, reached once the subscripts have parsed and
-        ///     every operand validated.
-        /// </summary>
-        /// <remarks>
-        ///     <para>
-        ///     A composition, not a new low-level kernel — which is exactly how NumPy computes it on
-        ///     its <c>optimize=</c> path: <c>numpy/_core/einsumfunc.py</c>'s <c>bmm_einsum</c>
-        ///     ("batched-matrix-multiply einsum") reduces every pairwise contraction to a
-        ///     <c>matmul</c> (plus a single-operand einsum to take diagonals, sum, and transpose the
-        ///     terms first), or to a broadcast <c>multiply</c> when nothing is contracted. This is a
-        ///     port of that, over NumSharp's own <see cref="matmul"/> / <see cref="multiply"/> /
-        ///     <see cref="sum"/> / <see cref="transpose"/> / <see cref="diagonal"/>. It lives here in
-        ///     the <see cref="np"/> layer, next to <see cref="tensordot"/> and
-        ///     <see cref="linalg.multi_dot"/>, because — exactly like them — it is a pure composition
-        ///     over the matrix products with no engine state and no seam of its own.
-        ///     </para>
-        ///     <para>
-        ///     <b>This is what makes einsum "go through OpenBLAS like other functions".</b> The
-        ///     products land on <see cref="TensorEngine.Matmul"/> (2-D <c>gemm</c> and batched), which
-        ///     already dispatches on <see cref="TensorEngine.Blas"/> — so with
-        ///     <c>NumSharp.Interop.OpenBLAS</c> referenced, the float32/float64/complex128 contractions
-        ///     are byte-identical to NumPy's, and without it they fall back to the managed GEMM. There
-        ///     is deliberately no <c>TryEinsum</c> seam: einsum reaches a backend the same indirect way
-        ///     <c>np.tensordot</c> and <c>np.linalg.multi_dot</c> do, through the matrix product.
-        ///     </para>
-        ///     <para>
-        ///     <b>Value parity.</b> For every contraction that reduces to a matrix product — matmul,
-        ///     batched matmul, matvec, <c>ij,kj-&gt;ik</c>, tensor contractions, inner/outer — the
-        ///     result equals <c>np.einsum(..., optimize=True)</c> (which is itself the matmul path),
-        ///     hence byte-identical to NumPy when the products are. Integer and boolean contractions
-        ///     are byte-exact throughout (modular / logical reduction is order-independent). The one
-        ///     place a last-ULP difference can appear is a FLOAT summation done outside a product —
-        ///     a pure reduction such as <c>ij-&gt;i</c>, a diagonal-then-sum, or the accumulation
-        ///     across three or more float operands — because that summation order follows NumSharp's
-        ///     <see cref="sum"/> and a left-to-right pairwise fold rather than NumPy's einsum
-        ///     iterator; the results stay <c>allclose</c>.
-        ///     </para>
-        /// </remarks>
-        [NDScoped]
-        private static NDArray EinsumContract(string subscripts, NDArray[] operands, NDArray @out,
-            DType dtype, char order, string casting, object optimize)
+        /// <inheritdoc />
+        [NDScoped] // reclaims the cast operands, every pairwise step's terms and products, and the layout copy
+        public override NDArray Einsum(string subscripts, NDArray[] operands, NDArray @out = null,
+            DType dtype = null, char order = 'K', string casting = "safe", object optimize = null)
         {
+            if (subscripts is null)
+                throw new ArgumentNullException(nameof(subscripts));
+
+            if (operands is null || operands.Length == 0)
+                throw new ValueError(
+                    "must specify the einstein sum subscripts string and at least one operand");
+
+            order = Backends.GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
+            Backends.GufuncGuard.RequireCasting(casting);
+            RequireOptimize(optimize);
+
             // Parse AND validate — rank, ellipsis grammar, operand count, output labels, out='s rank,
             // every diagonal and every label extent. Nothing past this line is reachable by an
             // expression NumPy would reject, and an impossible diagonal is reported here (with NumPy's
@@ -87,8 +67,10 @@ namespace NumSharp
                 return view;
             }
 
-            // Text (an operand, or a string dtype= request) has no sum-of-products: after the parse and the view path above
-            // (which hands text back as a view, as NumPy does), NumPy's operand casts, its bool-zero output fill and its
+            // Text (an operand, or a string dtype= request) has no sum-of-products: after the parse and the view path
+            //   above
+            // (which hands text back as a view, as NumPy does), NumPy's operand casts, its bool-zero output fill and
+            //   its
             // loop lookup refuse it, in that order.
             Backends.Strings.NDStringUfuncs.ThrowIfEinsum(operands, dtype, casting);
 
@@ -168,6 +150,14 @@ namespace NumSharp
         ///     plus any still needed by a later operand — in first-appearance order across the two
         ///     terms. bmm handles arranging the result into this order.
         /// </summary>
+        /// <param name="ta">The first operand's labels.</param>
+        /// <param name="tb">The second operand's labels.</param>
+        /// <param name="outputTerm">The final output's labels.</param>
+        /// <param name="terms">The fold's pending operands with their labels.</param>
+        /// <param name="fromIndex">The first pending entry still to be contracted (the two being contracted come before
+        ///     it).</param>
+        /// <returns>The labels this step keeps, in first-appearance order across <paramref name="ta"/> then
+        ///     <paramref name="tb"/>.</returns>
         private static string SurvivingTerm(string ta, string tb, string outputTerm,
             List<(NDArray Array, string Term)> terms, int fromIndex)
         {
@@ -194,6 +184,13 @@ namespace NumSharp
         ///     order. Also the whole computation for a single-operand einsum (trace, diagonal, axis
         ///     sum, transpose).
         /// </summary>
+        /// <param name="a">The operand.</param>
+        /// <param name="srcTerm">Its labels, one per axis.</param>
+        /// <param name="dstTerm">The labels to produce, in their order.</param>
+        /// <param name="computeType">The loop dtype: the sums run in it and the result is cast to it.</param>
+        /// <returns>The diagonals, sums and transpose of <paramref name="a"/> in <paramref name="dstTerm"/>'s order, in
+        ///     <paramref name="computeType"/> (a view of <paramref name="a"/> when nothing is summed or
+        ///     cast).</returns>
         private static NDArray SingleTermEinsum(NDArray a, string srcTerm, string dstTerm, NPTypeCode computeType)
         {
             var term = new List<char>(srcTerm);
@@ -256,10 +253,19 @@ namespace NumSharp
         ///     A single pairwise contraction <c>a[aTerm], b[bTerm] -&gt; outTerm</c> — port of
         ///     <c>bmm_einsum</c> + <c>_parse_eq_to_batch_matmul</c>. Every index is classified from
         ///     the operands' ACTUAL shapes (so size-1 broadcasting is handled exactly as NumPy does),
-        ///     then the contraction runs as one <see cref="matmul"/> (batched when there are shared
-        ///     output indices) or, when nothing is contracted, one broadcast <see cref="multiply"/>.
+        ///     then the contraction runs as one <c>np.matmul</c> (batched when there are shared
+        ///     output indices) or, when nothing is contracted, one broadcast <c>np.multiply</c>.
         /// </summary>
-        [NDScopedCovered] // only reached from [NDScoped] EinsumContract's fold (superseded left/right/ab stages are scope-reclaimed)
+        /// <param name="a">The first operand, already in the loop dtype.</param>
+        /// <param name="aTerm">Its labels.</param>
+        /// <param name="b">The second operand, already in the loop dtype.</param>
+        /// <param name="bTerm">Its labels.</param>
+        /// <param name="outTerm">The labels the step keeps, in their order.</param>
+        /// <param name="computeType">The loop dtype.</param>
+        /// <returns>The contraction, labelled by <paramref name="outTerm"/>.</returns>
+        /// <exception cref="ValueError">A label whose extents (both above 1) differ between the operands; the parse
+        ///     rejects that first, so it is a guard.</exception>
+        [NDScopedCovered] // only reached from [NDScoped] Einsum's fold (superseded left/right/ab stages are scope-reclaimed)
         private static NDArray PairwiseContract(NDArray a, string aTerm, NDArray b, string bTerm,
             string outTerm, NPTypeCode computeType)
         {
@@ -410,9 +416,18 @@ namespace NumSharp
         /// <summary>
         ///     The no-contraction case — an outer / Hadamard / broadcast product. Each operand is
         ///     transposed to the output's order and reshaped with length-1 axes wherever it lacks an
-        ///     output label, then a single broadcast <see cref="multiply"/> forms the result.
+        ///     output label, then a single broadcast <c>np.multiply</c> forms the result.
         /// </summary>
-        [NDScopedCovered] // only reached from PairwiseContract ← [NDScoped] EinsumContract (superseded left/right stages are scope-reclaimed)
+        /// <param name="a">The first operand.</param>
+        /// <param name="aTerm">Its labels.</param>
+        /// <param name="shapeA">Its dimensions.</param>
+        /// <param name="b">The second operand.</param>
+        /// <param name="bTerm">Its labels.</param>
+        /// <param name="shapeB">Its dimensions.</param>
+        /// <param name="outTerm">The output labels, in their order.</param>
+        /// <param name="computeType">The loop dtype.</param>
+        /// <returns>The broadcast product, labelled by <paramref name="outTerm"/>.</returns>
+        [NDScopedCovered] // only reached from PairwiseContract ← [NDScoped] Einsum (superseded left/right stages are scope-reclaimed)
         private static NDArray PureMultiplication(NDArray a, string aTerm, long[] shapeA,
             NDArray b, string bTerm, long[] shapeB, string outTerm, NPTypeCode computeType)
         {
@@ -457,6 +472,10 @@ namespace NumSharp
         }
 
         /// <summary>Product of each group's label extents; null when every group is already a single axis.</summary>
+        /// <param name="groups">The label groups, one per target axis.</param>
+        /// <param name="sizes">Each label's extent.</param>
+        /// <returns>One extent per group (the product of its labels' extents), or null when no group needs
+        ///     fusing.</returns>
         private static long[] FuseShape(List<char>[] groups, Dictionary<char, long> sizes)
         {
             bool needsFuse = false;
@@ -484,7 +503,12 @@ namespace NumSharp
             return shape;
         }
 
-        /// <summary>The output shape after the matmul — length-1 axes for the size-1 output labels, then the un-fused groups.</summary>
+        /// <summary>The output shape after the matmul — length-1 axes for the size-1 output labels, then the un-fused
+        ///     groups.</summary>
+        /// <param name="groups">The matmul's output groups (batch, then each operand's kept labels).</param>
+        /// <param name="singletonCount">How many size-1 output labels lead the shape.</param>
+        /// <param name="sizes">Each label's extent.</param>
+        /// <returns>The un-fused output shape, or null when the matmul's result already has it.</returns>
         private static long[] FuseOutputShape(List<char>[] groups, int singletonCount, Dictionary<char, long> sizes)
         {
             bool needs = singletonCount > 0;
@@ -517,6 +541,10 @@ namespace NumSharp
         ///     and C otherwise — where <c>'K'</c> leaves an already-computed C result untouched.
         ///     The single-operand VIEW path never reaches this method (order is ignored there).
         /// </summary>
+        /// <param name="result">The computed result.</param>
+        /// <param name="order">The checked order letter: <c>'C'</c>, <c>'F'</c>, <c>'A'</c> or <c>'K'</c>.</param>
+        /// <param name="operands">The einsum operands (their F-contiguity decides <c>'A'</c> and <c>'K'</c>).</param>
+        /// <returns><paramref name="result"/> itself, or a C- or F-ordered copy of it.</returns>
         private static NDArray ApplyOrder(NDArray result, char order, NDArray[] operands)
         {
             // A scalar result has no physical axis order. The PUBLIC ascontiguousarray /
@@ -547,6 +575,12 @@ namespace NumSharp
             }
         }
 
+        /// <summary>Joins three label groups into one term, in order (a matmul operand's desired label
+        ///     order).</summary>
+        /// <param name="a">The first group.</param>
+        /// <param name="b">The second group.</param>
+        /// <param name="c">The third group.</param>
+        /// <returns>The labels of <paramref name="a"/>, then <paramref name="b"/>, then <paramref name="c"/>.</returns>
         private static string Concat(List<char> a, List<char> b, List<char> c)
         {
             var sb = new StringBuilder(a.Count + b.Count + c.Count);
@@ -556,6 +590,10 @@ namespace NumSharp
             return sb.ToString();
         }
 
+        /// <summary>Whether the remaining labels already are the destination term, so no transpose is needed.</summary>
+        /// <param name="term">The remaining labels.</param>
+        /// <param name="dstTerm">The destination term.</param>
+        /// <returns>True when both hold the same labels in the same order.</returns>
         private static bool SameOrder(List<char> term, string dstTerm)
         {
             if (term.Count != dstTerm.Length)
@@ -566,6 +604,10 @@ namespace NumSharp
             return true;
         }
 
+        /// <summary>Whether two dimension lists are equal (<c>out=</c>'s check against the result).</summary>
+        /// <param name="a">The first dimensions.</param>
+        /// <param name="b">The second dimensions.</param>
+        /// <returns>True when both have the same rank and extents.</returns>
         private static bool ShapesEqual(long[] a, long[] b)
         {
             if (a.Length != b.Length)
@@ -576,7 +618,42 @@ namespace NumSharp
             return true;
         }
 
-        /// <summary>Renders a label for a message — a real ASCII letter as itself, a reserved ellipsis slot as "...".</summary>
+        /// <summary>Renders a label for a message — a real ASCII letter as itself, a reserved ellipsis slot as
+        ///     "...".</summary>
+        /// <param name="label">The label: an ASCII letter, or a reserved slot of the ellipsis (from U+E000).</param>
+        /// <returns>The letter, or <c>...</c>.</returns>
         private static string Describe(char label) => label >= 0xE000 ? "..." : label.ToString();
+
+        /// <summary> NumPy's check of <c>optimize=</c> (the <c>path_type</c> branches of <c>np.einsum_path</c>): it
+        ///     accepts null, a bool, any string, an <see cref="EinsumPath"/>, NumPy's raw <c>['einsum_path', ...]</c>
+        ///     list and a <c>(string, number)</c> tuple, and refuses anything else. NumSharp contracts left to right
+        ///     whatever the path says, so the value is only checked.
+        /// </summary>
+        /// <param name="optimize">The <c>optimize=</c> argument.</param>
+        /// <exception cref="TypeError">Any other value: <c>Did not understand the path: ...</c> with a Python
+        ///     repr of it.</exception>
+        private static void RequireOptimize(object optimize)
+        {
+            // NumPy accepts False/True/'greedy'/'optimal' — and silently tolerates any other STRING,
+            // falling through to greedy. It also accepts a precomputed path from np.einsum_path (an
+            // EinsumPath, or NumPy's raw ['einsum_path', …] list) and a ('greedy'|'optimal', memory)
+            // tuple. NumSharp still contracts left-to-right whatever the path says (documented above),
+            // so this ACCEPTS-and-VALIDATES the same shapes NumPy does without acting on them.
+            switch (optimize)
+            {
+                case null:
+                case bool:
+                case string:
+                case EinsumPath:
+                    return;
+            }
+
+            if (optimize is ITuple tuple && tuple.Length == 2 && tuple[0] is string && np.IsNumber(tuple[1]))
+                return;
+            if (optimize is object[] list && list.Length > 0 && (list[0] as string) == EinsumPath.Marker)
+                return;
+
+            throw new TypeError($"Did not understand the path: {np.PyRepr(optimize)}");
+        }
     }
 }
