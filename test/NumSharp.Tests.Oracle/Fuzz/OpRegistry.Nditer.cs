@@ -416,11 +416,17 @@ namespace NumSharp.Tests.Fuzz
         /// <summary>A script value: an int literal (a 0-d value, NumPy's Python int) or a <c>[a,b,…]</c> int64 array.</summary>
         /// <param name="text">The token.</param>
         /// <returns>The value array.</returns>
+        /// <remarks>
+        ///     The literal goes through C#'s implicit <c>long</c> conversion, which marks the 0-d value as a Python literal
+        ///     (<see cref="NDArray.WasPythonLiteral"/>): the setter packs it with NumPy's range check, as NumPy's setter
+        ///     packs a Python int (<c>it[0] = 300</c> on int8 raises OverflowError). <c>NDArray.Scalar</c> would be a 0-d
+        ///     ARRAY, which the setter casts as NumPy casts <c>np.array(300)</c> (44).
+        /// </remarks>
         private static NDArray ProtocolOperandValue(string text)
         {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             if (!text.StartsWith("[", StringComparison.Ordinal))
-                return NDArray.Scalar(long.Parse(text, inv));
+                return (NDArray)long.Parse(text, inv);
             string inner = text.Substring(1, text.Length - 2);
             return np.array(inner.Length == 0 ? Array.Empty<long>() : inner.Split(',').Select(t => long.Parse(t, inv)).ToArray());
         }
