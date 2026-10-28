@@ -492,6 +492,75 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-28, P2's sixteenth family: np.nditer's dtype code moved into the iterator engine and the DType layer
+  (`NDIterRef.CurrentView`, `DTypePromotion.AdaptDescriptorToArray`); five D4 fixes on the way.** Commits on `strings`,
+  developed in a scratch worktree and landed by fast-forward. D1: NumPy writes np.nditer in C, so its dtype code goes
+  to K, not to a new operation class (none was created). The referees: the snapshot (np.nditer, both overloads: 82,986
+  calls) with `DOTNET_TieredCompilation=0` under `NUMSHARP_DEBUG_GUARD_PAGES=1`, `twin_nditer.py` (each line rebuilt
+  in NumPy, the iterator pulled to its end like Python's `for x in it`: per operand the views' dtype, the run-length
+  list of their shapes, their C / F / OWNDATA / WRITEABLE flag sets and one SHA-256 over every step's bytes, or the
+  exception's type and text; an allocated output's views compared without their bytes, which are uninitialized on both
+  sides), `ab_nditer.py` (parent against fix, each changed line classified), and two setter probes for what the
+  snapshot cannot reach (`it[i] = value`: 10 operand dtypes x 14 values x with and without `external_loop`, 280 cases;
+  values that overlap the operand and edge values, 16 cases):
+  - `40a4e96d` the snapshot tool reaches np.nditer's arguments (the operand list, every global and per-operand flag,
+    op_dtypes with text and StringDType requests, op_axes, itershape, buffersize) and renders an iterator as one ITER
+    summary. Before any fix the twin agreed on 52,638 of the 82,365 comparable lines (621 decimal lines have no NumPy
+    twin): 29,099 lines differed only in the views' OWNDATA flag, 556 in the reference check's place, 72 in the
+    argument converters' order (the first count also took 545 lines whose allocated output hashed uninitialized
+    memory and 16 lines of NumSharp's `dtype(char)` text, both twin gaps, closed in the twin).
+  - `ac37ef1e` (D4) the 0-d element views do not own their data (`flags.owndata` False, the iterator NumPy's base):
+    `AliasView<T>` / `AliasStringView` wrapped them as owners. 29,409 lines changed, each only in the OWNDATA letter.
+  - `01388c87` (D4) flags, order and casting are converted before the operand count (NumPy's argument parser runs
+    them before `npyiter_prepare_ops`): 72 lines.
+  - `70f18167` (D4) the reference check runs per operand where `npyiter_prepare_one_operand` runs it (after the
+    write flag, the size and the descriptor adaptation, before the shape pass and the common dtype), and skips an
+    output the iterator allocates (a StringDType output needs no `refs_ok`; it was refused):
+    `NDIterRef.ThrowIfReferenceOperandUnsupported`, called by np.nditer's PrepareOperands and by the engine's own
+    loop. 556 lines; the twin agrees on all 82,365.
+  - `997dc839` (D4) the setter stores through the storage's own store, NumPy's `PyArray_CopyObject`: a 0-d array is
+    cast (`np.array(300)` into int8 stores 44; it was packed as a Python int and raised), null is Python's None in a
+    numeric operand (it raised `ArgumentNullException`). The hand-written store predated the C# literal mark of plan
+    X27, which `UnmanagedStorage.SetData` reads. The setter probe: 262 of 280 cases agreed before, 280 after; the
+    overlap probe 16 of 16 before and after. Snapshot unchanged (it does not reach the setter).
+  - `5991bf98` the nditer_protocol oracle replay builds its Python int with C#'s implicit conversion (a marked
+    literal): it used `NDArray.Scalar`, a 0-d array since X27, and passed only because the old setter packed every 0-d
+    value; 3 of the tier's 2,987 cases went red at `997dc839` on both frameworks.
+  - `ecab6bbe` the move: the views (`CurrentView` and its helpers: the 15-lane switch, the string views, the string
+    descriptor and allocator of the memory a pointer is on) into `Backends/Iterators/NDIter.OperandViews.cs`, and
+    `PyArray_AdaptDescriptorToArray` into `DTypePromotion`, now the one copy np.nditer, astype (`NDStringCasting`) and
+    numpy.ma's astype share. There were two copies, np.nditer's private one and `NDStringCasting`'s, which numpy.ma's
+    astype called (the commit message says each caller had its own). 82,986 calls byte-identical; R1 drops
+    np.nditer.cs's row (10 text and 15 numeric lines); R2 unchanged.
+  - `990eb14c` (D4) a write flag cleared on an iterator view cannot be set again (NumPy's view has the iterator for
+    its base, which exports no buffer; NumSharp set it again on a written operand's view): `CurrentView` marks each
+    view's storage `WriteProtected`, the flag `setflags` consults and nothing else reads. A sub-view of a 0-d view
+    refuses too, where NumPy's (its base is the writeable 0-d view) may be set again: NumSharp flattens a view's base
+    to the owning storage. Snapshot unchanged.
+  - Step 2 (C11): nothing to compose (NumPy writes np.nditer in C). The family's commits against the base `40a4e96d`
+    (`bench_nditer.cs`, three interleaved rounds of each build pinned to two P-cores, best of rounds, microseconds,
+    measured at `ecab6bbe`): the per-step pulls within the base's spread (float64 over 1K elements 232.8 -> 247.2, the
+    base's own rounds 232.8-251.6; 100K, a pair, U2 and StringDType +0.5 % to +3.9 %), `external_loop` and the
+    construction unchanged (one operand 0.348 -> 0.339, NPY/NS x1.47 -> x1.51; three with an allocated output 1.155 ->
+    1.207, x0.84 -> x0.80; StringDType 0.448 -> 0.451, x1.75 -> x1.73). The setter costs more: +18 % with a C# literal
+    (1,185 -> 1,397 per 1,000 stores, NPY/NS x0.37 -> x0.31) and +30 % with a 0-d array (792 -> 1,033, x0.36 ->
+    x0.28), the price of the shared store (`PackForStore`'s 0-d temporary, `GetData`'s view and a boxed fill per call)
+    over the hand-written pack it replaced; the store's fixed cost belongs to P3 (values entering storage). The
+    per-step cells stay at the per-view floor the branch notes record (x0.10-x0.32).
+  - **Found:**
+    - R1 counts patterns, not decisions: `Storage.IsVString` in the string-descriptor helper was never counted. The
+      helper moved with the counted lines it serves.
+    - The oracle adapter's comment said "NumPy's Python int" while its code built a NumPy scalar: a harness that
+      matched the old, wrong setter can hide that setter's divergence. Replay helpers built before X27 may hold more of
+      these (`NDArray.Scalar` standing for a Python literal).
+    - The owner's 2026-10-27 position that NumPy-level operation classes should be overridable engines (memory
+      `engines-overridable-evaluation`): this family needed no class, but the two families landed before it today
+      (`UniqueEngine`, `ConvolveEngine`) have the shape the owner questioned; their place waits on that decision.
+  - Left: np.nested_iters' own argument order ("Must provide at least one operand" is an ArgumentException there, and
+    its converters were not checked); the sub-view residual of `990eb14c`; the setter's cost (P3).
+  - At `990eb14c`: NumSharp.Tests net10.0 20,707 passed / 11 skipped and net8.0 20,706 / 11; Oracle net10.0 and
+    net8.0 412 / 2 skipped, 0 failed.
+  - Next in P2: np.emath, then np.sinc, np.digitize and the files of two lines or fewer (the K3 list's order).
 - **2026-10-28, P2's fifteenth family: np.convolve / np.correlate moved to their layers (`TensorEngine.Correlate` /
   `Correlate2`, `ConvolveEngine`, the kernels as `SlidingDot`), their mode NumPy's converter, the swapped product
   reversed in place.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees:

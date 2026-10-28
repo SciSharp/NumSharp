@@ -377,7 +377,8 @@ namespace NumSharp
         ///     to %S.</c>).</exception>
         /// <remarks>
         ///     One function for every caller that adapts a request to an array: <c>astype</c>, np.nditer's <c>op_dtypes</c>
-        ///     and numpy.ma's <c>astype</c>, each of which had kept its own copy of these lines.
+        ///     and numpy.ma's <c>astype</c>. It replaces two identical copies (np.nditer's own and the string astype's,
+        ///     which numpy.ma called).
         /// </remarks>
         internal static DType AdaptDescriptorToArray(DType arrayDescr, DType requested)
         {

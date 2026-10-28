@@ -4303,7 +4303,14 @@ allocation already has it), and fixed-width strings: 0-d `S` / `U` views, buffer
 widths and between `S` and `U` (ASCII), and between text and numbers (NumPy's legacy casts, since P1.1). The
 wrapper (`APIs/np.nditer.cs`) is `nditer_pywrap.c`: the started / finished flags (advance-on-entry pulls), every
 getter's and setter's checks and texts ("Iterator is past the end", "Iterator is invalid", the delayed-allocation
-text), `it[i] = v` packing a Python int with NumPy's range check, NumPy's write flags on the views; `np.nested_iters`
+text), `it[i] = v` storing like `a[...] = v` (NumPy's `PyArray_CopyObject`, the storage's own store since 2026-10-28:
+a C# literal packed as a Python scalar with NumPy's range check, a 0-d ARRAY cast as NumPy casts `np.array(300)`,
+null as Python's None — NaN / `nan+nanj` / False / `int()`'s TypeError in a numeric operand), NumPy's write flags on
+the views; the views themselves are the iterator's (`NDIterRef.CurrentView`, `Backends/Iterators/NDIter.OperandViews.cs`:
+the storage lane, a string view's width and class, a StringDType view's allocator), and like NumPy's (whose base is
+the iterator) they do not own their data (`flags.owndata` False: the 0-d views are flagged `ExternalBase`) and a
+write flag cleared on one cannot be set again (the view's storage is `WriteProtected`; a sub-view of a 0-d view
+refuses too, where NumPy's may be set again); `np.nested_iters`
 splits flags and dtypes per level (`NpyIter_NestedIters`: a buffered cast lands in the innermost level). Three engine
 rules a port must keep: **the flat index rides its own strides** (`NDIterState.IndexStrides`, NumPy's index
 "operand" — permuted, flipped and merged with the axes, so an index-tracking iterator coalesces when the index allows
@@ -4315,10 +4322,16 @@ zero stride is ambiguous, C order wins a conflict — no broadcast fallback to C
 min-stride sort. The op_axes reduction checks are `npyiter_check_reduce_ok_and_set_flags` (innermost axis first; an
 explicit reduction axis needs no `reduce_ok`). **The construction checks are NumPy's, in NumPy's order** (2026-10-09,
 plan X38; they were house `IncorrectShapeException`s, accepted inputs NumPy refuses, or NumPy's texts in another order):
-the wrapper runs `npyiter_init`'s `itershape` rule ("'op_axes' and 'itershape' must have the same number of entries equal
-to the iterator ndim" — it was accepted), `npyiter_check_op_axes` BEFORE the flag checks (a duplicate axis "contained
-duplicate value 0" — it was accepted and iterated a wrong grid; an axis past NumPy's 64-dimension limit that the operand
-lacks is "contained invalid values"), then `npyiter_fill_axisdata`'s shape pass (`FillAxisDataShapePass`): the plain
+the wrapper converts `flags`, `order` and `casting` before the operand count (`PyArg_ParseTupleAndKeywords`' converters
+run before `npyiter_prepare_ops`: with no operand a bad flag is its own error, 2026-10-28), runs `npyiter_init`'s
+`itershape` rule ("'op_axes' and 'itershape' must have the same number of entries equal to the iterator ndim" — it
+was accepted), `npyiter_check_op_axes` BEFORE the flag checks (a duplicate axis "contained duplicate value 0" — it was
+accepted and iterated a wrong grid; an axis past NumPy's 64-dimension limit that the operand lacks is "contained
+invalid values"), each operand's `npyiter_prepare_one_operand` checks with the reference check in its place (after the
+operand's write flag, size and requested dtype: a StringDType operand without `refs_ok` is NumPy's TypeError even when
+its `op_axes` or `itershape` is wrong too, and an output the iterator allocates is never checked, so a StringDType output
+needs no `refs_ok`; `NDIterRef.ThrowIfReferenceOperandUnsupported`, 2026-10-28), then `npyiter_fill_axisdata`'s shape
+pass (`FillAxisDataShapePass`): the plain
 "operands could not be broadcast together with shapes (2,) (3,) ", the remapped "… [original->remapped]: (2,3)->(2,3)
 (4,3) " and "… (2,3)  and requested shape (4,3)" texts, "Iterator input op_axes[0][0] (==5) is not a valid axis of
 op[0], which has 2 dimensions " (NumPy prints the entry's index REVERSED; reproduced), "input operand has more dimensions
@@ -4531,7 +4544,8 @@ per-element `it[0]` loop is **0.16–0.18×** (56–76 ms across runs; the varia
 100K `NDArray`s). The iteration ENGINE is not the problem: a bare `iternext()` walk of 100K elements
 takes 0.61 ms against NumPy's 2.60 ms for the same bare walk (**4.3×**). The whole deficit is the
 per-element `NDArray` view (~0.6 µs each) — `new NDArray(storage, shape)` re-aliases the storage, so
-the hot 0-d path takes the direct slice ctor instead (measured 2× cheaper) and the strided
+the hot 0-d path takes the direct slice ctor instead (measured 2× cheaper; since 2026-10-28 it also marks the storage
+`ExternalBase`, one struct copy, so the view reports NumPy's `owndata` False) and the strided
 `external_loop` path (once per CHUNK, not per element) keeps the storage route.
 
 **NDIter's fixed cost, and where it went (2026-09-03).** A heap `NDIterState` is ONE native block:
@@ -7391,7 +7405,7 @@ code gives NumPy's text.
 | numpy.polynomial printing helpers (U11) | `Polynomial/Package/NDPolyPrinting.cs` (`format_float`, `set_default_printstyle`, the print-style flag); facades in `np.polynomial.cs` and `np.polynomial.polyutils.cs` |
 | numpy.polynomial series classes (U10, U11's class half) | `Polynomial/Package/NDPolyBase.cs` (state, members, lifetimes, class attributes), `NDPolyBase.Protocol.cs` (Python's binary-operator protocol: `PyBinary`, NotImplemented, CPython's fallbacks; the base operators), `NDPolyBase.Algebra.cs` (convert / cast / fit / fromroots / roots / integ / deriv / linspace), `NDPolyBase.Printing.cs` (`__str__` / `__format__` / `__repr__` / `_repr_latex_`), `NDPolyClass.cs` (the class object: NumPy's class attributes and names, `NDChebyshev.Class` / `p.__class__`), `ND{Polynomial,Chebyshev,Legendre,Laguerre,Hermite,HermiteE}.cs` (the classes: statics, covariant members, the operator set), `NDPolyEval.Scalar.cs` (`{p}val` at a NumPy scalar: the step-tree interpreter and its float64 lane); factories in every facade. Oracle `polyclass{,_parity}.jsonl` via `OpRegistry.PolyClass.cs`; benchmark `benchmark/polynomial/polyclass_*` |
 | Iterators | `Backends/Iterators/NDIter.cs`, `NDIter.Detach.cs` (ref-struct → managed-owner bridge) |
-| Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs`, `Indexing/np.{ndindex,ndenumerate}.cs` |
+| Iteration APIs (nditer/ndindex/ndenumerate) | `APIs/np.nditer.cs` (np.nditer's wrapper: `nditer_pywrap.c`), `Backends/Iterators/NDIter.OperandViews.cs` (its views: `NDIterRef.CurrentView`), `Indexing/np.{ndindex,ndenumerate}.cs` |
 | Typed iteration (nditer&lt;T&gt;/nditer_chunks&lt;T&gt;) | `APIs/np.nditer.Typed.cs` (ref-struct enumerators + `TypedIterHelpers`) |
 | Expression DSL (np.evaluate) | `Backends/Iterators/NDExpr.cs` (nodes + emission), `NDExpr.Typing.cs` (per-node NumPy result_type pass), `NDExpr.Evaluate.cs` (array leaves, binding, reductions, operators), `Backends/Default/Math/DefaultEngine.Evaluate.cs` (host) |
 | ILKernelGenerator | `Backends/Kernels/ILKernelGenerator*.cs` (per-chunk, NDIter-driven) |
