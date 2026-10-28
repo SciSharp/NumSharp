@@ -6,9 +6,9 @@ using NumSharp.Backends;
 using NumSharp.Backends.Sorting;
 using NumSharp.Backends.Unmanaged;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class UniqueEngine
+    public partial class DefaultEngine
     {
         // ============================================================
         //  FLAT (no axis) — sort + mask path (NumPy algorithm)
@@ -25,7 +25,7 @@ namespace NumSharp
         //      float32 / float64 values only or counts only: the NaNs partitioned to the tail, the prefix radix-sorted,
         //          NumPy's sort NaN written; complex values only: NumPy's hash path (a high-cardinality line, and above
         //          2^28 elements every line, gets the same answer from the stable argsort).
-        //      the integer family, char, bool: the hash paths for values or counts alone (UniqueEngine.Hash.cs), a
+        //      the integer family, char, bool: the hash paths for values or counts alone (Default.Unique.Hash.cs), a
         //          stable radix argsort of keys and permutation for an index or an inverse; decimal: the BCL sort.
         //      above Array.MaxLength elements: the long-indexed fallback (uniqueFlatSortedLong*).
         // ============================================================
@@ -43,7 +43,7 @@ namespace NumSharp
         ///     each NaN distinct. Ignored by the other dtypes, which hold no NaN.</param>
         /// <returns>[values, index?, inverse?, counts?] in NumPy's order: the values sorted in <paramref name="a"/>'s dtype,
         ///     the index outputs int64. The inverse has the input's shape for an N-D input; the caller
-        ///     (<see cref="Compute"/>) reshapes it to the input's shape in every case, as NumPy does.</returns>
+        ///     (<see cref="UniqueCompute"/>) reshapes it to the input's shape in every case, as NumPy does.</returns>
         /// <exception cref="NotSupportedException">A dtype outside the 15 numeric ones (a text array reaching this route is a
         ///     bug in the caller, which routes text first).</exception>
         private static NDArray[] uniqueFlatKwargs(NDArray a, bool return_index, bool return_inverse, bool return_counts, bool equal_nan)
@@ -136,7 +136,7 @@ namespace NumSharp
         private static unsafe NDArray uniqueValuesOnly<T>(NDArray a, long n)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
-            // Integer-family values-only: the open-addressing hash path (UniqueEngine.Hash.cs)
+            // Integer-family values-only: the open-addressing hash path (Default.Unique.Hash.cs)
             // beats any sort at low/medium cardinality and bails to radix at high cardinality —
             // mirroring NumPy's own hash selection for these dtypes, but bailing to radix where
             // NumPy's std::unordered_set thrashes (int32 2M-distinct: NumPy 1540ms → us ~40ms). Its
@@ -159,7 +159,7 @@ namespace NumSharp
         //
         //  Strategy (float32 / float64 values only, counts only): do an O(n) partition pass to push NaN values
         //  to the end of the array, then sort the non-NaN prefix only, with the radix (RadixSortValues,
-        //  UniqueEngine.Radix.cs; it was the default Array.Sort, and before that a custom NaN comparer). The
+        //  Default.Unique.Radix.cs; it was the default Array.Sort, and before that a custom NaN comparer). The
         //  partition eliminated the Comparer<T> delegate overhead which had doubled
         //  sort time (custom NaN comparer: ~22 ms / 100K doubles, default sort:
         //  ~11 ms; partition cost: ~0.5 ms; net win is ~2× on float types).
@@ -999,7 +999,7 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The operand's element type.</typeparam>
         /// <param name="return_index">Also return an empty index.</param>
-        /// <param name="return_inverse">Also return an empty inverse (1-D: <see cref="Compute"/> reshapes it to the
+        /// <param name="return_inverse">Also return an empty inverse (1-D: <see cref="UniqueCompute"/> reshapes it to the
         ///     input's shape, e.g. <c>(0, 3)</c>).</param>
         /// <param name="return_counts">Also return empty counts.</param>
         /// <returns>[values, index?, inverse?, counts?], every array of shape <c>(0,)</c>.</returns>

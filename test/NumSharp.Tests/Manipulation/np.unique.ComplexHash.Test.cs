@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 using System.Linq;
 using System.Numerics;
 using AwesomeAssertions;
@@ -195,24 +196,24 @@ namespace NumSharp.Tests.Manipulation
             {
                 foreach (var (a, expectHandOff) in new[] { (high, true), (low, false) })
                 {
-                    UniqueEngine.DisableComplexHashCheckpoint = true;
+                    DefaultEngine.DisableComplexHashCheckpoint = true;
                     var refValuesEn = Bits(np.unique(a).values);
                     var refValues = Bits(np.unique(a, equal_nan: false).values);
                     var refCounts = np.unique_counts(a);
-                    UniqueEngine.DisableComplexHashCheckpoint = false;
+                    DefaultEngine.DisableComplexHashCheckpoint = false;
 
-                    int before = UniqueEngine.ComplexHashCheckpointHandOffs;
+                    int before = DefaultEngine.ComplexHashCheckpointHandOffs;
                     Bits(np.unique(a).values).Should().Equal(refValuesEn);
                     Bits(np.unique(a, equal_nan: false).values).Should().Equal(refValues);
                     var counts = np.unique_counts(a);
                     Bits(counts.values).Should().Equal(Bits(refCounts.values));
                     counts.counts.ToArray<long>().Should().Equal(refCounts.counts.ToArray<long>());
-                    (UniqueEngine.ComplexHashCheckpointHandOffs - before).Should().Be(expectHandOff ? 3 : 0);
+                    (DefaultEngine.ComplexHashCheckpointHandOffs - before).Should().Be(expectHandOff ? 3 : 0);
                 }
             }
             finally
             {
-                UniqueEngine.DisableComplexHashCheckpoint = false;
+                DefaultEngine.DisableComplexHashCheckpoint = false;
             }
         }
 
@@ -226,8 +227,8 @@ namespace NumSharp.Tests.Manipulation
         public void AboveTheHashBound_TheArgsortRoutesGiveTheHashAnswer()
         {
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
-            var managed = typeof(UniqueEngine).GetMethods(flags).First(m => m.Name == "uniqueValuesOnlyComplex");
-            var longIndexed = typeof(UniqueEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
+            var managed = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueValuesOnlyComplex");
+            var longIndexed = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
 
             var lines = Lines.Select(l => l.line).ToList();
             lines.Add(new[] { C(-0.0, 0.0), C(0.0, -0.0), C(D(Nan), 0.0), C(D(Nan), -0.0) });

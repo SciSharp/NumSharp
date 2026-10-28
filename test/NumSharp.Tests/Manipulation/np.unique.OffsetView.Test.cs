@@ -146,7 +146,7 @@ namespace NumSharp.Tests.Manipulation
             var full = np.array(new System.Numerics.Complex[] { new(9, 0), new(8, 0), new(7, 0), new(3, 1), new(1, 0), new(3, 1) });
             var view = np.split(full, 2)[1];   // [3+1j, 1+0j, 3+1j] at offset 3
             view.Shape.offset.Should().Be(3);
-            var method = typeof(UniqueEngine)
+            var method = typeof(DefaultEngine)
                 .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
                 .First(m => m.Name == "uniqueFlatSortedLongComplex");
             // signature: (NDArray a, long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)

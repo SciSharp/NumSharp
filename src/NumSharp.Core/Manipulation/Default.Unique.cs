@@ -2,41 +2,41 @@ using System;
 using NumSharp.Backends;
 
 // =============================================================================
-// UniqueEngine.cs - np.unique and the Array-API unique_* family after their facades' class boundaries
+// Default.Unique.cs - DefaultEngine's np.unique and the Array-API unique_* family, after their facades' class boundaries
 // (numpy/lib/_arraysetops_impl.py: unique, _unique1d, unique_all, unique_counts, unique_inverse, unique_values)
 // =============================================================================
 //
-// An internal operation class (the np-layer dtype plan's D1: NumPy writes unique in Python, with the C helper
-// _unique_hash in unique.cpp), moved from NDArray.unique and the np.unique / np.unique_values facades by P2. The facades
-// keep their signatures, documentation and class boundaries (numpy.char.chararray, numpy.matrix) and one call here; the
-// public instance members NDArray.unique(...) keep theirs and call Bare / Compute.
+// DefaultEngine's overrides of TensorEngine.Unique, UniqueValues, UniqueCounts, UniqueInverse and UniqueAll
+// (TensorEngine.ArraySetOps.cs). NumPy writes unique in Python, with the C helper _unique_hash in unique.cpp; the
+// np-layer dtype plan's P2 moved the statements from NDArray.unique and the np.unique / np.unique_values facades into the
+// internal operation class UniqueEngine, and its phase PE (E1) made that class these DefaultEngine partials. The facades
+// and the public instance members NDArray.unique(...) keep their signatures, documentation and class boundaries
+// (numpy.char.chararray, numpy.matrix) and call the engine members. Nothing here opens a class boundary: every caller
+// has already decided the operand is a plain array (a chararray operand computes through NDCharArrayBoundary, a
+// numpy.matrix operand inside NDMatrixBoundary's plain region).
+//
+// Two helpers were renamed in the merge, because DefaultEngine shares one namespace of member names: Compute is
+// UniqueCompute (QuantileEngine has a Compute too), and Splitmix is UniqueSplitmix (np.isin's helper of the same name
+// joined DefaultEngine first). The files stay beside the facades because their statements call public np.* functions,
+// which ratchet R2 counts under Backends/.
 //
 // The routes, in NumPy's order:
 //   * text first: the axis range check, StringDType's refusal of the structured axis path (ThrowIfTextUnique), then
-//     StringDType's flat path (UniqueEngine.VString.cs) or fixed-width text's statements (UniqueEngine.Text.cs);
-//   * `if axis is None or ar.ndim == 1`: the flat path (UniqueEngine.Kwargs.cs, the sort + mask pipeline, with the hash
-//     routes of UniqueEngine.Hash.cs and the radix sorts of UniqueEngine.Radix.cs), its inverse reshaped to the input's
+//     StringDType's flat path (Default.Unique.VString.cs) or fixed-width text's statements (Default.Unique.Text.cs);
+//   * `if axis is None or ar.ndim == 1`: the flat path (Default.Unique.Kwargs.cs, the sort + mask pipeline, with the hash
+//     routes of Default.Unique.Hash.cs and the radix sorts of Default.Unique.Radix.cs), its inverse reshaped to the input's
 //     shape;
 //   * otherwise the row path of an axis (uniqueAxisKwargs).
 // =============================================================================
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    /// <summary>
-    ///     NumPy's <c>numpy.unique</c> and its Array-API family (<c>numpy/lib/_arraysetops_impl.py</c>) after their facades'
-    ///     class boundaries: the text and axis checks in NumPy's order, the text routes, and the numeric flat and row paths.
-    /// </summary>
-    /// <remarks>
-    ///     An internal operation class (the np-layer dtype plan's D1: NumPy writes unique in Python), moved from
-    ///     <c>NDArray.unique</c>, <c>np.unique</c> and <c>np.unique_values</c> by P2. Nothing here opens a class boundary:
-    ///     every caller has already decided the operand is a plain array (a numpy.char.chararray operand computes through
-    ///     <see cref="NDCharArrayBoundary"/>, a numpy.matrix operand inside <see cref="NDMatrixBoundary"/>'s plain region).
-    /// </remarks>
-    internal static partial class UniqueEngine
+    public partial class DefaultEngine
     {
         /// <summary>
-        ///     <c>np.unique</c>'s statements after its class boundary: the checks NumPy makes before it reads text, then the
-        ///     computation inside a boundary scope that keeps only the returned outputs.
+        ///     DefaultEngine's <see cref="TensorEngine.Unique"/>: <c>np.unique</c>'s statements after its class boundary,
+        ///     the checks NumPy makes before it reads text, then the computation inside a boundary scope that keeps only
+        ///     the returned outputs.
         /// </summary>
         /// <param name="ar">The plain operand (only read).</param>
         /// <param name="return_index">Also return the first-occurrence indices (along the axis, if given).</param>
@@ -45,54 +45,31 @@ namespace NumSharp
         /// <param name="axis">The axis, or null to flatten the operand first.</param>
         /// <param name="equal_nan">NumPy's <c>equal_nan</c> (the flat numeric path only).</param>
         /// <param name="sorted">NumPy's <c>sorted</c>: accepted, the values always come back sorted (see
-        ///     <see cref="Compute"/>).</param>
+        ///     <see cref="UniqueCompute"/>).</param>
         /// <returns>[values, index?, inverse?, counts?], NumPy's order; each array yielded from the scope.</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="TypeError">A <c>StringDType</c> operand with an axis over two or more dimensions.</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
-        internal static NDArray[] Unique(NDArray ar, bool return_index, bool return_inverse, bool return_counts, int? axis,
-            bool equal_nan, bool sorted)
+        /// <remarks>Also the body of both <c>NDArray.unique</c> members since the plan's phase PE (they were the unscoped
+        ///     <c>Bare</c> and <c>UniqueCompute</c> calls; the checks and the outputs are the same, the internals are now
+        ///     reclaimed at this method's return).</remarks>
+        public override NDArray[] Unique(NDArray ar, bool return_index = false, bool return_inverse = false,
+            bool return_counts = false, int? axis = null, bool equal_nan = true, bool sorted = true)
         {
             // NumPy's one check before it reads text, the axis range, then StringDType's refusal of the structured axis path
-            // (an axis over two or more dimensions). Text of every class then computes in Compute.
+            // (an axis over two or more dimensions). Text of every class then computes in UniqueCompute.
             ThrowIfTextUnique(ar, axis);
             // Boundary scope: the sort/argsort/mask internals are reclaimed at exit; the present outputs are yielded (the
             // facade's UniqueResult carries only those arrays).
             using var scope = NDScope.Open();
-            return scope.Returns(Compute(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted));
+            return scope.Returns(UniqueCompute(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted));
         }
 
         /// <summary>
-        ///     The body of <see cref="NDArray.unique(int?, bool, bool)"/>, the bare-return form: the text checks, then the
-        ///     values of <see cref="Compute"/> without return flags.
-        /// </summary>
-        /// <param name="a">The array <c>unique</c> was called on (only read).</param>
-        /// <param name="axis">The axis, or null to flatten the array first.</param>
-        /// <param name="equal_nan">NumPy's <c>equal_nan</c>.</param>
-        /// <param name="sorted">NumPy's <c>sorted</c> (accepted; the values come back sorted).</param>
-        /// <returns>The unique values.</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> array of two or more dimensions with an axis.</exception>
-        /// <exception cref="ValueError">A <c>StringDType</c> array whose sort compares a None-like NA.</exception>
-        /// <remarks>Not scoped: the flag path's internals stay with the caller's scope, or with the finalizer when there
-        ///     is none (the instance member was always this way).</remarks>
-        internal static NDArray Bare(NDArray a, int? axis, bool equal_nan, bool sorted)
-        {
-            // NumPy's axis checks for text (StringDType's structured-path refusal included).
-            ThrowIfTextUnique(a, axis);
-            // Delegate to the tuple path with all return flags false, then take the values. The
-            // kwargs path uses the optimized sort+mask algorithm (NaN-partition for floats, plain
-            // Array.Sort for integers, IL-vectorizable mask scan) and carries the axis handling —
-            // substantially faster than the legacy Hashset+LongIntroSort path above ~1K elements.
-            return Compute(a, return_index: false, return_inverse: false, return_counts: false,
-                           axis: axis, equal_nan: equal_nan, sorted: sorted)[0];
-        }
-
-        /// <summary>
-        ///     NumPy's <c>np.unique</c> computation (the body of
-        ///     <see cref="NDArray.unique(bool, bool, bool, int?, bool, bool)"/>): text first (StringDType's flat path, or
-        ///     fixed-width text's statements), then <c>if axis is None or ar.ndim == 1</c> the flat path with its inverse
-        ///     reshaped to the input's shape, otherwise the row path of the axis.
+        ///     NumPy's <c>np.unique</c> computation (the body of <see cref="Unique"/> and of the text routes of the
+        ///     <c>unique_*</c> family): text first (StringDType's flat path, or fixed-width text's statements), then
+        ///     <c>if axis is None or ar.ndim == 1</c> the flat path with its inverse reshaped to the input's shape,
+        ///     otherwise the row path of the axis. Not scoped: its callers own the scope.
         /// </summary>
         /// <param name="a">The plain operand (only read).</param>
         /// <param name="return_index">Also return the first-occurrence indices (along the axis, if given).</param>
@@ -116,7 +93,7 @@ namespace NumSharp
         ///     where NumPy's sort compares an NA (<see cref="UniqueVString"/>).</exception>
         /// <exception cref="NotSupportedException">A dtype no route serves (none of the 15 numeric dtypes or the three
         ///     text dtypes reaches it).</exception>
-        internal static NDArray[] Compute(
+        internal static NDArray[] UniqueCompute(
             NDArray a,
             bool return_index,
             bool return_inverse = false,
@@ -131,8 +108,8 @@ namespace NumSharp
             // thing NumPy's does: without the sort, a None-like NA is never compared (and never refused).
 
             // Text: NumPy's axis check first. StringDType is tested first (IsString refuses it: its fixed-width readers would
-            // misread the 16-byte cells) and computes NumPy's flat path (UniqueEngine.VString.cs); fixed-width text
-            // computes NumPy's statements (UniqueEngine.Text.cs).
+            // misread the 16-byte cells) and computes NumPy's flat path (Default.Unique.VString.cs); fixed-width text
+            // computes NumPy's statements (Default.Unique.Text.cs).
             ThrowIfTextUnique(a, axis);
             if (Backends.Strings.NDStringUfuncs.IsVString(a))
             {
@@ -246,81 +223,93 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     <c>np.unique_values</c>' statements after its class boundary: <c>unique(x, equal_nan=False, sorted=False)</c>
-        ///     over the flattened operand. Text computes through <see cref="Compute"/>; numbers take the hash and sort routes
-        ///     of <see cref="uniqueValuesFast"/>.
+        ///     DefaultEngine's <see cref="TensorEngine.UniqueValues"/>: <c>np.unique_values</c>' statements after its class
+        ///     boundary, <c>unique(x, equal_nan=False, sorted=False)</c> over the flattened operand. Text computes through
+        ///     <see cref="UniqueCompute"/>; numbers take the hash and sort routes of <see cref="uniqueValuesFast"/>.
         /// </summary>
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>The unique values, sorted (NumPy returns its hash set's order for integers, complex and text: the
         ///     documented divergence).</returns>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
-        internal static NDArray UniqueValues(NDArray x)
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE): the hash / sort internals are reclaimed at
+        ///     this method's return instead of the facade's, the values are yielded.</remarks>
+        [NDScoped]
+        public override NDArray UniqueValues(NDArray x)
         {
-            // NumPy hashes text (sorts it with an index output); text of every class computes in Compute (this guard refuses
+            // NumPy hashes text (sorts it with an index output); text of every class computes in UniqueCompute (this guard refuses
             // only StringDType's structured axis path, which no axis-less call reaches).
             ThrowIfTextUnique(x, null);
             // StringDType first: IsString refuses it loudly (its callers are fixed-width routes).
             if (Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x))
-                return Compute(x, return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false,
+                return UniqueCompute(x, return_index: false, return_inverse: false, return_counts: false, axis: null, equal_nan: false,
                                sorted: false)[0];
             return uniqueValuesFast(x);
         }
 
         /// <summary>
-        ///     <c>np.unique_counts</c>' statements after its class boundary: <c>unique(x, return_counts=True,
-        ///     equal_nan=False)</c>. Text computes through <see cref="Compute"/>; numbers take
-        ///     <see cref="uniqueCountsFast"/>.
+        ///     DefaultEngine's <see cref="TensorEngine.UniqueCounts"/>: <c>np.unique_counts</c>' statements after its class
+        ///     boundary, <c>unique(x, return_counts=True, equal_nan=False)</c>. Text computes through
+        ///     <see cref="UniqueCompute"/>; numbers take <see cref="uniqueCountsFast"/>.
         /// </summary>
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>[values, counts].</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
-        internal static NDArray[] UniqueCounts(NDArray x)
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE): the internals are reclaimed at this method's
+        ///     return, both outputs are yielded.</remarks>
+        [NDScoped]
+        public override NDArray[] UniqueCounts(NDArray x)
         {
-            // NumPy sorts text: text of every class computes in Compute (this guard refuses only StringDType's structured
+            // NumPy sorts text: text of every class computes in UniqueCompute (this guard refuses only StringDType's structured
             // axis path, which no axis-less call reaches).
             ThrowIfTextUnique(x, null);
             return Backends.Strings.NDStringUfuncs.IsVString(x) || Backends.Strings.NDStringUfuncs.IsString(x)
-                ? Compute(x, return_index: false, return_inverse: false, return_counts: true, axis: null, equal_nan: false)
+                ? UniqueCompute(x, return_index: false, return_inverse: false, return_counts: true, axis: null, equal_nan: false)
                 : uniqueCountsFast(x);
         }
 
         /// <summary>
-        ///     <c>np.unique_inverse</c>'s statements after its class boundary: <c>unique(x, return_inverse=True,
-        ///     equal_nan=False)</c>, the inverse reshaped to the operand's shape.
+        ///     DefaultEngine's <see cref="TensorEngine.UniqueInverse"/>: <c>np.unique_inverse</c>'s statements after its
+        ///     class boundary, <c>unique(x, return_inverse=True, equal_nan=False)</c>, the inverse reshaped to the operand's
+        ///     shape.
         /// </summary>
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>[values, inverse_indices]; the inverse has <paramref name="x"/>'s shape.</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
-        /// <remarks>The flat inverse that the reshape views is left to the caller's scope (np.unique_inverse is
-        ///     <c>[NDScoped]</c>); the view keeps its buffer alive.</remarks>
-        internal static NDArray[] UniqueInverse(NDArray x)
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE). The flat inverse that the reshape views is
+        ///     not returned, so the scope disposes it at this method's return (np.unique_inverse's scope did, before);
+        ///     the view holds its own reference and keeps the buffer alive.</remarks>
+        [NDScoped]
+        public override NDArray[] UniqueInverse(NDArray x)
         {
-            // NumPy sorts text: text of every class computes in Compute below (this guard refuses only StringDType's
+            // NumPy sorts text: text of every class computes in UniqueCompute below (this guard refuses only StringDType's
             // structured axis path, which no axis-less call reaches).
             ThrowIfTextUnique(x, null);
-            var r = Compute(x, return_index: false, return_inverse: true, return_counts: false,
+            var r = UniqueCompute(x, return_index: false, return_inverse: true, return_counts: false,
                             axis: null, equal_nan: false);
             return new[] { r[0], ReshapeInverseToInput(r[1], x) };
         }
 
         /// <summary>
-        ///     <c>np.unique_all</c>'s statements after its class boundary: <c>unique(x, return_index=True,
-        ///     return_inverse=True, return_counts=True, equal_nan=False)</c>, the inverse reshaped to the operand's shape.
+        ///     DefaultEngine's <see cref="TensorEngine.UniqueAll"/>: <c>np.unique_all</c>'s statements after its class
+        ///     boundary, <c>unique(x, return_index=True, return_inverse=True, return_counts=True, equal_nan=False)</c>, the
+        ///     inverse reshaped to the operand's shape.
         /// </summary>
         /// <param name="x">The plain operand (only read).</param>
         /// <returns>[values, indices, inverse_indices, counts]; the inverse has <paramref name="x"/>'s shape.</returns>
         /// <exception cref="ValueError">A <c>StringDType</c> operand whose sort compares a None-like NA.</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
-        /// <remarks>The flat inverse that the reshape views is left to the caller's scope (np.unique_all is
-        ///     <c>[NDScoped]</c>); the view keeps its buffer alive.</remarks>
-        internal static NDArray[] UniqueAll(NDArray x)
+        /// <remarks>Owns its scope (a public entry since the plan's phase PE). The flat inverse that the reshape views is
+        ///     not returned, so the scope disposes it at this method's return (np.unique_all's scope did, before); the
+        ///     view holds its own reference and keeps the buffer alive.</remarks>
+        [NDScoped]
+        public override NDArray[] UniqueAll(NDArray x)
         {
-            // NumPy sorts text: text of every class computes in Compute below (this guard refuses only StringDType's
+            // NumPy sorts text: text of every class computes in UniqueCompute below (this guard refuses only StringDType's
             // structured axis path, which no axis-less call reaches).
             ThrowIfTextUnique(x, null);
-            var r = Compute(x, return_index: true, return_inverse: true, return_counts: true,
+            var r = UniqueCompute(x, return_index: true, return_inverse: true, return_counts: true,
                             axis: null, equal_nan: false);
             return new[] { r[0], r[1], ReshapeInverseToInput(r[2], x), r[3] };
         }

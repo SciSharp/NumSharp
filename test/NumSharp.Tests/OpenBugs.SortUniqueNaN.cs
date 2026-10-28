@@ -24,7 +24,7 @@ namespace NumSharp.Tests
     ///         surviving float32 / float64 NaN of two or more elements comes back as the canonical positive quiet NaN with
     ///         no payload; NumSharp's unique kept the input NaN's sign and payload (only the set routines —
     ///         <c>union1d</c> / <c>setxor1d</c> / <c>setdiff1d</c> — ran <c>CanonicalizeSetOpNaN</c> afterwards). Its value
-    ///         routes now write NumPy's sort NaN (<c>UniqueEngine.WriteSortNaNs</c>); the index and inverse routes keep the
+    ///         routes now write NumPy's sort NaN (<c>DefaultEngine.WriteSortNaNs</c>); the index and inverse routes keep the
     ///         bits, as NumPy's argsort-and-gather does.
     ///         </item>
     ///         <item>
@@ -126,7 +126,7 @@ namespace NumSharp.Tests
             AssertNoMismatch(fails,
                 "np.unique's values-only and counts-only routes, np.unique_values and np.unique_counts write NumPy's sort NaN " +
                 "for a surviving float NaN of an array of two or more elements (NumPy's ar.sort() rewrites it); a one-element " +
-                "array and the index route keep the input bits — see Manipulation/UniqueEngine.Kwargs.cs WriteSortNaNs");
+                "array and the index route keep the input bits — see Manipulation/Default.Unique.Kwargs.cs WriteSortNaNs");
         }
 
         /// <summary>

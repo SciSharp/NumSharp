@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -237,8 +238,8 @@ namespace NumSharp.Tests.Manipulation
         public void LongIndexedFallback_GivesTheManagedOutputs()
         {
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
-            var longFloat = typeof(UniqueEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition);
-            var longComplex = typeof(UniqueEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
+            var longFloat = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition);
+            var longComplex = typeof(DefaultEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
 
             double nan = BitConverter.UInt64BitsToDouble(Nan);
             double D(ulong b) => BitConverter.UInt64BitsToDouble(b);

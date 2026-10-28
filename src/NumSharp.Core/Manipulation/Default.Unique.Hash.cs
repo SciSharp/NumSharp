@@ -7,9 +7,9 @@ using NumSharp.Backends.Sorting;
 using NumSharp.Backends.Unmanaged;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class UniqueEngine
+    public partial class DefaultEngine
     {
         // ============================================================================
         //  HASH fast path for unique_values / unique_counts on INTEGER-FAMILY dtypes.
@@ -56,7 +56,7 @@ namespace NumSharp
                 // hash map): NumPy sorts them with SIMD vqsort, and a hash regresses ~2x on all-unique
                 // input (insert N + scalar-sort N) with no cheap way to detect that cardinality. Decimal
                 // needs value-equality (1.0m != 1.00m by bits), so it sorts too.
-                default: return Compute(a, false, false, false, axis: null, equal_nan: false)[0];
+                default: return UniqueCompute(a, false, false, false, axis: null, equal_nan: false)[0];
             }
         }
 
@@ -82,7 +82,7 @@ namespace NumSharp
                 case NPTypeCode.Char: { var (v, c) = UniqueHashSortedInt<char>(a, wantCounts: true); return new[] { v, c }; }
                 case NPTypeCode.Complex: { var (v, c) = UniqueHashSortedComplex(a, wantCounts: true); return new[] { v, c }; }
                 // Half/Single/Double/Decimal take the SORT path — see uniqueValuesFast.
-                default: return Compute(a, false, false, true, axis: null, equal_nan: false);
+                default: return UniqueCompute(a, false, false, true, axis: null, equal_nan: false);
             }
         }
 
@@ -120,7 +120,7 @@ namespace NumSharp
             // (correct, and n this large means the whole-array sort is not the bottleneck anyway).
             if (n > (1L << 28))
             {
-                var r = Compute(a, false, false, wantCounts, axis: null, equal_nan: false);
+                var r = UniqueCompute(a, false, false, wantCounts, axis: null, equal_nan: false);
                 return (r[0], wantCounts ? r[1] : null);
             }
 
@@ -224,14 +224,14 @@ namespace NumSharp
             else if (SysUnsafe.SizeOf<T>() == 4) k = SysUnsafe.As<T, uint>(ref v);
             else if (SysUnsafe.SizeOf<T>() == 2) k = SysUnsafe.As<T, ushort>(ref v);
             else k = SysUnsafe.As<T, byte>(ref v);
-            return Splitmix(k);
+            return UniqueSplitmix(k);
         }
 
         /// <summary>splitmix64 finalizer — avalanches every input bit into the low bits used as the table index.</summary>
         /// <param name="k">The raw key bits.</param>
         /// <returns>The mixed bits.</returns>
         [MethodImpl(OptimizeAndInline)]
-        private static ulong Splitmix(ulong k)
+        private static ulong UniqueSplitmix(ulong k)
         {
             k = (k ^ (k >> 30)) * 0xBF58476D1CE4E5B9UL;
             k = (k ^ (k >> 27)) * 0x94D049BB133111EBUL;
@@ -308,7 +308,7 @@ namespace NumSharp
             }
             if (n > (1L << 28))
             {
-                var r = Compute(a, false, false, wantCounts, axis: null, equal_nan: false);
+                var r = UniqueCompute(a, false, false, wantCounts, axis: null, equal_nan: false);
                 return (r[0], wantCounts ? r[1] : null);
             }
 
@@ -603,7 +603,7 @@ namespace NumSharp
         {
             ulong r = (ulong)BitConverter.DoubleToInt64Bits(v.Real);
             ulong im = (ulong)BitConverter.DoubleToInt64Bits(v.Imaginary);
-            return Splitmix((r * 0x9E3779B97F4A7C15UL) ^ (im * 0xC2B2AE3D27D4EB4FUL));
+            return UniqueSplitmix((r * 0x9E3779B97F4A7C15UL) ^ (im * 0xC2B2AE3D27D4EB4FUL));
         }
     }
 }

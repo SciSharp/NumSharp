@@ -96,10 +96,12 @@ namespace NumSharp
         ///     path refuses it).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, with an NA
         ///     among two or more distinct values (NumPy's sort refuses to compare it).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is
-        ///     <see cref="UniqueEngine.Bare"/>).</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is this array's
+        ///     <see cref="TensorEngine.Unique"/> without return flags, of which this member returns the values; the
+        ///     internals are reclaimed at its return).</remarks>
         public NDArray unique(int? axis = null, bool equal_nan = true, bool sorted = true)
-            => UniqueEngine.Bare(this, axis, equal_nan, sorted);
+            // With every return flag false the engine returns [values]; the facade of NumPy's bare return takes it.
+            => TensorEngine.Unique(this, axis: axis, equal_nan: equal_nan, sorted: sorted)[0];
 
         /// <summary>
         ///     Find the unique elements of an array with full NumPy keyword argument support.
@@ -127,9 +129,9 @@ namespace NumSharp
         ///     path refuses it).</exception>
         /// <exception cref="ValueError">A <c>StringDType</c> array whose NA object is neither NaN-like nor a string, where
         ///     NumPy's sort compares an NA. Text computes NumPy's answer: fixed-width text through NumPy's statements,
-        ///     <c>StringDType</c> through NumPy's flat path (see <see cref="UniqueEngine.Compute"/>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is
-        ///     <see cref="UniqueEngine.Compute"/>).</remarks>
+        ///     <c>StringDType</c> through NumPy's flat path (see <see cref="TensorEngine.Unique"/>).</exception>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html (the computation is this array's
+        ///     <see cref="TensorEngine.Unique"/>; the internals are reclaimed at its return, the outputs are kept).</remarks>
         public NDArray[] unique(
             bool return_index,
             bool return_inverse = false,
@@ -137,7 +139,7 @@ namespace NumSharp
             int? axis = null,
             bool equal_nan = true,
             bool sorted = true)
-            => UniqueEngine.Compute(this, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
+            => TensorEngine.Unique(this, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
 
         /// <summary>
         ///     The sorted distinct values of this array, found with a hash set: a legacy helper that no NumSharp code calls,

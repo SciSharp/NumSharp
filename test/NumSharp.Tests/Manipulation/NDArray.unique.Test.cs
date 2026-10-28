@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 using System.Linq;
 using NumSharp.Tests.Utilities;
 
@@ -416,14 +417,15 @@ namespace NumSharp.Tests.Manipulation
         //  we can't actually trigger the path naturally. Instead we use reflection
         //  to invoke the long-indexed methods directly on small data and confirm
         //  they produce the same output as the fast managed path. They are static
-        //  members of the internal operation class UniqueEngine, the operand first.
+        //  members of DefaultEngine (Default.Unique.Kwargs.cs; the internal class UniqueEngine until the
+        //  np-layer dtype plan's phase PE), the operand first.
         // ============================================================
 
         [TestMethod]
         public void Unique_LongPath_Int32_ProducesSameResultAsFastPath()
         {
             var arr = np.array(new int[] { 5, 2, 9, 2, 5, 1, 8 });
-            var method = typeof(UniqueEngine)
+            var method = typeof(DefaultEngine)
                 .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
                 .First(m => m.Name == "uniqueFlatSortedLong" && m.IsGenericMethodDefinition)
                 .MakeGenericMethod(typeof(int));
@@ -446,7 +448,7 @@ namespace NumSharp.Tests.Manipulation
         public void Unique_LongPath_Double_NaN_EqualNanTrue()
         {
             var arr = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0, 1.0 });
-            var method = typeof(UniqueEngine)
+            var method = typeof(DefaultEngine)
                 .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
                 .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition)
                 .MakeGenericMethod(typeof(double));
@@ -469,7 +471,7 @@ namespace NumSharp.Tests.Manipulation
         public void Unique_LongPath_Double_NaN_EqualNanFalse()
         {
             var arr = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0, 1.0 });
-            var method = typeof(UniqueEngine)
+            var method = typeof(DefaultEngine)
                 .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
                 .First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition)
                 .MakeGenericMethod(typeof(double));
@@ -494,7 +496,7 @@ namespace NumSharp.Tests.Manipulation
                 new(3, 0), new(1, 0), new(2, 0), new(1, 0)
             };
             var arr = np.array(data);
-            var method = typeof(UniqueEngine)
+            var method = typeof(DefaultEngine)
                 .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
                 .First(m => m.Name == "uniqueFlatSortedLongComplex");
             // signature: (NDArray a, long n, bool equal_nan, bool return_index, bool return_inverse, bool return_counts)

@@ -5,14 +5,14 @@ using NumSharp.Backends.Sorting;
 using NumSharp.Backends.Unmanaged;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class UniqueEngine
+    public partial class DefaultEngine
     {
         // ============================================================================
         //  RADIX flat sort for np.unique's SORT path.
         //
-        //  np.unique's flat pipeline (UniqueEngine.Kwargs.cs) sorts a managed key buffer
+        //  np.unique's flat pipeline (Default.Unique.Kwargs.cs) sorts a managed key buffer
         //  (+ perm for return_index/inverse/counts) and then masks/dedups. The sort was
         //  System.Array.Sort — the .NET BCL introsort, a COMPARISON sort (~n·log n comparisons,
         //  ~50% branch-mispredict on random data). This routes it instead through the SAME
@@ -35,10 +35,10 @@ namespace NumSharp
         //      of a run of zeros whenever the line holds one; NumPy's x86-simd-sort orders equal keys its
         //      own way and may keep +0.0, a divergence left as it is;
         //    - the integer hash path's high-cardinality bail-out sorts and dedups here (RadixSortValues +
-        //      RadixDedupSortedInt, UniqueEngine.Hash.cs).
+        //      RadixDedupSortedInt, Default.Unique.Hash.cs).
         //  The index and inverse routes of float16 / float32 / float64 / complex128, and every float16
         //  call, do not come here: they are NumPy's argsort-and-gather statements over AxisSort.ArgSort
-        //  (uniqueFlatArgsorted<T>, UniqueEngine.Kwargs.cs).
+        //  (uniqueFlatArgsorted<T>, Default.Unique.Kwargs.cs).
         //
         //  Scope: the 12 fixed-width numeric dtypes with a monotonic key (bool/byte/sbyte/int16/
         //  uint16/char/int32/uint32/int64/uint64/single/double). Half (no Vector<Half>, needs a
@@ -205,7 +205,7 @@ namespace NumSharp
         }
 
         // ----- monotonic key transforms (JIT-const typeof(T) dispatch; exactly one branch survives
-        //       per specialized method — same pattern as HashKey<T> in UniqueEngine.Hash.cs).
+        //       per specialized method — same pattern as HashKey<T> in Default.Unique.Hash.cs).
         //       These mirror AxisSort's IKey32/IKey64/FKey adapters byte-for-byte. -----
 
         /// <summary>Significant key bytes for the u32 core (1/2/4), or 8 to signal the u64 core.</summary>

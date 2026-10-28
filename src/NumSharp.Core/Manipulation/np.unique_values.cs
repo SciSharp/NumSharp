@@ -26,7 +26,7 @@ namespace NumSharp
         //   * values dtype is preserved; indices/inverse_indices/counts are int64 (NumPy intp).
         //   * inverse_indices is reshaped to the ORIGINAL input shape (NumPy 2.0 change), so the
         //     input can be reconstructed with np.take(values, inverse_indices). A 0-d input's
-        //     inverse is a 0-d () scalar — see UniqueEngine.ReshapeInverseToInput.
+        //     inverse is a 0-d () scalar — see DefaultEngine.ReshapeInverseToInput (Default.Unique.cs).
         //
         //  ONE deliberate divergence, unique_values only ([Misaligned]): for INTEGER and COMPLEX
         //  dtypes NumPy's sorted=False path dedups through a std::unordered_set (unique.cpp) and
@@ -236,7 +236,7 @@ namespace NumSharp
                 return NDCharArrayBoundary.Wrapped(x, static s => unique_values(s));
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
-            return UniqueEngine.UniqueValues(x);
+            return x.TensorEngine.UniqueValues(x);
         }
 
         /// <summary>
@@ -270,7 +270,7 @@ namespace NumSharp
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the hash and sort routes).
-            var r = UniqueEngine.UniqueCounts(x);
+            var r = x.TensorEngine.UniqueCounts(x);
             return new UniqueCountsResult(r[0], r[1]);
         }
 
@@ -292,9 +292,9 @@ namespace NumSharp
         ///     nan-like value</c>.</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         // NDScoped: internals reclaimed; the weaver yields the values and the (possibly reshaped)
-        // inverse — the two UniqueInverseResult fields. UniqueEngine.ReshapeInverseToInput returns a view of r[1]
-        // (or r[1] itself for 0-d); the un-yielded r[1] base is reclaimed, its buffer kept alive by
-        // the yielded view's ARC reference.
+        // inverse — the two UniqueInverseResult fields. The engine member owns a scope too: its
+        // DefaultEngine.ReshapeInverseToInput returns a view of the flat inverse, which that scope
+        // reclaims, the buffer kept alive by the returned view's ARC reference.
         [NDScoped]
         public static UniqueInverseResult unique_inverse(NDArray x)
         {
@@ -309,7 +309,7 @@ namespace NumSharp
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
-            var r = UniqueEngine.UniqueInverse(x);
+            var r = x.TensorEngine.UniqueInverse(x);
             return new UniqueInverseResult(r[0], r[1]);
         }
 
@@ -346,7 +346,7 @@ namespace NumSharp
             }
             using var plain = NDMatrixBoundary.PlainFor(x);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's statements after the class boundary (the text checks, the computation, the inverse's reshape).
-            var r = UniqueEngine.UniqueAll(x);
+            var r = x.TensorEngine.UniqueAll(x);
             return new UniqueAllResult(r[0], r[1], r[2], r[3]);
         }
     }

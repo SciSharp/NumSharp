@@ -216,8 +216,9 @@ namespace NumSharp
                         stripRuns: return_index || return_inverse || return_counts),
                     return_index, return_inverse, return_counts);
             using var plain = NDMatrixBoundary.PlainFor(ar);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // NumPy's statements after the class boundary (the text checks, the boundary scope, the computation).
-            NDArray[] outputs = UniqueEngine.Unique(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
+            // NumPy's statements after the class boundary, TensorEngine.Unique (the text checks, the boundary scope, the
+            // computation).
+            NDArray[] outputs = ar.TensorEngine.Unique(ar, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
             return new UniqueResult(outputs, return_index, return_inverse, return_counts);
         }
     }
