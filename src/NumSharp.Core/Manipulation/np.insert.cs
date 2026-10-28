@@ -8,7 +8,7 @@ namespace NumSharp
         // ============================== np.insert ==============================
         // Insert values along the given axis before the given indices.
         //
-        // The body is InsertEngine (Manipulation/InsertEngine.cs), an operation class beside this facade, which describes
+        // The body is NDArray.Insert (Manipulation/NDArray.FunctionBase.cs, beside this facade), which describes
         // the two branches; the facades keep their signatures, documentation, class boundaries and null checks.
 
         /// <summary>
@@ -47,8 +47,8 @@ namespace NumSharp
                 return NDCharArrayBoundary.Wrapped((arr, obj, values, axis), static s => insert(s.arr, s.obj, s.values, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
-            // (InsertEngine's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return InsertEngine.Insert(arr, obj, values, axis);
+            // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
+            return NDArray.Insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -85,7 +85,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(arr))
                 return NDCharArrayBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = InsertEngine.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -126,8 +126,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
-            // (InsertEngine's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return InsertEngine.Insert(arr, obj, values, axis);
+            // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
+            return NDArray.Insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -163,7 +163,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(arr))
                 return NDCharArrayBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = InsertEngine.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -200,8 +200,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
-            // (InsertEngine's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return InsertEngine.Insert(arr, obj, values, axis);
+            // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
+            return NDArray.Insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -237,7 +237,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(arr))
                 return NDCharArrayBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = InsertEngine.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -268,8 +268,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
-            // (InsertEngine's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return InsertEngine.Insert(arr, obj, values, axis);
+            // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
+            return NDArray.Insert(arr, obj, values, axis);
         }
 
         /// <summary>
@@ -305,7 +305,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(arr))
                 return NDCharArrayBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = InsertEngine.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -345,7 +345,7 @@ namespace NumSharp
             if (NDCharArrayBoundary.Sees(arr))
                 return NDCharArrayBoundary.Wrapped((arr, obj, value, axis), static s => insert(s.arr, s.obj, s.value, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
-            var asArr = InsertEngine.ScalarValueAsArray(value, arr.dtype);
+            var asArr = NDArray.ScalarValueAsArray(value, arr.dtype);
             return insert(arr, obj, asArr, axis);
         }
 
@@ -394,8 +394,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
             // A null `values` is Python's None, converted where NumPy converts the values: after the index checks
-            // (InsertEngine's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
-            return InsertEngine.Insert(arr, obj, values, axis);
+            // (NDArray.FunctionBase.cs's CoerceValuesForSingleIndex / CoerceValuesForMultiIndex).
+            return NDArray.Insert(arr, obj, values, axis);
         }
     }
 }

@@ -94,8 +94,8 @@ namespace NumSharp
                 return NDCharArrayBoundary.Wrapped((arr, obj, axis), static s => delete(s.arr, s.obj, s.axis));
             if (arr is null) throw new ArgumentNullException(nameof(arr));
 
-            var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj, ctx.axis));
+            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
+            return NDArray.Delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -119,8 +119,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, DeleteSlice(ctx.work, obj, ctx.axis));
+            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
+            return NDArray.Delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -144,11 +144,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            var longs = new long[obj.Length];
-            for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
-
-            var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, longs, ctx.axis));
+            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
+            return NDArray.Delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -171,8 +168,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            var ctx = PrepareAxisContext(arr, axis);
-            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis));
+            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
+            return NDArray.Delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -203,21 +200,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            var ctx = PrepareAxisContext(arr, axis);
-            long N = ctx.work.Shape.dimensions[ctx.axis];
-            if (obj.Length != N)
-                throw new ArgumentException(
-                    "boolean array argument obj to delete must be one dimensional " +
-                    $"and match the axis length of {N}",
-                    nameof(obj));
-
-            // keep = ~obj; route through np.compress which has the fused gather kernel.
-            var keep = new bool[obj.Length];
-            for (int i = 0; i < obj.Length; i++) keep[i] = !obj[i];
-
-            // keepArr is released by this method's scope (exceptions included).
-            var keepArr = np.array(keep);
-            return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis));
+            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
+            return NDArray.Delete(arr, obj, axis);
         }
 
         /// <summary>
@@ -258,43 +242,8 @@ namespace NumSharp
             if (arr is null) throw new ArgumentNullException(nameof(arr));
             if (obj is null) throw new ArgumentNullException(nameof(obj));
 
-            var ctx = PrepareAxisContext(arr, axis);
-
-            if (obj.GetTypeCode == NPTypeCode.Boolean)
-            {
-                long N = ctx.work.Shape.dimensions[ctx.axis];
-                if (obj.size != N || obj.ndim != 1)
-                    throw new ArgumentException(
-                        "boolean array argument obj to delete must be one dimensional " +
-                        $"and match the axis length of {N}",
-                        nameof(obj));
-
-                // keep = ~obj. Build a contig bool keep-mask without leaning on
-                // bitwise-not over a possibly-strided NDArray.
-                bool[] keep = new bool[N];
-                for (long i = 0; i < N; i++) keep[i] = !obj.GetBoolean((int)i);
-                // keepArr is released by this method's scope (exceptions included).
-                var keepArr = np.array(keep);
-                return WithSourceOrder(arr, np.compress(keepArr, ctx.work, ctx.axis));
-            }
-
-            // Not an integer index array: NumPy's `keep[obj,] = False` refuses it, whatever its size (text, floats, complex).
-            if (!InsertEngine.IsIntegerIndexDtype(obj.typecode))
-                throw new IndexError("arrays used as indices must be of integer (or boolean) type");
-
-            // Integer obj of any rank: its elements in C order (NumPy's fancy keep[obj,] reads every one).
-            var flatObj = obj.ndim > 1 ? np.ravel(obj) : obj;
-
-            // Integer obj. Size-1 ⇒ collapse to scalar path (NumPy parity).
-            if (flatObj.size == 1)
-            {
-                long idx = ToInt64Scalar(flatObj, "delete");
-                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, idx, ctx.axis));
-            }
-
-            // Materialise indices into a managed long[] for the multi-index path.
-            long[] indices = ToInt64Vector(flatObj, "delete");
-            return WithSourceOrder(arr, DeleteIndexArray(ctx.work, indices, ctx.axis));
+            // NumPy's statements after the class boundaries and the null checks: NDArray.Delete (NDArray.FunctionBase.cs).
+            return NDArray.Delete(arr, obj, axis);
         }
 
         // ---------------------------- helpers ----------------------------
@@ -310,7 +259,7 @@ namespace NumSharp
         /// <param name="axis">The caller's axis, or null for the flattened array.</param>
         /// <returns>The array to work on and the non-negative axis.</returns>
         /// <exception cref="AxisError">The axis is out of bounds (NumPy's <c>normalize_axis_index</c> text).</exception>
-        /// <remarks>Internal for <see cref="InsertEngine"/>, np.insert's operation class, which shares it with np.delete.</remarks>
+        /// <remarks>Internal for np.insert's and np.delete's statements (NDArray.FunctionBase.cs), which share it.</remarks>
         internal static (NDArray work, int axis) PrepareAxisContext(NDArray arr, int? axis)
         {
             if (axis is null)
@@ -336,7 +285,7 @@ namespace NumSharp
         /// <returns>The index as a <see cref="long"/>.</returns>
         /// <exception cref="ArgumentException"><paramref name="obj"/> is not an integer array (the callers test that
         ///     first, so this is not reached from them).</exception>
-        /// <remarks>Internal for <see cref="InsertEngine"/>, np.insert's operation class, which shares it with np.delete.</remarks>
+        /// <remarks>Internal for np.insert's and np.delete's statements (NDArray.FunctionBase.cs), which share it.</remarks>
         internal static long ToInt64Scalar(NDArray obj, string fn)
         {
             // Accept any integer dtype (NumPy: kind in "ui"). Bool is handled by
@@ -369,7 +318,7 @@ namespace NumSharp
         /// <returns>A fresh array of the indices in order.</returns>
         /// <exception cref="ArgumentException"><paramref name="obj"/> has more than one dimension or is not an integer
         ///     array (the callers test both first, so neither is reached from them).</exception>
-        /// <remarks>Internal for <see cref="InsertEngine"/>, np.insert's operation class, which shares it with np.delete.</remarks>
+        /// <remarks>Internal for np.insert's and np.delete's statements (NDArray.FunctionBase.cs), which share it.</remarks>
         internal static long[] ToInt64Vector(NDArray obj, string fn)
         {
             if (obj.ndim > 1)
@@ -419,234 +368,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Scalar-index path: two concatenated views (pre + post) along
-        ///     <paramref name="axis"/>. Bounds-checks first; -N…N-1 are valid.
-        ///     Single-chunk fall-throughs route through <see cref="np.copy"/>
-        ///     to produce an owning C-contig duplicate.
-        /// </summary>
-        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
-        /// <param name="obj">The index to remove; negative values count from the end.</param>
-        /// <param name="axis">The normalized axis.</param>
-        /// <returns>A fresh array without the sub-array at <paramref name="obj"/>.</returns>
-        /// <exception cref="IndexOutOfRangeException"><paramref name="obj"/> is outside <c>[-N, N)</c>.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>delete</c>
-        ///     overloads, so the pre/post views are released by the caller's scope, exceptions included.</remarks>
-        [NDScopedCovered]
-        private static NDArray DeleteSingleIndex(NDArray arr, long obj, int axis)
-        {
-            long N = arr.Shape.dimensions[axis];
-            if (obj < -N || obj >= N)
-                throw new IndexOutOfRangeException(
-                    $"index {obj} is out of bounds for axis {axis} with size {N}");
-            if (obj < 0) obj += N;
-
-            var pre = SliceAlongAxis(arr, axis, 0, obj);
-            var post = SliceAlongAxis(arr, axis, obj + 1, N);
-
-            if (pre.Shape.dimensions[axis] == 0) return np.copy(post);
-            if (post.Shape.dimensions[axis] == 0) return np.copy(pre);
-            return np.concatenate(new[] { pre, post }, axis);
-        }
-
-        /// <summary>
-        ///     Slice-obj path. Mirrors NumPy's implementation: positive-step slice
-        ///     concatenates pre + middle-kept + post; negative step is normalised
-        ///     by inverting the slice direction. step!=1 falls back to the
-        ///     keep-mask path which is identical to the array-obj path with the
-        ///     slice expanded.
-        /// </summary>
-        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
-        /// <param name="obj">The slice of positions to remove, read as Python's <c>slice.indices(N)</c>.</param>
-        /// <param name="axis">The normalized axis.</param>
-        /// <returns>A fresh array without the sliced sub-arrays.</returns>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c> slice overload of
-        ///     <c>delete</c>, so the pre/post views of the step-1 path are released by the caller's scope, exceptions
-        ///     included.</remarks>
-        [NDScopedCovered]
-        private static NDArray DeleteSlice(NDArray arr, Slice obj, int axis)
-        {
-            long N = arr.Shape.dimensions[axis];
-            var (start, stop, step) = PythonSliceIndices(obj, N);
-
-            // Count elements that will actually be removed (matches NumPy's `xr`).
-            long numToDelete;
-            if (step > 0)
-            {
-                if (stop <= start) numToDelete = 0;
-                else numToDelete = (stop - start + step - 1) / step;
-            }
-            else
-            {
-                if (stop >= start) numToDelete = 0;
-                else
-                {
-                    long mag = -step;
-                    numToDelete = (start - stop + mag - 1) / mag;
-                }
-            }
-
-            if (numToDelete <= 0)
-                return DuplicateArray(arr);
-
-            // Normalise negative-step slices to forward iteration over the same
-            // covered range (NumPy: start = xr[-1]; stop = xr[0] + 1; step = -step).
-            if (step < 0)
-            {
-                long absStep = -step;
-                long lastIncluded = start + (numToDelete - 1) * step; // smallest index removed
-                long firstIncluded = start; // largest index removed
-                start = lastIncluded;
-                stop = firstIncluded + 1;
-                step = absStep;
-            }
-
-            // step == 1 is a single contiguous block — pre + post concatenate.
-            if (step == 1)
-            {
-                var pre = SliceAlongAxis(arr, axis, 0, start);
-                var post = SliceAlongAxis(arr, axis, stop, N);
-                if (pre.Shape.dimensions[axis] == 0) return np.copy(post);
-                if (post.Shape.dimensions[axis] == 0) return np.copy(pre);
-                return np.concatenate(new[] { pre, post }, axis);
-            }
-
-            // Strided slice: expand to indices array and route through the mask path.
-            var indices = new long[numToDelete];
-            for (long i = 0; i < numToDelete; i++)
-                indices[i] = start + i * step;
-            return DeleteIndexArray(arr, indices, axis);
-        }
-
-        /// <summary>
-        ///     Multi-index path with two execution branches based on the ratio
-        ///     of deletions to axis length:
-        ///     <list type="bullet">
-        ///       <item><b>Sparse</b> (numDelete &lt; <see cref="DeleteChunkConcatThreshold"/>):
-        ///             sort + dedupe, then concat the kept chunks between deleted
-        ///             positions. Skips the O(N) bool-mask scan that compress's
-        ///             popcount+gather kernel needs. Wins ~2-3x on workloads like
-        ///             "delete 5 of 1M".</item>
-        ///       <item><b>Dense</b> (everything else): bool keep-mask + compress
-        ///             — popcount + fused-gather kernel reads each axis position
-        ///             exactly once, beats chunk-concat when chunks would be tiny.</item>
-        ///     </list>
-        /// </summary>
-        /// <param name="arr">The working array (the input, or its ravel for <c>axis=None</c>).</param>
-        /// <param name="indices">The positions to remove; normalized in place (negative values count from the end).
-        ///     The caller passes an array it owns (a copy of the user's).</param>
-        /// <param name="axis">The normalized axis.</param>
-        /// <returns>A fresh array without the indexed sub-arrays.</returns>
-        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>.</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>delete</c>
-        ///     overloads and the covered <see cref="DeleteSlice"/>, so the dense path's keep mask is released by the
-        ///     caller's scope, exceptions included.</remarks>
-        [NDScopedCovered]
-        private static NDArray DeleteIndexArray(NDArray arr, long[] indices, int axis)
-        {
-            long N = arr.Shape.dimensions[axis];
-
-            if (indices.Length == 0)
-                return DuplicateArray(arr);
-
-            // Normalize + bounds-check.
-            for (int k = 0; k < indices.Length; k++)
-            {
-                long idx = indices[k];
-                if (idx < -N || idx >= N)
-                    throw new IndexOutOfRangeException(
-                        $"index {indices[k]} is out of bounds for axis {axis} with size {N}");
-                if (idx < 0) idx += N;
-                indices[k] = idx;
-            }
-
-            // Sparse fast path: a small handful of deletions => chunk-concat is
-            // far cheaper than scanning the whole bool-mask. The constant is
-            // tuned against the popcount+gather kernel's per-byte throughput.
-            if (indices.Length < DeleteChunkConcatThreshold)
-                return DeleteChunkConcat(arr, indices, axis);
-
-            // Dense path: compress over a bool keep mask.
-            var keep = new bool[N];
-            for (long i = 0; i < N; i++) keep[i] = true;
-            for (int k = 0; k < indices.Length; k++) keep[indices[k]] = false;
-
-            // keepArr is released by the caller's scope (exceptions included).
-            var keepArr = np.array(keep);
-            return np.compress(keepArr, arr, axis);
-        }
-
-        /// <summary>
-        ///     Number of axis-deletions below which <see cref="DeleteIndexArray"/>
-        ///     prefers chunk-concat over compress. 256 is the rough crossover
-        ///     point on a 1M-element axis where compress's amortized cost catches
-        ///     up with the chunk-concat's per-chunk overhead.
-        /// </summary>
-        private const int DeleteChunkConcatThreshold = 256;
-
-        /// <summary>
-        ///     Sparse-delete fast path. Sorts and dedupes the (already-normalized)
-        ///     <paramref name="indices"/>, then concatenates the kept chunks
-        ///     between deleted positions. Equivalent to the bool-mask + compress
-        ///     path but skips the O(N) mask scan.
-        /// </summary>
-        /// <param name="arr">The working array.</param>
-        /// <param name="indices">The normalized, in-bounds positions to remove; sorted and deduplicated in place.</param>
-        /// <param name="axis">The normalized axis.</param>
-        /// <returns>The concatenation of the kept chunks, or an empty array when every position is removed.</returns>
-        /// <remarks>Its chunk views are released by the caller's scope; they share <paramref name="arr"/>'s buffer,
-        ///     so holding them until that scope closes keeps no extra memory alive.</remarks>
-        [NDScopedCovered] // only caller: DeleteIndexArray ← the [NDScoped] delete overloads
-        private static NDArray DeleteChunkConcat(NDArray arr, long[] indices, int axis)
-        {
-            long N = arr.Shape.dimensions[axis];
-
-            // Sort + dedupe in place. The chunks must be derived from monotonic
-            // axis positions; duplicates count as a single deletion.
-            Array.Sort(indices);
-            int unique = 0;
-            for (int k = 0; k < indices.Length; k++)
-            {
-                if (k == 0 || indices[k] != indices[k - 1])
-                    indices[unique++] = indices[k];
-            }
-
-            // Build chunks: arr[prev:idx_0], arr[idx_0+1:idx_1], ..., arr[idx_{n-1}+1:N].
-            // The first chunk uses prev=0; subsequent chunks use prev = idx_{k-1}+1.
-            // Skip zero-length chunks so concatenate sees only real data. The chunk views are
-            // released by the caller's scope (they share arr's buffer, so holding them until the
-            // scope closes keeps no extra memory alive).
-            var chunks = new System.Collections.Generic.List<NDArray>(unique + 1);
-            long prev = 0;
-            for (int k = 0; k < unique; k++)
-            {
-                long idx = indices[k];
-                if (idx > prev)
-                {
-                    var chunk = SliceAlongAxis(arr, axis, prev, idx);
-                    chunks.Add(chunk);
-                }
-                prev = idx + 1;
-            }
-            if (prev < N)
-            {
-                var tail = SliceAlongAxis(arr, axis, prev, N);
-                chunks.Add(tail);
-            }
-
-            if (chunks.Count == 0)
-            {
-                // Every axis position was deleted ⇒ allocate an empty
-                // result with axis dim 0 (NumPy parity).
-                var emptyDims = new long[arr.ndim];
-                for (int d = 0; d < arr.ndim; d++) emptyDims[d] = arr.Shape.dimensions[d];
-                emptyDims[axis] = 0;
-                return new NDArray(arr.dtype, Shape.Adopt(emptyDims), false);
-            }
-
-            return np.concatenate(chunks.ToArray(), axis);
-        }
-
-        /// <summary>
         ///     Allocates a fresh, owning copy of <paramref name="arr"/>. Used by
         ///     delete/insert no-op paths to honour NumPy's "delete does not occur
         ///     in-place" contract.
@@ -672,7 +393,7 @@ namespace NumSharp
         ///     Python-compatible <c>slice.indices(N)</c> implementation. Resolves
         ///     None/negative bounds to absolute positions and clamps to a legal
         ///     iteration range. Used by both <see cref="DeleteSlice"/> and
-        ///     <see cref="InsertEngine.InsertExpandSliceObj"/>.
+        ///     <see cref="NDArray.InsertExpandSliceObj"/>.
         /// </summary>
         internal static (long start, long stop, long step) PythonSliceIndices(Slice s, long N)
         {

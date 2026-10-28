@@ -323,7 +323,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="typeCode">The sorter's type code.</param>
         /// <returns>True for an integer sorter.</returns>
-        /// <remarks>The same set as <c>np.insert</c> / <c>np.delete</c>'s index test (<c>InsertEngine.IsIntegerIndexDtype</c>,
+        /// <remarks>The same set as <c>np.insert</c> / <c>np.delete</c>'s index test (<c>NDArray.IsIntegerIndexDtype</c>,
         ///     beside the facades), written here so the engine does not reach up into the np layer's helpers.</remarks>
         private static bool IsSearchSorterIntegerDtype(NPTypeCode typeCode)
             => typeCode.IsInteger() || typeCode == NPTypeCode.Char;
