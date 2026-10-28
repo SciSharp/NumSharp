@@ -350,6 +350,10 @@ static class Snapshot
         // hfft), the norm name, the N-D transforms' lengths s, and fftfreq / rfftfreq's window length n (an int or a long,
         // or a double that NumPy refuses), sample spacing d and device.
         FftN, FftNorm, FftS, FftFreqN, FftD, FftDevice,
+        // np.nan_to_num's fill values nan / posinf / neginf (objects: NumPy's array_like scalars or arrays, so the fused
+        // scalar path and the copyto composition are both reached) and np.real_if_close's tol (a multiple of the
+        // dtype's eps above 1, an absolute bound otherwise).
+        NanToNumFill, RealIfCloseTol,
         Default, Unsupported,
     }
 
@@ -464,6 +468,16 @@ static class Snapshot
 
     private static bool IsInterp(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "interp";
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.nan_to_num or np.real_if_close, whose <c>nan</c> / <c>posinf</c> /
+    ///     <c>neginf</c> and <c>tol</c> roles are theirs alone: no other target names an object <c>nan</c> or a double
+    ///     <c>tol</c> it should vary this way.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.nan_to_num or np.real_if_close overload.</returns>
+    private static bool IsTypeCheckFill(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "nan_to_num" or "real_if_close";
 
     /// <summary>
     ///     Classifies a parameter.
@@ -610,6 +624,12 @@ static class Snapshot
             if (n == "op_axes" && t == typeof(int[][])) return Role.NditerOpAxes;
             if (n == "itershape" && t == typeof(long[])) return Role.NditerItershape;
             if (n == "buffersize" && t == typeof(long)) return Role.NditerBuffersize;
+        }
+        // np.nan_to_num's fill values and np.real_if_close's tolerance (only theirs).
+        if (IsTypeCheckFill(p))
+        {
+            if (n is "nan" or "posinf" or "neginf" && t == typeof(object)) return Role.NanToNumFill;
+            if (n == "tol" && t == typeof(double)) return Role.RealIfCloseTol;
         }
         // np.interp's fills and period (only its).
         if (IsInterp(p))
@@ -1182,6 +1202,27 @@ static class Snapshot
                 Add("null", () => null);
                 Add("cpu", () => "cpu");
                 Add("cuda", () => "cuda");
+                break;
+            case Role.NanToNumFill:
+                // None first (NumPy's 0.0 / the dtype's largest and smallest finite values), then the scalar kinds the
+                // fused path converts (a double, an int, a bool, a float16, NaN as a fill, a value past float16's range),
+                // the array fills that take the copyto composition (a 0-d array, a row, a C# double[] of a row's length,
+                // an int32 array), and text NumPy refuses.
+                foreach (var (label, value) in new (string, Func<object>)[]
+                         {
+                             ("null", () => null), ("1.5", () => 1.5), ("-7", () => -7), ("true", () => true),
+                             ("half2.5", () => (Half)2.5), ("nan", () => double.NaN), ("1e6", () => 1e6),
+                             ("nd0d", () => np.array(9.5)), ("ndrow", () => np.array(new[] { 1.0, 2, 3, 4 })),
+                             ("dbl[4]", () => new[] { 1.0, 2, 3, 4 }), ("i32row", () => np.array(new[] { 1, 2, 3, 4 })),
+                             ("'x'", () => "x"),
+                         })
+                    Add(label, value);
+                break;
+            case Role.RealIfCloseTol:
+                // The default 100 (a multiple of eps) first, then a larger multiple, the 1.0 boundary (absolute from
+                // there), a tiny absolute bound, zero and a negative bound.
+                foreach (var v in new[] { 100.0, 1e6, 1.0, 1e-20, 0.0, -1.0 })
+                    Add(v.ToString("R", CultureInfo.InvariantCulture), () => v);
                 break;
             case Role.InterpPeriod:
                 // None first, then periods smaller and larger than the points' span, a fraction, a negative one (NumPy takes
