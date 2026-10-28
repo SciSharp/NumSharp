@@ -840,7 +840,8 @@ namespace NumSharp.Backends.Strings
         ///     has no string sum-of-products (<c>invalid data type for einsum</c>).</exception>
         internal static void ThrowIfEinsum(NDArray[] operands, DType dtype, string casting)
         {
-            bool any = IsStringRequest(dtype);
+            // A StringDType request is text too (NumPy loops it like S / U and finds no sum of products).
+            bool any = IsTextRequest(dtype);
             foreach (var op in operands)
                 any |= IsText(op);
             if (!any)
