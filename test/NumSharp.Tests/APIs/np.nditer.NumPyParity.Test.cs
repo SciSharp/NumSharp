@@ -225,6 +225,32 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
+        ///     A view of a written operand is writeable, and once its write flag is cleared it cannot be set again: NumPy's
+        ///     view has the iterator for its base, which exports no buffer, so <c>flags.writeable = true</c> raises
+        ///     "cannot set WRITEABLE flag to True of this array" for the 0-d element view and for the external-loop chunk
+        ///     alike (probed against NumPy 2.4.2; NumSharp set it again). A write through a writeable view still reaches the
+        ///     operand.
+        /// </summary>
+        [TestMethod]
+        public void Views_ClearedWriteFlag_CannotBeSetAgain()
+        {
+            using var a = np.arange(3.0);
+            foreach (var flags in new[] { new string[0], new[] { "external_loop" } })
+            {
+                using var it = np.nditer(a, flags: flags, op_flags: new[] { "readwrite" });
+                var view = it[0];
+                view.flags.writeable.Should().BeTrue();
+                view.flags.writeable = false;
+                var again = () => view.flags.writeable = true;
+                again.Should().Throw<ValueError>().WithMessage("cannot set WRITEABLE flag to True of this array");
+            }
+
+            using (var it = np.nditer(a, op_flags: new[] { "readwrite" }))
+                np.copyto(it[0], 9.0);
+            a.GetDouble(0).Should().Be(9.0);
+        }
+
+        /// <summary>
         ///     <c>it[i] = v</c> is NumPy's <c>PyArray_CopyObject</c> into the current element: a C# literal is a Python int,
         ///     packed into the operand's dtype with NumPy's range check (<c>it[1] = 300</c> on int8: "Python integer 300 out
         ///     of bounds for int8"), while a 0-d ARRAY is assigned with an unsafe cast (<c>np.array(300)</c> stores 44, as

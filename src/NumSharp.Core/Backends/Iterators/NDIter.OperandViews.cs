@@ -36,16 +36,26 @@ namespace NumSharp.Backends.Iteration
         /// <param name="scalar">True for the 0-d per-element view.</param>
         /// <returns>
         ///     The view, which does not own its data (<c>flags.owndata</c> is false, as NumPy's views of an iterator report)
-        ///     and keeps the shape's default write flag: the caller applies the operand's write flags.
+        ///     and keeps the shape's default write flag: the caller applies the operand's write flags. Once its write flag
+        ///     is cleared it cannot be set again (<c>flags.writeable = true</c> raises NumPy's ValueError).
         /// </returns>
         /// <exception cref="NotSupportedException">The operand's iteration lane has no view (none of the 15 storage
         ///     lanes nor a string lane).</exception>
         /// <exception cref="InvalidOperationException">A <c>StringDType</c> view without the allocator of its cells (a
         ///     routing bug: a <c>StringDType</c> cell is meaningless without its buffer's allocator).</exception>
         /// <remarks>
+        ///     <para>
         ///     The caller must not ask for the inner loop of a 0-d iteration through <c>GetInnerLoopSizePtr</c>: a 0-d
         ///     iteration has no inner dimension (the pointer would read <c>Shape[-1]</c>, an access violation); np.nditer's
         ///     getter passes <c>count = 1</c> there instead, NumPy's one 1-element chunk.
+        ///     </para>
+        ///     <para>
+        ///     NumPy's view has the iterator for its base, an object that exports no buffer, so <c>_IsWriteable</c> refuses
+        ///     to set a cleared write flag again. The view's storage carries NumSharp's flag for that question
+        ///     (<see cref="UnmanagedStorage.WriteProtected"/>), which blocks nothing else. NumSharp flattens a view's base to
+        ///     the owning storage, so a sub-view of a 0-d view refuses too, where NumPy's sub-view (its base is the
+        ///     writeable 0-d view) may be made writeable again; a sub-view of a 1-D chunk view keeps NumPy's answer.
+        ///     </para>
         /// </remarks>
         internal NDArray CurrentView(int op, long count, long stride, bool scalar)
         {
@@ -55,7 +65,10 @@ namespace NumSharp.Backends.Iteration
             // buffer under a buffered cast, the operand otherwise — the same descriptor without one).
             var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op, ptr) : null;
             var vstrings = VStringAllocatorOf(op, stringDescr, ptr);
-            return AliasView(ptr, dtype, stringDescr, count, stride, scalar, vstrings);
+            var view = AliasView(ptr, dtype, stringDescr, count, stride, scalar, vstrings);
+            // The iterator, the view's base in NumPy, grants no writable buffer: a cleared write flag stays cleared.
+            view.Storage.WriteProtected = true;
+            return view;
         }
 
         /// <summary>

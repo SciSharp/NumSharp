@@ -161,8 +161,16 @@ namespace NumSharp.Backends
         ///     write would reach PROT_READ pages — an access violation, not an exception.
         /// </summary>
         /// <remarks>
+        ///     <para>
         ///     Ordinary owned allocations and ordinary views never set this; a cleared WRITEABLE flag alone
         ///     (e.g. <c>a.flags.writeable = false</c> on your own array) is reversible and does NOT imply it.
+        ///     </para>
+        ///     <para>
+        ///     It answers only that question: whether a cleared WRITEABLE flag may be set again. It does not block a
+        ///     write while the flag is set. So np.nditer's views carry it too, writeable ones included
+        ///     (<c>NDIterRef.CurrentView</c>): their NumPy base is the iterator, an object that exports no buffer at all,
+        ///     so a write flag cleared on one cannot be set again.
+        ///     </para>
         /// </remarks>
         internal bool WriteProtected;
 
