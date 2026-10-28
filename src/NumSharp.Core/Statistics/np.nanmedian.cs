@@ -46,7 +46,7 @@ namespace NumSharp
             // NumPy's np.nanmedian body (the text routes, then the NaN-ignoring median) is TensorEngine.NanMedian's: the
             // facade holds only the class rule above.
             // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
-            return QuantileFamilyEngine(a).NanMedian(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
+            return EngineOf(a).NanMedian(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
                 keepdims);
         }
 
@@ -86,7 +86,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanmedian body is TensorEngine.NanMedian's.
-            return QuantileFamilyEngine(a).NanMedian(a, axis, @out, overwrite_input, keepdims);
+            return EngineOf(a).NanMedian(a, axis, @out, overwrite_input, keepdims);
         }
     }
 }

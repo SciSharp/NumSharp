@@ -75,7 +75,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -143,7 +143,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -218,7 +218,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -294,7 +294,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -363,7 +363,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Percentile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -435,7 +435,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("percentile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Percentile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
     }
 }

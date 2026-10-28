@@ -75,7 +75,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -143,7 +143,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -218,7 +218,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -294,7 +294,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -365,7 +365,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axes, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Quantile(a, q, axes, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -439,7 +439,7 @@ namespace NumSharp
             return chararray
                 ? DefaultEngine.QuantileFunction("quantile", a, new QuantileArgument(q), axis, @out,
                     overwrite_input, method, keepdims, weights, chararray: true)
-                : QuantileFamilyEngine(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+                : EngineOf(a).Quantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -544,20 +544,5 @@ namespace NumSharp
             using NDArray qArray = NDArray.PythonLiteral(q);
             return quantile(a, qArray, axis, @out, overwrite_input, method, keepdims, weights);
         }
-
-        /// <summary>
-        ///     The engine a quantile-family facade (<c>np.quantile</c>, <c>np.percentile</c>, <c>np.median</c> and their nan
-        ///     forms) hands its call to: the data's own engine, or the default engine when the data is null.
-        /// </summary>
-        /// <param name="a">The data, or null.</param>
-        /// <returns><paramref name="a"/>'s engine, or <see cref="BackendFactory.GetEngine"/>'s default engine for a null
-        ///     <paramref name="a"/>.</returns>
-        /// <remarks>
-        ///     A null data must reach the engine's statements rather than fail at the dispatch: NumPy's order checks q and
-        ///     the method before the data is read, and the engine reports the null data as
-        ///     <see cref="ArgumentNullException"/> where its statements first need it, as the family did before its bodies
-        ///     became engine members (the np-layer dtype plan, phase PE). <c>np.evaluate</c> resolves an engine the same way.
-        /// </remarks>
-        internal static TensorEngine QuantileFamilyEngine(NDArray a) => a?.TensorEngine ?? BackendFactory.GetEngine();
     }
 }

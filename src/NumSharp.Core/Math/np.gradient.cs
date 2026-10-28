@@ -7,7 +7,9 @@ using NumSharp.Utilities;
 namespace NumSharp
 {
     // ============================== np.gradient ==============================
-    // The body is GradientEngine (Math/GradientEngine.cs), an operation class beside this facade.
+    // The body is the engine member TensorEngine.Gradient (DefaultEngine's in Math/Default.Gradient.cs, beside this
+    // facade), reached through np.EngineOf: a null f is refused by the body's first statement (ArgumentNullException),
+    // not by the dispatch.
     //
     // The API mirrors NumPy's `gradient(f, *varargs, axis=None, edge_order=1)`.
     // C# cannot express NumPy's keyword-only `axis`/`edge_order` alongside the
@@ -164,7 +166,7 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing = null, int? axis = null, int edge_order = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return GradientEngine.Gradient(f,
+            return EngineOf(f).Gradient(f,
                             spacing is null ? Array.Empty<object>() : new[] { spacing },
                             axis.HasValue ? new[] { axis.Value } : null,
                             edge_order);
@@ -184,7 +186,7 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing, int[] axis, int edge_order = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return GradientEngine.Gradient(f, spacing is null ? Array.Empty<object>() : new[] { spacing }, axis, edge_order);
+            return EngineOf(f).Gradient(f, spacing is null ? Array.Empty<object>() : new[] { spacing }, axis, edge_order);
         }
 
         /// <summary>Two per-axis spacings — see the main overload.</summary>
@@ -192,7 +194,7 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing0, object spacing1, int[] axis = null, int edge_order = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return GradientEngine.Gradient(f, new[] { spacing0, spacing1 }, axis, edge_order);
+            return EngineOf(f).Gradient(f, new[] { spacing0, spacing1 }, axis, edge_order);
         }
 
         /// <summary>Three per-axis spacings — see the main overload.</summary>
@@ -200,7 +202,7 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object spacing0, object spacing1, object spacing2, int[] axis = null, int edge_order = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return GradientEngine.Gradient(f, new[] { spacing0, spacing1, spacing2 }, axis, edge_order);
+            return EngineOf(f).Gradient(f, new[] { spacing0, spacing1, spacing2 }, axis, edge_order);
         }
 
         /// <summary>
@@ -211,7 +213,7 @@ namespace NumSharp
         public static GradientResult gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1)
         {
             using var plain = NDMatrixBoundary.PlainFor(f);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return GradientEngine.Gradient(f, varargs ?? Array.Empty<object>(), axis, edge_order);
+            return EngineOf(f).Gradient(f, varargs ?? Array.Empty<object>(), axis, edge_order);
         }
     }
 }

@@ -7,10 +7,12 @@ using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 // The moved statements call the public np.* functions they called inside np (np.diff, np.empty, np.subtract, np.divide,
 // np.evaluate, np.all) and np's internal SliceAlongAxis, and build np's GradientResult; importing np's statics keeps them
-// verbatim.
+// verbatim. In a DefaultEngine partial a name resolves to DefaultEngine's members before np's statics: of the unqualified
+// names below only the helper Add was one (DefaultEngine's ufunc member), so the three PolyNumber helpers are GradientAdd,
+// GradientMul and GradientDiv since the file joined DefaultEngine.
 using static NumSharp.np;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
     // ============================== np.gradient ==============================
     // Return the gradient of an N-dimensional array, computed with second-order
@@ -59,25 +61,23 @@ namespace NumSharp
     // OpenBugs.NaNOperandOrder's Complex128_AddMultiplyDivide_KeepNumPysNaNPerPart),
     // which gradient inherits.
 
-    /// <summary>
-    ///     The body of NumPy's <c>gradient</c> (<c>numpy/lib/_function_base_impl.py</c>): the axes, the spacing per axis
-    ///     (scalars, or coordinate arrays reduced to their diffs), the output dtype, and per axis the interior's central
-    ///     differences and the edges' one-sided differences, written into a fresh array. The public <c>np.gradient</c>
-    ///     overloads only spread their spacings into one list, apply the matrix boundary and call <see cref="Gradient"/>.
-    /// </summary>
-    /// <remarks>
-    ///     Moved from <c>Math/np.gradient.cs</c> statement for statement by the np-layer dtype plan's P2 (an operation
-    ///     class, decision D1: NumPy writes gradient in Python). It sits beside its facade rather than under
-    ///     <c>Backends/</c>, as <c>Math/TrapezoidEngine</c> does: its statements call np.* functions, which ratchet R2
-    ///     counts against engine files.
-    /// </remarks>
-    internal static class GradientEngine
+    // DefaultEngine's override of TensorEngine.Gradient (TensorEngine.FunctionBase.cs): the body of NumPy's gradient - the
+    // axes, the spacing per axis (scalars, or coordinate arrays reduced to their diffs), the output dtype, and per axis the
+    // interior's central differences and the edges' one-sided differences, written into a fresh array. The public
+    // np.gradient overloads only spread their spacings into one list, apply the matrix boundary and call the member.
+    //
+    // History: moved from Math/np.gradient.cs statement for statement by the np-layer dtype plan's P2 into the internal
+    // operation class GradientEngine (decision D1: NumPy writes gradient in Python); its phase PE (E1) made that class this
+    // DefaultEngine partial. It sits beside its facade rather than under Backends/, as Default.Trapezoid.cs does: its
+    // statements call np.* functions, which ratchet R2 counts against engine files.
+    public partial class DefaultEngine
     {
         // ---- Core algorithm (port of numpy.gradient) ----
 
         /// <summary>
-        ///     NumPy's <c>gradient(f, *varargs, axis=axis, edge_order=edge_order)</c>: one fresh array per requested axis,
-        ///     second-order central differences inside and first- or second-order one-sided differences at both ends.
+        ///     DefaultEngine's <see cref="TensorEngine.Gradient"/>: NumPy's <c>gradient(f, *varargs, axis=axis,
+        ///     edge_order=edge_order)</c>, one fresh array per requested axis, second-order central differences inside and
+        ///     first- or second-order one-sided differences at both ends.
         /// </summary>
         /// <param name="f">The sampled values (the facade has applied the matrix boundary; null is refused here).</param>
         /// <param name="varargs">NumPy's <c>*varargs</c>: no entry (unit steps), one scalar for every axis, or one entry
@@ -116,7 +116,7 @@ namespace NumSharp
         ///     <see cref="np.GradientResult"/> (an <see cref="INDArrayCarrier"/>).
         /// </remarks>
         [NDScoped]
-        internal static GradientResult Gradient(NDArray f, object[] varargs, int[] axisArg, int edge_order)
+        public override GradientResult Gradient(NDArray f, object[] varargs, int[] axisArg = null, int edge_order = 1)
         {
             if (f is null) throw new ArgumentNullException(nameof(f));
 
@@ -367,7 +367,7 @@ namespace NumSharp
                     if (uniform)
                     {
                         var s = (PolyNumber)ax_dx;
-                        a0 = Div(Py(-1.5), s); b0 = Div(Py(2.0), s); c0 = Div(Py(-0.5), s);
+                        a0 = GradientDiv(Py(-1.5), s); b0 = GradientDiv(Py(2.0), s); c0 = GradientDiv(Py(-0.5), s);
                     }
                     else
                     {
@@ -375,9 +375,9 @@ namespace NumSharp
                         // c = - dx1 / (dx2 * (dx1 + dx2))
                         NDArray axd = (NDArray)ax_dx;
                         PolyNumber d1 = PolyNumber.ScalarOf(axd[0]), d2 = PolyNumber.ScalarOf(axd[1]);
-                        a0 = Div(PolyNumber.Negate(Add(Mul(Py(2.0), d1), d2)), Mul(d1, Add(d1, d2)));
-                        b0 = Div(Add(d1, d2), Mul(d1, d2));
-                        c0 = Div(PolyNumber.Negate(d1), Mul(d2, Add(d1, d2)));
+                        a0 = GradientDiv(PolyNumber.Negate(GradientAdd(GradientMul(Py(2.0), d1), d2)), GradientMul(d1, GradientAdd(d1, d2)));
+                        b0 = GradientDiv(GradientAdd(d1, d2), GradientMul(d1, d2));
+                        c0 = GradientDiv(PolyNumber.Negate(d1), GradientMul(d2, GradientAdd(d1, d2)));
                     }
                     // front: out[0] = a0*f[0] + b0*f[1] + c0*f[2]; f[1] / f[2] of an axis of 1 / 2 elements is the
                     // IndexError, raised after the coefficients (a Python zero step's ZeroDivisionError comes first).
@@ -386,7 +386,7 @@ namespace NumSharp
                     if (uniform)
                     {
                         var s = (PolyNumber)ax_dx;
-                        a1 = Div(Py(0.5), s); b1 = Div(Py(-2.0), s); c1 = Div(Py(1.5), s);
+                        a1 = GradientDiv(Py(0.5), s); b1 = GradientDiv(Py(-2.0), s); c1 = GradientDiv(Py(1.5), s);
                     }
                     else
                     {
@@ -394,9 +394,9 @@ namespace NumSharp
                         // c = (2. * dx2 + dx1) / (dx2 * (dx1 + dx2))
                         NDArray axd = (NDArray)ax_dx;
                         PolyNumber e1 = PolyNumber.ScalarOf(axd[-2]), e2 = PolyNumber.ScalarOf(axd[-1]);
-                        a1 = Div(e2, Mul(e1, Add(e1, e2)));
-                        b1 = Div(PolyNumber.Negate(Add(e2, e1)), Mul(e1, e2));
-                        c1 = Div(Add(Mul(Py(2.0), e2), e1), Mul(e2, Add(e1, e2)));
+                        a1 = GradientDiv(e2, GradientMul(e1, GradientAdd(e1, e2)));
+                        b1 = GradientDiv(PolyNumber.Negate(GradientAdd(e2, e1)), GradientMul(e1, e2));
+                        c1 = GradientDiv(GradientAdd(GradientMul(Py(2.0), e2), e1), GradientMul(e2, GradientAdd(e1, e2)));
                     }
                     // back: out[-1] = a1*f[-3] + b1*f[-2] + c1*f[-1] (an axis short enough to make these raise has
                     // already raised at the front edge)
@@ -476,11 +476,11 @@ namespace NumSharp
         private static NDArray Edge2(NDArray f, int axis, int N, long k0, long k1, long k2,
                                      PolyNumber a, PolyNumber b, PolyNumber c)
         {
-            PolyNumber t0 = Mul(a, EdgeOperand(AtAxis(f, axis, N, k0)));
-            PolyNumber t1 = Mul(b, EdgeOperand(AtAxis(f, axis, N, k1)));
-            PolyNumber s01 = Add(t0, t1);
-            PolyNumber t2 = Mul(c, EdgeOperand(AtAxis(f, axis, N, k2)));
-            return Add(s01, t2).ToNDArray();
+            PolyNumber t0 = GradientMul(a, EdgeOperand(AtAxis(f, axis, N, k0)));
+            PolyNumber t1 = GradientMul(b, EdgeOperand(AtAxis(f, axis, N, k1)));
+            PolyNumber s01 = GradientAdd(t0, t1);
+            PolyNumber t2 = GradientMul(c, EdgeOperand(AtAxis(f, axis, N, k2)));
+            return GradientAdd(s01, t2).ToNDArray();
         }
 
         /// <summary>
@@ -538,7 +538,7 @@ namespace NumSharp
                 throw new TypeError("unsupported operand type(s) for *: 'float' and 'NoneType'");
             if (axDx is string)
                 throw new TypeError("can't multiply sequence by non-int of type 'float'");
-            return Mul(Py(2.0), (PolyNumber)axDx);
+            return GradientMul(Py(2.0), (PolyNumber)axDx);
         }
 
         /// <summary>
@@ -569,13 +569,13 @@ namespace NumSharp
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The sum.</returns>
-        private static PolyNumber Add(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Add, a, b);
+        private static PolyNumber GradientAdd(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Add, a, b);
 
         /// <summary>Python's <c>a * b</c> with NumPy's semantics for the operands' kinds.</summary>
         /// <param name="a">Left operand.</param>
         /// <param name="b">Right operand.</param>
         /// <returns>The product.</returns>
-        private static PolyNumber Mul(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Multiply, a, b);
+        private static PolyNumber GradientMul(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Multiply, a, b);
 
         /// <summary>Python's <c>a / b</c> (true division) with NumPy's semantics for the operands' kinds.</summary>
         /// <param name="a">Left operand.</param>
@@ -583,7 +583,7 @@ namespace NumSharp
         /// <returns>The quotient.</returns>
         /// <exception cref="DivideByZeroException">Two Python numbers with a zero divisor (CPython's ZeroDivisionError:
         ///     <c>float division by zero</c>); a NumPy scalar divisor gives inf / nan instead.</exception>
-        private static PolyNumber Div(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Divide, a, b);
+        private static PolyNumber GradientDiv(PolyNumber a, PolyNumber b) => PolyNumber.Binary(BinaryOp.Divide, a, b);
 
         // Assign an edge hyperplane at index `at` along `axis` into `outp`, then dispose the value.
         /// <summary>

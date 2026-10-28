@@ -55,7 +55,7 @@ namespace NumSharp
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
             // NumPy's _ureduce turns an int axis into a 1-tuple: the engine member takes the axes as an array.
-            return QuantileFamilyEngine(a).Median(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
+            return EngineOf(a).Median(a, axis.HasValue ? new[] { axis.Value } : null, @out, overwrite_input,
                 keepdims);
         }
 
@@ -107,7 +107,7 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.median body (the text routes, then the numeric median) is TensorEngine.Median's: the facade
             // holds only the class rules above.
-            return QuantileFamilyEngine(a).Median(a, axis, @out, overwrite_input, keepdims);
+            return EngineOf(a).Median(a, axis, @out, overwrite_input, keepdims);
         }
 
         /// <summary>

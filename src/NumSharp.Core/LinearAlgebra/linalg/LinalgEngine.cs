@@ -14,7 +14,7 @@ namespace NumSharp
     /// <remarks>
     ///     Moved from <c>LinearAlgebra/linalg/np.linalg*.cs</c> statement for statement by the np-layer dtype plan's P2 (an
     ///     operation class, decision D1: NumPy writes numpy.linalg in Python), one partial file per facade file. It sits
-    ///     beside its facades rather than under <c>Backends/</c>, as <c>Math/GradientEngine</c> does: its statements call
+    ///     beside its facades rather than under <c>Backends/</c>, as <c>Math/Default.Gradient.cs</c> does: its statements call
     ///     np.* functions, which ratchet R2 counts against engine files. A body that calls a sibling function calls its
     ///     public facade (<c>np.linalg.inv</c>, <c>np.linalg.svdvals</c>, ...), as the bodies did before the move, so the
     ///     class boundary meets every nested call where it met it before.

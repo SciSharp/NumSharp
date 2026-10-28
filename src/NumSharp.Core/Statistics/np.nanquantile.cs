@@ -65,7 +65,7 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // NumPy's np.nanquantile body (q's checks, the weighted branch, the text routes, the NaN-ignoring quantile) is
             // TensorEngine.NanQuantile's: the facade holds only the class rule above.
-            return QuantileFamilyEngine(a).NanQuantile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
+            return EngineOf(a).NanQuantile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
                 overwrite_input, method, keepdims, weights);
         }
 
@@ -127,7 +127,7 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // NumPy's np.nanquantile body is TensorEngine.NanQuantile's (a null q is reported there, after the complex
             // check).
-            return QuantileFamilyEngine(a).NanQuantile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
+            return EngineOf(a).NanQuantile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
                 overwrite_input, method, keepdims, weights);
         }
 
@@ -196,7 +196,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanquantile body is TensorEngine.NanQuantile's.
-            return QuantileFamilyEngine(a).NanQuantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return EngineOf(a).NanQuantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -265,7 +265,7 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanquantile body is TensorEngine.NanQuantile's (a null q is reported there, after the complex
             // check).
-            return QuantileFamilyEngine(a).NanQuantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return EngineOf(a).NanQuantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>
@@ -330,7 +330,7 @@ namespace NumSharp
                 return NDMatrixBoundary.Reduced((a, q, axis, @out, overwrite_input, method, keepdims, weights), static s => nanquantile(s.a, s.q, s.axis, s.@out, s.overwrite_input, s.method, s.keepdims, s.weights), axis, keepdims, null);
             // NumPy's np.nanquantile body is TensorEngine.NanQuantile's: a null or text q, the range check at any rank,
             // an integer q's index taken instead of interpolated, a weak C# literal, q's rank, all in NumPy's order.
-            return QuantileFamilyEngine(a).NanQuantile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
+            return EngineOf(a).NanQuantile(a, q, axis.HasValue ? new[] { axis.Value } : null, @out,
                 overwrite_input, method, keepdims, weights);
         }
 
@@ -392,7 +392,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(a, @out);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             // NumPy's np.nanquantile body is TensorEngine.NanQuantile's (see the one-axis overload).
-            return QuantileFamilyEngine(a).NanQuantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
+            return EngineOf(a).NanQuantile(a, q, axis, @out, overwrite_input, method, keepdims, weights);
         }
 
         /// <summary>

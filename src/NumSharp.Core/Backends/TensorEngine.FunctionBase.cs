@@ -233,5 +233,44 @@ namespace NumSharp
         /// </remarks>
         public abstract NDArray Cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false, int? ddof = null,
             NDArray fweights = null, NDArray aweights = null, DType dtype = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.gradient(f, *varargs, axis=None, edge_order=1)</c>: one fresh array per requested axis, with
+        ///     second-order central differences inside and first- or second-order one-sided differences at both ends; each
+        ///     component has <paramref name="f"/>'s shape.
+        /// </summary>
+        /// <param name="f">The sampled values, a plain array (null is refused by the body's first statement).</param>
+        /// <param name="varargs">NumPy's <c>*varargs</c>: no entry (unit steps), one scalar for every axis, or one entry per
+        ///     requested axis, each a scalar step (a C# number is a Python number, weak) or a 1-D coordinate array as long
+        ///     as its axis.</param>
+        /// <param name="axis">The axes to differentiate along (negative values count from the end), or null for every axis.
+        ///     A one-axis call passes a one-element array. (DefaultEngine's override names it <c>axisArg</c>: its loop
+        ///     rebinds NumPy's <c>axis</c>.)</param>
+        /// <param name="edge_order">The boundary order: 1 gives first-order ends; any other value up to 2 (0 and negative
+        ///     values included, as NumPy reads them) gives second-order ends.</param>
+        /// <returns>One component per requested axis, a single array when exactly one axis was requested (NumPy's bare
+        ///     ndarray), none for a 0-d <paramref name="f"/> without an axis.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="f"/> is null.</exception>
+        /// <exception cref="AxisError">An axis outside <c>[-f.ndim, f.ndim)</c>.</exception>
+        /// <exception cref="ValueError">A repeated axis; a ragged list spacing; a coordinate array of another rank than 1 or
+        ///     another length than its axis; <paramref name="edge_order"/> above 2; an axis shorter than
+        ///     <c>edge_order + 1</c>.</exception>
+        /// <exception cref="NotSupportedException">A list spacing holding None or another object, or a Python int past
+        ///     uint64 (NumPy's object array).</exception>
+        /// <exception cref="TypeError">A spacing count other than 0, 1 or the number of axes; a bool
+        ///     <paramref name="f"/> with a scalar step or first-order edges (NumPy's boolean subtract); a text
+        ///     <paramref name="f"/>; bool coordinates; a str or None step.</exception>
+        /// <exception cref="IndexError">The coordinates of an empty axis.</exception>
+        /// <exception cref="DivideByZeroException">A zero step that is a Python number with second-order edges (CPython's
+        ///     ZeroDivisionError); a decimal input or step divided by zero.</exception>
+        /// <exception cref="OverflowException">A Python int step past the float range; a decimal result past decimal's
+        ///     range.</exception>
+        /// <remarks>
+        ///     NumPy writes gradient in Python; DefaultEngine's override runs its statements, each in NumPy's dtype, so the
+        ///     components are bit-identical to NumPy's. <c>np.gradient</c>'s overloads spread their spacings into one list,
+        ///     apply the matrix boundary's plain region and call this; an override replaces it for every array whose engine
+        ///     it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>GradientEngine</c>.
+        /// </remarks>
+        public abstract np.GradientResult Gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1);
     }
 }
