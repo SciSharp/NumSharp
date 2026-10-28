@@ -272,6 +272,14 @@ namespace NumSharp.Backends
                 // product, which NumPy DOES take through the FMA array loop, so it keeps NumSharp's
                 // (now FMA) complex multiply. (Real dtypes have no scalar/array multiply distinction.)
                 NDArray rk = r[k.ToString()];
+                // q[k] = d is NumPy's scalar setitem. d = scale * r[k] has the dimensions of v[0] and r[k], a row when u
+                // or v is N-D, and a d with dimensions is a sequence: a complex slot refuses it through complex()
+                // (TypeError), a real one as a sequence (ValueError). Checked before d is formed: forming it cannot fail
+                // once w = u[0] + v[0] did not (the same shapes), and the complex product below reads one element.
+                if (scale.ndim != 0 || rk.ndim != 0)
+                    throw w == NPTypeCode.Complex
+                        ? new TypeError("only 0-dimensional arrays can be converted to Python scalars")
+                        : new ValueError("setting an array element with a sequence.");
                 NDArray d = w == NPTypeCode.Complex ? NaiveComplexScalarMultiply(scale, rk) : scale * rk;
                 q[$"{k}:{k + 1}"] = np.atleast_1d(d);
                 // r[k : k+n+1] -= d * v   (an in-place, length-(n+1) vector update)
