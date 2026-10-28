@@ -299,5 +299,20 @@ namespace NumSharp
         ///     plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
         /// </remarks>
         public abstract NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1);
+
+        /// <summary>
+        ///     NumPy's <c>np.sinc(x)</c>, the normalized sinc <c>sin(pi*x) / (pi*x)</c>: <c>y = pi * x</c>, every exact
+        ///     zero of <c>y</c> replaced by the machine epsilon of <c>y</c>'s dtype (1e-20 for a dtype that is not float),
+        ///     then <c>sin(y) / y</c>, so the removable singularity gives its limit 1.
+        /// </summary>
+        /// <param name="x">The input, any dtype and layout (not null).</param>
+        /// <returns>The values, of <c>pi * x</c>'s dtype: float64 for bool, integers and char; float16 / float32 /
+        ///     float64 kept; complex128 for complex; decimal for decimal (the double bridge).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="TypeError">A text operand: <c>pi * x</c> has no loop (NumPy's no-loop texts).</exception>
+        /// <exception cref="OverflowException">A decimal <paramref name="x"/> whose <c>pi * x</c> leaves the decimal
+        ///     range.</exception>
+        /// <remarks>DefaultEngine runs the four statements as one fused <c>np.evaluate</c> pass.</remarks>
+        public abstract NDArray Sinc(NDArray x);
     }
 }
