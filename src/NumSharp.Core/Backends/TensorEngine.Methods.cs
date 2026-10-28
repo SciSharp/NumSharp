@@ -510,5 +510,65 @@ namespace NumSharp
         ///     plain region and calls this.</remarks>
         public abstract NDArray Trace(NDArray a, int offset = 0, int axis1 = 0, int axis2 = 1, DType dtype = null,
             NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.ptp</c> (<c>_methods._ptp</c>): the range, <c>maximum.reduce(a, axis) -
+        ///     minimum.reduce(a, axis)</c>, in <paramref name="a"/>'s own dtype, so an integer range wraps exactly as NumPy's
+        ///     does (<c>ptp(int8 [-128, 127])</c> is -1).
+        /// </summary>
+        /// <param name="a">
+        ///     The array, a plain one (<c>np.ptp</c> decides the <c>numpy.matrix</c> class first). Numbers and StringDType;
+        ///     fixed-width text is refused as NumPy's <c>maximum.reduce</c> refuses it.
+        /// </param>
+        /// <param name="axis">
+        ///     The reduced axis (negative counts from the end; a 0-d array accepts 0 and -1), or null for every axis.
+        /// </param>
+        /// <param name="out">
+        ///     NumPy's <c>out=</c>: an array of the result's shape that receives the range and is returned, or null for a
+        ///     fresh result. NumPy parses it before anything else, so a read-only out fails first.
+        /// </param>
+        /// <param name="keepdims">Whether the reduced axis stays with length one.</param>
+        /// <returns>
+        ///     <paramref name="out"/> itself when given; otherwise a fresh array, read-only when 0-d (NumPy's scalar).
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a text out: NumPy's maximum.reduce has no such loop.</exception>
+        /// <exception cref="ValueError">
+        ///     A read-only out, an empty reduction (NumPy's maximum has no identity), or a StringDType subtraction NumPy
+        ///     refuses.
+        /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
+        /// <remarks>
+        ///     NumPy writes ptp in Python (<c>numpy/_core/_methods.py</c>); DefaultEngine's override runs those statements
+        ///     over <see cref="ReduceAMax"/> and <see cref="ReduceAMin"/>. An override replaces <c>np.ptp</c> for every
+        ///     array whose engine it is, and the tuple-axis overload re-enters this one for a single axis or for every
+        ///     axis. New in 0.71.0 (the np-layer dtype plan, phase PE); it was an internal static of DefaultEngine.
+        /// </remarks>
+        public abstract NDArray Ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.ptp(a, axis=(...))</c>: the range over the axes of a tuple, with <c>maximum.reduce</c>'s tuple
+        ///     checks first (every axis in range, then no axis twice).
+        /// </summary>
+        /// <param name="a">The array, a plain one (the facade decides the <c>numpy.matrix</c> class first).</param>
+        /// <param name="axis">
+        ///     The reduced axes (negative values count from the end), or null for every axis. An empty tuple reduces
+        ///     nothing: the result is <c>a - a</c>.
+        /// </param>
+        /// <param name="out">NumPy's <c>out=</c>, or null for a fresh result.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one.</param>
+        /// <returns><paramref name="out"/> itself when given; otherwise the range, dtype preserved.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError">An axis is out of range (a 0-d input has no axis for a tuple to name).</exception>
+        /// <exception cref="ValueError">An axis appears twice (<c>duplicate value in 'axis'</c>).</exception>
+        /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's loop refusal).</exception>
+        /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
+        /// <remarks>
+        ///     A tuple of one axis, or of every axis, re-enters <see cref="Ptp(NDArray, int?, NDArray, bool)"/> through
+        ///     virtual dispatch, so an override of that member sees those calls too. New in 0.71.0 (the np-layer dtype
+        ///     plan, phase PE).
+        /// </remarks>
+        public abstract NDArray Ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false);
     }
 }

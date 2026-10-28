@@ -27,14 +27,14 @@ namespace NumSharp.Backends
         /// <exception cref="ArgumentException"><paramref name="out"/> does not have the result's shape.</exception>
         /// <remarks>
         ///     Moved from the public <c>np.ptp(a, int? axis, out, keepdims)</c> by the np-layer dtype plan's P1b, statement for
-        ///     statement. NumPy's ptp is a Python function, so its body is an internal member here rather than a
-        ///     TensorEngine one (decision D1, as np.angle's). The facade's <c>np.amax</c> / <c>np.amin</c> calls became the
-        ///     engine members they reach for a plain operand (<see cref="TensorEngine.ReduceAMax"/> /
-        ///     <see cref="TensorEngine.ReduceAMin"/>: no <c>out=</c>, <c>initial=</c> or <c>where=</c>, and the matrix rule
-        ///     has already been applied).
+        ///     statement; the facade's <c>np.amax</c> / <c>np.amin</c> calls became the engine members they reach for a
+        ///     plain operand (<see cref="TensorEngine.ReduceAMax"/> / <see cref="TensorEngine.ReduceAMin"/>: no
+        ///     <c>out=</c>, <c>initial=</c> or <c>where=</c>, and the matrix rule has already been applied). The plan's phase
+        ///     PE (E1) made it DefaultEngine's override of <see cref="TensorEngine.Ptp(NDArray, int?, NDArray, bool)"/>; it
+        ///     was an internal static.
         /// </remarks>
         [NDScoped] // the two extremes are this call's own temporaries (the difference, or out, is yielded)
-        internal static NDArray Ptp(NDArray a, int? axis, NDArray @out, bool keepdims)
+        public override NDArray Ptp(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false)
         {
             // Text (input or out=): NumPy's maximum.reduce(a, axis, out=out) parses out (read-only), validates the axis (a
             // 0-d input accepts 0 and -1), then resolves its loop on (out, a) and refuses text with its verbatim text; see
@@ -70,9 +70,11 @@ namespace NumSharp.Backends
         /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's loop refusal).</exception>
         /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
         /// <remarks>Moved from the public tuple-axis <c>np.ptp</c> by the np-layer dtype plan's P1b, statement for
-        ///     statement; its re-entries into the one-axis overload call the one-axis member above.</remarks>
+        ///     statement; its re-entries into the one-axis overload call the one-axis member above, through virtual
+        ///     dispatch since phase PE made both of them DefaultEngine's overrides of
+        ///     <see cref="TensorEngine.Ptp(NDArray, int[], NDArray, bool)"/> and its one-axis sibling.</remarks>
         [NDScoped] // the chained extremes and the kept-dims difference are this call's own (the result, or out, is yielded)
-        internal static NDArray Ptp(NDArray a, int[] axis, NDArray @out, bool keepdims)
+        public override NDArray Ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
             // Text (input or out=): NumPy's maximum.reduce checks the tuple (every axis, then "duplicate value in
             // 'axis'"), then refuses text on (out, a) with its verbatim text; see NDStringUfuncs.ReduceError / ReduceOutError.

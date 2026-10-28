@@ -19,7 +19,8 @@ namespace NumSharp
         /// <returns><paramref name="out"/> itself when given; otherwise the range, a fresh array (read-only when 0-d:
         ///     NumPy's scalar); a <c>numpy.matrix</c> operand gives a matrix.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ptp.html — NumPy's whole function is
-        ///     <c>DefaultEngine.Ptp</c> (the np-layer dtype plan, P1b); this applies the matrix rule and calls it.</remarks>
+        ///     the engine's <see cref="TensorEngine.Ptp(NDArray, int?, NDArray, bool)"/> (the np-layer dtype plan, P1b and
+        ///     PE); this applies the matrix rule and calls it.</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of range.</exception>
         /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's maximum.reduce refuses the loop).</exception>
@@ -32,8 +33,8 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             // NumPy's ptp is _methods._ptp: subtract(maximum.reduce(a, axis, out, keepdims), minimum.reduce(a, axis,
-            // keepdims), out). The whole function, its text routes included, is the engine's: DefaultEngine.Ptp.
-            return Backends.DefaultEngine.Ptp(a, axis, @out, keepdims);
+            // keepdims), out). The whole function, its text routes included, is the engine's: TensorEngine.Ptp.
+            return a.TensorEngine.Ptp(a, axis, @out, keepdims);
         }
 
         /// <summary>
@@ -52,16 +53,16 @@ namespace NumSharp
         ///     whose result cannot be a matrix.</exception>
         /// <exception cref="TypeError">Fixed-width text, or a text out (NumPy's maximum.reduce refuses the loop).</exception>
         /// <exception cref="ArgumentException"><paramref name="out"/> has the wrong shape.</exception>
-        /// <remarks>NumPy's whole function is <c>DefaultEngine.Ptp</c> (the np-layer dtype plan, P1b); this applies the
-        ///     matrix rule and calls it.</remarks>
+        /// <remarks>NumPy's whole function is the engine's <see cref="TensorEngine.Ptp(NDArray, int[], NDArray, bool)"/>
+        ///     (the np-layer dtype plan, P1b and PE); this applies the matrix rule and calls it.</remarks>
         [NDScoped]
         public static NDArray ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
-            // NumPy's ptp with a tuple axis (maximum.reduce's tuple checks first) is the engine's too: DefaultEngine.Ptp.
-            return Backends.DefaultEngine.Ptp(a, axis, @out, keepdims);
+            // NumPy's ptp with a tuple axis (maximum.reduce's tuple checks first) is the engine's too: TensorEngine.Ptp.
+            return a.TensorEngine.Ptp(a, axis, @out, keepdims);
         }
     }
 }
