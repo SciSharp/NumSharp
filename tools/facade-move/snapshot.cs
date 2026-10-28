@@ -23,8 +23,9 @@
 // prepared), so the snapshots of the other functions are what they were. Compare only snapshots made the same way.
 //
 // A name "np.f" is every public static overload of np.f; "np.linalg.f" every public static overload of np.linalg.f (run on
-// pools of square matrices, stacks, rectangles and empties, see LinalgLayouts); "NDArray.f" every public instance overload
-// declared on NDArray;
+// pools of square matrices, stacks, rectangles and empties, see LinalgLayouts); "np.emath.f" every public instance overload
+// declared on the module class EmathModule, called on np.emath (its first array parameter is the operand, logn's x and
+// power's exponent p are the second operand); "NDArray.f" every public instance overload declared on NDArray;
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
 // NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
 // np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too.
@@ -188,9 +189,10 @@ static class Snapshot
     ///     Snapshots every overload of one target.
     /// </summary>
     /// <param name="target"><c>np.name</c> for the public static overloads of <c>np.name</c>, <c>np.linalg.name</c> for
-    ///     those of the module class <c>np.linalg</c>, <c>NDArray.name</c> for the public instance overloads declared on
-    ///     NDArray (<c>NDArray.op_X</c> for its static operators), <c>NDMatrix.name</c> for the public instance overloads
-    ///     declared on NDMatrix.</param>
+    ///     those of the module class <c>np.linalg</c>, <c>np.emath.name</c> for the public instance overloads declared on the
+    ///     module class <see cref="EmathModule"/> (called on <c>np.emath</c>), <c>NDArray.name</c> for the public instance
+    ///     overloads declared on NDArray (<c>NDArray.op_X</c> for its static operators), <c>NDMatrix.name</c> for the public
+    ///     instance overloads declared on NDMatrix.</param>
     /// <returns>The output lines, overloads ordered by signature.</returns>
     /// <exception cref="ArgumentException">The target names no overload.</exception>
     /// <remarks>
@@ -200,9 +202,11 @@ static class Snapshot
     /// </remarks>
     public static IEnumerable<string> Run(string target)
     {
-        // np.linalg.f is a member of the nested module class np.linalg: the name is what follows the LAST dot.
+        // np.linalg.f is a member of the nested module class np.linalg, np.emath.f an instance member of the module object
+        // np.emath: the name is what follows the LAST dot.
         bool onLinalg = target.StartsWith("np.linalg.", StringComparison.Ordinal);
-        string name = target.Substring((onLinalg ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
+        bool onEmath = target.StartsWith("np.emath.", StringComparison.Ordinal);
+        string name = target.Substring((onLinalg || onEmath ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
         bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
         bool onMatrix = target.StartsWith("NDMatrix.", StringComparison.Ordinal);
         // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is.
@@ -215,7 +219,9 @@ static class Snapshot
                         ? typeof(NDArray).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.DeclaringType == typeof(NDArray))
                         : onLinalg
                             ? typeof(np.linalg).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                            : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
+                            : onEmath
+                                ? typeof(EmathModule).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(EmathModule))
+                                : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
             .Where(m => m.Name == name && !m.IsGenericMethodDefinition)
             .Select(m => (Method: m, Signature: Signature(target, m)))
             .OrderBy(t => t.Signature, StringComparer.Ordinal)
@@ -351,6 +357,15 @@ static class Snapshot
         && p.Member.Name is "convolve" or "correlate";
 
     /// <summary>
+    ///     Whether a parameter belongs to an np.emath function, whose exponent <c>p</c> (np.emath.power) is the second operand:
+    ///     np.linalg's norm / cond name an order <c>p</c> with another meaning, and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public instance member of <see cref="EmathModule"/>.</returns>
+    private static bool IsEmath(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(EmathModule);
+
+    /// <summary>
     ///     Classifies a parameter.
     /// </summary>
     /// <param name="p">The parameter.</param>
@@ -387,6 +402,8 @@ static class Snapshot
                 // ar2: the set routines np.union1d / np.intersect1d / np.setxor1d / np.setdiff1d (ar1 is the operand), which
                 // run np.unique's body over their concatenation.
                 : n is "lhs" or "rhs" or "left" or "right" or "x" or "y" or "other" or "x2" or "b" or "a2" or "ar2" ? Role.Operand2
+                // np.emath.power's exponent (np.emath.logn's x is caught by the names above).
+                : n == "p" && IsEmath(p) ? Role.Operand2
                 // np.insert / np.delete's index array or mask, and np.insert's values array.
                 : n == "obj" && IsInsertOrDelete(p) ? Role.InsertObjArray
                 : n == "values" && IsInsertOrDelete(p) ? Role.InsertValues
@@ -1434,7 +1451,9 @@ static class Snapshot
     {
         try
         {
-            return m.Invoke(instance ? operand : null, argv);
+            // A static member has no receiver; an instance member of a module class (np.emath's) is called on its module
+            // object, with the operand among the arguments.
+            return m.Invoke(instance ? operand : m.IsStatic ? null : ModuleReceiver(m), argv);
         }
         catch (TargetInvocationException e) when (e.InnerException is not null)
         {
@@ -1442,6 +1461,16 @@ static class Snapshot
             throw;
         }
     }
+
+    /// <summary>The module object an instance member of a module class is called on.</summary>
+    /// <param name="m">An instance member declared on a module class.</param>
+    /// <returns><c>np.emath</c> for a member of <see cref="EmathModule"/>.</returns>
+    /// <exception cref="ArgumentException">A module class the tool does not know: its module object would have to be named
+    ///     here first.</exception>
+    private static object ModuleReceiver(MethodInfo m) =>
+        m.DeclaringType == typeof(EmathModule)
+            ? np.emath
+            : throw new ArgumentException($"no module object for {m.DeclaringType}");
 
     /// <summary>An exception as one line: its type's full name and its message, newlines escaped.</summary>
     /// <param name="e">The exception.</param>
