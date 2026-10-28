@@ -112,9 +112,18 @@ namespace NumSharp
 
         /// <summary>
         ///     Port of <c>einsum_path</c>'s <c>path_type</c> resolution — maps NumPy's Python-typed
-        ///     <c>optimize</c> onto C# types, in NumPy's exact decision order.
+        ///     <c>optimize</c> onto C# types, in NumPy's exact decision order. <c>np.einsum</c> runs it too, for any
+        ///     <c>optimize</c> but <c>False</c>, as NumPy's <c>einsum</c> calls <c>einsum_path</c>.
         /// </summary>
-        private static EinsumPathPlanner.Directive ResolveOptimize(object optimize)
+        /// <param name="optimize">NumPy's <c>optimize</c>: null (None) or a bool, a string (a path algorithm), an
+        ///     <see cref="EinsumPath"/> or a list headed <c>'einsum_path'</c> (an explicit path), or a
+        ///     <c>(string, number)</c> tuple or two-element <c>object[]</c> (an algorithm with a memory limit; a bool
+        ///     limit is Python's int).</param>
+        /// <returns>The planner directive: no optimization, an algorithm, an explicit path, or an algorithm with a
+        ///     memory limit.</returns>
+        /// <exception cref="TypeError">A number (<c>object of type 'int' has no len()</c>), or anything else NumPy's
+        ///     branches do not take (<c>Did not understand the path: ...</c>, with a Python repr of it).</exception>
+        internal static EinsumPathPlanner.Directive ResolveOptimize(object optimize)
         {
             // path_type = optimize; True -> 'greedy'; None -> False.
             object pathType = optimize;
@@ -209,16 +218,14 @@ namespace NumSharp
 
         /// <summary>
         ///     Whether a boxed value is a C# number that stands for NumPy's <c>(int, float)</c> in the
-        ///     <c>optimize=(name, memory_limit)</c> tuple: any integer or floating type, but not a bool, which NumPy's
-        ///     <c>isinstance(x, (int, float))</c> accepts.
+        ///     <c>optimize=(name, memory_limit)</c> tuple: any integer or floating type, and a bool, which NumPy's
+        ///     <c>isinstance(x, (int, float))</c> takes for an int.
         /// </summary>
         /// <param name="o">The tuple's second item.</param>
-        /// <returns>True for <c>int</c>, <c>long</c>, <c>short</c>, <c>byte</c>, <c>sbyte</c>, <c>uint</c>, <c>ulong</c>,
-        ///     <c>ushort</c>, <c>float</c>, <c>double</c> or <c>decimal</c>.</returns>
-        /// <remarks>Shared by <c>np.einsum_path</c> and <c>DefaultEngine</c>'s check of <c>np.einsum</c>'s
-        ///     <c>optimize=</c>, so it is internal.</remarks>
-        internal static bool IsNumber(object o) =>
-            o is int or long or short or byte or sbyte or uint or ulong or ushort or float or double or decimal;
+        /// <returns>True for <c>bool</c>, <c>int</c>, <c>long</c>, <c>short</c>, <c>byte</c>, <c>sbyte</c>, <c>uint</c>,
+        ///     <c>ulong</c>, <c>ushort</c>, <c>float</c>, <c>double</c> or <c>decimal</c>.</returns>
+        private static bool IsNumber(object o) =>
+            o is bool or int or long or short or byte or sbyte or uint or ulong or ushort or float or double or decimal;
 
         /// <summary>
         ///     Converts a numeric <c>optimize=("greedy", N)</c> memory limit to <see cref="BigInteger"/>.
@@ -228,6 +235,7 @@ namespace NumSharp
         /// </summary>
         private static BigInteger ToBigInteger(object o) => o switch
         {
+            bool flag => flag ? 1 : 0,   // Python's int(True)
             int i => i,
             long l => l,
             short s => s,
@@ -254,9 +262,7 @@ namespace NumSharp
         ///     item by item), or anything else through its invariant-culture string.</param>
         /// <returns>The rendering, e.g. <c>None</c>, <c>'greedy'</c>, <c>True</c>, <c>('greedy', 100)</c>,
         ///     <c>[1, 2]</c>.</returns>
-        /// <remarks>Shared by <c>np.einsum_path</c> and <c>DefaultEngine</c>'s check of <c>np.einsum</c>'s
-        ///     <c>optimize=</c>, so it is internal.</remarks>
-        internal static string PyRepr(object o)
+        private static string PyRepr(object o)
         {
             switch (o)
             {

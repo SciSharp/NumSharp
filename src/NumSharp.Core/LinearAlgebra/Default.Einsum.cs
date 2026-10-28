@@ -21,13 +21,16 @@ namespace NumSharp.Backends
             if (subscripts is null)
                 throw new ArgumentNullException(nameof(subscripts));
 
+            // NumPy's einsum hands any optimize= but False to einsum_path, whose path_type check runs before c_einsum
+            // looks at the operands, order= or casting=.
+            RequireOptimize(optimize);
+
             if (operands is null || operands.Length == 0)
                 throw new ValueError(
                     "must specify the einstein sum subscripts string and at least one operand");
 
             order = Backends.GufuncGuard.RequireOrder(order);   // a lowercase letter is NumPy's too
             Backends.GufuncGuard.RequireCasting(casting);
-            RequireOptimize(optimize);
 
             // Parse AND validate — rank, ellipsis grammar, operand count, output labels, out='s rank,
             // every diagonal and every label extent. Nothing past this line is reachable by an
@@ -624,36 +627,22 @@ namespace NumSharp.Backends
         /// <returns>The letter, or <c>...</c>.</returns>
         private static string Describe(char label) => label >= 0xE000 ? "..." : label.ToString();
 
-        /// <summary> NumPy's check of <c>optimize=</c> (the <c>path_type</c> branches of <c>np.einsum_path</c>): it
-        ///     accepts null, a bool, any string, an <see cref="EinsumPath"/>, NumPy's raw <c>['einsum_path', ...]</c>
-        ///     list and a <c>(string, number)</c> tuple, and refuses anything else. NumSharp contracts left to right
-        ///     whatever the path says, so the value is only checked.
+        /// <summary>
+        ///     NumPy's check of <c>optimize=</c>: <c>einsum</c> calls <c>c_einsum</c> directly for <c>False</c> (NumSharp's
+        ///     null default too) and hands anything else to <c>einsum_path</c>, whose <c>path_type</c> branches accept
+        ///     <c>True</c>, any string, an explicit path (an <see cref="EinsumPath"/> or a list headed
+        ///     <c>'einsum_path'</c>) and a <c>(string, int | float)</c> pair (a bool is an int there), and refuse the rest:
+        ///     the same resolution <c>np.einsum_path</c> runs (<c>np.ResolveOptimize</c>). NumSharp contracts left to right
+        ///     whatever the path says, so the resolved directive is dropped.
         /// </summary>
         /// <param name="optimize">The <c>optimize=</c> argument.</param>
-        /// <exception cref="TypeError">Any other value: <c>Did not understand the path: ...</c> with a Python
-        ///     repr of it.</exception>
+        /// <exception cref="TypeError">A number (<c>object of type 'int' has no len()</c>: NumPy's <c>len(path_type)</c>),
+        ///     or any other value NumPy does not understand (<c>Did not understand the path: ...</c>).</exception>
         private static void RequireOptimize(object optimize)
         {
-            // NumPy accepts False/True/'greedy'/'optimal' — and silently tolerates any other STRING,
-            // falling through to greedy. It also accepts a precomputed path from np.einsum_path (an
-            // EinsumPath, or NumPy's raw ['einsum_path', …] list) and a ('greedy'|'optimal', memory)
-            // tuple. NumSharp still contracts left-to-right whatever the path says (documented above),
-            // so this ACCEPTS-and-VALIDATES the same shapes NumPy does without acting on them.
-            switch (optimize)
-            {
-                case null:
-                case bool:
-                case string:
-                case EinsumPath:
-                    return;
-            }
-
-            if (optimize is ITuple tuple && tuple.Length == 2 && tuple[0] is string && np.IsNumber(tuple[1]))
+            if (optimize is null || optimize is false)
                 return;
-            if (optimize is object[] list && list.Length > 0 && (list[0] as string) == EinsumPath.Marker)
-                return;
-
-            throw new TypeError($"Did not understand the path: {np.PyRepr(optimize)}");
+            np.ResolveOptimize(optimize);
         }
     }
 }
