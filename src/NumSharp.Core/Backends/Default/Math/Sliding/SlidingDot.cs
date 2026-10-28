@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using NumSharp.Backends.Kernels;
 using NumSharp.Backends.Printing;
 using NumSharp.Backends.Strings;
 using NumSharp.Utilities;
@@ -771,14 +772,106 @@ namespace NumSharp.Backends
         /// Materialize <paramref name="x"/> to a contiguous, offset-0 array of dtype
         /// <paramref name="retType"/> (the sliding kernels walk the raw buffer from Address, which
         /// does not include Shape.offset). astype of a differing dtype already yields a fresh
-        /// contiguous array; a sliced/strided/broadcast/reversed view is copied.
+        /// contiguous array; a sliced/strided/broadcast/reversed view is copied — a one-dimensional one
+        /// by <see cref="CopyOneDimensional"/>, any other by <see cref="NDArray.copy"/>.
         /// </summary>
+        /// <param name="x">The operand (one-dimensional when it comes from the correlations).</param>
+        /// <param name="retType">The dtype the sliding kernels compute in.</param>
+        /// <returns><paramref name="x"/> itself when it already is a contiguous, offset-0 array of
+        ///     <paramref name="retType"/>, else a fresh one (the caller's scope reclaims it).</returns>
         internal static NDArray MaterializeForSliding(NDArray x, NPTypeCode retType)
         {
             NDArray t = x.GetTypeCode == retType ? x : x.astype(retType);
             if (t.Shape.IsSliced || t.Shape.IsBroadcasted)
-                t = t.copy();
+                t = CopyOneDimensional(t) ?? t.copy();
             return t;
+        }
+
+        /// <summary>
+        ///     The copy <see cref="MaterializeForSliding"/> makes of a one-dimensional view of its own dtype (np.convolve's
+        ///     reversed kernel, a stepped, offset or broadcast operand): a fresh contiguous array filled by ONE call of the
+        ///     strided move kernel, each element read where the view's stride puts it. The bits are
+        ///     <see cref="NDArray.copy"/>'s (a move of whole elements); the cost is not: the general copy spends about
+        ///     300 ns of setup beyond the allocation on a three-element view, which every short np.convolve kernel paid.
+        /// </summary>
+        /// <param name="view">A one-dimensional array whose layout the sliding kernels cannot walk.</param>
+        /// <returns>The contiguous copy, or null when <paramref name="view"/> has another rank or the kernel is unavailable
+        ///     (runtime IL generation off): the caller then makes the general copy.</returns>
+        private static unsafe NDArray CopyOneDimensional(NDArray view)
+        {
+            if (view.ndim != 1)
+                return null;
+            int itemSize = view.dtypesize;
+            var move = DirectILKernelGenerator.GetStridedMoveKernel(itemSize);
+            if (move is null)
+                return null;
+
+            long n = view.Shape.dimensions[0];
+            // Uninitialized: the move writes every element.
+            var copy = new NDArray(view.GetTypeCode, Shape.Vector(n), false);
+            // The view's first element is Storage.Address plus Shape.offset elements (a contiguous slice re-seats Address
+            // and keeps offset 0, a stepped one keeps the base and a non-zero offset, so the sum is right for both); a
+            // negative stride walks backwards from it, a zero one repeats it (a broadcast view).
+            byte* src = view.Storage.Address + view.Shape.offset * itemSize;
+            move((byte*)copy.Address, itemSize, src, view.Shape.strides[0] * itemSize, n);
+            return copy;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>_pyarray_revert</c>: reverses a freshly computed correlation IN PLACE, the last step of
+        ///     <c>PyArray_Correlate2</c> when it swapped its operands. The result keeps its own buffer, so it stays the
+        ///     fresh, C-contiguous, owning array NumPy returns; reversing through a view and copying it gave the same bits
+        ///     for a second allocation (about 1 us of a 1.6 us call over eight elements).
+        /// </summary>
+        /// <param name="ret">The result of <see cref="SlidingCorrelate"/>: one-dimensional, C-contiguous, offset 0, owning
+        ///     its buffer. No other array may share that buffer: its elements move.</param>
+        /// <exception cref="NotSupportedException">An element width other than 1, 2, 4, 8 or 16 bytes (no NumSharp
+        ///     dtype has one).</exception>
+        internal static unsafe void RevertInPlace(NDArray ret)
+        {
+            long n = ret.size;
+            if (n < 2)
+                return;
+            // Whole elements move as unsigned words of their width - a bit move, so a NaN payload, a signed zero or a
+            // decimal's scale travels unchanged (NumPy reverses the bytes and then byte-swaps every item: the same
+            // permutation of elements).
+            void* p = ret.Address;
+            switch (ret.dtypesize)
+            {
+                case 1: ReverseElements((byte*)p, n); break;
+                case 2: ReverseElements((ushort*)p, n); break;
+                case 4: ReverseElements((uint*)p, n); break;
+                case 8: ReverseElements((ulong*)p, n); break;
+                case 16: ReverseElements((Element16*)p, n); break;
+                default: throw new NotSupportedException($"No element width of {ret.dtypesize} bytes to reverse.");
+            }
+        }
+
+        /// <summary>Reverses <paramref name="n"/> elements in place.</summary>
+        /// <typeparam name="T">An unmanaged type of the elements' width (only its bits are moved).</typeparam>
+        /// <param name="p">The first element.</param>
+        /// <param name="n">The number of elements.</param>
+        /// <remarks><see cref="MemoryExtensions.Reverse{T}(Span{T})"/> is vectorized for the 1-, 2-, 4- and 8-byte widths;
+        ///     a run longer than a span can hold takes the two-pointer swap.</remarks>
+        private static unsafe void ReverseElements<T>(T* p, long n) where T : unmanaged
+        {
+            if (n <= int.MaxValue)
+            {
+                new Span<T>(p, (int)n).Reverse();
+                return;
+            }
+            for (T* lo = p, hi = p + (n - 1); lo < hi; lo++, hi--)
+                (*lo, *hi) = (*hi, *lo);
+        }
+
+        /// <summary>A 16-byte element (complex128, decimal) as two words, moved by <see cref="ReverseElements{T}"/>.</summary>
+        private struct Element16
+        {
+            /// <summary>The first eight bytes.</summary>
+            public ulong Lo;
+
+            /// <summary>The last eight bytes.</summary>
+            public ulong Hi;
         }
     }
 }

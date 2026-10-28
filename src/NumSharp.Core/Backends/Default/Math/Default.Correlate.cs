@@ -33,9 +33,9 @@ namespace NumSharp.Backends
         ///     operand's refusal or first-product error.</exception>
         /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy
         ///     computes.</exception>
-        /// <remarks>The materialized operands, the conjugate, and the first result of a reversed product are temporaries:
-        ///     the [NDScoped] weaver returns their buffers when the call ends, and only the returned array survives (the
-        ///     caller's operands are never tracked).</remarks>
+        /// <remarks>The materialized operands and the conjugate are temporaries: the [NDScoped] weaver returns their
+        ///     buffers when the call ends, and only the returned array survives (the caller's operands are never tracked).
+        ///     A swapped product is reversed in its own buffer, as NumPy's is.</remarks>
         [NDScoped]
         private NDArray CorrelateNumPy(NDArray a, NDArray v, string mode, bool correlate2)
         {
@@ -94,10 +94,10 @@ namespace NumSharp.Backends
                                      && (correlate2 || SlidingDot.DotOperandBlasable(v, retType, reversed: false));
             NDArray result = SlidingDot.SlidingCorrelate(data, kernel, retType, m, complexDotViaBlas);
 
-            // PyArray_Correlate2 reverses the output of an inverted product (ret = ret[::-1], _pyarray_revert);
-            // PyArray_Correlate leaves it as computed.
+            // PyArray_Correlate2 reverses the output of an inverted product in place (_pyarray_revert), so the result is
+            // still the fresh owning array; PyArray_Correlate leaves it as computed.
             if (correlate2 && inverted)
-                result = result["::-1"].copy();
+                SlidingDot.RevertInPlace(result);
 
             return result;
         }
