@@ -330,11 +330,18 @@ namespace NumSharp.Backends.Sorting
 
         /// <summary>The pre-axis stage of NumPy's array-kth conversion: a &gt;1-D kth is rejected
         /// with the verbatim conversion error BEFORE the axis is even looked at (probed:
-        /// <c>np.partition(a, [[1]], axis=9)</c> reports too-deep, not the axis).</summary>
+        /// <c>np.partition(a, [[1]], axis=9)</c> reports too-deep, not the axis). A null kth
+        /// passes: it rides through to the kth stage (<see cref="ExtractKthValues"/> hands it on,
+        /// <see cref="PrepKth"/> refuses it), where NumPy refuses kth=None ("Partition index must be
+        /// integer", after the axis), as the int[] form's null already did.</summary>
+        /// <param name="kth">The kth index array, or null.</param>
+        /// <exception cref="ValueError"><paramref name="kth"/> has more than one dimension.</exception>
         private static void KthTooDeepCheck(NDArray kth)
         {
+            // A null is not refused here: NumPy converts None to a 0-d object array, which passes this stage, and
+            // checks the axis before it refuses the dtype.
             if (kth is null)
-                throw new ArgumentNullException(nameof(kth));
+                return;
             if (kth.ndim > 1)
                 throw new ValueError("object too deep for desired array");
         }
@@ -347,8 +354,17 @@ namespace NumSharp.Backends.Sorting
         /// uint64 2^64-1 wraps to -1 and is a LEGAL last-element kth). Char (no NumPy dtype) is
         /// integer-family, so it rides the same route (house call). Any layout/0-d is normalized
         /// by the astype+ravel.</summary>
+        /// <param name="kth">The kth index array, or null.</param>
+        /// <returns>The positions as int64 values in C order (wrapped modularly), or null for a null
+        ///     <paramref name="kth"/>, which <see cref="PrepKth"/> then refuses.</returns>
+        /// <exception cref="ValueError">A bool index array.</exception>
+        /// <exception cref="TypeError">An index array of a non-integer dtype.</exception>
         private static long[] ExtractKthValues(NDArray kth)
         {
+            // Null rides through, as WidenKth's does for the int[] form, so PrepKth's ArgumentNullException fires at the
+            // kth stage, after the axis.
+            if (kth is null)
+                return null;
             if (kth.typecode == NPTypeCode.Boolean)
                 throw new ValueError("Booleans unacceptable as partition index");
             switch (kth.typecode)
