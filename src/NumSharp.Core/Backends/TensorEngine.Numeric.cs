@@ -1,5 +1,6 @@
 // The functions of numpy/_core/numeric.py that compute: isclose, allclose, argwhere, flatnonzero, count_nonzero,
-// array_equal, array_equiv, convolve and correlate (with NumPy's multiarray.correlate / correlate2 behind the last two).
+// array_equal, array_equiv, convolve and correlate (with NumPy's multiarray.correlate / correlate2 behind those two),
+// and cross.
 
 using System;
 using NumSharp.Backends;
@@ -170,5 +171,30 @@ namespace NumSharp
         ///     0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>ConvolveEngine</c>.
         /// </remarks>
         public abstract NDArray Convolve(NDArray a, NDArray v, string mode = "full");
+
+        /// <summary>
+        ///     NumPy's <c>np.cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None)</c>: the cross product of (arrays of)
+        ///     2- or 3-vectors taken along <paramref name="axisa"/> / <paramref name="axisb"/>, the other axes broadcast; a
+        ///     2-vector's missing third component is zero, and two 2-vectors give only the z-component.
+        /// </summary>
+        /// <param name="a">The first vector(s), at least 1-D.</param>
+        /// <param name="b">The second vector(s), at least 1-D.</param>
+        /// <param name="axisa">The axis of <paramref name="a"/> that holds the vectors (negative counts from the end).</param>
+        /// <param name="axisb">The axis of <paramref name="b"/> that holds the vectors.</param>
+        /// <param name="axisc">The axis of the result that holds the 3-vectors; ignored when both inputs are 2-vectors.</param>
+        /// <param name="axis">When given, the one axis of both inputs and the result; it overrides the other three.</param>
+        /// <returns>A new array in <c>promote_types(a.dtype, b.dtype)</c> over the broadcast leading axes, plus the 3-vector
+        ///     axis at <paramref name="axisc"/> unless both inputs are 2-vectors.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> or <paramref name="b"/> is null.</exception>
+        /// <exception cref="ValueError">A 0-D input (<c>At least one array has zero dimension</c>), or a vector length
+        ///     other than 2 or 3 (<c>incompatible dimensions for cross product</c>).</exception>
+        /// <exception cref="AxisError">An axis out of range for its operand, reported with its <c>axisa</c> / <c>axisb</c> /
+        ///     <c>axisc</c> prefix; <c>axisc</c> is checked against the result's rank right after the broadcast.</exception>
+        /// <exception cref="IncorrectShapeException">Leading axes that do not broadcast (<c>np.broadcast</c>'s text),
+        ///     raised before the dtype promotion.</exception>
+        /// <exception cref="TypeError">A text operand: multiply has no string loop (raised after the shape checks).</exception>
+        /// <remarks>DefaultEngine composes NumPy's statements over multiply, negative, subtract and moveaxis (no kernel of its
+        ///     own). The 2-vector forms are deprecated in NumPy 2.0; the warning is not modelled.</remarks>
+        public abstract NDArray Cross(NDArray a, NDArray b, int axisa = -1, int axisb = -1, int axisc = -1, int? axis = null);
     }
 }
