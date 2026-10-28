@@ -66,7 +66,7 @@ namespace NumSharp
         {
             using var plain = NDMatrixBoundary.PlainFor(m, y, fweights);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (m is null) throw new ArgumentNullException(nameof(m));
-            return CovEngine.Cov(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
+            return m.TensorEngine.Cov(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
         }
     }
 }

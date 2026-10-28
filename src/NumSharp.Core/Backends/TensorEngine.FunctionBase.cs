@@ -191,5 +191,47 @@ namespace NumSharp
         /// </remarks>
         public abstract (NDArray avg, NDArray sumOfWeights) Average(NDArray a, int[] axis = null, NDArray weights = null,
             bool returned = false, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.cov(m, y=None, rowvar=True, bias=False, ddof=None, fweights=None, aweights=None, *,
+        ///     dtype=None)</c>: the covariance matrix of the variables (rows of <paramref name="m"/> unless
+        ///     <paramref name="rowvar"/> is false, plus those of <paramref name="y"/>).
+        /// </summary>
+        /// <param name="m">The variables, a plain array (not null): 1-D or 2-D.</param>
+        /// <param name="y">An additional set of variables, or null.</param>
+        /// <param name="rowvar">Whether rows are variables (columns observations).</param>
+        /// <param name="bias">Normalize by N instead of N - 1 (overridden by <paramref name="ddof"/>).</param>
+        /// <param name="ddof">The delta degrees of freedom, or null for <paramref name="bias"/>'s default.</param>
+        /// <param name="fweights">The integer frequency weights, or null.</param>
+        /// <param name="aweights">The analytic weights, or null.</param>
+        /// <param name="dtype">The result dtype, or null for <c>result_type(m, y, float64)</c>.</param>
+        /// <returns>
+        ///     The covariance matrix (squeezed: a 0-d array for one variable), a fresh array the caller owns; an empty
+        ///     <c>(0, 0)</c> float64 array for no variables.
+        /// </returns>
+        /// <exception cref="ValueError">More than 2 dimensions; text variables whose <paramref name="m"/> and
+        ///     <paramref name="y"/> have different observation counts; a negative weight; text that does not parse into a
+        ///     numeric <paramref name="dtype"/>; a <c>StringDType</c> request over no observations.</exception>
+        /// <exception cref="IncorrectShapeException">Numeric variables with different observation counts (concatenate).</exception>
+        /// <exception cref="TypeError">A non-integral frequency weight; text the mean refuses.</exception>
+        /// <exception cref="RuntimeError">A malformed weight array.</exception>
+        /// <exception cref="DTypePromotionError"><c>StringDType</c> variables without <paramref name="dtype"/>, or a
+        ///     <c>StringDType</c> request with weights.</exception>
+        /// <exception cref="ArgumentException">An integer or bool <paramref name="dtype"/> (the in-place centring's cast
+        ///     refusal).</exception>
+        /// <exception cref="DivideByZeroException">Weights that sum to zero.</exception>
+        /// <exception cref="OverflowException">An integer text outside an integer <paramref name="dtype"/>, or decimal
+        ///     arithmetic out of range.</exception>
+        /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
+        /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
+        /// <remarks>
+        ///     NumPy writes cov in Python; DefaultEngine's override runs its statements (its product goes through
+        ///     <c>np.dot</c>, so the OpenBLAS backend computes it when installed). <c>np.cov</c> (and <c>np.corrcoef</c>
+        ///     through it) calls this after the matrix boundary's plain region and the null check; an override replaces it
+        ///     for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal
+        ///     class <c>CovEngine</c>.
+        /// </remarks>
+        public abstract NDArray Cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false, int? ddof = null,
+            NDArray fweights = null, NDArray aweights = null, DType dtype = null);
     }
 }

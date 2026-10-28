@@ -1,24 +1,55 @@
 using System;
 using NumSharp.Backends.Kernels;
 
-namespace NumSharp.Statistics
+// =============================================================================
+// Default.Cov.cs - DefaultEngine's np.cov (numpy/lib/_function_base_impl.py: cov)
+// =============================================================================
+//
+// DefaultEngine's override of TensorEngine.Cov (TensorEngine.FunctionBase.cs): NumPy's statements, statement for
+// statement - the operand checks, `X = array(m, ndmin=2, dtype=dtype)` and the empty-variables return, y's conversion
+// and concatenation, the frequency / analytic weight checks, the weighted mean and its weight sum (NumPy's
+// `average(..., returned=True)`), the normalization factor, the in-place centring `X -= avg[:, None]`, the product
+// `dot(X, X_T.conj())` (a managed Gram kernel for a few real variables without a BLAS backend), the scale and the closing
+// squeeze; and over text, NumPy's statements up to the reduction that refuses it.
+//
+// The body is the static CovFunction, because the text route (CovOfText, static) calls it again for parsed text; the
+// override owns the [NDScoped] scope both run under.
+//
+// History: the np-layer dtype plan's P2 moved these statements from the public np.cov into the internal operation class
+// CovEngine; its phase PE (E1) made that class this DefaultEngine partial. The facade keeps the matrix boundary's plain
+// region and the null check. The file sits beside the facade, not under Backends/, because its statements call the public
+// np.* functions NumPy's call (np.average, np.dot, np.concatenate, ...), which ratchet R2 counts under Backends/.
+// =============================================================================
+
+namespace NumSharp.Backends
 {
-    /// <summary>
-    ///     NumPy's <c>numpy.cov</c> (<c>numpy/lib/_function_base_impl.py</c>), statement for statement: the operand checks,
-    ///     <c>X = array(m, ndmin=2, dtype=dtype)</c> and the empty-variables return, <c>y</c>'s conversion and
-    ///     concatenation, the frequency / analytic weight checks, the weighted mean and its weight sum (NumPy's
-    ///     <c>average(..., returned=True)</c>), the normalization factor, the in-place centring <c>X -= avg[:, None]</c>, the
-    ///     product <c>dot(X, X_T.conj())</c> (a managed Gram kernel for a few real variables without a BLAS backend), the
-    ///     scale and the closing squeeze; and over text, NumPy's statements up to the reduction that refuses it.
-    /// </summary>
-    /// <remarks>
-    ///     An internal operation class (the np-layer dtype plan's D1: NumPy writes cov in Python), moved from the public
-    ///     <c>np.cov</c> by P2; the facade keeps the matrix boundary's plain region and the null check. It sits beside the
-    ///     facade, not under <c>Backends/</c>, because its statements call the public np.* functions NumPy's call
-    ///     (np.average, np.dot, np.concatenate, ...), which ratchet R2 counts under <c>Backends/</c>.
-    /// </remarks>
-    internal static class CovEngine
+    public partial class DefaultEngine
     {
+        /// <summary>
+        ///     DefaultEngine's <see cref="TensorEngine.Cov"/>: <see cref="CovFunction"/>, NumPy's whole body, under this
+        ///     member's scope.
+        /// </summary>
+        /// <param name="m">The variables (not null): a 1-D or 2-D array, rows are variables unless
+        ///     <paramref name="rowvar"/> is false.</param>
+        /// <param name="y">An additional set of variables, or null.</param>
+        /// <param name="rowvar">Whether rows are variables (columns observations).</param>
+        /// <param name="bias">Normalize by N instead of N - 1 (overridden by <paramref name="ddof"/>).</param>
+        /// <param name="ddof">The delta degrees of freedom, or null for <paramref name="bias"/>'s default.</param>
+        /// <param name="fweights">The integer frequency weights, or null.</param>
+        /// <param name="aweights">The analytic weights, or null.</param>
+        /// <param name="dtype">The requested dtype, or null for at least float64.</param>
+        /// <returns>The covariance matrix, which survives the scope (every intermediate is reclaimed).</returns>
+        /// <exception cref="Exception">The errors of <see cref="CovFunction"/>, in its order.</exception>
+        /// <remarks>
+        ///     The scope was np.cov's until the plan's phase PE (the body was <c>[NDScopedCovered]</c> under it); as a public
+        ///     entry point the override owns it now, so a direct engine caller's intermediates are reclaimed too. np.cov keeps
+        ///     its own <c>[NDScoped]</c> (nested scopes).
+        /// </remarks>
+        [NDScoped]
+        public override NDArray Cov(NDArray m, NDArray y = null, bool rowvar = true, bool bias = false, int? ddof = null,
+            NDArray fweights = null, NDArray aweights = null, DType dtype = null)
+            => CovFunction(m, y, rowvar, bias, ddof, fweights, aweights, dtype);
+
         /// <summary>
         ///     <c>cov(m, y, rowvar, bias, ddof, fweights, aweights, dtype)</c> after the facade's checks: NumPy's whole body.
         /// </summary>
@@ -49,8 +80,8 @@ namespace NumSharp.Statistics
         /// <exception cref="UnicodeEncodeError">A U → S conversion of non-ASCII text.</exception>
         /// <exception cref="UnicodeDecodeError">An S → U conversion of non-ASCII bytes.</exception>
         /// <exception cref="InvalidOperationException">Not reached (see <see cref="CovOfText"/>).</exception>
-        [NDScopedCovered] // only callers: np.cov ([NDScoped]) and CovOfText's parsed-text call, which runs under it
-        internal static NDArray Cov(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
+        [NDScopedCovered] // only callers: the [NDScoped] Cov override and CovOfText's parsed-text call, which runs under it
+        internal static NDArray CovFunction(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
             NDArray aweights, DType dtype)
         {
             // --- Check inputs. NumPy's "ddof must be integer" ValueError is enforced by the int? type. ---
@@ -72,7 +103,7 @@ namespace NumSharp.Statistics
 
             // Every intermediate below — atleast_2d/astype/T/concatenate, the weight casts and
             // validation masks, avg and its column view, Xc/Xt and the pre-scale c — is scope-
-            // tracked and reclaimed when np.cov's scope exits (throw paths included); only the
+            // tracked and reclaimed when the Cov override's scope exits (throw paths included); only the
             // yielded result survives. Inputs were constructed before the scope opened: never touched.
 
             int mNdim = m.ndim;
@@ -189,7 +220,7 @@ namespace NumSharp.Statistics
         ///     first reduction, so a bad weight wins over the refusal of text. The float64 temporaries belong to the
         ///     caller's <c>[NDScoped]</c> scope.
         /// </remarks>
-        [NDScopedCovered] // only callers: the [NDScoped] cov (the casts and validation masks are scope-reclaimed)
+        [NDScopedCovered] // only caller: CovFunction, under the [NDScoped] Cov override (casts and masks are reclaimed)
         private static NDArray CovWeights(NDArray fweights, NDArray aweights, long nobs, out NDArray aweightsCast)
         {
             NDArray w = null;
@@ -276,7 +307,7 @@ namespace NumSharp.Statistics
         /// <exception cref="RuntimeError">A malformed weight array.</exception>
         /// <exception cref="InvalidOperationException">Not reached: np.average refuses every text array, as NumPy's mean
         ///     does.</exception>
-        [NDScopedCovered] // only caller: the [NDScoped] cov (the conversion temporaries are scope-reclaimed)
+        [NDScopedCovered] // only caller: CovFunction, under the [NDScoped] Cov override (temporaries are reclaimed)
         private static NDArray CovOfText(NDArray m, NDArray y, bool rowvar, bool bias, int? ddof, NDArray fweights,
             NDArray aweights, DType dtype)
         {
@@ -297,7 +328,7 @@ namespace NumSharp.Statistics
                     return EmptyCovariance();
                 // y = array(y, ndmin=2, dtype=dtype): the same parse for text y; then the covariance of the numbers.
                 var ym = y is not null && Backends.Strings.NDStringUfuncs.IsText(y) ? y.astype(dtype, true, 'K', "unsafe") : y;
-                return Cov(xm, ym, rowvar, bias, ddof, fweights, aweights, dtype);
+                return CovFunction(xm, ym, rowvar, bias, ddof, fweights, aweights, dtype);
             }
             if (dtype is null)
             {
