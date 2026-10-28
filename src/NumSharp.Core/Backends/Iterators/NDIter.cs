@@ -248,31 +248,71 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        ///     NumPy's reference check of <c>npyiter_prepare_one_operand</c>: an operand (or requested descriptor) that HOLDS
-        ///     REFERENCES — a NEP 55 <c>StringDType</c> array, whose 16-byte cells point into their buffer's allocator — needs
+        ///     NumPy's reference check of <c>npyiter_prepare_one_operand</c>, over every operand the caller passed (see
+        ///     <see cref="ThrowIfReferenceOperandUnsupported"/>). An operand the iterator ALLOCATES (a null entry) is skipped,
+        ///     as NumPy's function returns for a NULL operand before the check: a <c>StringDType</c> output needs no
         ///     <see cref="NDIterGlobalFlags.REFS_OK"/>.
         /// </summary>
         /// <param name="nop">The number of operands.</param>
         /// <param name="op">The operands (null entries are allocated).</param>
         /// <param name="flags">The global flags.</param>
-        /// <param name="opDescrs">The requested descriptors, or null.</param>
-        /// <exception cref="TypeError">A reference operand without <see cref="NDIterGlobalFlags.REFS_OK"/> (NumPy's text:
-        ///     <c>Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled</c>).</exception>
+        /// <param name="opDescrs">The requested descriptors (a null entry, or a null array, means the operand's own).</param>
+        /// <exception cref="TypeError">A reference operand or request without <see cref="NDIterGlobalFlags.REFS_OK"/>.</exception>
         /// <remarks>
         ///     With the flag, a <c>StringDType</c> operand iterates in place, buffered and cast like any other: its buffer
         ///     transfers duplicate each string into the destination's allocator, or run the <c>StringDType</c> cast of the pair
         ///     (<see cref="NDIterVStringContext"/>, attached once the operands are final). This refused buffering and casting
-        ///     until strings phase 1, P1.7.
+        ///     until strings phase 1, P1.7. np.nditer runs the per-operand check itself first, at NumPy's position in its own
+        ///     construction passes (before its shape pass); this loop is then a repeat that cannot fail.
         /// </remarks>
         private static void ThrowIfReferenceOperandsUnsupported(int nop, NDArray[] op, NDIterGlobalFlags flags, DType[]? opDescrs)
         {
+            if ((flags & NDIterGlobalFlags.REFS_OK) != 0)
+                return;
             for (int i = 0; i < nop; i++)
             {
+                var operand = op[i];
+                if (operand is null)
+                    continue;
                 var requested = opDescrs != null && i < opDescrs.Length ? opDescrs[i] : null;
-                bool refs = (op[i] is not null && op[i].Storage.IsVString) || requested?.Meta is VStringDTypeMeta;
-                if (refs && (flags & NDIterGlobalFlags.REFS_OK) == 0)
-                    throw new TypeError("Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled");
+                // This runs in every iterator construction (every ufunc call): an operand with nothing requested whose
+                // storage is not StringDType's (the one dtype that holds references) cannot be refused, so it is passed
+                // without resolving its descriptor.
+                if (requested is null && !operand.Storage.IsVString)
+                    continue;
+                var own = operand.dtype;
+                ThrowIfReferenceOperandUnsupported(own, requested ?? own, flags);
             }
+        }
+
+        /// <summary>
+        ///     NumPy's reference check of <c>npyiter_prepare_one_operand</c> for ONE operand the caller passed: without
+        ///     <see cref="NDIterGlobalFlags.REFS_OK"/>, an operand whose own descriptor HOLDS REFERENCES — a NEP 55
+        ///     <c>StringDType</c> array, whose 16-byte cells point into their buffer's allocator — or whose iteration
+        ///     descriptor is ANOTHER descriptor that holds references (a <c>StringDType</c> request over a numeric array) is
+        ///     refused.
+        /// </summary>
+        /// <param name="own">The operand's own descriptor (NumPy's <c>PyArray_DESCR(op)</c>).</param>
+        /// <param name="iterDescr">The operand's iteration descriptor: <paramref name="own"/> itself when nothing was
+        ///     requested (or the operand's own descriptor was), else the request adapted to the array (NumPy's
+        ///     <c>op_dtype</c>).</param>
+        /// <param name="flags">The global flags.</param>
+        /// <exception cref="TypeError">NumPy's text: <c>Iterator operand or requested dtype holds references, but the
+        ///     NPY_ITER_REFS_OK flag was not enabled</c>.</exception>
+        /// <remarks>
+        ///     The request counts only when it is not the operand's own descriptor OBJECT (NumPy compares the pointers,
+        ///     <c>dt != *op_dtype</c>); the operand's own references are refused either way, so the distinction only decides
+        ///     whether a request equal to a numeric operand's descriptor is looked at, which cannot hold references. Callers
+        ///     run it where NumPy does: after the operand's write flag, its size and its requested dtype were checked, before
+        ///     the iteration shape is computed (an invalid <c>op_axes</c>, a mismatched <c>itershape</c> or broadcast is
+        ///     reported only for an operand that passed).
+        /// </remarks>
+        internal static void ThrowIfReferenceOperandUnsupported(DType own, DType iterDescr, NDIterGlobalFlags flags)
+        {
+            if ((flags & NDIterGlobalFlags.REFS_OK) != 0)
+                return;
+            if (own.hasobject || (!ReferenceEquals(iterDescr, own) && iterDescr.hasobject))
+                throw new TypeError("Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled");
         }
 
         // =========================================================================

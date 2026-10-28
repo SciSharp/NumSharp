@@ -45,7 +45,9 @@ namespace NumSharp
         /// <returns>The iterator (dispose it: <see cref="NDIterator.close"/> resolves its write-backs).</returns>
         /// <exception cref="ValueError">NumPy's argument and flag errors (verbatim texts), or a text that does not parse as the
         ///     number a copy or the first buffer fill reads it into (NumPy's <c>int()</c> / <c>float()</c> texts).</exception>
-        /// <exception cref="TypeError">A refused cast, or a cast operand neither copied nor buffered.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand, or a <c>StringDType</c> request over another operand,
+        ///     without <c>refs_ok</c> (checked per operand, before the iteration shape, as NumPy checks it; an output the
+        ///     iterator allocates is not checked); a refused cast, or a cast operand neither copied nor buffered.</exception>
         /// <exception cref="OverflowException">A text read into an integer dtype by a copy or the first buffer fill holds a
         ///     number outside that dtype (NumPy's OverflowError).</exception>
         /// <exception cref="OutOfMemoryException">A NEP 55 <c>StringDType</c> copy or buffer transfer cannot allocate a string
@@ -237,8 +239,9 @@ namespace NumSharp
             /// <exception cref="ValueError">NumPy's argument, flag, op_axes, shape-pass and stride-pass errors (verbatim
             ///     texts: a broadcast mismatch, an invalid or duplicate axis, a stretched no_broadcast operand, a refused
             ///     reduction), or a text that does not parse as the number a copy or the first buffer fill reads it into.</exception>
-            /// <exception cref="TypeError">A malformed <paramref name="op_dtypes"/> sequence, a refused cast, or a cast
-            ///     operand neither copied nor buffered.</exception>
+            /// <exception cref="TypeError">A malformed <paramref name="op_dtypes"/> sequence, a <c>StringDType</c> operand or
+            ///     request without <c>refs_ok</c> (before the shape pass), a refused cast, or a cast operand neither copied
+            ///     nor buffered.</exception>
             /// <exception cref="OverflowException">A text read into an integer dtype by a copy or the first buffer fill holds
             ///     a number outside that dtype.</exception>
             /// <exception cref="OutOfMemoryException">A <c>StringDType</c> copy or buffer transfer cannot allocate a string
@@ -617,8 +620,8 @@ namespace NumSharp
             /// <summary>
             ///     NumPy's <c>npyiter_prepare_operands</c>: each operand in turn — its flags
             ///     (<c>npyiter_check_per_op_flags</c>), the single ARRAYMASK, then <c>npyiter_prepare_one_operand</c> (the null /
-            ///     VIRTUAL rules, writeability, size, and the requested dtype adapted to the array) — then the
-            ///     WRITEMASKED / ARRAYMASK pairing.
+            ///     VIRTUAL rules, writeability, size, the requested dtype adapted to the array, and the reference check) — then
+            ///     the WRITEMASKED / ARRAYMASK pairing.
             /// </summary>
             /// <param name="op">The operands.</param>
             /// <param name="perOpFlags">The per-operand flags.</param>
@@ -628,12 +631,14 @@ namespace NumSharp
             /// <returns>Per operand, its iteration descriptor so far: the adapted request or the operand's own; for a null
             ///     operand the request (or bool for an ARRAYMASK), else null until <see cref="ResolveCommonDtype"/>.</returns>
             /// <exception cref="ValueError">NumPy's per-operand texts, in NumPy's order.</exception>
+            /// <exception cref="TypeError">Without <c>refs_ok</c>, a <c>StringDType</c> operand or a <c>StringDType</c> request
+            ///     over another operand (<see cref="NDIterRef.ThrowIfReferenceOperandUnsupported"/>); an output the iterator
+            ///     allocates is never checked, as in NumPy.</exception>
             /// <remarks>
             ///     An unsized string request is adapted to its array (<c>PyArray_AdaptDescriptorToArray</c>): <c>U3</c> under
             ///     <c>'U'</c> stays <c>&lt;U3</c>, <c>|S3</c> under <c>'U'</c> becomes <c>&lt;U3</c>, an int64 array under
-            ///     <c>'U'</c> becomes <c>&lt;U21</c> — the width a cast from the array would pick. NumPy's <c>refs_ok</c>, <c>nbo</c>
-            ///     and <c>aligned</c> checks have nothing to act on (NumSharp has no object dtype, and its arrays are native);
-            ///     they are not reproduced.
+            ///     <c>'U'</c> becomes <c>&lt;U21</c> — the width a cast from the array would pick. NumPy's <c>nbo</c> and
+            ///     <c>aligned</c> checks have nothing to act on (NumSharp's arrays are native) and are not reproduced.
             /// </remarks>
             private static DType[] PrepareOperands(NDArray[] op, NDIterPerOpFlags[] perOpFlags, DType[] requests,
                                                    NDIterGlobalFlags globalFlags, int nop)
@@ -692,6 +697,11 @@ namespace NumSharp
 
                     var own = op[i].dtype;
                     descrs[i] = request is null || ReferenceEquals(request, own) ? own : AdaptDescriptorToArray(own, request);
+
+                    // The reference check, where npyiter_prepare_one_operand runs it: after this operand's write flag, size
+                    // and requested dtype, before any later operand and before the shape pass. So without refs_ok a
+                    // StringDType operand is refused even when its op_axes, its itershape or a broadcast is also wrong.
+                    NDIterRef.ThrowIfReferenceOperandUnsupported(own, descrs[i], globalFlags);
                 }
 
                 if (anyWriteMasked && maskOp < 0)

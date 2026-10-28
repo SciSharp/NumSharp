@@ -587,6 +587,49 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
+        ///     NumPy checks for references where <c>npyiter_prepare_one_operand</c> runs, operand by operand: after the
+        ///     operand's write flag, its size and its requested dtype, before the iteration shape. So without <c>refs_ok</c> a
+        ///     <c>StringDType</c> operand gets the reference TypeError even when its <c>op_axes</c>, its <c>itershape</c> or
+        ///     its broadcast against another operand is wrong too (NumSharp reported those first), a numeric operand
+        ///     requesting <c>StringDType</c> gets it as well, while a read-only operand flagged for writing and an empty
+        ///     operand report their own errors first. An output the iterator ALLOCATES is never checked: a
+        ///     <c>StringDType</c> output needs no <c>refs_ok</c> and holds empty strings (NumSharp refused it). Probed against
+        ///     NumPy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void Nditer_ReferenceCheck_RunsWhereNumPyRunsIt()
+        {
+            const string Refs = "Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled";
+            using var s = A("a", "bb", "ccc");
+            using var x = np.arange(3.0);
+            using var seven = np.ones(new Shape(7));
+
+            ((Action)(() => np.nditer(s, op_axes: new[] { new[] { 1 } }).Dispose())).Should().Throw<TypeError>().WithMessage(Refs);
+            ((Action)(() => np.nditer(s, itershape: new long[] { 4 }).Dispose())).Should().Throw<TypeError>().WithMessage(Refs);
+            ((Action)(() => np.nditer(new[] { s, seven }).Dispose())).Should().Throw<TypeError>().WithMessage(Refs);
+            ((Action)(() => np.nditer(new[] { x, s }).Dispose())).Should().Throw<TypeError>().WithMessage(Refs);
+            ((Action)(() => np.nditer(x, op_dtypes: new[] { T }).Dispose())).Should().Throw<TypeError>().WithMessage(Refs);
+
+            // The checks npyiter_prepare_one_operand makes before it.
+            using var empty = A();
+            ((Action)(() => np.nditer(empty).Dispose())).Should().Throw<ValueError>()
+                .WithMessage("Iteration of zero-sized operands is not enabled");
+            using var stretched = np.broadcast_to(s, new Shape(2, 3));
+            ((Action)(() => np.nditer(stretched, op_flags: new[] { "readwrite" }).Dispose())).Should().Throw<ValueError>()
+                .WithMessage("operand array with iterator write flag set is read-only");
+
+            // An allocated StringDType output: no refs_ok needed.
+            using (var it = np.nditer(new NDArray[] { x, null }, op_dtypes: new DType[] { null, T }))
+            {
+                it.dtypes[1].ToString(true).Should().Be("StringDType()");
+                var outputs = new List<object>();
+                foreach (var step in it)
+                    outputs.Add(step[1].Storage.GetAtIndex(0));
+                outputs.Should().Equal(new object[] { "", "", "" });
+            }
+        }
+
+        /// <summary>
         ///     <c>tobytes()</c>: a buffer already in the requested order gives its own cells; any other layout is ravelled first
         ///     (NumPy 2.4.2's path for a dtype with references), so the copy's arena offsets start at 1 and follow the C walk.
         /// </summary>
