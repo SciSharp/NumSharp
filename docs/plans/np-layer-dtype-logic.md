@@ -492,6 +492,70 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-28, P2's fifteenth family: np.convolve / np.correlate moved to their layers (`TensorEngine.Correlate` /
+  `Correlate2`, `ConvolveEngine`, the kernels as `SlidingDot`), their mode NumPy's converter, the swapped product
+  reversed in place.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees:
+  the snapshot (np.convolve, np.correlate, NDArray.convolve, NDArray.correlate: 44,928 calls) with `SNAPSHOT_BYTES=1`
+  and `DOTNET_TieredCompilation=0` under `NUMSHARP_DEBUG_GUARD_PAGES=1`, `twin_sliding.py` (each line rebuilt in NumPy:
+  dtype, shape, C / F / OWNDATA / WRITEABLE flags and SHA-256, or the exception's type and text; NaN bits a verdict of
+  their own), `ab_lines.py` (parent against fix, the changed lines grouped by function, mode variant and outcome), and a
+  NumPy probe of the mode converter (28 values through both functions, the order against empty, 0-d and 2-D operands):
+  - `3fba426d` the snapshot tool reaches np.convolve / np.correlate's `v` (a kernel role: the operand's copy, int32 /
+    float64 / short / one-element / one-element reversed / long / special-value / bool / text / 0-d / 2-D / empty /
+    strided / reversed kernels) and their `mode` (the near misses `Full`, `v`, `same `, an unknown `x`, a quote, the
+    empty text and null), on 1-D pools with a 24-element layout: 44,928 calls (5,976 before, every 2-D operand stopping
+    at NumPy's depth check). Before any change the twin agreed on 36,744 of the 43,776 comparable lines (1,152 decimal
+    lines have no NumPy twin).
+  - `1f304ebc` the move (D1: NumPy writes convolve in Python and correlate in C): `multiarray.correlate` /
+    `correlate2` become the abstract `TensorEngine.Correlate` / `Correlate2` (DefaultEngine's `CorrelateNumPy`:
+    `PyArray_Correlate` / `PyArray_Correlate2` with `_pyarray_correlate`'s checks, in
+    `Backends/Default/Math/Default.Correlate.cs`), np.convolve's Python statements the operation class
+    `ConvolveEngine` (`Math/ConvolveEngine.cs`), and the sliding kernels that were NDArray members the class
+    `SlidingDot` (`Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs`). 44,928 calls byte-identical at
+    `TieredCompilation=0`; R1 drops the family's three rows (8 text and 20 numeric lines); R2 unchanged.
+  - `cf50c452` (D4) the mode is NumPy's `PyArray_CorrelatemodeConverter`: ValueError with NumPy's texts (it was
+    ArgumentException, with .NET's ` (Parameter 'mode')` suffix), the bad argument in Python's repr (`(got "it's")`; it
+    was `(got 'it's')`), a null mode, NumPy's None, TypeError `convolve/correlate mode not understood` (it was a
+    NullReferenceException), a lone surrogate CPython's UnicodeEncodeError before the parser. 22,652 snapshot lines
+    changed, every one a mode-error line; the twin's mismatches 7,032 -> 628.
+  - `25b193e6` step 2 (C11): a swapped np.correlate product is reversed in its own buffer (NumPy's `_pyarray_revert`; it
+    took a reversed view and a copy: 1,066 ns of a 1,641 ns call over eight elements) and a one-dimensional operand view
+    is copied by one strided move (`CopyOneDimensional`: the general copy spent ~300 ns of setup beyond the allocation
+    on np.convolve's three-element reversed kernel). The snapshot byte-identical; NPY/NS np.correlate(3, 8 values)
+    x0.57 -> x1.87, np.convolve(8, 3) x1.08 -> x1.33, np.convolve(int32 1000, 10, 'same') x3.76 -> x4.34,
+    np.convolve(float64 1000, 10) x1.96 -> x2.24. The move itself measured within +3.4 % of the base on every cell
+    but the 8 x 3 correlate, +5.5 % (+26 ns, inside that cell's 0.47-0.56 us spread across eight base runs; the
+    commit message's "+-3 %" undercounts it).
+  - Evidence at `25b193e6`: the twin agrees on 43,148 of the 43,776 comparable lines. The 628 left: 414 lines whose
+    result holds another NaN's bits than NumPy's (318 of them over the special-value kernel, the rest over the
+    special-value pool: where NaNs and infinities meet in a sum of products, which NaN survives is the compiled loop's
+    operand order, the class the branch notes record for float add / multiply), and 214 lines where NumPy computes a
+    StringDType product as Python objects (an object array: NotSupportedException, documented).
+  - **Found:**
+    - At the default tiering two runs of ONE build differ in five complex lines of NDArray.correlate (NaN signs): the
+      hand-written complex dot kernels give one NaN sign as tier-0 code and another optimized, and the optimized one is
+      NumPy's. This family's A/Bs run with tiering off; the tier-0 class is open.
+    - The twin hung for 27 minutes inside NumPy: its OBJECT fallback beside a StringDType operand computes
+      `4294967295 * "x"` for a uint32 operand (gigabyte strings). The twin now tames the numeric operand
+      (`np.ones_like`): the answer is an object array either way.
+    - NDArray.copy of a short strided one-dimensional view spends ~300 ns of setup beyond the allocation (775 ns for
+      three float64 values, a bare allocation 439): library-wide; the sliding kernels now bypass it.
+    - A facade whose body moved keeps `[NDScoped]`: `OperandRootsTests` (gap LT22) wants the weaver's operand roots at
+      NDArray.convolve / correlate's public entry, and the scope one call deeper does not satisfy it (both failed until
+      the scopes came back).
+    - NumPy also takes the integers 0 / 1 / 2 as the mode (`integer convolve/correlate mode must be 0, 1, or 2`
+      otherwise); NumSharp's mode parameters are strings, so that branch has no counterpart (documented).
+    - Harness traps: a background `cmd //c x.cmd` from Git Bash, and a nested `cmd /c y.cmd` inside a batch file, do not
+      resolve a relative script name (the nested cmd starts in another directory), so the runners are named by absolute
+      path (`%~dp0`); Python's `-I` ignores `PYTHONIOENCODING`, so a probe printing non-cp1252 text prints `ascii()`; a
+      mutated file restored with its old timestamp (`shutil.copy2`) is older than the mutant's build output, so MSBuild
+      skips the rebuild until the file is touched.
+  - Left: the 414 NaN-bit lines and the tier-0 NaN signs; np.convolve over 8 x 3 values at x1.33 (the reversed view,
+    then the kernel and the result at the NDArray allocation floor).
+  - At `25b193e6`: NumSharp.Tests net10.0 20,703 passed / 11 skipped and net8.0 20,702 / 11; Oracle net10.0 and net8.0
+    412 / 2 skipped, 0 failed.
+  - Next in P2: np.nditer (`APIs/np.nditer.cs`), then np.emath, np.sinc, np.digitize and the files of two lines or
+    fewer (the K3 list's order).
 - **2026-10-28, P2's fourteenth family: np.unique moved into `UniqueEngine`, its flat routes NumPy's `_unique1d`
   statements; np.argsort's float16 / complex128 radix on the way.** Commits on `strings`, developed in a scratch
   worktree and landed by fast-forward. The referees: the snapshot (np.unique, NDArray.unique's two members,

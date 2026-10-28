@@ -469,7 +469,7 @@ a unit below, that document wins.
   | **all** | **1.57** | **37.8** |
 
   Three kernels were added for the long products:
-  - blocked FMA long-product kernels without the backend (`Math/NDArray.SlidingDot.Long.cs`);
+  - blocked FMA long-product kernels without the backend (`Backends/Default/Math/Sliding/SlidingDot.Long.cs`);
   - an exact blocked float16 kernel;
   - a fused one-pass chebmulx IL kernel (`GetPolyChebMulxKernel`), which took chebmulx at 10000 terms from
     1.05–1.48× to 5.5–6.5×.
