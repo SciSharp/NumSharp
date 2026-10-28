@@ -17,7 +17,15 @@ now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two o
 carry NumPy's `out=` (the reducelike loop rule, the reduce prologue, `_mean` / `_var`'s statement order),
 numpy.matrix's reductions hold no text line, and six divergences found on the way got their fix commits (D4); the public
 np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 is
-next. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+under way: sixteen families by 2026-10-28, np.emath next. Progress goes into the [§9 state log](#9-state-log), newest
+entry first.
+
+**The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
+NumSharp moves becomes a `TensorEngine` member. Those NumPy writes in Python are declared in partial files named after
+NumPy's source files (`TensorEngine.FunctionBase.cs`, `TensorEngine.NanFunctions.cs`, ...), and `DefaultEngine` implements
+them. numpy.linalg and numpy.fft are the only new sub-engines (`TensorEngine.Linalg`, `TensorEngine.Fft`, beside `Blas`).
+The twelve operation classes P1 / P2 created before the decision move there in phase [PE](#pe-the-engine-layout), and
+[Appendix D](#appendix-d-where-every-numpy-function-lives) gives every NumPy function's home.
 
 **The answer.** It cannot simply be moved, but nothing blocks it. Most dtype lines can move as they are, as the same
 helper called one level down, and two families already show the result: `np.sum` and the four sort functions have no
@@ -36,9 +44,15 @@ The five that shape the plan:
 The plan moves each function family's whole body behind its public method, one family per commit, behind two ratchet
 tests and a NumSharp-against-NumSharp snapshot.
 
-**Inside `TensorEngine` itself?** Yes for every operation NumPy implements in C: those become (or already are)
-`TensorEngine` members, and the dtype switch sits in `DefaultEngine`'s override. For the functions NumPy writes in
-Python, the plan recommends the engine layer but not the public `TensorEngine` contract (D1); both are possible.
+**Inside `TensorEngine` itself?** Yes, for every function (D1, decided 2026-10-28):
+- An operation NumPy implements in C is an abstract `TensorEngine` member, and its dtype switch sits in `DefaultEngine`'s
+  override.
+- A function NumPy writes in Python is an abstract `TensorEngine` member too. It is declared in the partial file named
+  after its NumPy source file, and `DefaultEngine` implements it with NumPy's statements.
+- numpy.linalg and numpy.fft live in two sub-engines, `TensorEngine.Linalg` and `TensorEngine.Fft`. A provider library can
+  replace their kernels, as `Blas` lets OpenBLAS replace the BLAS / LAPACK routines.
+
+Until that decision the plan recommended the engine layer, but not the public contract, for NumPy's Python functions.
 
 **Background:** the 2026-10-22 analysis of the chararray boundary (231 `NDCharArrayBoundary.Sees(` on this branch) and
 its follow-ups, which found that text dtype decisions sit in two places: 205 lines inside the engine and 535 lines in
@@ -53,7 +67,7 @@ Three layers:
 | Layer | What it is | What it holds | What it never holds |
 |---|---|---|---|
 | **F**, the facade | the public `np.*` functions, the `NDArray` members and operators, the module classes (`np.linalg`, `np.fft`, ...) | the public signature and its XML docs; the conversions C# forces (implicit conversions at the call site, several C# overloads normalized into one call); the class-boundary statement (matrix, chararray); one call into O | a dtype test, numeric or text |
-| **O**, the operation | a `TensorEngine` member (pluggable, reached through `a.TensorEngine`), or an internal operation class (`QuantileEngine`, `AxisSort`, `NDPolySeries`) | NumPy's function body, statement for statement: its argument checks and its dtype checks in NumPy's order, the conversions NumPy makes late, the switch to a family core | a call into F |
+| **O**, the operation | a `TensorEngine` member: abstract, reached through `a.TensorEngine`, declared in the partial file of its NumPy source module and implemented by `DefaultEngine`; or a member of the `TensorEngine.Linalg` / `TensorEngine.Fft` sub-engine. The package internals of numpy.polynomial and numpy.ma (`NDPolySeries`, `NDMaskedArray`) keep their own classes. Until phase PE lands, also the twelve operation classes P1 / P2 created (`QuantileEngine`, ...) | NumPy's function body, statement for statement: its argument checks and its dtype checks in NumPy's order, the conversions NumPy makes late, the switch to a family core | a call into F |
 | **K**, the cores | the IL kernels, `NDIter`, `Backends/Strings` (S, U, StringDType), the cast implementations, the `DType` classes and their slots | the loops, per dtype family | NumPy's Python-level statements |
 
 Rules: F calls O. O calls O or K, never F. A dtype test lives only in O or K. A conversion that exists only because of
@@ -66,18 +80,33 @@ Python do not disappear: `if a.dtype.kind == "c": raise TypeError(...)` in `quan
 `if issubclass(z.dtype.type, _nx.complexfloating)` in `angle` move, unchanged and in NumPy's order, from the public
 method into O.
 
-**Which O** (decision D1):
+**Which O** (decision D1, as the owner decided it on 2026-10-28; the 2026-10-24 rule, which made NumPy's Python
+functions internal operation classes, is in [§5](#5-decisions-for-the-owner)):
 
-- A NumPy operation implemented in C (the ufuncs with their reduce and accumulate, sort / partition / searchsorted,
-  take / put / where, copy and cast, nonzero, the matmul family) is a `TensorEngine` member. Its dtype switch lives in
-  `DefaultEngine`'s override, as `ReduceAdd`'s StringDType route already does.
-- A NumPy function implemented in Python (the quantile family, histogram, cov, gradient, trapezoid, average, angle, the
-  set routines, numpy.polynomial, numpy.ma) is an internal operation class that composes `TensorEngine` members. It
-  belongs to the engine layer (new ones under `Backends/Default/<Family>/`, see C3) but not to the public pluggable
-  contract: a backend replaces the kernels the operation calls, not NumPy's Python.
-- Values entering storage (creation, assignment, IO, fill) belong to the `DType` class: NumPy's `setitem` / `getitem`
+- **NumPy's C core** is an abstract `TensorEngine` member: `_multiarray_umath`'s ufuncs with their reduce and accumulate,
+  the ndarray methods, and the C functions (sort / partition / searchsorted, take / put / where, copy and cast, nonzero,
+  the matmul family). Its dtype switch lives in `DefaultEngine`'s override, as `ReduceAdd`'s StringDType route already
+  does.
+- **A function NumPy writes in Python** (the quantile family, histogram, cov, gradient, trapezoid, average, angle, the
+  set routines, np.emath, the legacy np.poly*) is also an abstract `TensorEngine` member.
+  - It is declared in the partial file named after its NumPy source file: `numpy/lib/_function_base_impl.py` gives
+    `TensorEngine.FunctionBase.cs`, `numpy/lib/_nanfunctions_impl.py` gives `TensorEngine.NanFunctions.cs`, and so on;
+    [Appendix D](#appendix-d-where-every-numpy-function-lives) has the whole map.
+  - `DefaultEngine` implements it with NumPy's statements, in NumPy's order.
+  - No new operation classes.
+- **A sub-engine** is a settable `TensorEngine` property holding an abstract class with a public default implementation.
+  It reaches every array, because it sits on the cached engine. It exists only where an outside library can provide the
+  capability as a unit, or where NumSharp ships a port of one:
+  - `Blas`, the BLAS / LAPACK routines (exists);
+  - `Linalg`, numpy.linalg: its Python statements over the `_umath_linalg` kernels;
+  - `Fft`, numpy.fft: the `_raw_fft` statements over the pocketfft kernels.
+
+  A provider package derives from the default class and overrides the kernels.
+- **Values entering storage** (creation, assignment, IO, fill) belong to the `DType` class: NumPy's `setitem` / `getitem`
   slots (`PyArray_Pack`), which `DTypeMeta` does not port yet. The DType oracle lists `setitem` as exempt because
   "element packing goes through NPTypeCode switches (SetAtIndex / the cast kernels)".
+- **Packages with an object model of their own keep it:** numpy.random (its seam is NumPy's `BitGenerator`), the
+  numpy.polynomial package and numpy.ma (their internals are O already), np.strings / np.char ([§8](#8-out-of-scope)).
 
 **What the tree already shows:**
 
@@ -200,13 +229,17 @@ widened member is a breaking change for a subclass outside the repo; none is kno
 engine code without the engine object. The quantile family, histogram, cov, gradient, trapezoid, angle, ptp, trace and
 the NaN scans have no `TensorEngine` member at all.
 
-**Consequence.** For each family, D1 decides between a `TensorEngine` member and an internal operation class. New
-operation classes go under `Backends/Default/<Family>/`; existing ones (`QuantileEngine` in `Statistics/`, the `NDPoly*`
-classes in `Polynomial/Package/`) stay where they are, because moving files only adds conflicts. **Correction
-(2026-10-25, P2):** an operation class whose statements call np.* functions (every P2 composition: NumPy's Python
-calls NumPy's functions) sits beside its facade instead (`Statistics/HistogramEngine`, `Math/TrapezoidEngine`), because
-ratchet R2 counts np.* calls against every file under `Backends/` and would grow; `Backends/Default/<Family>/` holds the
-ones that compose engine members only.
+**Consequence.** Every family gets a member. D1, as decided on 2026-10-28, puts NumPy's Python functions on
+`TensorEngine` too, so no family needs an operation class any more.
+- **Declarations** go to the `TensorEngine` partial file of the function's NumPy module, under `Backends/`. They hold no
+  np.* call.
+- **Implementations** are `DefaultEngine`'s partials. They stay beside their facades while their statements still call
+  np.* functions, because ratchet R2 counts np.* calls against every file under `Backends/`: the twelve classes' bodies
+  hold 534 such calls. They move under `Backends/Default/` in P6.
+
+History. Until 2026-10-28 the consequence was an internal operation class for each Python-level family; twelve were
+created in P1 / P2, and phase [PE](#pe-the-engine-layout) moves them into members. The 2026-10-25 correction placed such
+a class beside its facade (`Statistics/HistogramEngine`, `Math/TrapezoidEngine`) for the same R2 reason.
 
 ### C4. The engine calls back up into np.*
 
@@ -334,23 +367,25 @@ operation class, or the `DType` slots.
 
 ## 5. Decisions for the owner
 
-The owner's answers (2026-10-24), and what they mean for the work:
+The owner's answers (2026-10-24; D1 again on 2026-10-28), and what they mean for the work:
 
 | # | Answer | Applied as |
 |---|---|---|
-| D1 | "look into it and decide when time comes to impl" | Decided per family when it moves. The pilot: `np.cumsum` / `np.cumprod` widen a `TensorEngine` member (NumPy does them in C); `np.median` moves into the existing internal class `QuantileEngine`; `np.angle`, a NumPy Python function, becomes the internal static `DefaultEngine.Angle`. |
+| D1 | 2026-10-24: "look into it and decide when time comes to impl". 2026-10-28, after an evaluation of the operation classes: "1. Confirmed, 2. Ok, 3. Fft, 4. Yes", and "the 'other' engines should be part of TensorEngine" | **Until 2026-10-28**, decided per family: C-level families widened a `TensorEngine` member, and Python-level families became internal operation classes. Twelve were created: `QuantileEngine`, `HistogramEngine`, `AverageEngine`, `CovEngine`, `GradientEngine`, `TrapezoidEngine`, `ConvolveEngine`, `LinalgEngine`, `ArrayEqualEngine`, `InsertEngine`, `IsinEngine`, `UniqueEngine`. **Since 2026-10-28**, the rule is [§1](#1-what-out-of-np-has-to-mean)'s "Which O": (1) a sub-engine only where an outside library can provide the capability, so `Blas`, `Linalg` and `Fft`; (2) `Linalg` takes the ten `_umath_linalg` members off `TensorEngine` (all ten shipped in 0.70.0 as public virtual members, so this breaks a subclass or a direct caller; accepted); (3) the FFT kernels are overridable members of the `Fft` sub-engine, not an interface; (4) NumPy's Python functions sit in partial files named after NumPy's source files; (5) they are `TensorEngine` members, implemented by `DefaultEngine`. Phase [PE](#pe-the-engine-layout) applies it to the twelve classes. |
 | D2 | yes | Widen in place: `ReduceCumAdd` / `ReduceCumMul` gained `out=` (`fe18431f`), listed under Breaking Changes. |
 | D3 | "idk, our code is healthy, use it as reference" | The current behavior is the reference: every move is held to NumSharp's own snapshot before and after, and a batch is whatever unit keeps that true (a function's whole body, text and numeric together). |
 | D4 | yes, small bugfix commits | A divergence found on the way gets its own commit (the pilot: `3f88d53f`). |
 | D5 | yes, on `strings` only | R1 / R2 run on `strings`. |
 | D6 | `strings` | Everything lands on `strings`. |
 | D7 | a TODO after the last phase | The class boundary stays in the facades until P7. |
+| D8 | open | The 61 NumPy Python functions whose facades hold no dtype logic (marked † in [Appendix D](#appendix-d-where-every-numpy-function-lives): the stack and split families, `broadcast_to`, the flips, `tri*`, the windows, `meshgrid`, `outer`, `tensordot`, ...) are outside this plan, which moves dtype logic. Recommended: make them `TensorEngine` members in a later pass, so that every array function has one home. The alternative leaves them as facades over engine calls. |
+| D9 | open | Installing an overriding `TensorEngine` for every array. `BackendFactory` has no setter, and an array binds its engine when it is created, so a `DefaultEngine` subclass reaches only the arrays it is given. The sub-engine properties sit on the cached engine and reach every array. |
 
 The recommendations as written before the answers:
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D1 | Where an O lives | By NumPy's own split: a C-level operation is a `TensorEngine` member; a Python-level function is an internal operation class that composes members (new ones under `Backends/Default/<Family>/`); values entering storage go to the `DType` slots. The alternative, every function as a public virtual `TensorEngine` member, puts all dtype handling literally inside the engine class but grows its public pluggable surface from 151 members to several hundred and asks a backend author to face NumPy's Python. |
+| D1 | Where an O lives | By NumPy's own split: a C-level operation is a `TensorEngine` member; a Python-level function is an internal operation class that composes members (new ones under `Backends/Default/<Family>/`); values entering storage go to the `DType` slots. The alternative, every function as a public virtual `TensorEngine` member, puts all dtype handling literally inside the engine class but grows its public pluggable surface from 151 members to several hundred and asks a backend author to face NumPy's Python. *Superseded on 2026-10-28 by the owner's answer above: NumPy's Python functions are `TensorEngine` members after all. They are grouped by NumPy's source files, and the pluggable sub-engines are limited to what a library provides.* |
 | D2 | How to widen engine members | In place, before 0.71.0 ships: change the abstract signatures, implement them in `DefaultEngine`, list the change under Breaking Changes. The alternative, new virtual overloads whose default refuses, breaks nobody but leaves two forms of each operation. |
 | D3 | The unit of a batch | A function family's whole body, text and numeric together. `np.cumsum` shows why: its text routes and its numeric `out=` handling are one prologue. |
 | D4 | A divergence found during a move | Fixed in its own commit in the same batch, proven first (NumPy probe, oracle cases), never inside the move commit, so every move commit is behavior-preserving. |
@@ -365,11 +400,18 @@ The recommendations as written before the answers:
 1. **Inventory.** The family's dtype and text lines, from the ratchet allowlist.
 2. **Read NumPy.** The function's source in `refs/numpy`: which statements are Python (they move to O as they are) and
    which are C (they belong to the engine member or the kernel).
-3. **Target.** Per D1: a `TensorEngine` member (widened per D2), an operation class, or the `DType` slots.
+3. **Target.** Per D1, one of three places:
+   - an abstract `TensorEngine` member, widened per D2 when it exists, declared in the partial file of the function's
+     NumPy module ([Appendix D](#appendix-d-where-every-numpy-function-lives)) and implemented by `DefaultEngine`;
+   - a member of `TensorEngine.Linalg` / `TensorEngine.Fft`;
+   - the `DType` slots.
+
+   A member has one NumPy-shaped signature: the facade normalizes its C# overloads before the call.
 4. **Snapshot.** Record NumSharp's outcomes for the family's call matrix on the parent commit (P0).
 5. **Move.** The facade keeps its signature, its XML docs, the boundary statement and the conversions C# forces;
-   everything else moves to the target in NumPy's statement order. The computational np.* calls of the moved code become
-   engine or core calls (C4).
+   everything else moves to the target in NumPy's statement order. The facade's one call is `a.TensorEngine.X(...)`; a
+   sub-engine is read into a local first (`var linalg = a.TensorEngine.Linalg;`, the `Blas` rule). The computational
+   np.* calls of the moved code become engine or core calls (C4).
 6. **Gates.** Build on net8.0 and net10.0 with no warnings; the snapshot identical; `NumSharp.Tests` on both frameworks
    (`TestCategory!=OpenBugs&TestCategory!=HighMemory`); the oracle (`FuzzMatrix`, the family's string-oracle sections);
    the leak gates; the benchmark cells of the touched functions (NPY/NS, no cell slower beyond noise).
@@ -435,12 +477,87 @@ The recommendations as written before the answers:
 
 ### P2. Compositions above the engine (K3, 150 lines in 43 files)
 
-For each function: first move the body as it is into an operation class (a pure move, snapshot-identical). Then try
+For each function: first move the body as it is into its D1 target, a pure move, snapshot-identical. Since 2026-10-28
+the target is a `TensorEngine` member in the partial file of its NumPy module, implemented by `DefaultEngine`, or a
+member of the `Linalg` / `Fft` sub-engine. Before that it was an operation class; phase [PE](#pe-the-engine-layout)
+converts those. Then try
 NumPy's own composition through engine calls, as its own commit, with the snapshot as the referee: where it gives the
 same answers, the error replay goes away; where it does not, the snapshot names an engine divergence the composition
 was working around, which gets its own fix first (D4). The pilot's `np.angle` is the second case (state log). Order by size: `np.histogram` 16, `np.histogramdd` 9, `np.trapezoid` 8,
 `np.searchsorted` 8, `np.cov` 8, `GufuncGuard` 7, `np.gradient` 6, `np.linalg` 5, `np.array_equal` 5, `np.insert` 5,
 `np.isin` (VString) 5, `np.average` 5, then the files of four lines or fewer.
+
+The next family, np.emath, is the first to land under the revised D1:
+- Its members go to `TensorEngine.Scimath.cs`, after `numpy/lib/_scimath_impl.py`, and `DefaultEngine` implements them.
+- Their names collide with the ufunc members (`sqrt`, `log`, `power`, ...), so they take the namespace as a prefix:
+  `EmathSqrt`, `EmathLog`, `EmathPower`, ...
+
+### PE. The engine layout
+
+The owner decided it on 2026-10-28 (D1); the rule is [§1](#1-what-out-of-np-has-to-mean)'s "Which O". This phase
+converts what P1 / P2 built before the rule, one family per commit. Each move is snapshot-identical and follows the
+method of [§6](#6-method-per-batch). New families do not wait for it: they land under the revised D1 directly.
+
+Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
+
+| Partial file (NumPy source) | Takes over |
+|---|---|
+| `TensorEngine.FunctionBase.cs` (`lib/_function_base_impl.py`) | `QuantileEngine`'s quantile / percentile / median, `AverageEngine`, `CovEngine`, `GradientEngine`, `TrapezoidEngine`, `InsertEngine` with np.delete's body, `DefaultEngine.Angle` |
+| `TensorEngine.NanFunctions.cs` (`lib/_nanfunctions_impl.py`) | `QuantileEngine`'s nanquantile / nanpercentile / nanmedian, `DefaultEngine.NanCumSum` / `NanCumProd` / `NanMeanNumPy` / `NanVarStdNumPy` |
+| `TensorEngine.Histograms.cs` (`lib/_histograms_impl.py`) | `HistogramEngine`, histogram2d included (NumPy's `_twodim_base_impl` wrapper of histogramdd) |
+| `TensorEngine.ArraySetOps.cs` (`lib/_arraysetops_impl.py`) | `IsinEngine`, `UniqueEngine` |
+| `TensorEngine.Numeric.cs` (`_core/numeric.py`) | `ArrayEqualEngine`, `ConvolveEngine` |
+| `TensorEngine.Methods.cs` (`_core/_methods.py`, beside `_mean` / `_var` / `_std`) | `DefaultEngine.Ptp` |
+
+- [ ] **E1, NumPy's Python layer on `TensorEngine`.** The declarations in the table's partial files are abstract and
+      documented in full; `DefaultEngine` implements them with today's bodies. Rules for the contract:
+  - One NumPy-shaped signature per function: the facade keeps normalizing its C# overloads.
+  - The plumbing parameters leave the signature. Quantile's `string op` becomes separate members (`Quantile` /
+    `Percentile` in FunctionBase, `NanQuantile` / `NanPercentile` in NanFunctions), and `QuantileArgument` an
+    `object q`. The `bool chararray` flag belongs to the class boundary, so it stays on an internal overload that the
+    facade calls for a chararray operand (P7).
+  - A public entry point owns its `[NDScoped]`. The `[NDScopedCovered]` entries (Cov, Histogramdd, Histogram2d,
+    Trapezoid, Insert) rely on a scoped caller, which a public member cannot.
+  - NumPy's private helpers (`_ureduce`, `_commonType`, `_assert_stacked_square`, ...) stay `internal static`, on
+    `DefaultEngine` or `DefaultLinalgEngine`. Their callers outside the facades re-point: the text routes
+    (`Backends/Strings`, `QuantileText`), the quantile kernel (`DirectILKernelGenerator.Quantile`), `QuantileWeighted`,
+    `NDPolyFit` and `NDMatrix.Operators` (LinalgEngine's helpers), `Default.SearchSorted` (InsertEngine's).
+  - The `NDArray` members that call a class today (`unique`, `convolve`, `array_equal`) become facades over the member.
+  - Placement follows C3.
+- [ ] **E2, `TensorEngine.Linalg`.**
+  - The name moves: today's internal `LinalgEngine` (one of the twelve) becomes the public abstract contract holding
+    numpy.linalg's functions. Its statements move to a public `DefaultLinalgEngine`, over `protected virtual`
+    `_umath_linalg` kernels.
+  - The kernels keep today's order: `Blas` first, then the managed LU for det / slogdet / inv / solve, or
+    `OpenBlasMissingBackendException` for the other six. An empty operand still answers without LAPACK (`LinAlgEmpty`).
+  - Ten members leave `TensorEngine`: Cholesky, Det, Slogdet, Eig, Eigh, Inv, Solve, Lstsq, Qr and Svd. All ten shipped
+    in 0.70.0 as public virtual members, so the move goes under Breaking Changes.
+  - The products (Dot, Matmul, Inner, Vdot, Vecdot, Matvec, Vecmat) stay on `TensorEngine`: they are NumPy's C core.
+- [ ] **E3, `TensorEngine.Fft`.**
+  - A public abstract `FftEngine` holds numpy.fft's 18 functions. A public `DefaultFftEngine` holds the `_raw_fft`
+    statements of `Fourier/np.fft.RawFft.cs`, over `protected virtual` c2c / r2c / c2r kernels split out of
+    `PocketFFTDriver.Execute`.
+  - `np.fft` (`FourierModule`) stays the facade.
+  - An MKL, FFTW or cuFFT package derives from `DefaultFftEngine` and overrides the kernels.
+- [ ] **E4, members that already exist** move to the partial file of their NumPy Python file. No API changes:
+  - IsClose, AllClose, MoveAxis, RollAxis, Argwhere, FlatNonZero, CountNonZero and Correlate go to Numeric;
+  - IsPosInf and IsNegInf go to UfuncLike;
+  - NanSum, NanProd, NanMax and NanMin go to NanFunctions.
+- [ ] **E5, C-level statics become members.**
+  - np.sort / np.argsort / np.partition / np.argpartition / np.lexsort get `TensorEngine` members (Sort, ArgSort,
+    Partition, ArgPartition, LexSort). `AxisSort`, `AxisPartition` and `RadixSort` stay their kernels.
+  - `DefaultEngine.MaxMinNumPy` becomes `ReduceAMax` / `ReduceAMin` with `out=` / `initial=` / `where=` (D2).
+  - `MeanOverAxes` / `ReduceAddOverAxes` become the tuple-axis forms of `ReduceMean` / `ReduceAdd`.
+  - `RichCompareEquality` stays internal: it is the operator protocol around `Compare`.
+- [ ] **E6, the C core's files.** `TensorEngine.cs` splits into `TensorEngine.Umath.cs` (the ufuncs), `.Methods.cs` (the
+      ndarray methods) and `.Multiarray.cs` (the C functions). This is file organization only.
+
+The gates are §6's, plus three rules:
+- A test per sub-engine sets a probe subclass on the cached engine's property (`Linalg`, `Fft`), calls the facade, checks
+  that the probe ran, and restores the default. It is `[DoNotParallelize]`: it changes process-wide state.
+- Never name a member group or property `Math`: inside the engine classes it would shadow `System.Math` (148 uses in
+  35 files). Nor `Sorting`, the `NumSharp.Backends.Sorting` namespace (10 uses).
+- A NumPy sub-namespace function whose name a core member already has takes the namespace as a prefix (`EmathSqrt`).
 
 ### P3. Values entering storage (K4, 153 lines in 52 files)
 
@@ -455,7 +572,8 @@ was working around, which gets its own fix first (D4). The pilot's `np.angle` is
 ### P4. numpy.polynomial and numpy.ma (K5, 61 lines in 14 files)
 
 - [ ] The legacy facades `np.polyval`, `np.polyint`, `np.polyarithmetic`, `np.poly` and `poly1d` move their bodies into
-      operation classes. The package internals (`NDPolySeries`, `NDPolyCalc`, `NDPolyVander`, `NDPolyEval`,
+      `TensorEngine` members in `TensorEngine.Polynomial.cs`, after `lib/_polynomial_impl.py` (D1). The package internals
+      (`NDPolySeries`, `NDPolyCalc`, `NDPolyVander`, `NDPolyEval`,
       `NDMaskedArray`) are O already: their dtype statements are NumPy's Python statements, and they stay.
 
 ### P5. Numeric-only functions
@@ -466,7 +584,8 @@ was working around, which gets its own fix first (D4). The pilot's `np.angle` is
 
 - [ ] The computational up-calls left after P1 to P5 become engine or core calls; the structural ones become internal
       helpers (allocation, `copyto`, `broadcast_to`, the buffer size). R2 ends at zero computations; any structural
-      call left is listed with its reason.
+      call left is listed with its reason. Then `DefaultEngine`'s partials of NumPy's Python layer move under
+      `Backends/Default/` (C3).
 
 ### P7. The class boundary
 
@@ -478,6 +597,10 @@ A loop registry (NEP 43 `ArrayMethod` loops for ufuncs, registered per DType cla
 no-loop error) would replace the 205 per-member text guards inside `DefaultEngine`. `docs/plans/dtype-system.md`
 already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
+D8's pass, if the owner takes it: the 61 NumPy Python functions without dtype logic (marked † in
+[Appendix D](#appendix-d-where-every-numpy-function-lives)) become `TensorEngine` members by the same method. D9 is the
+open question of installing an overriding engine for every array.
+
 ---
 
 ## 8. Out of scope
@@ -485,6 +608,8 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 - `np.strings`, `np.char` and `Char/` (the text API itself, 81 lines): dtype-specific by definition. They follow the same
   F / O rule when their own pass comes.
 - The engine's per-member text guards (205 lines in 62 files): already deep. See "Later".
+- numpy.random, the numpy.polynomial package and numpy.ma keep their own object models (D1). Their internals do not
+  become `TensorEngine` members.
 - The class boundary (P7).
 - Behavior changes, except a divergence found and proven during a move (D4).
 
@@ -492,6 +617,31 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-28, D1 decided again: the engine layout.** No code changed; this entry records the owner's decision and what
+  it changes in the plan. The owner answered an evaluation of the twelve operation classes:
+  - a sub-engine only where an outside library can provide the capability (`Blas`, `Linalg`, `Fft`);
+  - `Linalg` takes the ten `_umath_linalg` members;
+  - the FFT kernels are overridable members of `Fft`;
+  - NumPy's Python functions sit in partial files named after NumPy's source files, as `TensorEngine` members that
+    `DefaultEngine` implements.
+
+  Applied to: §1's "Which O", the answer's "Inside `TensorEngine` itself?", C3's consequence, the D1 row of §5 (D8 and D9
+  added, both open), §6's steps 3 and 5, P2's target, the new phase [PE](#pe-the-engine-layout), P4, P6, "Later", §8, and
+  the new [Appendix D](#appendix-d-where-every-numpy-function-lives).
+  - Measured: NumPy 2.4.2 has 637 public callables in numpy, numpy.linalg, numpy.fft, numpy.random and numpy.emath plus
+    the ndarray methods; NumSharp has 586 of them by name. In the engine 404: NumPy's C core 183 (ufuncs 106, ndarray
+    methods 45, C functions 32), its Python layer 172 in 18 partial files, the sub-engines 49 (Linalg 31, Fft 18).
+    Outside it 233: classes and types, np.random, the ndarray methods themselves, printing and configuration, IO, the
+    dtype routines.
+  - Of the 172 Python-layer functions:
+    - 44 already sit in an operation class, a `DefaultEngine` static or a `TensorEngine` member (PE moves them);
+    - 65 wait in ratchet R1 (P2 to P5 move them, np.emath first);
+    - 61 have facades without dtype logic (D8);
+    - 2 are not in NumSharp (`fromfunction`, `row_stack`).
+  - **Found:** all ten `_umath_linalg` members shipped in 0.70.0 as public virtual `TensorEngine` members; the evaluation
+    the owner answered named four (Cholesky, Det, Inv, Solve). So E2 breaks all ten. `System.Math` is used 148 times in
+    35 engine files, which rules out a member named `Math`.
+  - Next in P2: np.emath, the first family under the revised D1 (`TensorEngine.Scimath.cs`, members prefixed `Emath`).
 - **2026-10-28, P2's sixteenth family: np.nditer's dtype code moved into the iterator engine and the DType layer
   (`NDIterRef.CurrentView`, `DTypePromotion.AdaptDescriptorToArray`); five D4 fixes on the way.** Commits on `strings`,
   developed in a scratch worktree and landed by fast-forward. D1: NumPy writes np.nditer in C, so its dtype code goes
@@ -1836,3 +1986,74 @@ grep -h -E "public (abstract|virtual) [A-Za-z<>]+ (Reduce[A-Za-z]*|Sum|Mean|AMax
 The np.* calls made from inside the engine were counted per call, comment lines skipped, by a script that splits them
 into structural / creation calls (`zeros`, `empty`, `copyto`, `broadcast_to`, `getbufsize`, the dtype names, the
 promotion helpers, ...) and computations (everything else).
+
+## Appendix D. Where every NumPy function lives
+
+Every public callable of NumPy 2.4.2's `numpy`, `numpy.linalg`, `numpy.fft`, `numpy.random` and `numpy.emath`, and the
+`ndarray` methods, 637 in all, placed under D1 as the owner decided it on 2026-10-28:
+- "NumPy" counts the callables, and "NumSharp" the names NumSharp has on the matching surface (`np`, `np.linalg`,
+  `np.fft`, `np.random`, `np.emath`, `NDArray`).
+- Names in *italics* are missing from NumSharp.
+- † marks the 61 functions of D8 (a facade without dtype logic).
+
+Measured 2026-10-28: NumPy's side by introspection, NumSharp's names by reflection over a build of `97a3cc51`. No public
+name changed between that commit and `45afc57b`.
+
+NumPy itself says where a callable lives:
+- a ufunc goes to `TensorEngine.Umath.cs`;
+- a function written in C (a builtin, or an `__array_function__` dispatcher over one) goes to `TensorEngine.Multiarray.cs`;
+- a function of `_core/fromnumeric.py` (NumPy's wrappers over the ndarray methods) goes to `TensorEngine.Methods.cs`;
+- any other function written in Python goes to the partial file named after its source file;
+- numpy.linalg and numpy.fft go to their sub-engines, numpy.emath to `TensorEngine.Scimath.cs`.
+
+Classes, np.random, the dtype routines, IO, printing and configuration stay outside the engine, however NumPy writes
+them.
+
+```python
+import inspect, numpy as np
+
+def implemented_in(obj):
+    if inspect.isclass(obj):
+        return "class"
+    if isinstance(obj, np.ufunc):
+        return "ufunc"
+    body = getattr(obj, "_implementation", obj)   # an __array_function__ dispatcher's Python body, if it has one
+    if inspect.isfunction(body):
+        return inspect.getsourcefile(body)        # .../numpy/lib/_function_base_impl.py, ...
+    return "C"
+```
+
+| Home | NumPy source | NumPy | NumSharp | Functions |
+|---|---|---|---|---|
+| `TensorEngine.Umath.cs` | the ufuncs | 106 | 97 | abs, absolute, *acos*, acosh, add, arccos, arccosh, arcsin, arcsinh, arctan, arctan2, arctanh, *asin*, asinh, *atan*, *atan2*, atanh, bitwise_and, bitwise_count, *bitwise_invert*, *bitwise_left_shift*, bitwise_not, bitwise_or, *bitwise_right_shift*, bitwise_xor, cbrt, ceil, conj, conjugate, copysign, cos, cosh, deg2rad, degrees, divide, divmod, equal, exp, exp2, expm1, fabs, float_power, floor, floor_divide, fmax, fmin, fmod, frexp, gcd, greater, greater_equal, heaviside, hypot, invert, isfinite, isinf, isnan, *isnat*, lcm, ldexp, left_shift, less, less_equal, log, log10, log1p, log2, logaddexp, logaddexp2, logical_and, logical_not, logical_or, logical_xor, matmul, matvec, maximum, minimum, mod, modf, multiply, negative, nextafter, not_equal, positive, *pow*, power, rad2deg, radians, reciprocal, remainder, right_shift, rint, sign, signbit, sin, sinh, spacing, sqrt, square, subtract, tan, tanh, true_divide, trunc, vecdot, vecmat |
+| `TensorEngine.Methods.cs` | `_core/fromnumeric.py` over the ndarray methods, `_core/_methods.py` | 45 | 40 | all, amax, amin, any, argmax, argmin, argpartition, argsort, around, choose, clip, compress, cumprod, cumsum, *cumulative_prod*, *cumulative_sum*, diagonal, matrix_transpose, max, mean, min, *ndim*, nonzero, partition, permute_dims, prod, ptp, put, ravel, repeat, reshape, resize, *round*, searchsorted, *shape*, size, sort, squeeze, std, sum, swapaxes, take, trace, transpose, var |
+| `TensorEngine.Multiarray.cs` | the C functions of `_multiarray_umath` | 32 | 27 | arange, array, asanyarray, asarray, ascontiguousarray, asfortranarray, bincount, *busday_count*, *busday_offset*, concat, concatenate, copyto, *datetime_as_string*, dot, empty, empty_like, *from_dlpack*, frompyfunc, inner, *is_busday*, lexsort, may_share_memory, nested_iters, packbits, putmask, ravel_multi_index, shares_memory, unpackbits, unravel_index, vdot, where, zeros |
+| `TensorEngine.FunctionBase.cs` | `lib/_function_base_impl.py` | 35 | 35 | angle, append†, asarray_chkfinite, average, bartlett†, blackman†, copy†, corrcoef†, cov, delete, diff, digitize, extract, flip†, gradient, hamming†, hanning†, i0, insert, interp, iterable†, kaiser†, median, meshgrid†, percentile, piecewise, place, quantile, rot90†, select, sinc, sort_complex, trapezoid, trim_zeros, unwrap |
+| `TensorEngine.Numeric.cs` | `_core/numeric.py` | 27 | 26 | allclose, argwhere, array_equal, array_equiv, base_repr†, binary_repr†, convolve, correlate, count_nonzero, cross, flatnonzero, *fromfunction*, full, full_like, identity†, indices, isclose, isfortran†, isscalar†, moveaxis, ones, ones_like†, outer†, roll†, rollaxis, tensordot†, zeros_like† |
+| `TensorEngine.ShapeBase.cs` | `lib/_shape_base_impl.py` | 15 | 14 | apply_along_axis, apply_over_axes†, array_split†, column_stack†, dsplit†, dstack†, expand_dims†, hsplit†, kron, put_along_axis, *row_stack*, split†, take_along_axis, tile†, vsplit† |
+| `TensorEngine.TwoDimBase.cs` | `lib/_twodim_base_impl.py` | 14 | 14 | diag, diagflat†, eye, fliplr†, flipud†, mask_indices†, tri†, tril†, tril_indices†, tril_indices_from†, triu†, triu_indices†, triu_indices_from†, vander |
+| `TensorEngine.NanFunctions.cs` | `lib/_nanfunctions_impl.py` | 14 | 14 | nanargmax, nanargmin, nancumprod, nancumsum, nanmax, nanmean, nanmedian, nanmin, nanpercentile, nanprod, nanquantile, nanstd, nansum, nanvar |
+| `TensorEngine.ArraySetOps.cs` | `lib/_arraysetops_impl.py` | 11 | 11 | ediff1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique, unique_all, unique_counts, unique_inverse, unique_values |
+| `TensorEngine.Polynomial.cs` | `lib/_polynomial_impl.py` (legacy np.poly*) | 10 | 10 | poly, polyadd, polyder†, polydiv, polyfit†, polyint, polymul, polysub, polyval, roots |
+| `TensorEngine.Scimath.cs` | `lib/_scimath_impl.py` (np.emath; members prefixed `Emath`) | 9 | 9 | arccos, arcsin, arctanh, log, log10, log2, logn, power, sqrt |
+| `TensorEngine.CoreShapeBase.cs` | `_core/shape_base.py` | 8 | 8 | atleast_1d†, atleast_2d†, atleast_3d†, block†, hstack†, stack†, unstack†, vstack† |
+| `TensorEngine.TypeCheck.cs` | `lib/_type_check_impl.py` | 8 | 8 | imag, iscomplex, iscomplexobj, isreal, isrealobj, nan_to_num, real, real_if_close |
+| `TensorEngine.IndexTricks.cs` | `lib/_index_tricks_impl.py` | 4 | 4 | diag_indices†, diag_indices_from†, fill_diagonal, ix_ |
+| `TensorEngine.StrideTricks.cs` | `lib/_stride_tricks_impl.py` | 3 | 3 | broadcast_arrays†, broadcast_shapes†, broadcast_to† |
+| `TensorEngine.UfuncLike.cs` | `lib/_ufunclike_impl.py` | 3 | 3 | fix†, isneginf, isposinf |
+| `TensorEngine.CoreFunctionBase.cs` | `_core/function_base.py` | 3 | 3 | geomspace, linspace, logspace |
+| `TensorEngine.Histograms.cs` | `lib/_histograms_impl.py` (+ histogram2d) | 4 | 4 | histogram, histogram2d, histogram_bin_edges, histogramdd |
+| `TensorEngine.EinsumFunc.cs` | `_core/einsumfunc.py` | 2 | 2 | einsum, einsum_path† |
+| `TensorEngine.ArrayPad.cs` | `lib/_arraypad_impl.py` | 1 | 1 | pad |
+| `TensorEngine.CoreAsArray.cs` | `_core/_asarray.py` | 1 | 1 | require† |
+| `TensorEngine.Linalg` | numpy.linalg | 31 | 31 | cholesky, cond, cross, det, diagonal, eig, eigh, eigvals, eigvalsh, inv, lstsq, matmul, matrix_norm, matrix_power, matrix_rank, matrix_transpose, multi_dot, norm, outer, pinv, qr, slogdet, solve, svd, svdvals, tensordot, tensorinv, tensorsolve, trace, vecdot, vector_norm |
+| `TensorEngine.Fft` | numpy.fft | 18 | 18 | fft, fft2, fftfreq, fftn, fftshift, hfft, ifft, ifft2, ifftn, ifftshift, ihfft, irfft, irfft2, irfftn, rfft, rfft2, rfftfreq, rfftn |
+
+Outside the engine, 233 (NumSharp 203):
+- classes and types (ndarray, dtype and the scalar types, nditer, broadcast, finfo / iinfo, vectorize, poly1d, errstate, ...): 70 (NumSharp 60);
+- np.random (Generator, RandomState, the bit generators: NumPy's own seam): 63 (NumSharp 61);
+- the ndarray methods (NDArray members over the same TensorEngine members): 53 (NumSharp 51);
+- printing and error / buffer configuration: 13 (NumSharp 9);
+- IO (with the DType slots, P3): 12 (NumSharp 9);
+- dtype routines (the DType layer): 11 (NumSharp 10);
+- other: 11 (NumSharp 3), numpy.matrix's asmatrix and bmat, printoptions, LinAlgError, the utilities and the test runners, of which NumSharp has the first three.
