@@ -1,28 +1,19 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.svd</c> past the class boundary. <paramref name="hermitian"/> takes NumPy's
-        ///     eigh-based branch (<see cref="SvdHermitian"/>, <see cref="SvdvalsHermitian"/>); otherwise the rank check,
-        ///     <c>_commonType</c>, the gufunc's text refusal, then <see cref="TensorEngine.Svd"/> at the loop dtype.
-        /// </summary>
-        /// <param name="a">The matrix, or a stack of them (plain: the facade applied the class boundary).</param>
-        /// <param name="full_matrices">True for square U and Vh, false for <c>K = min(M, N)</c> columns / rows; ignored
-        ///     with <paramref name="hermitian"/> (a Hermitian matrix is square, so both are the same).</param>
-        /// <param name="compute_uv">False for the singular values alone (U and Vh null).</param>
-        /// <param name="hermitian">Decompose the Hermitian (real symmetric) matrix whose lower triangle <paramref name="a"/>
-        ///     holds, through eigh / eigvalsh, as NumPy does; the upper triangle is not read, so a non-Hermitian operand
-        ///     gives the factors of another matrix, without an error.</param>
-        /// <returns><c>(U, S, Vh)</c>, the singular values descending.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: with <c>hermitian</c> the eigh-based branch (<see cref="SvdHermitian"/>,
+        ///     <see cref="SvdvalsHermitian"/>, through this engine's <see cref="Eigh"/> / <see cref="Eigvalsh"/>);
+        ///     otherwise the rank check, <c>_commonType</c>, the text refusal of the <c>svd_f</c> / <c>svd_s</c> / <c>svd</c>
+        ///     gufunc's input cast, then <see cref="SvdKernel"/> at the loop dtype.
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp; the (U, S, Vh) tuple is yielded component-wise
-        internal static (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool full_matrices, bool compute_uv, bool hermitian)
+        public override (NDArray U, NDArray S, NDArray Vh) Svd(NDArray a, bool full_matrices = true, bool compute_uv = true,
+            bool hermitian = false)
         {
             // NumPy's hermitian=True branch runs before any check of svd's own: eigh / eigvalsh make theirs (the square
             // check, _commonType, their gufunc's input cast).
@@ -32,7 +23,7 @@ namespace NumSharp
             AssertStacked2d(a);
             var common = CommonType(a);
             ThrowIfTextGufunc(compute_uv ? (full_matrices ? "svd_f" : "svd_s") : "svd", a);
-            return a.TensorEngine.Svd(ToCommon(a, common), full_matrices, compute_uv);
+            return SvdKernel(ToCommon(a, common), full_matrices, compute_uv);
         }
 
         /// <summary>
@@ -66,7 +57,7 @@ namespace NumSharp
         ///     rows of Vh, can come in another order.
         /// </remarks>
         [NDScoped] // the eigh factors, the sign / abs / argsort temps and the product behind Vh; U, S and Vh are yielded
-        private static (NDArray U, NDArray S, NDArray Vh) SvdHermitian(NDArray a)
+        private (NDArray U, NDArray S, NDArray Vh) SvdHermitian(NDArray a)
         {
             var (w, v) = Eigh(a, 'L');
             var sgn = np.sign(w);
@@ -106,7 +97,7 @@ namespace NumSharp
         /// <remarks>eigvalsh is not eigh without the vectors: LAPACK computes the values in another way when it computes no
         ///     vectors, so these can differ from <see cref="SvdHermitian"/>'s S in the last bits, in NumPy as here.</remarks>
         [NDScoped] // the eigenvalues and their absolute values; the reversed view of the sorted copy is yielded
-        private static NDArray SvdvalsHermitian(NDArray a)
+        private NDArray SvdvalsHermitian(NDArray a)
             => ReverseLastAxis(np.sort(np.abs(Eigvalsh(a, 'L')), -1));
 
         /// <summary>NumPy's <c>x[..., ::-1]</c>: a view of <paramref name="x"/> with its last axis reversed.</summary>
@@ -114,42 +105,29 @@ namespace NumSharp
         /// <returns>The view (shares <paramref name="x"/>'s memory; the last axis's stride negated).</returns>
         private static NDArray ReverseLastAxis(NDArray x) => x[new[] {Slice.Ellipsis, new Slice(null, null, -1)}];
 
-        /// <summary>
-        ///     The body of <c>np.linalg.svdvals</c>: <c>svd(x, compute_uv=False)</c>'s statements.
-        /// </summary>
-        /// <param name="x">The matrix, or a stack of them.</param>
-        /// <returns>The singular values, descending.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     <c>svd(x, compute_uv=False)</c>'s statements: the rank check, <c>_commonType</c>, the text refusal of the
+        ///     <c>svd</c> gufunc's input cast, then <see cref="SvdKernel"/> without U and Vh.
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp (U/Vh are null under compute_uv: false)
-        internal static NDArray Svdvals(NDArray x)
+        public override NDArray Svdvals(NDArray x)
         {
             AssertStacked2d(x);
             var common = CommonType(x);
             // NumPy's svd(x, compute_uv=False) calls _umath_linalg.svd: its input cast refuses text.
             ThrowIfTextGufunc("svd", x);
-            return x.TensorEngine.Svd(ToCommon(x, common), fullMatrices: false, computeUv: false).S;
+            return SvdKernel(ToCommon(x, common), fullMatrices: false, computeUv: false).S;
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.matrix_rank</c>: the tolerance arguments, NumPy's predicate below two axes, and
-        ///     otherwise the count of singular values above the tolerance.
-        /// </summary>
-        /// <param name="A">The matrix, or a stack of them.</param>
-        /// <param name="tol">The absolute threshold; null for <c>S.max() * max(M, N) * eps</c> (or <paramref name="rtol"/>).</param>
-        /// <param name="hermitian">Take the singular values from the Hermitian (real symmetric) matrix whose lower triangle
-        ///     <paramref name="A"/> holds, as NumPy does (its square check applies; the upper triangle is not read).</param>
-        /// <param name="rtol">The relative threshold.</param>
-        /// <returns>The rank (an int64 0-d array for one matrix, one per matrix of a stack).</returns>
-        /// <exception cref="ValueError">Both <paramref name="tol"/> and <paramref name="rtol"/> are set.</exception>
-        /// <exception cref="LinAlgError">A non-square operand with <paramref name="hermitian"/>.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand of two or more axes (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the tolerance arguments, NumPy's predicate below two axes (<c>int(not all(A == 0))</c>),
+        ///     and otherwise the count of singular values (this engine's <see cref="Svd(NDArray, bool, bool, bool)"/>)
+        ///     above the tolerance.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray MatrixRank(NDArray A, double? tol, bool hermitian, double? rtol)
+        public override NDArray MatrixRank(NDArray A, double? tol = null, bool hermitian = false, double? rtol = null)
         {
             if (tol is not null && rtol is not null)
                 throw new ValueError("`tol` and `rtol` can't be both set.");
@@ -193,25 +171,15 @@ namespace NumSharp
             return np.count_nonzero(np.greater(s, tolArr), -1);
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.cond</c>: the empty-operand refusal, the hashability of <paramref name="p"/>, the
-        ///     singular-value orders (through the public <c>np.linalg.svdvals</c>), or <c>norm(x, p) * norm(inv(x), p)</c>
-        ///     for the others (the inverse in float64 / complex128, NaN for a singular matrix), and NumPy's NaN-to-inf tail.
-        /// </summary>
-        /// <param name="x">The matrix, or a stack of them.</param>
-        /// <param name="p">The order: null / ±2 (singular values), ±1, ±inf, <c>"fro"</c>, <c>"nuc"</c>.</param>
-        /// <returns>The condition number (a 0-d array for one matrix, one per matrix of a stack), real; inf for a singular
-        ///     matrix.</returns>
-        /// <exception cref="LinAlgError">An empty operand (<c>cond is not defined on empty arrays</c>), a non-square one
-        ///     for an inverse-based order, or the nuclear norm of a singular matrix (its NaN inverse: <c>SVD did not
-        ///     converge</c>).</exception>
-        /// <exception cref="TypeError">An array or list <paramref name="p"/> (unhashable), or a float16, decimal or char
-        ///     operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ValueError">An order the norm refuses (<c>Invalid norm order for matrices.</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the empty-operand refusal, the hashability of the order, the singular-value orders
+        ///     (through the public <c>np.linalg.svdvals</c>), or <c>norm(x, p) * norm(inv(x), p)</c> for the others (the
+        ///     inverse by <see cref="InvKernel"/> in float64 / complex128, NaN for a singular matrix), and NumPy's NaN-to-inf
+        ///     tail.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray Cond(NDArray x, object p)
+        public override NDArray Cond(NDArray x, object p = null)
         {
             if (IsEmpty2d(x))
                 throw new LinAlgError("cond is not defined on empty arrays");
@@ -285,11 +253,11 @@ namespace NumSharp
         ///     and the managed LU), so every regular matrix's inverse is the same bits either way.
         /// </remarks>
         [NDScopedCovered] // only caller: [NDScoped] cond; the per-matrix views, inverses and the NaN scalar ride its scope
-        private static NDArray InvIgnoringErrors(NDArray x)
+        private NDArray InvIgnoringErrors(NDArray x)
         {
             try
             {
-                return x.TensorEngine.Inv(x);
+                return InvKernel(x);
             }
             catch (LinAlgError e) when (e.Message == "Singular matrix")
             {
@@ -312,7 +280,7 @@ namespace NumSharp
                 var slot = inverses[new[] {Slice.Index(k)}];
                 try
                 {
-                    np.copyto(slot, x.TensorEngine.Inv(matrices[new[] {Slice.Index(k)}]));
+                    np.copyto(slot, InvKernel(matrices[new[] {Slice.Index(k)}]));
                 }
                 catch (LinAlgError e) when (e.Message == "Singular matrix")
                 {

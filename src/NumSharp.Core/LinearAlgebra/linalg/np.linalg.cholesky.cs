@@ -31,13 +31,13 @@ namespace NumSharp
             ///     definite.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine.Cholesky scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray cholesky(NDArray a, bool upper = false)
             {
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.Wrapped((a, upper), static s => cholesky(s.a, s.upper));
-                return LinalgEngine.Cholesky(a, upper);
+                return EngineOf(a).Linalg.Cholesky(a, upper);
             }
         }
     }

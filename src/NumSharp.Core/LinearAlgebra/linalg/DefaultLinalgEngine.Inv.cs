@@ -1,54 +1,36 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.inv</c>: <c>_assert_stacked_square</c>, <c>_commonType</c>, the gufunc's text
-        ///     refusal, then <see cref="TensorEngine.Inv"/> at the loop dtype.
-        /// </summary>
-        /// <param name="a">The square matrix, or a stack of them (plain: the facade applied the class boundary).</param>
-        /// <returns>The inverse, a fresh array of the loop dtype.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a singular matrix (<c>Singular
-        ///     matrix</c>, from the factorisation).</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: <c>_assert_stacked_square</c>, <c>_commonType</c>, the text refusal of the <c>inv</c>
+        ///     gufunc's input cast, then <see cref="InvKernel"/> at the loop dtype.
+        /// </remarks>
         // Scope: ToCommon mints a dtype-cast temp when `a` is not already the common type
         // (a.typecode == common ? a : Cast(...)) — a leftover otherwise dropped to the finalizer.
         // [NDScoped] reclaims it while leaving a passthrough input untouched (rule R2); the
         // engine's fresh inverse is yielded. Matches the scoped siblings pinv/tensorinv.
         [NDScoped]
-        internal static NDArray Inv(NDArray a)
+        public override NDArray Inv(NDArray a)
         {
             AssertStackedSquare(a);
             var common = CommonType(a);
             // NumPy calls _umath_linalg.inv: its input cast refuses text, an empty operand included.
             ThrowIfTextGufunc("inv", a);
-            return a.TensorEngine.Inv(ToCommon(a, common));
+            return InvKernel(ToCommon(a, common));
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.pinv</c>: the tolerance arguments, NumPy's empty-operand answer, the conjugation,
-        ///     the singular value decomposition, the cutoff and the recombination of the factors.
-        /// </summary>
-        /// <param name="a">The matrix, or a stack of them (plain: the facade applied the class boundary).</param>
-        /// <param name="rcond">The relative cutoff; null with <paramref name="rtol"/> null means NumPy's 1e-15.</param>
-        /// <param name="hermitian">Decompose the Hermitian (real symmetric) matrix whose lower triangle the conjugated
-        ///     operand holds, through the hermitian SVD (eigh), as NumPy does: its square check applies and the upper
-        ///     triangle is not read.</param>
-        /// <param name="rtol">The Array-API spelling of <paramref name="rcond"/>.</param>
-        /// <returns>The pseudo-inverse, shape <c>(..., N, M)</c>: float64 / float32 / complex128 by the loop dtype, the
-        ///     operand's own dtype for an empty operand.</returns>
-        /// <exception cref="ValueError">Both <paramref name="rcond"/> and <paramref name="rtol"/> are set, or an empty
-        ///     operand of fewer than two axes (Python's unpack of <c>a.shape[-2:]</c>).</exception>
-        /// <exception cref="TypeError">A text operand (<c>cannot conjugate non-numeric dtype</c>), or a float16, decimal
-        ///     or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the tolerance arguments, NumPy's empty-operand answer (<c>_is_empty_2d</c>, the
+        ///     operand's own dtype), the conjugation, the singular value decomposition through this engine's
+        ///     <see cref="Svd(NDArray, bool, bool, bool)"/>, the cutoff and the recombination of the factors.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray Pinv(NDArray a, double? rcond, bool hermitian, double? rtol)
+        public override NDArray Pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
         {
             if (rcond is not null && rtol is not null)
                 throw new ValueError("`rtol` and `rcond` can't be both set.");
@@ -100,23 +82,13 @@ namespace NumSharp
                 np.multiply(np.expand_dims(sInv, -1), np.swapaxes(u, -1, -2)));
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.tensorinv</c>: NumPy's shape statements, the reshape to a square matrix, its
-        ///     inverse (through the public <c>np.linalg.inv</c>) and the reshape to the inverted shape.
-        /// </summary>
-        /// <param name="a">The tensor to invert.</param>
-        /// <param name="ind">How many LEADING axes form the "row" side; must be positive.</param>
-        /// <returns>The inverse, shape <c>a.shape[ind:] + a.shape[:ind]</c>.</returns>
-        /// <exception cref="ValueError"><paramref name="ind"/> is not positive (<c>Invalid ind argument.</c>), or the
-        ///     reshape to a square matrix is impossible.</exception>
-        /// <exception cref="LinAlgError">The reshaped matrix is not square, or is singular.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (inv's <c>_commonType</c>), or a 0-d operand
-        ///     whose 1x1 inverse succeeded: NumPy's last statement is <c>ia.reshape(*invshape)</c>, and an empty
-        ///     <c>invshape</c> calls <c>reshape()</c> with no argument (<c>reshape() takes exactly 1 argument (0
-        ///     given)</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the shape arithmetic, the reshape to a square matrix, its inverse through the public
+        ///     <c>np.linalg.inv</c> (so the engine's <see cref="Inv"/> computes it) and the reshape to the inverted shape.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray Tensorinv(NDArray a, int ind)
+        public override NDArray Tensorinv(NDArray a, int ind = 2)
         {
             if (ind <= 0)
                 throw new ValueError("Invalid ind argument.");

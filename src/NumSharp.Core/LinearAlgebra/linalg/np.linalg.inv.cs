@@ -25,7 +25,7 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a singular matrix.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
-            // Scope: the class boundary's temporaries; LinalgEngine.Inv reclaims the ToCommon dtype-cast temp. Matches
+            // Scope: the class boundary's temporaries; the Linalg member reclaims the ToCommon dtype-cast temp. Matches
             // the scoped siblings pinv/tensorinv.
             [NDScoped]
             public static NDArray inv(NDArray a)
@@ -33,7 +33,7 @@ namespace NumSharp
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.Wrapped(a, static s => inv(s));
-                return LinalgEngine.Inv(a);
+                return EngineOf(a).Linalg.Inv(a);
             }
 
             /// <summary>
@@ -58,13 +58,13 @@ namespace NumSharp
             ///     both <paramref name="rcond"/> and <paramref name="rtol"/> set.</exception>
             /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand with <paramref name="hermitian"/>.</exception>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine.Pinv scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray pinv(NDArray a, double? rcond = null, bool hermitian = false, double? rtol = null)
             {
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.Wrapped((a, rcond, hermitian, rtol), static s => pinv(s.a, s.rcond, s.hermitian, s.rtol));
-                return LinalgEngine.Pinv(a, rcond, hermitian, rtol);
+                return EngineOf(a).Linalg.Pinv(a, rcond, hermitian, rtol);
             }
 
             /// <summary>
@@ -91,11 +91,11 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand (inv's <c>_commonType</c>), or a 0-d operand
             ///     whose 1x1 inverse succeeded (<c>reshape() takes exactly 1 argument (0 given)</c>).</exception>
             /// <exception cref="ArgumentException">A text operand (inv's gufunc input cast, NumPy's UFuncTypeError).</exception>
-            [NDScoped] // the facade keeps its scope over the call; LinalgEngine.Tensorinv scopes the computation's own
+            [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray tensorinv(NDArray a, int ind = 2)
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return LinalgEngine.Tensorinv(a, ind);
+                return EngineOf(a).Linalg.Tensorinv(a, ind);
             }
         }
     }

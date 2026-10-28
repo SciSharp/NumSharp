@@ -1,26 +1,17 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.matrix_power</c>: <c>_assert_stacked_square</c>, the inverse for a negative
-        ///     power (through the public <c>np.linalg.inv</c>), the identity for 0, the operand itself for 1, and binary
-        ///     exponentiation with <c>np.matmul</c> above.
-        /// </summary>
-        /// <param name="a">The square matrix, or a stack of them: plain for a numpy.matrix operand (the facade applied its
-        ///     rule), a numpy.char.chararray one as it is (the facade has no chararray rule).</param>
-        /// <param name="n">The power: any integer.</param>
-        /// <returns>The power. <b>Footgun (NumPy's own):</b> <c>n == 1</c> returns <paramref name="a"/> ITSELF.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or a negative power of a singular
-        ///     matrix.</exception>
-        /// <exception cref="TypeError">A text matrix with <c>n</c> of 2 or more (matmul has no string loop) or a negative
-        ///     <c>n</c> (inv's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A negative power of a matrix the managed LU cannot take
-        ///     with no backend installed.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: <c>_assert_stacked_square</c>, the inverse for a negative power (through the public
+        ///     <c>np.linalg.inv</c>, so the engine's <see cref="Inv"/> computes it), the identity for 0, the operand itself for
+        ///     1, and binary exponentiation with <c>np.matmul</c> above.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray MatrixPower(NDArray a, int n)
+        public override NDArray MatrixPower(NDArray a, int n)
         {
             AssertStackedSquare(a);
 

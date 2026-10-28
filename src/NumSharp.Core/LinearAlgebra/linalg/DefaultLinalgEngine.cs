@@ -1,26 +1,48 @@
 using System;
 using System.Numerics;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
     /// <summary>
-    ///     The bodies of NumPy's <c>numpy.linalg</c> Python layer (<c>numpy/linalg/_linalg.py</c>): the argument checks
-    ///     (<c>_assert_stacked_2d</c>, <c>_assert_stacked_square</c>, <c>_assert_finite</c>), the dtype rule
-    ///     (<c>_commonType</c>) and the text refusals of the <c>_umath_linalg</c> gufuncs' input casts, and per function
-    ///     the statements around the gufunc call, which is a <see cref="TensorEngine"/> member (<c>Inv</c>, <c>Svd</c>,
-    ///     <c>Qr</c>, ...). The public <c>np.linalg</c> functions only apply the class boundary (numpy.matrix,
-    ///     numpy.char.chararray) and call one member of this class.
+    ///     NumSharp's <see cref="LinalgEngine"/>, the default of <see cref="TensorEngine.Linalg"/>: NumPy's
+    ///     <c>numpy/linalg/_linalg.py</c> statements in NumPy's order - the argument checks (<c>_assert_stacked_2d</c>,
+    ///     <c>_assert_stacked_square</c>, <c>_assert_finite</c>), the dtype rule (<c>_commonType</c>), the text refusals of
+    ///     the <c>_umath_linalg</c> gufuncs' input casts and each function's tail - over ten <c>protected virtual</c>
+    ///     kernels that stand for those gufuncs (<see cref="CholeskyKernel"/>, <see cref="DetKernel"/>,
+    ///     <see cref="SlogdetKernel"/>, <see cref="EigKernel"/>, <see cref="EighKernel"/>, <see cref="InvKernel"/>,
+    ///     <see cref="SolveKernel"/>, <see cref="LstsqKernel"/>, <see cref="QrKernel"/>, <see cref="SvdKernel"/>).
     /// </summary>
     /// <remarks>
-    ///     Moved from <c>LinearAlgebra/linalg/np.linalg*.cs</c> statement for statement by the np-layer dtype plan's P2 (an
-    ///     operation class, decision D1: NumPy writes numpy.linalg in Python), one partial file per facade file. It sits
-    ///     beside its facades rather than under <c>Backends/</c>, as <c>Math/Default.Gradient.cs</c> does: its statements call
-    ///     np.* functions, which ratchet R2 counts against engine files. A body that calls a sibling function calls its
-    ///     public facade (<c>np.linalg.inv</c>, <c>np.linalg.svdvals</c>, ...), as the bodies did before the move, so the
-    ///     class boundary meets every nested call where it met it before.
+    ///     <para><b>The kernels.</b> Each answers an empty operand (an empty matrix or a zero-size batch) itself, without
+    ///     LAPACK (<see cref="LinAlgEmpty"/>), then asks the operand engine's <see cref="TensorEngine.Blas"/>, then falls
+    ///     back: the LU four (det, slogdet, inv, solve) to the managed LU (<see cref="ManagedLu"/>, allclose to NumPy), the
+    ///     other six to <see cref="OpenBlasMissingBackendException"/>. So the bundled OpenBLAS of
+    ///     <c>NumSharp.Interop.OpenBLAS</c> reaches them through <see cref="TensorEngine.Blas"/>, and no subclass is needed
+    ///     for it.</para>
+    ///     <para><b>Deriving.</b> Override a kernel to compute a factorisation another way (MKL, a GPU, a solver of
+    ///     your own): the public members keep running NumPy's statements around it, so the override receives validated
+    ///     operands already cast to the loop dtype (float32, float64 or complex128) and its result goes through NumPy's
+    ///     collapse, casts and result layouts. Call the base kernel for the operands it does not serve (an empty one,
+    ///     another dtype). Assign the instance to <see cref="TensorEngine.Linalg"/> of the cached engine.</para>
+    ///     <para><b>Nested calls.</b> A member that needs another numpy.linalg function calls its public facade
+    ///     (<c>np.linalg.inv</c>, <c>np.linalg.svdvals</c>, <c>np.linalg.norm</c>, ...) where NumPy's statement calls the
+    ///     module function, so the engine assigned to <see cref="TensorEngine.Linalg"/> computes it and the class boundary
+    ///     meets it where NumPy's would; one that calls a sibling directly in NumPy (pinv's and matrix_rank's <c>svd</c>,
+    ///     the hermitian svd's <c>eigh</c>) calls this engine's own virtual member.</para>
+    ///     <para>The statements were the internal operation class <c>LinalgEngine</c> (the np-layer dtype plan's P2) and
+    ///     the kernels the ten <see cref="TensorEngine"/> members of the same names (0.70.0); phase PE's E2 made the class
+    ///     this public sub-engine. The files sit beside the <c>np.linalg</c> facades rather than under <c>Backends/</c>:
+    ///     the statements call np.* functions, which ratchet R2 counts against engine files. The kernels are
+    ///     <c>Backends/Default/LinearAlgebra/DefaultLinalgEngine.Kernels.cs</c>.</para>
     /// </remarks>
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine : LinalgEngine
     {
+        /// <summary>
+        ///     The instance <see cref="TensorEngine.Linalg"/> returns while nothing else is assigned: shared by every engine,
+        ///     because the class holds no state (each kernel reads the Blas of its operand's engine).
+        /// </summary>
+        internal static readonly DefaultLinalgEngine Shared = new();
+
         /// <summary>
         ///     Port of <c>_assert_stacked_2d</c> — a stack of matrices needs at least two axes.
         /// </summary>

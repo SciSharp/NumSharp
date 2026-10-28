@@ -16,7 +16,10 @@ namespace NumSharp
             ///     of the forms in this file.
             ///     </para>
             /// </remarks>
-            public static NDArray matmul(NDArray x1, NDArray x2) => np.matmul(x1, x2);
+            public static NDArray matmul(NDArray x1, NDArray x2)
+                => NDMatrixBoundary.Sees(x1, x2)   // np.matmul's rule: a numpy.matrix operand comes back as a matrix
+                ? NDMatrixBoundary.Wrapped((x1, x2), static s => matmul(s.x1, s.x2))
+                : EngineOf(x1).Linalg.Matmul(x1, x2);
 
             /// <summary>
             ///     Outer product of two VECTORS.
@@ -33,18 +36,26 @@ namespace NumSharp
             /// <param name="x2">The second vector.</param>
             /// <returns>The <c>(len(x1), len(x2))</c> outer product, a fresh array.</returns>
             /// <exception cref="ValueError">Either operand is not one-dimensional.</exception>
-            public static NDArray outer(NDArray x1, NDArray x2) => LinalgEngine.Outer(x1, x2);
+            public static NDArray outer(NDArray x1, NDArray x2) => EngineOf(x1).Linalg.Outer(x1, x2);
 
             /// <summary>
             ///     Tensor contraction — the Array-API spelling of <see cref="np.tensordot(NDArray, NDArray, int)"/>.
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.tensordot.html</remarks>
             public static NDArray tensordot(NDArray x1, NDArray x2, int axes = 2)
-                => np.tensordot(x1, x2, axes);
+                => NDMatrixBoundary.Sees(x1, x2)   // np.tensordot's rule: NumPy converts with asarray, so the result is plain
+                ? NDMatrixBoundary.Plain((x1, x2, axes), static s => tensordot(s.x1, s.x2, s.axes))
+                : NDCharArrayBoundary.Sees(x1, x2)   // a numpy.char.chararray operand too: asarray drops either class
+                ? NDCharArrayBoundary.Plain((x1, x2, axes), static s => tensordot(s.x1, s.x2, s.axes))
+                : EngineOf(x1).Linalg.Tensordot(x1, x2, axes);
 
             /// <inheritdoc cref="tensordot(NDArray, NDArray, int)"/>
             public static NDArray tensordot(NDArray x1, NDArray x2, int[] axesA, int[] axesB)
-                => np.tensordot(x1, x2, axesA, axesB);
+                => NDMatrixBoundary.Sees(x1, x2)   // np.tensordot's rule: NumPy converts with asarray, so the result is plain
+                ? NDMatrixBoundary.Plain((x1, x2, axesA, axesB), static s => tensordot(s.x1, s.x2, s.axesA, s.axesB))
+                : NDCharArrayBoundary.Sees(x1, x2)   // a numpy.char.chararray operand too: asarray drops either class
+                ? NDCharArrayBoundary.Plain((x1, x2, axesA, axesB), static s => tensordot(s.x1, s.x2, s.axesA, s.axesB))
+                : EngineOf(x1).Linalg.Tensordot(x1, x2, axesA, axesB);
 
             /// <summary>
             ///     Sum along the diagonals of the LAST TWO axes.
@@ -59,7 +70,12 @@ namespace NumSharp
             ///     </para>
             /// </remarks>
             public static NDArray trace(NDArray x, int offset = 0, DType dtype = null)
-                => np.trace(x, offset, -2, -1, dtype);
+            {
+                // np.trace's rule: no matrix rule, a numpy.matrix operand is computed as a plain array (the region only
+                // raises the boundary's depth: no temporary, so no scope; np.trace inside the member scopes its own).
+                using var plain = NDMatrixBoundary.PlainFor(x);
+                return EngineOf(x).Linalg.Trace(x, offset, dtype);
+            }
 
             /// <summary>
             ///     Diagonals of the LAST TWO axes.
@@ -87,7 +103,9 @@ namespace NumSharp
             /// </summary>
             /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linalg.vecdot.html</remarks>
             public static NDArray vecdot(NDArray x1, NDArray x2, int axis = -1)
-                => np.vecdot(x1, x2, axis: axis);
+                => NDMatrixBoundary.Sees(x1, x2)   // np.vecdot's rule: a numpy.matrix operand comes back as a matrix
+                ? NDMatrixBoundary.Wrapped((x1, x2, axis), static s => vecdot(s.x1, s.x2, s.axis))
+                : EngineOf(x1).Linalg.Vecdot(x1, x2, axis);
 
             /// <summary>
             ///     Cross product of 3-element vectors.
@@ -115,7 +133,7 @@ namespace NumSharp
             /// <exception cref="ValueError">The component axis of either operand does not have length 3, or the other axes
             ///     do not broadcast.</exception>
             /// <exception cref="TypeError">Either operand holds text (the multiply has no string loop).</exception>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine.Cross scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray cross(NDArray x1, NDArray x2, int axis = -1)
             {
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
@@ -124,7 +142,7 @@ namespace NumSharp
                 // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
                 if (NDCharArrayBoundary.Sees(x1, x2))
                     return NDCharArrayBoundary.Plain((x1, x2, axis), static s => cross(s.x1, s.x2, s.axis));
-                return LinalgEngine.Cross(x1, x2, axis);
+                return EngineOf(x1).Linalg.Cross(x1, x2, axis);
             }
         }
     }

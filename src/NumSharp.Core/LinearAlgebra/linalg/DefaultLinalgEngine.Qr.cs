@@ -1,28 +1,25 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.qr</c> past the mode check and the class boundary: <c>_assert_stacked_2d</c>,
-        ///     <c>_commonType</c>, then <see cref="TensorEngine.Qr"/> at the loop dtype; the raw and economic modes' factored
-        ///     matrix comes back as NumPy's object (<see cref="RawFactor"/>, <see cref="FactoredCopy"/>).
-        /// </summary>
-        /// <param name="a">The matrix, or a stack of them: plain for a numpy.matrix operand (the facade applied its rule), a
-        ///     numpy.char.chararray one as it is (NumPy's <c>_makearray</c> drops that class; the results are plain).</param>
-        /// <param name="resolved">The mode <see cref="ResolveQrMode"/> returned.</param>
-        /// <returns><c>(Q, R)</c>; for <c>"r"</c> the Q slot is null, for <c>"raw"</c> the pair is <c>(h, tau)</c>, for
-        ///     <c>"economic"</c> the packed matrix and null.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the mode check (<see cref="ResolveQrMode"/>, before the operand is read),
+        ///     <c>_assert_stacked_2d</c>, <c>_commonType</c>, then <see cref="QrKernel"/> at the loop dtype; the raw and
+        ///     economic modes' factored matrix comes back as NumPy's object (<see cref="RawFactor"/>,
+        ///     <see cref="FactoredCopy"/>).
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp and the backend's C-ordered factor; the (Q, R) tuple is yielded
-        internal static (NDArray Q, NDArray R) Qr(NDArray a, string resolved)
+        public override (NDArray Q, NDArray R) Qr(NDArray a, string mode = "reduced")
         {
+            // NumPy checks the mode before it reads the operand (np.linalg.qr resolved it already for its numpy.matrix
+            // rule; resolving a resolved mode returns it).
+            string resolved = ResolveQrMode(mode);
             AssertStacked2d(a);
             var common = CommonType(a);
-            var (q, r) = a.TensorEngine.Qr(ToCommon(a, common), resolved);
+            var (q, r) = QrKernel(ToCommon(a, common), resolved);
             // raw and economic hand back the factored matrix itself, and NumPy's is its copy of the operand
             // (`a = a.astype(t, copy=True)`, the operand's K order) that qr_r_raw factored in place.
             return resolved switch

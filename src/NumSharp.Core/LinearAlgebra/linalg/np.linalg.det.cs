@@ -23,12 +23,12 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
-            // Scope: the facade keeps its scope over the call (LinalgEngine.Det reclaims the ToCommon dtype-cast temp).
+            // Scope: the facade keeps its scope over the call (the Linalg member reclaims the ToCommon dtype-cast temp).
             [NDScoped]
             public static NDArray det(NDArray a)
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return LinalgEngine.Det(a);
+                return EngineOf(a).Linalg.Det(a);
             }
 
             /// <summary>
@@ -47,12 +47,12 @@ namespace NumSharp
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
             // Scope: the facade keeps its scope over the call; the (sign, logabsdet) tuple result is yielded through the
-            // weaver's Returns<T1,T2> tuple egress (LinalgEngine.Slogdet reclaims the ToCommon dtype-cast temp).
+            // weaver's Returns<T1,T2> tuple egress (the Linalg member reclaims the ToCommon dtype-cast temp).
             [NDScoped]
             public static (NDArray sign, NDArray logabsdet) slogdet(NDArray a)
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return LinalgEngine.Slogdet(a);
+                return EngineOf(a).Linalg.Slogdet(a);
             }
         }
     }

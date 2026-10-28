@@ -1,31 +1,21 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.solve</c> past the class boundary: <c>_assert_stacked_square</c>, <c>_commonType</c>,
-        ///     the gufunc's text refusal, its core-dimension checks and its iterator's broadcast of the stacked axes (the
-        ///     1-D <paramref name="b"/> picks the <c>(m,m),(m)-&gt;(m)</c> gufunc, any other rank
-        ///     <c>(m,m),(m,n)-&gt;(m,n)</c>; <see cref="Backends.GufuncGuard.CheckCoreDimensions"/>), then
-        ///     <see cref="TensorEngine.Solve"/> at the loop dtype.
-        /// </summary>
-        /// <param name="a">Coefficient matrix, <c>(..., M, M)</c> (plain: the facade applied the class boundary).</param>
-        /// <param name="b">Ordinate values, <c>(..., M)</c> or <c>(..., M, K)</c>.</param>
-        /// <returns>The solution, a fresh array of the loop dtype.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes, a non-square <paramref name="a"/>, or a singular matrix.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="ValueError">A core dimension of <paramref name="b"/> that does not match, a <paramref name="b"/>
-        ///     of too few axes for the matrix gufunc, or stacked axes that do not broadcast (<c>operands could not be
-        ///     broadcast together with remapped shapes [original-&gt;remapped]: ...</c>): NumPy's gufunc texts.</exception>
-        /// <exception cref="OpenBlasMissingBackendException">No matrix backend serves these operands.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: <c>_assert_stacked_square</c>, <c>_commonType</c>, the text refusal of the gufunc's input
+        ///     casts, its core-dimension checks and its iterator's broadcast of the stacked axes (a 1-D <c>b</c> picks the
+        ///     <c>(m,m),(m)-&gt;(m)</c> gufunc, any other rank <c>(m,m),(m,n)-&gt;(m,n)</c>;
+        ///     <see cref="GufuncGuard.CheckCoreDimensions"/>), then <see cref="SolveKernel"/> at the loop dtype.
+        /// </remarks>
         // Scope: solve casts BOTH operands via ToCommon (two potential dtype-cast temps) before
         // the engine call — [NDScoped] reclaims whichever were minted (a passthrough operand
         // already at the common type is never tracked), yielding the engine's fresh solution.
         [NDScoped]
-        internal static NDArray Solve(NDArray a, NDArray b)
+        public override NDArray Solve(NDArray a, NDArray b)
         {
             AssertStackedSquare(a);
 
@@ -39,37 +29,27 @@ namespace NumSharp
             Backends.GufuncGuard.CheckCoreDimensions(oneDimensional ? Backends.GufuncSignature.Solve1 : Backends.GufuncSignature.Solve,
                 new[] { a, b, null }, null, null, keepdimsPassed: false, keepdims: false);
 
-            return a.TensorEngine.Solve(ToCommon(a, common), ToCommon(b, common), oneDimensional);
+            return SolveKernel(ToCommon(a, common), ToCommon(b, common), oneDimensional);
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.tensorsolve</c> past the class boundary, NumPy's statements: the axis move,
-        ///     <c>oldshape = a.shape[-(an - b.ndim):]</c>, the size check, the square system <c>a.reshape(prod, prod)</c>
-        ///     against <c>b.ravel()</c> (through the public <c>np.linalg.solve</c>) and <c>res.shape = oldshape</c>.
-        /// </summary>
-        /// <param name="a">The coefficient tensor (plain: the facade applied the class boundary).</param>
-        /// <param name="b">The right-hand side.</param>
-        /// <param name="axes">Axes of <paramref name="a"/> to move to the right before inversion, as LIST VALUES (never
-        ///     normalized), or null.</param>
-        /// <returns>The solution, of shape <c>oldshape</c>: <c>a.shape[b.ndim:]</c> (after the axis move) when
-        ///     <paramref name="a"/> has more axes than <paramref name="b"/>, the WHOLE shape of <paramref name="a"/> when
-        ///     they have as many. It is solve's own result relabelled in place, so it owns its data.</returns>
-        /// <exception cref="ValueError">An axis that is not one of <c>0 .. a.ndim - 1</c> (Python's
-        ///     <c>list.remove(x): x not in list</c>), or a right-hand side that does not match the square system
-        ///     (solve's gufunc text, <c>solve1: Input operand 1 has a mismatch in its core dimension 0, ...</c>).</exception>
-        /// <exception cref="LinAlgError"><c>a.size != prod(oldshape) ** 2</c>, or the system is singular.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (solve's <c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (solve's gufunc input cast, NumPy's UFuncTypeError).</exception>
+        /// <inheritdoc/>
         /// <remarks>
+        ///     <para>
+        ///     NumPy's statements: the axis move, <c>oldshape = a.shape[-(an - b.ndim):]</c>, the size check, the square system
+        ///     <c>a.reshape(prod, prod)</c> against <c>b.ravel()</c> (through the public <c>np.linalg.solve</c>, so the engine's
+        ///     <see cref="Solve"/> computes it) and <c>res.shape = oldshape</c>.
+        ///     </para>
+        ///     <para>
         ///     NumPy takes <c>oldshape</c> with a Python slice whose edges are part of the answer: when <c>a.ndim ==
         ///     b.ndim</c> the slice starts at <c>-0</c>, which is 0, so the whole shape is the unknowns' shape and only an
-        ///     operand of 0 or 1 elements passes the size check (<c>tensorsolve(zeros((0, 0)), zeros((0, 0)))</c> is an
-        ///     empty (0, 0) solution, <c>tensorsolve([[2.]], [[4.]])</c> is <c>[[2.]]</c>, a 0-d pair a 0-d solution); when
-        ///     <c>b</c> has more axes than <c>a</c> the slice starts past them, and the system is <c>(1, 1)</c> against
-        ///     every element of <c>b</c>.
+        ///     operand of 0 or 1 elements passes the size check (<c>tensorsolve(zeros((0, 0)), zeros((0, 0)))</c> is an empty
+        ///     (0, 0) solution, <c>tensorsolve([[2.]], [[4.]])</c> is <c>[[2.]]</c>, a 0-d pair a 0-d solution); when <c>b</c>
+        ///     has more axes than <c>a</c> the slice starts past them, and the system is <c>(1, 1)</c> against every element of
+        ///     <c>b</c>.
+        ///     </para>
         /// </remarks>
         [NDScoped]
-        internal static NDArray Tensorsolve(NDArray a, NDArray b, int[] axes)
+        public override NDArray Tensorsolve(NDArray a, NDArray b, int[] axes = null)
         {
             // an = a.ndim, read before the axis move (which keeps the rank).
             int an = a.ndim;

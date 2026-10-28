@@ -24,13 +24,13 @@ namespace NumSharp
             /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
             /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine.Eig scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray eigenvalues, NDArray eigenvectors) eig(NDArray a)
             {
                 // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.WrappedPair(a, static s => eig(s), wrapFirst: false, wrapSecond: true);
-                return LinalgEngine.Eig(a);
+                return EngineOf(a).Linalg.Eig(a);
             }
 
             /// <summary>
@@ -42,11 +42,11 @@ namespace NumSharp
             /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves (an empty operand or a zero-size batch needs none).</exception>
             /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
             /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
-            [NDScoped] // the facade keeps its scope over the call; LinalgEngine.Eigvals scopes the computation's own
+            [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray eigvals(NDArray a)
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return LinalgEngine.Eigvals(a);
+                return EngineOf(a).Linalg.Eigvals(a);
             }
 
             /// <summary>
@@ -70,13 +70,13 @@ namespace NumSharp
             /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
             /// <exception cref="TypeError">A float16, decimal or char operand.</exception>
             /// <exception cref="ArgumentException">A text operand (NumPy's gufunc input-cast refusal).</exception>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine.Eigh scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static (NDArray eigenvalues, NDArray eigenvectors) eigh(NDArray a, char UPLO = 'L')
             {
                 // a numpy.matrix operand: NumPy returns the plain eigenvalues and wrap(vt), the eigenvectors as a matrix
                 if (NDMatrixBoundary.Sees(a))
                     return NDMatrixBoundary.WrappedPair((a, UPLO), static s => eigh(s.a, s.UPLO), wrapFirst: false, wrapSecond: true);
-                return LinalgEngine.Eigh(a, UPLO);
+                return EngineOf(a).Linalg.Eigh(a, UPLO);
             }
 
             /// <summary>
@@ -84,11 +84,11 @@ namespace NumSharp
             /// </summary>
             /// <inheritdoc cref="eigh"/>
             /// <returns>The eigenvalues, ascending and real.</returns>
-            [NDScoped] // the facade keeps its scope over the call; LinalgEngine.Eigvalsh scopes the computation's own
+            [NDScoped] // the facade keeps its scope over the call; the Linalg member scopes the computation's own
             public static NDArray eigvalsh(NDArray a, char UPLO = 'L')
             {
                 using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-                return LinalgEngine.Eigvalsh(a, UPLO);
+                return EngineOf(a).Linalg.Eigvalsh(a, UPLO);
             }
         }
     }

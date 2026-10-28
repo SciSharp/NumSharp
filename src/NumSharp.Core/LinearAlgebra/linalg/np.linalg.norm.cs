@@ -56,7 +56,7 @@ namespace NumSharp
             ///     Matrix or vector norm reduced over an explicit axis tuple.
             /// </summary>
             /// <inheritdoc cref="norm(NDArray, object, int?, bool)"/>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray norm(NDArray x, object ord, int[] axis, bool keepdims = false)
             {
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
@@ -65,7 +65,7 @@ namespace NumSharp
                 // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
                 if (NDCharArrayBoundary.Sees(x))
                     return NDCharArrayBoundary.Plain((x, ord, axis, keepdims), static s => norm(s.x, s.ord, s.axis, s.keepdims));
-                return LinalgEngine.Norm(x, ord, axis, keepdims);
+                return EngineOf(x).Linalg.Norm(x, ord, axis, keepdims);
             }
 
             /// <summary>
@@ -93,7 +93,7 @@ namespace NumSharp
                 ? NDMatrixBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
                 : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
                 ? NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord))
-                : LinalgEngine.VectorNormOverAxis(x, axis, keepdims, ord);
+                : EngineOf(x).Linalg.VectorNorm(x, axis, keepdims, ord);
 
             /// <summary>
             ///     The Array-API vector norm — <c>axis</c> defaults to flattening and <c>ord</c> to 2.
@@ -124,7 +124,7 @@ namespace NumSharp
             ///     to norm.".
             ///     </para>
             /// </remarks>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray vector_norm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
             {
                 // a numpy.matrix operand: NumPy converts with asarray here, so the result is a plain array
@@ -133,7 +133,7 @@ namespace NumSharp
                 // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
                 if (NDCharArrayBoundary.Sees(x))
                     return NDCharArrayBoundary.Plain((x, axis, keepdims, ord), static s => vector_norm(s.x, s.axis, s.keepdims, s.ord));
-                return LinalgEngine.VectorNormOverAxes(x, axis, keepdims, ord);
+                return EngineOf(x).Linalg.VectorNorm(x, axis, keepdims, ord);
             }
 
             /// <summary>
@@ -161,7 +161,7 @@ namespace NumSharp
                 ? NDMatrixBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
                 : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
                 ? NDCharArrayBoundary.Plain((x, keepdims, ord), static s => matrix_norm(s.x, s.keepdims, s.ord))
-                : norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
+                : EngineOf(x).Linalg.MatrixNorm(x, keepdims, ord);
         }
     }
 }

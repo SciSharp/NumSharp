@@ -38,11 +38,12 @@ namespace NumSharp
         ///     accepts 2-vectors. Each is implemented against its own contract.
         ///     </para>
         ///     <para>
-        ///     <b>The bodies are <see cref="LinalgEngine"/></b> (<c>LinearAlgebra/linalg/LinalgEngine*.cs</c>), an
-        ///     operation class beside these facades: NumPy's <c>_linalg.py</c> statements (the argument checks, the dtype
-        ///     rule, the text refusals) around the <see cref="TensorEngine"/> member that is NumPy's gufunc. A facade here
-        ///     keeps its signature, its documentation, the class boundary (numpy.matrix, numpy.char.chararray) and one
-        ///     call.
+        ///     <b>The bodies are the <see cref="TensorEngine.Linalg"/> sub-engine</b> (<see cref="LinalgEngine"/>, by default
+        ///     <see cref="Backends.DefaultLinalgEngine"/> in <c>LinearAlgebra/linalg/DefaultLinalgEngine*.cs</c>): NumPy's
+        ///     <c>_linalg.py</c> statements (the argument checks, the dtype rule, the text refusals) around kernels that
+        ///     stand for NumPy's <c>_umath_linalg</c> gufuncs. A facade here keeps its signature, its documentation, the
+        ///     class boundary (numpy.matrix, numpy.char.chararray) and one call, <c>EngineOf(a).Linalg.X(...)</c>, so an
+        ///     engine assigned to <see cref="TensorEngine.Linalg"/> computes every function of this module.
         ///     </para>
         /// </remarks>
         [ModuleName("np.linalg")]

@@ -44,13 +44,13 @@ namespace NumSharp
             ///     fewer than two arrays.</exception>
             /// <exception cref="LinAlgError">With three or more arrays, an operand other than a vector end that is not
             ///     two-dimensional.</exception>
-            [NDScoped] // the class boundary's temporaries; LinalgEngine.MultiDot scopes the computation's own
+            [NDScoped] // the class boundary's temporaries; the Linalg member scopes the computation's own
             public static NDArray multi_dot(NDArray[] arrays, NDArray @out = null)
             {
                 // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
                 if (NDMatrixBoundary.Sees(arrays))
                     return NDMatrixBoundary.Wrapped((arrays, @out), static s => multi_dot(s.arrays, s.@out), @out);
-                return LinalgEngine.MultiDot(arrays, @out);
+                return EngineOf(arrays is { Length: > 0 } ? arrays[0] : null).Linalg.MultiDot(arrays, @out);
             }
 
             /// <inheritdoc cref="multi_dot(NDArray[], NDArray)"/>

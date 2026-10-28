@@ -1,31 +1,19 @@
 using System;
 using NumSharp.Backends.Iteration;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.norm(x, ord, int[] axis, keepdims)</c> past the class boundary: NumPy's
-        ///     <c>x.astype(float)</c> of a text operand, the float conversion of an integer / bool one, the fast path of
-        ///     the default order over the whole array (raveled in memory order, <c>sqrt(x.dot(x))</c>, and for a complex
-        ///     operand <c>sqrt(x_real.dot(x_real) + x_imag.dot(x_imag))</c>), then the one-axis (vector) or two-axis
-        ///     (matrix) branch.
-        /// </summary>
-        /// <param name="x">The operand (plain: the facade applied the class boundary).</param>
-        /// <param name="ord">The order: null, a number, an infinity, or <c>"fro"</c> / <c>"f"</c> / <c>"nuc"</c>.</param>
-        /// <param name="axis">The reduced axes, or null for every axis.</param>
-        /// <param name="keepdims">Keep the reduced axes as length 1.</param>
-        /// <returns>The norm: a 0-d array for a whole-array norm, else the reduced array.</returns>
-        /// <exception cref="ValueError">An order that is invalid for the number of reduced axes, duplicate axes, more
-        ///     than two reduced axes (<c>Improper number of dimensions to norm.</c>), a min order of an empty operand, or a
-        ///     text element that does not parse as a float.</exception>
-        /// <exception cref="AxisError">An axis out of range.</exception>
-        /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A matrix order 2, -2 or <c>"nuc"</c> over a non-empty
-        ///     matrix with no matrix backend installed.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: <c>x.astype(float)</c> of a text operand, the float conversion of an integer / bool one,
+        ///     the fast path of the default order over the whole array (raveled in memory order, <c>sqrt(x.dot(x))</c>, and for
+        ///     a complex operand <c>sqrt(x_real.dot(x_real) + x_imag.dot(x_imag))</c>), then the one-axis
+        ///     (<see cref="NormVectorBranch"/>) or two-axis (<see cref="NormMatrixBranch"/>) branch.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray Norm(NDArray x, object ord, int[] axis, bool keepdims)
+        public override NDArray Norm(NDArray x, object ord = null, int[] axis = null, bool keepdims = false)
         {
             // NumPy's norm converts a non-inexact input with x.astype(float): a text array is parsed (each element by
             // float(), the first failing one raising NumPy's text), and the norm runs on the float64 numbers.
@@ -71,31 +59,23 @@ namespace NumSharp
             int[] axes = axis ?? AllAxes(nd);
 
             // NumPy's one-axis branch hands the axis to its reductions as it is (they check it), so a string order is
-            // refused before any axis check: VectorNorm normalizes where those reductions would.
+            // refused before any axis check: NormVectorBranch normalizes where those reductions would.
             if (axes.Length == 1)
-                return VectorNorm(a, ord, axes[0], keepdims);
+                return NormVectorBranch(a, ord, axes[0], keepdims);
             if (axes.Length == 2)
-                return MatrixNorm(a, ord, axes, nd, keepdims);
+                return NormMatrixBranch(a, ord, axes, nd, keepdims);
 
             throw new ValueError("Improper number of dimensions to norm.");
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.vector_norm(x, int[] axis, keepdims, ord)</c> past the class boundary: NumPy's
-        ///     tuple branch (the reduced axes moved to the front and merged into one, then norm's one-axis branch over
-        ///     axis 0, through the public <c>np.linalg.norm</c>) or, without axes, the norm of the flattened operand.
-        /// </summary>
-        /// <param name="x">The operand (plain: the facade applied the class boundary).</param>
-        /// <param name="axis">The reduced axes, any number of them, or null for the flattened array.</param>
-        /// <param name="keepdims">Leave the reduced axes in the result with length 1.</param>
-        /// <param name="ord">The vector order; null means NumPy's default of 2.</param>
-        /// <returns>The vector norm over the axes.</returns>
-        /// <exception cref="AxisError">An axis is out of range.</exception>
-        /// <exception cref="ValueError">An axis appears twice ("repeated axis"), a text order, or -inf of an empty
-        ///     operand.</exception>
-        /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's tuple branch: the reduced axes moved to the front and merged into one, then norm's one-axis branch over
+        ///     axis 0 (through the public <c>np.linalg.norm</c>, so the engine's <see cref="Norm"/> computes it); without
+        ///     axes, the norm of the flattened operand.
+        /// </remarks>
         [NDScoped]
-        internal static NDArray VectorNormOverAxes(NDArray x, int[] axis, bool keepdims, object ord)
+        public override NDArray VectorNorm(NDArray x, int[] axis = null, bool keepdims = false, object ord = null)
         {
             object order = ord ?? 2;
             if (axis is not null)
@@ -143,27 +123,20 @@ namespace NumSharp
             return keepdims ? ReshapeLikeNumPy(flattened, Ones(x.ndim)) : flattened;
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.vector_norm(x, int axis, keepdims, ord)</c> past the class boundary: NumPy's
-        ///     <c>res = norm(x, axis=_axis, ord=ord)</c> (through the public <c>np.linalg.norm</c>, without keepdims) and,
-        ///     for keepdims, <c>res.reshape(tuple(shape))</c> with the reduced axis of the input's shape set to 1.
-        /// </summary>
-        /// <param name="x">The operand (plain: the facade applied the class boundary).</param>
-        /// <param name="axis">The reduced axis (negative values count from the end).</param>
-        /// <param name="keepdims">Leave the reduced axis in the result with length 1.</param>
-        /// <param name="ord">The vector order; null means NumPy's default of 2.</param>
-        /// <returns>The norm along <paramref name="axis"/>; with keepdims a view of it (NumPy's reshape).</returns>
-        /// <exception cref="AxisError"><paramref name="axis"/> is out of range for a numeric order (a 0-d input has no
-        ///     axis).</exception>
-        /// <exception cref="ValueError">A text order, or -inf of an empty axis.</exception>
-        /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
+        /// <inheritdoc/>
         /// <remarks>
+        ///     <para>
+        ///     NumPy's <c>res = norm(x, axis=_axis, ord=ord)</c> (through the public <c>np.linalg.norm</c>, without keepdims)
+        ///     and, for keepdims, <c>res.reshape(tuple(shape))</c> with the reduced axis of the input's shape set to 1.
+        ///     </para>
+        ///     <para>
         ///     NumPy's vector_norm never hands keepdims to norm ("We can't reuse np.linalg.norm(keepdims) because of the
         ///     reshape hacks above"), so its keepdims result is a reshape of the reduced array, not the reduction's own
         ///     keepdims array: a view that does not own its data.
+        ///     </para>
         /// </remarks>
         [NDScoped]
-        internal static NDArray VectorNormOverAxis(NDArray x, int axis, bool keepdims, object ord)
+        public override NDArray VectorNorm(NDArray x, int axis, bool keepdims = false, object ord = null)
         {
             var res = np.linalg.norm(x, ord ?? 2, new[] {axis}, false);
             if (!keepdims)
@@ -175,6 +148,15 @@ namespace NumSharp
             shape[NormalizeAxis(axis, x.ndim)] = 1;
             return ReshapeLikeNumPy(res, shape);
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's one statement <c>return norm(x, axis=(-2, -1), keepdims=keepdims, ord=ord)</c>, through the public
+        ///     <c>np.linalg.norm</c> (so the engine's <see cref="Norm"/> computes it), the null order standing for NumPy's
+        ///     default <c>"fro"</c>. It opens no scope: the call is the whole body and its result is returned as it is.
+        /// </remarks>
+        public override NDArray MatrixNorm(NDArray x, bool keepdims = false, object ord = null)
+            => np.linalg.norm(x, ord ?? "fro", new[] {-2, -1}, keepdims);
 
         /// <summary>
         ///     NumPy's <c>r.reshape(shape)</c> of a norm result, which may be one of NumPy's scalars: an array's reshape is a
@@ -191,7 +173,7 @@ namespace NumSharp
         ///     A view of NumSharp's read-only scalar stand-in would stay read-only, where NumPy's reshape of a scalar is
         ///     writeable, so the view is taken of a copy (a 0-d copy costs one element).
         /// </remarks>
-        [NDScopedCovered] // only callers: the [NDScoped] norm bodies and MatrixNorm under them; the copy lives on as the view's base
+        [NDScopedCovered] // only callers: the [NDScoped] norm bodies and NormMatrixBranch under them; the copy lives on as the view's base
         private static NDArray ReshapeLikeNumPy(NDArray r, long[] shape)
         {
             if (r.ndim == 0)
@@ -220,7 +202,7 @@ namespace NumSharp
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
         /// <exception cref="AxisError">A numeric order with an axis out of range (NumPy's reductions' error).</exception>
         [NDScopedCovered] // always dispatched from the [NDScoped] Norm body; rides its scope
-        private static NDArray VectorNorm(NDArray a, object ord, int axis, bool keepdims)
+        private static NDArray NormVectorBranch(NDArray a, object ord, int axis, bool keepdims)
         {
             if (ord is null || (IsNumber(ord, out double n) && n == 2d))
             {
@@ -314,7 +296,7 @@ namespace NumSharp
         ///     <c>0x1.185f5bb7003c2p+19</c> and the product <c>...3c1p+19</c>, so NumPy's <c>norm(v, 0.5)</c> and
         ///     <c>norm(v, 0.5, keepdims=True)</c> of <c>v = [x * x]</c> differ in the last bit.
         /// </remarks>
-        [NDScopedCovered] // only caller: VectorNorm under the [NDScoped] Norm body; the widened / narrowed copies ride its scope
+        [NDScopedCovered] // only caller: NormVectorBranch under the [NDScoped] Norm body; the widened / narrowed copies ride its scope
         private static NDArray ScalarPower(NDArray ret, NDArray recip)
         {
             switch (ret.typecode)
@@ -349,7 +331,7 @@ namespace NumSharp
         /// <exception cref="TypeError">An order that is neither null, a number nor a string.</exception>
         /// <exception cref="OpenBlasMissingBackendException">An order 2, -2 or "nuc" over a non-empty matrix with no matrix backend.</exception>
         [NDScopedCovered] // always dispatched from the [NDScoped] Norm body; rides its scope
-        private static NDArray MatrixNorm(NDArray a, object ord, int[] axes, int nd, bool keepdims)
+        private static NDArray NormMatrixBranch(NDArray a, object ord, int[] axes, int nd, bool keepdims)
         {
             int rowAxis = NormalizeAxis(axes[0], nd);
             int colAxis = NormalizeAxis(axes[1], nd);
@@ -435,7 +417,7 @@ namespace NumSharp
         ///     <para><b>Not modelled.</b> An empty operand keeps the two one-axis sums: every sum is the identity's 0 (or
         ///     the result holds no element), whatever the order.</para>
         /// </remarks>
-        [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] Norm scope
+        [NDScopedCovered] // only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope
         private static NDArray FrobeniusOverBoth(NDArray a, int rowAxis, int colAxis)
         {
             if (a.size == 0)
@@ -624,7 +606,7 @@ namespace NumSharp
         /// <returns>The reduced norm.</returns>
         /// <exception cref="OpenBlasMissingBackendException">No matrix backend computes the singular values of a non-empty operand.</exception>
         /// <exception cref="ValueError">"-2" of an empty matrix (the empty-min error).</exception>
-        [NDScopedCovered] // only reached via MatrixNorm, itself under the [NDScoped] Norm scope
+        [NDScopedCovered] // only reached via NormMatrixBranch, itself under the [NDScoped] Norm scope
         private static NDArray SingularValueNorm(NDArray a, int rowAxis, int colAxis, string which)
         {
             // NumPy's _multi_svd_norm: move the two matrix axes to the end, take the singular values

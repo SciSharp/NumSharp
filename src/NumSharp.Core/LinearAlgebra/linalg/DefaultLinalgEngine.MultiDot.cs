@@ -1,42 +1,32 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.multi_dot</c>, NumPy's statements: two arrays are <c>dot(a, b, out=out)</c>; three
-        ///     or more are promoted at their vector ends (<c>atleast_2d</c>, and its transpose for the last), checked by
-        ///     <c>_assert_2d</c>, multiplied in the cheapest association order with <paramref name="out"/> handed to the
-        ///     FINAL dot, and the result reshaped back: <c>result[0, 0]</c> when both ends were vectors, <c>ravel()</c>
-        ///     when one was.
-        /// </summary>
-        /// <param name="arrays">The chain (plain: the facade applied the class boundary).</param>
-        /// <param name="out">The final product's out array (np.dot's strict out: the product's exact dtype and rank,
-        ///     C-contiguous), or null.</param>
-        /// <returns>The product: <paramref name="out"/> itself when given (a two-array chain, or no vector end); a view
-        ///     of it raveled when one end was a vector; a NumPy scalar stand-in (a fresh read-only 0-d array holding the
-        ///     single element) when both were; otherwise a fresh array.</returns>
-        /// <exception cref="ValueError">Fewer than two arrays (<c>Expecting at least two arrays.</c>), or an out array
-        ///     np.dot refuses (<c>output array is not acceptable (must have the right datatype, number of dimensions, and be
-        ///     a C-Array)</c>, <c>output array has wrong dimensions</c>).</exception>
-        /// <exception cref="IncorrectShapeException">Misaligned operands: np.dot's <c>shapes (…) and (…) not aligned</c>
-        ///     (NumPy's ValueError text; the house type for an alignment error).</exception>
-        /// <exception cref="LinAlgError">With three or more arrays, an operand other than a vector end that is not
-        ///     two-dimensional.</exception>
+        /// <inheritdoc/>
         /// <remarks>
-        ///     <para><b>out= is np.dot's.</b> NumPy passes <c>out</c> to the final <c>dot</c>, whose check is
+        ///     <para>
+        ///     NumPy's statements: two arrays are <c>dot(a, b, out=out)</c>; three or more are promoted at their vector ends
+        ///     (<c>atleast_2d</c>, and its transpose for the last), checked by <c>_assert_2d</c>, multiplied in the cheapest
+        ///     association order (<c>_multi_dot_three</c> for three, the matrix-chain dynamic program above) with the out
+        ///     array handed to the FINAL dot, and the result reshaped back: <c>result[0, 0]</c> when both ends were vectors,
+        ///     <c>ravel()</c> when one was.
+        ///     </para>
+        ///     <para>
+        ///     <b>out= is np.dot's.</b> NumPy passes <c>out</c> to the final <c>dot</c>, whose check is
         ///     <c>new_array_for_sum</c>: no cast, no broadcast. So <c>multi_dot([v, B, C], out=o)</c> wants <c>o</c> shaped
-        ///     <c>(1, k)</c> and of the product's dtype, and a float64 <c>o</c> for an integer chain is refused where a
-        ///     copy into it would have cast. The inner products are computed first, so their errors come before the out
-        ///     check.</para>
-        ///     <para><b>The vector ends.</b> NumPy's <c>result[0, 0]</c> of the (1, 1) product is a scalar: here a fresh
-        ///     0-d copy of that element, marked like NumPy's scalars (<see cref="NDArray.MarkReductionScalar"/>), never a
-        ///     view of the product or of <paramref name="out"/>. <c>result.ravel()</c> of the C-ordered (1, k) or (k, 1)
-        ///     product is a view of it.</para>
+        ///     <c>(1, k)</c> and of the product's dtype, and a float64 <c>o</c> for an integer chain is refused where a copy
+        ///     into it would have cast. The inner products are computed first, so their errors come before the out check.
+        ///     </para>
+        ///     <para>
+        ///     <b>The vector ends.</b> NumPy's <c>result[0, 0]</c> of the (1, 1) product is a scalar: here a fresh 0-d copy
+        ///     of that element, marked like NumPy's scalars (<see cref="NDArray.MarkReductionScalar"/>), never a view of the
+        ///     product or of the out array. <c>result.ravel()</c> of the C-ordered (1, k) or (k, 1) product is a view of it.
+        ///     </para>
         /// </remarks>
         [NDScoped]
-        internal static NDArray MultiDot(NDArray[] arrays, NDArray @out)
+        public override NDArray MultiDot(NDArray[] arrays, NDArray @out = null)
         {
             if (arrays is null || arrays.Length < 2)
                 throw new ValueError("Expecting at least two arrays.");

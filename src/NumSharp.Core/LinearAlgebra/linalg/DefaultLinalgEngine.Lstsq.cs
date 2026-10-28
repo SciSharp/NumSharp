@@ -1,27 +1,18 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.lstsq</c>: the 1-D <paramref name="b"/> promotion, <c>_assert_2d</c>, the row
-        ///     check, <c>_commonType</c>, the gufunc's text refusal, the default cutoff, the <c>nrhs == 0</c> padding,
-        ///     <see cref="TensorEngine.Lstsq"/>, and NumPy's tail (the squeeze, the discarded residuals, the casts).
-        /// </summary>
-        /// <param name="a">Coefficient matrix, <c>(M, N)</c> (plain: the facade applied the class boundary).</param>
-        /// <param name="b">Ordinate values, <c>(M,)</c> or <c>(M, K)</c>.</param>
-        /// <param name="rcond">The cutoff ratio; null for NumPy's <c>eps * max(M, N)</c>.</param>
-        /// <returns><c>(solution, residuals, rank, singularValues)</c>: the residuals EMPTY unless the system is
-        ///     overdetermined and full-rank.</returns>
-        /// <exception cref="LinAlgError">An operand that is not two-dimensional (after the promotion), or <c>b</c>'s
-        ///     rows differ from <c>a</c>'s (<c>Incompatible dimensions</c>).</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the 1-D <c>b</c> promotion, <c>_assert_2d</c>, the row check, <c>_commonType</c>, the text
+        ///     refusal of the <c>lstsq</c> gufunc's input casts, the default cutoff, the <c>nrhs == 0</c> padding,
+        ///     <see cref="LstsqKernel"/>, and NumPy's tail (the squeeze, the discarded residuals, the casts).
+        /// </remarks>
         [NDScoped] // reclaims the column-promoted b, the ToCommon casts and the nrhs==0 padding temps; the 4-tuple is yielded
-        internal static (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
-            NDArray a, NDArray b, double? rcond)
+        public override (NDArray Solution, NDArray Residuals, NDArray Rank, NDArray SingularValues) Lstsq(
+            NDArray a, NDArray b, double? rcond = null)
         {
             // A 1-D b is promoted to a single column, exactly as NumPy's `b = b[:, newaxis]`; the
             // solution is squeezed back at the end. _assert_2d then rejects any higher rank.
@@ -55,7 +46,7 @@ namespace NumSharp
             if (padded)
                 bC = np.zeros(new Shape(m, 1), common);
 
-            var (x, resids, rank, s) = aC.TensorEngine.Lstsq(aC, bC, cutoff);
+            var (x, resids, rank, s) = LstsqKernel(aC, bC, cutoff);
 
             if (padded)
             {

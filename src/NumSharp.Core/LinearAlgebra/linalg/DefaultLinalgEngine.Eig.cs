@@ -1,46 +1,36 @@
 using System;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    internal static partial class LinalgEngine
+    public partial class DefaultLinalgEngine
     {
-        /// <summary>
-        ///     The body of <c>np.linalg.eig</c>: <c>_assert_stacked_square</c>, <c>_assert_finite</c>,
-        ///     <c>_commonType</c>, <see cref="TensorEngine.Eig"/> at the loop dtype, then NumPy's collapse of a real
-        ///     operand's all-real result (<see cref="CollapseEig"/>).
-        /// </summary>
-        /// <param name="a">The square matrix, or a stack of them (plain: the facade applied the class boundary).</param>
-        /// <returns><c>(eigenvalues, eigenvectors)</c>, the columns of the second being the vectors; real for a real
-        ///     operand whose eigenvalues are all real, else complex128.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
-        /// <exception cref="TypeError">A text operand (<c>isfinite</c> has no string loop), or a float16, decimal or
-        ///     char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: <c>_assert_stacked_square</c>, <c>_assert_finite</c>, <c>_commonType</c>,
+        ///     <see cref="EigKernel"/> at the loop dtype, then NumPy's collapse of a real operand's all-real result
+        ///     (<see cref="CollapseEig"/>).
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex w/v CollapseEig supersedes
-        internal static (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a)
+        public override (NDArray eigenvalues, NDArray eigenvectors) Eig(NDArray a)
         {
             AssertStackedSquare(a);
             AssertFinite(a);
             var common = CommonType(a);
-            var (w, v) = a.TensorEngine.Eig(ToCommon(a, common), computeVectors: true);
+            var (w, v) = EigKernel(ToCommon(a, common), computeVectors: true);
             return CollapseEig(w, v, common);
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.eigvals</c>: <see cref="Eig"/>'s statements without the eigenvectors.
-        /// </summary>
-        /// <param name="a">The square matrix, or a stack of them.</param>
-        /// <returns>The eigenvalues: real for a real operand whose eigenvalues are all real, else complex128.</returns>
-        /// <exception cref="LinAlgError">Fewer than two axes, a non-square operand, or an operand holding inf / NaN.</exception>
-        /// <exception cref="TypeError">A text operand, or a float16, decimal or char operand.</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     <see cref="Eig(NDArray)"/>'s statements without the eigenvectors (the kernel computes none).
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp and the pre-collapse complex eigenvalues
-        internal static NDArray Eigvals(NDArray a)
+        public override NDArray Eigvals(NDArray a)
         {
             AssertStackedSquare(a);
             AssertFinite(a);
             var common = CommonType(a);
-            var w = a.TensorEngine.Eig(ToCommon(a, common), computeVectors: false).eigenvalues;
+            var w = EigKernel(ToCommon(a, common), computeVectors: false).eigenvalues;
             return CollapseEig(w, null, common).eigenvalues;
         }
 
@@ -126,51 +116,37 @@ namespace NumSharp
             np.copyto(im, im.astype(NPTypeCode.Single));
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.eigh</c>: the UPLO check, <c>_assert_stacked_square</c>, <c>_commonType</c>, the
-        ///     gufunc's text refusal, then <see cref="TensorEngine.Eigh"/> at the loop dtype.
-        /// </summary>
-        /// <param name="a">The real symmetric / complex Hermitian matrix, or a stack of them (only the triangle
-        ///     <paramref name="UPLO"/> names is read).</param>
-        /// <param name="UPLO">Which triangle holds the data: <c>'L'</c> or <c>'U'</c>, either case.</param>
-        /// <returns><c>(eigenvalues, eigenvectors)</c>: the eigenvalues ascending and always real.</returns>
-        /// <exception cref="ValueError"><paramref name="UPLO"/> is neither <c>'L'</c> nor <c>'U'</c> (checked before the
-        ///     operand).</exception>
-        /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     NumPy's statements: the UPLO check (before the operand is read), <c>_assert_stacked_square</c>,
+        ///     <c>_commonType</c>, the text refusal of the <c>eigh_lo</c> / <c>eigh_up</c> gufunc's input cast, then
+        ///     <see cref="EighKernel"/> at the loop dtype.
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp; the tuple is yielded component-wise
-        internal static (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char UPLO)
+        public override (NDArray eigenvalues, NDArray eigenvectors) Eigh(NDArray a, char UPLO = 'L')
         {
             char uplo = RequireUplo(UPLO);
             AssertStackedSquare(a);
             var common = CommonType(a);
             // NumPy calls _umath_linalg.eigh_lo / eigh_up: its input cast refuses text.
             ThrowIfTextGufunc(uplo == 'U' ? "eigh_up" : "eigh_lo", a);
-            return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: true);
+            return EighKernel(ToCommon(a, common), uplo, computeVectors: true);
         }
 
-        /// <summary>
-        ///     The body of <c>np.linalg.eigvalsh</c>: <see cref="Eigh"/>'s statements without the eigenvectors.
-        /// </summary>
-        /// <param name="a">The real symmetric / complex Hermitian matrix, or a stack of them.</param>
-        /// <param name="UPLO">Which triangle holds the data: <c>'L'</c> or <c>'U'</c>, either case.</param>
-        /// <returns>The eigenvalues, ascending and real.</returns>
-        /// <exception cref="ValueError"><paramref name="UPLO"/> is neither <c>'L'</c> nor <c>'U'</c>.</exception>
-        /// <exception cref="LinAlgError">Fewer than two axes, or a non-square operand.</exception>
-        /// <exception cref="TypeError">A float16, decimal or char operand (<c>_commonType</c>).</exception>
-        /// <exception cref="ArgumentException">A text operand (the gufunc's input cast).</exception>
-        /// <exception cref="OpenBlasMissingBackendException">A non-empty operand that no matrix backend serves.</exception>
+        /// <inheritdoc/>
+        /// <remarks>
+        ///     <see cref="Eigh(NDArray, char)"/>'s statements without the eigenvectors (the <c>eigvalsh_lo</c> /
+        ///     <c>eigvalsh_up</c> gufunc; the kernel computes no vectors).
+        /// </remarks>
         [NDScoped] // reclaims the ToCommon cast temp (the discarded eigenvector slot is null here)
-        internal static NDArray Eigvalsh(NDArray a, char UPLO)
+        public override NDArray Eigvalsh(NDArray a, char UPLO = 'L')
         {
             char uplo = RequireUplo(UPLO);
             AssertStackedSquare(a);
             var common = CommonType(a);
             // NumPy calls _umath_linalg.eigvalsh_lo / eigvalsh_up: its input cast refuses text.
             ThrowIfTextGufunc(uplo == 'U' ? "eigvalsh_up" : "eigvalsh_lo", a);
-            return a.TensorEngine.Eigh(ToCommon(a, common), uplo, computeVectors: false).eigenvalues;
+            return EighKernel(ToCommon(a, common), uplo, computeVectors: false).eigenvalues;
         }
 
         /// <summary>

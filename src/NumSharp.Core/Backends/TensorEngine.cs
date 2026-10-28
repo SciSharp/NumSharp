@@ -1,9 +1,10 @@
-// TensorEngine's core file: the Blas seam and NumSharp's own np.evaluate entry points. The members NumPy names
-// live in partial files named after NumPy's sources: TensorEngine.Umath.cs (the ufuncs), TensorEngine.Methods.cs
-// (the ndarray methods that compute), TensorEngine.Multiarray.cs (the C functions that compute),
-// TensorEngine.Numeric.cs, TensorEngine.NanFunctions.cs, TensorEngine.UfuncLike.cs, TensorEngine.LinearAlgebra.cs,
-// and TensorEngine.ArrayObject.cs (the array-object members shipped in 0.70.0). The rule that places a function is
-// docs/plans/np-layer-dtype-logic.md, section 1 "Which O" and Appendix D.
+// TensorEngine's core file: the Blas seam, the Linalg sub-engine (numpy.linalg, LinalgEngine) and NumSharp's own
+// np.evaluate entry points. The members NumPy names live in partial files named after NumPy's sources:
+// TensorEngine.Umath.cs (the ufuncs), TensorEngine.Methods.cs (the ndarray methods that compute),
+// TensorEngine.Multiarray.cs (the C functions that compute), TensorEngine.Numeric.cs, TensorEngine.NanFunctions.cs,
+// TensorEngine.UfuncLike.cs, TensorEngine.LinearAlgebra.cs, and TensorEngine.ArrayObject.cs (the array-object members
+// shipped in 0.70.0). The rule that places a function is docs/plans/np-layer-dtype-logic.md, section 1 "Which O" and
+// Appendix D.
 
 using System;
 using NumSharp.Backends;
@@ -31,6 +32,38 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         public IBlasBackend Blas { get; set; }
+
+        /// <summary>
+        ///     numpy.linalg's functions for the arrays bound to this engine: every <c>np.linalg</c> function applies its
+        ///     class boundary and calls one member of this sub-engine. <see cref="DefaultLinalgEngine"/> (NumPy's
+        ///     <c>_linalg.py</c> statements over kernels that ask <see cref="Blas"/> first) until something else is
+        ///     assigned.
+        /// </summary>
+        /// <value>The assigned engine, or the shared <see cref="DefaultLinalgEngine"/>; never null. Assigning null
+        ///     restores the default.</value>
+        /// <remarks>
+        ///     <para>
+        ///     <b>You rarely need this.</b> A LAPACK backend reaches the factorisations through <see cref="Blas"/> already
+        ///     (the <c>Try*</c> members of <see cref="IBlasBackend"/>), which is how <c>NumSharp.Interop.OpenBLAS</c> serves
+        ///     them. Assign a <see cref="DefaultLinalgEngine"/> subclass to compute a factorisation another way while NumPy's
+        ///     argument checks, dtype rules and result layouts stay (override its <c>protected virtual</c> kernels), or a
+        ///     <see cref="LinalgEngine"/> of your own to replace whole functions.
+        ///     </para>
+        ///     <para>
+        ///     Engines are cached singletons (<see cref="BackendFactory"/>), so an assignment reaches every array bound to
+        ///     the engine, existing ones included, from the next <c>np.linalg</c> call on: each call reads the property
+        ///     once, so one already running finishes with the engine it read. Do not assign it while another thread runs
+        ///     np.linalg functions whose results you compare: they may straddle the change.
+        ///     </para>
+        /// </remarks>
+        public LinalgEngine Linalg
+        {
+            get => _linalg ?? DefaultLinalgEngine.Shared;
+            set => _linalg = value;
+        }
+
+        /// <summary>The engine assigned to <see cref="Linalg"/>, or null for the shared default.</summary>
+        private LinalgEngine _linalg;
 
         /// <summary>
         ///     Fused evaluation of an <see cref="NDExpr"/> tree in one iterator
