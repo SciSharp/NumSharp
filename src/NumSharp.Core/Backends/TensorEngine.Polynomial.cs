@@ -12,7 +12,9 @@ namespace NumSharp
         ///     polynomial with the given roots, or of a square matrix's characteristic polynomial (its eigenvalues are
         ///     the roots).
         /// </summary>
-        /// <param name="seq_of_zeros">A 1-D sequence of roots, or a non-empty square 2-D array.</param>
+        /// <param name="seq_of_zeros">A 1-D sequence of roots, or a non-empty square 2-D array. A 0-d input is one root
+        ///     (atleast_1d): this is poly's body, which NumPy's np.poly reaches only through its dispatcher, and that
+        ///     refuses a 0-d input first (the np.poly facade raises its TypeError).</param>
         /// <returns>The coefficients, 1-D: float64 for real roots of any dtype but float32 (kept) and complex (kept;
         ///     the real part when the roots come in conjugate pairs); the 0-d float64 <c>1.0</c> for no
         ///     roots.</returns>
@@ -26,50 +28,61 @@ namespace NumSharp
         public abstract NDArray Poly(NDArray seq_of_zeros);
 
         /// <summary>
-        ///     NumPy's <c>np.polyval(p, x)</c>: Horner's scheme, <c>y = y * x + p[k]</c> from <c>y = zeros_like(x)</c>.
+        ///     NumPy's <c>np.polyval(p, x)</c>: Horner's scheme, <c>y = y * x + pv</c> for each <c>pv</c> in
+        ///     <paramref name="p"/>, from <c>y = zeros_like(x)</c>.
         /// </summary>
-        /// <param name="p">The coefficients, highest degree first (1-D; NumPy iterates it).</param>
+        /// <param name="p">The coefficients, highest degree first. NumPy iterates its first axis (<c>len(p)</c>
+        ///     coefficients): an N-D p's coefficients are its rows, each broadcast against x.</param>
         /// <param name="x">The points, any shape.</param>
-        /// <returns>The values, of dtype <c>result_type(p, x)</c> and <paramref name="x"/>'s shape; with no
-        ///     coefficient, <c>zeros_like(x)</c>.</returns>
+        /// <returns>The values, of dtype <c>result_type(p, x)</c>; of <paramref name="x"/>'s shape for a 1-D p, of the
+        ///     broadcast of x's shape and a row's for an N-D p; with no coefficient, <c>zeros_like(x)</c>.</returns>
         /// <exception cref="TypeError">A 0-d <paramref name="p"/> (<c>iteration over a 0-d array</c>), or text, which
         ///     has no multiply (in <paramref name="x"/>) or add (in <paramref name="p"/>) loop.</exception>
+        /// <exception cref="IncorrectShapeException">An N-D p whose rows do not broadcast with x (the add's
+        ///     <c>operands could not be broadcast together</c> text, NumPy's ValueError).</exception>
         public abstract NDArray Polyval(NDArray p, NDArray x);
 
         /// <summary>
         ///     NumPy's <c>np.polyint(p, m=1, k=None)</c>: the <paramref name="m"/>-th antiderivative, each integration
         ///     dividing the coefficients by their exponents and appending a constant.
         /// </summary>
-        /// <param name="p">The coefficients, highest degree first.</param>
+        /// <param name="p">The coefficients, highest degree first, measured by <c>len()</c> (its first axis: an N-D p
+        ///     meets the division's broadcast or the concatenation's rank error, as in NumPy).</param>
         /// <param name="m">The order of the antiderivative.</param>
-        /// <param name="k">The integration constants, highest order first: null for zeros, one value for every order,
-        ///     or at least <paramref name="m"/> values.</param>
+        /// <param name="k">The integration constants, highest order first, measured by <c>len()</c>: null for zeros,
+        ///     one value for every order, or at least <paramref name="m"/> values.</param>
         /// <returns>The antiderivative's coefficients (floating or complex: the division by the exponents); for
         ///     <paramref name="m"/> 0, <paramref name="p"/> as an array.</returns>
         /// <exception cref="ValueError">A negative <paramref name="m"/>, or fewer constants than
         ///     <paramref name="m"/>.</exception>
         /// <exception cref="TypeError">With <paramref name="m"/> above 0: a 0-d <paramref name="p"/> (<c>len() of
         ///     unsized object</c>), or text, whose division by the exponents has no loop.</exception>
+        /// <exception cref="IncorrectShapeException">An N-D p or k whose shapes the division, the constants' broadcast or
+        ///     the concatenation refuses (NumPy's ValueError texts).</exception>
         public abstract NDArray Polyint(NDArray p, int m = 1, NDArray k = null);
 
         /// <summary>
-        ///     NumPy's <c>np.polyadd(a1, a2)</c>: the shorter coefficient array zero-extended on the high-degree side,
-        ///     then added.
+        ///     NumPy's <c>np.polyadd(a1, a2)</c>: the shorter coefficient array (by <c>len()</c>, the first axis)
+        ///     zero-extended on the high-degree side with zeros of its own dtype, then added.
         /// </summary>
         /// <param name="a1">The first polynomial's coefficients (a scalar is a constant).</param>
         /// <param name="a2">The second polynomial's coefficients.</param>
         /// <returns>The sum's coefficients, in the addition's promoted dtype.</returns>
         /// <exception cref="TypeError">Coefficients the addition has no loop for (text with numbers).</exception>
+        /// <exception cref="IncorrectShapeException">An N-D operand: the 1-D pad meets np.concatenate's rank error, and
+        ///     equal first axes the addition's broadcast error (NumPy's ValueError texts).</exception>
         public abstract NDArray Polyadd(NDArray a1, NDArray a2);
 
         /// <summary>
-        ///     NumPy's <c>np.polysub(a1, a2)</c>: the shorter coefficient array zero-extended on the high-degree side,
-        ///     then <c>a1 - a2</c>.
+        ///     NumPy's <c>np.polysub(a1, a2)</c>: the shorter coefficient array (by <c>len()</c>, the first axis)
+        ///     zero-extended on the high-degree side with zeros of its own dtype, then <c>a1 - a2</c>.
         /// </summary>
         /// <param name="a1">The minuend's coefficients.</param>
         /// <param name="a2">The subtrahend's coefficients.</param>
         /// <returns>The difference's coefficients, in the subtraction's promoted dtype.</returns>
         /// <exception cref="TypeError">Coefficients the subtraction has no loop for (text, bool).</exception>
+        /// <exception cref="IncorrectShapeException">An N-D operand: the 1-D pad meets np.concatenate's rank error, and
+        ///     equal first axes the subtraction's broadcast error (NumPy's ValueError texts).</exception>
         public abstract NDArray Polysub(NDArray a1, NDArray a2);
 
         /// <summary>
@@ -88,10 +101,18 @@ namespace NumSharp
         ///     0.0</c>), the scalar quotient coefficients computed with NumPy's scalar arithmetic, the remainder's
         ///     leading near-zero coefficients dropped (<c>rtol=1e-14</c>, at least one kept).
         /// </summary>
-        /// <param name="u">The dividend's coefficients.</param>
-        /// <param name="v">The divisor's coefficients.</param>
-        /// <returns>The quotient and the remainder, floating or complex.</returns>
-        /// <exception cref="TypeError">Coefficients the float conversion has no loop for (text).</exception>
+        /// <param name="u">The dividend's coefficients, measured by <c>len()</c> (its first axis).</param>
+        /// <param name="v">The divisor's coefficients, measured by <c>len()</c>.</param>
+        /// <returns>The quotient and the remainder, floating or complex; for an N-D u shorter than v, NumPy's
+        ///     <c>(zeros(1), u)</c> with u's leading near-zero rows dropped.</returns>
+        /// <exception cref="TypeError">Coefficients the float conversion has no loop for (text); or a complex quotient
+        ///     coefficient with dimensions (u or v N-D), which NumPy's <c>q[k] = d</c> refuses through complex()
+        ///     (<c>only 0-dimensional arrays can be converted to Python scalars</c>).</exception>
+        /// <exception cref="ValueError">A real quotient coefficient with dimensions (<c>setting an array element with a
+        ///     sequence.</c>).</exception>
+        /// <exception cref="IncorrectShapeException">Rows of an N-D u and v that do not broadcast: NumPy's first
+        ///     statement <c>w = u[0] + v[0]</c> raises the add's error, u's row first.</exception>
+        /// <exception cref="IndexError">An empty u or v (<c>u[0]</c> / <c>v[0]</c>).</exception>
         public abstract (NDArray q, NDArray r) Polydiv(NDArray u, NDArray v);
     }
 }
