@@ -248,7 +248,12 @@ namespace NumSharp.Backends
             u = np.atleast_1d(u) + 0.0;   // floated, exactly like NumPy's `+ 0.0`
             v = np.atleast_1d(v) + 0.0;
 
-            NPTypeCode w = np.result_type(u["0"], v["0"]);              // common type of `u[0] + v[0]`
+            // w = u[0] + v[0]: NumPy forms the sum and keeps its dtype, the common type of two NumPy values, both strong
+            // (np.result_type reads them so; NumSharp's operator would take a 0-d operand as a weak scalar). Forming the
+            // sum is what raises for an N-D u and v whose rows do not broadcast (the add's error, u's row first), before
+            // anything else is read, so it is formed too, in that dtype.
+            NPTypeCode w = np.result_type(u["0"], v["0"]);
+            using (np.add(u["0"], v["0"], dtype: w)) { }
             // NumPy's m = len(u) - 1, n = len(v) - 1: the first axes (an N-D operand's rows).
             long m = u.Shape.dimensions[0] - 1;
             long n = v.Shape.dimensions[0] - 1;
