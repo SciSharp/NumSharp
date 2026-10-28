@@ -74,7 +74,9 @@
 // buffersize, its order and casting taking the general roles), and np.einsum's subscripts (built from the operand's rank:
 // views, sums, a diagonal, ellipses, two- and three-operand contractions, an outer product, refused forms), its operand
 // list (built from the operand, see MakeEinsumOps) and optimize, its out / dtype / order / casting taking the general
-// roles; an overload with a required
+// roles, and np.interp's sample points xp and values fp (fixed arrays, independent of the operand x: a ramp in several
+// dtypes and layouts, repeated, decreasing and NaN points, complex and text values, the shapes NumPy refuses), its fills
+// left / right (a double, or a Complex for the complex overload) and its period; an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -330,6 +332,10 @@ static class Snapshot
         // The max / min family's initial= (np.max / np.amax / np.min / np.amin / np.nanmax / np.nanmin and NDArray's max /
         // min): the value every output starts from, which a where= mask needs (see the Initial variants).
         Initial,
+        // np.interp: the sample points xp and values fp (fixed arrays independent of the operand x: an increasing ramp
+        // in several dtypes and layouts, repeated, decreasing and NaN points, complex and text values, and the forms NumPy
+        // refuses), the fills left / right (a C# double, or a Complex for the complex overload) and the period.
+        InterpXp, InterpFp, InterpFill, InterpFillComplex, InterpPeriod,
         Default, Unsupported,
     }
 
@@ -426,6 +432,16 @@ static class Snapshot
         p.Member.DeclaringType == typeof(EmathModule);
 
     /// <summary>
+    ///     Whether a parameter belongs to np.interp, whose <c>xp</c> / <c>fp</c> / <c>left</c> / <c>right</c> /
+    ///     <c>period</c> roles are its alone: other functions name a second operand <c>left</c> / <c>right</c> (an NDArray,
+    ///     the Operand2 role), and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.interp overload.</returns>
+    private static bool IsInterp(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "interp";
+
+    /// <summary>
     ///     Classifies a parameter.
     /// </summary>
     /// <param name="p">The parameter.</param>
@@ -479,6 +495,9 @@ static class Snapshot
                 : n == "test_elements" && IsIsin(p) ? Role.IsinTest
                 // np.partition / np.argpartition and the ndarray methods' index array of positions.
                 : n == "kth" && IsSortFamily(p) ? Role.KthArray
+                // np.interp's sample points and values (required, fixed arrays: see the InterpXp / InterpFp variants).
+                : n == "xp" && IsInterp(p) ? Role.InterpXp
+                : n == "fp" && IsInterp(p) ? Role.InterpFp
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -567,6 +586,13 @@ static class Snapshot
             if (n == "op_axes" && t == typeof(int[][])) return Role.NditerOpAxes;
             if (n == "itershape" && t == typeof(long[])) return Role.NditerItershape;
             if (n == "buffersize" && t == typeof(long)) return Role.NditerBuffersize;
+        }
+        // np.interp's fills and period (only its).
+        if (IsInterp(p))
+        {
+            if (n is "left" or "right" && t == typeof(double?)) return Role.InterpFill;
+            if (n is "left" or "right" && t == typeof(Complex?)) return Role.InterpFillComplex;
+            if (n == "period" && t == typeof(double?)) return Role.InterpPeriod;
         }
         // np.einsum's subscripts and optimize (only its; its out, dtype, order and casting take the general roles).
         if (IsEinsum(p))
@@ -1017,6 +1043,71 @@ static class Snapshot
                 Add("2.5", () => 2.5);
                 Add("-1.5", () => -1.5);
                 Add("nan", () => double.NaN);
+                break;
+            case Role.InterpXp:
+                // An increasing float64 ramp 0..5 first (the pool's values fall inside and outside it), the ramp in other
+                // dtypes and layouts (strided, reversed), a repeated point, decreasing and NaN points (NumPy does not check
+                // monotonicity: its loop answers them deterministically), complex and text points (the safe-cast refusals,
+                // or text parsed under a period), and the forms NumPy refuses (2-D, 0-d, empty, a length other than fp's).
+                Add("ramp", () => np.array(new[] { 0.0, 1, 2, 3, 4, 5 }));
+                Add("int64", () => np.array(new long[] { 0, 1, 2, 3, 4, 5 }));
+                Add("float32", () => np.array(new float[] { 0, 1, 2, 3, 4, 5 }));
+                Add("strided", () => np.array(new[] { 0.0, 9, 1, 9, 2, 9, 3, 9, 4, 9, 5, 9 })["::2"]);
+                Add("reversed", () => np.array(new[] { 5.0, 4, 3, 2, 1, 0 })["::-1"]);
+                Add("dup", () => np.array(new[] { 0.0, 1, 1, 2, 4, 5 }));
+                Add("desc", () => np.array(new[] { 5.0, 4, 3, 2, 1, 0 }));
+                Add("nan", () => np.array(new[] { 0.0, 1, double.NaN, 3, 4, 5 }));
+                Add("complex", () => np.array(new[] { new Complex(0, 0), 1, 2, 3, 4, 5 }));
+                Add("text", () => np.array(new[] { "0", "1", "2", "3", "4", "5" }));
+                Add("2d", () => np.array(new[] { 0.0, 1, 2, 3, 4, 5 }).reshape(new Shape(2, 3)));
+                Add("0d", () => np.array(2.0));
+                Add("empty", () => np.empty(new Shape(0), np.float64));
+                Add("len5", () => np.array(new[] { 0.0, 1, 2, 3, 4 }));
+                break;
+            case Role.InterpFp:
+                // Real float64 values first, then other real dtypes, complex values (NumPy's complex loop), NaN values,
+                // text, strided and reversed views, and the forms NumPy refuses (2-D, 0-d, empty, a length other than
+                // xp's).
+                Add("ramp", () => np.array(new[] { 10.0, 20, 15, 5, 0, -5 }));
+                Add("int64", () => np.array(new long[] { 10, 20, 15, 5, 0, -5 }));
+                Add("float32", () => np.array(new float[] { 10, 20, 15, 5, 0, -5 }));
+                Add("float16", () => np.array(new[] { 10.0, 20, 15, 5, 0, -5 }).astype(np.float16));
+                Add("bool", () => np.array(new[] { true, false, true, true, false, true }));
+                Add("complex", () => np.array(new[]
+                    { new Complex(1, 1), new Complex(2, -1), new Complex(0, 3), 4, new Complex(-1, 0.5), new Complex(5, 5) }));
+                Add("nan", () => np.array(new[] { 10.0, double.NaN, 15, 5, double.PositiveInfinity, -5 }));
+                Add("text", () => np.array(new[] { "10", "20", "15", "5", "0", "-5" }));
+                Add("strided", () => np.array(new[] { 10.0, 0, 20, 0, 15, 0, 5, 0, 0, 0, -5, 0 })["::2"]);
+                Add("reversed", () => np.array(new[] { -5.0, 0, 5, 15, 20, 10 })["::-1"]);
+                Add("2d", () => np.array(new[] { 10.0, 20, 15, 5, 0, -5 }).reshape(new Shape(2, 3)));
+                Add("0d", () => np.array(2.0));
+                Add("empty", () => np.empty(new Shape(0), np.float64));
+                Add("len5", () => np.array(new[] { 10.0, 20, 15, 5, 0 }));
+                break;
+            case Role.InterpFill:
+                // None first (fp[0] / fp[-1]), then a number, NaN and an infinity.
+                Add("null", () => (double?)null);
+                Add("-1.5", () => (double?)-1.5);
+                Add("nan", () => (double?)double.NaN);
+                Add("inf", () => (double?)double.PositiveInfinity);
+                break;
+            case Role.InterpFillComplex:
+                // None first, then a complex value and a complex with a zero imaginary part (NumPy's real loop refuses
+                // both: PyFloat_AsDouble takes no Python complex).
+                Add("null", () => (Complex?)null);
+                Add("(1+2j)", () => (Complex?)new Complex(1, 2));
+                Add("(3+0j)", () => (Complex?)new Complex(3, 0));
+                break;
+            case Role.InterpPeriod:
+                // None first, then periods smaller and larger than the points' span, a fraction, a negative one (NumPy takes
+                // its absolute value), zero (refused) and NaN.
+                Add("null", () => (double?)null);
+                Add("4", () => (double?)4.0);
+                Add("6", () => (double?)6.0);
+                Add("2.5", () => (double?)2.5);
+                Add("-6", () => (double?)-6.0);
+                Add("0", () => (double?)0.0);
+                Add("nan", () => (double?)double.NaN);
                 break;
             case Role.IntArg:
             {
