@@ -60,7 +60,12 @@
 // sums, other dtypes, the forms NumPy refuses) and axis tuple (single axes, both orders of a pair, the empty tuple, a
 // repeated and an out-of-range axis), and np.convolve / np.correlate's second sequence v (the operand's copy, other dtypes
 // and lengths, one-element arrays of either stride sign, special values, text, the shapes NumPy refuses, strided and
-// reversed views) and their mode name (the three names, near misses, other strings, null)); an overload with a required
+// reversed views) and their mode name (the three names, near misses, other strings, null), and np.nditer's operand list
+// op (the operand alone, with a copy, with an output to allocate, with a row, another dtype, a 0-d, a shape that does not
+// broadcast, none), flags (each tracking and loop flag, the buffered forms, refs_ok, common_dtype, reduce_ok, ranged,
+// two refused forms), op_flags (one list, or one per operand), op_dtypes (numbers, the unsized 'U' / 'S' NumPy adapts, a
+// sized 'U5', StringDType, two refused forms), op_axes and itershape (built from the operand's rank and shape) and
+// buffersize, its order and casting taking the general roles); an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -71,6 +76,9 @@
 // HistogramResult, np.histogramdd's HistogramddResult) renders each array field, and one that keeps its arrays in
 // properties (np.unique's UniqueResult, np.unique_all / unique_counts / unique_inverse's result structs) each NDArray
 // property, null for an output not requested; np.gradient's GradientResult renders as GRAD1(array) or GRADN(array; ...).
+// An np.nditer iterator is pulled to its end and renders as ITER nop=N dtypes=[...] steps=S with, per operand, its views'
+// dtype, the run-length list of their shapes, their flag sets and one hash over every step's view (RenderIterator); take
+// nditer snapshots under NUMSHARP_DEBUG_GUARD_PAGES=1, where an allocated output's memory reads as zeros.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -281,8 +289,26 @@ static class Snapshot
         // 2-D, an empty one, strided and reversed views; see MakeSlidingKernel) and the mode name (the three names, the near
         // misses and other strings NumPy refuses with two different texts, and null).
         SlidingKernel, SlidingMode,
+        // np.nditer: the multi-operand overload's operand list (built from the operand: the operand alone, with a copy, with
+        // an output to allocate, with a row, an operand of another dtype, a 0-d, one that does not broadcast, and no
+        // operand; see MakeNditerOps), the global flags, the per-operand flags (one list, or one per operand), op_dtypes,
+        // op_axes and itershape (built from the operand's rank and shape) and buffersize. order and casting take the
+        // general Order / Casting roles.
+        NditerOps, NditerFlags, NditerOpFlags, NditerOpFlagsList, NditerOpDtypes, NditerOpAxes, NditerItershape,
+        NditerBuffersize,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.nditer, whose <c>op</c> list, <c>flags</c>, <c>op_flags</c>, <c>op_dtypes</c>,
+    ///     <c>op_axes</c>, <c>itershape</c> and <c>buffersize</c> roles are its alone: no other snapshot target declares
+    ///     them, and np.nested_iters (whose <c>op</c> list and flags would read the same way) keeps its defaults until its
+    ///     own family.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.nditer overload.</returns>
+    private static bool IsNditer(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "nditer";
 
     /// <summary>
     ///     Whether a parameter belongs to np.average or np.average_returned, whose <c>weights</c> / <c>axis</c> tuple roles
@@ -431,6 +457,17 @@ static class Snapshot
         }
         // np.isin's algorithm name (only its: np.sort's, np.argsort's and np.partition's kind keep their defaults).
         if (n == "kind" && t == typeof(string) && IsIsin(p)) return Role.IsinKind;
+        // np.nditer's arguments (only its; its order and casting take the general roles below and above).
+        if (IsNditer(p))
+        {
+            if (n == "flags" && t == typeof(string[])) return Role.NditerFlags;
+            if (n == "op_flags" && t == typeof(string[])) return Role.NditerOpFlags;
+            if (n == "op_flags" && t == typeof(string[][])) return Role.NditerOpFlagsList;
+            if (n == "op_dtypes" && t == typeof(DType[])) return Role.NditerOpDtypes;
+            if (n == "op_axes" && t == typeof(int[][])) return Role.NditerOpAxes;
+            if (n == "itershape" && t == typeof(long[])) return Role.NditerItershape;
+            if (n == "buffersize" && t == typeof(long)) return Role.NditerBuffersize;
+        }
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
         if (n == "method" && t == typeof(string)) return Role.Method;
@@ -508,6 +545,80 @@ static class Snapshot
                 // capitalized name (the check is case-sensitive).
                 foreach (var s in new[] { null, "sort", "table", "x", "Sort" })
                     Add(s ?? "null", () => s);
+                break;
+            case Role.NditerOps:
+            case Role.NditerOpAxes:
+            case Role.NditerItershape:
+                // Built from the operand (MakeNditerOps / MakeNditerOpAxes / MakeNditerItershape); the factory here is never
+                // called. The base is the operand alone / no op_axes / no itershape.
+                Add(role == Role.NditerOps ? "one" : "null", () => null);
+                break;
+            case Role.NditerFlags:
+                // No flags first, then each tracking and loop flag alone, the buffered forms (with the external loop, with
+                // growing inner loops, with a delayed allocation that needs a reset before the first pull), the flags a
+                // StringDType or a reduction operand needs, and two forms NumPy refuses (an unknown name, an index tracked
+                // together with the external loop).
+                Add("null", () => null);
+                foreach (var (label, f) in new[]
+                         {
+                             ("multi_index", new[] { "multi_index" }), ("c_index", new[] { "c_index" }),
+                             ("f_index", new[] { "f_index" }), ("external_loop", new[] { "external_loop" }),
+                             ("buffered", new[] { "buffered" }), ("buffered_ext", new[] { "buffered", "external_loop" }),
+                             ("grow_inner", new[] { "buffered", "external_loop", "grow_inner" }),
+                             ("delay", new[] { "buffered", "delay_bufalloc" }), ("refs_ok", new[] { "refs_ok" }),
+                             ("refs_buffered", new[] { "refs_ok", "buffered" }), ("zerosize_ok", new[] { "zerosize_ok" }),
+                             ("common_dtype", new[] { "common_dtype" }), ("reduce_ok", new[] { "reduce_ok" }),
+                             ("ranged", new[] { "ranged" }), ("bogus", new[] { "bogus" }),
+                             ("mi_ext", new[] { "multi_index", "external_loop" }),
+                         })
+                    Add(label, () => (string[])f.Clone());
+                break;
+            case Role.NditerOpFlags:
+                // The single operand's flags: none first (readonly), each access mode, a copy (readonly) and a write-back
+                // copy (readwrite), the layout requests, and two forms NumPy refuses (an unknown name; no access mode).
+                Add("null", () => null);
+                foreach (var (label, f) in new[]
+                         {
+                             ("readonly", new[] { "readonly" }), ("readwrite", new[] { "readwrite" }),
+                             ("writeonly", new[] { "writeonly" }), ("copy", new[] { "readonly", "copy" }),
+                             ("updateifcopy", new[] { "readwrite", "updateifcopy" }),
+                             ("no_broadcast", new[] { "readonly", "no_broadcast" }), ("contig", new[] { "readonly", "contig" }),
+                             ("aligned_nbo", new[] { "readonly", "aligned", "nbo" }), ("bogus", new[] { "bogus" }),
+                             ("empty", Array.Empty<string>()),
+                         })
+                    Add(label, () => (string[])f.Clone());
+                break;
+            case Role.NditerOpFlagsList:
+                // The multi-operand form's flags: none first, one list broadcast to every operand, one list per operand
+                // (an output to allocate, a written first operand), and two forms NumPy refuses (an unknown name; more
+                // lists than operands).
+                Add("null", () => null);
+                foreach (var (label, f) in new[]
+                         {
+                             ("ro", new[] { new[] { "readonly" } }),
+                             ("ro_alloc", new[] { new[] { "readonly" }, new[] { "writeonly", "allocate" } }),
+                             ("rw_ro", new[] { new[] { "readwrite" }, new[] { "readonly" } }),
+                             ("ro_ro", new[] { new[] { "readonly" }, new[] { "readonly" } }),
+                             ("bogus", new[] { new[] { "bogus" } }),
+                             ("three", new[] { new[] { "readonly" }, new[] { "readonly" }, new[] { "readonly" } }),
+                         })
+                    Add(label, () => f.Select(x => (string[])x.Clone()).ToArray());
+                break;
+            case Role.NditerOpDtypes:
+                // None first, then one requested dtype (numbers, the unsized text classes 'U' / 'S' NumPy adapts to the
+                // operand, a sized 'U5', StringDType), and two forms NumPy refuses for one operand (two entries) or reads as
+                // "the operand's own" (a null entry).
+                Add("null", () => null);
+                foreach (var d in new[] { "float64", "int8", "bool", "complex128", "U", "U5", "S", "T" })
+                    Add(d, () => new[] { np.dtype(d) });
+                Add("two", () => new[] { np.dtype("float64"), np.dtype("float64") });
+                Add("null_entry", () => new DType[] { null });
+                break;
+            case Role.NditerBuffersize:
+                // The default (0, NumPy's buffer size) first, then buffers of one and three elements (several fills over
+                // every pool operand) and a large one.
+                foreach (var b in new long[] { 0, 1, 3, 8192 })
+                    Add(b.ToString(CultureInfo.InvariantCulture), () => b);
                 break;
             case Role.AverageWeights:
                 // The base is no weights (the mean); the variants follow from the operand (MakeAverageWeights).
@@ -1015,6 +1126,13 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.nditer's multi-operand list carries the operand too (MakeNditerOps).
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "op" && IsNditer(ps[i]))
+            {
+                roles[i] = Role.NditerOps;
+                sawArray = true;
+                continue;
+            }
             roles[i] = Classify(ps[i], !sawArray && ps[i].ParameterType == typeof(NDArray));
             if (ps[i].ParameterType == typeof(NDArray)) sawArray = true;
         }
@@ -1049,6 +1167,9 @@ static class Snapshot
             Role.GradAxisSpacing => GradAxisSpacingVariantLabels.Length - 1,
             Role.GradVarargs => GradVarargsVariantLabels.Length - 1,
             Role.LinalgArrays => LinalgArraysVariantLabels.Length - 1,
+            Role.NditerOps => NditerOpsVariantLabels.Length - 1,
+            Role.NditerOpAxes => NditerOpAxesVariantLabels.Length - 1,
+            Role.NditerItershape => NditerItershapeVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -1149,6 +1270,9 @@ static class Snapshot
             Role.GradAxisSpacing => GradAxisSpacingVariantLabels[v],
             Role.GradVarargs => GradVarargsVariantLabels[v],
             Role.LinalgArrays => LinalgArraysVariantLabels[v],
+            Role.NditerOps => NditerOpsVariantLabels[v],
+            Role.NditerOpAxes => NditerOpAxesVariantLabels[v],
+            Role.NditerItershape => NditerItershapeVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -1172,6 +1296,7 @@ static class Snapshot
                     : roles[i] == Role.SlidingKernel ? MakeSlidingKernel(SlidingKernelVariantLabels[0], operand)
                     : roles[i] == Role.IsinTest ? MakeIsinTest(IsinTestVariantLabels[0], operand)
                     : roles[i] == Role.LinalgArrays ? MakeLinalgArrays(LinalgArraysVariantLabels[0], operand)
+                    : roles[i] == Role.NditerOps ? MakeNditerOps(NditerOpsVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -1231,6 +1356,15 @@ static class Snapshot
                         break;
                     case Role.LinalgArrays:
                         argv[p] = MakeLinalgArrays(LinalgArraysVariantLabels[v], operand);
+                        break;
+                    case Role.NditerOps:
+                        argv[p] = MakeNditerOps(NditerOpsVariantLabels[v], operand);
+                        break;
+                    case Role.NditerOpAxes:
+                        argv[p] = MakeNditerOpAxes(NditerOpAxesVariantLabels[v], operand);
+                        break;
+                    case Role.NditerItershape:
+                        argv[p] = MakeNditerItershape(NditerItershapeVariantLabels[v], operand);
                         break;
                     case Role.SampleSeq:
                     case Role.BinsInts:
@@ -2260,6 +2394,100 @@ static class Snapshot
         }
     }
 
+    /// <summary>np.nditer's operand-list variants (see <see cref="MakeNditerOps"/>); the first, the operand alone, is the
+    ///     base.</summary>
+    private static readonly string[] NditerOpsVariantLabels = { "one", "pair", "alloc", "row", "int32", "zero_d", "badshape", "none" };
+
+    /// <summary>np.nditer's op_axes variants (see <see cref="MakeNditerOpAxes"/>); the first, no op_axes, is the base.</summary>
+    private static readonly string[] NditerOpAxesVariantLabels = { "null", "same", "rev", "newaxis", "bad", "dup", "empty" };
+
+    /// <summary>np.nditer's itershape variants (see <see cref="MakeNditerItershape"/>); the first, no itershape, is the
+    ///     base.</summary>
+    private static readonly string[] NditerItershapeVariantLabels = { "null", "same", "deduce", "lead", "wrong" };
+
+    /// <summary>
+    ///     Builds np.nditer's multi-operand list for an operand: the operand alone, with a copy of itself, with an output the
+    ///     iterator allocates (NumPy's <c>None</c>: its dtype is the operands' result type), with a float64 row of its last
+    ///     axis (broadcast), with an int32 ramp of its shape (another dtype: the views keep each operand's own), with a 0-d,
+    ///     with an array that does not broadcast, and no operand at all.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="NditerOpsVariantLabels"/>).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh operand list (its first entry is the operand itself).</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeNditerOps(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        switch (label)
+        {
+            case "one": return new[] { operand };
+            case "pair": return new[] { operand, operand.copy() };
+            case "alloc": return new[] { operand, null };
+            case "row":
+                // The last axis' length (a 0-d operand's row is one element), so the row broadcasts against the operand.
+                return new[] { operand, np.ones(new Shape(dims.Length == 0 ? 1 : dims[^1]), np.dtype("float64")) };
+            case "int32":
+            {
+                long size = 1;
+                foreach (long d in dims) size *= d;
+                return new[] { operand, np.arange(size).astype(np.dtype("int32")).reshape(new Shape(dims)) };
+            }
+            case "zero_d": return new[] { operand, np.array(1.0) };
+            case "badshape": return new[] { operand, np.ones(new Shape(7), np.dtype("float64")) };
+            case "none": return Array.Empty<NDArray>();
+            default: throw new ArgumentException("unknown nditer operand-list variant " + label);
+        }
+    }
+
+    /// <summary>
+    ///     Builds np.nditer's op_axes for an operand (one entry: the single-operand form's count; the multi-operand form
+    ///     with more operands refuses it): the identity, the axes reversed, a new leading axis (-1), an out-of-range axis, a
+    ///     repeated axis, and no axes.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="NditerOpAxesVariantLabels"/>); <c>null</c> is no op_axes.</param>
+    /// <param name="operand">The pool operand (its rank).</param>
+    /// <returns>The op_axes, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static int[][] MakeNditerOpAxes(string label, NDArray operand)
+    {
+        int ndim = operand.ndim;
+        int[] identity = Enumerable.Range(0, ndim).ToArray();
+        switch (label)
+        {
+            case "null": return null;
+            case "same": return new[] { identity };
+            // Enumerable.Reverse by name: under C# 14 an array's .Reverse() binds the in-place span overload.
+            case "rev": return new[] { Enumerable.Reverse(identity).ToArray() };
+            case "newaxis": return new[] { new[] { -1 }.Concat(identity).ToArray() };
+            case "bad": return new[] { new[] { ndim } };
+            case "dup": return new[] { new[] { 0, 0 }.Concat(identity.Skip(2)).ToArray() };
+            case "empty": return new[] { Array.Empty<int>() };
+            default: throw new ArgumentException("unknown nditer op_axes variant " + label);
+        }
+    }
+
+    /// <summary>
+    ///     Builds np.nditer's itershape for an operand: its own shape, every entry deduced (-1), an extra leading axis of 2
+    ///     (the operand broadcasts into it), and a shape whose first entry does not match the operand's.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="NditerItershapeVariantLabels"/>); <c>null</c> is no itershape.</param>
+    /// <param name="operand">The pool operand (its shape).</param>
+    /// <returns>The itershape, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static long[] MakeNditerItershape(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        switch (label)
+        {
+            case "null": return null;
+            case "same": return (long[])dims.Clone();
+            case "deduce": return dims.Select(_ => -1L).ToArray();
+            case "lead": return new[] { 2L }.Concat(dims).ToArray();
+            case "wrong": return dims.Length == 0 ? new[] { 3L } : new[] { dims[0] + 1 }.Concat(dims.Skip(1)).ToArray();
+            default: throw new ArgumentException("unknown nditer itershape variant " + label);
+        }
+    }
+
     /// <summary>The labels of a histogramdd / histogram2d role; the first is the base value.</summary>
     /// <param name="role">One of <see cref="Role.SampleSeq"/>, <see cref="Role.BinsInts"/>, <see cref="Role.BinsArrays"/>,
     ///     <see cref="Role.BinsObjects"/>, <see cref="Role.RangeArray"/>.</param>
@@ -2514,6 +2742,10 @@ static class Snapshot
                 // for NumPy's bare ndarray (one requested axis), GRADN for its tuple, each component in axis order.
                 return (g.IsSingle ? "GRAD1(" : "GRADN(") +
                        string.Join("; ", Enumerable.Range(0, g.Length).Select(k => Render(g[k], outArray))) + ")";
+            case np.NDIterator iterator:
+                // Before the IEnumerable case: an iterator is enumerable, and its per-step views rendered one by one would
+                // make lines of kilobytes.
+                return RenderIterator(iterator);
             case IEnumerable e:
                 return "LIST[" + string.Join("; ", e.Cast<object>().Select(o => Render(o, outArray))) + "]";
             default:
@@ -2542,6 +2774,104 @@ static class Snapshot
                     return "STRUCT " + result.GetType().Name + "(" +
                            string.Join("; ", arrayProperties.Select(pi => pi.Name + "=" + Render(pi.GetValue(result), outArray))) + ")";
                 return "VAL " + result.GetType().Name + " " + Convert.ToString(result, CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    ///     Renders an np.nditer iterator by pulling it to its end, as a Python <c>for x in it</c> does: <c>ITER nop=N
+    ///     dtypes=[...] steps=S</c>, then per operand the dtype of its views, the run-length list of their shapes
+    ///     (<c>()x24</c>, <c>(4,)x6</c>), the distinct flag sets in the order they appear and ONE hash over the bytes of every
+    ///     step's view (repr for StringDType, as <see cref="HashOf"/>), and <c>EXC@k</c> with the exception when the
+    ///     construction's properties, a pull or a view raises at step k. The iterator is disposed (its write-backs
+    ///     resolved) before the line is returned.
+    /// </summary>
+    /// <param name="it">The iterator np.nditer returned.</param>
+    /// <returns>The outcome text.</returns>
+    /// <remarks>
+    ///     The views alias the iterator's memory (an operand, a buffer, an allocated output), so each is read at its own
+    ///     step; an output the iterator allocates holds what the allocator left there, which the snapshot reads as zeros
+    ///     only under <c>NUMSHARP_DEBUG_GUARD_PAGES=1</c> (every buffer fresh): take nditer snapshots with it. More than
+    ///     100,000 steps ends the iteration (no pool operand has that many elements: a step that never ends is a bug).
+    /// </remarks>
+    private static string RenderIterator(np.NDIterator it)
+    {
+        var sb = new StringBuilder("ITER");
+        int steps = 0;
+        IncrementalHash[] hashes = null;
+        string[] dtypes = null;
+        List<(string Shape, int Count)>[] shapes = null;
+        List<string>[] flags = null;
+        string error = null;
+        try
+        {
+            sb.Append($" nop={it.nop} dtypes=[{string.Join(", ", it.dtypes.Select(d => d?.ToString() ?? "null"))}]");
+            foreach (NDArray[] views in it)
+            {
+                if (hashes is null)
+                {
+                    hashes = views.Select(_ => IncrementalHash.CreateHash(HashAlgorithmName.SHA256)).ToArray();
+                    dtypes = new string[views.Length];
+                    shapes = views.Select(_ => new List<(string, int)>()).ToArray();
+                    flags = views.Select(_ => new List<string>()).ToArray();
+                }
+                for (int k = 0; k < views.Length; k++)
+                {
+                    NDArray v = views[k];
+                    dtypes[k] ??= v.dtype.ToString();
+                    string shape = "(" + string.Join(",", v.shape) + ")";
+                    var runs = shapes[k];
+                    if (runs.Count > 0 && runs[^1].Shape == shape)
+                        runs[^1] = (shape, runs[^1].Count + 1);
+                    else
+                        runs.Add((shape, 1));
+                    var f = v.flags;
+                    string fl = $"{(f.c_contiguous ? "C" : "-")}{(f.f_contiguous ? "F" : "-")}{(f.owndata ? "O" : "-")}{(f.writeable ? "W" : "-")}";
+                    if (!flags[k].Contains(fl))
+                        flags[k].Add(fl);
+                    hashes[k].AppendData(ViewBytes(v));
+                }
+                if (++steps > 100_000)
+                {
+                    error = "ABORT more than 100000 steps";
+                    break;
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            error = $"EXC@{steps} {Describe(e)}";
+        }
+        finally
+        {
+            it.Dispose();
+        }
+        sb.Append($" steps={steps}");
+        if (hashes is not null)
+            for (int k = 0; k < hashes.Length; k++)
+                sb.Append($" op{k}={dtypes[k]} {string.Join(",", shapes[k].Select(r => r.Shape + "x" + r.Count))} " +
+                          $"{string.Join("/", flags[k])} " +
+                          Convert.ToHexString(hashes[k].GetHashAndReset()).Substring(0, 16).ToLowerInvariant());
+        if (error is not null)
+            sb.Append(' ').Append(error);
+        return sb.ToString();
+    }
+
+    /// <summary>The bytes <see cref="HashOf"/> hashes for an array (its C-order bytes, or its repr for StringDType and
+    ///     for anything <c>tobytes</c> refuses).</summary>
+    /// <param name="a">The array.</param>
+    /// <returns>The bytes (the type name of the failure when neither form is available).</returns>
+    private static byte[] ViewBytes(NDArray a)
+    {
+        try
+        {
+            return a.dtype.kind == 'T'
+                ? Encoding.UTF8.GetBytes(a.ToString(true))
+                : np.ascontiguousarray(a).tobytes();
+        }
+        catch (Exception e)
+        {
+            try { return Encoding.UTF8.GetBytes(a.ToString(true)); }
+            catch { return Encoding.UTF8.GetBytes("unhashable(" + e.GetType().Name + ")"); }
         }
     }
 
