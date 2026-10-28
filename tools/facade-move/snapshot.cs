@@ -25,7 +25,8 @@
 // A name "np.f" is every public static overload of np.f; "np.linalg.f" every public static overload of np.linalg.f (run on
 // pools of square matrices, stacks, rectangles and empties, see LinalgLayouts); "np.emath.f" every public instance overload
 // declared on the module class EmathModule, called on np.emath (its first array parameter is the operand, logn's x and
-// power's exponent p are the second operand); "NDArray.f" every public instance overload declared on NDArray;
+// power's exponent p are the second operand); "np.fft.f" every public instance overload declared on the module class
+// FourierModule, called on np.fft; "NDArray.f" every public instance overload declared on NDArray;
 // "NDArray.op_X" every public static operator overload declared on NDArray (op_Equality, op_UnaryPlus, ...), whose first
 // NDArray parameter is the operand; "NDMatrix.f" every public instance overload declared on NDMatrix, called on
 // np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too.
@@ -76,7 +77,11 @@
 // list (built from the operand, see MakeEinsumOps) and optimize, its out / dtype / order / casting taking the general
 // roles, and np.interp's sample points xp and values fp (fixed arrays, independent of the operand x: a ramp in several
 // dtypes and layouts, repeated, decreasing and NaN points, complex and text values, the shapes NumPy refuses), its fills
-// left / right (a double, or a Complex for the complex overload) and its period; an overload with a required
+// left / right (a double, or a Complex for the complex overload) and its period, and np.fft's transform length n (None,
+// crops, zero pads, the odd and even lengths the real transforms tell apart, the lengths NumPy refuses), norm (the three
+// names, None and a near miss), the N-D lengths s (one or two axes, -1, an empty and a refused length, more lengths than
+// axes) and fftfreq / rfftfreq's window length n (an int, a long, or a double NumPy refuses), spacing d and device, the
+// axis / axes taking the general roles; an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -200,7 +205,8 @@ static class Snapshot
     /// </summary>
     /// <param name="target"><c>np.name</c> for the public static overloads of <c>np.name</c>, <c>np.linalg.name</c> for
     ///     those of the module class <c>np.linalg</c>, <c>np.emath.name</c> for the public instance overloads declared on the
-    ///     module class <see cref="EmathModule"/> (called on <c>np.emath</c>), <c>NDArray.name</c> for the public instance
+    ///     module class <see cref="EmathModule"/> (called on <c>np.emath</c>), <c>np.fft.name</c> for those declared on the
+    ///     module class <see cref="FourierModule"/> (called on <c>np.fft</c>), <c>NDArray.name</c> for the public instance
     ///     overloads declared on NDArray (<c>NDArray.op_X</c> for its static operators), <c>NDMatrix.name</c> for the public
     ///     instance overloads declared on NDMatrix.</param>
     /// <returns>The output lines, overloads ordered by signature.</returns>
@@ -216,7 +222,9 @@ static class Snapshot
         // np.emath: the name is what follows the LAST dot.
         bool onLinalg = target.StartsWith("np.linalg.", StringComparison.Ordinal);
         bool onEmath = target.StartsWith("np.emath.", StringComparison.Ordinal);
-        string name = target.Substring((onLinalg || onEmath ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
+        // np.fft.f is an instance member of the module object np.fft, as np.emath's are.
+        bool onFft = target.StartsWith("np.fft.", StringComparison.Ordinal);
+        string name = target.Substring((onLinalg || onEmath || onFft ? target.LastIndexOf('.') : target.IndexOf('.')) + 1);
         bool onNDArray = target.StartsWith("NDArray.", StringComparison.Ordinal);
         bool onMatrix = target.StartsWith("NDMatrix.", StringComparison.Ordinal);
         // An operator is a static method of NDArray whose first NDArray parameter is the operand, as np.f's is.
@@ -231,7 +239,9 @@ static class Snapshot
                             ? typeof(np.linalg).GetMethods(BindingFlags.Public | BindingFlags.Static)
                             : onEmath
                                 ? typeof(EmathModule).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(EmathModule))
-                                : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
+                                : onFft
+                                    ? typeof(FourierModule).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m => m.DeclaringType == typeof(FourierModule))
+                                    : typeof(np).GetMethods(BindingFlags.Public | BindingFlags.Static))
             .Where(m => m.Name == name && !m.IsGenericMethodDefinition)
             .Select(m => (Method: m, Signature: Signature(target, m)))
             .OrderBy(t => t.Signature, StringComparer.Ordinal)
@@ -336,6 +346,10 @@ static class Snapshot
         // in several dtypes and layouts, repeated, decreasing and NaN points, complex and text values, and the forms NumPy
         // refuses), the fills left / right (a C# double, or a Complex for the complex overload) and the period.
         InterpXp, InterpFp, InterpFill, InterpFillComplex, InterpPeriod,
+        // np.fft: the 1-D transforms' length n (nullable: None = the input's length along the axis, 2 * (m - 1) for irfft /
+        // hfft), the norm name, the N-D transforms' lengths s, and fftfreq / rfftfreq's window length n (an int or a long,
+        // or a double that NumPy refuses), sample spacing d and device.
+        FftN, FftNorm, FftS, FftFreqN, FftD, FftDevice,
         Default, Unsupported,
     }
 
@@ -438,6 +452,16 @@ static class Snapshot
     /// </summary>
     /// <param name="p">The parameter.</param>
     /// <returns>True for a parameter of a public static np.interp overload.</returns>
+    /// <summary>
+    ///     Whether a parameter belongs to an np.fft function (a public instance member of the module class
+    ///     <see cref="FourierModule"/>), whose <c>n</c> / <c>norm</c> / <c>s</c> / <c>d</c> / <c>device</c> roles are its alone:
+    ///     np.linalg.matrix_power's <c>n</c> is an exponent, and the snapshots of the other targets must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public instance member of <see cref="FourierModule"/>.</returns>
+    private static bool IsFft(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(FourierModule);
+
     private static bool IsInterp(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "interp";
 
@@ -599,6 +623,16 @@ static class Snapshot
         {
             if (n == "subscripts" && t == typeof(string)) return Role.EinsumSubscripts;
             if (n == "optimize" && t == typeof(object)) return Role.EinsumOptimize;
+        }
+        // np.fft's arguments (only its: its a / x take the operand role above, its axis / axes the general roles).
+        if (IsFft(p))
+        {
+            if (n == "n" && t == typeof(int?)) return Role.FftN;
+            if (n == "norm" && t == typeof(string)) return Role.FftNorm;
+            if (n == "s" && t == typeof(int[])) return Role.FftS;
+            if (n == "n" && (t == typeof(int) || t == typeof(long) || t == typeof(double))) return Role.FftFreqN;
+            if (n == "d" && t == typeof(double)) return Role.FftD;
+            if (n == "device" && t == typeof(string)) return Role.FftDevice;
         }
         if (t == typeof(DType)) return Role.DType;
         if (t == typeof(bool)) return Role.Bool;
@@ -1097,6 +1131,57 @@ static class Snapshot
                 Add("null", () => (Complex?)null);
                 Add("(1+2j)", () => (Complex?)new Complex(1, 2));
                 Add("(3+0j)", () => (Complex?)new Complex(3, 0));
+                break;
+            case Role.FftN:
+                // None first (the input's length; irfft / hfft's 2 * (m - 1)), then lengths that crop and zero pad, the odd
+                // and even lengths the real transforms tell apart (rfft_n_odd / rfft_n_even, a Nyquist term), a prime past
+                // the pool's lengths (pocketfft's generic radix), and the lengths NumPy refuses.
+                Add("null", () => (int?)null);
+                foreach (var v in new[] { 1, 2, 3, 4, 5, 8, 11, 0, -1 })
+                    Add(v.ToString(CultureInfo.InvariantCulture), () => (int?)v);
+                break;
+            case Role.FftNorm:
+                // None first, then NumPy's three names (forward / inverse swap them) and a near miss NumPy refuses (its text
+                // differs between the forward and the inverse transforms).
+                Add("null", () => null);
+                foreach (var v in new[] { "backward", "ortho", "forward", "Ortho" })
+                    Add(v, () => v);
+                break;
+            case Role.FftS:
+                // None first (the input's shape along the axes), then one and two lengths, -1 (the input's length), an empty
+                // and a zero length, more lengths than the operand has axes, and lengths that crop and pad.
+                Add("null", () => null);
+                foreach (var a in new[]
+                         {
+                             new[] { 4 }, new[] { -1 }, new[] { 2, 3 }, new[] { 3, -1 }, Array.Empty<int>(), new[] { 0 },
+                             new[] { 3, 3, 3 }, new[] { 5, 1 },
+                         })
+                    Add("[" + string.Join(",", a) + "]", () => a.ToArray());
+                break;
+            case Role.FftFreqN:
+                // fftfreq / rfftfreq's required window length: its C# type decides (a double is NumPy's "n should be an
+                // integer"): an even and an odd length, one, zero (float division by zero) and a negative one (fftfreq's
+                // "negative dimensions", rfftfreq's empty result).
+                if (p.ParameterType == typeof(double))
+                {
+                    Add("8.0", () => 8.0);
+                    Add("2.5", () => 2.5);
+                }
+                else
+                    foreach (var v in new long[] { 8, 9, 1, 0, -3 })
+                        Add(v.ToString(CultureInfo.InvariantCulture),
+                            p.ParameterType == typeof(int) ? () => (object)(int)v : () => (object)v);
+                break;
+            case Role.FftD:
+                // The default first, then a fraction, a negative spacing and zero (float division by zero).
+                foreach (var v in new[] { 1.0, 0.5, -2.0, 0.0 })
+                    Add(v.ToString("R", CultureInfo.InvariantCulture), () => v);
+                break;
+            case Role.FftDevice:
+                // None first, NumPy's one device, and one it refuses.
+                Add("null", () => null);
+                Add("cpu", () => "cpu");
+                Add("cuda", () => "cuda");
                 break;
             case Role.InterpPeriod:
                 // None first, then periods smaller and larger than the points' span, a fraction, a negative one (NumPy takes
@@ -1793,13 +1878,16 @@ static class Snapshot
 
     /// <summary>The module object an instance member of a module class is called on.</summary>
     /// <param name="m">An instance member declared on a module class.</param>
-    /// <returns><c>np.emath</c> for a member of <see cref="EmathModule"/>.</returns>
+    /// <returns><c>np.emath</c> for a member of <see cref="EmathModule"/>, <c>np.fft</c> for one of
+    ///     <see cref="FourierModule"/>.</returns>
     /// <exception cref="ArgumentException">A module class the tool does not know: its module object would have to be named
     ///     here first.</exception>
     private static object ModuleReceiver(MethodInfo m) =>
         m.DeclaringType == typeof(EmathModule)
             ? np.emath
-            : throw new ArgumentException($"no module object for {m.DeclaringType}");
+            : m.DeclaringType == typeof(FourierModule)
+                ? np.fft
+                : throw new ArgumentException($"no module object for {m.DeclaringType}");
 
     /// <summary>An exception as one line: its type's full name and its message, newlines escaped.</summary>
     /// <param name="e">The exception.</param>
