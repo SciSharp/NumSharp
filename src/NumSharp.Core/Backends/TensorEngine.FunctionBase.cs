@@ -272,5 +272,32 @@ namespace NumSharp
         ///     it is. New in 0.71.0 (the np-layer dtype plan, phase PE); it was the internal class <c>GradientEngine</c>.
         /// </remarks>
         public abstract np.GradientResult Gradient(NDArray f, object[] varargs, int[] axis = null, int edge_order = 1);
+
+        /// <summary>
+        ///     NumPy's <c>np.trapezoid(y, x=None, dx=1.0, axis=-1)</c>: the integral of <paramref name="y"/> along the axis
+        ///     by the composite trapezoidal rule, <c>sum(d * (y[1:] + y[:-1]) / 2.0, axis)</c> with <c>d</c> the spacing.
+        /// </summary>
+        /// <param name="y">The integrand, a plain array (not null).</param>
+        /// <param name="x">The sample points (1-D along the axis, or of <paramref name="y"/>'s rank), or null for evenly
+        ///     spaced samples.</param>
+        /// <param name="dx">The spacing when <paramref name="x"/> is null.</param>
+        /// <param name="axis">The integration axis, read against each statement's array as NumPy reads it.</param>
+        /// <returns>The integral: a fresh array the caller owns, of <paramref name="y"/>'s shape without the axis (0-d for a
+        ///     1-D <paramref name="y"/>), its dtype NumPy's arithmetic result.</returns>
+        /// <exception cref="IndexError">The axis is outside <paramref name="y"/>'s rank.</exception>
+        /// <exception cref="AxisError">An N-D <paramref name="x"/> has no axis <paramref name="axis"/> (np.diff's
+        ///     <c>normalize_axis_index</c>).</exception>
+        /// <exception cref="ValueError">A 0-D <paramref name="x"/> (np.diff's "at least one dimensional"), or a StringDType
+        ///     <paramref name="y"/> whose concatenation meets an NA it cannot add.</exception>
+        /// <exception cref="IncorrectShapeException">The spacing does not broadcast against <c>y[1:] + y[:-1]</c>.</exception>
+        /// <exception cref="TypeError">A text <paramref name="y"/> or <paramref name="x"/>: the refusal of the first NumPy
+        ///     statement that has no loop for it.</exception>
+        /// <remarks>
+        ///     NumPy writes trapezoid in Python; DefaultEngine's override runs its statements, the half and its sum fused
+        ///     into one pass where that gives NumPy's bits. <c>np.trapezoid</c> calls this after the matrix boundary and the
+        ///     null check; an override replaces it for every array whose engine it is. New in 0.71.0 (the np-layer dtype
+        ///     plan, phase PE); it was the internal class <c>TrapezoidEngine</c>.
+        /// </remarks>
+        public abstract NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1);
     }
 }

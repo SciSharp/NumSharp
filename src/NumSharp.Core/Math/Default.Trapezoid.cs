@@ -2,10 +2,12 @@ using System;
 using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 // The moved statements call the public np.* functions they called inside np (np.diff, np.sum, np.evaluate,
-// np.ascontiguousarray, np.add) and np's internal DiffAxis; importing np's statics keeps them verbatim.
+// np.ascontiguousarray, np.add) and np's internal DiffAxis; importing np's statics keeps them verbatim. In a DefaultEngine
+// partial a name resolves to DefaultEngine's members before np's statics: none of the unqualified names below is a
+// DefaultEngine member (checked when the file joined DefaultEngine).
 using static NumSharp.np;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
     // ============================== np.trapezoid ==============================
     // Integrate along the given axis using the composite trapezoidal rule.
@@ -88,22 +90,20 @@ namespace NumSharp
     // a C-contiguous y skipped the vote entirely though an F-ordered x outvotes it wherever y has
     // extent 1. NpyIter's rule closes all three.
 
-    /// <summary>
-    ///     The body of NumPy's <c>trapezoid</c> (<c>numpy/lib/_function_base_impl.py</c>): the spacing, the slices, the
-    ///     layout of the reduction input, the fused half <c>d * (y[1:] + y[:-1]) / 2.0</c>, its sum along the axis, and the
-    ///     text route. The public <c>np.trapezoid</c> only applies the matrix boundary, checks <c>y</c> for null and calls
-    ///     <see cref="Trapezoid"/>.
-    /// </summary>
-    /// <remarks>
-    ///     Moved from <c>Math/np.trapezoid.cs</c> statement for statement by the np-layer dtype plan's P2 (an operation
-    ///     class, decision D1: NumPy writes trapezoid in Python). It sits beside its facade rather than under
-    ///     <c>Backends/</c>, as <c>Statistics/HistogramEngine</c> does: its statements call np.* functions, which ratchet R2
-    ///     counts against engine files.
-    /// </remarks>
-    internal static class TrapezoidEngine
+    // DefaultEngine's override of TensorEngine.Trapezoid (TensorEngine.FunctionBase.cs): the body of NumPy's trapezoid
+    // (numpy/lib/_function_base_impl.py) - the spacing, the slices, the layout of the reduction input, the fused half
+    // `d * (y[1:] + y[:-1]) / 2.0`, its sum along the axis, and the text route. The public np.trapezoid only applies the
+    // matrix boundary, checks y for null and calls the member.
+    //
+    // History: moved from Math/np.trapezoid.cs statement for statement by the np-layer dtype plan's P2 into the internal
+    // operation class TrapezoidEngine (decision D1: NumPy writes trapezoid in Python); its phase PE (E1) made that class
+    // this DefaultEngine partial. It sits beside its facade rather than under Backends/, as Default.Histogram*.cs does: its
+    // statements call np.* functions, which ratchet R2 counts against engine files.
+    public partial class DefaultEngine
     {
         /// <summary>
-        ///     NumPy's <c>trapezoid</c> for an array <paramref name="y"/>: the text route, the spacing (<c>dx</c>, the 1-D
+        ///     DefaultEngine's <see cref="TensorEngine.Trapezoid"/>: NumPy's <c>trapezoid</c> for an array
+        ///     <paramref name="y"/>: the text route, the spacing (<c>dx</c>, the 1-D
         ///     points' difference reshaped along the axis, or an N-D x's difference along its own axis), the slices
         ///     <c>y[1:]</c> / <c>y[:-1]</c>, the layout NumPy's reduction input has, the fused half and its sum.
         /// </summary>
@@ -120,10 +120,12 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">The spacing does not broadcast against <c>y[1:] + y[:-1]</c>.</exception>
         /// <exception cref="TypeError">A text <paramref name="y"/> or <paramref name="x"/>: the refusal of the first NumPy
         ///     statement that has no loop for it (<see cref="TrapezoidText"/>).</exception>
-        /// <remarks>Moved from <c>np.trapezoid</c> statement for statement by the np-layer dtype plan's P2; it runs under the
-        ///     facade's scope (<c>[NDScoped]</c>), which reclaims what the matrix boundary and this body leave.</remarks>
-        [NDScopedCovered] // only caller: np.trapezoid ([NDScoped])
-        internal static NDArray Trapezoid(NDArray y, NDArray x, double dx, int axis)
+        /// <remarks>Moved from <c>np.trapezoid</c> statement for statement by the np-layer dtype plan's P2. Until its phase
+        ///     PE it ran under the facade's scope (<c>[NDScopedCovered]</c>); as a public entry point it owns its
+        ///     <c>[NDScoped]</c> now, which reclaims what this body leaves at its own return (np.trapezoid keeps its scope
+        ///     for what the matrix boundary leaves).</remarks>
+        [NDScoped]
+        public override NDArray Trapezoid(NDArray y, NDArray x = null, double dx = 1.0, int axis = -1)
         {
             // Text (y or x): NumPy's statements as they are (TrapezoidText); the fused pass below is numeric.
             if (Backends.Strings.NDStringUfuncs.IsText(y) || Backends.Strings.NDStringUfuncs.IsText(x))

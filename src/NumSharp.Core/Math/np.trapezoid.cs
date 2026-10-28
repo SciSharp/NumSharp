@@ -88,7 +88,7 @@ namespace NumSharp
                     ? NDMatrixBoundary.Plain((y, x, dx, axis), static s => trapezoid(s.y, s.x, s.dx, s.axis))
                     : NDMatrixBoundary.Reduced((y, x, dx, axis), static s => trapezoid(s.y, s.x, s.dx, s.axis), axis, false, null);
             if (y is null) throw new ArgumentNullException(nameof(y));
-            return TrapezoidEngine.Trapezoid(y, x, dx, axis);
+            return y.TensorEngine.Trapezoid(y, x, dx, axis);
         }
     }
 }
