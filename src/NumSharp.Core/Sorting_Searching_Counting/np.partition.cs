@@ -1,5 +1,3 @@
-using NumSharp.Backends.Sorting;
-
 namespace NumSharp
 {
     public static partial class np
@@ -35,7 +33,9 @@ namespace NumSharp
             ? throw NDCharArrayBoundary.PartitionKeywordError()
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : AxisPartition.Partition(a, new[] { kth }, axis, kind, order);
+            // NumPy's partition is fromnumeric.partition over PyArray_Partition, the engine's: TensorEngine.Partition
+            // (EngineOf, so a null a still meets the kind and order checks first, as before the move).
+            : EngineOf(a).Partition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Return a partitioned copy of an array, partitioning around EVERY index in
@@ -61,7 +61,7 @@ namespace NumSharp
             ? throw NDCharArrayBoundary.PartitionKeywordError()
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : AxisPartition.Partition(a, kth, axis, kind, order);
+            : EngineOf(a).Partition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Return a partitioned copy with the kth indices given as an ARRAY — NumPy's array-kth
@@ -82,7 +82,7 @@ namespace NumSharp
             ? throw NDCharArrayBoundary.PartitionKeywordError()
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => partition(s.a, s.kth, s.axis, s.kind, s.order))
-            : AxisPartition.Partition(a, kth, axis, kind, order);
+            : EngineOf(a).Partition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray
@@ -93,14 +93,14 @@ namespace NumSharp
         ///     null axis flattens in place — the same NumSharp extension <c>ndarray.sort</c> carries).
         /// </summary>
         public void partition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.PartitionInPlace(this, new[] { kth }, axis, kind, order);
+            => TensorEngine.PartitionInPlace(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Partition this array in place around every index in <paramref name="kth"/> at once
         ///     (NumPy <c>ndarray.partition</c> with a kth sequence).
         /// </summary>
         public void partition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.PartitionInPlace(this, kth, axis, kind, order);
+            => TensorEngine.PartitionInPlace(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Partition this array in place with the kth indices given as an ARRAY (NumPy's array-kth
@@ -108,6 +108,6 @@ namespace NumSharp
         ///     dtype/too-deep rejections and wrap semantics).
         /// </summary>
         public void partition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.PartitionInPlace(this, kth, axis, kind, order);
+            => TensorEngine.PartitionInPlace(this, kth, axis, kind, order);
     }
 }

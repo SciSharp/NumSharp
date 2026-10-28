@@ -1,5 +1,3 @@
-using NumSharp.Backends.Sorting;
-
 namespace NumSharp
 {
     public static partial class np
@@ -41,7 +39,9 @@ namespace NumSharp
             ? NDMatrixBoundary.Wrapped((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
             : NDCharArrayBoundary.Sees(a)   // a numpy.char.chararray operand comes back as a chararray, as from NumPy (NDCharArrayBoundary)
             ? NDCharArrayBoundary.Kept((a, axis, kind, order, stable), static s => sort(s.a, s.axis, s.kind, s.order, s.stable))
-            : AxisSort.Sort(a, axis, SortKindArguments.Resolve(kind, order, stable));
+            // NumPy's sort is fromnumeric.sort over PyArray_Sort, the engine's: TensorEngine.Sort (EngineOf, so a null a
+            // still meets the argument checks first, as before the move).
+            : EngineOf(a).Sort(a, axis, kind, order, stable);
     }
 
     public partial class NDArray
@@ -63,6 +63,6 @@ namespace NumSharp
         ///     value</c>, raised after the lines before it were sorted).</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public void sort(int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => AxisSort.SortInPlace(this, axis, SortKindArguments.Resolve(kind, order, stable));
+            => TensorEngine.SortInPlace(this, axis, kind, order, stable);
     }
 }

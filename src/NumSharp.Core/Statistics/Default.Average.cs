@@ -354,7 +354,7 @@ namespace NumSharp.Backends
             // wgt = wgt.transpose(np.argsort(axis))
             if (axis.Length > 1)
             {
-                int[] perm = ArgSort(axis);
+                int[] perm = AverageArgSort(axis);
                 bool identity = true;
                 for (int i = 0; i < perm.Length; i++)
                     if (perm[i] != i) { identity = false; break; }
@@ -373,7 +373,7 @@ namespace NumSharp.Backends
         /// <summary><c>np.argsort</c> of a short int array (the axis tuple): the positions in ascending value order.</summary>
         /// <param name="arr">The values (distinct: a normalized axis tuple).</param>
         /// <returns>The permutation that sorts <paramref name="arr"/>.</returns>
-        private static int[] ArgSort(int[] arr)
+        private static int[] AverageArgSort(int[] arr)
         {
             int[] idx = new int[arr.Length];
             for (int i = 0; i < arr.Length; i++) idx[i] = i;

@@ -1,5 +1,3 @@
-using NumSharp.Backends.Sorting;
-
 namespace NumSharp
 {
     public static partial class np
@@ -32,7 +30,9 @@ namespace NumSharp
             ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
-            : AxisPartition.ArgPartition(a, new[] { kth }, axis, kind, order);
+            // PyArray_ArgPartition, the engine's: TensorEngine.ArgPartition (EngineOf, so a null a still meets the kind and
+            // order checks first, as before the move).
+            : EngineOf(a).ArgPartition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Indirect partition around EVERY index in <paramref name="kth"/> at once (NumPy
@@ -49,7 +49,7 @@ namespace NumSharp
             ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
-            : AxisPartition.ArgPartition(a, kth, axis, kind, order);
+            : EngineOf(a).ArgPartition(a, kth, axis, kind, order);
 
         /// <summary>
         ///     Indirect partition with the kth indices given as an ARRAY — NumPy's array-kth form
@@ -67,7 +67,7 @@ namespace NumSharp
             ? NDCharArrayBoundary.IndexResult((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order), null)
             : NDMatrixBoundary.Sees(a)   // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             ? NDMatrixBoundary.Wrapped((a, kth, axis, kind, order), static s => argpartition(s.a, s.kth, s.axis, s.kind, s.order))
-            : AxisPartition.ArgPartition(a, kth, axis, kind, order);
+            : EngineOf(a).ArgPartition(a, kth, axis, kind, order);
     }
 
     public partial class NDArray
@@ -77,20 +77,20 @@ namespace NumSharp
         ///     (NumPy <c>ndarray.argpartition</c>). This array is only read.
         /// </summary>
         public NDArray argpartition(int kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(this, new[] { kth }, axis, kind, order);
+            => TensorEngine.ArgPartition(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Returns the int64 indices that would partition this array around every index in
         ///     <paramref name="kth"/> at once (NumPy <c>ndarray.argpartition</c>).
         /// </summary>
         public NDArray argpartition(int[] kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(this, kth, axis, kind, order);
+            => TensorEngine.ArgPartition(this, kth, axis, kind, order);
 
         /// <summary>
         ///     Returns the int64 indices that would partition this array, with the kth indices given
         ///     as an ARRAY (NumPy's array-kth form — see the <c>np.argpartition</c> overload).
         /// </summary>
         public NDArray argpartition(NDArray kth, int? axis = -1, string kind = "introselect", string order = null)
-            => AxisPartition.ArgPartition(this, kth, axis, kind, order);
+            => TensorEngine.ArgPartition(this, kth, axis, kind, order);
     }
 }

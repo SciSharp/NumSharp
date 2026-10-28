@@ -18,7 +18,7 @@ namespace NumSharp
         ///     for source compatibility — the element type is taken from the array's own dtype.
         /// </remarks>
         public NDArray argsort<T>(int axis = -1) where T : unmanaged
-            => AxisSort.ArgSort(this, axis);
+            => TensorEngine.ArgSort(this, axis);
 
         /// <summary>
         ///     Returns the indices that would sort this array along <paramref name="axis"/> (null flattens). NumPy's
@@ -45,6 +45,6 @@ namespace NumSharp
         ///     value</c>, raised after the lines before it were sorted).</exception>
         /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c> text).</exception>
         public NDArray argsort(int? axis = -1, string kind = null, object order = null, bool? stable = null)
-            => AxisSort.ArgSort(this, axis, SortKindArguments.Resolve(kind, order, stable));
+            => TensorEngine.ArgSort(this, axis, kind, order, stable);
     }
 }

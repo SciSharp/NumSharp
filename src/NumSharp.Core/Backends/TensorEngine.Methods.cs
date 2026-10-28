@@ -1,7 +1,8 @@
 // The ndarray methods that compute, which numpy/_core/fromnumeric.py wraps as np.sum, np.prod, np.mean, np.std,
 // np.var, np.max, np.min, np.argmax, np.argmin, np.all, np.any, np.cumsum, np.cumprod, np.searchsorted,
-// np.nonzero, np.trace, np.clip and np.round (NumPy implements them in _core/_methods.py and in C over the ufunc
-// reductions). The ndarray methods of the array object (reshape, take, put, ...) are not engine members.
+// np.nonzero, np.trace, np.clip, np.round, np.sort, np.argsort, np.partition and np.argpartition (NumPy implements
+// them in _core/_methods.py and in C over the ufunc reductions and the sort functions). The ndarray methods of the
+// array object (reshape, take, put, ...) are not engine members.
 
 using System;
 using NumSharp.Backends;
@@ -571,5 +572,178 @@ namespace NumSharp
         ///     plan, phase PE).
         /// </remarks>
         public abstract NDArray Ptp(NDArray a, int[] axis, NDArray @out = null, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.sort(a, axis, kind, order, stable)</c> (<c>fromnumeric.sort</c> over <c>PyArray_Sort</c>), the
+        ///     whole call: a sorted copy of <paramref name="a"/>, which is only read. Use <see cref="SortInPlace"/> for
+        ///     <c>ndarray.sort</c>.
+        /// </summary>
+        /// <param name="a">The array (any dtype: text sorts by code points, <c>StringDType</c> in NumPy's NA order).</param>
+        /// <param name="axis">The sorted axis (negative counts from the end), or null for the C-order flattening.</param>
+        /// <param name="kind">NumPy's <c>kind=</c>, read from its first character (<c>q</c>uicksort, <c>h</c>eapsort,
+        ///     <c>m</c>ergesort or <c>s</c>table, any case), or null for the default. It changes the answer only where NumPy's
+        ///     does: the stable kind's float value sort keeps every NaN's bits, and StringDType refuses the heapsort kind.</param>
+        /// <param name="order">NumPy's <c>order=</c>, a field name or a list of them, or null: every NumSharp dtype has no
+        ///     fields, so any value is refused.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true asks for the stable kind; any non-null value is
+        ///     refused together with <paramref name="kind"/>.</param>
+        /// <returns>A fresh array of <paramref name="a"/>'s dtype laid out as <c>copy(order='K')</c> lays out
+        ///     <paramref name="a"/> (an F input stays F), or the sorted flattening for a null axis.</returns>
+        /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>sort kind must be one of 'quick', 'heap', or
+        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/>, or an
+        ///     <paramref name="order"/>, all before the array is read; a <c>StringDType</c> line of two or more elements
+        ///     holding an NA whose NA object is neither NaN-like nor a string.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort
+        ///     kind</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of range (a 0-d array refuses every axis: NumPy's sort does not ravel
+        ///     it first).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.sort</c> applies its class
+        ///     boundaries and calls this; DefaultEngine sorts with its AxisSort kernels.</remarks>
+        public abstract NDArray Sort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
+
+        /// <summary>
+        ///     NumPy's <c>ndarray.sort(axis, kind, order, stable)</c> (<c>array_sort</c> over <c>PyArray_Sort</c>), the whole
+        ///     call: sorts <paramref name="a"/> IN PLACE along the axis, in NumPy's order of checks (the arguments, the axis,
+        ///     writeability, then the sort). Use <see cref="Sort"/> for a sorted copy.
+        /// </summary>
+        /// <param name="a">The array sorted in place (any dtype).</param>
+        /// <param name="axis">The sorted axis (negative counts from the end), or null: NumSharp's extension that sorts a
+        ///     contiguous array's flattening in place.</param>
+        /// <param name="kind">NumPy's <c>kind=</c>, read from its first character (<c>q</c>uicksort, <c>h</c>eapsort,
+        ///     <c>m</c>ergesort or <c>s</c>table, any case), or null for the default. It changes the answer only where NumPy's
+        ///     does: the stable kind's float value sort keeps every NaN's bits, and StringDType refuses the heapsort kind.</param>
+        /// <param name="order">NumPy's <c>order=</c>, a field name or a list of them, or null: every NumSharp dtype has no
+        ///     fields, so any value is refused.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true asks for the stable kind; any non-null value is
+        ///     refused together with <paramref name="kind"/>.</param>
+        /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>sort kind must be one of 'quick', 'heap', or
+        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/>, or an
+        ///     <paramref name="order"/>, all before the array is read; a read-only
+        ///     array (<c>sort array is read-only</c>); a <c>StringDType</c> line of two or more elements
+        ///     holding an NA whose NA object is neither NaN-like nor a string.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort
+        ///     kind</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): <c>NDArray.sort</c> calls this.</remarks>
+        public abstract void SortInPlace(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.argsort(a, axis, kind, order, stable)</c> and <c>ndarray.argsort</c> (<c>PyArray_ArgSort</c>),
+        ///     the whole call: the int64 indices that sort <paramref name="a"/> along the axis.
+        /// </summary>
+        /// <param name="a">The array (only read). A 0-d array ravels to one element first, as NumPy's
+        ///     <c>PyArray_CheckAxis</c> does: its answer is <c>[0]</c>, and an axis other than 0 / -1 reports dimension 1.</param>
+        /// <param name="axis">The sorted axis (negative counts from the end), or null for the C-order flattening.</param>
+        /// <param name="kind">NumPy's <c>kind=</c>, read from its first character (<c>q</c>uicksort, <c>h</c>eapsort,
+        ///     <c>m</c>ergesort or <c>s</c>table, any case), or null for the default. It changes the answer only where NumPy's
+        ///     does: the stable kind's float value sort keeps every NaN's bits, and StringDType refuses the heapsort kind.</param>
+        /// <param name="order">NumPy's <c>order=</c>, a field name or a list of them, or null: every NumSharp dtype has no
+        ///     fields, so any value is refused.</param>
+        /// <param name="stable">NumPy's keyword-only <c>stable=</c>: true asks for the stable kind; any non-null value is
+        ///     refused together with <paramref name="kind"/>.</param>
+        /// <returns>A fresh, C-contiguous int64 array of <paramref name="a"/>'s shape (one-dimensional for a null axis).
+        ///     Ties keep their order for every numeric kind (NumSharp's numeric argsort is one stable order); text follows
+        ///     NumPy's introsort for the default kind.</returns>
+        /// <exception cref="ValueError">An unknown <paramref name="kind"/> (<c>sort kind must be one of 'quick', 'heap', or
+        ///     'stable' (got 'x')</c>), <paramref name="kind"/> together with <paramref name="stable"/>, or an
+        ///     <paramref name="order"/>, all before the array is read; a <c>StringDType</c> line of two or more elements
+        ///     holding an NA whose NA object is neither NaN-like nor a string.</exception>
+        /// <exception cref="RuntimeError">A <c>StringDType</c> array with the heapsort kind (<c>unsupported sort
+        ///     kind</c>), before the axis: NumPy resolves the argsort loop first.</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): <c>np.argsort</c> and <c>NDArray.argsort</c>
+        ///     call this.</remarks>
+        public abstract NDArray ArgSort(NDArray a, int? axis = -1, string kind = null, object order = null, bool? stable = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.partition(a, kth, axis, kind, order)</c> (<c>fromnumeric.partition</c> over
+        ///     <c>PyArray_Partition</c>), the whole call: a copy of <paramref name="a"/> in which every
+        ///     <paramref name="kth"/> element is where a sorted copy holds it, with no larger element before it and no
+        ///     smaller one after it along the axis (introselect). Use <see cref="PartitionInPlace"/> for
+        ///     <c>ndarray.partition</c>.
+        /// </summary>
+        /// <param name="a">The array (only read). Text has no partition function, so NumPy sorts each line.</param>
+        /// <param name="kth">NumPy's array_like of positions along the axis: a C# <see cref="int"/>, an <see cref="int"/>[],
+        ///     an integer index array, or any other object, converted with <c>np.asanyarray</c>. A negative position counts
+        ///     from the end; every listed position ends where a sorted copy holds its element.</param>
+        /// <param name="axis">The axis (negative counts from the end), or null for the flattened array.</param>
+        /// <param name="kind">NumPy's <c>kind=</c>: only <c>"introselect"</c> (the default) or null.</param>
+        /// <param name="order">NumPy's <c>order=</c>, a field name, or null: every NumSharp dtype has no fields, so any
+        ///     value is refused.</param>
+        /// <returns>A fresh array of <paramref name="a"/>'s dtype laid out as <c>copy(order='K')</c> lays out
+        ///     <paramref name="a"/>, or the partitioned flattening for a null axis. Float NaNs end each line with their own
+        ///     bits; the arrangement between the listed positions is the introselect's own.</returns>
+        /// <exception cref="ValueError">A <paramref name="kind"/> other than <c>"introselect"</c> (<c>select kind must be
+        ///     'introselect' (got 'x')</c>) or an <paramref name="order"/>, before the array is read; a kth index array of
+        ///     more than one dimension (<c>object too deep for desired array</c>, before the axis) or of bool dtype
+        ///     (<c>Booleans unacceptable as partition index</c>); a position out of bounds (<c>kth(=5) out of bounds
+        ///     (5)</c>, skipped for an empty array).</exception>
+        /// <exception cref="TypeError">A kth index array of a non-integer dtype (<c>Partition index must be
+        ///     integer</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null, at NumPy's kth stage (after the axis:
+        ///     NumPy's kth=None raises its TypeError there).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.partition</c> applies its class
+        ///     boundaries and calls this; DefaultEngine partitions with its AxisPartition kernels.</remarks>
+        public abstract NDArray Partition(NDArray a, object kth, int? axis = -1, string kind = "introselect", string order = null);
+
+        /// <summary>
+        ///     NumPy's <c>ndarray.partition(kth, axis, kind, order)</c> (<c>array_partition</c> over <c>PyArray_Partition</c>),
+        ///     the whole call: partitions <paramref name="a"/> IN PLACE along the axis (see <see cref="Partition"/>), in
+        ///     NumPy's order of checks (the kind, the order, the axis, writeability, then the positions).
+        /// </summary>
+        /// <param name="a">The array partitioned in place.</param>
+        /// <param name="kth">NumPy's array_like of positions along the axis: a C# <see cref="int"/>, an <see cref="int"/>[],
+        ///     an integer index array, or any other object, converted with <c>np.asanyarray</c>. A negative position counts
+        ///     from the end; every listed position ends where a sorted copy holds its element.</param>
+        /// <param name="axis">The axis (negative counts from the end), or null: NumSharp's extension that partitions a
+        ///     contiguous array's flattening in place.</param>
+        /// <param name="kind">NumPy's <c>kind=</c>: only <c>"introselect"</c> (the default) or null.</param>
+        /// <param name="order">NumPy's <c>order=</c>, a field name, or null: every NumSharp dtype has no fields, so any
+        ///     value is refused.</param>
+        /// <exception cref="ValueError">A <paramref name="kind"/> other than <c>"introselect"</c> (<c>select kind must be
+        ///     'introselect' (got 'x')</c>) or an <paramref name="order"/>, before the array is read; a kth index array of
+        ///     more than one dimension (<c>object too deep for desired array</c>, before the axis) or of bool dtype
+        ///     (<c>Booleans unacceptable as partition index</c>); a read-only array (<c>partition array is
+        ///     read-only</c>); a position out of bounds (<c>kth(=5) out of bounds
+        ///     (5)</c>, skipped for an empty array).</exception>
+        /// <exception cref="TypeError">A kth index array of a non-integer dtype (<c>Partition index must be
+        ///     integer</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null, at NumPy's kth stage (after the axis:
+        ///     NumPy's kth=None raises its TypeError there).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): <c>NDArray.partition</c> calls this.</remarks>
+        public abstract void PartitionInPlace(NDArray a, object kth, int? axis = -1, string kind = "introselect", string order = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.argpartition(a, kth, axis, kind, order)</c> and <c>ndarray.argpartition</c>
+        ///     (<c>PyArray_ArgPartition</c>), the whole call: the int64 indices that partition <paramref name="a"/> along the
+        ///     axis (see <see cref="Partition"/>).
+        /// </summary>
+        /// <param name="a">The array (only read). A 0-d array ravels to one element first, as NumPy's
+        ///     <c>PyArray_CheckAxis</c> does.</param>
+        /// <param name="kth">NumPy's array_like of positions along the axis: a C# <see cref="int"/>, an <see cref="int"/>[],
+        ///     an integer index array, or any other object, converted with <c>np.asanyarray</c>. A negative position counts
+        ///     from the end; every listed position ends where a sorted copy holds its element.</param>
+        /// <param name="axis">The axis (negative counts from the end), or null for the flattened array.</param>
+        /// <param name="kind">NumPy's <c>kind=</c>: only <c>"introselect"</c> (the default) or null.</param>
+        /// <param name="order">NumPy's <c>order=</c>, a field name, or null: every NumSharp dtype has no fields, so any
+        ///     value is refused.</param>
+        /// <returns>A fresh, C-contiguous int64 array of <paramref name="a"/>'s shape (one-dimensional for a null axis):
+        ///     the element at each listed position is where a sorted copy holds it. Text answers with the default argsort
+        ///     (NumPy's generic introsort fallback).</returns>
+        /// <exception cref="ValueError">A <paramref name="kind"/> other than <c>"introselect"</c> (<c>select kind must be
+        ///     'introselect' (got 'x')</c>) or an <paramref name="order"/>, before the array is read; a kth index array of
+        ///     more than one dimension (<c>object too deep for desired array</c>, before the axis) or of bool dtype
+        ///     (<c>Booleans unacceptable as partition index</c>); a position out of bounds (<c>kth(=5) out of bounds
+        ///     (5)</c>, skipped for an empty array).</exception>
+        /// <exception cref="TypeError">A kth index array of a non-integer dtype (<c>Partition index must be
+        ///     integer</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="kth"/> is null, at NumPy's kth stage (after the axis:
+        ///     NumPy's kth=None raises its TypeError there).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): <c>np.argpartition</c> and
+        ///     <c>NDArray.argpartition</c> call this.</remarks>
+        public abstract NDArray ArgPartition(NDArray a, object kth, int? axis = -1, string kind = "introselect", string order = null);
     }
 }

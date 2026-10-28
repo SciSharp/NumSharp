@@ -1,4 +1,4 @@
-// The C functions of NumPy's _multiarray_umath that compute (np.dot so far; Appendix D of
+// The C functions of NumPy's _multiarray_umath that compute (np.dot and np.lexsort so far; Appendix D of
 // docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
 // np.copyto, np.concatenate, ...) are not engine members.
 
@@ -31,5 +31,24 @@ namespace NumSharp
         /// <remarks>Widened in place with <paramref name="out"/> (the np-layer dtype plan, P2): a call without it is the
         ///     product alone, as before, and an engine deriving from TensorEngine implements the three-parameter member.</remarks>
         public abstract NDArray Dot(NDArray x, NDArray y, NDArray @out = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.lexsort(keys, axis)</c> (<c>PyArray_LexSort</c>), the whole call: the int64 indices that sort
+        ///     by several keys at once, the LAST key primary and each earlier one breaking the ties of the keys after it
+        ///     (a stable sort per key).
+        /// </summary>
+        /// <param name="keys">The keys, every one of the same shape (any dtype; text sorts by code points). The public
+        ///     <c>np.lexsort(NDArray, int)</c> splits an array along its first axis into this list.</param>
+        /// <param name="axis">The axis sorted along (negative counts from the end). Keys of rank 0 accept 0 and -1 (NumPy's
+        ///     backwards compatibility) and answer the 0-d <c>0</c>.</param>
+        /// <returns>A fresh int64 array of the keys' shape (zeros for keys of at most one element).</returns>
+        /// <exception cref="TypeError"><paramref name="keys"/> is null or empty (<c>need sequence of keys with len &gt; 0 in
+        ///     lexsort</c>).</exception>
+        /// <exception cref="ArgumentNullException">A key is null.</exception>
+        /// <exception cref="ValueError">The keys differ in shape (<c>all keys need to be the same shape</c>).</exception>
+        /// <exception cref="AxisError">The axis is out of range.</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.lexsort</c> applies its class
+        ///     boundaries and calls this.</remarks>
+        public abstract NDArray LexSort(NDArray[] keys, int axis = -1);
     }
 }
