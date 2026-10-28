@@ -20,11 +20,12 @@ np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the ow
 landed eighteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
 then resumed it the same day beside PE and P3, with P4 (np.emath, the seventeenth family, came first). Later that day the owner kept the array object
 out of the engine: `TensorEngine` holds the functions that compute values, while creation, conversion, views, joins and
-selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). PE's E6, E4, E1 and E7
+selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). PE's E6, E4, E1, E5 and E7
 are done (2026-10-28): `TensorEngine.cs` is split into partial files named after NumPy's sources, eleven of the twelve
 operation classes are `TensorEngine` members implemented by `DefaultEngine` (or, for np.insert / np.delete, internal
-members of `NDArray`), and np.diagonal's view left the engine for `NDArray` and `Shape`; `LinalgEngine` waits for E2,
-and E2, E3 and E5 are open. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+members of `NDArray`), np.diagonal's view left the engine for `NDArray` and `Shape`, and the sort family and the
+max / min keywords are members; `LinalgEngine` waits for E2, and E2 and E3 are open. Progress goes into the
+[§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -618,7 +619,10 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
   - NanSum, NanProd, NanMax and NanMin go to NanFunctions;
   - MoveAxis and RollAxis are functions of the array object: they join the other shipped array-object members in
     `TensorEngine.ArrayObject.cs` (E6, E7).
-- [ ] **E5, C-level statics become members.** The sort members are done (2026-10-28, `2f52ffea`, §9); the rest is open.
+- [x] **E5, C-level statics become members.** Done 2026-10-28 (§9): the sort members (`2f52ffea`), `ReduceAMax` /
+      `ReduceAMin` / `NanMax` / `NanMin` with `out=` / `initial=` / `where=` (`bf862520`); `MeanOverAxes` /
+      `ReduceAddOverAxes` need no member (E1 made np.average's body a `DefaultEngine` partial, so they are the engine's
+      own helpers).
   - np.sort / np.argsort / np.partition / np.argpartition / np.lexsort get `TensorEngine` members (Sort, ArgSort,
     Partition, ArgPartition, LexSort). `AxisSort`, `AxisPartition` and `RadixSort` stay their kernels.
   - `DefaultEngine.MaxMinNumPy` becomes `ReduceAMax` / `ReduceAMin` with `out=` / `initial=` / `where=` (D2).
@@ -723,6 +727,26 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-28, PE: E5 done.** Commits on `strings`, landed by fast-forward:
+  - `04db655a` the snapshot tool varies the max / min family's `initial=` (np.max / np.amax / np.min / np.amin /
+    np.nanmax / np.nanmin and NDArray's max / min): before it a `where=` mask always met NumPy's no-identity error, so the
+    masked and seeded reductions never ran. 114,402 calls at the parent, a second run identical, the "small" group
+    unchanged.
+  - `bf862520` `ReduceAMax` / `ReduceAMin` (Methods) and `NanMax` / `NanMin` (NanFunctions) take `out=`, `initial=` and
+    `where=`, appended after their existing parameters so every positional call binds as before (a third `out` would have
+    taken a C# bool through the implicit bool -> NDArray conversion). np.nanmax / np.nanmin's pair joined though the plan
+    named only ReduceAMax / ReduceAMin: `MaxMinNumPy` also serves fmax / fmin, which would otherwise have stayed past the
+    engine. The facades make one call (`EngineOf`, so a null `a` keeps its exception); a call with any keyword takes
+    `MaxMinNumPy` as its first statement; `dtype=` with a keyword is NotSupportedException (np.max has no `dtype=`). The
+    IL guard's LT11 row names the widened signature. 114,402 calls byte-identical, a 50-call null / keyword-error probe
+    too; the max / min tests (765) and the oracle's eight reduction tiers with the ratchets pass on both frameworks.
+  - `MeanOverAxes` / `ReduceAddOverAxes` (decided, no commit): the plan made them members because the operation class
+    AverageEngine reached them past the engine. E1 made np.average's body a `DefaultEngine` partial, so they are the
+    engine's own helpers. A `ReduceAdd(int[] ...)` overload would also make every `ReduceAdd(a, null, ...)` call ambiguous
+    (22 in src and tests, and any caller of 0.70.0's member), and its iterator has float / complex / decimal add loops
+    only, so no public member was added.
+  - Next: E2 (`TensorEngine.Linalg`), E3 (`TensorEngine.Fft`); then P3.
 
 - **2026-10-28, PE: E6, E4, E1 and E7 done, E5 begun (the sort members).** Commits on `strings`, developed in a
   scratch worktree and landed by fast-forward, one family per commit. Every move is byte-identical on the snapshot,
