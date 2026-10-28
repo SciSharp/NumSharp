@@ -127,7 +127,7 @@ namespace NumSharp.Backends
         ///     has length ≥ 2.
         ///     </para>
         /// </summary>
-        internal static unsafe NDArray DiffAdjacentContiguous(NDArray a, int axis)
+        private static unsafe NDArray DiffAdjacentContiguous(NDArray a, int axis)
         {
             NPTypeCode dt = a.GetTypeCode;
             var kernel = DirectILKernelGenerator.GetAdjacentDiffKernel(dt);
@@ -210,7 +210,7 @@ namespace NumSharp.Backends
         ///     emitter rejects the dtype, signalling the caller to fall back to
         ///     the <c>-</c> operator.
         /// </summary>
-        internal static unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
+        private static unsafe NDArray DiffSubtractViaNDIter(NDArray hi, NDArray lo)
         {
             NPTypeCode dt = hi.GetTypeCode;
 

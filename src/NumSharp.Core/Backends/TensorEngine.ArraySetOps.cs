@@ -166,5 +166,20 @@ namespace NumSharp
         ///     <c>UniqueEngine</c>.
         /// </remarks>
         public abstract NDArray[] UniqueAll(NDArray x);
+
+        /// <summary>
+        ///     NumPy's <c>np.ediff1d(ary, to_end=None, to_begin=None)</c>: the differences between consecutive elements
+        ///     of the flattened array, with to_begin / to_end (each cast to <paramref name="ary"/>'s dtype under
+        ///     <c>same_kind</c>) put before and after.
+        /// </summary>
+        /// <param name="ary">The input, flattened (not null).</param>
+        /// <param name="to_end">Values to append, or null for none.</param>
+        /// <param name="to_begin">Values to prepend, or null for none.</param>
+        /// <returns>A new 1-D array in <paramref name="ary"/>'s dtype.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="ary"/> is null.</exception>
+        /// <exception cref="ArgumentException">to_begin / to_end that cannot reach <paramref name="ary"/>'s dtype under
+        ///     <c>same_kind</c> (NumPy's TypeError text).</exception>
+        /// <exception cref="TypeError">Text or bool, which subtract has no loop for (NumPy's texts).</exception>
+        public abstract NDArray Ediff1d(NDArray ary, object to_end = null, object to_begin = null);
     }
 }
