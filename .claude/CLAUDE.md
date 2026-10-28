@@ -113,7 +113,7 @@ Array-API unique family, `np.isin`, the four set routines, `np.sort_complex`, `n
 family with its nan forms, and numpy.ma's `sort` / `argsort` / `median` / `unique`, with NumPy's ordering of missing
 values (NaN-like NA after every text in input order, string NA as its text, `None`-like NA raises at the first comparison
 that meets it — a line of one element compares nothing). Code: `Backends/Default/Sorting/VString{Sort,Search,Distinct}.cs`,
-`Manipulation/{UniqueEngine,IsinEngine}.VString.cs`, `Backends/Strings/NDVStringStatistics.Quantile.cs`. Design: a stable
+`Manipulation/Default.{Unique,Isin}.VString.cs`, `Backends/Strings/NDVStringStatistics.Quantile.cs`. Design: a stable
 radix of 8-byte prefix keys with a tie pass (NumPy's stable kind), NumPy's introsort replayed over (rank, index) records
 only where equal texts make the default kind's order observable; `np.lexsort` replays `npy_atimsort` when two or more
 NaN-like NAs meet (its asymmetric compare reverses adjacent NAs); `np.unique`'s values-only route hashes (`TextTable`:
@@ -1961,10 +1961,11 @@ the k-th unique value → use `.values[k]`). To keep the ~230 existing call-site
 no-flags case — and the test `Should()` extension gained a `UniqueResult` overload (`FluentExtension.cs`). The
 **instance** `NDArray.unique(int? axis=null, …)`→`NDArray` and `NDArray.unique(bool return_index, …)`→`NDArray[]`
 keep their return types; only the static `np.unique` was lifted to `UniqueResult`, which wraps the `NDArray[]` of the
-computation. All of them are one call into the internal operation class `UniqueEngine` (np-layer dtype plan P2,
-2026-10-28: `Unique` for `np.unique` after its chararray / matrix boundaries, `Bare` / `Compute` for the two instance
-members, `UniqueValues` / `UniqueCounts` / `UniqueInverse` / `UniqueAll` for the Array-API functions; the kernels are
-its partials `UniqueEngine.{Kwargs,Hash,Radix,Text,VString}.cs`). The other three sibling
+computation. All of them are one call into an engine member (np-layer dtype plan P2 and PE, 2026-10-28):
+`TensorEngine.Unique` for `np.unique` after its chararray / matrix boundaries and for both instance members (the bare
+one takes element 0), `UniqueValues` / `UniqueCounts` / `UniqueInverse` / `UniqueAll` for the Array-API functions;
+DefaultEngine's overrides are `Manipulation/Default.Unique.cs`, the kernels its partials
+`Default.Unique.{Kwargs,Hash,Radix,Text,VString}.cs`. The other three sibling
 result structs (`UniqueAllResult`/`UniqueCountsResult`/`UniqueInverseResult`) are always tuples, so they carry no
 `values`-forwarding surface — the asymmetry is deliberate (only `np.unique` has a bare-array case). Gate:
 `Manipulation/np.unique.AxisEdgeCases.Test.cs` (`UniqueResult_*` + `BareReturn_*` pins); the whole test suite compiles
@@ -1990,7 +1991,7 @@ hash-bucket order (neither sorted nor first-occurrence — e.g. `[0,8,16,24,1,9,
 win-amd64, not reproducible in C#); NumSharp returns them SORTED (identical AS A SET, deterministic, portable, and
 consistent with the `values` field of the other three). **Plain float32/64 are NOT in NumPy's hash map**, so they
 fall to NumPy's own sort path and are already sorted — NumSharp's float `unique_values` is thus bit-exact with NumPy,
-not divergent. **Hash fast path** (`UniqueEngine.Hash.cs`): the 10 integer-family dtypes (bool/byte/sbyte/int16/
+not divergent. **Hash fast path** (`Default.Unique.Hash.cs`): the 10 integer-family dtypes (bool/byte/sbyte/int16/
 uint16/int32/uint32/int64/uint64/char) take a purpose-built open-addressing table (byte-size-keyed generic hash,
 load-factor-0.5 growth, **splitmix64 finalizer**) then a sort of the small unique set — mirroring NumPy's own
 algorithm SELECTION (NumPy hashes int + complex, both in its `_unique_hash` map, and sorts floats). **Complex** joins
@@ -2019,8 +2020,8 @@ the np.unique family of the np-layer plan (2026-10-28, two pinned P-cores): floa
 (still that gap), float16 values alone 5.49× (the stable radix argsort, was 0.95×), complex128 `np.unique_counts`
 1.59–4.74× over a cardinality sweep at 100K / 1M (0.91× at 1K, NumPy's fixed cost). Full design +
 the measured "why the axis comparator stays scalar / why floats stay sorted / why splitmix" decisions:
-**`docs/stale-docs/UNIQUE_DESIGN.md`** (superseded where this section differs). See `Manipulation/UniqueEngine.cs` (the
-Array-API bodies) + `Manipulation/UniqueEngine.Hash.cs`.
+**`docs/stale-docs/UNIQUE_DESIGN.md`** (superseded where this section differs). See `Manipulation/Default.Unique.cs` (the
+Array-API bodies) + `Manipulation/Default.Unique.Hash.cs`.
 
 **`np.unique` full parameter parity** — `unique(ar, return_index=false, return_inverse=false,
 return_counts=false, axis=null, equal_nan=true, sorted=true)`, all six probed against 2.4.2 (gates
@@ -2046,7 +2047,7 @@ NaN-to-end ordering across every float width (the unique-row set and counts are 
 differs). The values of the axis path are always NumPy's view of the gathered rows (`reshape_uniq`'s `np.moveaxis`
 runs at axis 0 too, so `flags.owndata` is False; fixed 2026-10-28, `5364e93e`), and a C-contiguous operand at an
 offset (an `np.split` / `np.array_split` / `np.unstack` child) is read from its own first element (the slab helpers
-read the parent's first rows before `d8562466`). See `Manipulation/UniqueEngine.{cs,Kwargs.cs}`.
+read the parent's first rows before `d8562466`). See `Manipulation/Default.Unique.{cs,Kwargs.cs}`.
 
 **`np.unique`'s flat routes are NumPy's `_unique1d` statements** (np-layer dtype plan P2, 2026-10-28; probed against
 2.4.2). NumPy sorts in place when neither an index nor an inverse is asked (`ar.sort(); aux = ar`), and otherwise
@@ -2054,7 +2055,7 @@ argsorts and gathers (`perm = ar.argsort(kind='mergesort' if return_index else '
 starts are `aux[1:] != aux[:-1]` (IEEE: a NaN differs from everything, `-0.0 == +0.0`), `equal_nan` collapses one run
 from the first NaN (complex: the first value with a NaN part), and the index is `perm[mask]`. NumSharp's routes:
 - **An index or an inverse** (any float dtype), **float16 every call** and **complex128 counts** run the argsort
-  statements (`UniqueEngine.uniqueFlatArgsorted<T>`) over `AxisSort.ArgSort`, which is one stable order for every kind,
+  statements (`DefaultEngine.uniqueFlatArgsorted<T>`) over `AxisSort.ArgSort`, which is one stable order for every kind,
   NumPy's mergesort order: a collapsed NaN run's value and index are the same NaN's, a run of zeros keeps the first
   zero in input order, and complex values come in `CDOUBLE_LT`'s order (no NaN part lexicographic, then `R+nanj` by
   `R`, then `nan+Rj` by `R`, then `nan+nanj`). float16 values alone take it too because NumPy's float16 in-place sort
@@ -2420,7 +2421,7 @@ Release):** pow on every element on both sides — `x ** 2.0` 0.96–1.06×, int
 fractional-exponent path **~parity (0.86–0.99×)**: the `Math.Pow` physical ceiling (NumPy is equally
 scalar-`pow`-bound, no SIMD `pow` exists — the same ceiling as `arcsinh`/`arccosh`). The old 4.5–51× for a fast
 exponent came from computing `x*x` / `sqrt`, which is not NumPy's value. See `Math/np.float_power.cs`,
-`Backends/Default/Math/Default.FloatPower.cs`, `Backends/TensorEngine.cs` (`FloatPower`).
+`Backends/Default/Math/Default.FloatPower.cs`, `Backends/TensorEngine.Umath.cs` (`FloatPower`).
 
 **`np.power`'s float loops — NumPy's zero-exponent-step fast path, exactly where NumPy takes it** (2026-10-06, plan
 `docs/plans/api-parameter-parity.md` X13 / X19 / X20; gates the `power_fast` tier + `Math/np.power.StrideZero.Test.cs`).
@@ -2489,7 +2490,7 @@ result's own buffer as NumPy does: `SlidingDot.RevertInPlace`), and a complex `v
   (`PyArray_Correlate` / `PyArray_Correlate2` with `_pyarray_correlate`'s checks) are the engine members
   `TensorEngine.Correlate` / `Correlate2` (`Backends/Default/Math/Default.Correlate.cs`); np.convolve's Python
   statements (`ndmin=1`, its own `a cannot be empty` / `v cannot be empty`, the swap by length, `v[::-1]`) are
-  `ConvolveEngine` (`Math/ConvolveEngine.cs`); the four facades are one call each, NDArray.convolve / correlate keeping
+  `TensorEngine.Convolve` (DefaultEngine's in `Math/Default.Convolve.cs`); the four facades are one call each, NDArray.convolve / correlate keeping
   `[NDScoped]` so the weaver roots their operands at the public entry (`OperandRootsTests`, gap LT22).
 - **The mode is NumPy's `PyArray_CorrelatemodeConverter`** (`SlidingDot.ParseSlidingMode`): case-SENSITIVE; a text
   whose first letter names a mode but is not its exact name is `ValueError("Use one of 'valid', 'same', or 'full' for
@@ -2564,7 +2565,7 @@ managed path stays the `groupa` fuzz default.
 P-cores, best of 6–8 process runs): np.correlate of 3 by 8 values (the swapped product) **1.87×** (0.57× while the
 reversal took a view and a copy), np.convolve of 8 by 3 values **1.33×** (the reversed view, then the kernel and the
 result at the NDArray allocation floor), np.convolve(int32 1000, 10, 'same') **4.34×**. See `Math/np.correlate.cs`,
-`Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs`, `Math/ConvolveEngine.cs`,
+`Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs`, `Math/Default.Convolve.cs`,
 `Backends/Default/Math/Default.Correlate.cs`, `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs`,
 `Backends/ISlidingDotBackend.cs`, `NumSharp.Interop.OpenBLAS/OpenBlasEngine.SlidingDot.cs`.
 
@@ -2990,7 +2991,7 @@ masks carried NaN, an unmasked inf stayed where NumPy masks it into 0.0, and the
 - **Perf** (310 cells): geomean 4.80× since X11's masked copy and X15's float16 broadcast route (2026-10-06; 2.83×
   before), min 1.07×. The five cells under 1.5× are the memory-bound 1M nomask means (1.07–1.39×).
 
-**`np.average` / `np.average_returned` are NumPy's statements** (`Statistics/AverageEngine.cs`; 2026-10-27, plan
+**`np.average` / `np.average_returned` are NumPy's statements** (`Statistics/Default.Average.cs`; 2026-10-27, plan
 `docs/plans/np-layer-dtype-logic.md` P2, the family's state-log entry). NumPy writes average in Python
 (`numpy/lib/_function_base_impl.py`), so the operation is an internal class beside the facade (it calls np.*
 functions, which ratchet R2 forbids under `Backends/`); the facades keep the numpy.matrix boundary and the null check.
@@ -3287,8 +3288,8 @@ See `Logic/np.is.cs` (`signbit`), `Backends/Default/Logic/Default.SignBit.cs`,
 `np.isin(element, test_elements, assume_unique=false, invert=false, kind=null)` is the element-wise membership
 test — a bool array of `element`'s shape, True where `element[i]` is a value in the (flattened) `test_elements`
 set — and runs NumPy's `_isin` (`numpy/lib/_arraysetops_impl.py`) after the facade's class boundary, in
-`Manipulation/IsinEngine.cs` (`IsinEngine.VString.cs` holds the `StringDType` route; moved there by the np-layer
-dtype plan's P2, 2026-10-27). NumPy answers on one of three paths, and NumSharp takes the same one (`NumPyPath`):
+`Manipulation/Default.Isin.cs` (`Default.Isin.VString.cs` holds the `StringDType` route; moved there by the np-layer
+dtype plan's P2, 2026-10-27, as the internal class IsinEngine, and made `TensorEngine.Isin` by its phase PE). NumPy answers on one of three paths, and NumSharp takes the same one (`NumPyPath`):
 - **The table method** (an integer or bool pair — a char array is NumPy's uint16 —, `kind` None or `'table'`, the
   set's range safe for its dtype and at most `6·(len(ar1)+len(ar2))`, or `kind='table'`) runs as one pass
   (`TableMembership`). Elements of one byte, and of two bytes from 8,192 on, read a table over their dtype's whole
@@ -3324,7 +3325,7 @@ uint8 3.40×, bool 34.7×; 1M int32 6.07×), the loop path **1.74–6.41×** (10
 same source measured 270 and 940 µs), and `assume_unique` over presorted floats **0.42×** (NumPy's own statements
 against NumPy's timsort, which finds the two sorted runs; 5.17× over a permutation). An AVX2 gather of the range table
 measured 1.7× faster and is not taken: Intel's GDS microcode mitigation slows gathers on 6th–11th-generation cores. See
-`Manipulation/np.isin.cs` (facade), `Manipulation/IsinEngine.cs`; gates: `Manipulation/np.isin.Test.cs` (42) +
+`Manipulation/np.isin.cs` (facade), `Manipulation/Default.Isin.cs`; gates: `Manipulation/np.isin.Test.cs` (42) +
 `np.isin.NumPyPort.Test.cs` (4) + the `isin` cases of the `groupa` tier (22) + the facade-move snapshot's NumPy twin
 (5,069 comparable calls, every one NumPy's outcome).
 
@@ -4938,10 +4939,10 @@ StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
   starting best can admit a lane that an earlier lane of the group has since beaten.
 
 **Text set routines and statistics are NumPy's statements over the sort and search engines** (strings phase 2, P2.2
-milestone C, 2026-10-16; `Manipulation/UniqueEngine.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
-`Manipulation/IsinEngine.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/np.{lexsort,
-sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
-`QuantileEngine.Functions.cs` (`QuantileOfText`); gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
+milestone C, 2026-10-16; `Manipulation/Default.Unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
+`Manipulation/Default.Isin.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/{Default.LexSort,
+np.sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
+`Default.Quantile.Functions.cs` (`QuantileOfText`); gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
 `Backends/Strings/StringSetsTests.cs` (18); plan `docs/plans/strings-phase2.md`):
 - **np.unique.** The flat path (axis None or a 1-D input): with flags, ONE stable text argsort serves every flag
   (return_index needs NumPy's mergesort first occurrences; inverse and counts do not depend on the order of equal strings),
@@ -4976,7 +4977,7 @@ sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `St
 - **Rode along (numeric quantiles, NumPy 2.4.2).** `q = np.asanyarray(q)` keeps a Python int an integer, so an integer q
   TAKES the element over every dtype (`np.quantile([1., inf], 1)` is inf, the float q 1.0 interpolates to NaN): the `long q`
   overloads and the array-q integer route. `weak_q = type(q) in (int, float)`: only a C# number keeps float16 / float32
-  data's dtype, a 0-d array q is strong (`QuantileEngine.Compute(weakQ:)`). New overloads `quantile` / `percentile(NDArray a,
+  data's dtype, a 0-d array q is strong (`DefaultEngine.QuantileCompute(weakQ:)`). New overloads `quantile` / `percentile(NDArray a,
   NDArray q, int[] axis, ...)` (NumPy's array q with a tuple axis). An unknown method is NumPy's verbatim ValueError
   (`'x' is not a valid method. Use one of: dict_keys([...])`, a ValueError is an ArgumentException). A float16 q reads.
 - **Perf** (NPY/NS, two pinned P-cores, fresh inputs, 206 cells at 1K / 100K): geomean 4.24× (1K 3.57×, 100K 5.02×), min
@@ -5087,8 +5088,8 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   DERIVED kth-values** (`take(partition(a,ks),ks)` / the take_along_axis gather at ks): the arrangement BETWEEN kth
   anchors is introselect-implementation-specific on BOTH sides, so whole-output bytes are not contractual — the
   two-sided ≤/≥ invariant is unit-test-pinned instead.
-- `lexsort(keys, axis=-1)` — indirect stable sort, LAST key primary. Pure composition reproducing `PyArray_LexSort`
-  pass for pass: successive **stable** argsorts first→last key, each re-sorting the running permutation via
+- `lexsort(keys, axis=-1)` — indirect stable sort, LAST key primary (`TensorEngine.LexSort`; DefaultEngine's body is
+  `Default.LexSort.cs`). Pure composition reproducing `PyArray_LexSort` pass for pass: successive **stable** argsorts first→last key, each re-sorting the running permutation via
   `take_along_axis` — bit-identical indices to NumPy's mergesort passes because NumSharp's radix argsort is stable,
   ties included. Verbatim errors: `need sequence of keys with len > 0 in lexsort` (TypeError), `all keys need to be
   the same shape` (ValueError); 0-d keys let axis 0/-1 slip (NumPy's back-compat quirk) and size ≤ 1 early-returns
@@ -5123,7 +5124,10 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   its exact value), then up-cast. NumSharp's single `Complex` absorbs NumPy's complex64 cells (int8/16, uint8/16 —
   values identical, width documented; those four dtypes are excluded from the fuzz tier and unit-test-pinned).
   0-d leaks `ndarray.sort()`'s own `axis -1 is out of bounds for array of dimension 0`, exactly as NumPy leaks it.
-  See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs`.
+  See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs` (the facades) and
+  `Default.{Sort,LexSort}.cs` (DefaultEngine's `TensorEngine.Sort` / `SortInPlace` / `ArgSort` / `Partition` /
+  `PartitionInPlace` / `ArgPartition` / `LexSort`, over the AxisSort / AxisPartition kernels; np-layer dtype plan,
+  phase PE, E5).
 
 ### Linear Algebra
 `diag`, `diagflat`, `diag_indices`, `diag_indices_from`, `diagonal`, `dot`, `einsum` (contracts via the matrix products / OpenBLAS), `einsum_path` (greedy/optimal contraction planner, byte-exact info string), `fill_diagonal`, `inner`, `mask_indices`, `matmul`, `matvec`, `outer`, `tensordot`, `trace`, `tril`, `tril_indices`, `tril_indices_from`, `triu`, `triu_indices`, `triu_indices_from`, `vdot`, `vecdot`, `vecmat`
@@ -7382,11 +7386,11 @@ code gives NumPy's text.
 | UnmanagedStorage | `Backends/Unmanaged/UnmanagedStorage.cs` |
 | Shape | `View/Shape.cs` |
 | Slice | `View/Slice.cs` |
-| TensorEngine | `Backends/TensorEngine.cs` |
+| TensorEngine | `Backends/TensorEngine.cs` (Blas, Evaluate) + one partial per NumPy source file: `TensorEngine.{Umath,Methods,Multiarray,Numeric,NanFunctions,UfuncLike,ArrayObject,FunctionBase,ArraySetOps,LinearAlgebra,Threading,Histograms,Scimath,EinsumFunc,Polynomial}.cs` (np-layer dtype plan, phase PE) |
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
-| unique family | `Manipulation/np.unique.cs` (`np.unique`: its class boundaries, then `UniqueEngine.Unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.cs` (the two instance members, one call each; the legacy protected `unique<T>()`), the internal operation class `Manipulation/UniqueEngine.cs` (the statements after the boundaries, the text checks) + `UniqueEngine.Kwargs.cs` (NumPy's `_unique1d` routes: the argsort-and-gather statements, the in-place-sort routes, the long-indexed fallback, the axis path) + `UniqueEngine.Hash.cs` (int + complex hash fast path, splitmix64; the complex radix sort of the distinct values and the cardinality checkpoint) + `UniqueEngine.{Radix,Text,VString}.cs`. Design + measured perf decisions: `docs/stale-docs/UNIQUE_DESIGN.md` |
+| unique family | `Manipulation/np.unique.cs` (`np.unique`: its class boundaries, then `TensorEngine.Unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.cs` (the two instance members, one call each; the legacy protected `unique<T>()`), DefaultEngine's `Manipulation/Default.Unique.cs` (the statements after the boundaries, the text checks) + `Default.Unique.Kwargs.cs` (NumPy's `_unique1d` routes: the argsort-and-gather statements, the in-place-sort routes, the long-indexed fallback, the axis path) + `Default.Unique.Hash.cs` (int + complex hash fast path, splitmix64; the complex radix sort of the distinct values and the cardinality checkpoint) + `Default.Unique.{Radix,Text,VString}.cs`. Design + measured perf decisions: `docs/stale-docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | numpy.matrix (`NDMatrix`) | `Matrixlib/NDMatrix.cs` (class, result forms, scalar conversions, T / H / I / A / A1), `.Construction.cs` (`matrix.__new__`, the literal parser), `.Indexing.cs`, `.Operators.cs`, `.Reductions.cs`, `.Methods.cs`, `Matrixlib/np.matrix.cs`, `Creation/np.{asmatrix,bmat}.cs`, `View/Shape.Matrix.cs` (the finalize rule), `Selection/NDArray.Indexing.AssignedValue.cs` (NumPy's value rule for index-array assignment) |
 | The matrix boundary (`np.*` with a matrix operand) | `Matrixlib/NDMatrixBoundary.cs` (`Sees`, the rules `Wrapped` / `Reduced` / `Plain` / `WrappedAll` / `WrappedPair` / `WrappedTriple` / `WrappedIf`, the regions `PlainFor` / `Inside`, `PlainOf` for containers, the caller audit); one statement in each public `np.*` overload; oracle `matrix_operand.jsonl` via `OpRegistry.MatrixOperand.cs` and `FuzzCorpusTests.MatrixOperand.cs` |
@@ -7395,7 +7399,7 @@ code gives NumPy's text.
 | ONNX Runtime interop (package) | `src/NumSharp.Interop.OnnxRuntime/NDArrayOnnxInterop.{cs,Export.cs,Import.cs,NonTensor.cs,Text.cs}` (dtype maps, `IsCpuAccessible`, `AsOrtValue`/`ToOrtValue`/`AsDenseTensor`/`ToDenseTensor`, `ToNDArray`/`AsNDArray`, the non-tensor readers, the text crossing), `OnnxCodecMode.cs` (Auto / View / Copy), `OrtTensor.cs` (the `OrtTensor`/`OrtTensor<T>` handles, the value → handle and disposed-value tables, `ImportLease`), `UnmanagedMemoryManager.cs` (`Memory<T>` over the unmanaged buffer + `PinToken`), `InferenceSessionExtensions.cs` (`session.Run(NDArray…)`, `RunInto`, the overlap and fed-input rules) + `InferenceSessionExtensions.Async.cs` (`RunIntoAsync`/`RunAsync`, `PendingRun`), `src/NumSharp.Interop.Shared/Postprocess.cs` (compiled into this bridge and the ML.NET one); ORT C# source for reference at `refs/onnxruntime/csharp/` (sparse submodule, at `v1.31.0`) + the official samples at `refs/onnxruntime-inference-examples/c_sharp/` |
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,matmul,tensordot}.cs` (facades); the gufuncs' whole calls `Backends/Default/LinearAlgebra/Default.Gufuncs.cs` (`TensorEngine.Matmul` / `Vecdot` / `Matvec` / `Vecmat` with every keyword), NumPy's gufunc checks `Backends/Default/LinearAlgebra/{GufuncGuard,GufuncSignature}.cs`; NumPy's float16 NaN order `Utilities/NDHalfDot.cs` |
-| Sliding products (`np.correlate` / `np.convolve`) | `Math/np.correlate.cs`, `Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs` (facades); `Math/ConvolveEngine.cs` (np.convolve's Python statements); `Backends/Default/Math/Default.Correlate.cs` (`TensorEngine.Correlate` / `Correlate2`: `PyArray_Correlate` / `PyArray_Correlate2`); `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs` (the mode converter, the sliding kernels, NumPy's per-dtype dotfunc models, the blocked long products, the in-place reversal, `SlidingCorrelateInto` for numpy.polynomial); `Backends/ISlidingDotBackend.cs` (the byte-parity BLAS seam) |
+| Sliding products (`np.correlate` / `np.convolve`) | `Math/np.correlate.cs`, `Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs` (facades); `Math/Default.Convolve.cs` (np.convolve's Python statements, `TensorEngine.Convolve`); `Backends/Default/Math/Default.Correlate.cs` (`TensorEngine.Correlate` / `Correlate2`: `PyArray_Correlate` / `PyArray_Correlate2`); `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs` (the mode converter, the sliding kernels, NumPy's per-dtype dotfunc models, the blocked long products, the in-place reversal, `SlidingCorrelateInto` for numpy.polynomial); `Backends/ISlidingDotBackend.cs` (the byte-parity BLAS seam) |
 | einsum | `LinearAlgebra/np.einsum.cs` (the facade), `Backends/TensorEngine.EinsumFunc.cs` (the abstract `Einsum`), `LinearAlgebra/Default.Einsum.cs` (DefaultEngine's: the checks, the view path, the pairwise fold over the matrix products), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (the module class) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs` (facades: the class boundary and one call); NumPy's Python statements in the internal operation class `LinearAlgebra/linalg/LinalgEngine*.cs` beside them (`_assert_*` / `_commonType`, one partial per facade file; the `_umath_linalg` gufuncs stay `TensorEngine` members); np.dot's whole call `Backends/Default/Math/BLAS/Default.Dot*.cs` (`TensorEngine.Dot(x, y, out)`, the N-D route's per-dtype dot functions in `Default.Dot.NDMD.cs`); `Exceptions/LinAlgError.cs` |
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |

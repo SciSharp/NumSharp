@@ -20,8 +20,11 @@ np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the ow
 landed eighteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
 then resumed it the same day beside PE and P3, with P4 (np.emath, the seventeenth family, came first). Later that day the owner kept the array object
 out of the engine: `TensorEngine` holds the functions that compute values, while creation, conversion, views, joins and
-selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). Progress goes into the
-[§9 state log](#9-state-log), newest entry first.
+selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). PE's E6, E4, E1 and E7
+are done (2026-10-28): `TensorEngine.cs` is split into partial files named after NumPy's sources, eleven of the twelve
+operation classes are `TensorEngine` members implemented by `DefaultEngine` (or, for np.insert / np.delete, internal
+members of `NDArray`), and np.diagonal's view left the engine for `NDArray` and `Shape`; `LinalgEngine` waits for E2,
+and E2, E3 and E5 are open. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -79,7 +82,7 @@ Three layers:
 | Layer | What it is | What it holds | What it never holds |
 |---|---|---|---|
 | **F**, the facade | the public `np.*` functions, the `NDArray` members and operators, the module classes (`np.linalg`, `np.fft`, ...) | the public signature and its XML docs; the conversions C# forces (implicit conversions at the call site, several C# overloads normalized into one call); the class-boundary statement (matrix, chararray); one call into O | a dtype test, numeric or text |
-| **O**, the operation | for a function that computes values, a `TensorEngine` member: abstract, reached through `a.TensorEngine`, declared in the partial file of its NumPy source module and implemented by `DefaultEngine`; or a member of the `TensorEngine.Linalg` / `TensorEngine.Fft` sub-engine. For a function of the array object, an internal member of an `NDArray`, `UnmanagedStorage` or `Shape` partial, not virtual. The package internals of numpy.polynomial and numpy.ma (`NDPolySeries`, `NDMaskedArray`) keep their own classes. Until phase PE lands, also the twelve operation classes P1 / P2 created (`QuantileEngine`, ...) | NumPy's function body, statement for statement: its argument checks and its dtype checks in NumPy's order, the conversions NumPy makes late, the switch to a family core | a call into F |
+| **O**, the operation | for a function that computes values, a `TensorEngine` member: abstract, reached through `a.TensorEngine`, declared in the partial file of its NumPy source module and implemented by `DefaultEngine`; or a member of the `TensorEngine.Linalg` / `TensorEngine.Fft` sub-engine. For a function of the array object, an internal member of an `NDArray`, `UnmanagedStorage` or `Shape` partial, not virtual. The package internals of numpy.polynomial and numpy.ma (`NDPolySeries`, `NDMaskedArray`) keep their own classes. Until E2 lands, also `LinalgEngine`, the last of the twelve operation classes P1 / P2 created (phase PE's E1 moved the other eleven) | NumPy's function body, statement for statement: its argument checks and its dtype checks in NumPy's order, the conversions NumPy makes late, the switch to a family core | a call into F |
 | **K**, the cores | the IL kernels, `NDIter`, `Backends/Strings` (S, U, StringDType), the cast implementations, the `DType` classes and their slots | the loops, per dtype family | NumPy's Python-level statements |
 
 Rules: F calls O. O calls O or K, never F. A dtype test lives only in O or K. A conversion that exists only because of
@@ -575,10 +578,10 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
 | `TensorEngine.Methods.cs` (`_core/_methods.py`, beside `_mean` / `_var` / `_std`) | `DefaultEngine.Ptp` |
 | `NDArray.FunctionBase.cs` (`lib/_function_base_impl.py`; the array object, E7) | `InsertEngine` with np.delete's body |
 
-- [ ] **E1, NumPy's Python layer on `TensorEngine`.** The declarations in the table's `TensorEngine` partial files are
-      abstract and documented in full; `DefaultEngine` implements them with today's bodies. `InsertEngine` moves to the
-      array object instead: np.insert and np.delete join and split by position and compute no value (E7). Rules for
-      the contract:
+- [x] **E1, NumPy's Python layer on `TensorEngine`.** Done 2026-10-28 (§9), but `LinalgEngine`, which is E2's. The
+      declarations in the table's `TensorEngine` partial files are abstract and documented in full; `DefaultEngine`
+      implements them with today's bodies. `InsertEngine` moves to the array object instead: np.insert and np.delete
+      join and split by position and compute no value (E7). Rules for the contract:
   - One NumPy-shaped signature per function: the facade keeps normalizing its C# overloads.
   - The plumbing parameters leave the signature. Quantile's `string op` becomes separate members (`Quantile` /
     `Percentile` in FunctionBase, `NanQuantile` / `NanPercentile` in NanFunctions), and `QuantileArgument` an
@@ -608,22 +611,24 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
     `PocketFFTDriver.Execute`.
   - `np.fft` (`FourierModule`) stays the facade.
   - An MKL, FFTW or cuFFT package derives from `DefaultFftEngine` and overrides the kernels.
-- [ ] **E4, members that already exist** move to the partial file of their NumPy Python file. No API changes:
+- [x] **E4, members that already exist** (done 2026-10-28, `df3a30c5`) move to the partial file of their NumPy Python
+      file. No API changes:
   - IsClose, AllClose, Argwhere, FlatNonZero, CountNonZero and Correlate go to Numeric;
   - IsPosInf and IsNegInf go to UfuncLike;
   - NanSum, NanProd, NanMax and NanMin go to NanFunctions;
   - MoveAxis and RollAxis are functions of the array object: they join the other shipped array-object members in
     `TensorEngine.ArrayObject.cs` (E6, E7).
-- [ ] **E5, C-level statics become members.**
+- [ ] **E5, C-level statics become members.** The sort members are done (2026-10-28, `2f52ffea`, §9); the rest is open.
   - np.sort / np.argsort / np.partition / np.argpartition / np.lexsort get `TensorEngine` members (Sort, ArgSort,
     Partition, ArgPartition, LexSort). `AxisSort`, `AxisPartition` and `RadixSort` stay their kernels.
   - `DefaultEngine.MaxMinNumPy` becomes `ReduceAMax` / `ReduceAMin` with `out=` / `initial=` / `where=` (D2).
   - `MeanOverAxes` / `ReduceAddOverAxes` become the tuple-axis forms of `ReduceMean` / `ReduceAdd`.
   - `RichCompareEquality` stays internal: it is the operator protocol around `Compare`.
-- [ ] **E6, the C core's files.** `TensorEngine.cs` splits into `TensorEngine.Umath.cs` (the ufuncs), `.Methods.cs` (the
-      ndarray methods that compute), `.Multiarray.cs` (the C functions that compute) and `.ArrayObject.cs` (the ten
-      array-object members shipped in 0.70.0, E7). This is file organization only.
-- [ ] **E7, the array object stays off `TensorEngine`.**
+- [x] **E6, the C core's files.** Done 2026-10-28 (`df3a30c5`). `TensorEngine.cs` splits into `TensorEngine.Umath.cs`
+      (the ufuncs), `.Methods.cs` (the ndarray methods that compute), `.Multiarray.cs` (the C functions that compute)
+      and `.ArrayObject.cs` (the ten array-object members shipped in 0.70.0, E7). This is file organization only.
+- [x] **E7, the array object stays off `TensorEngine`.** Done 2026-10-28 (`7408f707`, `8f3407eb`, §9); the shape math of
+      its last bullet is P6's.
   - No function of the array object becomes an engine member. Its functions move into their `NDArray`,
     `UnmanagedStorage` and `Shape` partials when P3 or D8's pass moves their family
     ([§1](#1-what-out-of-np-has-to-mean), [Appendix D](#appendix-d-where-every-numpy-function-lives)); `InsertEngine`
@@ -719,6 +724,103 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-28, PE: E6, E4, E1 and E7 done, E5 begun (the sort members).** Commits on `strings`, developed in a
+  scratch worktree and landed by fast-forward, one family per commit. Every move is byte-identical on the snapshot,
+  taken with `DOTNET_TieredCompilation=0` under `NUMSHARP_DEBUG_GUARD_PAGES=1`, against `df3a30c5` (E7's and E5's moves
+  against their parents, whose tool knows their arguments):
+  - `df3a30c5` E6 and E4: `TensorEngine.cs` keeps `Blas` and `Evaluate`; the other members sit in `TensorEngine.Umath.cs`
+    (88), `.Methods.cs`, `.Multiarray.cs`, `.Numeric.cs` (IsClose, AllClose, Argwhere, FlatNonZero, CountNonZero ×2,
+    Correlate, Correlate2), `.NanFunctions.cs` (NanSum, NanProd, NanMin, NanMax), `.UfuncLike.cs` (IsPosInf, IsNegInf)
+    and `.ArrayObject.cs` (the ten array-object members of 0.70.0 and Diagonal). File organization only: the reflection
+    dump of TensorEngine's 177 members is identical.
+  - E1, the operation classes onto the partial files (each class `git mv`'d to `Default.<Name>*.cs` beside its facades,
+    which R2 needs while it calls np.*; `public partial class DefaultEngine` in NumSharp.Backends; the entries public
+    overrides; the helpers keep their statements, names and access):
+    - `393ee639` np.angle -> `TensorEngine.Angle` (`TensorEngine.FunctionBase.cs`, new);
+    - `8fc122ac` np.ptp -> `Ptp` ×2 (`.Methods.cs`);
+    - `feb098a9` np.nancumsum / nancumprod / nanmean / nanvar / nanstd -> `.NanFunctions.cs`;
+    - `68ed63bf` IsinEngine -> `Isin` (`TensorEngine.ArraySetOps.cs`, new);
+    - `d2bc63f8` UniqueEngine -> `Unique`, `UniqueValues`, `UniqueCounts`, `UniqueInverse`, `UniqueAll`;
+    - `adf600d7` ArrayEqualEngine, ConvolveEngine -> `ArrayEqual`, `ArrayEquiv`, `Convolve` (`.Numeric.cs`);
+    - `d8545c5e` QuantileEngine -> `Quantile`, `Percentile`, `Median` (FunctionBase) and `NanQuantile`, `NanPercentile`,
+      `NanMedian` (NanFunctions); q is NumPy's array_like (`object`), the axis NumPy's general form (`int[]`);
+    - `ba16ae12` AverageEngine -> `Average` (a pair: the average and the sum of weights), `7d339c3f` CovEngine -> `Cov`,
+      `a45832b2` GradientEngine -> `Gradient` (+ `np.EngineOf`), `4101af06` TrapezoidEngine -> `Trapezoid`;
+    - `307aa982` HistogramEngine -> `HistogramBinEdges`, `Histogram`, `Histogramdd`, `Histogram2d`
+      (`TensorEngine.Histograms.cs`, new);
+    - `7408f707` InsertEngine and np.delete's statements -> the array object: `Manipulation/NDArray.FunctionBase.cs`,
+      internal `NDArray.Insert` / `NDArray.Delete` overloads (E7's rule).
+  - Snapshot calls per group: small 31,698; sets 18,930; numeric 25,890; quantile 480,552; stats 140,118 (and
+    np.average_returned 16,548); hist 197,748; insert 118,969.
+  - Name checks: DefaultEngine (and, for Insert, NDArray) is one namespace of member names, so each class's member names
+    were checked against a reflection dump of DefaultEngine's, and its unqualified identifiers against them, before the
+    move. Renamed where a name was taken: UniqueEngine Compute / Splitmix -> `UniqueCompute` / `UniqueSplitmix`;
+    IsinEngine `PythonInt` -> `IsinPythonInt` (it hid the PythonInt class: CS0119); QuantileEngine Compute ->
+    `QuantileCompute`, BooleanSubtractError -> `QuantileBooleanSubtractError` (np.var's helper: CS0111), its op-string
+    bodies -> `QuantileFunction` / `NanQuantileFunction`; GradientEngine Add / Mul / Div -> `GradientAdd` /
+    `GradientMul` / `GradientDiv` (DefaultEngine's ufunc Add); HistogramEngine IsFinite / Ptp -> `HistogramIsFinite` /
+    `HistogramPtp`. In NDArray the moved code spells `System.Array` in full (NDArray has an `Array` property).
+  - Static bodies where a static helper calls the function again: `CovFunction` (the parsed-text route),
+    `HistogramFunction` (Stone's and the complex estimators), `HistogramddFunction` / `Histogram2dFunction`
+    (histogram2d calls histogramdd); each override is `[NDScoped] X(...) => XFunction(...)`.
+  - Scopes (E1's rule): the `[NDScopedCovered]` entries became `[NDScoped]` overrides (Cov, Histogramdd, Histogram2d,
+    Trapezoid), and so did the unscoped bodies that relied on a scoped facade (Isin, the four Array-API unique members,
+    Histogram, HistogramBinEdges). Bodies whose facades were unscoped stay unscoped (the quantile family,
+    ArrayEqual, ArrayEquiv). Insert and Delete are internal and keep `[NDScopedCovered]` under their scoped facades.
+  - Dispatch: each facade calls its operand's engine; where the body itself refuses a null operand (the quantile family,
+    np.gradient, the histogram family) it goes through `np.EngineOf` (the operand's engine, or the default one), so the
+    null still reaches the body's ArgumentNullException in NumPy's order.
+  - np.median / np.nanmedian lost their one-axis bodies: an `int?` axis is passed as a one-element array, as NumPy's
+    `_ureduce` turns an int into a 1-tuple; the quantile snapshot covers every overload and is identical.
+  - Public API against `df3a30c5`: 41 new abstract `TensorEngine` members (the 31 above, `Einsum` and the nine `Emath`
+    members of P2) and their 41 `DefaultEngine` overrides, and `Diagonal` gone (E7, below); nothing else changed on
+    `TensorEngine`, `DefaultEngine`, `NDArray` or `np` (a reflection diff of the public and protected surface).
+  - E7, `8f3407eb`: `TensorEngine.Diagonal` (`199feaaf`, unreleased) leaves the engine. np.diagonal's view is the
+    internal `NDArray.Diagonal` (`Indexing/NDArray.diagonal.cs`, beside the ndarray method) over the new `Shape` partial
+    `Shape.Diagonal` (`View/Shape.Diagonal.cs`: PyArray_Diagonal's statements up to the view, the exceptions keeping
+    np.diagonal's argument names), and `DefaultEngine.Trace` reads its diagonal through it. 63,187 calls (np.diagonal,
+    np.trace, their ndarray methods, np.linalg's Array-API forms and np.einsum) byte-identical to the parent `32478d0c`,
+    the 26,004 outside np.einsum to `df3a30c5` too (the tool learned np.einsum's arguments in `34d1d3fa`).
+  - Two things the full-suite checkpoint after E1 found, each with its own commit (D4):
+    - `6b887534` np.ptp(null) raised a NullReferenceException: `8fc122ac` made both facades call `a.TensorEngine.Ptp`
+      before `np.EngineOf` existed. They call `EngineOf(a)` now. A probe of every E1 facade with a null operand in each
+      position (48 calls) matches `df3a30c5`: ptp was the only one whose ArgumentNullException was lost.
+    - `32478d0c` ratchet R1 counted `Manipulation/NDArray.FunctionBase.cs` as a new facade file with 7 text and 8 numeric
+      lines. R1 scans `NDArray.*.cs` outside `Backends/`, and the array object's homes are such files: np.insert's lines
+      (in the operation class InsertEngine, which R1 never scanned, since `b9774efb`) and np.delete's boolean-mask test
+      are pinned there by hand with the reason that P3 moves the array object's per-dtype semantics into the DType
+      slots; np.delete.cs went from 21 to 20 numeric lines.
+  - E5, the sort family (the rest of E5 is open):
+    - `e185a4b3` the snapshot tool reaches the sort family: kind (the sort kinds and the select kind, names NumPy parses
+      and refuses), stable, order, kth as a C# int / int[] / index array, np.lexsort's key list built from the operand.
+      Every kth / keys overload was a SKIP line before. 79,710 calls at the parent, a second run identical, the "sets"
+      group unchanged.
+    - `a2942d35` (D4, a 0.70.0 behaviour) a null kth index array with a bad axis raised ArgumentNullException before the
+      axis check; it now rides to the kth stage as the int[] form's null did, NumPy's order for kth=None (AxisError for
+      `np.partition(a, None, axis=5)`, probed). The snapshot moved in exactly those 320 lines, each now its int[] twin's.
+    - `2f52ffea` np.sort / np.argsort / np.partition / np.argpartition / np.lexsort and the ndarray methods sort /
+      argsort / partition / argpartition: seven abstract members, `Sort`, `SortInPlace`, `ArgSort`, `Partition`,
+      `PartitionInPlace`, `ArgPartition` in `TensorEngine.Methods.cs` and `LexSort` in `TensorEngine.Multiarray.cs`. The
+      in-place pair carries ndarray.sort / ndarray.partition (PyArray_Sort / PyArray_Partition compute in place; np.sort
+      / np.partition are copies around them), so every computing ndarray method reaches the engine. kth is one `object`
+      (NumPy's array_like). DefaultEngine's overrides sit beside the facades (`Default.Sort.cs`, `Default.LexSort.cs`;
+      they call np.asanyarray / np.argsort, R2) over the AxisSort / AxisPartition kernels, which stay. Average's private
+      ArgSort became AverageArgSort. The 79,710 calls byte-identical, a 22-call null probe too; R1's np.lexsort.cs row
+      went.
+  - Found, open: the net10.0 oracle aborted once in three full runs at `8f3407eb` with an AccessViolationException in
+    `DirectILKernelGenerator.NanReduceContiguousAxisDouble128` under `np.nansum` along an axis
+    (`FuzzCorpusTests.SumIdentity`): the stack LT30 fixed by anchoring `DefaultEngine.NanSum`, which is still anchored
+    (the IL guard passes). `SumIdentity` alone passes with and without guard pages, and net8.0 passed. With the operand
+    rooted, the likelier cause is an early release of its block elsewhere; not reproduced yet.
+  - Suites at `8f3407eb`, in a worktree without the OpenBLAS binaries staged: NumSharp.Tests net8.0 20,434 passed / 283
+    skipped, net10.0 the same but for one wall-clock test the parallel session's load failed
+    (`T2_NonZero_Is_Much_Slower_Than_NumPy`, 185 ms against its 32 ms bound; it passes alone); Oracle net8.0 379 / 35,
+    net10.0 379 / 35 in two of three runs (the third is the access violation above). At `7408f707`, OpenBLAS staged:
+    NumSharp.Tests 20,706 / 11 and Oracle 411 / 2, but for the two failures `6b887534` and `32478d0c` fixed. The E5
+    commits: their targeted tests (532), the ratchets and the lifetime IL guard on both frameworks.
+  - Next: the rest of E5 (`ReduceAMax` / `ReduceAMin` with `out=` / `initial=` / `where=`, the tuple-axis
+    `ReduceMean` / `ReduceAdd`), E2 (`TensorEngine.Linalg`), E3 (`TensorEngine.Fft`); then P3. The parallel session
+    took P2's last families, P4's fixes and P5.
 - **2026-10-28, P4: the legacy polynomial functions are abstract `TensorEngine` members (`TensorEngine.Polynomial.cs`);
   their D4 fixes are open.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The
   referees: the snapshot (np.poly, np.polyval, np.polyint, np.polyadd, np.polysub, np.polymul, np.polydiv: 8,221 calls)
