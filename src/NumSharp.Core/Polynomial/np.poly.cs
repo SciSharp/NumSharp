@@ -18,13 +18,23 @@ namespace NumSharp
         /// <exception cref="ValueError">A 1-D text root that does not parse as a float (NumPy casts the roots to their
         ///     mintypecode, 'd' for text: <c>could not convert string to float: np.str_('x')</c>).</exception>
         /// <exception cref="NotSupportedException">A square matrix and no LAPACK backend installed (the eigenvalues).</exception>
+        /// <exception cref="TypeError">A 0-d <paramref name="seq_of_zeros"/>, or null (NumPy's None): NumPy's
+        ///     <c>array_function_dispatch</c> iterates what poly's dispatcher returns, the argument itself, and neither is
+        ///     iterable (<c>dispatcher for __array_function__ did not return an iterable</c>), before poly's body
+        ///     runs.</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.poly.html
         ///     <para>An empty input returns the 0-d scalar <c>1.0</c> (NumPy's Python float <c>1.0</c>).</para>
+        ///     <para>The engine member <see cref="TensorEngine.Poly"/> is poly's body alone (NumPy's implementation under the
+        ///     dispatcher): it takes a 0-d input as one root.</para>
         /// </remarks>
         [NDScoped]
         public static NDArray poly(NDArray seq_of_zeros)
         {
+            // NumPy's dispatch comes first: poly's dispatcher returns the argument, which array_function_dispatch iterates to
+            // find overriding classes; a 0-d array (or None) is not iterable.
+            if (seq_of_zeros is null || seq_of_zeros.ndim == 0)
+                throw new TypeError("dispatcher for __array_function__ did not return an iterable");
             using var plain = NDMatrixBoundary.PlainFor(seq_of_zeros);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             return seq_of_zeros.TensorEngine.Poly(seq_of_zeros);
         }

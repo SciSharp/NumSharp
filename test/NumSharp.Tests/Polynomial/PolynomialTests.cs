@@ -325,17 +325,26 @@ namespace NumSharp.Tests.Polynomial
                 .Should().Throw<ValueError>().WithMessage("Input must be a rank-1 array.");
         }
 
+        /// <summary>
+        ///     np.poly and np.roots refuse a 0-d input (and null, NumPy's None) as NumPy 2.4.2 does: their
+        ///     <c>@array_function_dispatch</c> dispatchers return the argument itself, which NumPy iterates before the
+        ///     function's body runs, and a 0-d array is not iterable. The engine member <c>Poly</c> is poly's body alone
+        ///     and still takes a 0-d input as one root, as NumPy's implementation function does.
+        /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void ZeroDInput_AcceptedViaAtleast1d_DivergesFromNumpyDispatcher()
+        public void ZeroDInput_RaisesNumpysDispatcherTypeError()
         {
-            // NumPy's @array_function_dispatch decorator rejects a 0-d array before roots/poly's body
-            // runs ("dispatcher for __array_function__ did not return an iterable"), an internal
-            // dispatch artifact with no NumSharp analogue. NumSharp has no such dispatcher, so the
-            // function BODY runs — and NumPy's own body would accept it too, via atleast_1d. So:
-            //   roots(0-d 5.0) -> a constant has no roots -> empty; poly(0-d 5.0) -> (x - 5) -> [1,-5].
-            np.roots(NDArray.Scalar(5.0)).Should().BeShaped(0);           // no eigvals reached
-            np.poly(NDArray.Scalar(5.0)).Should().BeOfValues(1.0, -5.0);  // pure, no eigvals
+            const string text = "dispatcher for __array_function__ did not return an iterable";
+            new Action(() => np.roots(NDArray.Scalar(5.0))).Should().Throw<TypeError>().WithMessage(text);
+            new Action(() => np.poly(NDArray.Scalar(5.0))).Should().Throw<TypeError>().WithMessage(text);
+            new Action(() => np.roots(null)).Should().Throw<TypeError>().WithMessage(text);
+            new Action(() => np.poly(null)).Should().Throw<TypeError>().WithMessage(text);
+            // A one-element 1-D input is iterable: a constant has no roots, one root gives (x - 5).
+            np.roots(np.array(new[] { 5.0 })).Should().BeShaped(0);
+            np.poly(np.array(new[] { 5.0 })).Should().BeOfValues(1.0, -5.0);
+            // The body under the dispatcher (NumPy's poly.__wrapped__) takes the 0-d input through atleast_1d.
+            NDArray zeroD = NDArray.Scalar(5.0);
+            zeroD.TensorEngine.Poly(zeroD).Should().BeOfValues(1.0, -5.0);
         }
 
         #endregion
