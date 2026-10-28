@@ -5,34 +5,38 @@ using NumSharp.Backends;
 using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 // The moved statements call np's internal promotion table (_FindCommonArrayType) as they did inside np; importing np's
-// statics keeps them verbatim.
+// statics keeps them verbatim. In a DefaultEngine partial a name resolves to DefaultEngine's members before np's statics:
+// none of the unqualified names below is a DefaultEngine member (checked when the file joined DefaultEngine).
 using static NumSharp.np;
 
-namespace NumSharp.Statistics
+// =============================================================================
+// Default.Average.cs - DefaultEngine's np.average (numpy/lib/_function_base_impl.py: average, _weights_are_valid)
+// =============================================================================
+//
+// DefaultEngine's override of TensorEngine.Average (TensorEngine.FunctionBase.cs): NumPy's statements after the facades'
+// checks - the axis tuple (normalize_axis_tuple), the mean without weights and the element count it stands for, and with
+// weights _weights_are_valid's reshape, the result dtype, the weight sum and its zero check, the weighted sum and the
+// division, and `returned`'s weight sum in the average's shape; over text, NumPy's statements up to the reduction that
+// refuses it. With weights it runs NumPy's composition statement by statement (the weight sum, its zero check, the
+// products' sum, the division), so every sum is np.sum's add.reduce; the products' sum streams through np.evaluate where
+// that gives the same bits (SumOfProducts). Until the np-layer plan's step 2 for this family a fused weighted-sum kernel
+// computed both sums in one pass in its own SIMD order, a few ULP from NumPy's pairwise sums.
+//
+// History: the np-layer dtype plan's P2 moved these statements from the public np.average / np.average_returned into the
+// internal operation class AverageEngine; its phase PE (E1) made that class this DefaultEngine partial. The facades keep
+// the numpy.matrix boundary and the null check. The file sits beside the facades, not under Backends/, because its
+// statements call the public np.* functions NumPy's call (np.mean, np.sum, np.multiply, np.true_divide, np.broadcast_to,
+// np.evaluate), which ratchet R2 counts under Backends/.
+// =============================================================================
+
+namespace NumSharp.Backends
 {
-    /// <summary>
-    ///     NumPy's <c>numpy.average</c> (<c>numpy/lib/_function_base_impl.py</c>) after the facades' checks: the axis tuple
-    ///     (<c>normalize_axis_tuple</c>), the mean without weights and the element count it stands for, and with weights
-    ///     <c>_weights_are_valid</c>'s reshape, the result dtype, the weight sum and its zero check, the weighted sum and the
-    ///     division, and <c>returned</c>'s weight sum in the average's shape; over text, NumPy's statements up to the
-    ///     reduction that refuses it.
-    /// </summary>
-    /// <remarks>
-    ///     An internal operation class (the np-layer dtype plan's D1: NumPy writes average in Python), moved from the public
-    ///     <c>np.average</c> / <c>np.average_returned</c> by P2; the facades keep the numpy.matrix boundary and the null
-    ///     check. It sits beside the facades, not under <c>Backends/</c>, because its statements call the public np.*
-    ///     functions NumPy's call (np.mean, np.sum, np.multiply, np.true_divide, np.broadcast_to, np.evaluate), which
-    ///     ratchet R2 counts under <c>Backends/</c>. With weights it runs NumPy's composition statement by statement (the
-    ///     weight sum, its zero check, the products' sum, the division), so every sum is np.sum's add.reduce; the products'
-    ///     sum streams through np.evaluate where that gives the same bits (<see cref="SumOfProducts"/>). Until the np-layer
-    ///     plan's step 2 for this family a fused weighted-sum kernel computed both sums in one pass in its own SIMD order, a
-    ///     few ULP from NumPy's pairwise sums.
-    /// </remarks>
-    internal static class AverageEngine
+    public partial class DefaultEngine
     {
         /// <summary>
-        ///     <c>average(a, axis, weights, returned, keepdims)</c> after the facades' checks: the average and, for
-        ///     <paramref name="returned"/>, the sum of weights in the average's shape.
+        ///     DefaultEngine's <see cref="TensorEngine.Average"/>: <c>average(a, axis, weights, returned, keepdims)</c> after
+        ///     the facades' checks: the average and, for <paramref name="returned"/>, the sum of weights in the average's
+        ///     shape.
         /// </summary>
         /// <param name="a">The operand (not null): any dtype and layout; text takes NumPy's text statements.</param>
         /// <param name="axis">The axes as given (a negative axis counts from the end), or null for every axis.</param>
@@ -60,8 +64,10 @@ namespace NumSharp.Statistics
         ///     or beside S.</exception>
         /// <exception cref="InvalidOperationException">Not reached: a weight sum in a text result dtype that NumPy refuses
         ///     but that computed (a wiring error inside NumSharp).</exception>
-        internal static (NDArray avg, NDArray sumOfWeights) Average(
-            NDArray a, int[] axis, NDArray weights, bool keepdims, bool returned)
+        /// <remarks>NumPy's parameter order (<c>returned</c> before the keyword-only <c>keepdims</c>); the body owns a
+        ///     boundary scope, so only the returned arrays survive the call.</remarks>
+        public override (NDArray avg, NDArray sumOfWeights) Average(
+            NDArray a, int[] axis = null, NDArray weights = null, bool returned = false, bool keepdims = false)
         {
             // Boundary scope: reclaims the weight view, the products and the weighted sum, the
             // count and broadcast temps; each tuple component is yielded individually (a dropped

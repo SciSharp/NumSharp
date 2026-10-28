@@ -1548,7 +1548,7 @@ namespace NumSharp.Backends.Strings
         ///     (<c>normalize_axis_tuple</c> with the argument name <c>axis</c>); without weights, <c>a.mean(axis)</c> (the
         ///     add.reduce text); with weights, their shape checks (<c>_weights_are_valid</c>). Weights of a valid shape are
         ///     not refused here: NumPy goes on to <c>result_type(a.dtype, wgt.dtype)</c> and <c>wgt.sum(dtype=result_type)</c>,
-        ///     the statements np.average runs for every operand (<see cref="NumSharp.Statistics.AverageEngine"/>), which
+        ///     the statements np.average runs for every operand (<see cref="DefaultEngine.Average"/>), which
         ///     refuse the text result dtype - a sized string for U / S / numeric weights, StringDType beside U (both
         ///     descriptors a ufunc's <c>dtype=</c> refuses), no common DType for S beside StringDType.
         /// </summary>

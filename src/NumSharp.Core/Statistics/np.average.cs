@@ -19,7 +19,7 @@ namespace NumSharp
         /// <returns>The average: float64 for an integer or bool operand, else the common dtype of the operand and the weights;
         ///     0-d without an axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html (NumPy's <c>average</c>, whose body
-        ///     <see cref="AverageEngine.Average"/> runs).</remarks>
+        ///     <see cref="TensorEngine.Average"/> runs).</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (<c>axis: axis 2 is out of bounds for array
         ///     of dimension 2</c>).</exception>
@@ -36,7 +36,7 @@ namespace NumSharp
                 return AverageOfMatrix(a, axis, weights, keepdims);
             if (a is null) throw new ArgumentNullException(nameof(a));
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            return AverageEngine.Average(a, axisArr, weights, keepdims, returned: false).avg;
+            return a.TensorEngine.Average(a, axisArr, weights, returned: false, keepdims: keepdims).avg;
         }
 
         /// <summary>
@@ -54,7 +54,7 @@ namespace NumSharp
         /// <returns>The average: float64 for an integer or bool operand, else the common dtype of the operand and the weights;
         ///     0-d over every axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html (NumPy's <c>average</c>, whose body
-        ///     <see cref="AverageEngine.Average"/> runs).</remarks>
+        ///     <see cref="TensorEngine.Average"/> runs).</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>).</exception>
@@ -70,7 +70,7 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return AverageOfMatrix(a, axis, weights, keepdims);
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return AverageEngine.Average(a, axis, weights, keepdims, returned: false).avg;
+            return a.TensorEngine.Average(a, axis, weights, returned: false, keepdims: keepdims).avg;
         }
 
         /// <summary>
@@ -134,7 +134,7 @@ namespace NumSharp
         private static (NDArray avg, NDArray sumOfWeights) AverageReturnedOfMatrix(NDArray avg, NDArray a, int[] axis, NDArray weights)
         {
             using var plain = NDMatrixBoundary.Inside();   // the calls below compute plain: this method shapes the pair itself
-            var (plainAvg, scl) = AverageEngine.Average(a, axis, weights, keepdims: false, returned: true);
+            var (plainAvg, scl) = a.TensorEngine.Average(a, axis, weights, returned: true, keepdims: false);
             plainAvg.Dispose();   // only the sum of weights is wanted from this pass
             if (scl.Shape.Equals(avg.Shape) || SameDimensions(scl.Shape, avg.Shape))
                 return (avg, scl);
@@ -180,7 +180,7 @@ namespace NumSharp
         /// <returns>The average (see <see cref="average(NDArray, int?, NDArray, bool)"/>) and the sum of weights in the
         ///     average's dtype and shape (the element count per average without weights).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html (NumPy's <c>average</c> with
-        ///     <c>returned=True</c>, whose body <see cref="AverageEngine.Average"/> runs).</remarks>
+        ///     <c>returned=True</c>, whose body <see cref="TensorEngine.Average"/> runs).</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds (<c>axis: axis 2 is out of bounds for array
         ///     of dimension 2</c>).</exception>
@@ -198,7 +198,7 @@ namespace NumSharp
 #pragma warning restore NDW012
             if (a is null) throw new ArgumentNullException(nameof(a));
             int[] axisArr = axis.HasValue ? new[] { axis.Value } : null;
-            return AverageEngine.Average(a, axisArr, weights, keepdims, returned: true);
+            return a.TensorEngine.Average(a, axisArr, weights, returned: true, keepdims: keepdims);
         }
 
         /// <summary>
@@ -215,7 +215,7 @@ namespace NumSharp
         /// <returns>The average (see <see cref="average(NDArray, int[], NDArray, bool)"/>) and the sum of weights in the
         ///     average's dtype and shape (the element count per average without weights).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.average.html (NumPy's <c>average</c> with
-        ///     <c>returned=True</c>, whose body <see cref="AverageEngine.Average"/> runs).</remarks>
+        ///     <c>returned=True</c>, whose body <see cref="TensorEngine.Average"/> runs).</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
         /// <exception cref="AxisError">An axis is out of bounds (<c>axis: axis 9 is out of bounds for array of dimension
         ///     2</c>).</exception>
@@ -232,7 +232,7 @@ namespace NumSharp
                 return AverageReturnedOfMatrix(AverageOfMatrix(a, axis, weights, keepdims), a, axis, weights);
 #pragma warning restore NDW012
             if (a is null) throw new ArgumentNullException(nameof(a));
-            return AverageEngine.Average(a, axis, weights, keepdims, returned: true);
+            return a.TensorEngine.Average(a, axis, weights, returned: true, keepdims: keepdims);
         }
     }
 }

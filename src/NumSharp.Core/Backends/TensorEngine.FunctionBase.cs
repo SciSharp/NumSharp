@@ -151,5 +151,45 @@ namespace NumSharp
         /// </remarks>
         public abstract NDArray Median(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
             bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.average(a, axis=None, weights=None, returned=False, *, keepdims=False)</c>: the (weighted) average
+        ///     over the given axes, and with <paramref name="returned"/> the sum of the weights in the average's shape.
+        /// </summary>
+        /// <param name="a">The operand, a plain array (not null): any dtype and layout; text takes NumPy's text
+        ///     statements.</param>
+        /// <param name="axis">The reduced axes (a negative axis counts from the end), or null for every axis. A one-axis
+        ///     call passes a one-element array.</param>
+        /// <param name="weights">The weights, or null for the plain mean: of <paramref name="a"/>'s shape, or of the reduced
+        ///     axes' extents in the order of <paramref name="axis"/>.</param>
+        /// <param name="returned">Also compute the sum of weights (NumPy's <c>returned=True</c>); false leaves the pair's
+        ///     second element null.</param>
+        /// <param name="keepdims">Keep the reduced axes with length 1.</param>
+        /// <returns>
+        ///     The average and the sum of weights (null unless <paramref name="returned"/>): arrays the caller owns, 0-d for a
+        ///     reduction over every axis without <paramref name="keepdims"/>. The pair stands for NumPy's return, which is
+        ///     the average alone or the tuple.
+        /// </returns>
+        /// <exception cref="AxisError">An axis out of bounds (<c>axis: axis 9 is out of bounds for array of dimension 2</c>:
+        ///     NumPy names the argument).</exception>
+        /// <exception cref="ValueError">An axis that appears twice (<c>repeated axis in `axis` argument</c>); weights not of
+        ///     the reduced axes' shape.</exception>
+        /// <exception cref="DivideByZeroException">Weights that sum to zero (<c>Weights sum to zero, can't be
+        ///     normalized</c>), or a mean without weights whose result is empty (<c>division by zero</c>).</exception>
+        /// <exception cref="TypeError">Weights of another shape without an axis (<c>Axis must be specified when shapes of a
+        ///     and weights differ.</c>); the weight sum's refusal of a text result dtype; a text operand without weights (the
+        ///     mean's add.reduce refusal).</exception>
+        /// <exception cref="DTypePromotionError">Weights and an operand with no common DType (StringDType beside a number or
+        ///     beside S).</exception>
+        /// <exception cref="InvalidOperationException">Not reached: a weight sum in a text result dtype that NumPy refuses but
+        ///     that computed (a wiring error inside NumSharp).</exception>
+        /// <remarks>
+        ///     NumPy writes average in Python; DefaultEngine's override runs its statements in NumPy's order.
+        ///     <c>np.average</c> and <c>np.average_returned</c> call it after the numpy.matrix rule and the null check; an
+        ///     override replaces both for every array whose engine it is. New in 0.71.0 (the np-layer dtype plan, phase PE);
+        ///     it was the internal class <c>AverageEngine</c>.
+        /// </remarks>
+        public abstract (NDArray avg, NDArray sumOfWeights) Average(NDArray a, int[] axis = null, NDArray weights = null,
+            bool returned = false, bool keepdims = false);
     }
 }
