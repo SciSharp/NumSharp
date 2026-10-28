@@ -17,7 +17,7 @@ now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two o
 carry NumPy's `out=` (the reducelike loop rule, the reduce prologue, `_mean` / `_var`'s statement order),
 numpy.matrix's reductions hold no text line, and six divergences found on the way got their fix commits (D4); the public
 np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 has
-landed seventeen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
+landed eighteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
 then resumed it the same day beside PE and P3, with P4 (np.emath, the seventeenth family, came first). Later that day the owner kept the array object
 out of the engine: `TensorEngine` holds the functions that compute values, while creation, conversion, views, joins and
 selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). Progress goes into the
@@ -718,6 +718,51 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-28, P2's eighteenth family: np.einsum's contraction is the abstract `TensorEngine.Einsum`
+  (`TensorEngine.EinsumFunc.cs`); three D4 fixes, the largest NumPy's iterator taking `out=` in.** Commits on `strings`,
+  developed in a scratch worktree and landed by fast-forward. The referees: the snapshot (np.einsum's three overloads:
+  37,183 calls) with `DOTNET_TieredCompilation=0` under `NUMSHARP_DEBUG_GUARD_PAGES=1`, and `twin_einsum.py` (each line
+  rebuilt in NumPy, `numpy.einsum` called, the outcome rendered the snapshot's way; recorded with `SNAPSHOT_BYTES=1`, so
+  a float result is compared by value when its bits differ):
+  - `34d1d3fa` the snapshot tool reaches np.einsum's arguments: subscripts built from the operand's rank (views, sums, a
+    transpose, the implicit output, a diagonal, ellipses, two- and three-operand contractions, an outer product, three
+    refused forms), operand lists built from the operand (with a copy, an int32 ramp, U5 text, a 0-d, three of it, none)
+    and optimize. Before any fix the twin agreed on 26,871 of 36,791 comparable lines (391 decimal lines have no NumPy
+    twin).
+  - `33bc9c03` the move: `TensorEngine.Einsum(subscripts, operands, out, dtype, order, casting, optimize)` abstract and
+    documented in full in the new `Backends/TensorEngine.EinsumFunc.cs`; `LinearAlgebra/np.einsum.Contract.cs` renamed
+    to `LinearAlgebra/Default.Einsum.cs` (`DefaultEngine`'s override, beside the facade: it calls np.*), the facade's
+    argument checks moving in with it (a public entry point checks its own arguments); np.einsum keeps its overloads,
+    the boundaries and one call on the first operand's engine (the default engine when there is none, as np.evaluate
+    does). 37,183 calls byte-identical; R1 drops np.einsum.Contract.cs's row (1 text, 4 numeric lines); R2 unchanged.
+  - `f8f34d6f` (D4) a StringDType `dtype=` request is text: the refusal asked only for the fixed-width classes, so the
+    request reached the numeric path and NumSharp's own NotSupportedException. 162 lines change; 36 agree, the other 126
+    are the next two commits' lines (with `out=` given, read-only or text) and NumPy's SystemError (the commit message
+    counts 36 SystemError lines; 18 are, the other 18 are read-only `out=` lines).
+  - `e0d7da1f` (D4) the optimize check is np.einsum_path's `path_type` resolution (`np.ResolveOptimize`, now internal),
+    run right after the subscripts' null check, before the operand count and the order / casting converters (NumPy's
+    einsum calls einsum_path first): a bare number raises `object of type 'int' has no len()`, a `(name, True)` memory
+    limit and a two-element list are accepted (in np.einsum_path too: `IsNumber` takes a bool). 2,340 lines change;
+    1,935 agree.
+  - `7daa5e1c` repairs three `//` comment blocks and two doc tags a re-wrap script broke in the move (its message names
+    the move by its pre-rebase hash `15aa02c5`).
+  - `b4946bb2` (D4) `out=` joins the iterator, as in NumPy's `c_einsum` (one NpyIter over the operands and the out,
+    `NPY_ITER_COMMON_DTYPE`, out READWRITE): a read-only out raises `operand array with iterator write flag set is
+    read-only` first; the loop dtype is the common dtype of the operands and the out (int8 operands with an int64 out
+    are summed in int64; they wrapped in int8); the out's read and write casts are checked after the operands', before
+    anything is computed; the text refusal takes the out in. 2,505 lines change; 2,302 agree, the rest are NumPy's
+    SystemError (198) and NumSharp's char class name (5).
+  - After the fixes the twin reads: 30,969 agree, 3,309 VF01 (0-d results; a 0-d operand on the view path is a view, a
+    text scalar renders with its own length), 69 float sums rounded in another order (NumSharp contracts through np.sum
+    / np.matmul, NumPy's default einsum through its sum-of-products loop), 1,968 documented parser texts (with
+    `optimize=` NumPy parses with its Python parser), 437 NumPy SystemErrors (its c_einsum loses the TypeError it set
+    for a text `out=`), 33 NumPy views past an empty buffer (`get_single_op_view` skips its extent check when a label's
+    first extent is 0; NumSharp refuses the diagonal), 1 NumPy StringDType out it cannot read back, 5 char class names.
+  - Step 2 (C11): nothing to compose; the body already is NumPy's optimize= path (`bmm_einsum`) over the matrix
+    products, so the move and the fixes change no kernel and there is nothing to benchmark.
+  - Left: the out's extent check runs after the contraction (NumPy's broadcast error precedes the casts; a call with
+    both a wrong extent and a refused cast reports the cast); an explicit path in `optimize=` is not validated against
+    the operands (NumPy's einsum_path raises for an incomplete one); the documented parser difference.
 - **2026-10-28, P2's seventeenth family: np.emath's nine functions are abstract `TensorEngine` members
   (`TensorEngine.Scimath.cs`, prefixed `Emath`), the first family under the revised D1.** Commits on `strings`,
   developed in a scratch worktree and landed by fast-forward. The owner resumed P2 and P4 beside PE and P3 ("Continue

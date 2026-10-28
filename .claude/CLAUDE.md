@@ -5258,10 +5258,10 @@ inside NumPy (`np.einsum('ij,jk->ik', a, b)` ≠ `a @ b` bitwise there; probed 2
 so a float comparison against a plain NumPy `einsum` call is a ≤3-ULP comparison, not a byte one.
 Without the backend they fall to the managed GEMM (exactly as `np.matmul` itself does). There
 is deliberately **no `TryEinsum` seam** — einsum reaches a backend the indirect way `np.tensordot` and
-`np.linalg.multi_dot` do, through the product. The whole composition is a pure `np`-layer function —
-`np.EinsumContract` (`LinearAlgebra/np.einsum.Contract.cs`), sitting beside `np.tensordot` and
-`np.linalg.multi_dot` rather than on the engine (it uses no engine state): N operands fold
-left-to-right, each step through `PairwiseContract`.
+`np.linalg.multi_dot` do, through the product. The whole call is the abstract `TensorEngine.Einsum`
+(`Backends/TensorEngine.EinsumFunc.cs`, NumPy's `_core/einsumfunc.py`), which `DefaultEngine` implements in
+`LinearAlgebra/Default.Einsum.cs` (beside the facade while it calls np.*): the argument checks, the parse, the
+view path, then N operands fold left-to-right, each step through `PairwiseContract`.
 
 **Value parity, with a probed split.** Integer and boolean contractions are byte-exact everywhere
 (modular / logical reduction is order-independent); every product-shaped case (matmul, batched
@@ -5290,12 +5290,18 @@ refuses). On this path NumPy **ignores `order=` entirely** (`order='C'`/`'F'` st
 non-contiguous diagonal view) and **discards a `dtype=` request** (`einsum('ii->i', int32,
 dtype=int64)` is the int32 view) — both reproduced.
 
-**`casting=` gates EVERY cast, with NumPy's iterator texts verbatim.** Each operand must reach the
-loop dtype under the rule — `Iterator operand 0 dtype could not be cast from dtype('int64') to
-dtype('float64') according to the rule 'no'` — which is what makes `casting='no'` reject mixed
-dtypes; and the result must reach `out=`'s dtype — `Iterator requested dtype could not be cast from
-dtype('float64') to dtype('int32'), the operand 1 dtype, according to the rule 'safe'` (out is
-operand `nop` in NumPy's numbering). A same-rank `out=` EXTENT mismatch is a second NpyIter-leak
+**`out=` joins NumPy's iterator, and `casting=` gates EVERY cast with its texts verbatim.** NumPy's
+`c_einsum` runs one NpyIter over the operands and `out=` (`NPY_ITER_COMMON_DTYPE`, out READWRITE), in this
+order: a read-only out raises `operand array with iterator write flag set is read-only`; the loop dtype is
+the common dtype of the operands AND the out when no `dtype=` is given (int8 operands with an int64 out are
+summed in int64); each operand must reach the loop dtype under the rule — `Iterator operand 0 dtype could not
+be cast from dtype('int64') to dtype('float64') according to the rule 'no'` — which is what makes
+`casting='no'` reject mixed dtypes; then the out is read into the loop dtype (`Iterator operand 1 dtype could
+not be cast from dtype('float64') to dtype('int32') ...` under `dtype=int32`) and written back from it —
+`Iterator requested dtype could not be cast from dtype('float64') to dtype('int32'), the operand 1 dtype,
+according to the rule 'safe'` (out is operand `nop` in NumPy's numbering) — all before anything is computed.
+A text `out=` goes to the text refusal, which takes the out into the common dtype and its casts. A same-rank
+`out=` EXTENT mismatch is a second NpyIter-leak
 divergence (like the label-extent one): NumPy leaks the "remapped shapes" iterator text, NumSharp
 words it about the contraction (`einsum() output parameter has shape (…) but the contraction
 produces (…)`).
@@ -5379,7 +5385,10 @@ precomputed `EinsumPath` (explicit path), and a `("greedy"|"optimal", memory)` t
 decision order, with the verbatim error taxonomy (`ValueError` for the parse/shape rejections;
 `KeyError` — a new `Exceptions/KeyError.cs` — for an unknown path name, reproducing NumPy's buggy
 `('Path name %s not found', '…')` leak; `RuntimeError` for an incomplete explicit path; `TypeError`
-"Did not understand the path: …" / "object of type '…' has no len()" for a bad path object). The
+"Did not understand the path: …" / "object of type '…' has no len()" for a bad path object; a bool memory
+limit is Python's int, accepted). `np.einsum` runs the same resolution (`np.ResolveOptimize`) for any
+`optimize` but `False`, first, before the operands, `order=` and `casting=`, as NumPy's `einsum` calls
+`einsum_path` before `c_einsum`. The
 returned `EinsumPath` ROUND-TRIPS into `np.einsum(…, optimize: path)` (also the raw list and the memory
 tuple) — accepted and validated, though einsum STILL contracts pairwise left-to-right (documented
 above), so the path changes nothing numerically, only which plan is displayed. **The cost model is
@@ -7387,7 +7396,7 @@ code gives NumPy's text.
 | ML.NET interop (package) | `src/NumSharp.Interop.MLNet/NDArrayMLNetInterop.{cs,Export.cs,Import.cs}` (dtype maps, `AsDataView`/`ToDataView`/`ToVBuffer`, `ToNDArray`, zero-copy `VBuffer.AsNDArray<T>` + `WrapExternal`/`Pin`/`Live{Exports,Imports}`), `NDArrayDataView.cs` (the NDArray-backed `IDataView` + strided lazy cursor + ARC-pin lifetime), `VBufferAccessor.cs` (compiled-expression getter for the private `VBuffer<T>._values`), `ImportLease.cs` (the last-view-releases GCHandle pin lease), `Postprocess.cs` (shared with ONNX). Depends on `Microsoft.ML.DataView` only |
 | CBLAS product family | `LinearAlgebra/np.{inner,vdot,vecdot,matvec,vecmat,matmul,tensordot}.cs` (facades); the gufuncs' whole calls `Backends/Default/LinearAlgebra/Default.Gufuncs.cs` (`TensorEngine.Matmul` / `Vecdot` / `Matvec` / `Vecmat` with every keyword), NumPy's gufunc checks `Backends/Default/LinearAlgebra/{GufuncGuard,GufuncSignature}.cs`; NumPy's float16 NaN order `Utilities/NDHalfDot.cs` |
 | Sliding products (`np.correlate` / `np.convolve`) | `Math/np.correlate.cs`, `Math/np.math.cs` (np.convolve), `Math/NDArray.{Correlate,Convolve}.cs` (facades); `Math/ConvolveEngine.cs` (np.convolve's Python statements); `Backends/Default/Math/Default.Correlate.cs` (`TensorEngine.Correlate` / `Correlate2`: `PyArray_Correlate` / `PyArray_Correlate2`); `Backends/Default/Math/Sliding/SlidingDot{,.Long}.cs` (the mode converter, the sliding kernels, NumPy's per-dtype dotfunc models, the blocked long products, the in-place reversal, `SlidingCorrelateInto` for numpy.polynomial); `Backends/ISlidingDotBackend.cs` (the byte-parity BLAS seam) |
-| einsum | `LinearAlgebra/np.einsum.cs`, `LinearAlgebra/np.einsum.Contract.cs` (the contraction composition — pure `np`-layer, not on the engine), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
+| einsum | `LinearAlgebra/np.einsum.cs` (the facade), `Backends/TensorEngine.EinsumFunc.cs` (the abstract `Einsum`), `LinearAlgebra/Default.Einsum.cs` (DefaultEngine's: the checks, the view path, the pairwise fold over the matrix products), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (the module class) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs` (facades: the class boundary and one call); NumPy's Python statements in the internal operation class `LinearAlgebra/linalg/LinalgEngine*.cs` beside them (`_assert_*` / `_commonType`, one partial per facade file; the `_umath_linalg` gufuncs stay `TensorEngine` members); np.dot's whole call `Backends/Default/Math/BLAS/Default.Dot*.cs` (`TensorEngine.Dot(x, y, out)`, the N-D route's per-dtype dot functions in `Default.Dot.NDMD.cs`); `Exceptions/LinAlgError.cs` |
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
 | Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
