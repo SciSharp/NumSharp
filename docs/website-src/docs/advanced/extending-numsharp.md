@@ -148,7 +148,9 @@ You rarely emit kernels by hand - the engine does it for the built-in ops - but 
 
 ## 5. Replace the compute backend (`TensorEngine.Blas`)
 
-The heaviest extension: change *which* implementation computes an operation. NumSharp exposes exactly one settable seam on the engine - `TensorEngine.Blas`, an `IBlasBackend` - so an optional package can route products and factorisations through a native library while everything else stays managed. This is how `NumSharp.Interop.OpenBLAS` makes `np.dot`/`np.matmul` byte-identical to NumPy. Writing your own backend is a matter of implementing `IBlasBackend` and assigning the property. This is covered in full in [Native code & backends](native-backends.md).
+The heaviest extension: change *which* implementation computes an operation. NumSharp exposes a settable seam on the engine - `TensorEngine.Blas`, an `IBlasBackend` - so an optional package can route products and factorisations through a native library while everything else stays managed. This is how `NumSharp.Interop.OpenBLAS` makes `np.dot`/`np.matmul` byte-identical to NumPy. Writing your own backend is a matter of implementing `IBlasBackend` and assigning the property. This is covered in full in [Native code & backends](native-backends.md).
+
+`np.linalg` has a second property on the same engine, `TensorEngine.Linalg` (a `LinalgEngine`, by default `DefaultLinalgEngine`): NumPy's `numpy.linalg` statements around ten kernels (`CholeskyKernel`, `SvdKernel`, ...) that ask `Blas`. A LAPACK library needs only `Blas`. To compute a factorisation another way while NumPy's argument checks, dtype rules and result layouts stay, derive from `DefaultLinalgEngine`, override its `protected virtual` kernel, and assign the instance to `TensorEngine.Linalg`; assigning `null` restores the default. Both properties sit on the cached engine, so an assignment reaches arrays that already exist.
 
 ---
 

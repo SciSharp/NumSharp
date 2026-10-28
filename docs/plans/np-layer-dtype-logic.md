@@ -20,11 +20,12 @@ np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the ow
 landed eighteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
 then resumed it the same day beside PE and P3, with P4 (np.emath, the seventeenth family, came first). Later that day the owner kept the array object
 out of the engine: `TensorEngine` holds the functions that compute values, while creation, conversion, views, joins and
-selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). PE's E6, E4, E1, E5 and E7
-are done (2026-10-28): `TensorEngine.cs` is split into partial files named after NumPy's sources, eleven of the twelve
-operation classes are `TensorEngine` members implemented by `DefaultEngine` (or, for np.insert / np.delete, internal
-members of `NDArray`), np.diagonal's view left the engine for `NDArray` and `Shape`, and the sort family and the
-max / min keywords are members; `LinalgEngine` waits for E2, and E2 and E3 are open. Progress goes into the
+selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). PE's E6, E4, E1, E5, E7
+and E2 are done (2026-10-28 / 29): `TensorEngine.cs` is split into partial files named after NumPy's sources, eleven of
+the twelve operation classes are `TensorEngine` members implemented by `DefaultEngine` (or, for np.insert / np.delete,
+internal members of `NDArray`), np.diagonal's view left the engine for `NDArray` and `Shape`, and the sort family and
+the max / min keywords are members; numpy.linalg is the `TensorEngine.Linalg` sub-engine (`LinalgEngine`, default
+`DefaultLinalgEngine`), and E3 is open. Progress goes into the
 [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
@@ -597,7 +598,9 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
     `NDPolyFit` and `NDMatrix.Operators` (LinalgEngine's helpers), `Default.SearchSorted` (InsertEngine's).
   - The `NDArray` members that call a class today (`unique`, `convolve`, `array_equal`) become facades over the member.
   - Placement follows C3.
-- [ ] **E2, `TensorEngine.Linalg`.**
+- [x] **E2, `TensorEngine.Linalg`.** Done 2026-10-29 (`36a1f084`, §9): `LinalgEngine` (numpy.linalg's 29 computing
+      functions, 31 members) with `DefaultLinalgEngine` over ten `protected virtual` kernels; the four Array-API
+      forwarders' facades apply their main-namespace twin's class boundary.
   - The name moves: today's internal `LinalgEngine` (one of the twelve) becomes the public abstract contract holding
     numpy.linalg's functions. Its statements move to a public `DefaultLinalgEngine`, over `protected virtual`
     `_umath_linalg` kernels.
@@ -727,6 +730,28 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, PE: E2 done.** `36a1f084` on `strings`, landed by fast-forward:
+  - The internal operation class `LinalgEngine` (`LinearAlgebra/linalg/LinalgEngine*.cs`) became the public
+    `DefaultLinalgEngine` (git mv, beside the facades for ratchet R2), and `LinalgEngine` the public abstract contract
+    (`Backends/LinalgEngine.cs`): numpy.linalg's 29 computing functions as 31 members (Appendix D's list; `Tensordot`
+    and `VectorNorm` have a second C# form for NumPy's int-or-tuple argument). NumPy's names, order and defaults.
+  - The ten `_umath_linalg` members left `TensorEngine` (shipped in 0.70.0 as public virtual: Breaking) for
+    `DefaultLinalgEngine`'s `protected virtual` kernels `CholeskyKernel` ... `SvdKernel`, body for body (LinAlgEmpty,
+    the operand engine's `Blas`, the managed LU or `OpenBlasMissingBackendException`, whose text still names the
+    operand's engine). `TensorEngine.Linalg` (beside `Blas`) holds the assigned engine or the shared default; null
+    restores the default.
+  - Decided on the way: the five Array-API members Appendix D lists (`Matmul`, `Tensordot`, `Trace`, `Vecdot`,
+    `MatrixNorm`) are NumPy's one-statement wrappers; their facades now apply the main-namespace function's class
+    boundary before they call the member, because the default's call into `np.matmul` from a library frame at depth
+    zero is what the matrix-boundary caller audit forbids. `Qr` takes the caller's mode and resolves it first (the
+    facade resolves it too, for its matrix rule). Helpers that call a kernel or a virtual sibling are instance methods.
+  - Gates: the linalg snapshot (66,113 calls) byte-identical to its baseline managed and with the bundled OpenBLAS; a
+    78-call null-operand and matrix / chararray probe identical to the parent; a reflection diff showing exactly the ten
+    removed members, the `Linalg` property and the two new types; `LinalgSubEngineTests` (5: the default, a probe
+    subclass reaching all 31 members for arrays created before the assignment, nested calls, a kernel override serving
+    the factorisations with NumPy's statements kept, the missing-backend text).
+  - Next: E3 (`TensorEngine.Fft`); then P3.
 
 - **2026-10-28, PE: E5 done.** Commits on `strings`, landed by fast-forward:
   - `04db655a` the snapshot tool varies the max / min family's `initial=` (np.max / np.amax / np.min / np.amin /
