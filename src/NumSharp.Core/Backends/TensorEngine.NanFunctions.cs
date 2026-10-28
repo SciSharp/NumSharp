@@ -1,5 +1,6 @@
 // The functions of numpy/lib/_nanfunctions_impl.py: nansum, nanprod, nanmin, nanmax, nancumsum, nancumprod, nanmean,
-// nanvar, nanstd, nanquantile, nanpercentile and nanmedian (the np-layer dtype plan's phase PE moved the last eight here).
+// nanvar, nanstd, nanquantile, nanpercentile and nanmedian (the np-layer dtype plan's phase PE moved the last eight here),
+// and nanargmax and nanargmin (its phase P2).
 
 using System;
 using NumSharp.Backends;
@@ -307,5 +308,61 @@ namespace NumSharp
         /// </remarks>
         public abstract NDArray NanMedian(NDArray a, int[] axis = null, NDArray @out = null, bool overwrite_input = false,
             bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanargmax(a, axis=None, out=None, *, keepdims=&lt;no value&gt;)</c>: <c>argmax</c> of the
+        ///     array with every NaN replaced by -inf, after NumPy's all-NaN slice guard. Only an inexact array (float16,
+        ///     float32, float64, complex) has NaNs to replace: NumPy's <c>_replace_nan</c> leaves integers, bool and text
+        ///     alone (NumSharp's char and decimal too), so theirs is <c>argmax</c> itself.
+        /// </summary>
+        /// <param name="a">The input.</param>
+        /// <param name="axis">The axis to reduce, or null for the flattened array; a 0-d array takes 0 and -1.</param>
+        /// <param name="out">An array to write the indices into and return, or null: its shape must equal the result's,
+        ///     its dtype must reach int64 by a safe cast (bool through uint32, and char); the indices are cast unsafely into
+        ///     it.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one (every axis for the flattened
+        ///     form).</param>
+        /// <returns>The int64 indices (0-d for the flattened form without keepdims), or <paramref name="out"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range, naming the input's rank for an inexact
+        ///     dtype and the ravelled rank otherwise (the NumPy statement that raises differs).</exception>
+        /// <exception cref="ValueError">An all-NaN slice (<c>All-NaN slice encountered</c>); an empty reduced length
+        ///     (<c>attempt to get argmax of an empty sequence</c>); an out of another shape (<c>output array does not match
+        ///     result of np.argmax.</c>); a <c>StringDType</c> line of two or more elements holding an NA that is neither a
+        ///     string nor NaN-like.</exception>
+        /// <exception cref="TypeError">An out whose dtype does not cast safely to int64.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        ///     text).</exception>
+        /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
+        ///     caveat).</remarks>
+        public abstract NDArray NanArgMax(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.nanargmin(a, axis=None, out=None, *, keepdims=&lt;no value&gt;)</c>: <c>argmin</c> of the
+        ///     array with every NaN replaced by +inf, after NumPy's all-NaN slice guard. Only an inexact array (float16,
+        ///     float32, float64, complex) has NaNs to replace: NumPy's <c>_replace_nan</c> leaves integers, bool and text
+        ///     alone (NumSharp's char and decimal too), so theirs is <c>argmin</c> itself.
+        /// </summary>
+        /// <param name="a">The input.</param>
+        /// <param name="axis">The axis to reduce, or null for the flattened array; a 0-d array takes 0 and -1.</param>
+        /// <param name="out">An array to write the indices into and return, or null: its shape must equal the result's,
+        ///     its dtype must reach int64 by a safe cast (bool through uint32, and char); the indices are cast unsafely into
+        ///     it.</param>
+        /// <param name="keepdims">Whether the reduced axes stay with length one (every axis for the flattened
+        ///     form).</param>
+        /// <returns>The int64 indices (0-d for the flattened form without keepdims), or <paramref name="out"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="a"/> is null.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range, naming the input's rank for an inexact
+        ///     dtype and the ravelled rank otherwise (the NumPy statement that raises differs).</exception>
+        /// <exception cref="ValueError">An all-NaN slice (<c>All-NaN slice encountered</c>); an empty reduced length
+        ///     (<c>attempt to get argmin of an empty sequence</c>); an out of another shape (<c>output array does not match
+        ///     result of np.argmin.</c>); a <c>StringDType</c> line of two or more elements holding an NA that is neither a
+        ///     string nor NaN-like.</exception>
+        /// <exception cref="TypeError">An out whose dtype does not cast safely to int64.</exception>
+        /// <exception cref="OutOfMemoryException">A corrupt <c>StringDType</c> cell (NumPy's <c>MemoryError</c>
+        ///     text).</exception>
+        /// <remarks>The result cannot be trusted when a slice holds only NaNs and infinities of the losing sign (NumPy's
+        ///     caveat).</remarks>
+        public abstract NDArray NanArgMin(NDArray a, int? axis = null, NDArray @out = null, bool keepdims = false);
     }
 }

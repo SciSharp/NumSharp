@@ -118,7 +118,7 @@ Selection/NDArray.Indexing.Strings.cs	1	3
 Selection/NDArray.Indexing.VString.cs	5	0
 Selection/NDArray.Indexing.cs	2	1
 Sorting_Searching_Counting/np.bincount.cs	1	3
-Sorting_Searching_Counting/np.nanargmax.cs	2	15
+Sorting_Searching_Counting/np.nanargmax.cs	0	9
 Sorting_Searching_Counting/np.sort_complex.cs	0	1
 Statistics/np.median.cs	2	0
 Statistics/np.nanmean.cs	0	1
