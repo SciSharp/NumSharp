@@ -372,5 +372,29 @@ namespace NumSharp
         /// <exception cref="TypeError">A StringDType <paramref name="x"/> against numeric bins: Python cannot order the
         ///     pair.</exception>
         public abstract NDArray Digitize(NDArray x, NDArray bins, bool right = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.unwrap(p, discont=None, axis=-1, *, period=6.283185307179586)</c>: along the axis, every jump
+        ///     between neighbours larger than <c>max(discont, period / 2)</c> is corrected by multiples of the period
+        ///     (the cumulative correction added to <c>p[1:]</c>).
+        /// </summary>
+        /// <param name="p">The input, at least 1-D, not complex (not null).</param>
+        /// <param name="discont">The largest jump left alone, or null for <c>period / 2</c> (a smaller one acts as
+        ///     <c>period / 2</c>).</param>
+        /// <param name="axis">The axis to unwrap along (negative counts from the end).</param>
+        /// <param name="period">NumPy's period, a Python float or int: a boxed <see cref="double"/> (or null for
+        ///     <c>2 pi</c>) takes the float path, a boxed <see cref="long"/> or <see cref="int"/> NumPy's integer path for
+        ///     an integer or bool input.</param>
+        /// <returns>A new array of <paramref name="p"/>'s shape: float64 (or the input's float dtype) on the float path,
+        ///     the integer dtype on the integer path.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="p"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="period"/> is neither null, a double, a long nor an
+        ///     int.</exception>
+        /// <exception cref="ValueError">A 0-D <paramref name="p"/>.</exception>
+        /// <exception cref="AxisError"><paramref name="axis"/> out of range.</exception>
+        /// <exception cref="TypeError">A complex <paramref name="p"/>.</exception>
+        /// <exception cref="OverflowException">On the integer path, a bound or the period that does not fit the input
+        ///     dtype (NumPy's OverflowError).</exception>
+        public abstract NDArray Unwrap(NDArray p, double? discont = null, int axis = -1, object period = null);
     }
 }
