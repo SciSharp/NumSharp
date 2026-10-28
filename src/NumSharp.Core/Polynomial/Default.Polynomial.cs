@@ -202,9 +202,9 @@ namespace NumSharp.Backends
             long diff = a2.Shape.dimensions[0] - a1.Shape.dimensions[0];
 
             if (diff > 0)
-                a1 = np.concatenate(new[] { np.zeros(new Shape(diff), a1.typecode), a1 }, 0);
+                a1 = np.concatenate(new[] { np.zeros(new Shape(diff), a1.dtype), a1 }, 0);
             else if (diff < 0)
-                a2 = np.concatenate(new[] { np.zeros(new Shape(-diff), a2.typecode), a2 }, 0);
+                a2 = np.concatenate(new[] { np.zeros(new Shape(-diff), a2.dtype), a2 }, 0);
 
             return subtract ? a1 - a2 : a1 + a2;
         }
