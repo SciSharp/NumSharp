@@ -225,22 +225,30 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
-        ///     <c>it[i] = v</c> packs a Python int into the operand's dtype with NumPy's range check ("Python integer 300 out
-        ///     of bounds for int8"), and refuses a read-only operand ("Iterator operand 0 is not writeable").
+        ///     <c>it[i] = v</c> is NumPy's <c>PyArray_CopyObject</c> into the current element: a C# literal is a Python int,
+        ///     packed into the operand's dtype with NumPy's range check (<c>it[1] = 300</c> on int8: "Python integer 300 out
+        ///     of bounds for int8"), while a 0-d ARRAY is assigned with an unsafe cast (<c>np.array(300)</c> stores 44, as
+        ///     NumPy's 0-d ndarray does; the setter packed it as a Python int and raised before); a read-only operand is
+        ///     refused ("Iterator operand 0 is not writeable"). Probed against NumPy 2.4.2.
         /// </summary>
         [TestMethod]
-        public void Setter_PacksWithNumPysRangeCheck_AndRefusesReadOnly()
+        public void Setter_PacksLiteralsCastsArrays_AndRefusesReadOnly()
         {
             using var src = np.arange(3);
             using var dst = np.zeros(new Shape(3), np.int8);
-            using var it = np.nditer(new[] { src, dst }, op_flags: new[] { new[] { "readonly" }, new[] { "readwrite" } });
-            using var big = NDArray.Scalar(300);
-            var overflow = () => it[1] = big;
-            overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
+            using (var it = np.nditer(new[] { src, dst }, op_flags: new[] { new[] { "readonly" }, new[] { "readwrite" } }))
+            {
+                var overflow = () => it[1] = 300;
+                overflow.Should().Throw<OverflowException>().WithMessage("Python integer 300 out of bounds for int8");
 
-            using var one = NDArray.Scalar(1);
-            var readOnly = () => it[0] = one;
-            readOnly.Should().Throw<RuntimeError>().WithMessage("Iterator operand 0 is not writeable");
+                using var array300 = np.array(300L);
+                it[1] = array300;
+
+                var readOnly = () => it[0] = 1;
+                readOnly.Should().Throw<RuntimeError>().WithMessage("Iterator operand 0 is not writeable");
+            }
+
+            dst.GetAtIndex(0).Should().Be((sbyte)44);
         }
 
         // ------------------------------------------------------------------ orders and layouts

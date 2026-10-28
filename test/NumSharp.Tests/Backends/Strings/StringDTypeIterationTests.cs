@@ -710,22 +710,41 @@ namespace NumSharp.Tests.Backends.Strings
         }
 
         /// <summary>
-        ///     Null into a numeric operand: NumPy stores NaN into a float operand (and False into bool, TypeError for
-        ///     integers); NumSharp refuses the null for every numeric dtype, as its indexer does.
+        ///     Null is Python's <c>None</c> in a numeric operand too, stored by setitem's rules: NaN (NumPy's positive
+        ///     <c>NPY_NAN</c>, <c>0x7ff8000000000000</c>) into a float operand, <c>nan+nanj</c> into a complex one, <c>False</c>
+        ///     into a bool one, and Python's <c>int()</c> TypeError into an integer one, which stores nothing. The setter
+        ///     refused the null for every numeric dtype before. Probed against NumPy 2.4.2.
         /// </summary>
         [TestMethod]
-        [Misaligned]
-        public void Setter_NullIntoANumericOperand_IsRefused()
+        public void Setter_NullIntoANumericOperand_IsNumPysNone()
         {
-            using var a = np.array(new[] { 1.0, 2.0 });
+            using var f = np.array(new[] { 1.0, 2.0 });
+            using (var it = np.nditer(new[] { f }, null, new[] { new[] { "readwrite" } }))
+                it[0] = null;
+            BitConverter.DoubleToInt64Bits(f.GetDouble(0)).Should().Be(0x7ff8000000000000L);
+            f.GetDouble(1).Should().Be(2.0);
+
+            using var c = np.array(new[] { new System.Numerics.Complex(1, 0), new System.Numerics.Complex(2, 0) });
+            using (var it = np.nditer(new[] { c }, null, new[] { new[] { "readwrite" } }))
+                it[0] = null;
+            var first = (System.Numerics.Complex)c.Storage.GetAtIndex(0);
+            double.IsNaN(first.Real).Should().BeTrue();
+            double.IsNaN(first.Imaginary).Should().BeTrue();
+
+            using var b = np.array(new[] { true, true });
+            using (var it = np.nditer(new[] { b }, null, new[] { new[] { "readwrite" } }))
+                it[0] = null;
+            V(b).Should().Equal(false, true);
+
+            using var i = np.array(new long[] { 1, 2 });
             Action store = () =>
             {
-                using var it = np.nditer(new[] { a }, null, new[] { new[] { "readwrite" } });
-                foreach (var _ in it)
-                    it[0] = null;
+                using var it = np.nditer(new[] { i }, null, new[] { new[] { "readwrite" } });
+                it[0] = null;
             };
-            store.Should().Throw<ArgumentNullException>();
-            V(a).Should().Equal(1.0, 2.0);
+            store.Should().Throw<TypeError>()
+                .WithMessage("int() argument must be a string, a bytes-like object or a real number, not 'NoneType'");
+            V(i).Should().Equal(1L, 2L);
         }
 
         /// <summary>

@@ -401,31 +401,49 @@ namespace NumSharp.Tests.APIs
         }
 
         /// <summary>
-        ///     The setter packs a Python float into an integer operand by truncation (NumPy's <c>PyArray_Pack</c>):
-        ///     <c>it[0] = 2.7</c> stores 2.
+        ///     The setter packs a Python float (a C# literal) into an integer operand by truncation (NumPy's
+        ///     <c>PyArray_Pack</c>): <c>it[0] = 2.7</c> stores 2. A 0-d array of 2.7 is cast and stores 2 as well.
         /// </summary>
         [TestMethod]
         public void Setter_PythonFloat_TruncatesIntoAnIntegerOperand()
         {
             using var a = np.arange(3);
             using (var it = np.nditer(a, op_flags: new[] { "readwrite" }))
+                it[0] = 2.7;
+            a.ToArray<long>().Should().Equal(2L, 1L, 2L);
+
+            using var b = np.arange(3);
+            using (var it = np.nditer(b, op_flags: new[] { "readwrite" }))
             {
                 using var value = NDArray.Scalar(2.7);
                 it[0] = value;
             }
-
-            a.ToArray<long>().Should().Equal(2L, 1L, 2L);
+            b.ToArray<long>().Should().Equal(2L, 1L, 2L);
         }
 
-        /// <summary>A NaN cannot be packed into an integer operand: NumPy's ValueError, nothing is stored.</summary>
+        /// <summary>
+        ///     A Python float NaN (a C# literal) cannot be packed into an integer operand: NumPy's ValueError, nothing is
+        ///     stored. A 0-d ARRAY holding NaN is cast instead, as NumPy's <c>np.array(np.nan)</c> is: the operand receives
+        ///     the cast's answer, int64's minimum (the setter packed it as a Python float and raised before). Probed against
+        ///     NumPy 2.4.2.
+        /// </summary>
         [TestMethod]
-        public void Setter_NaNIntoAnIntegerOperand_IsAValueError()
+        public void Setter_NaNIntoAnIntegerOperand_LiteralRaises_ArrayIsCast()
         {
             using var a = np.arange(3);
-            using var it = np.nditer(a, op_flags: new[] { "readwrite" });
-            using var nan = NDArray.Scalar(double.NaN);
-            var act = () => it[0] = nan;
-            act.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            using (var it = np.nditer(a, op_flags: new[] { "readwrite" }))
+            {
+                var act = () => it[0] = double.NaN;
+                act.Should().Throw<ValueError>().WithMessage("cannot convert float NaN to integer");
+            }
+            a.ToArray<long>().Should().Equal(0L, 1L, 2L);
+
+            using (var it = np.nditer(a, op_flags: new[] { "readwrite" }))
+            {
+                using var nan = NDArray.Scalar(double.NaN);
+                it[0] = nan;
+            }
+            a.ToArray<long>().Should().Equal(long.MinValue, 1L, 2L);
         }
 
         /// <summary>A text value is PARSED into a numeric operand (NumPy's <c>int('12')</c>): <c>it[0] = '12'</c> stores 12.</summary>

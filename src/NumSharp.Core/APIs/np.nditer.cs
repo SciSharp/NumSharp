@@ -1470,28 +1470,30 @@ namespace NumSharp
             /// <exception cref="IndexError">No operand <paramref name="i"/>: "Iterator operand index i is out of
             ///     bounds".</exception>
             /// <exception cref="RuntimeError">Setting a read-only operand: "Iterator operand i is not writeable".</exception>
-            /// <exception cref="ArgumentNullException">Setting null (Python's <c>None</c>) into a numeric operand: NumPy stores
-            ///     NaN into a float operand, <c>False</c> into a bool one and raises <c>TypeError</c> for an integer one; NumSharp
-            ///     refuses the null for every numeric dtype, as its indexer's store does.</exception>
-            /// <exception cref="OverflowException">Setting a 0-d integer value that does not fit the operand's dtype (NumPy's
-            ///     OverflowError texts).</exception>
+            /// <exception cref="OverflowException">Setting a C# number literal that does not fit the operand's dtype (NumPy's
+            ///     OverflowError texts: "Python integer 300 out of bounds for int8", "cannot convert float infinity to
+            ///     integer").</exception>
+            /// <exception cref="TypeError">Setting null (Python's <c>None</c>) or a complex literal into an integer operand
+            ///     (Python's <c>int()</c> texts), or a complex literal into a real one.</exception>
             /// <remarks>
             ///     <para>
             ///     The setter is NumPy's <c>npyiter_seq_ass_item</c>: the value is copied into a 1-D view of the current
-            ///     inner loop (one element without <c>external_loop</c>). A 0-d value is a SCALAR there (<c>PyArray_Pack</c>:
-            ///     a C# number is NumPy's Python scalar — range-checked, a float truncated into an integer operand, a string
-            ///     parsed), so <c>it[1] = 300</c> on an int8 operand raises like NumPy's; a value with dimensions is assigned
-            ///     with unsafe casting and broadcast to the view ("could not broadcast input array from shape (2,) into shape
-            ///     (1,)"). NumSharp cannot tell an explicit 0-d array from a literal, so <c>np.array(300)</c> also raises
-            ///     where NumPy's 0-d ndarray would wrap.
+            ///     inner loop (one element without <c>external_loop</c>) by <c>PyArray_CopyObject</c>, the store
+            ///     <c>a[...] = value</c> makes. A C# number literal is NumPy's Python scalar, PACKED: range-checked, a float
+            ///     truncated into an integer operand, a NaN into one NumPy's ValueError, so <c>it[1] = 300</c> on an int8 operand
+            ///     raises like NumPy's. A 0-d ARRAY (<c>np.array(300)</c>, <c>NDArray.Scalar(300)</c>) is an array: it is
+            ///     assigned with an unsafe cast and stores 44, as NumPy's 0-d ndarray does. A value with dimensions is
+            ///     broadcast to the view ("could not broadcast input array from shape (2,) into shape (1,)"). Null is Python's
+            ///     <c>None</c>: NaN into a float operand, <c>nan+nanj</c> into a complex one, <c>False</c> into a bool one,
+            ///     Python's <c>int()</c> TypeError into an integer one.
             ///     </para>
             ///     <para>
             ///     A view of NEP 55 <c>StringDType</c> memory (the operand, or its buffer under a buffered cast to
-            ///     <c>StringDType</c>) takes the store <c>a[...] = value</c> makes, which is the same <c>PyArray_CopyObject</c>:
-            ///     a C# literal goes through <c>StringDType</c>'s setitem (a number stores its <c>str()</c>, null stores the NA
-            ///     object, or <c>'None'</c> under <c>coerce=True</c>, and both raise "StringDType only allows string data when
-            ///     string coercion is disabled." under <c>coerce=False</c>), and an array is cast. A null into fixed-width text
-            ///     memory stores <c>str(None)</c>, truncated to the width (<c>'No'</c> for <c>&lt;U2</c>), as NumPy's setitem does.
+            ///     <c>StringDType</c>) goes through <c>StringDType</c>'s setitem for a C# literal (a number stores its
+            ///     <c>str()</c>, null stores the NA object, or <c>'None'</c> under <c>coerce=True</c>, and both raise
+            ///     "StringDType only allows string data when string coercion is disabled." under <c>coerce=False</c>), and an
+            ///     array is cast. A null into fixed-width text memory stores <c>str(None)</c>, truncated to the width
+            ///     (<c>'No'</c> for <c>&lt;U2</c>), as NumPy's setitem does.
             ///     </para>
             /// </remarks>
             public NDArray this[int i]
@@ -1553,12 +1555,6 @@ namespace NumSharp
                     var stringDescr = dtype == NPTypeCode.String ? OperandStringDescr(op, ptr) : null;
                     var vstrings = VStringAllocatorOf(op, stringDescr, ptr);
 
-                    // A null value is Python's None. Text memory stores it (StringDType's setitem, or str(None) into a
-                    // fixed-width element); a numeric operand refuses it before anything is written, as the indexer's store
-                    // does — NumPy's NaN / False / TypeError for numeric dtypes is not modelled.
-                    if (value is null && stringDescr is null)
-                        throw new ArgumentNullException(nameof(value));
-
                     // npyiter_seq_ass_item's temporary: a 1-D view of the current inner loop — one element without
                     // external_loop, and a 0-d iteration has no inner axis to read (GetInnerLoopSizePtr would read Shape[-1]).
                     long count = 1, stride = 1;
@@ -1576,17 +1572,14 @@ namespace NumSharp
                     if (!target.Shape.IsWriteable)
                         target.Storage.SetShapeUnsafe(target.Shape.WithFlags(flagsToSet: ArrayFlags.WRITEABLE));
 
-                    if (vstrings != null || value is null)
-                    {
-                        // PyArray_CopyObject(temporary, value) is the store `a[...] = value` makes, so the storage's own store
-                        // runs it. StringDType memory: setitem for a C# literal or null (the NA object, its str(), or
-                        // coerce=False's ValueError) and a cast for an array, each overwritten string freed through the
-                        // allocator of the memory the view is on (the operand's, or the buffer's own). A null into
-                        // fixed-width text (numeric memory refused it above): str(None), 'None' truncated to the width.
-                        target.Storage.SetData(value, Array.Empty<int>());
-                        return;
-                    }
-                    AssignToIteratorView(target, value);
+                    // PyArray_CopyObject(temporary, value) is the store `a[...] = value` makes, so the storage's own store
+                    // runs it, on the PyArray_Pack route of a view assignment: a C# literal (NDArray.WasPythonLiteral) is
+                    // packed as the Python scalar it stands for (range-checked, never wrapped), a 0-d or larger array is
+                    // cast unsafely and broadcast, and null is Python's None (setitem's NaN / nan+nanj / False, int()'s
+                    // TypeError, StringDType's NA object, str(None) into fixed-width text). StringDType memory frees each
+                    // overwritten string through the allocator of the memory the view is on (the operand's, or the
+                    // buffer's own).
+                    target.Storage.SetData(value, Array.Empty<int>());
                 }
             }
 
@@ -1659,31 +1652,6 @@ namespace NumSharp
             {
                 view.Storage.WriteProtected = true;
                 view.Storage.SetShapeUnsafe(view.Shape.WithFlags(flagsToClear: ArrayFlags.WRITEABLE));
-            }
-
-            /// <summary>
-            ///     <c>PyArray_CopyObject(view, value)</c> for the iterator's setter: a 0-d numeric or text value is packed as a
-            ///     SCALAR (NumPy's <c>PyArray_Pack</c>, range-checked) and stored into every element of the view; anything
-            ///     else — a value with dimensions, or a text view — is assigned with unsafe casting and NumPy's broadcasting.
-            /// </summary>
-            /// <param name="view">The writeable 1-D view of the current inner loop.</param>
-            /// <param name="value">The value (not null).</param>
-            /// <exception cref="OverflowException">A 0-d integer that does not fit the view's dtype.</exception>
-            /// <exception cref="ValueError">A text that does not parse into a numeric view, a NaN into an integer view, or a
-            ///     value that does not broadcast to the view.</exception>
-            /// <exception cref="TypeError">A complex into a real view.</exception>
-            private static void AssignToIteratorView(NDArray view, NDArray value)
-            {
-                if (value.ndim == 0 && view.typecode != NPTypeCode.String)
-                {
-                    byte* slot = stackalloc byte[ReductionInitial.SlotBytes];
-                    ReductionInitial.TryPack(value.GetAtIndex(0), view.typecode, new Span<byte>(slot, ReductionInitial.SlotBytes));
-                    CopytoAssignRawScalar(view, slot, view.typecode, null, NPY_CASTING.NPY_UNSAFE_CASTING);
-                    return;
-                }
-
-                // PyArray_AssignArray(dest, src, NULL, NPY_UNSAFE_CASTING): np.copyto's broadcasting and texts.
-                copyto(view, value, casting: "unsafe");
             }
 
             // ---------------------------------------------------------------
