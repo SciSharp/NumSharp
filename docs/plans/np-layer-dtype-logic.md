@@ -17,8 +17,8 @@ now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two o
 carry NumPy's `out=` (the reducelike loop rule, the reduce prologue, `_mean` / `_var`'s statement order),
 numpy.matrix's reductions hold no text line, and six divergences found on the way got their fix commits (D4); the public
 np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 has
-landed sixteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled, and
-picks the next work from P3 to P7; when P2 resumes, np.emath comes first. Later that day the owner kept the array object
+landed seventeen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
+then resumed it the same day beside PE and P3, with P4 (np.emath, the seventeenth family, came first). Later that day the owner kept the array object
 out of the engine: `TensorEngine` holds the functions that compute values, while creation, conversion, views, joins and
 selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). Progress goes into the
 [§9 state log](#9-state-log), newest entry first.
@@ -551,8 +551,8 @@ was working around, which gets its own fix first (D4). The pilot's `np.angle` is
 `np.searchsorted` 8, `np.cov` 8, `GufuncGuard` 7, `np.gradient` 6, `np.linalg` 5, `np.array_equal` 5, `np.insert` 5,
 `np.isin` (VString) 5, `np.average` 5, then the files of four lines or fewer.
 
-The rest of P2 is deferred (the owner, 2026-10-28; see the State). When it resumes, np.emath comes first, as the first
-family under the revised D1:
+The owner deferred the rest of P2 on 2026-10-28 and resumed it the same day (see the State). np.emath came first, as
+the first family under the revised D1:
 - Its members go to `TensorEngine.Scimath.cs`, after `numpy/lib/_scimath_impl.py`, and `DefaultEngine` implements them.
 - Their names collide with the ufunc members (`sqrt`, `log`, `power`, ...), so they take the namespace as a prefix:
   `EmathSqrt`, `EmathLog`, `EmathPower`, ...
@@ -718,6 +718,47 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-28, P2's seventeenth family: np.emath's nine functions are abstract `TensorEngine` members
+  (`TensorEngine.Scimath.cs`, prefixed `Emath`), the first family under the revised D1.** Commits on `strings`,
+  developed in a scratch worktree and landed by fast-forward. The owner resumed P2 and P4 beside PE and P3 ("Continue
+  to PE+P3, ... parallely rest of P2+P4, ... Then P5"). The referees: the snapshot (the nine functions: 3,546 calls)
+  with `DOTNET_TieredCompilation=0` under `NUMSHARP_DEBUG_GUARD_PAGES=1`, and `twin_emath.py` (each line rebuilt in
+  NumPy, `numpy.emath` called, the outcome rendered the snapshot's way; a line that differs is re-run through NumPy's
+  statements with NumSharp's library rules modelled one at a time):
+  - `80cce839` the snapshot tool reaches np.emath: a target `np.emath.f` is every public instance member of
+    `EmathModule`, called on the module object; power's exponent `p` is the second operand (logn's `x` already was).
+    The twin agrees on 2,516 of the 3,349 comparable lines (197 decimal lines have no NumPy twin). The other 833 are
+    library rules, none of them emath's own statements:
+    - 317 VF01: a 0-d result is a writeable 0-d array where NumPy returns a read-only scalar.
+    - 366 F1: NumPy's `_tocomplex` picks complex64 for single / byte / short / ubyte / ushort input; NumSharp has one
+      complex type. The lines agree with `_tocomplex` forced to complex128.
+    - 51 the branch's weak 0-d rule: logn's 0-d log result and power's 0-d operand are read as weak by the division /
+      the power ufunc, where NumPy reads a 0-d array or scalar as strong. The lines agree with those operands passed as
+      Python scalars.
+    - 99 complex results: NumSharp's complex128 log / log10 / log2 / sqrt differ from NumPy's by one ULP on finite
+      values (below), its complex arccos / arcsin / arctanh keep their documented envelope, and complex power is F5.
+  - `73bbcc86` the move: `TensorEngine.EmathSqrt`, `EmathLog`, `EmathLog10`, `EmathLog2`, `EmathLogn(n, x)`,
+    `EmathPower(x, p)`, `EmathArccos`, `EmathArcsin` and `EmathArctanh`, abstract and documented in full in the new
+    `Backends/TensorEngine.Scimath.cs`; `DefaultEngine`'s overrides in `Math/Default.Scimath.cs` beside the facade (they
+    call np.*), with the domain-fix helpers (`FixRealLtZero`, `FixRealAbsGt1`, `FixIntLtZero`, the text refusal) as its
+    private statics. None of the moved names occurs elsewhere in NumSharp.Core, so the merge into `DefaultEngine`
+    rebinds no call. np.emath keeps the signatures, the boundary statements and one call. 3,546 calls byte-identical;
+    R1 drops np.emath.cs's row (3 text and 3 numeric lines); R2 unchanged.
+  - No D4 commit: the twin found no divergence in emath's statements.
+  - Step 2 (C11): nothing to change; each override is NumPy's statements over the np.* ufuncs, one per line, so there
+    is no composition to try and nothing to benchmark.
+  - **Found:** NumSharp's complex128 `np.log` / `np.sqrt` (and log10 / log2) differ from NumPy 2.4.2's by one ULP on
+    ordinary finite values, contrary to the branch notes' "bit-for-bit" claim for the complex unary ufuncs:
+    `np.log(3-3j).real` is 1.4451858789480825 against NumPy's 1.4451858789480823, `np.log(5+2j).real`
+    1.683647914993237 against 1.6836479149932368, `np.sqrt(11-11j).real` 3.6439229674969837 against
+    3.6439229674969833 (plain np.log gives the same bits as np.emath.log; a 1-element array and a 0-d array too).
+    A ufunc matter for the complex unary work, outside this plan.
+  - The suites ran on the move before its two rebases onto PE's commits: NumSharp.Tests net10.0 20,435 passed / 283
+    skipped and net8.0 20,434 / 283, Oracle net10.0 and net8.0 379 / 35 skipped, 0 failed (the scratch worktree lacked
+    the gitignored OpenBLAS runtimes, so the backend's tests were Inconclusive). After each rebase: the snapshot
+    byte-identical, the emath tests (61) on both frameworks and the layering ratchets green.
+  - Next in P2: np.einsum's contraction (`TensorEngine.EinsumFunc.cs`), then P4 (`TensorEngine.Polynomial.cs`), then
+    the families whose partial files PE creates.
 - **2026-10-28, D1 narrowed: the array object stays out of `TensorEngine`.** No code changed; this entry records the
   owner's decision and what it changes in the plan. The owner asked "Why do we move functions that are not math like
   np.copyto or np.frombuffer? ... is the storage not a set of in-memory classes?", read the split the P2 session
