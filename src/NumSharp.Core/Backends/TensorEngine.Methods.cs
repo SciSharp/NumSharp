@@ -480,7 +480,8 @@ namespace NumSharp
 
         /// <summary>
         ///     NumPy's <c>np.trace(a, offset, axis1, axis2, dtype, out)</c> (<c>PyArray_Trace</c>), the whole call: the sums
-        ///     along the diagonals <see cref="Diagonal"/> returns, <c>add.reduce</c> over its last axis with
+        ///     along the diagonals <see cref="np.diagonal(NDArray, int, int, int)"/> returns, <c>add.reduce</c> over its
+        ///     last axis with
         ///     <paramref name="dtype"/> and <paramref name="out"/>.
         /// </summary>
         /// <param name="a">The array (at least 2-D; any dtype, text included).</param>
@@ -497,7 +498,7 @@ namespace NumSharp
         /// <returns><paramref name="out"/> itself when given; otherwise the sums: a read-only 0-d result (NumPy's scalar)
         ///     for 2-D <paramref name="a"/>, <paramref name="a"/>'s shape without the two axes otherwise.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-        /// <exception cref="ValueError"><see cref="Diagonal"/>'s refusals; a StringDType diagonal that cannot be reduced
+        /// <exception cref="ValueError"><see cref="np.diagonal(NDArray, int, int, int)"/>'s refusals; a StringDType diagonal that cannot be reduced
         ///     (empty: no identity; an NA under the None-like rule); a read-only <paramref name="out"/> ("output array is
         ///     read-only") or one of the wrong rank ("output parameter for reduction operation add has the wrong number of
         ///     dimensions: ...").</exception>

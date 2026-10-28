@@ -10,7 +10,8 @@ namespace NumSharp.Backends
         ///     NumPy's <c>PyArray_Trace</c>: <c>add.reduce(diagonal(a, offset, axis1, axis2), axis=-1, dtype=dtype,
         ///     out=out)</c>. A 2-D or 3-D operand without <paramref name="dtype"/> or <paramref name="out"/> takes the fused
         ///     kernel (<see cref="TryTraceFast"/>, one strided walk of the diagonal accumulating in the promoted dtype); every
-        ///     other call reads the diagonal view (<see cref="Diagonal"/>) and runs the text routes; then an
+        ///     other call reads the diagonal view (<see cref="NDArray.Diagonal(NDArray, int, int, int)"/>, the array
+        ///     object's: a view is not an engine member) and runs the text routes; then an
         ///     <paramref name="out"/> takes the add reduction with an out operand (<see cref="ReduceAdd"/>: the reduce
         ///     prologue's checks and the loop <c>dtype ?? promote_types(out, diagonal)</c>), and a call without one sums a
         ///     contiguous copy of the diagonal. Moved from the public <c>np.trace</c> by the np-layer dtype plan's P1b,
@@ -36,7 +37,7 @@ namespace NumSharp.Backends
 
             // The diagonal validates ndim, axis values, and axis1!=axis2 and emits
             // a 1-D-extended view (the diagonal axis is the last dim of the result).
-            var diag = Diagonal(a, offset, axis1, axis2);
+            var diag = NDArray.Diagonal(a, offset, axis1, axis2);
             // A StringDType input: the diagonal's add.reduce along its LAST axis (PyArray_Trace), out= included — the
             // StringDType loop concatenates (a dtype= request has no loop, an empty diagonal has no identity).
             if (Strings.NDStringUfuncs.VStringReduces("trace", diag, diag.ndim - 1, dtype, @out, loopOnly: true))
@@ -98,7 +99,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         ///     Fused 2-D / 3-D trace fast path. Computes the diagonal start
-        ///     offset and stride exactly like <see cref="Diagonal"/> does, then
+        ///     offset and stride exactly like <see cref="Shape.Diagonal(int, int, int)"/> does, then
         ///     calls the per-src-dtype IL kernel to walk and accumulate in one
         ///     pass. For 3-D source: iterates the single non-axis1/axis2 axis
         ///     in the kernel's outer loop, writing one accum-typed result per
@@ -143,7 +144,7 @@ namespace NumSharp.Backends
             long stride1 = shape.strides[ax1];
             long stride2 = shape.strides[ax2];
 
-            // Same offset-stride formula Diagonal uses; offset>=0 shifts along
+            // Same offset-stride formula Shape.Diagonal uses; offset>=0 shifts along
             // axis2, offset<0 shifts along axis1.
             long offsetStride;
             long offAbs;

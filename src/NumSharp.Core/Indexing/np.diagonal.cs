@@ -53,9 +53,9 @@ namespace NumSharp
             using var plain = NDMatrixBoundary.PlainFor(a);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
             if (a is null) throw new ArgumentNullException(nameof(a));
 
-            // NumPy's diagonal IS PyArray_Diagonal, a read-only view built from the strides: the engine's
-            // (DefaultEngine.Diagonal).
-            return a.TensorEngine.Diagonal(a, offset, axis1, axis2);
+            // NumPy's diagonal IS PyArray_Diagonal, a read-only view built from the strides: the array object's
+            // (NDArray.Diagonal over Shape.Diagonal's layout; a view computes no value, so it is no engine member).
+            return NDArray.Diagonal(a, offset, axis1, axis2);
         }
     }
 }
