@@ -113,7 +113,7 @@ Array-API unique family, `np.isin`, the four set routines, `np.sort_complex`, `n
 family with its nan forms, and numpy.ma's `sort` / `argsort` / `median` / `unique`, with NumPy's ordering of missing
 values (NaN-like NA after every text in input order, string NA as its text, `None`-like NA raises at the first comparison
 that meets it — a line of one element compares nothing). Code: `Backends/Default/Sorting/VString{Sort,Search,Distinct}.cs`,
-`Manipulation/{NDArray.unique,np.isin}.VString.cs`, `Backends/Strings/NDVStringStatistics.Quantile.cs`. Design: a stable
+`Manipulation/{UniqueEngine,IsinEngine}.VString.cs`, `Backends/Strings/NDVStringStatistics.Quantile.cs`. Design: a stable
 radix of 8-byte prefix keys with a tie pass (NumPy's stable kind), NumPy's introsort replayed over (rank, index) records
 only where equal texts make the default kind's order observable; `np.lexsort` replays `npy_atimsort` when two or more
 NaN-like NAs meet (its asymmetric compare reverses adjacent NAs); `np.unique`'s values-only route hashes (`TextTable`:
@@ -1960,8 +1960,11 @@ the k-th unique value → use `.values[k]`). To keep the ~230 existing call-site
 `GetAtIndex`/`GetAtIndex<T>`/`GetDouble`/`GetSingle`/`GetBoolean`/`GetInt32`) — the value the caller means in the
 no-flags case — and the test `Should()` extension gained a `UniqueResult` overload (`FluentExtension.cs`). The
 **instance** `NDArray.unique(int? axis=null, …)`→`NDArray` and `NDArray.unique(bool return_index, …)`→`NDArray[]`
-are UNCHANGED (all internal consumers — `NDArray.unique.Hash.cs`, `np.unique_values.cs` — stay on them); only the
-static `np.unique` was lifted to `UniqueResult`, which wraps the instance `NDArray[]`. The other three sibling
+keep their return types; only the static `np.unique` was lifted to `UniqueResult`, which wraps the `NDArray[]` of the
+computation. All of them are one call into the internal operation class `UniqueEngine` (np-layer dtype plan P2,
+2026-10-28: `Unique` for `np.unique` after its chararray / matrix boundaries, `Bare` / `Compute` for the two instance
+members, `UniqueValues` / `UniqueCounts` / `UniqueInverse` / `UniqueAll` for the Array-API functions; the kernels are
+its partials `UniqueEngine.{Kwargs,Hash,Radix,Text,VString}.cs`). The other three sibling
 result structs (`UniqueAllResult`/`UniqueCountsResult`/`UniqueInverseResult`) are always tuples, so they carry no
 `values`-forwarding surface — the asymmetry is deliberate (only `np.unique` has a bare-array case). Gate:
 `Manipulation/np.unique.AxisEdgeCases.Test.cs` (`UniqueResult_*` + `BareReturn_*` pins); the whole test suite compiles
@@ -1987,12 +1990,20 @@ hash-bucket order (neither sorted nor first-occurrence — e.g. `[0,8,16,24,1,9,
 win-amd64, not reproducible in C#); NumSharp returns them SORTED (identical AS A SET, deterministic, portable, and
 consistent with the `values` field of the other three). **Plain float32/64 are NOT in NumPy's hash map**, so they
 fall to NumPy's own sort path and are already sorted — NumSharp's float `unique_values` is thus bit-exact with NumPy,
-not divergent. **Hash fast path** (`NDArray.unique.Hash.cs`): the 10 integer-family dtypes (bool/byte/sbyte/int16/
+not divergent. **Hash fast path** (`UniqueEngine.Hash.cs`): the 10 integer-family dtypes (bool/byte/sbyte/int16/
 uint16/int32/uint32/int64/uint64/char) take a purpose-built open-addressing table (byte-size-keyed generic hash,
 load-factor-0.5 growth, **splitmix64 finalizer**) then a sort of the small unique set — mirroring NumPy's own
 algorithm SELECTION (NumPy hashes int + complex, both in its `_unique_hash` map, and sorts floats). **Complex** joins
-the hash path (NumPy's scalar lexicographic complex sort is slow, so it is a clean win, no all-unique regression);
-**float/half/double/decimal keep the sort path**. Float hashing was measured end-to-end and REJECTED: it helps
+the hash path for values alone with either `equal_nan` and for `np.unique_values`, as NumPy's `_unique1d` takes
+`_unique_hash` there (values alone only), and for `np.unique_counts`, where NumPy sorts in place instead: the hash with
+counts gives the same sorted values and counts, its representative of equal values the first in C order (NumPy's sort
+picks its own on a line of 17 elements or more, below). Its distinct values are sorted afterwards (by radix from 2,048
+on; the values with a NaN part in NumPy's sort order, `R+nanj`, then `nan+Rj`, then `nan+nanj`), and a line of 32,768
+elements or more whose first sixteenth is over 90 % distinct goes to the argsort route instead, which is faster there
+with the same answer (`ComplexHashCheckpointMinLength`; 2026-10-28, `b3403dd4` / `a267ee2a`). NumPy's table order of
+EQUAL values with a NaN part (`nan+0j` and `nan-0j`) is MSVC's `std::unordered_set` iteration order, not reproduced:
+NumSharp keeps them in input order. **float/half/double/decimal keep the sort path**. Float hashing was measured
+end-to-end and REJECTED: it helps
 duplicated data but regresses ~2× on all-unique input (insert N + scalar-sort N), and a cheap cardinality sample
 provably cannot distinguish "100K-unique-in-1M" (hash helps) from all-unique (hash hurts). The **splitmix64
 finalizer is load-bearing** — a single Fibonacci multiply then a low-bits table index clustered integer-valued
@@ -2003,9 +2014,13 @@ NumPy pays for a mergesort argsort + cumsum + nonzero + diff); integer `unique_v
 `unique_counts` **1.0–1.5×** at ≤1% cardinality; **complex `unique_values`/`unique_counts` 3.0–6.7×**; `unique_inverse`
 **0.7–1.4×**. The remaining sub-1.5× cells — high-cardinality `unique_counts`, `unique_inverse`, and ALL float
 `unique_values`/`unique_counts` (0.1–0.3×) — are bounded by NumPy's SIMD `vqsort` (`x86-simd-sort`), which NumSharp's
-scalar sort core lacks; closing them is a shared-sort-core change, not a property of these wrappers. Full design +
+scalar sort core lacks; closing them is a shared-sort-core change, not a property of these wrappers. Remeasured with
+the np.unique family of the np-layer plan (2026-10-28, two pinned P-cores): float32 / float64 values alone 0.51–0.86×
+(still that gap), float16 values alone 5.49× (the stable radix argsort, was 0.95×), complex128 `np.unique_counts`
+1.59–4.74× over a cardinality sweep at 100K / 1M (0.91× at 1K, NumPy's fixed cost). Full design +
 the measured "why the axis comparator stays scalar / why floats stay sorted / why splitmix" decisions:
-**`docs/UNIQUE_DESIGN.md`**. See `Manipulation/np.unique_values.cs` + `Manipulation/NDArray.unique.Hash.cs`.
+**`docs/stale-docs/UNIQUE_DESIGN.md`** (superseded where this section differs). See `Manipulation/UniqueEngine.cs` (the
+Array-API bodies) + `Manipulation/UniqueEngine.Hash.cs`.
 
 **`np.unique` full parameter parity** — `unique(ar, return_index=false, return_inverse=false,
 return_counts=false, axis=null, equal_nan=true, sorted=true)`, all six probed against 2.4.2 (gates
@@ -2028,7 +2043,40 @@ mergesort argsort, so identical NaN slabs keep input order). **One deliberate di
 **float16 + axis + NaN**, NumPy 2.4.2's structured/void sort mis-orders NaN to the FRONT — inconsistent with its
 OWN 1-D float16 sort and its float32/64 structured sorts (all NaN-last); NumSharp keeps the consistent, correct
 NaN-to-end ordering across every float width (the unique-row set and counts are identical, only NaN position
-differs). See `Manipulation/NDArray.unique.{cs,Kwargs.cs}`.
+differs). The values of the axis path are always NumPy's view of the gathered rows (`reshape_uniq`'s `np.moveaxis`
+runs at axis 0 too, so `flags.owndata` is False; fixed 2026-10-28, `5364e93e`), and a C-contiguous operand at an
+offset (an `np.split` / `np.array_split` / `np.unstack` child) is read from its own first element (the slab helpers
+read the parent's first rows before `d8562466`). See `Manipulation/UniqueEngine.{cs,Kwargs.cs}`.
+
+**`np.unique`'s flat routes are NumPy's `_unique1d` statements** (np-layer dtype plan P2, 2026-10-28; probed against
+2.4.2). NumPy sorts in place when neither an index nor an inverse is asked (`ar.sort(); aux = ar`), and otherwise
+argsorts and gathers (`perm = ar.argsort(kind='mergesort' if return_index else 'quicksort'); aux = ar[perm]`); the run
+starts are `aux[1:] != aux[:-1]` (IEEE: a NaN differs from everything, `-0.0 == +0.0`), `equal_nan` collapses one run
+from the first NaN (complex: the first value with a NaN part), and the index is `perm[mask]`. NumSharp's routes:
+- **An index or an inverse** (any float dtype), **float16 every call** and **complex128 counts** run the argsort
+  statements (`UniqueEngine.uniqueFlatArgsorted<T>`) over `AxisSort.ArgSort`, which is one stable order for every kind,
+  NumPy's mergesort order: a collapsed NaN run's value and index are the same NaN's, a run of zeros keeps the first
+  zero in input order, and complex values come in `CDOUBLE_LT`'s order (no NaN part lexicographic, then `R+nanj` by
+  `R`, then `nan+Rj` by `R`, then `nan+nanj`). float16 values alone take it too because NumPy's float16 in-place sort
+  is its scalar `quicksort_<half_tag>` off AVX512_SPR / ICL hosts, an insertion sort (stable) for lines of up to 16
+  elements (`fa98ba8a`, `6871394e`).
+- **float32 / float64 values alone and counts alone** are NumPy's in-place sort: the NaNs partitioned to the tail and
+  written as NumPy's sort NaN, the positive quiet NaN, for two elements or more (`WriteSortNaNs`, `86f0f944`); a
+  one-element line keeps its bits.
+- **complex128 values alone** take the hash path (above) for both `equal_nan` settings (`b3403dd4`).
+- **Past `Array.MaxLength` elements** the long-indexed fallback runs the same statements on each route
+  (`uniqueFlatArgsortedLong<T>` / `uniqueFlatArgsortedLongComplex`, `bed773f6`), and past 2^28 complex elements, where
+  the hash bails, the argsort route gives the hash path's answer (`ArgsortedHashAnswer`: under `equal_nan` the collapsed
+  class is its first value in C order, the one NumPy's hash set keeps).
+
+Remaining divergences, all of NumPy's own sort order between EQUAL values: float32 / float64 values alone and counts
+alone (x86-simd-sort's order of `-0.0` / `+0.0`, CPU-dependent), float16 and complex128 lines of 17 elements or more
+without an index (NumPy's scalar introsort: float16 values alone, counts and an inverse; complex128 counts and an
+inverse, its values alone being the hash path. `np.unique` of the snapshot's 24-element float16 line keeps `+0.0` where
+the stable order keeps the first zero, `-0.0`, and over random complex lines of 17-100 elements with zeros of both signs
+NumPy keeps another zero than the first in input order in 7-14 of 20), and the complex hash path's table order. Gates:
+`Manipulation/np.unique.{ArgsortRoute,ComplexHash,OffsetView}.Test.cs`, `OpenBugs.SortUniqueNaN.cs` (now a regression
+guard).
 
 `flip`/`fliplr`/`flipud` return **O(ndim) views** (stride negation + base-offset shift via `Storage.Alias`,
 the Transpose pattern — no slice resolution, no data movement), bit-identical to the `m[..., ::-1, ...]`
@@ -4855,7 +4903,7 @@ StringSearchTests.cs` (21); plan `docs/plans/strings-phase2.md`):
   starting best can admit a lane that an earlier lane of the group has since beaten.
 
 **Text set routines and statistics are NumPy's statements over the sort and search engines** (strings phase 2, P2.2
-milestone C, 2026-10-16; `Manipulation/NDArray.unique.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
+milestone C, 2026-10-16; `Manipulation/UniqueEngine.Text.cs`, `Backends/Default/Sorting/TextDistinct.cs`,
 `Manipulation/IsinEngine.cs` (`IsinTextFlat`), the set routines' own files, `Sorting_Searching_Counting/np.{lexsort,
 sort_complex}.cs`, `Statistics/np.histogram.cs` (`HistogramCumulativeText`), `Statistics/QuantileText.cs` +
 `QuantileEngine.Functions.cs` (`QuantileOfText`); gates the string oracle's `strsets` section (7,299 cases, strict but for one order excuse) +
@@ -4954,6 +5002,23 @@ axis)`: ax0 f64 4.4 / 8.6–8.8 @100K/4M, f32/i32 ax0 @4M 16.4, i64 10.5–11.8,
 2.1–3.5 (1.0–137× the legacy kernel); Rows over a memory-bound 4M buffer stays ~parity (the same per-row kernel NumPy
 runs). Pre-existing, not fixed: `ReduceArgMax` wraps an out-of-range NEGATIVE axis (`while (axis < 0) axis += ndim`)
 instead of raising NumPy's AxisError. Gate `Backends/Kernels/AxisArgFastPathTests.cs` (8).
+
+**`np.argsort` is one stable LSD radix order for every numeric dtype but decimal**
+(`Backends/Default/Sorting/AxisSort.cs` over `RadixSort.ArgSortU32/U64`; float16 and complex128 joined 2026-10-28,
+`80c3b6a9`: they ran `Array.Sort` of a managed index array with a class comparer, 0.27–0.61× NumPy). The kind is
+ignored: every kind gets NumPy's stable (mergesort) order. An argsort only orders indices, so it can fold what NumPy's
+comparators call equal, which the value sorts of these two dtypes cannot (they rebuild values from keys and need
+distinct keys for ±0 and the NaN payloads, so they keep the comparison sort):
+- float16 (`ArgLineF16`): `HArgKey16` maps the sign-magnitude bits to an unsigned order with both zeros on one key, the
+  non-NaN indices go through the 4-byte core with two key bytes, and the NaN indices follow in input order (`HALF_LT`
+  with ties by index).
+- complex128 (`ArgLineC128`): `CDOUBLE_LT` is lexicographic on (class, first key, second key), so the line is
+  partitioned stably by class (no NaN part; `R+nanj`; `nan+Rj`; `nan+nanj`), the first class radix-sorted by its
+  imaginary key and then stably by its real key, the second and third by their one key, the fourth kept in input order.
+
+Perf (NPY/NS, 1K / 100K / 1M and both axes of a 500×500 matrix): float16 1.58–15.6×, complex128 0.91–4.97× (the low
+is 1K against NumPy's default quicksort; 1.36× against its stable kind). np.unique's argsort-and-gather routes run on it.
+Gate `Sorting/np.argsort.HalfComplex.Test.cs` (NumPy's stable indices under every kind, past the insertion thresholds).
 
 **The issue-#623 six** — `partition`/`argpartition`/`lexsort`/`nanargmax`/`nanargmin`/`sort_complex` (all probed
 against 2.4.2; gates `Sorting/np.{partition,lexsort,nanargmax,sort_complex}.Test.cs` (108) + ~2,170 differential
@@ -7277,7 +7342,7 @@ code gives NumPy's text.
 | DefaultEngine | `Backends/Default/DefaultEngine.*.cs` |
 | np API | `APIs/np.cs` |
 | Diagonal / triangular family | `Creation/np.tri.cs`, `Indexing/np.{diag,tril,diag_indices,tril_indices,fill_diagonal}.cs` |
-| unique family | `Manipulation/NDArray.unique.cs` + `NDArray.unique.Kwargs.cs` (sort+mask core + axis path), `Manipulation/np.unique.cs` (`np.unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.Hash.cs` (int + complex hash fast path, splitmix64). Design + measured perf decisions: `docs/UNIQUE_DESIGN.md` |
+| unique family | `Manipulation/np.unique.cs` (`np.unique`: its class boundaries, then `UniqueEngine.Unique`), `Manipulation/np.unique_values.cs` (Array-API `unique_values`/`unique_counts`/`unique_inverse`/`unique_all` + result structs), `Manipulation/NDArray.unique.cs` (the two instance members, one call each; the legacy protected `unique<T>()`), the internal operation class `Manipulation/UniqueEngine.cs` (the statements after the boundaries, the text checks) + `UniqueEngine.Kwargs.cs` (NumPy's `_unique1d` routes: the argsort-and-gather statements, the in-place-sort routes, the long-indexed fallback, the axis path) + `UniqueEngine.Hash.cs` (int + complex hash fast path, splitmix64; the complex radix sort of the distinct values and the cardinality checkpoint) + `UniqueEngine.{Radix,Text,VString}.cs`. Design + measured perf decisions: `docs/stale-docs/UNIQUE_DESIGN.md` |
 | Selection family | `Indexing/np.{take,take_along_axis,put,put_along_axis,place,putmask,select}.cs`; IL kernels `Backends/Kernels/Direct/DirectILKernelGenerator.{Take,TakeAlongAxis,Put,PutAlongAxis,Place,PutMask,Select}.cs` (`Select` = fused single-pass reverse-`ConditionalSelect` chain; `TakeAlongAxis` = whole-array strided-odometer gather, byte-width-keyed; `PutAlongAxis` = the scatter mirror — a dtype-agnostic validate pass + a bounds-free scatter pass for NumPy's all-or-nothing assignment; `PutMask` = Place's typed-MOV scatter with a by-position cursor + `nv==1` scalar fast path) |
 | numpy.matrix (`NDMatrix`) | `Matrixlib/NDMatrix.cs` (class, result forms, scalar conversions, T / H / I / A / A1), `.Construction.cs` (`matrix.__new__`, the literal parser), `.Indexing.cs`, `.Operators.cs`, `.Reductions.cs`, `.Methods.cs`, `Matrixlib/np.matrix.cs`, `Creation/np.{asmatrix,bmat}.cs`, `View/Shape.Matrix.cs` (the finalize rule), `Selection/NDArray.Indexing.AssignedValue.cs` (NumPy's value rule for index-array assignment) |
 | The matrix boundary (`np.*` with a matrix operand) | `Matrixlib/NDMatrixBoundary.cs` (`Sees`, the rules `Wrapped` / `Reduced` / `Plain` / `WrappedAll` / `WrappedPair` / `WrappedTriple` / `WrappedIf`, the regions `PlainFor` / `Inside`, `PlainOf` for containers, the caller audit); one statement in each public `np.*` overload; oracle `matrix_operand.jsonl` via `OpRegistry.MatrixOperand.cs` and `FuzzCorpusTests.MatrixOperand.cs` |
@@ -7673,7 +7738,7 @@ dotnet test --filter "TestCategory=Misaligned"
 dotnet test --filter "TestCategory!=OpenBugs&TestCategory!=HighMemory&TestCategory!=WindowsOnly"
 ```
 
-**OpenBugs files**: `OpenBugs.MatrixOperand.cs` (the matrix boundary's gaps outside its oracle tier: `np.gradient` and `np.meshgrid` return plain arrays in their result structs where NumPy returns matrices, MO06 / MO07), `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`, the managed size-1 `dot`/`inner` operands take the opposite of NumPy's scalar branch, complex one-element `prod` skips the `1+0j` identity, `median` returns the middle element instead of its `np.mean`, complex `cumprod` multiplies element 0 by `1+0j`, the default `einsum`'s zero-filled accumulator for bare products; the N-D size-1 flat `cumprod` returning 0-d, which NaN a flat sum of several NaNs keeps (and a complex128 short run's NaN per part), an axis sum in a cast loop whose pinned rows are longer than `np.getbufsize()` (group 9: NumPy splits them across fills), the plain C-contiguous sum along an outer axis keeping a column's first NaN where NumPy keeps the later row's (group 15); raw-bit asserts, because `0.0 == -0.0`. Groups 10 to 14 are fixed (2026-10-27, the np-layer dtype plan's np.average family): the reversed / broadcast operands' sums and means (`da7adc53`; findings 5 / 10, X12, X14; tests moved to `Math/np.sum.ReversedBroadcast.Test.cs`) and np.average over a tuple axis (`a2e9fe85`, `97a3cc51`; test moved to `Statistics/np.average.TupleAxes.Test.cs`). The add.reduce identity class — a sum/mean/nansum/nanmean/average/trapezoid/einsum-sum/np.evaluate-sum of only `-0.0` keeping `-0.0`, one-element nan-reductions returning `(1,)`, the complex 1-D `nansum` throw, the float16 nan-axis wrong-element reads, `np.mean`'s float64 empty result — is fixed and its tests moved to `Math/np.sum.Identity.Test.cs`), `OpenBugs.FancyIndex.cs` (fancy indexing against NumPy's three `mapping.c` routes: an N-D index array that is not C-contiguous, beside a slice / ellipsis / integer, is read in MEMORY order — wrong values from the getter, wrong positions from the setter; and the result LAYOUT — NumPy's transposed MapIter view for an index behind a slice, the index arrays' order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, incl. `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has all-zero strides, a slice keeps its parent's strides on an extent-0 axis; NumSharp does neither), `OpenBugs.PolynomialNaN.cs` (the `numpy.polynomial` U3/U4 step-table integral kernels keep the wrong NaN per statement — `lagint` float16 overflow / `hermeint` float16 NaN-in-`k` / `lagint` float64 `scl=+inf`; raw-bit asserts vs NumPy 2.4.2, win-amd64), `OpenBugs.SortUniqueNaN.cs` (`np.unique`/`unique_values` keep a float32/float64 NaN's payload and sign where NumPy's sort-first unique returns the canonical positive quiet NaN; `np.sort` ignores `kind`, canonicalizing where NumPy's `stable`/`mergesort` keep every NaN's bits), `OpenBugs.Matrix.cs` (the array library below numpy.matrix, found by the matrix tier: a fancy assignment into an offset view throws, and four result-layout gaps — cumprod, imag of a real F array (fixed, its pin kept as a regression test), round of a broadcast operand, conjugate of a transposed strided view; the pins of np.dot N-D × M-D in float64 and the flat np.prod in a cast loop moved to `LinearAlgebra/np.dot.Test.cs` and `Math/np.prod.CastLoop.Test.cs` when they were fixed), `OpenBugs.ErrorParity.cs` (FIXED regression pins since 2026-10-08, plan X36: the error-MESSAGE gaps a 2026-10-06 sweep found — the stacking family's empty operand list leaking .NET's "Value cannot be an empty collection." (now NumPy's `ValueError` "need at least one array to concatenate" / "…to stack"), `moveaxis`/`rollaxis`/`swapaxes`/`squeeze`'s legacy `axis (5) … dimension (2)` texts (now NumPy's `AxisError` with its `source:`/`destination:`/`axis2:` prefix), and `moveaxis`'s length mismatch as a bare `Exception` with a stray backtick (now NumPy's `ValueError`)). `OpenBugs.UfuncOut.cs` is gone: its pin (`np.power(x, 2.0, out=o)` called `pow` where NumPy takes `x*x`) was fixed with plan X13 (2026-10-06) and moved to `Math/np.power.StrideZero.Test.cs`. `OpenBugs.IndexSearchLayout.cs` is gone too: `argwhere` / `flatnonzero` / `unravel_index` return NumPy's views since 2026-10-08 (plan X37), and its tests moved to `Indexing/IndexSearchLayout.Test.cs`. Group 5 (`np.var`/`np.std` at a degenerate size) is fixed: np.var / np.std are NumPy's `_var` since 2026-10-05, its tests moved to `Math/np.var.NumPyPort.Test.cs`, and the registry's **V1** branch is gone. `OpenBugs.ReductionKeywords.cs` (the max / min family without NumPy's `out=`/`initial=`/`where=`) is fixed the same day (plan A4): its tests moved to `Selection/np.max.Keywords.Test.cs`. Group 4 (`np.nanstd`/`np.nanvar` returning `(1,)` for a 1-D axis) is fixed the same day: they are NumPy's `nanvar`, and its test moved to `Math/np.nanvar.NumPyPort.Test.cs`. The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, not here, because the bug exists only in optimized code and they need the lifetime child process (see "Differential-Fuzz Pipeline"): none is open since 2026-10-09 (the 28 found were fixed by the weaver's operand roots and pinned in the gate; `LifetimeOracleTests.Gaps.cs` and its per-gap tests are gone). A new open gap gets a `Lifetime_LT<nn>_*` test beside the aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
+**OpenBugs files**: `OpenBugs.MatrixOperand.cs` (the matrix boundary's gaps outside its oracle tier: `np.gradient` and `np.meshgrid` return plain arrays in their result structs where NumPy returns matrices, MO06 / MO07), `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel), `OpenBugs.Random.cs` (random), `OpenBugs.BroadcastReduce.cs` (broadcast reduce), `OpenBugs.Reductions.cs` (how a reduction STARTS: flat `cumsum` loses a leading `-0.0`, the managed size-1 `dot`/`inner` operands take the opposite of NumPy's scalar branch, complex one-element `prod` skips the `1+0j` identity, `median` returns the middle element instead of its `np.mean`, complex `cumprod` multiplies element 0 by `1+0j`, the default `einsum`'s zero-filled accumulator for bare products; the N-D size-1 flat `cumprod` returning 0-d, which NaN a flat sum of several NaNs keeps (and a complex128 short run's NaN per part), an axis sum in a cast loop whose pinned rows are longer than `np.getbufsize()` (group 9: NumPy splits them across fills), the plain C-contiguous sum along an outer axis keeping a column's first NaN where NumPy keeps the later row's (group 15); raw-bit asserts, because `0.0 == -0.0`. Groups 10 to 14 are fixed (2026-10-27, the np-layer dtype plan's np.average family): the reversed / broadcast operands' sums and means (`da7adc53`; findings 5 / 10, X12, X14; tests moved to `Math/np.sum.ReversedBroadcast.Test.cs`) and np.average over a tuple axis (`a2e9fe85`, `97a3cc51`; test moved to `Statistics/np.average.TupleAxes.Test.cs`). The add.reduce identity class — a sum/mean/nansum/nanmean/average/trapezoid/einsum-sum/np.evaluate-sum of only `-0.0` keeping `-0.0`, one-element nan-reductions returning `(1,)`, the complex 1-D `nansum` throw, the float16 nan-axis wrong-element reads, `np.mean`'s float64 empty result — is fixed and its tests moved to `Math/np.sum.Identity.Test.cs`), `OpenBugs.FancyIndex.cs` (fancy indexing against NumPy's three `mapping.c` routes: an N-D index array that is not C-contiguous, beside a slice / ellipsis / integer, is read in MEMORY order — wrong values from the getter, wrong positions from the setter; and the result LAYOUT — NumPy's transposed MapIter view for an index behind a slice, the index arrays' order for a lone index or arrays on every axis, the source's order for the other axes of a non-C source, incl. `Generator.permutation` of a non-C 3-D source), `OpenBugs.EmptyStrides.cs` (a zero-size array NumPy allocates has all-zero strides, a slice keeps its parent's strides on an extent-0 axis; NumSharp does neither), `OpenBugs.PolynomialNaN.cs` (the `numpy.polynomial` U3/U4 step-table integral kernels keep the wrong NaN per statement — `lagint` float16 overflow / `hermeint` float16 NaN-in-`k` / `lagint` float64 `scl=+inf`; raw-bit asserts vs NumPy 2.4.2, win-amd64), `OpenBugs.SortUniqueNaN.cs` (both pins fixed, kept as regression tests: `np.unique`/`unique_values`/`unique_counts`' value routes write NumPy's sort NaN, the positive quiet NaN, for float32/float64 (`86f0f944`), and `np.sort`'s `stable`/`mergesort` keep every NaN's bits), `OpenBugs.Matrix.cs` (the array library below numpy.matrix, found by the matrix tier: a fancy assignment into an offset view throws, and four result-layout gaps — cumprod, imag of a real F array (fixed, its pin kept as a regression test), round of a broadcast operand, conjugate of a transposed strided view; the pins of np.dot N-D × M-D in float64 and the flat np.prod in a cast loop moved to `LinearAlgebra/np.dot.Test.cs` and `Math/np.prod.CastLoop.Test.cs` when they were fixed), `OpenBugs.ErrorParity.cs` (FIXED regression pins since 2026-10-08, plan X36: the error-MESSAGE gaps a 2026-10-06 sweep found — the stacking family's empty operand list leaking .NET's "Value cannot be an empty collection." (now NumPy's `ValueError` "need at least one array to concatenate" / "…to stack"), `moveaxis`/`rollaxis`/`swapaxes`/`squeeze`'s legacy `axis (5) … dimension (2)` texts (now NumPy's `AxisError` with its `source:`/`destination:`/`axis2:` prefix), and `moveaxis`'s length mismatch as a bare `Exception` with a stray backtick (now NumPy's `ValueError`)). `OpenBugs.UfuncOut.cs` is gone: its pin (`np.power(x, 2.0, out=o)` called `pow` where NumPy takes `x*x`) was fixed with plan X13 (2026-10-06) and moved to `Math/np.power.StrideZero.Test.cs`. `OpenBugs.IndexSearchLayout.cs` is gone too: `argwhere` / `flatnonzero` / `unravel_index` return NumPy's views since 2026-10-08 (plan X37), and its tests moved to `Indexing/IndexSearchLayout.Test.cs`. Group 5 (`np.var`/`np.std` at a degenerate size) is fixed: np.var / np.std are NumPy's `_var` since 2026-10-05, its tests moved to `Math/np.var.NumPyPort.Test.cs`, and the registry's **V1** branch is gone. `OpenBugs.ReductionKeywords.cs` (the max / min family without NumPy's `out=`/`initial=`/`where=`) is fixed the same day (plan A4): its tests moved to `Selection/np.max.Keywords.Test.cs`. Group 4 (`np.nanstd`/`np.nanvar` returning `(1,)` for a 1-D axis) is fixed the same day: they are NumPy's `nanvar`, and its test moved to `Math/np.nanvar.NumPyPort.Test.cs`. The LIFETIME OpenBugs (lost GC anchors) live in the Oracle project, not here, because the bug exists only in optimized code and they need the lifetime child process (see "Differential-Fuzz Pipeline"): none is open since 2026-10-09 (the 28 found were fixed by the weaver's operand roots and pinned in the gate; `LifetimeOracleTests.Gaps.cs` and its per-gap tests are gone). A new open gap gets a `Lifetime_LT<nn>_*` test beside the aggregate `Lifetime_KnownGaps` (and `LifetimeOracleTests.Scaled.cs`'s `LifetimeScaled_KnownGaps`).
 
 **Auditing the whole category (2026-10-05).** Run `TestCategory=OpenBugs&TestCategory!=HighMemory` (`[LargeMemoryTest]` adds the
 OpenBugs category to memory-heavy NON-bug tests) in Release AND Debug on both TFMs; a test that passes in all four has its

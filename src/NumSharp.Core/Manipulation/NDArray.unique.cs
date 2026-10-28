@@ -140,15 +140,28 @@ namespace NumSharp
             => UniqueEngine.Compute(this, return_index, return_inverse, return_counts, axis, equal_nan, sorted);
 
         /// <summary>
-        ///     Find the unique elements of an array.<br></br>
-        ///
-        ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
-        ///     * the indices of the input array that give the unique values<br></br>
-        ///     * the indices of the unique array that reconstruct the input array<br></br>
-        ///     * the number of times each unique value comes up in the input array<br></br>
+        ///     The sorted distinct values of this array, found with a hash set: a legacy helper that no NumSharp code calls,
+        ///     kept for subclasses (it is <c>protected</c> on a public, unsealed class). <c>np.unique</c> does not run it and
+        ///     its answer is not NumPy's in the cases listed under remarks; call <see cref="unique(int?, bool, bool)"/> for
+        ///     NumPy's answer.
         /// </summary>
-        /// <returns></returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html
+        /// <typeparam name="T">The CLR type of the array's dtype. The elements are read as <typeparamref name="T"/> without
+        ///     a check, so any other type reinterprets the bytes.</typeparam>
+        /// <returns>A new 1-D array of the distinct values in ascending order. Values that
+        ///     <see cref="EqualityComparer{T}.Default"/> calls equal are one value: every NaN is one value, and so are -0.0
+        ///     and +0.0; the one kept is the first met in C order, with its bits.</returns>
+        /// <remarks>
+        ///     Where the answer differs from NumPy's <c>np.unique</c>:
+        ///     <list type="bullet">
+        ///       <item><description>a float16 NaN sorts first, because <see cref="Half.CompareTo(Half)"/> orders a NaN below
+        ///         every value (float32 and float64 put it last, as NumPy does);</description></item>
+        ///       <item><description>the NaN kept has the bits of the first NaN met, where NumPy's sort writes the positive
+        ///         quiet NaN for float32 and float64.</description></item>
+        ///     </list>
+        ///     A non-contiguous array is read through <see cref="flat"/>, a raveled copy that is not disposed: its buffer
+        ///     returns to the pool only when the finalizer runs.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.unique.html
+        /// </remarks>
         protected NDArray unique<T>() where T : unmanaged, IComparable<T>
         {
             unsafe
@@ -180,7 +193,8 @@ namespace NumSharp
                 var arraySlice = new ArraySlice<T>(memoryBlock);
                 Hashset<T>.CopyTo(hashset, arraySlice);
 
-                // NumPy returns sorted unique values with NaN at end
+                // Ascending order. float32 / float64 put a NaN last (NumPy's place for it); every other type sorts by its
+                // CompareTo, which puts a float16 NaN first.
                 SortUnique<T>(memoryBlock.Address, count);
 
                 // Create NDArray directly from ArraySlice (no additional allocation)
@@ -190,9 +204,14 @@ namespace NumSharp
 
         /// <summary>
         /// Sorts the unique values using LongIntroSort. For float/double, uses NaN-aware comparison
-        /// that places NaN at the end (matching NumPy behavior).
+        /// that places NaN at the end (matching NumPy behavior). Every other type sorts by its own
+        /// <see cref="IComparable{T}.CompareTo"/>, which puts a float16 NaN first. The sort is not stable,
+        /// which is harmless here only because the values are distinct.
         /// Supports long indexing for arrays exceeding int.MaxValue elements.
         /// </summary>
+        /// <typeparam name="T">The element type.</typeparam>
+        /// <param name="ptr">The first of <paramref name="count"/> values, sorted in place.</param>
+        /// <param name="count">The number of values.</param>
         private static unsafe void SortUnique<T>(T* ptr, long count) where T : unmanaged, IComparable<T>
         {
             if (typeof(T) == typeof(double))

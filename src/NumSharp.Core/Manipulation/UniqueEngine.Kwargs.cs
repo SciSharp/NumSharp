@@ -157,9 +157,10 @@ namespace NumSharp
 
         // ----- NaN-aware float paths -----
         //
-        //  Strategy (values only, counts only): do an O(n) partition pass to push NaN values to the end of the
-        //  array, then call default Array.Sort on the non-NaN prefix only. This
-        //  eliminates the Comparer<T> delegate overhead which previously doubled
+        //  Strategy (float32 / float64 values only, counts only): do an O(n) partition pass to push NaN values
+        //  to the end of the array, then sort the non-NaN prefix only, with the radix (RadixSortValues,
+        //  UniqueEngine.Radix.cs; it was the default Array.Sort, and before that a custom NaN comparer). The
+        //  partition eliminated the Comparer<T> delegate overhead which had doubled
         //  sort time (custom NaN comparer: ~22 ms / 100K doubles, default sort:
         //  ~11 ms; partition cost: ~0.5 ms; net win is ~2× on float types).
         //  An index or an inverse takes uniqueFlatArgsorted instead (NumPy's argsort and gather), and so does every

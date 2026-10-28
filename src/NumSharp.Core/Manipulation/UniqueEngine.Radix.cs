@@ -22,22 +22,36 @@ namespace NumSharp
         //
         //  Bit-parity is by construction: these transforms are the SAME monotonic unsigned keys
         //  AxisSort uses (so ascending key order == NumPy value order, -0.0 sorts before +0.0
-        //  exactly as Array.Sort's default float comparer), and the caller keeps EVERY surrounding
-        //  step unchanged (NaN partition to the tail with original bits preserved, mask via IEEE
-        //  Equals, first-occurrence via min-perm-within-run, inverse reshape, counts). Radix is
-        //  stable, so a perm's within-run order is ascending-index — first occurrence — which the
-        //  existing min-scan also recovers, so outputs are identical to the BCL path it replaces.
+        //  exactly as Array.Sort's default float comparer). The callers (since the np-layer plan's
+        //  np.unique family, 2026-10-28):
+        //    - the integer family, char and bool with an index or an inverse (and counts past the hash
+        //      path's 2^28 bound) sort keys + perm here (RadixArgSortKeysPerm, uniqueFlatSorted<T>). Radix
+        //      is stable, so a run's permutation order is ascending index (first occurrence), which the
+        //      emit's min-perm-within-run scan also recovers: the outputs are those of the BCL path this
+        //      replaced;
+        //    - float32 / float64 values alone and counts alone sort the non-NaN prefix here
+        //      (RadixSortValues) after the NaN partition, and WriteSortNaNs then writes NumPy's sort NaN
+        //      into the tail (NumPy sorts in place there). The -0.0-below-+0.0 key makes -0.0 the value
+        //      of a run of zeros whenever the line holds one; NumPy's x86-simd-sort orders equal keys its
+        //      own way and may keep +0.0, a divergence left as it is;
+        //    - the integer hash path's high-cardinality bail-out sorts and dedups here (RadixSortValues +
+        //      RadixDedupSortedInt, UniqueEngine.Hash.cs).
+        //  The index and inverse routes of float16 / float32 / float64 / complex128, and every float16
+        //  call, do not come here: they are NumPy's argsort-and-gather statements over AxisSort.ArgSort
+        //  (uniqueFlatArgsorted<T>, UniqueEngine.Kwargs.cs).
         //
         //  Scope: the 12 fixed-width numeric dtypes with a monotonic key (bool/byte/sbyte/int16/
         //  uint16/char/int32/uint32/int64/uint64/single/double). Half (no Vector<Half>, needs a
-        //  float compare), Decimal (16-byte value equality) and Complex (lexicographic) keep the
-        //  BCL/scalar path — the same three dtypes AxisSort routes to its scalar kernel.
+        //  float compare), Decimal (16-byte value equality) and Complex (lexicographic) never sort
+        //  here — the same three dtypes AxisSort's VALUE sort routes to its scalar kernel (its argsort
+        //  radix-sorts Half and Complex too, with keys that fold what NumPy calls equal).
         // ============================================================================
 
         /// <summary>True when dtype <paramref name="tc"/> has a monotonic radix key (see class remarks).</summary>
         /// <param name="tc">The dtype.</param>
         /// <returns>True for the 12 fixed-width dtypes the radix routes serve; false for Half, Decimal, Complex and text,
-        ///     which keep the BCL sort.</returns>
+        ///     which never sort through this file (Decimal keeps the BCL sort; Half and Complex take the routes the class
+        ///     remarks name).</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool CanRadixSortUnique(NPTypeCode tc) => tc switch
         {

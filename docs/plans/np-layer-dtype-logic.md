@@ -492,6 +492,102 @@ already specifies it for ufuncs; today `ArrayMethod` serves casts only.
 
 ## 9. State log
 
+- **2026-10-28, P2's fourteenth family: np.unique moved into `UniqueEngine`, its flat routes NumPy's `_unique1d`
+  statements; np.argsort's float16 / complex128 radix on the way.** Commits on `strings`, developed in a scratch
+  worktree and landed by fast-forward. The referees: the snapshot (np.unique, NDArray.unique's two members,
+  np.unique_values / unique_counts / unique_inverse / unique_all and the four set routines, which run np.unique's body
+  over their concatenation: 13,728 calls) run under `NUMSHARP_DEBUG_GUARD_PAGES=1`, `twin_unique.py` (each line rebuilt
+  in NumPy: dtype, shape, C / F / OWNDATA / WRITEABLE flags and SHA-256 of every array of a result struct, or the
+  exception's type and text; NumPy's values-only hash order recognized as such), `ab_unique.py` (parent against fix,
+  each changed line classified by the twin), and NumPy probes for what the snapshot cannot reach (its pool holds no
+  offset view and no tie that two routes resolve differently), compared by raw bits and written into the unit tests:
+  signed zeros (14 lines x 20 routes), NaN bits (6 inputs x 16 calls), complex NaN classes (3 lines x 16 flag
+  combinations), complex NaN-part order (8 inputs x 6 routes):
+  - `40806f6c` the snapshot tool renders the arrays of np.unique's result structs (`STRUCT Name(prop=...)` over their
+    NDArray properties: 2,326 of the family's 6,570 lines were an opaque `VAL <type>`) and reaches the set routines'
+    second operand `ar2`. 13,728 calls. Before any fix the twin agreed on 12,507 of the 13,144 comparable lines (584
+    decimal lines have no NumPy twin).
+  - `7dbd3ef5` the move (D1: NumPy writes unique in Python): np.unique's statements after its class boundaries, the
+    instance members' routing and text checks, the Array-API bodies, and the sort + mask, hash and radix kernels that
+    were NDArray instance members, into the internal operation class `UniqueEngine`
+    (`Manipulation/UniqueEngine{,.Kwargs, .Hash,.Radix,.Text,.VString}.cs`). 13,728 calls byte-identical; R1 drops the
+    family's six rows (7 text and 93 numeric lines).
+  - `d8562466` (D4) with an axis, a C-contiguous view at an offset (an np.split / np.array_split / np.unstack child) is
+    read from its own first element: the row path's slab helpers read the storage's base, so `np.unique(np.split(a,
+    3)[1], axis=0)` returned the parent's first rows with their counts and indices (silent wrong values); the
+    long-indexed complex fallback had the same read.
+  - `5364e93e` (D4) the values with an axis are NumPy's view at axis 0 too (`reshape_uniq`'s `np.moveaxis`, so
+    `flags.owndata` is False; the numeric row path returned the gathered owner). 312 lines fixed.
+  - `86f0f944` (D4) the values-only and counts-only routes of float32 / float64 write NumPy's sort NaN, the positive
+    quiet NaN, for two elements or more (NumPy's in-place `ar.sort()`); the `[OpenBugs]` pin of
+    `OpenBugs.SortUniqueNaN.cs` passes and stays as a regression test.
+  - `80c3b6a9` np.argsort of float16 and complex128 sorts by radix (they ran `Array.Sort` over an index array with a
+    class comparer): a 16-bit key with both zeros folded and the NaNs appended in input order, and a stable partition by
+    complex NaN class with per-class 64-bit keys. The same indices: 10,562 random lines against the replaced kernel,
+    1,200 NumPy cases, 6 planted bugs killed. NPY/NS float16 x1.58-x15.6 (x0.40-x1.02), complex128 x0.91-x4.97
+    (x0.27-x0.61). It lands before the next fix because that fix, on the comparison argsort, ran float16 2.2x and
+    complex128 1.2x slower than the partition route it replaces.
+  - `fa98ba8a` (D4) the index and inverse routes over float16 / float32 / float64 / complex128 (and float16 / complex128
+    counts) are NumPy's argsort-and-gather statements over that stable order: a collapsed NaN run's value and index are
+    the same NaN's, a run of zeros keeps the first zero in input order (it kept `-0.0`), complex NaN classes come in
+    `CDOUBLE_LT`'s order. Probes: complex NaN classes 30 of 48 lines differed, then 0; signed zeros 98 of 280, then 42
+    (each on the values-only / counts-only routes: NumPy's x86-simd-sort orders equal keys its own way); NaN bits 64 of
+    96, then 2 (float16 values alone, closed by `6871394e`). NPY/NS at 100K: float16 `return_index` x1.16 -> x8.56,
+    complex128 x0.72 -> x3.35.
+  - `bed773f6` (D4) the long-indexed fallback (above `Array.MaxLength` elements) runs the same statements on the same
+    routes (it kept the unstable partition and an introsort, and for complex the smallest position of a collapsed NaN
+    run as its index); tested through reflection on small lines.
+  - `b3403dd4` (D4) complex values with a NaN part come out in NumPy's sort order without equal_nan: np.unique takes the
+    hash path for both settings and sorts (it partitioned them in partition order); np.unique_counts / np.unique_values
+    sort them the same way; above 2^28 elements the argsort route gives the hash path's answer (under equal_nan the
+    collapsed class is its first value in C order). Probe: 18 of 48 lines differed, then 2 (equal NaN-part values
+    below).
+  - `a267ee2a` step 2 (C11): the complex hash path sorts its distinct values by radix from 2,048 on, and a line of
+    32,768 elements or more whose first sixteenth is over 90 % distinct goes to the argsort route (the hash costs ~15 ns
+    per element plus ~110 ns per distinct value, the argsort route 50-70 ns: they break even near 0.3 n distinct). The
+    insert loop is split at the checkpoint: a test inside it cost 10 us at 1K. np.unique_counts(complex) at 100K x0.63
+    -> x1.82; a cardinality sweep at 100K / 1M x1.59-x4.74 (the hash alone fell to x1.07).
+  - `6871394e` step 2: float16 values alone take the stable argsort route too, which is NumPy's answer where NumPy's
+    float16 in-place sort keeps equal values in input order (the scalar `quicksort_<half_tag>` on hosts without
+    AVX512_SPR / ICL: an insertion sort for lines of up to 16 elements), and NPY/NS x0.95 -> x5.49 at 100K. The NaN-bits
+    probe matches on all 96 lines.
+  - Evidence at `6871394e`: the twin agrees on 12,819 of the 13,144 comparable lines (12,507 at `40806f6c`). The 325
+    left: 264 lines in NumPy's hash order (values alone over integers, bool, complex and text with `sorted=False`, and
+    np.unique_values: the documented divergence, NumSharp sorts); 25 char lines whose `DTypePromotionError` against a
+    StringDType `ar2` names NumSharp's own `CharDType` (the twin's uint16 proxy names `UInt16DType`); and 36 lines of
+    NumPy's order between equal values over the snapshot's operands with both zeros, float32 / float64 values alone and
+    counts alone (x86-simd-sort, 26 lines) and float16 lines of 24 and 48 elements (NumPy's introsort, 10 lines: values,
+    counts and an inverse alike). The A/B of the last two commits, which were not snapshotted one by one, changed 2
+    lines, both np.union1d over a float16 operand with both zeros: one is now NumPy's (24 elements; NumPy keeps the
+    first zero), one moved into the introsort's tie order (48 elements; NumPy keeps `+0.0`, the stable order the first
+    zero, `-0.0`; np.unique of the same 24 values already differed so at `40806f6c`).
+  - **Found:**
+    - NumPy's float16 in-place sort and quicksort argsort are its scalar introsort on a host without AVX512_SPR / ICL
+      (`numpy/_core/meson.build` builds the 16-bit SIMD sort for those only), and complex128's on every host: stable up
+      to 16 elements, its own tie order past them. Only `return_index` asks NumPy for mergesort, so an inverse without
+      an index meets that order too. Probed for complex128 (`probe_czero_long.py`, 840 line and route pairs): over
+      random lines of 17-100 elements with zeros of both signs, NumPy's counts and inverse routes keep another zero than
+      the first in input order in 7-14 of 20 lines; its values alone (the hash) and `return_index` never do, nor any
+      route up to 16 elements. NumSharp keeps the first zero on every complex route (the stable argsort and the hash
+      alike).
+    - NumPy's float32 / float64 in-place sort is x86-simd-sort's (AVX2 here): which zero represents a run of zeros is
+      CPU-dependent, and the values-only routes keep the radix's `-0.0`.
+    - The order of equal NaN-part complex values on NumPy's hash path (`nan+0j` and `nan-0j`) is MSVC's
+      `std::unordered_set` iteration order (NumPy hashes `-0.0` as `+0.0`), not reproduced; NumSharp keeps input order.
+    - The snapshot proves the move and `5364e93e`; `d8562466`, `86f0f944`, `fa98ba8a`, `bed773f6` and `b3403dd4` rest on
+      the probes and unit tests (each fails on its parent).
+    - A span sort with a struct comparer was slower than the delegate sort it would replace (98 us at 1,000 values, 21
+      ms at 80,000).
+    - The legacy protected `NDArray.unique<T>()` has no caller; its doc was malformed (CS1570), and its float16 NaN
+      sorts first (`Half.CompareTo`): the doc says so now (probed).
+    - The branch CLAUDE.md pointed at `docs/UNIQUE_DESIGN.md`, which is in `docs/stale-docs/` since 2026-09-04 (fixed);
+      eight other design docs moved there are still named by their old paths.
+  - Left: float32 / float64 values alone and counts alone, x0.51-x0.86 NumPy (its SIMD sort against NumSharp's radix);
+    complex128 np.unique_counts at 1K, x0.91 (NumPy's sort at its fixed cost); the long-indexed routes are tested only
+    through reflection on small lines; NDW012 at eight sites of `UniqueEngine.Text.cs`, moved as they were.
+  - At `6871394e`: NumSharp.Tests net10.0 20,692 passed / 11 skipped and net8.0 20,691 / 11; Oracle net10.0 and net8.0
+    412 / 2 skipped, 0 failed; the carved-gap replays find every carved case of their 82 gaps still diverging.
+  - Next in P2: np.convolve / np.correlate (`Math/NDArray.Convolve.cs` 4, `Math/NDArray.Correlate.cs` 4 and 1).
 - **2026-10-27, P2's thirteenth family: np.logical_and / or / xor / not moved into `TensorEngine.LogicalAnd` /
   `LogicalOr` / `LogicalXor` / `LogicalNot`; the ufunc machinery's NumPy orders and layouts fixed on the way; one pass
   for the common call.** Commits on `strings`, developed in a scratch worktree and landed by fast-forward. The referees:
