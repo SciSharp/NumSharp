@@ -1563,9 +1563,11 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Long-indexed unique for NaN-capable types Single/Double/Half (not Complex).
-        ///     Partitions NaN to the tail, sorts non-NaN portion with default compare,
-        ///     stabilizes the NaN-tail's perm order (ascending) to match NumPy mergesort.
+        ///     Long-indexed unique for NaN-capable types Single/Double/Half (not Complex), by the managed routes' split: a
+        ///     call with an index or an inverse (and a float16 counts-only call) is NumPy's argsort and gather
+        ///     (<see cref="uniqueFlatArgsortedLong{T}"/>); a values-only or counts-only call is NumPy's in-place sort, here
+        ///     the NaNs partitioned to the tail, the non-NaN portion sorted with the default compare, the NaN tail's records
+        ///     put back in input order, and a float32 / float64 tail written as NumPy's sort NaN.
         /// </summary>
         /// <typeparam name="T">The operand's element type (Half, float or double).</typeparam>
         /// <param name="a">The operand (any layout; only read).</param>
@@ -1580,6 +1582,10 @@ namespace NumSharp
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
+            // An index, an inverse, or float16 counts: the statements the managed route runs (uniqueFlatArgsorted).
+            if (return_index || return_inverse || (return_counts && typeof(T) == typeof(Half)))
+                return uniqueFlatArgsortedLong<T>(a, n, equal_nan, return_index, return_inverse, return_counts);
+
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
             KeyPerm<T>* kp = block.Address;
             PopulateKeyPerm(a, kp, n);
@@ -1588,7 +1594,8 @@ namespace NumSharp
             Utilities.LongIntroSort.Sort(kp, firstNaN);
             StabilizeNaNTailLong<T>(kp, firstNaN, n);
             // NumPy's values-only and counts-only routes sort in place, which rewrites every float32 / float64 NaN
-            // (WriteSortNaNs); the index and inverse routes argsort and keep the bits.
+            // (WriteSortNaNs); the index and inverse routes argsort and keep the bits (they returned above, so the test
+            // always holds here).
             if (!return_index && !return_inverse)
                 WriteSortNaNsLong(kp, firstNaN, n);
 
@@ -1622,7 +1629,102 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Long-indexed unique for Complex. Complex doesn't implement IComparable&lt;&gt;
+        ///     The long-indexed form of <see cref="uniqueFlatArgsorted{T}"/> for float16 / float32 / float64: NumPy's
+        ///     argsort-and-gather statements over unmanaged records. <c>perm = ar.argsort()</c> is NumSharp's stable argsort
+        ///     (its radix scratch is unmanaged, so a line of any length), <c>aux = ar[perm]</c> fills the records (every
+        ///     value keeps its bits), the NaNs sorted last are the tail, and <see cref="BuildMaskAndEmitLong{T}"/> builds the
+        ///     outputs.
+        /// </summary>
+        /// <typeparam name="T">Half, float or double (the operand's element type).</typeparam>
+        /// <param name="a">The operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <param name="equal_nan">True: the NaNs are one run from the first of them in sorted order; false: a run each.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="EmitOutputsLong{T}"/>).</returns>
+        /// <remarks>
+        ///     <see cref="EmitOutputsLong{T}"/>'s index is each run's smallest position. Under the stable order that is the
+        ///     position at the run's start, NumPy's <c>perm[mask]</c>: equal values keep their input order, and so do the
+        ///     NaNs of a collapsed run. Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the
+        ///     tests); the record block is not disposed, its buffer returns through the block's finalizer.
+        /// </remarks>
+        private static unsafe NDArray[] uniqueFlatArgsortedLong<T>(NDArray a, long n, bool equal_nan,
+            bool return_index, bool return_inverse, bool return_counts)
+            where T : unmanaged, IComparable<T>, IEquatable<T>
+        {
+            var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);
+            KeyPerm<T>* kp = block.Address;
+            using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))
+            {
+                long* perm = (long*)order.Address;   // a fresh C-contiguous int64 array: its first element is at its base
+                if (a.Shape.IsContiguous)
+                {
+                    // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                    T* src = (T*)a.Address + a.Shape.offset;
+                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[p]; kp[j].Perm = p; }
+                }
+                else
+                {
+                    // perm indexes the C-order flattening; a.flat is that flattening (a copy for this layout).
+                    using var flat = a.flat;
+                    T* src = (T*)flat.Address;
+                    Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[getOffset(p)]; kp[j].Perm = p; }
+                }
+            }
+            long firstNaN = n;
+            while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
+            return BuildMaskAndEmitLong<T>(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts);
+        }
+
+        /// <summary>
+        ///     The long-indexed form of <see cref="uniqueFlatArgsorted{T}"/> for complex128: the stable argsort (NumPy's
+        ///     complex order: the NaN classes <c>R+nanj</c>, <c>nan+Rj</c>, <c>nan+nanj</c> after the other values), the
+        ///     gather into <see cref="ComplexKeyPerm"/> records, and <see cref="BuildMaskAndEmitLongComplex"/> with the
+        ///     index at each run's start (NumPy's <c>perm[mask]</c>: a collapsed run of values with a NaN part is
+        ///     represented by the first of them in sorted order, not by the first in input order).
+        /// </summary>
+        /// <param name="a">The complex128 operand (any layout; only read).</param>
+        /// <param name="n">Its element count (positive).</param>
+        /// <param name="equal_nan">True: the values with a NaN part are one run; false: a run each.</param>
+        /// <param name="return_index">Also return the first-occurrence indices.</param>
+        /// <param name="return_inverse">Also return the reconstruction indices.</param>
+        /// <param name="return_counts">Also return the counts.</param>
+        /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
+        /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests); the record
+        ///     block is not disposed, its buffer returns through the block's finalizer.</remarks>
+        private static unsafe NDArray[] uniqueFlatArgsortedLongComplex(NDArray a, long n, bool equal_nan,
+            bool return_index, bool return_inverse, bool return_counts)
+        {
+            var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
+            ComplexKeyPerm* kp = block.Address;
+            using (var order = AxisSort.ArgSort(a, null, NPY_SORTKIND.NPY_STABLESORT))
+            {
+                long* perm = (long*)order.Address;
+                if (a.Shape.IsContiguous)
+                {
+                    Complex* src = (Complex*)a.Address + a.Shape.offset;
+                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[p]; kp[j].Perm = p; }
+                }
+                else
+                {
+                    using var flat = a.flat;
+                    Complex* src = (Complex*)flat.Address;
+                    Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                    for (long j = 0; j < n; j++) { long p = perm[j]; kp[j].Key = src[getOffset(p)]; kp[j].Perm = p; }
+                }
+            }
+            long firstNaN = n;
+            while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
+            return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts,
+                                               indexAtRunStart: true);
+        }
+
+        /// <summary>
+        ///     Long-indexed unique for Complex. A call with an index, an inverse or counts is NumPy's argsort and gather
+        ///     (<see cref="uniqueFlatArgsortedLongComplex"/>), as on the managed route; a values-only call partitions the
+        ///     values with a NaN part to the tail and sorts the rest. Complex doesn't implement IComparable&lt;&gt;
         ///     so we use a dedicated <see cref="ComplexKeyPerm"/> struct and explicit lex
         ///     comparison via Comparison&lt;&gt; delegate.
         /// </summary>
@@ -1641,6 +1743,10 @@ namespace NumSharp
         private static unsafe NDArray[] uniqueFlatSortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
+            // An index, an inverse or counts: the statements the managed route runs (uniqueFlatArgsorted).
+            if (return_index || return_inverse || return_counts)
+                return uniqueFlatArgsortedLongComplex(a, n, equal_nan, return_index, return_inverse, return_counts);
+
             var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
             ComplexKeyPerm* kp = block.Address;
 
@@ -1713,11 +1819,15 @@ namespace NumSharp
         /// <param name="return_index">Also return the first-occurrence indices.</param>
         /// <param name="return_inverse">Also return the reconstruction indices.</param>
         /// <param name="return_counts">Also return the counts.</param>
+        /// <param name="indexAtRunStart">True: each index is the position at its run's start, NumPy's <c>perm[mask]</c> (for
+        ///     records in NumPy's argsort order: a collapsed run of values with a NaN part holds different values, and
+        ///     NumPy's index is the first of them in sorted order). False (the values-only partition route, whose sort is
+        ///     unstable): each run's smallest position, the first occurrence.</param>
         /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
         /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
         private static unsafe NDArray[] BuildMaskAndEmitLongComplex(
             NDArray a, ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
-            bool return_index, bool return_inverse, bool return_counts)
+            bool return_index, bool return_inverse, bool return_counts, bool indexAtRunStart = false)
         {
             long nanStart = firstNaN;
 
@@ -1758,7 +1868,17 @@ namespace NumSharp
             results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
             int outPos = 1;
 
-            if (return_index)
+            if (return_index && indexAtRunStart)
+            {
+                // perm[mask]: the position of each run's first record.
+                var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
+                long* iDst = idxBlock.Address;
+                long oIdx = 0;
+                for (long i = 0; i < n; i++)
+                    if (mask[i] != 0) iDst[oIdx++] = kp[i].Perm;
+                results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount));
+            }
+            else if (return_index)
             {
                 var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
                 var idxSlice = new ArraySlice<long>(idxBlock);

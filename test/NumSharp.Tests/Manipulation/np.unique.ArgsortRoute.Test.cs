@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using AwesomeAssertions;
@@ -217,6 +218,70 @@ namespace NumSharp.Tests.Manipulation
                     bool origNaN = (bool)np.isnan(orig);
                     if (origNaN) ((bool)np.isnan(rebuilt)).Should().BeTrue();
                     else ((bool)(rebuilt == orig)).Should().BeTrue($"{dt} n={n} en={en}: values[inverse[{i}]] == ar[{i}]");
+                }
+            }
+        }
+
+        /// <summary>
+        ///     The long-indexed fallback (above <see cref="Array.MaxLength"/> elements, reached here by reflection on small
+        ///     lines) runs the same statements: for every call the managed route answers with the argsort statements, the
+        ///     fallback's outputs are byte-identical to np.unique's (values, index, inverse, counts), on the probe lines of the
+        ///     other tests and on random lines with ties, both zeros and NaNs of several payloads.
+        /// </summary>
+        [TestMethod]
+        public void LongIndexedFallback_GivesTheManagedOutputs()
+        {
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            var longFloat = typeof(UniqueEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongFloat" && m.IsGenericMethodDefinition);
+            var longComplex = typeof(UniqueEngine).GetMethods(flags).First(m => m.Name == "uniqueFlatSortedLongComplex");
+
+            double nan = BitConverter.UInt64BitsToDouble(Nan);
+            double D(ulong b) => BitConverter.UInt64BitsToDouble(b);
+            var lines = new List<NDArray>
+            {
+                np.array(new[] { new Complex(nan, 0), new Complex(1, nan), new Complex(2, 0) }),
+                np.array(new[] { new Complex(nan, nan), new Complex(nan, 1), new Complex(0, nan), new Complex(1, 0) }),
+                np.array(new[] { new Complex(nan, 2), new Complex(nan, 1), new Complex(1, 0), new Complex(nan, 1) }),
+                np.array(new[] { new Complex(-0.0, -0.0), new Complex(0, 0), new Complex(1, 0) }),
+                np.array(new[] { 0.0, -0.0, 1.0 }),
+                np.array(new[] { D(0x7FF8000000000123), D(0xFFF8000000000000), 1.0 }),
+                np.array(new[] { D(0x7FF0000000000001), 1.0, D(Nan) }),
+                np.array(new[] { BitConverter.UInt32BitsToSingle(0x7FC00123), BitConverter.UInt32BitsToSingle(0xFFC00000), 1.0f }),
+                np.array(new[] { BitConverter.UInt16BitsToHalf(0x7E01), BitConverter.UInt16BitsToHalf(0xFE00), (Half)1f }),
+            };
+            var rng = new System.Random(20261028);
+            double[] pool = { 0.0, -0.0, 1.5, -2.0, double.PositiveInfinity, nan, D(0xFFF8000000000000), D(0x7FF8000000000005) };
+            foreach (int n in new[] { 5, 130, 1000 })
+            {
+                var raw = Enumerable.Range(0, n).Select(_ => pool[rng.Next(pool.Length)]).ToArray();
+                lines.Add(np.array(raw));
+                lines.Add(np.array(raw).astype(np.float32));
+                lines.Add(np.array(raw).astype(np.float16));
+                lines.Add(np.array(raw.Select((v, i) => new Complex(v, pool[(i * 7 + rng.Next(3)) % pool.Length])).ToArray()));
+                lines.Add(np.array(raw).reshape(n / 5, 5)["::-1"]);   // a non-contiguous operand (rows reversed)
+            }
+
+            foreach (var a in lines)
+            foreach (bool ri in new[] { false, true })
+            foreach (bool rv in new[] { false, true })
+            foreach (bool rc in new[] { false, true })
+            foreach (bool en in new[] { true, false })
+            {
+                // The routes the managed side answers with the argsort statements: an index or an inverse, and the counts of
+                // float16 / complex128 (float32 / float64 counts and every values-only call are NumPy's in-place sort).
+                bool argsorted = ri || rv || (rc && (a.typecode == NPTypeCode.Half || a.typecode == NPTypeCode.Complex));
+                if (!argsorted) continue;
+                NDArray[] want = np.unique(a, return_index: ri, return_inverse: rv, return_counts: rc, equal_nan: en);
+                var args = new object[] { a, (long)a.size, en, ri, rv, rc };
+                var got = a.typecode == NPTypeCode.Complex
+                    ? (NDArray[])longComplex.Invoke(null, args)
+                    : (NDArray[])longFloat.MakeGenericMethod(a.dtype.type).Invoke(null, args);
+                got.Length.Should().Be(want.Length);
+                for (int k = 0; k < got.Length; k++)
+                {
+                    got[k].shape.Should().Equal(want[k].shape, $"{a.typecode} n={a.size} ri={ri} rv={rv} rc={rc} en={en} output {k}");
+                    np.ascontiguousarray(got[k]).tobytes().Should().Equal(np.ascontiguousarray(want[k]).tobytes(),
+                        $"{a.typecode} n={a.size} ri={ri} rv={rv} rc={rc} en={en} output {k}");
                 }
             }
         }
