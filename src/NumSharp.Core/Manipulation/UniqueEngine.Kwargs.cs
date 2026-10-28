@@ -20,11 +20,11 @@ namespace NumSharp
         //      ret = aux[mask], perm[mask], inverse (cumsum(mask) - 1 scattered through perm), counts (run lengths)
         //
         //  Routes here:
-        //      float16 / float32 / float64 / complex128 with an index or an inverse (and float16 / complex128 counts):
-        //          those statements over NumPy's stable argsort order (uniqueFlatArgsorted).
-        //      float values only or counts only: the NaNs partitioned to the tail, the prefix sorted (radix; BCL for
-        //          float16), NumPy's sort NaN written for float32 / float64; complex values only: NumPy's hash path
-        //          (above 2^28 elements the same answer from the stable argsort).
+        //      float16 / float32 / float64 / complex128 with an index or an inverse (and every float16 call, complex128
+        //          counts): those statements over NumPy's stable argsort order (uniqueFlatArgsorted).
+        //      float32 / float64 values only or counts only: the NaNs partitioned to the tail, the prefix radix-sorted,
+        //          NumPy's sort NaN written; complex values only: NumPy's hash path (a high-cardinality line, and above
+        //          2^28 elements every line, gets the same answer from the stable argsort).
         //      the integer family, char, bool: the hash paths for values or counts alone (UniqueEngine.Hash.cs), a
         //          stable radix argsort of keys and permutation for an index or an inverse; decimal: the BCL sort.
         //      above Array.MaxLength elements: the long-indexed fallback (uniqueFlatSortedLong*).
@@ -162,7 +162,8 @@ namespace NumSharp
         //  eliminates the Comparer<T> delegate overhead which previously doubled
         //  sort time (custom NaN comparer: ~22 ms / 100K doubles, default sort:
         //  ~11 ms; partition cost: ~0.5 ms; net win is ~2× on float types).
-        //  An index or an inverse takes uniqueFlatArgsorted instead (NumPy's argsort and gather).
+        //  An index or an inverse takes uniqueFlatArgsorted instead (NumPy's argsort and gather), and so does every
+        //  float16 call (its stable radix argsort is faster than a comparison sort of float16 keys).
 
         /// <summary>
         ///     The flat unique of a float64 operand, by NumPy's two routes: a values-only or counts-only call is NumPy's
@@ -295,10 +296,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The flat unique of a float16 operand: a values-only call partitions the NaNs to the tail and BCL-sorts the
-        ///     non-NaN prefix (Half has no radix key here; the sort is unstable, so which of a <c>-0.0</c> / <c>+0.0</c>
-        ///     pair survives is its choice, as it is NumPy's in-place sort's); every other call is NumPy's argsort and
-        ///     gather (<see cref="uniqueFlatArgsorted{T}"/>).
+        ///     The flat unique of a float16 operand: every call is NumPy's argsort and gather
+        ///     (<see cref="uniqueFlatArgsorted{T}"/>), over the stable order; for values or counts alone that is the answer
+        ///     of NumPy's in-place float16 sort where that sort keeps equal values in input order (see
+        ///     <see cref="uniqueValuesOnlyHalf"/>).
         /// </summary>
         /// <param name="a">The operand (any layout; only read).</param>
         /// <param name="return_index">Also return the first-occurrence indices.</param>
@@ -323,8 +324,12 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Values-only float16 path: extract, partition the NaNs to the tail, BCL-sort the prefix, dedup-emit; no
-        ///     permutation.
+        ///     Values-only float16 path: the argsort statements without outputs (<see cref="uniqueFlatArgsorted{T}"/>). NumPy
+        ///     runs <c>ar.sort()</c> here, and on a host without AVX-512 its float16 sort is its scalar quicksort: the bits
+        ///     kept, and below 17 elements an insertion sort that keeps equal values in input order, which is the stable
+        ///     order's answer (the first zero of a run of zeros, the first NaN in input order); longer lines may differ in
+        ///     which of two equal values represents them. The stable radix argsort is also about six times faster than the
+        ///     comparison sort of the float16 keys this replaced (100,000 elements: 1.5 ms, was 8.9 ms; NumPy 8.5 ms).
         /// </summary>
         /// <param name="a">The float16 operand (any layout; only read).</param>
         /// <param name="n">Its element count (positive).</param>
@@ -335,10 +340,7 @@ namespace NumSharp
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongFloat<Half>(a, n, equal_nan, false, false, false)[0];
 
-            var keys = ExtractKeysOnly<Half>(a, n);
-            long firstNaN = PartitionNaN_HalfKeysOnly(keys, n);
-            System.Array.Sort(keys, 0, (int)firstNaN);
-            return EmitValuesOnlyFloat<Half>(keys, n, firstNaN, equal_nan);
+            return uniqueFlatArgsorted<Half>(a, n, false, false, false, equal_nan)[0];
         }
 
         /// <summary>
@@ -702,25 +704,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The values-only NaN partition for float16 keys (see <see cref="PartitionNaN_DoubleKeysOnly"/>).
-        /// </summary>
-        /// <param name="keys">The keys, partitioned in place.</param>
-        /// <param name="n">The number of keys.</param>
-        /// <returns>The index of the first NaN (<paramref name="n"/> when there is none).</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long PartitionNaN_HalfKeysOnly(Half[] keys, long n)
-        {
-            long hi = n;
-            long i = 0;
-            while (i < hi)
-            {
-                if (Half.IsNaN(keys[i])) { hi--; (keys[i], keys[hi]) = (keys[hi], keys[i]); }
-                else i++;
-            }
-            return hi;
-        }
-
-        /// <summary>
         /// Values-only emit for non-NaN-capable types: single dedup-scan over sorted keys.
         /// </summary>
         /// <typeparam name="T">The key type (no NaN: bool, the integers, char, decimal).</typeparam>
@@ -747,10 +730,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Values-only emit for float types (Double/Single/Half). Handles the NaN tail:
+        /// Values-only emit for float types (Double/Single). Handles the NaN tail:
         /// equal_nan=true → one NaN representative; equal_nan=false → every NaN unique.
         /// </summary>
-        /// <typeparam name="T">The key type (Half, float or double).</typeparam>
+        /// <typeparam name="T">The key type (float or double).</typeparam>
         /// <param name="keys">The sorted non-NaN prefix followed by the NaN tail (partition order).</param>
         /// <param name="n">The number of keys.</param>
         /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
@@ -1575,10 +1558,10 @@ namespace NumSharp
 
         /// <summary>
         ///     Long-indexed unique for NaN-capable types Single/Double/Half (not Complex), by the managed routes' split: a
-        ///     call with an index or an inverse (and a float16 counts-only call) is NumPy's argsort and gather
-        ///     (<see cref="uniqueFlatArgsortedLong{T}"/>); a values-only or counts-only call is NumPy's in-place sort, here
-        ///     the NaNs partitioned to the tail, the non-NaN portion sorted with the default compare, the NaN tail's records
-        ///     put back in input order, and a float32 / float64 tail written as NumPy's sort NaN.
+        ///     call with an index or an inverse, and every float16 call, is NumPy's argsort and gather
+        ///     (<see cref="uniqueFlatArgsortedLong{T}"/>); a float32 / float64 values-only or counts-only call is NumPy's
+        ///     in-place sort, here the NaNs partitioned to the tail, the non-NaN portion sorted with the default compare,
+        ///     the NaN tail's records put back in input order, and the tail written as NumPy's sort NaN.
         /// </summary>
         /// <typeparam name="T">The operand's element type (Half, float or double).</typeparam>
         /// <param name="a">The operand (any layout; only read).</param>
@@ -1593,8 +1576,8 @@ namespace NumSharp
             bool return_index, bool return_inverse, bool return_counts)
             where T : unmanaged, IComparable<T>, IEquatable<T>
         {
-            // An index, an inverse, or float16 counts: the statements the managed route runs (uniqueFlatArgsorted).
-            if (return_index || return_inverse || (return_counts && typeof(T) == typeof(Half)))
+            // An index, an inverse, or float16: the statements the managed route runs (uniqueFlatArgsorted).
+            if (return_index || return_inverse || typeof(T) == typeof(Half))
                 return uniqueFlatArgsortedLong<T>(a, n, equal_nan, return_index, return_inverse, return_counts);
 
             var block = new UnmanagedMemoryBlock<KeyPerm<T>>(n);

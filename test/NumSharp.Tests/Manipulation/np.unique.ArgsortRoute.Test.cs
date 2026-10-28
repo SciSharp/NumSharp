@@ -182,6 +182,11 @@ namespace NumSharp.Tests.Manipulation
             var c = np.unique(np.array(new[] { H(0x7E01), H(0xFE00), (Half)1f }), return_counts: true);
             Bits16(c[0]).Should().Equal((ushort)0x3C00, (ushort)0x7E01);
             Ints(c[1]).Should().Equal(1L, 2);
+            // float16 values alone too (NumPy's float16 in-place sort, an insertion sort below 17 elements, keeps equal NaNs
+            // in input order): [pay, -nan, 1] gives [1, pay], and both NaNs in input order without equal_nan.
+            Bits16(np.unique(np.array(new[] { H(0x7E01), H(0xFE00), (Half)1f })).values).Should().Equal((ushort)0x3C00, (ushort)0x7E01);
+            Bits16(np.unique(np.array(new[] { H(0x7E01), H(0xFE00), (Half)1f }), equal_nan: false).values)
+                .Should().Equal((ushort)0x3C00, (ushort)0x7E01, (ushort)0xFE00);
         }
 
         /// <summary>
@@ -267,9 +272,10 @@ namespace NumSharp.Tests.Manipulation
             foreach (bool rc in new[] { false, true })
             foreach (bool en in new[] { true, false })
             {
-                // The routes the managed side answers with the argsort statements: an index or an inverse, and the counts of
-                // float16 / complex128 (float32 / float64 counts and every values-only call are NumPy's in-place sort).
-                bool argsorted = ri || rv || (rc && (a.typecode == NPTypeCode.Half || a.typecode == NPTypeCode.Complex));
+                // The routes the managed side answers with the argsort statements: an index or an inverse, every float16
+                // call, and complex128 counts (float32 / float64 values or counts alone are NumPy's in-place sort; complex
+                // values alone the hash path).
+                bool argsorted = ri || rv || a.typecode == NPTypeCode.Half || (rc && a.typecode == NPTypeCode.Complex);
                 if (!argsorted) continue;
                 NDArray[] want = np.unique(a, return_index: ri, return_inverse: rv, return_counts: rc, equal_nan: en);
                 var args = new object[] { a, (long)a.size, en, ri, rv, rc };
