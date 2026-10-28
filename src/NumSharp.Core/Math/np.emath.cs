@@ -33,9 +33,12 @@ namespace NumSharp
     ///     <see cref="arctanh"/>).
     ///
     ///     <para>
-    ///     Every function is a PURE COMPOSITION over the existing <c>np.*</c> ufuncs — a domain scan
-    ///     (<c>np.any</c> of a comparison), an optional cast to complex128, then the standard real/complex
-    ///     ufunc — a line-for-line port of NumPy 2.4.2 <c>numpy/lib/_scimath_impl.py</c>. Because the
+    ///     Each function's body is its engine member (<see cref="TensorEngine.EmathSqrt"/> and its siblings
+    ///     in <c>TensorEngine.Scimath.cs</c>), which <c>DefaultEngine</c> implements as a PURE COMPOSITION over
+    ///     the existing <c>np.*</c> ufuncs — a domain scan (<c>np.any</c> of a comparison), an optional cast to
+    ///     complex128, then the standard real/complex ufunc — a line-for-line port of NumPy 2.4.2
+    ///     <c>numpy/lib/_scimath_impl.py</c>. The methods here keep the signatures, the class-boundary
+    ///     statements and one call. Because the
     ///     numerics ARE the already-validated <c>np.sqrt</c>/<c>np.log</c>/<c>np.arccos</c>/… kernels,
     ///     <b>emath introduces no divergence of its own</b> — every difference from NumPy traces to a
     ///     documented property of the underlying ufunc (validated by an 897-case layout-aware
@@ -82,7 +85,7 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.sqrt(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.sqrt(s.x))
-            : np.sqrt(FixRealLtZero(x));
+            : x.TensorEngine.EmathSqrt(x);
 
         /// <summary>
         ///     Compute the natural logarithm of <paramref name="x"/>, returning the complex principal value
@@ -103,7 +106,7 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log(s.x))
-            : np.log(FixRealLtZero(x));
+            : x.TensorEngine.EmathLog(x);
 
         /// <summary>
         ///     Compute the base-10 logarithm of <paramref name="x"/>, returning the complex principal value
@@ -122,7 +125,7 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log10(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log10(s.x))
-            : np.log10(FixRealLtZero(x));
+            : x.TensorEngine.EmathLog10(x);
 
         /// <summary>
         ///     Compute the base-2 logarithm of <paramref name="x"/>, returning the complex principal value
@@ -141,7 +144,7 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.log2(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.log2(s.x))
-            : np.log2(FixRealLtZero(x));
+            : x.TensorEngine.EmathLog2(x);
 
         /// <summary>
         ///     Take the log base <paramref name="n"/> of <paramref name="x"/>, computed and returned in the
@@ -167,12 +170,7 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(n, x))
                 return NDCharArrayBoundary.Plain((self: this, n, x), static s => s.self.logn(s.n, s.x));
-            // NumPy fixes BOTH operands independently, then divides. A negative element in n (e.g. logn(-2, 8))
-            // makes log(n) complex, so real log(x) / complex log(n) promotes the quotient to complex — exactly
-            // NumPy's `nx.log(x) / nx.log(n)`.
-            x = FixRealLtZero(x);
-            n = FixRealLtZero(n);
-            return np.log(x) / np.log(n);
+            return n.TensorEngine.EmathLogn(n, x);
         }
 
         /// <summary>
@@ -206,11 +204,7 @@ namespace NumSharp
             // a numpy.char.chararray operand too: NumPy's asarray drops either class (NDCharArrayBoundary)
             if (NDCharArrayBoundary.Sees(x, p))
                 return NDCharArrayBoundary.Plain((self: this, x, p), static s => s.self.power(s.x, s.p));
-            // Base: negative real element -> complex128. Exponent: negative real element -> float (so a
-            // negative integer exponent does not hit np.power's integer-domain "negative integer power" error).
-            x = FixRealLtZero(x);
-            p = FixIntLtZero(p);
-            return np.power(x, p);
+            return x.TensorEngine.EmathPower(x, p);
         }
 
         /// <summary>
@@ -233,7 +227,7 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arccos(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arccos(s.x))
-            : np.arccos(FixRealAbsGt1(x));
+            : x.TensorEngine.EmathArccos(x);
 
         /// <summary>
         ///     Compute the inverse sine of <paramref name="x"/>, returning the complex principal value for
@@ -252,7 +246,7 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arcsin(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arcsin(s.x))
-            : np.arcsin(FixRealAbsGt1(x));
+            : x.TensorEngine.EmathArcsin(x);
 
         /// <summary>
         ///     Compute the inverse hyperbolic tangent of <paramref name="x"/>, returning the complex
@@ -274,108 +268,6 @@ namespace NumSharp
             ? NDMatrixBoundary.Plain((self: this, x), static s => s.self.arctanh(s.x))
             : NDCharArrayBoundary.Sees(x)   // a numpy.char.chararray operand too: asarray drops either class
             ? NDCharArrayBoundary.Plain((self: this, x), static s => s.self.arctanh(s.x))
-            : np.arctanh(FixRealAbsGt1(x));
-
-        // ── Domain-fix helpers (ports of numpy/lib/_scimath_impl.py) ──────────────────────────────
-        // Each returns the input UNCHANGED unless a whole-array complex/float promotion is required, in
-        // which case a fresh copy is returned (matching NumPy's `_tocomplex`/`x*1.0`, both of which copy).
-        // A COMPLEX input never enters the scan: NumPy's `isreal(x) & (x<0)` is false for a complex element
-        // (imag != 0), and where it IS real-and-negative the `_tocomplex` re-copy is dtype-idempotent for an
-        // already-complex128 array — so the standard complex ufunc applied to the untouched input produces
-        // the identical result. Skipping the scan for complex input is therefore an exact, cheaper shortcut.
-
-        /// <summary>
-        ///     NumPy's <c>_fix_real_lt_zero</c>: convert <paramref name="x"/> to complex128 if it is a real
-        ///     array with ANY element <c>&lt; 0</c>; otherwise return it unchanged. Drives
-        ///     <see cref="sqrt"/>/<see cref="log"/>/<see cref="log10"/>/<see cref="log2"/>/<see cref="logn"/>
-        ///     and the base of <see cref="power"/>.
-        /// </summary>
-        /// <param name="x">The array to inspect (any real dtype, or already complex).</param>
-        /// <returns>
-        ///     <paramref name="x"/> unchanged when it is complex, empty, or has no negative real element; a
-        ///     complex128 copy when any real element is strictly negative. The scan is
-        ///     <c>np.any(x &lt; 0)</c> — a NaN never triggers (<c>nan &lt; 0</c> is false) and <c>-0.0</c>
-        ///     never triggers, both matching NumPy's element-wise <c>x &lt; 0</c>.
-        /// </returns>
-        /// <exception cref="TypeError">Text (<see cref="LessThanZeroTextError"/>).</exception>
-        [NDScoped]
-        private static NDArray FixRealLtZero(NDArray x)
-        {
-            if (x.typecode == NPTypeCode.Complex)
-                return x; // complex in -> complex ufunc out; the scan/_tocomplex would be a value-identical no-op
-            // Text: NumPy's `x < 0` has no loop for text and a Python int, whatever the size (an empty array included,
-            // which the fast scan below would skip).
-            if (Backends.Strings.NDStringUfuncs.IsText(x))
-                throw LessThanZeroTextError(x);
-            // Fused early-exit scan for the hot contiguous float32/float64 case (no abs/bool temp, one pass);
-            // null => not the fast path, so use the composition, whose `x < 0` boolean is layout- and
-            // promotion-invariant (an element is negative or it is not) and equals `any(isreal(x) & (x<0))`
-            // for a real dtype (where isreal is all-true). np.any early-exits at the first true lane.
-            bool neg = Backends.Kernels.EmathDomainScan.AnyNegative(x) ?? np.any(x < (NDArray)0);
-            return neg ? x.astype(np.complex128) : x;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>_fix_real_abs_gt_1</c>: convert <paramref name="x"/> to complex128 if it is a real
-        ///     array with ANY element whose magnitude exceeds 1; otherwise return it unchanged. Drives
-        ///     <see cref="arccos"/>/<see cref="arcsin"/>/<see cref="arctanh"/>.
-        /// </summary>
-        /// <param name="x">The array to inspect (any real dtype, or already complex).</param>
-        /// <returns>
-        ///     <paramref name="x"/> unchanged when it is complex, empty, or every element has <c>|x| &lt;= 1</c>;
-        ///     a complex128 copy when any real element has <c>|x| &gt; 1</c>. The comparison is strict, so
-        ///     <c>|x| == 1</c> stays real; a <c>nan</c> never triggers (<c>|nan| &gt; 1</c> is false) while
-        ///     an infinity does (<c>|inf| &gt; 1</c> is true) — all matching NumPy's <c>abs(x) &gt; 1</c>.
-        /// </returns>
-        /// <exception cref="TypeError">Text: NumPy's <c>abs(x)</c> has no text loop (<c>ufunc 'absolute' did not contain a
-        ///     loop with signature matching types &lt;class 'numpy.dtypes.StrDType'&gt; -&gt; None</c>), even for an empty
-        ///     array.</exception>
-        [NDScoped]
-        private static NDArray FixRealAbsGt1(NDArray x)
-        {
-            if (x.typecode == NPTypeCode.Complex)
-                return x;
-            if (Backends.Strings.NDStringUfuncs.IsText(x))
-                throw new TypeError($"ufunc 'absolute' did not contain a loop with signature matching types {x.dtype.Meta} -> None");
-            bool big = Backends.Kernels.EmathDomainScan.AnyAbsGreaterThanOne(x) ?? np.any(np.abs(x) > (NDArray)1);
-            return big ? x.astype(np.complex128) : x;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>_fix_int_lt_zero</c>: promote <paramref name="p"/> to a float (via <c>p * 1.0</c>)
-        ///     if it is a real array with ANY element <c>&lt; 0</c>; otherwise return it unchanged. Used for
-        ///     the EXPONENT of <see cref="power"/> so that a negative integer exponent does not hit
-        ///     <c>np.power</c>'s integer-domain error.
-        /// </summary>
-        /// <param name="p">The exponent array to inspect (any real dtype, or already complex).</param>
-        /// <returns>
-        ///     <paramref name="p"/> unchanged when it is complex or has no negative real element; otherwise
-        ///     <c>p * 1.0</c> — a WEAK multiply (NEP50), so an integer <paramref name="p"/> becomes float64
-        ///     while a <c>float32</c>/<c>float16</c> <paramref name="p"/> keeps its width (identity for finite
-        ///     values, <c>-0.0</c>/<c>±inf</c>/<c>nan</c> preserved). NOT a cast to complex — only the base
-        ///     promotes to complex.
-        /// </returns>
-        /// <exception cref="TypeError">Text (<see cref="LessThanZeroTextError"/>).</exception>
-        [NDScoped]
-        private static NDArray FixIntLtZero(NDArray p)
-        {
-            if (p.typecode == NPTypeCode.Complex)
-                return p;
-            if (Backends.Strings.NDStringUfuncs.IsText(p))
-                throw LessThanZeroTextError(p);
-            bool neg = Backends.Kernels.EmathDomainScan.AnyNegative(p) ?? np.any(p < (NDArray)0);
-            return neg ? p * 1.0 : p;
-        }
-
-        /// <summary>
-        ///     NumPy's refusal of the domain scans' <c>x &lt; 0</c> for text: the comparison promoter names the text class and
-        ///     the Python int's abstract class, <c>ufunc 'less' did not contain a loop with signature matching types
-        ///     (&lt;class 'numpy.dtypes.StrDType'&gt;, &lt;class 'numpy.dtypes._PyLongDType'&gt;) -&gt; None</c> (C#'s own
-        ///     <c>(NDArray)0</c> is a strong int32 array and would name <c>Int32DType</c>).
-        /// </summary>
-        /// <param name="x">The text array.</param>
-        /// <returns>The exception (not thrown).</returns>
-        private static TypeError LessThanZeroTextError(NDArray x)
-            => new TypeError($"ufunc 'less' did not contain a loop with signature matching types ({x.dtype.Meta}, {DTypeRegistry.PyLong}) -> None");
+            : x.TensorEngine.EmathArctanh(x);
     }
 }
