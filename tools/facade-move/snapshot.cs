@@ -311,6 +311,9 @@ static class Snapshot
         // int32 ramp, with text, with a 0-d, three of it, none; see MakeEinsumOps) and optimize. out, dtype, order and
         // casting take the general roles.
         EinsumSubscripts, EinsumOps, EinsumOptimize,
+        // np.polyint's integration constants k: an NDArray (null, a 0-d, one value, five, two, integers, text) or the C#
+        // double of its convenience overload. Its order m takes the IntArg role.
+        PolyintK, PolyintKDouble,
         Default, Unsupported,
     }
 
@@ -393,6 +396,14 @@ static class Snapshot
     {
         Type t = p.ParameterType;
         string n = p.Name;
+        // np.polyint's order and constants (only its): m around its default 1 (0, 2, a negative order, 5), k its own
+        // variants, before the general array roles would read an NDArray k as a second operand.
+        if (p.Member.DeclaringType == typeof(np) && p.Member.Name == "polyint")
+        {
+            if (n == "m" && t == typeof(int)) return Role.IntArg;
+            if (n == "k" && t == typeof(NDArray)) return Role.PolyintK;
+            if (n == "k" && t == typeof(double)) return Role.PolyintKDouble;
+        }
         // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
         // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
         // are unchanged by the NDMatrix support.
@@ -857,6 +868,23 @@ static class Snapshot
                         Add(a.ToString(CultureInfo.InvariantCulture), () => a);
                 break;
             }
+            case Role.PolyintK:
+                // None first (zeros), then a 0-d constant, one value (broadcast to every order), five (enough for every
+                // order varied), two (too few past order 2: "k must be a scalar or a rank-1 array of length 1 or >m."),
+                // integers, and text.
+                Add("null", () => null);
+                Add("zero_d", () => np.array(2.5));
+                Add("one", () => np.array(new[] { 2.5 }));
+                Add("five", () => np.array(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 }));
+                Add("two", () => np.array(new[] { 1.0, 2.0 }));
+                Add("int", () => np.array(new[] { 1, 2, 3, 4, 5 }));
+                Add("text", () => np.array(new[] { "a", "b", "c", "d", "e" }));
+                break;
+            case Role.PolyintKDouble:
+                Add("2.5", () => 2.5);
+                Add("-1.5", () => -1.5);
+                Add("nan", () => double.NaN);
+                break;
             case Role.IntArg:
             {
                 // The default first (the base value), then values on both sides of it and one out of range.
