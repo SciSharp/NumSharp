@@ -352,5 +352,25 @@ namespace NumSharp
         /// <exception cref="AxisError"><paramref name="axis"/> out of range.</exception>
         /// <exception cref="TypeError">Text with <paramref name="n"/> above 0: subtract has no string loop.</exception>
         public abstract NDArray Diff(NDArray a, int n = 1, int axis = -1, object prepend = null, object append = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.digitize(x, bins, right=False)</c>: the index of the bin each value of <paramref name="x"/>
+        ///     falls in, <c>searchsorted</c> on the bins (reversed for decreasing bins) with the side <paramref name="right"/>
+        ///     selects.
+        /// </summary>
+        /// <param name="x">The values to bin, any shape (not null).</param>
+        /// <param name="bins">The 1-D monotonic bin edges (not null).</param>
+        /// <param name="right">Whether an interval includes its right edge instead of its left one.</param>
+        /// <returns>The int64 bin indices, of <paramref name="x"/>'s shape.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> or <paramref name="bins"/> is null.</exception>
+        /// <exception cref="IncorrectTypeException">A complex <paramref name="x"/> (<c>x may not be complex</c>,
+        ///     checked first).</exception>
+        /// <exception cref="ValueError"><paramref name="bins"/> not 1-D, or not monotonic (<c>bins must be
+        ///     monotonically increasing or decreasing</c>).</exception>
+        /// <exception cref="InvalidCastException"><paramref name="bins"/> that do not cast 'safely' to float64 (NumPy's
+        ///     TypeError text).</exception>
+        /// <exception cref="TypeError">A StringDType <paramref name="x"/> against numeric bins: Python cannot order the
+        ///     pair.</exception>
+        public abstract NDArray Digitize(NDArray x, NDArray bins, bool right = false);
     }
 }
