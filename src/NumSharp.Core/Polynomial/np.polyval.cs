@@ -34,48 +34,7 @@ namespace NumSharp
             // a numpy.char.chararray p alone: NumPy's asarray(p) drops the class
             if (NDCharArrayBoundary.Sees(p))
                 return NDCharArrayBoundary.Plain((p, x), static s => polyval(s.p, s.x));
-            p = np.asarray(p);
-
-            // A poly1d `x` composes the two polynomials — handled by the poly1d overload below.
-            x = np.asanyarray(x);
-
-            // NumPy's `for pv in p` cannot iterate a 0-d coefficient array (a scalar is not a
-            // length-1 polynomial — that would be `[c]`). A 1-D length-1 array is a valid constant.
-            if (p.ndim == 0)
-                throw new TypeError("iteration over a 0-d array");
-
-            long n = p.size;
-            // No coefficients — NumPy's loop never runs, so the result is zeros_like(x) (a string x included).
-            if (n == 0)
-                return np.zeros_like(x);
-
-            // NumPy's Horner loop starts with y = zeros_like(x) and y * x: text in x has no multiply loop. Text in p meets
-            // the first add, y * x + pv, whose left side keeps x's dtype; iterating a 1-D p yields NumPy SCALARS, whose
-            // descriptor is their own text length (np.str_('a') is <U1, '' too), while an N-D p yields rows of p's dtype.
-            // (A StringDType x is named by class; a 1-D StringDType p iterates as Python strs, so its add meets the legacy
-            // resolver with the str's own <U descriptor, as a U p's np.str_ does; an N-D one names the classes.)
-            if (Backends.Strings.NDStringUfuncs.IsText(x))
-                throw Backends.Strings.NDStringUfuncs.NoLoop("multiply", x.dtype, x.dtype);
-            if (Backends.Strings.NDStringUfuncs.IsText(p))
-                throw Backends.Strings.NDStringUfuncs.NoLoop("add", x.dtype,
-                    p.ndim == 1 ? Backends.Strings.NDStringArrays.ScalarDescr(p.Storage.GetAtIndex(0)) : p.dtype);
-
-            // Horner accumulates `y = y*x + p[k]`. NumPy lets `y` (starting at zeros_like(x)) grow in
-            // dtype as wider coefficients arrive; the fixed common dtype below is bit-identical because
-            // every widening cast (int->wider, float32->float64, real->complex) is exact and `y` starts
-            // at zero. Computing in `result_type` up front lets the whole loop reuse two buffers.
-            NPTypeCode t = np.result_type(p, x);
-            NDArray xc = x.astype(t);
-            NDArray y = np.zeros(x.Shape, t);
-
-            // Iterate from k = 0 so the very first `0 * x` reproduces NumPy's `0*inf -> nan` edge.
-            for (long k = 0; k < n; k++)
-            {
-                np.multiply(y, xc, @out: y);
-                np.add(y, p[k.ToString()], @out: y);
-            }
-
-            return y;
+            return p.TensorEngine.Polyval(p, x);
         }
 
         /// <summary>

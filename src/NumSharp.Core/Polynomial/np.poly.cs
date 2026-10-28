@@ -26,67 +26,7 @@ namespace NumSharp
         public static NDArray poly(NDArray seq_of_zeros)
         {
             using var plain = NDMatrixBoundary.PlainFor(seq_of_zeros);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            seq_of_zeros = np.atleast_1d(seq_of_zeros);
-            bool text = Backends.Strings.NDStringUfuncs.IsText(seq_of_zeros);
-            int nd = seq_of_zeros.ndim;
-
-            NDArray seq;
-            if (nd == 2 && seq_of_zeros.Shape.dimensions[0] == seq_of_zeros.Shape.dimensions[1] && seq_of_zeros.Shape.dimensions[0] != 0)
-            {
-                // Characteristic polynomial: build from the matrix's eigenvalues (a text matrix fails their finiteness
-                // check, NumPy's isfinite TypeError).
-                seq = np.linalg.eigvals(seq_of_zeros);
-            }
-            else if (nd == 1)
-            {
-                // A real (non-object) sequence is cast to its mintypecode float — float32 stays float32,
-                // everything else (int/bool/float16/float64) becomes float64; complex stays complex. Text has no
-                // mintypecode of its own ('U' is in no typeset), so it takes the default 'd': parsed into float64.
-                seq = seq_of_zeros.astype(text ? NPTypeCode.Double : PolyMinType(seq_of_zeros.typecode));
-            }
-            else
-            {
-                throw new ValueError("input must be 1d or non-empty square 2d array.");
-            }
-
-            if (seq.size == 0)
-                return NDArray.Scalar(1.0);
-
-            NPTypeCode dt = seq.typecode;
-            NDArray onesScalar = np.ones(new Shape(1), dt);
-            NDArray negSeq = np.negative(seq);
-
-            // a = ones(1); for each root: a = convolve(a, [1, -root])  (accumulates (x - root) factors).
-            NDArray a = onesScalar;
-            for (long i = 0; i < seq.size; i++)
-            {
-                NDArray factor = np.concatenate(new[] { onesScalar, negSeq[$"{i}:{i + 1}"] }, 0);
-                a = np.convolve(a, factor, "full");
-            }
-
-            // If the roots come as complex conjugate pairs, the coefficients are real — take the real part.
-            if (dt == NPTypeCode.Complex)
-            {
-                NDArray rootsC = seq.astype(NPTypeCode.Complex);
-                if (np.all(np.equal(np.sort(rootsC), np.sort(np.conjugate(rootsC)))))
-                    a = np.real(a).copy();
-            }
-
-            return a;
-        }
-
-        /// <summary>
-        ///     NumPy's <c>mintypecode(dtype.char)</c> as applied by <c>poly</c>: the smallest floating type
-        ///     that holds the roots. float32 preserves; complex preserves; every other type widens to float64.
-        /// </summary>
-        internal static NPTypeCode PolyMinType(NPTypeCode t)
-        {
-            switch (t)
-            {
-                case NPTypeCode.Single: return NPTypeCode.Single;
-                case NPTypeCode.Complex: return NPTypeCode.Complex;
-                default: return NPTypeCode.Double;
-            }
+            return seq_of_zeros.TensorEngine.Poly(seq_of_zeros);
         }
     }
 }

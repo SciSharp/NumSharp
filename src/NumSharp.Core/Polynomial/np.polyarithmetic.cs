@@ -11,7 +11,7 @@ namespace NumSharp
         public static NDArray polyadd(NDArray a1, NDArray a2)
         {
             using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return PolyAddSub(a1, a2, subtract: false);
+            return a1.TensorEngine.Polyadd(a1, a2);
         }
 
         /// <summary>
@@ -21,22 +21,7 @@ namespace NumSharp
         public static NDArray polysub(NDArray a1, NDArray a2)
         {
             using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return PolyAddSub(a1, a2, subtract: true);
-        }
-
-        [NDScoped]
-        private static NDArray PolyAddSub(NDArray a1, NDArray a2, bool subtract)
-        {
-            a1 = np.atleast_1d(a1);
-            a2 = np.atleast_1d(a2);
-            long diff = a2.size - a1.size;
-
-            if (diff > 0)
-                a1 = np.concatenate(new[] { np.zeros(new Shape(diff), a1.typecode), a1 }, 0);
-            else if (diff < 0)
-                a2 = np.concatenate(new[] { np.zeros(new Shape(-diff), a2.typecode), a2 }, 0);
-
-            return subtract ? a1 - a2 : a1 + a2;
+            return a1.TensorEngine.Polysub(a1, a2);
         }
 
         /// <summary>
@@ -53,30 +38,7 @@ namespace NumSharp
         public static NDArray polymul(NDArray a1, NDArray a2)
         {
             using var plain = NDMatrixBoundary.PlainFor(a1, a2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text: NumPy's poly1d trims leading "zeros" of text (empty strings; the trim cannot fail and an all-empty input
-            // becomes the text '0') and convolve then refuses any text operand for want of an item size — so after each
-            // input's rank check the answer is that refusal, whatever the text holds.
-            // StringDType: poly1d trims each input (leading empty strings; an all-empty input becomes the text '0') and
-            // np.convolve answers the pair — its legacy descriptor lookup refuses a StringDType first operand, or falls back
-            // to an OBJECT product whose first element product decides (np.convolve's StringDType route).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a1) || Backends.Strings.NDStringUfuncs.IsVString(a2))
-            {
-                using var t1 = new poly1d(a1);
-                using var t2 = new poly1d(a2);
-                return np.convolve(t1.coeffs, t2.coeffs, "full");
-            }
-            if (Backends.Strings.NDStringUfuncs.IsString(a1) || Backends.Strings.NDStringUfuncs.IsString(a2))
-            {
-                if (np.atleast_1d(a1).ndim > 1 || np.atleast_1d(a2).ndim > 1)
-                    throw new ValueError("Polynomial must be 1d only.");
-                throw Backends.Strings.NDStringUfuncs.NoItemsize();
-            }
-            // poly1d normalisation trims leading zeros (and maps an all-zero input to [0]). The polynomials
-            // own their coefficient arrays (field egress — no ambient scope reclaims them), so they are
-            // disposed here; the convolution is a fresh array, yielded by the [NDScoped] weaver.
-            using var p1 = new poly1d(a1);
-            using var p2 = new poly1d(a2);
-            return np.convolve(p1.coeffs, p2.coeffs, "full");
+            return a1.TensorEngine.Polymul(a1, a2);
         }
 
         /// <summary>
@@ -98,58 +60,7 @@ namespace NumSharp
         public static (NDArray q, NDArray r) polydiv(NDArray u, NDArray v)
         {
             using var plain = NDMatrixBoundary.PlainFor(u, v);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            u = np.atleast_1d(u) + 0.0;   // floated, exactly like NumPy's `+ 0.0`
-            v = np.atleast_1d(v) + 0.0;
-
-            NPTypeCode w = np.result_type(u["0"], v["0"]);              // common type of `u[0] + v[0]`
-            long m = u.size - 1;
-            long n = v.size - 1;
-            NDArray scale = 1.0 / v["0"];
-
-            long qlen = Math.Max(m - n + 1, 1);
-            NDArray q = np.zeros(new Shape(qlen), w);
-            NDArray r = u.astype(w);
-
-            for (long k = 0; k < m - n + 1; k++)
-            {
-                // d = scale * r[k]. NumPy evaluates this SCALAR*SCALAR product through scalarmath —
-                // the NAIVE a_re*b_re - a_im*b_im — NOT the FMA simd_cmul its ARRAY multiply (and hence
-                // NumSharp's complex `*`) uses. For a complex loop we therefore multiply the scalar d
-                // naively to stay bit-identical to NumPy's polydiv; `d * v` below is a scalar*ARRAY
-                // product, which NumPy DOES take through the FMA array loop, so it keeps NumSharp's
-                // (now FMA) complex multiply. (Real dtypes have no scalar/array multiply distinction.)
-                NDArray rk = r[k.ToString()];
-                NDArray d = w == NPTypeCode.Complex ? NaiveComplexScalarMultiply(scale, rk) : scale * rk;
-                q[$"{k}:{k + 1}"] = np.atleast_1d(d);
-                // r[k : k+n+1] -= d * v   (an in-place, length-(n+1) vector update)
-                NDArray seg = r[$"{k}:{k + n + 1}"];
-                np.subtract(seg, d * v, @out: seg);
-            }
-
-            // Strip leading near-zero remainder coefficients (NumPy: rtol 1e-14, keep at least one).
-            while (r.Shape.dimensions[r.ndim - 1] > 1 && np.allclose(r["0"], NDArray.Scalar(0.0), rtol: 1e-14))
-                r = r["1:"];
-
-            return (q, r);
-        }
-
-        /// <summary>
-        ///     Naive (un-fused) complex scalar product <c>a·b</c> — <c>(a_re·b_re − a_im·b_im,
-        ///     a_re·b_im + a_im·b_re)</c> — matching NumPy's <c>scalarmath</c> path, which a
-        ///     <c>np.complex128</c> scalar multiply takes (its ARRAY multiply is the FMA <c>simd_cmul</c>
-        ///     instead). Used by <see cref="polydiv"/> for the scalar quotient coefficient so it stays
-        ///     bit-identical to NumPy; do NOT route array multiplies here.
-        /// </summary>
-        /// <param name="a">Left 0-D complex scalar.</param>
-        /// <param name="b">Right 0-D complex scalar.</param>
-        /// <returns>A 0-D complex NDArray holding the naive product.</returns>
-        private static NDArray NaiveComplexScalarMultiply(NDArray a, NDArray b)
-        {
-            System.Numerics.Complex x = a.GetData<System.Numerics.Complex>()[0];
-            System.Numerics.Complex y = b.GetData<System.Numerics.Complex>()[0];
-            return NDArray.Scalar(new System.Numerics.Complex(
-                x.Real * y.Real - x.Imaginary * y.Imaginary,
-                x.Real * y.Imaginary + x.Imaginary * y.Real));
+            return u.TensorEngine.Polydiv(u, v);
         }
     }
 }
