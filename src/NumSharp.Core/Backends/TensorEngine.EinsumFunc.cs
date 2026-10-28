@@ -7,11 +7,12 @@ namespace NumSharp
 {
     public abstract partial class TensorEngine
     {
-        /// <summary> NumPy's <c>np.einsum(subscripts, *operands, out=None, dtype=None, order='K', casting='safe',
+        /// <summary>
+        ///     NumPy's <c>np.einsum(subscripts, *operands, out=None, dtype=None, order='K', casting='safe',
         ///     optimize=False)</c>: the Einstein summation convention over <paramref name="operands"/>, the whole call
         ///     from the argument checks to the copy into <paramref name="out"/>.
         /// </summary>
-        /// <param name="subscripts"> Comma-separated subscript labels, optionally followed by <c>-&gt;</c> and the
+        /// <param name="subscripts">Comma-separated subscript labels, optionally followed by <c>-&gt;</c> and the
         ///     output labels (<c>"ij,jk-&gt;ik"</c>); spaces are ignored and <c>...</c> broadcasts. Without
         ///     <c>-&gt;</c> the output is every label used once, in ASCII order, after the broadcast dimensions.
         /// </param>

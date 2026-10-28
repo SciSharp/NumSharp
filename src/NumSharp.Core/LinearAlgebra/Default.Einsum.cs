@@ -1,8 +1,7 @@
 // NumPy's numpy/_core/einsumfunc.py (np.einsum's optimize= path, bmm_einsum) as DefaultEngine's Einsum: the argument
 // checks, the parse, the view path, then a left-to-right pairwise fold over the matrix products. The file sits beside
-//   its
-// facade (LinearAlgebra/np.einsum.cs) while its statements call np.*: ratchet R2 counts np.* calls against every file
-// under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
+// its facade (LinearAlgebra/np.einsum.cs) while its statements call np.*: ratchet R2 counts np.* calls against every
+// file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/ in P6.
 
 using System;
 using System.Collections.Generic;
@@ -71,10 +70,8 @@ namespace NumSharp.Backends
             }
 
             // Text (an operand, or a string dtype= request) has no sum-of-products: after the parse and the view path
-            //   above
-            // (which hands text back as a view, as NumPy does), NumPy's operand casts, its bool-zero output fill and
-            //   its
-            // loop lookup refuse it, in that order.
+            // above (which hands text back as a view, as NumPy does), NumPy's operand casts, its bool-zero output fill
+            // and its loop lookup refuse it, in that order.
             Backends.Strings.NDStringUfuncs.ThrowIfEinsum(operands, dtype, casting);
 
             // einsum accumulates in the operands' promoted dtype (NEP50 result_type), NOT np.sum's
