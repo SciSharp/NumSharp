@@ -923,26 +923,28 @@ namespace NumSharp.Backends.Strings
         }
 
         /// <summary>
-        ///     NumPy's answer for <c>np.convolve</c> / <c>np.correlate</c> with a <c>StringDType</c> operand once its earlier
-        ///     checks passed (for <c>np.convolve</c>: the two emptiness checks, the swap by length and the mode; for
-        ///     <c>np.correlate</c>: the mode), in the order of <c>PyArray_Correlate</c> / <c>PyArray_Correlate2</c>.
+        ///     NumPy's answer for a sliding product with a <c>StringDType</c> operand — <c>PyArray_Correlate</c> (behind
+        ///     <c>np.convolve</c>) or <c>PyArray_Correlate2</c> (behind <c>np.correlate</c>) once the mode is parsed — in the
+        ///     order of those functions, over the operands as the C function receives them.
         /// </summary>
-        /// <param name="a">The first operand (for <c>np.convolve</c>: the longer one, after NumPy's swap).</param>
-        /// <param name="v">The second operand (for <c>np.convolve</c>: the kernel, which NumPy reverses).</param>
+        /// <param name="a">The first operand as the C function receives it (for <c>np.convolve</c>: the longer one, after
+        ///     its Python swap).</param>
+        /// <param name="v">The second operand as the C function receives it (for <c>np.convolve</c>: the kernel already
+        ///     reversed, <c>v[::-1]</c>).</param>
         /// <param name="mode">The parsed mode: 0 valid, 1 same, 2 full.</param>
-        /// <param name="convolve">True for <c>np.convolve</c> (<c>multiarray.correlate(a, v[::-1], mode)</c>), false for
-        ///     <c>np.correlate</c> (<c>multiarray.correlate2(a, v, mode)</c>).</param>
+        /// <param name="op">The public NumPy function the C function serves, which the refusal of an object product names:
+        ///     <c>convolve</c> for <c>multiarray.correlate</c>, <c>correlate</c> for <c>multiarray.correlate2</c>.</param>
         /// <returns>The exception to throw (never null).</returns>
         /// <remarks>
         ///     The descriptor lookup first (<see cref="LegacyProductRefusal"/>), then for the OBJECT fallback
         ///     <c>PyArray_FromAny(op, OBJECT, 1, 1)</c> (one dimension each: <c>object of too small depth for desired
         ///     array</c> / <c>object too deep for desired array</c>, the first operand first), <c>_pyarray_correlate</c>'s
-        ///     emptiness checks (correlate only: convolve made them in Python), the swap that makes <c>ap1</c> the longer
-        ///     operand (correlate only), and <c>OBJECT_dot</c>'s first product <c>ap1[0] * ap2[n_left]</c> (<c>n_left</c> 0 /
-        ///     <c>n // 2</c> / <c>n - 1</c> for valid / same / full; convolve's <c>ap2</c> is the reversed kernel). A product
-        ///     that does not raise builds an object array: a <see cref="NotSupportedException"/>.
+        ///     emptiness checks (np.convolve made its own in Python, so they never fire behind it), the swap that makes
+        ///     <c>ap1</c> the longer operand (never behind np.convolve, which swapped already), and <c>OBJECT_dot</c>'s first
+        ///     product <c>ap1[0] * ap2[n_left]</c> (<c>n_left</c> 0 / <c>n // 2</c> / <c>n - 1</c> for valid / same / full).
+        ///     A product that does not raise builds an object array: a <see cref="NotSupportedException"/>.
         /// </remarks>
-        internal static Exception VStringSlidingAnswer(NDArray a, NDArray v, int mode, bool convolve)
+        internal static Exception VStringSlidingAnswer(NDArray a, NDArray v, int mode, string op)
         {
             if (LegacyProductRefusal(a, v) is { } refusal)
                 return refusal;
@@ -952,14 +954,11 @@ namespace NumSharp.Backends.Strings
                 return depthV;
 
             long n1 = a.size, n2 = v.size;
-            if (!convolve)
-            {
-                if (n1 == 0)
-                    return new ValueError("first array argument cannot be empty");
-                if (n2 == 0)
-                    return new ValueError("second array argument cannot be empty");
-            }
-            // _pyarray_correlate makes ap1 the longer operand (np.convolve swapped in Python already, so it never swaps).
+            if (n1 == 0)
+                return new ValueError("first array argument cannot be empty");
+            if (n2 == 0)
+                return new ValueError("second array argument cannot be empty");
+            // _pyarray_correlate makes ap1 the longer operand (behind np.convolve it never swaps: the Python body did).
             NDArray ap1 = a, ap2 = v;
             if (n1 < n2)
             {
@@ -968,10 +967,9 @@ namespace NumSharp.Backends.Strings
                 (n1, n2) = (n2, n1);
             }
             long nLeft = mode switch { 0 => 0, 1 => n2 / 2, _ => n2 - 1 };
-            // np.convolve's ap2 is v[::-1]: its element n_left is v's element n2 - 1 - n_left.
-            long kernelIndex = convolve ? n2 - 1 - nLeft : nLeft;
-            string op = convolve ? "convolve" : "correlate";
-            return (Exception)FirstProductError(ap1, 0, ap2, kernelIndex) ?? ObjectArrayRefusal(op, a, v);
+            // ap2 is read as the C function receives it: np.convolve's reversed kernel is already the view v[::-1], so its
+            // logical element n_left is the original kernel's element n2 - 1 - n_left, as in NumPy.
+            return (Exception)FirstProductError(ap1, 0, ap2, nLeft) ?? ObjectArrayRefusal(op, a, v);
         }
 
         /// <summary>

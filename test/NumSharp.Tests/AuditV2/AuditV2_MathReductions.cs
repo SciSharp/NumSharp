@@ -159,10 +159,10 @@ public class AuditV2_MathReductions
     // magnitude exceeds 2^53 (double's mantissa precision) lost precision. NumPy uses
     // type-specific accumulators (int64 sum for int64 input).
     //
-    // Resolved by the shared correlate / convolve engine (NDArray.SlidingDot.cs, added
-    // in 12f484c3), which accumulates in the operand dtype, so integer results are exact
-    // at every size. The test was [OpenBugs] until the 2026-10-05 run of the whole
-    // OpenBugs category found it passing.
+    // Resolved by the shared correlate / convolve engine (added as Math/NDArray.SlidingDot.cs
+    // in 12f484c3, now Backends/Default/Math/Sliding/SlidingDot.cs), which accumulates in the
+    // operand dtype, so integer results are exact at every size. The test was [OpenBugs] until
+    // the 2026-10-05 run of the whole OpenBugs category found it passing.
 
     /// <summary>
     /// T1.14 — np.convolve with int64 values around 2^53 must preserve full int64 precision:

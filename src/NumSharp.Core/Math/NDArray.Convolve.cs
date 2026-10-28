@@ -1,5 +1,4 @@
 using System;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -18,13 +17,15 @@ namespace NumSharp
         /// <remarks>
         /// NumPy Reference: https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
         ///
-        /// convolve is <c>correlate(a, v[::-1], mode)</c> (numpy/_core/numeric.py): it reverses the
-        /// kernel and runs the shared sliding multiply-accumulate engine (<see cref="SlidingCorrelate"/>).
+        /// convolve is <c>correlate(a, v[::-1], mode)</c> (numpy/_core/numeric.py): NumPy's Python statements run in
+        /// <see cref="ConvolveEngine.Convolve"/>, which reverses the kernel and calls the engine's correlation
+        /// (<see cref="Backends.TensorEngine.Correlate"/>, the shared sliding multiply-accumulate kernels).
         /// Unlike correlate it does NOT conjugate a complex kernel and is commutative, so the
-        /// "swap if v longer" below needs no output reversal. See <c>np.correlate.cs</c> for the
+        /// "swap if v longer" needs no output reversal. See <c>np.correlate.cs</c> for the
         /// float bit-parity notes (both share the same kernel).
         /// </remarks>
         /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
+        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
         /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
         ///     the length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
         ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
@@ -33,60 +34,11 @@ namespace NumSharp
         ///     legacy-only descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
+        // Scope: the facade keeps its scope over the call, so the weaver roots this array and v at the public entry (the
+        // lifetime oracle's gap LT22: an unrooted operand could be finalized while the kernels read its buffer);
+        // ConvolveEngine.Convolve reclaims its own temporaries.
         [NDScoped]
         public NDArray convolve(NDArray v, string mode = "full")
-        {
-            // NumPy's np.convolve (2.4.2), statement for statement: `array(a, ndmin=1)` (a 0-d operand becomes one
-            // element), the two emptiness checks on the operands AS GIVEN, the swap by len() (the FIRST dimension), then
-            // multiarray.correlate(a, v[::-1], mode): the mode, the 1-D requirement of PyArray_FromAny(op, typec, 1, 1)
-            // and the result allocation, which a string type number cannot size.
-            NDArray a = this.ndim == 0 ? this.reshape(1) : this;
-            if (v.ndim == 0)
-                v = v.reshape(1);
-
-            // Validate non-empty BEFORE the swap (NumPy convolve's own messages, distinct from correlate's), so an empty
-            // first operand reports `a` even when the second is longer: np.convolve([], [1]) is 'a cannot be empty'.
-            if (a.Shape.dimensions[0] == 0)
-                throw new ValueError("a cannot be empty");
-            if (v.Shape.dimensions[0] == 0)
-                throw new ValueError("v cannot be empty");
-
-            // NumPy swaps if v is longer than a (convolve is commutative, so no output reversal).
-            if (v.Shape.dimensions[0] > a.Shape.dimensions[0])
-            {
-                var temp = a;
-                a = v;
-                v = temp;
-            }
-
-            var m = ParseSlidingMode(mode);
-
-            // A StringDType operand: PyArray_Correlate's descriptor lookup over (a, v[::-1]) comes before the depth check
-            // (the legacy-only refusal, or an OBJECT product whose own checks and first product answer).
-            if (Backends.Strings.NDStringUfuncs.IsVString(a) || Backends.Strings.NDStringUfuncs.IsVString(v))
-                throw Backends.Strings.NDStringUfuncs.VStringSlidingAnswer(a, v, (int)m, convolve: true);
-
-            // PyArray_FromAny(op, typec, 1, 1): an operand of two or more dimensions is too deep.
-            if (a.ndim != 1 || v.ndim != 1)
-                throw new ValueError("object too deep for desired array");
-
-            // The result allocation needs a fixed item size, which a string type number does not have.
-            if (Backends.Strings.NDStringUfuncs.IsString(a) || Backends.Strings.NDStringUfuncs.IsString(v))
-                throw Backends.Strings.NDStringUfuncs.NoItemsize();
-
-            // Determine output type using NumPy's type promotion rules.
-            var retType = np._FindCommonType(a, v);
-
-            // convolve(a, v) == correlate(a, v[::-1]): reverse the kernel, then the shared engine
-            // reads it forward. The reversed view is materialized to a contiguous, retType buffer;
-            // the view and both materializations are scope-tracked and die with the call.
-            NDArray data = MaterializeForSliding(a, retType);
-            NDArray kernel = MaterializeForSliding(v["::-1"], retType);
-
-            // NumPy hands a one-element operand to its dotfunc with the operand's own stride (np.convolve's kernel
-            // reversed), which can keep a complex product off cblas and on CDOUBLE_dot's plain loop.
-            bool complexDotViaBlas = DotOperandBlasable(a, retType, reversed: false) && DotOperandBlasable(v, retType, reversed: true);
-            return SlidingCorrelate(data, kernel, retType, m, complexDotViaBlas);
-        }
+            => ConvolveEngine.Convolve(this, v, mode);
     }
 }

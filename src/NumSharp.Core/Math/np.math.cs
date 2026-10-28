@@ -131,17 +131,39 @@ namespace NumSharp
         /// Returns the discrete, linear convolution of two one-dimensional sequences.
         ///
         /// The convolution operator is often seen in signal processing, where it models the effect of a linear time-invariant system on a signal[1]. In probability theory, the sum of two independent random variables is distributed according to the convolution of their individual distributions.
-        /// 
+        ///
         /// If v is longer than a, the arrays are swapped before computation.
         /// </summary>
-        /// <param name="a"></param>
-        /// <param name="v"></param>
-        /// <param name="mode"></param>
-        /// <returns></returns>
-        /// <exception cref="TypeError">A <c>numpy.matrix</c> operand with <c>keepdims: true</c>: NumPy calls the matrix method, which has no such keyword. The text names that method, as in <c>matrix.sum() got an unexpected keyword argument 'keepdims'</c> for <c>np.sum</c>.</exception>
+        /// <param name="a">The first one-dimensional input sequence (a 0-d array is one element, NumPy's <c>ndmin=1</c>).</param>
+        /// <param name="v">The second one-dimensional input sequence (likewise); it is the one reversed, after the swap that
+        ///     makes the longer sequence the data.</param>
+        /// <param name="mode"><c>'full'</c> (the default: every overlap, <c>len(a) + len(v) - 1</c> points), <c>'same'</c>
+        ///     (<c>max(len(a), len(v))</c> points, centred) or <c>'valid'</c> (only the full overlaps). The name is
+        ///     case-sensitive, as in NumPy.</param>
+        /// <returns>A fresh 1-D array of the operands' common dtype (<c>result_type(a, v)</c>): the discrete, linear
+        ///     convolution of <paramref name="a"/> and <paramref name="v"/>.</returns>
+        /// <remarks>
+        /// https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
+        ///
+        /// NumPy's Python body (<c>numpy/_core/numeric.py</c>) runs in <see cref="ConvolveEngine.Convolve"/>; its last
+        /// statement, <c>multiarray.correlate(a, v[::-1], mode)</c>, is the engine member
+        /// <see cref="Backends.TensorEngine.Correlate"/>. Unlike <see cref="correlate"/>, a complex kernel is NOT
+        /// conjugated, and the swap needs no reversal of the result (convolution is commutative). The order of the errors
+        /// is NumPy's: the two emptiness texts (on the operands as given) come before the mode, and the mode before the
+        /// depth check. Both functions share one kernel; see <see cref="correlate"/> for its bit parity.
+        /// </remarks>
+        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
+        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
+        /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
+        ///     the length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions (a
+        ///     <c>numpy.matrix</c> operand included, as in NumPy), or — for a fixed-width string operand, after every check
+        ///     above — <c>data type must provide an itemsize</c>.</exception>
+        /// <exception cref="TypeError">A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's
+        ///     legacy-only descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
+        /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
+        ///     object array, which NumSharp does not have).</exception>
         public static NDArray convolve(NDArray a, NDArray v, string mode = "full")
-            // NDArray.convolve runs NumPy's checks in NumPy's order (lengths, mode, depth) and only then refuses text.
-            => a.convolve(v, mode);
+            => ConvolveEngine.Convolve(a, v, mode);
 
         /// <summary>
         ///     Return the product of array elements over a given axis.

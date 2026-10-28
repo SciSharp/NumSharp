@@ -7,9 +7,9 @@ using System.Runtime.Intrinsics.X86;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public partial class NDArray
+    internal static partial class SlidingDot
     {
         // ======================================================================================================
         //  Long sliding products without the byte-parity backend

@@ -29,12 +29,12 @@ using NumSharp.Backends.Unmanaged.Pooling;
 //   * as_series / _add / _sub   the U1 substrate (TrimLength, CopyInto, CombineInto — the same code {p}add runs);
 //   * {p}mulx                   an integral-layout calculus kernel (PolyCalcKey.Mulx); chebmulx of two or more terms —
 //                               NumPy's three ARRAY statements, not a loop — one fused pass (GetPolyChebMulxKernel);
-//   * np.convolve               the sliding-dot engine np.convolve runs (NDArray.SlidingCorrelateInto), the byte-parity
+//   * np.convolve               the sliding-dot engine np.convolve runs (SlidingDot.SlidingCorrelateInto), the byte-parity
 //                               OpenBLAS route included;
 //   * scalarmath                the U1 one-element kernels (naive complex product, NumPy's scalar division).
 // So the only C# here is NumPy's own Python — its loops are the ones over SERIES, never over elements — and the
 // element work is the house's, which is why every result is NumPy's to the bit (the convolution bases' long real and
-// all complex products excepted without the backend: np.convolve itself is BLAS-bound there, see NDArray.SlidingDot).
+// all complex products excepted without the backend: np.convolve itself is BLAS-bound there, see SlidingDot).
 //
 // DTYPES CARRIED PER SERIES
 // -------------------------
@@ -1088,7 +1088,7 @@ namespace NumSharp
             // Both factors are fresh arrays of one dtype here (as_series copies, the z-series and power products are new),
             // so NumPy's dot sees a positive stride except for np.convolve's reversed ONE-element kernel, which NumPy passes
             // through as `v[::-1]` (stride -itemsize): a one-term complex factor keeps CDOUBLE_dot off cblas.
-            NDArray.SlidingCorrelateInto(d.P, d.N, k, v.N, r.P, d.T, NDArray.SlidingMode.Full,
+            SlidingDot.SlidingCorrelateInto(d.P, d.N, k, v.N, r.P, d.T, SlidingDot.SlidingMode.Full,
                 BackendFactory.GetEngine().Blas as ISlidingDotBackend, complexDotViaBlas: v.N != 1);
             a.Release(mark);
             return r;

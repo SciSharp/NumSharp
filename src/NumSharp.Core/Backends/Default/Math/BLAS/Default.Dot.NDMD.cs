@@ -623,7 +623,7 @@ namespace NumSharp.Backends
         ///     <c>cblas_zdotu_sub</c>: scipy-openblas' zdotu keeps four separate double sums (<c>Σ ar·br</c>, <c>Σ ai·bi</c>,
         ///     <c>Σ ar·bi</c>, <c>Σ ai·br</c>) - at any length when a stride is not 1, below its vector block of eight when
         ///     both are - and returns <c>re + im·I</c>, which CDOUBLE_dot adds into a zeroed pair
-        ///     (<see cref="NDArray.ZdotuResult(double, double)"/>). Any other stride runs CDOUBLE_dot's own loop.
+        ///     (<see cref="SlidingDot.ZdotuResult(double, double)"/>). Any other stride runs CDOUBLE_dot's own loop.
         /// </summary>
         /// <param name="a">The first operand.</param><param name="sa">Its stride (elements).</param>
         /// <param name="b">The second operand (not conjugated).</param><param name="sb">Its stride (elements).</param>
@@ -646,7 +646,7 @@ namespace NumSharp.Backends
                     d2 += x.Real * y.Imaginary;
                     d3 += x.Imaginary * y.Real;
                 }
-                return NDArray.ZdotuResult(d0 - d1, d2 + d3);
+                return SlidingDot.ZdotuResult(d0 - d1, d2 + d3);
             }
 
             // CDOUBLE_dot without cblas: sumr += ar*br - ai*bi; sumi += ar*bi + ai*br, from +0.

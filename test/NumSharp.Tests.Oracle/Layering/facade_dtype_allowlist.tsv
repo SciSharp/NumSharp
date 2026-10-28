@@ -96,9 +96,6 @@ Manipulation/np.resize.cs	1	0
 Manipulation/np.setops.cs	0	2
 Manipulation/np.trim_zeros.cs	2	0
 Math/NDArray.ComplexAccessors.cs	1	2
-Math/NDArray.Convolve.cs	4	0
-Math/NDArray.Correlate.cs	4	1
-Math/NDArray.SlidingDot.cs	0	19
 Math/np.conjugate.cs	0	1
 Math/np.deg2rad.cs	1	0
 Math/np.diff.cs	3	16

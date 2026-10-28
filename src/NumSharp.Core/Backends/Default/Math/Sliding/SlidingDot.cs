@@ -2,13 +2,24 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
-using NumSharp.Backends;
 using NumSharp.Utilities;
 using SRCS = System.Runtime.CompilerServices;
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    public partial class NDArray
+    /// <summary>
+    ///     The sliding multiply-accumulate kernels behind <c>np.correlate</c> and <c>np.convolve</c> (NumPy's
+    ///     <c>_pyarray_correlate</c> and <c>small_correlate</c>, with each dtype's dot function): the engine members
+    ///     <see cref="TensorEngine.Correlate"/> / <see cref="TensorEngine.Correlate2"/> call
+    ///     <see cref="SlidingCorrelate"/>, and numpy.polynomial's series arena calls the pointer-level
+    ///     <see cref="SlidingCorrelateInto"/> for its <c>np.convolve</c> statements.
+    /// </summary>
+    /// <remarks>
+    ///     These were static members of <see cref="NDArray"/> (<c>Math/NDArray.SlidingDot.cs</c> and
+    ///     <c>NDArray.SlidingDot.Long.cs</c>) until the np-layer dtype plan's P2 moved the bodies of np.convolve and
+    ///     np.correlate out of the facade: the kernels are the K layer, so they sit with the engine, unchanged.
+    /// </remarks>
+    internal static partial class SlidingDot
     {
         // Shared sliding multiply-accumulate engine for np.correlate and np.convolve.
         //
@@ -209,7 +220,7 @@ namespace NumSharp
                     case NPTypeCode.Int64:  SlidingSimd((long*)a,   (long*)k,   (long*)o,   n2, nLeft, nRight, mid); break;
                     case NPTypeCode.UInt64: SlidingSimd((ulong*)a,  (ulong*)k,  (ulong*)o,  n2, nLeft, nRight, mid); break;
                     // Without the backend, a kernel long enough to reach OpenBLAS's vector dot block takes the blocked
-                    // long-product kernels (NDArray.SlidingDot.Long.cs) for exactly the positions NumPy sums with that
+                    // long-product kernels (SlidingDot.Long.cs) for exactly the positions NumPy sums with that
                     // vector kernel; every shorter position keeps its byte-exact scalar-regime sum. The Try* methods
                     // decline (writing nothing) on a host without AVX/FMA or for a kernel holding a non-finite value.
                     case NPTypeCode.Single:
