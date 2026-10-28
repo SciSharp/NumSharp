@@ -314,5 +314,21 @@ namespace NumSharp
         ///     range.</exception>
         /// <remarks>DefaultEngine runs the four statements as one fused <c>np.evaluate</c> pass.</remarks>
         public abstract NDArray Sinc(NDArray x);
+
+        /// <summary>
+        ///     NumPy's <c>np.i0(x)</c>, the modified Bessel function of the first kind, order 0: <c>astype(float)</c> for a
+        ///     dtype that is not float, <c>abs</c>, then the cephes Chebyshev series (<c>|x| &lt;= 8</c> and above), each
+        ///     float width computed in its own precision as NumPy's ufunc chain computes it.
+        /// </summary>
+        /// <param name="x">The input, any dtype but complex, any layout (not null).</param>
+        /// <returns>The values: float16 / float32 / float64 kept, float64 for bool, integers, char and parsed text,
+        ///     decimal for decimal (the double bridge).</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="x"/> is null.</exception>
+        /// <exception cref="IncorrectTypeException">A complex operand (NumPy's <c>i0 not supported for complex
+        ///     values</c>).</exception>
+        /// <exception cref="ValueError">Text that does not parse as a float (NumPy's <c>astype(float)</c>).</exception>
+        /// <exception cref="OverflowException">A decimal result past the decimal range (<c>|x|</c> above about 72).</exception>
+        /// <remarks>DefaultEngine runs the series per element in one fused <c>np.evaluate</c> pass.</remarks>
+        public abstract NDArray I0(NDArray x);
     }
 }
