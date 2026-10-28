@@ -266,7 +266,8 @@ namespace NumSharp
         //  sort N — with no cheap way to detect that cardinality up front).
         //
         //  Two rules make the bitwise integer machinery reusable: any-NaN complex is partitioned out
-        //  (each is DISTINCT and appended after the sorted finite set, matching equal_nan=False), and
+        //  (each is DISTINCT under equal_nan=False — NumPy's equal_complex is false for two of them — and
+        //  appended after the sorted finite set in NumPy's complex sort order, SortNaNPartsInNumPyOrder), and
         //  -0.0 is normalized to +0.0 PER COMPONENT for HASHING only — the FIRST-occurrence original
         //  bits are stored (NumPy keeps the first element's signed zero), and equality is Complex `==`
         //  (IEEE per component: -0.0 == +0.0). The finite set is lex-sorted (real, then imaginary).
@@ -287,7 +288,9 @@ namespace NumSharp
         /// <param name="a">The complex128 operand (any layout; only read).</param>
         /// <param name="wantCounts">Also count each class's elements.</param>
         /// <param name="equalNan">NumPy's <c>equal_nan</c>: true makes every value with a NaN part ONE class (kept as the
-        ///     first such value in C order, sorted last); false keeps each NaN distinct, appended in C order.</param>
+        ///     first such value in C order, sorted last); false keeps each NaN distinct, appended in NumPy's complex sort
+        ///     order (<see cref="SortNaNPartsInNumPyOrder"/>; equal ones in input order, where NumPy's are in its hash
+        ///     table's order).</param>
         /// <returns>The sorted values and, when <paramref name="wantCounts"/>, the aligned int64 counts.</returns>
         /// <remarks>
         ///     With <paramref name="equalNan"/> the caller (np.unique's values-only path) keeps arrays above 2^28 elements on
@@ -363,6 +366,10 @@ namespace NumSharp
             int j = 0;
             for (int s = 0; s < cap; s++) { if (!used[s]) continue; uv[j] = table[s]; if (wantCounts) uc[j] = cnt[s]; j++; }
             if (wantCounts) System.Array.Sort(uv, uc, ComplexLexComparer); else System.Array.Sort(uv, ComplexLexComparer);
+            // NumPy sorts the whole hash result, so distinct NaN-part values come out in its complex order, not input order
+            // (np.unique([1+nanj, nan+2j], equal_nan=False) and the reverse input both give [1+nanj, nan+2j]).
+            if (!equalNan && nans is not null && nans.Count > 1)
+                SortNaNPartsInNumPyOrder(nans);
 
             var (values, counts) = AppendNaNsAndBuild(uv, uc, uniqueCount, nans, nans?.Count ?? 0, wantCounts);
             // The collapsed NaN class counts every value with a NaN part (AppendNaNsAndBuild counts each NaN as 1).
@@ -371,12 +378,12 @@ namespace NumSharp
             return (values, counts);
         }
 
-        /// <summary>Builds the value array (sorted finite set + each distinct NaN appended, input order) and, when requested, aligned int64 counts (finite counts + 1 per NaN).</summary>
+        /// <summary>Builds the value array (sorted finite set + each distinct NaN appended in the order given) and, when requested, aligned int64 counts (finite counts + 1 per NaN).</summary>
         /// <typeparam name="T">The element type.</typeparam>
         /// <param name="finite">The sorted finite values.</param>
         /// <param name="finiteCnt">Their counts (read only when <paramref name="wantCounts"/>).</param>
         /// <param name="finiteCount">How many entries of <paramref name="finite"/> are used.</param>
-        /// <param name="nans">The NaN values to append, in input order (null when there are none).</param>
+        /// <param name="nans">The NaN values to append, in the order they go out (null when there are none).</param>
         /// <param name="nanCount">How many of them.</param>
         /// <param name="wantCounts">Also build the counts.</param>
         /// <returns>The fresh 1-D values and, when <paramref name="wantCounts"/>, the aligned int64 counts (null
@@ -401,6 +408,70 @@ namespace NumSharp
                 counts = new NDArray(new ArraySlice<long>(cblock), Shape.Vector(total));
             }
             return (values, counts);
+        }
+
+        /// <summary>
+        ///     Sorts complex values that have a NaN part into NumPy's complex sort order (<c>CDOUBLE_LT</c>): <c>R+nanj</c>
+        ///     by R, then <c>nan+Rj</c> by R, then <c>nan+nanj</c>. Equal values (both zeros are equal; every
+        ///     <c>nan+nanj</c> is equal) keep their input order: NumPy sorts its hash table's output, so its order of equal
+        ///     values is the table's iteration order, which follows the C++ library's bucket layout and is not reproduced.
+        /// </summary>
+        /// <param name="nans">The values, in input order (each with a NaN part); sorted in place.</param>
+        private static void SortNaNPartsInNumPyOrder(List<Complex> nans)
+        {
+            var keyed = new NaNPartKey[nans.Count];
+            for (int i = 0; i < keyed.Length; i++)
+                keyed[i] = new NaNPartKey(nans[i], i);
+            // A generic span sort over a struct comparer: the comparison is devirtualized, and the position in the key
+            // makes the (unstable) introsort's order a total, stable one.
+            keyed.AsSpan().Sort(default(NaNPartKeyComparer));
+            for (int i = 0; i < keyed.Length; i++)
+                nans[i] = keyed[i].Value;
+        }
+
+        /// <summary>A complex value with a NaN part and the key NumPy's complex order sorts it by.</summary>
+        private readonly struct NaNPartKey
+        {
+            /// <summary>0 for <c>R+nanj</c>, 1 for <c>nan+Rj</c>, 2 for <c>nan+nanj</c>: the classes' order in <c>CDOUBLE_LT</c>.</summary>
+            public readonly int Class;
+
+            /// <summary>R, the part that is not NaN (0 for <c>nan+nanj</c>, whose values are all equal).</summary>
+            public readonly double Key;
+
+            /// <summary>The value's position in the input, which breaks ties.</summary>
+            public readonly int Position;
+
+            /// <summary>The value itself (its bits are kept).</summary>
+            public readonly Complex Value;
+
+            /// <summary>Classifies <paramref name="z"/>.</summary>
+            /// <param name="z">A value with a NaN part.</param>
+            /// <param name="position">Its position in the input.</param>
+            public NaNPartKey(Complex z, int position)
+            {
+                bool reNaN = double.IsNaN(z.Real);
+                Class = !reNaN ? 0 : double.IsNaN(z.Imaginary) ? 2 : 1;
+                Key = Class == 0 ? z.Real : Class == 1 ? z.Imaginary : 0.0;
+                Position = position;
+                Value = z;
+            }
+        }
+
+        /// <summary>Orders <see cref="NaNPartKey"/>s by class, then key (IEEE: both zeros equal), then position.</summary>
+        private readonly struct NaNPartKeyComparer : IComparer<NaNPartKey>
+        {
+            /// <summary>Compares two keyed values.</summary>
+            /// <param name="x">The first.</param>
+            /// <param name="y">The second.</param>
+            /// <returns>Negative, zero or positive as <paramref name="x"/> sorts before, with or after <paramref name="y"/>
+            ///     (zero only for the same position).</returns>
+            public int Compare(NaNPartKey x, NaNPartKey y)
+            {
+                if (x.Class != y.Class) return x.Class < y.Class ? -1 : 1;
+                if (x.Key < y.Key) return -1;
+                if (x.Key > y.Key) return 1;
+                return x.Position.CompareTo(y.Position);
+            }
         }
 
         /// <summary>Collapses signed zeros (-0.0→+0.0) per component so ±0 variants share a hash bucket.</summary>

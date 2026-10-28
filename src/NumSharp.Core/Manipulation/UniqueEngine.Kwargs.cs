@@ -23,8 +23,8 @@ namespace NumSharp
         //      float16 / float32 / float64 / complex128 with an index or an inverse (and float16 / complex128 counts):
         //          those statements over NumPy's stable argsort order (uniqueFlatArgsorted).
         //      float values only or counts only: the NaNs partitioned to the tail, the prefix sorted (radix; BCL for
-        //          float16), NumPy's sort NaN written for float32 / float64; complex values only: the hash path under
-        //          equal_nan, else the partition and a lexicographic sort.
+        //          float16), NumPy's sort NaN written for float32 / float64; complex values only: NumPy's hash path
+        //          (above 2^28 elements the same answer from the stable argsort).
         //      the integer family, char, bool: the hash paths for values or counts alone (UniqueEngine.Hash.cs), a
         //          stable radix argsort of keys and permutation for an index or an inverse; decimal: the BCL sort.
         //      above Array.MaxLength elements: the long-indexed fallback (uniqueFlatSortedLong*).
@@ -342,10 +342,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The flat unique of a complex128 operand. A values-only call under <paramref name="equal_nan"/> is NumPy's
-        ///     hash path (each equality class keeps its first element in C order, every value with a NaN part one
-        ///     class); a values-only call without it partitions the values with a NaN part to the tail and sorts the rest
-        ///     lexicographically (real part, then imaginary part); every other call is NumPy's argsort and gather
+        ///     The flat unique of a complex128 operand. A values-only call is NumPy's hash path whatever
+        ///     <paramref name="equal_nan"/> is (each equality class keeps its first element in C order; under
+        ///     <paramref name="equal_nan"/> every value with a NaN part is one class, otherwise each is a value of its own,
+        ///     sorted last in NumPy's complex order); every other call is NumPy's argsort and gather
         ///     (<see cref="uniqueFlatArgsorted{T}"/>), whose argsort orders the NaN classes as NumPy's complex sort does.
         /// </summary>
         /// <param name="a">The operand (any layout; only read).</param>
@@ -359,14 +359,15 @@ namespace NumSharp
             long n = a.size;
             if (n == 0) return BuildEmptyResults<Complex>(return_index, return_inverse, return_counts);
 
-            // Values only, equal_nan: NumPy's _unique1d takes its C++ hash path for complex (unique.cpp), whose
-            // representative of each equality class is its FIRST element in C order — all values with a NaN part one class
-            // (np.unique([nan+0j, 1j, 1+nanj]) is [1j, nan+0j]), +0.0 and -0.0 one class. The sort path below kept a NaN
-            // from its unstable NaN partition instead. Above 2^28 elements the hash bails to this method, so those stay on
-            // the sort path.
+            // Values only: NumPy's _unique1d takes its C++ hash path for complex (unique.cpp) whatever equal_nan is, and
+            // sorts the result. Each equality class is represented by its FIRST element in C order (+0.0 and -0.0 one
+            // class); under equal_nan all values with a NaN part are one class (np.unique([nan+0j, 1j, 1+nanj]) is
+            // [1j, nan+0j]), otherwise each is a value, in NumPy's complex order (np.unique([1+nanj, nan+2j],
+            // equal_nan=False) puts R+nanj first). Above 2^28 elements the hash bails to this method, so those take
+            // uniqueValuesOnlyComplex, the same answer from the stable argsort.
             if (!return_index && !return_inverse && !return_counts)
-                return new[] { equal_nan && n <= (1L << 28)
-                    ? UniqueHashSortedComplex(a, wantCounts: false, equalNan: true).values
+                return new[] { n <= (1L << 28)
+                    ? UniqueHashSortedComplex(a, wantCounts: false, equalNan: equal_nan).values
                     : uniqueValuesOnlyComplex(a, n, equal_nan) };
 
             if (!IsManagedSortableLength(n))
@@ -379,8 +380,12 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Values-only complex128 sort path (taken when <c>equal_nan</c> is false, or above 2^28 elements): partition
-        ///     the values with a NaN part to the tail, sort the rest lexicographically, dedup-emit.
+        ///     The values-only complex128 route above 2^28 elements, where the hash path bails: the hash path's answer from
+        ///     the stable argsort (<see cref="uniqueFlatArgsorted{T}"/> without outputs). The sorted distinct values, each
+        ///     class represented by its first element in input order (the stable order's run start); the values with a NaN
+        ///     part sorted last in NumPy's complex order, each a value without <paramref name="equal_nan"/> and one value
+        ///     with it, represented by the first of them in C order as NumPy's hash set keeps it
+        ///     (<see cref="KeepFirstNaNPartInCOrder"/>).
         /// </summary>
         /// <param name="a">The complex128 operand (any layout; only read).</param>
         /// <param name="n">Its element count (positive).</param>
@@ -391,15 +396,46 @@ namespace NumSharp
             if (!IsManagedSortableLength(n))
                 return uniqueFlatSortedLongComplex(a, n, equal_nan, false, false, false)[0];
 
-            var keys = ExtractKeysOnly<Complex>(a, n);
-            long firstNaN = PartitionNaN_ComplexKeysOnly(keys, n);
-            System.Array.Sort(keys, 0, (int)firstNaN,
-                Comparer<Complex>.Create((x, y) =>
+            var values = uniqueFlatArgsorted<Complex>(a, n, false, false, false, equal_nan)[0];
+            if (equal_nan)
+                KeepFirstNaNPartInCOrder(values, a);
+            return values;
+        }
+
+        /// <summary>
+        ///     NumPy's hash-path representative of a collapsed NaN class: when the sorted distinct values end with a value
+        ///     that has a NaN part (the run <c>equal_nan</c> collapsed, represented by the first such value in sorted order),
+        ///     overwrites it with the first such value of <paramref name="a"/> in C order, the one NumPy's hash set keeps
+        ///     (it inserts in C order, keeps the first of an equality class, and makes every value with a NaN part one
+        ///     class under <c>equal_nan</c>).
+        /// </summary>
+        /// <param name="values">The sorted distinct values: a fresh, writeable, C-contiguous 1-D complex128 array.</param>
+        /// <param name="a">The operand the values came from (any layout; only read).</param>
+        private static unsafe void KeepFirstNaNPartInCOrder(NDArray values, NDArray a)
+        {
+            long m = values.size;
+            Complex* v = (Complex*)values.Address;   // fresh and C-contiguous: its first element is at its base
+            if (m == 0 || !IsNaNKey(v[m - 1]))
+                return;
+            long n = a.size;
+            if (a.Shape.IsContiguous)
+            {
+                // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
+                Complex* src = (Complex*)a.Address + a.Shape.offset;
+                for (long i = 0; i < n; i++)
+                    if (IsNaNKey(src[i])) { v[m - 1] = src[i]; return; }
+            }
+            else
+            {
+                using var flat = a.flat;   // the C-order flattening (a copy for this layout)
+                Complex* src = (Complex*)flat.Address;
+                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                for (long i = 0; i < n; i++)
                 {
-                    int c = x.Real.CompareTo(y.Real);
-                    return c != 0 ? c : x.Imaginary.CompareTo(y.Imaginary);
-                }));
-            return EmitValuesOnlyFloat<Complex>(keys, n, firstNaN, equal_nan);
+                    Complex z = src[getOffset(i)];
+                    if (IsNaNKey(z)) { v[m - 1] = z; return; }
+                }
+            }
         }
 
         /// <summary>
@@ -686,30 +722,6 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     The values-only NaN partition for complex128 keys: every value with a NaN in either part to the tail (see
-        ///     <see cref="PartitionNaN_DoubleKeysOnly"/>).
-        /// </summary>
-        /// <param name="keys">The keys, partitioned in place.</param>
-        /// <param name="n">The number of keys.</param>
-        /// <returns>The index of the first value with a NaN part (<paramref name="n"/> when there is none).</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-        private static long PartitionNaN_ComplexKeysOnly(Complex[] keys, long n)
-        {
-            long hi = n;
-            long i = 0;
-            while (i < hi)
-            {
-                Complex c = keys[i];
-                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
-                {
-                    hi--; (keys[i], keys[hi]) = (keys[hi], keys[i]);
-                }
-                else i++;
-            }
-            return hi;
-        }
-
-        /// <summary>
         /// Values-only emit for non-NaN-capable types: single dedup-scan over sorted keys.
         /// </summary>
         /// <typeparam name="T">The key type (no NaN: bool, the integers, char, decimal).</typeparam>
@@ -736,10 +748,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Values-only emit for float types (Double/Single/Half/Complex). Handles the NaN tail:
+        /// Values-only emit for float types (Double/Single/Half). Handles the NaN tail:
         /// equal_nan=true → one NaN representative; equal_nan=false → every NaN unique.
         /// </summary>
-        /// <typeparam name="T">The key type (Half, float, double or Complex).</typeparam>
+        /// <typeparam name="T">The key type (Half, float or double).</typeparam>
         /// <param name="keys">The sorted non-NaN prefix followed by the NaN tail (partition order).</param>
         /// <param name="n">The number of keys.</param>
         /// <param name="firstNaN">The index where the NaN tail starts (<paramref name="n"/> without NaN).</param>
@@ -1717,16 +1729,14 @@ namespace NumSharp
             }
             long firstNaN = n;
             while (firstNaN > 0 && IsNaNKey(kp[firstNaN - 1].Key)) firstNaN--;
-            return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts,
-                                               indexAtRunStart: true);
+            return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan, return_index, return_inverse, return_counts);
         }
 
         /// <summary>
-        ///     Long-indexed unique for Complex. A call with an index, an inverse or counts is NumPy's argsort and gather
-        ///     (<see cref="uniqueFlatArgsortedLongComplex"/>), as on the managed route; a values-only call partitions the
-        ///     values with a NaN part to the tail and sorts the rest. Complex doesn't implement IComparable&lt;&gt;
-        ///     so we use a dedicated <see cref="ComplexKeyPerm"/> struct and explicit lex
-        ///     comparison via Comparison&lt;&gt; delegate.
+        ///     Long-indexed unique for Complex, the managed routes' answers over unmanaged records: a call with an index, an
+        ///     inverse or counts is NumPy's argsort and gather (<see cref="uniqueFlatArgsortedLongComplex"/>); a values-only
+        ///     call is the hash path's answer from the same stable argsort, a collapsed NaN class represented by its first
+        ///     value in C order (as <see cref="uniqueValuesOnlyComplex"/> gives it).
         /// </summary>
         /// <param name="a">The complex128 operand (any layout; only read).</param>
         /// <param name="n">Its element count.</param>
@@ -1735,11 +1745,7 @@ namespace NumSharp
         /// <param name="return_inverse">Also return the reconstruction indices.</param>
         /// <param name="return_counts">Also return the counts.</param>
         /// <returns>[values, index?, inverse?, counts?] (see <see cref="BuildMaskAndEmitLongComplex"/>).</returns>
-        /// <remarks>
-        ///     Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests). A C-contiguous
-        ///     operand is read from its first element, its base address plus its offset (as <see cref="PopulateKeyPerm{T}"/>
-        ///     reads it).
-        /// </remarks>
+        /// <remarks>Reached only above <see cref="Array.MaxLength"/> elements (and by reflection from the tests).</remarks>
         private static unsafe NDArray[] uniqueFlatSortedLongComplex(NDArray a, long n, bool equal_nan,
             bool return_index, bool return_inverse, bool return_counts)
         {
@@ -1747,53 +1753,11 @@ namespace NumSharp
             if (return_index || return_inverse || return_counts)
                 return uniqueFlatArgsortedLongComplex(a, n, equal_nan, return_index, return_inverse, return_counts);
 
-            var block = new UnmanagedMemoryBlock<ComplexKeyPerm>(n);
-            ComplexKeyPerm* kp = block.Address;
-
-            if (a.Shape.IsContiguous)
-            {
-                // Base address PLUS the shape's offset: a contiguous view may keep the base with a non-zero offset.
-                Complex* src = (Complex*)a.Address + a.Shape.offset;
-                for (long i = 0; i < n; i++) { kp[i].Key = src[i]; kp[i].Perm = i; }
-            }
-            else
-            {
-                var flat = a.flat;
-                Complex* src = (Complex*)flat.Address;
-                Func<long, long> getOffset = flat.Shape.GetOffset_1D;
-                for (long i = 0; i < n; i++) { kp[i].Key = src[getOffset(i)]; kp[i].Perm = i; }
-            }
-
-            // Partition NaN to tail
-            long hi = n, i2 = 0;
-            while (i2 < hi)
-            {
-                Complex c = kp[i2].Key;
-                if (double.IsNaN(c.Real) || double.IsNaN(c.Imaginary))
-                {
-                    hi--;
-                    (kp[i2], kp[hi]) = (kp[hi], kp[i2]);
-                }
-                else i2++;
-            }
-            long firstNaN = hi;
-
-            // Sort non-NaN with lex comparer
-            Utilities.LongIntroSort.Sort(kp, firstNaN, (x, y) =>
-            {
-                int c = x.Key.Real.CompareTo(y.Key.Real);
-                return c != 0 ? c : x.Key.Imaginary.CompareTo(y.Key.Imaginary);
-            });
-
-            // Stabilize NaN tail by perm
-            if (firstNaN < n - 1)
-            {
-                Utilities.LongIntroSort.Sort(kp + firstNaN, n - firstNaN,
-                    (x, y) => x.Perm.CompareTo(y.Perm));
-            }
-
-            return BuildMaskAndEmitLongComplex(a, kp, n, firstNaN, equal_nan,
-                                                return_index, return_inverse, return_counts);
+            // Values only: the hash path's answer (see uniqueValuesOnlyComplex).
+            var r = uniqueFlatArgsortedLongComplex(a, n, equal_nan, false, false, false);
+            if (equal_nan)
+                KeepFirstNaNPartInCOrder(r[0], a);
+            return r;
         }
 
         /// <summary>A complex128 key and its input position: the long-indexed complex path's sort record.</summary>
@@ -1819,15 +1783,14 @@ namespace NumSharp
         /// <param name="return_index">Also return the first-occurrence indices.</param>
         /// <param name="return_inverse">Also return the reconstruction indices.</param>
         /// <param name="return_counts">Also return the counts.</param>
-        /// <param name="indexAtRunStart">True: each index is the position at its run's start, NumPy's <c>perm[mask]</c> (for
-        ///     records in NumPy's argsort order: a collapsed run of values with a NaN part holds different values, and
-        ///     NumPy's index is the first of them in sorted order). False (the values-only partition route, whose sort is
-        ///     unstable): each run's smallest position, the first occurrence.</param>
-        /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64.</returns>
+        /// <returns>[values, index?, inverse?, counts?]: fresh arrays, the index outputs int64. Each index is the position
+        ///     at its run's start, NumPy's <c>perm[mask]</c>: the records are in NumPy's argsort order, and a collapsed run
+        ///     of values with a NaN part, which holds different values, is represented by the first of them in that
+        ///     order.</returns>
         /// <remarks>The mask block is not disposed: its buffer returns through the block's finalizer.</remarks>
         private static unsafe NDArray[] BuildMaskAndEmitLongComplex(
             NDArray a, ComplexKeyPerm* kp, long n, long firstNaN, bool equal_nan,
-            bool return_index, bool return_inverse, bool return_counts, bool indexAtRunStart = false)
+            bool return_index, bool return_inverse, bool return_counts)
         {
             long nanStart = firstNaN;
 
@@ -1868,7 +1831,7 @@ namespace NumSharp
             results[0] = new NDArray(valuesSlice, Shape.Vector(uniqueCount));
             int outPos = 1;
 
-            if (return_index && indexAtRunStart)
+            if (return_index)
             {
                 // perm[mask]: the position of each run's first record.
                 var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
@@ -1877,21 +1840,6 @@ namespace NumSharp
                 for (long i = 0; i < n; i++)
                     if (mask[i] != 0) iDst[oIdx++] = kp[i].Perm;
                 results[outPos++] = new NDArray(new ArraySlice<long>(idxBlock), Shape.Vector(uniqueCount));
-            }
-            else if (return_index)
-            {
-                var idxBlock = new UnmanagedMemoryBlock<long>(uniqueCount);
-                var idxSlice = new ArraySlice<long>(idxBlock);
-                long* iDst = idxBlock.Address;
-                long oIdx = 0;
-                long currentMin = kp[0].Perm;
-                for (long i = 1; i < n; i++)
-                {
-                    if (mask[i] != 0) { iDst[oIdx++] = currentMin; currentMin = kp[i].Perm; }
-                    else if (kp[i].Perm < currentMin) currentMin = kp[i].Perm;
-                }
-                iDst[oIdx++] = currentMin;
-                results[outPos++] = new NDArray(idxSlice, Shape.Vector(uniqueCount));
             }
 
             if (return_inverse)
