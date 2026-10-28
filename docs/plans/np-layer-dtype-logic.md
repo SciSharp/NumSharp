@@ -566,8 +566,10 @@ the first family under the revised D1:
 The rest of the list moved on 2026-10-29 (np.radians / np.degrees, np.sinc, np.i0, np.diff, np.ediff1d, np.digitize,
 np.unwrap, np.cross, np.nanargmax / np.nanargmin, np.interp: the state log). Left: np.evaluate's two text lines, the
 positional operands' refusal. They run before the keyword checks that `BuildEvaluateOptions` does in the facade, so
-moving them alone would reorder the errors, and moving both means a `TensorEngine.Evaluate` that takes NumPy's
-keywords, declared in `TensorEngine.cs`.
+moving them alone would reorder the errors, and moving both means a `TensorEngine.Evaluate` that takes the keywords
+(`dtype`, `casting`, `order`, `where`) and checks them after the operands, declared in `TensorEngine.cs`. The
+snapshot tool cannot referee it either: np.evaluate's `NDExpr` argument is SKIP. Open for the owner (2026-10-29):
+whether the engine member takes the raw keywords.
 
 ### PE. The engine layout
 
@@ -693,7 +695,165 @@ The gates are §6's, plus three rules:
 
 ### P5. Numeric-only functions
 
-- [ ] Classify the numeric lines left in facade files after P1 to P4 (C9), then move per family by the method of [§6](#6-method-per-batch).
+- [x] (2026-10-29) Classify the numeric lines left in facade files after P1 to P4 (C9): below.
+- [ ] Move P5's families, one per commit, by the method of [§6](#6-method-per-batch).
+
+**The classification (2026-10-29, at `ab206a01`).** R1's own scanner (`LayeringScanner.CountFacadeDtypeTests`, copied
+into a file-based app that prints every counted line) finds 717 numeric and 255 text lines in 121 facade files. C9's
+classes:
+- **A**, NumPy's statement: it moves with the function's body to its home.
+- **B**, a NumSharp fast path: it moves into the engine member or the kernel.
+- **C**, a C#-only conversion or a class-boundary statement: it stays in the facade and R1 keeps it listed.
+- **D**, core code: the dtype layer or a class's own code. It does not move.
+
+Where the numeric lines go:
+- **P5, 23 lines in 9 files, six families.** Each facade holds only numeric lines, and each home is a partial this
+  phase may edit:
+  - np.nan_to_num, np.isreal / np.iscomplex and np.real_if_close, in a new `TensorEngine.TypeCheck.cs`
+    (`lib/_type_check_impl.py`);
+  - the set routines np.union1d / np.intersect1d / np.setxor1d / np.setdiff1d, in `TensorEngine.ArraySetOps.cs`;
+  - np.sort_complex (`FunctionBase`) and np.roots (`Polynomial`);
+  - np.conjugate's loop resolution (NumPy's conjugate has no bool loop) and np.isposinf / np.isneginf's complex
+    refusal, into the members they already call (`DefaultEngine.Conjugate`, `IsPosInf`, `IsNegInf`).
+- **The coordinator's engine files, 25 lines.** np.argmax's out= pair, which np.nanargmax shares (`Methods`),
+  np.bincount, np.packbits and np.unravel_index (`Multiarray`), and the text lines of np.kron and np.median.
+- **E3, 4 lines:** np.fft.RawFft.
+- **P3, 469 lines:** the array object, Creation/, IO, the indexers, the C# conversions and DTypes/. P3's own design
+  classifies them line by line; the table gives the files.
+- **Stay, 196 lines (C and D):**
+  - the dtype routines np.can_cast, the np.isdtype family, np.find_common_type, np.common_type and np.min_scalar_type
+    (111), whose home is the DType layer;
+  - numpy.matrix's own class code (27);
+  - the classes finfo, iinfo, memoryview, vectorize and flatiter (50), whose subject is the dtype;
+  - the matrix rule's result dtype in the np.nanmean / np.nanstd / np.nanvar facades (3, P7's);
+  - the typed iterator's and np.asscalar's C# type check;
+  - np.random.multinomial's own statement, the polynomial package's port and the operators' text route.
+
+The 255 text lines are P3's K4 files, np.evaluate's two (P2's) and np.fft.RawFft's one (E3). Per file:
+
+| File | numeric | text | Class | Home | Moves in |
+|---|---|---|---|---|---|
+| `Logic/np.isneginf.cs` | 1 | 0 | A (the complex refusal) | `DefaultEngine.IsNegInf` (`TensorEngine.UfuncLike.cs`) | P5 |
+| `Logic/np.isposinf.cs` | 1 | 0 | A (the complex refusal) | `DefaultEngine.IsPosInf` (`TensorEngine.UfuncLike.cs`) | P5 |
+| `Logic/np.isreal_iscomplex.cs` | 5 | 1 | A (isreal, iscomplex); D (isrealobj, iscomplexobj: 2 lines) | `TensorEngine.TypeCheck.cs` `IsReal` / `IsComplex`; the two *obj predicates are dtype routines and stay | P5 |
+| `Logic/np.nan_to_num.cs` | 10 | 0 | A, B | `TensorEngine.TypeCheck.cs` `NanToNum` (new partial, `lib/_type_check_impl.py`) | P5 |
+| `Manipulation/np.setops.cs` | 2 | 0 | B (the NaN rewrite after unique) | `TensorEngine.ArraySetOps.cs` `Union1d` / `Intersect1d` / `Setxor1d` / `Setdiff1d` | P5 |
+| `Math/np.conjugate.cs` | 1 | 0 | A (the ufunc's loop resolution: no bool loop) | `DefaultEngine.Conjugate` (`TensorEngine.Umath.cs`) | P5 |
+| `Math/np.real_if_close.cs` | 1 | 0 | A | `TensorEngine.TypeCheck.cs` `RealIfClose` | P5 |
+| `Polynomial/np.roots.cs` | 1 | 0 | A | `TensorEngine.Polynomial.cs` `Roots` | P5 |
+| `Sorting_Searching_Counting/np.sort_complex.cs` | 1 | 0 | A | `TensorEngine.FunctionBase.cs` `SortComplex` | P5 |
+| `APIs/np.evaluate.cs` | 0 | 2 | text | P2's last lines: needs a keyword-taking `TensorEngine.Evaluate` (see P2) | P2 (open) |
+| `Indexing/np.unravel_index.cs` | 2 | 0 | A, B | `TensorEngine.Multiarray.cs` `UnravelIndex` | PE (coordinator) |
+| `LinearAlgebra/np.kron.cs` | 0 | 1 | text | `TensorEngine.ShapeBase.cs` `Kron` (file under LinearAlgebra/) | PE (coordinator) |
+| `Manipulation/np.packbits.cs` | 11 | 0 | A, B | `TensorEngine.Multiarray.cs` `Packbits` / `Unpackbits` | PE (coordinator) |
+| `Sorting_Searching_Counting/np.bincount.cs` | 3 | 1 | A | `TensorEngine.Multiarray.cs` `Bincount` | PE (coordinator) |
+| `Sorting_Searching_Counting/np.nanargmax.cs` | 9 | 0 | A (np.argmax's out= contract, shared with np.argmax) | `TensorEngine.Methods.cs` (`ArgMax` / `ArgMin` with out=) | PE (coordinator) |
+| `Statistics/np.median.cs` | 0 | 2 | text | the quantile family's facade | PE (coordinator) |
+| `Fourier/np.fft.RawFft.cs` | 4 | 1 | A | `TensorEngine.Fft` | E3 (coordinator) |
+| `APIs/np.fromfile.cs` | 0 | 6 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.fromstring.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.loadtxt.Parsers.cs` | 15 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.loadtxt.Sinks.cs` | 0 | 24 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.loadtxt.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.savetxt.cs` | 1 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.tofile.cs` | 6 | 5 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.where.cs` | 8 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Casting/Implicit/NDArray.Implicit.Array.cs` | 48 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Casting/Implicit/NDArray.Implicit.ValueTypes.cs` | 3 | 4 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Casting/NDArray.ToString.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Casting/NDArray.byteswap.cs` | 1 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Casting/NDArray.getfield.cs` | 0 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Casting/NDArray.tobytes.cs` | 0 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/NDArray.Scalar.cs` | 0 | 5 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.arange.cs` | 18 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.array.cs` | 3 | 5 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.array.string.cs` | 0 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.asanyarray.cs` | 0 | 4 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.asarray.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.asarray_chkfinite.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.concatenate.Strings.cs` | 0 | 4 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.concatenate.cs` | 2 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.dtype.cs` | 2 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.eye.cs` | 4 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.frombuffer.Strings.cs` | 0 | 4 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.frombuffer.cs` | 93 | 12 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.full.cs` | 3 | 8 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.full_like.cs` | 1 | 4 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.geomspace.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.linspace.cs` | 23 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.logspace.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.mgrid.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.ndarray.cs` | 1 | 10 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.ogrid.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.ones.cs` | 4 | 6 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.r_.cs` | 8 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Creation/np.vander.cs` | 0 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `DTypes/np.dtypes.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.choose.cs` | 7 | 7 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.compress.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.diag.cs` | 0 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.extract.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.fill_diagonal.cs` | 0 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.indices.cs` | 3 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.ix_.cs` | 2 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.ndenumerate.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.piecewise.cs` | 7 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.place.cs` | 2 | 9 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.put.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.put_along_axis.cs` | 1 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.putmask.cs` | 2 | 4 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.ravel_multi_index.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.select.cs` | 10 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.take.FancyAxis.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.take.cs` | 4 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Indexing/np.take_along_axis.cs` | 9 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/NDArray.FunctionBase.cs` | 8 | 7 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/NDArray.fill.cs` | 1 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/NDArray.resize.cs` | 0 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.apply_along_axis.cs` | 1 | 0 | B (a span write when the dtypes match) | the array object (`NDArray.ShapeBase`) | P3 (coordinator) |
+| `Manipulation/np.copyto.Strings.cs` | 2 | 15 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.copyto.VString.cs` | 0 | 7 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.copyto.cs` | 5 | 7 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.delete.cs` | 20 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.pad.cs` | 33 | 12 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.repeat.cs` | 9 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.resize.cs` | 0 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Manipulation/np.trim_zeros.cs` | 0 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Math/NDArray.ComplexAccessors.cs` | 2 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Math/np.imag.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Math/np.real.cs` | 1 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.Masking.cs` | 0 | 3 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.PrepareIndex.cs` | 12 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.Selection.Getter.cs` | 41 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.Selection.Setter.cs` | 23 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.Selection.cs` | 4 | 0 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.Strings.cs` | 3 | 1 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.VString.cs` | 0 | 5 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `Selection/NDArray.Indexing.cs` | 1 | 2 | P3's design | the array object (Appendix D) / IO / the DType slots | P3 (coordinator) |
+| `APIs/np.finfo.cs` | 11 | 1 | D (the dtype is the class's subject) | the class | stays |
+| `APIs/np.flatiter.cs` | 1 | 1 | D | the class | stays |
+| `APIs/np.iinfo.cs` | 21 | 1 | D (the dtype is the class's subject) | the class | stays |
+| `APIs/np.memoryview.cs` | 16 | 2 | D (the buffer protocol's format codes) | the class (or the `DType` slots, P3) | stays |
+| `APIs/np.nditer.Typed.cs` | 1 | 0 | C (the C# T against the dtype) | the typed iterator | stays |
+| `APIs/np.vectorize.cs` | 2 | 0 | D | the class | stays |
+| `Logic/np.can_cast.cs` | 80 | 1 | D (a dtype routine) | the DType layer (`DTypeCasting`; DTypes/ is P3's) | stays |
+| `Logic/np.common_type.cs` | 6 | 1 | D (a dtype routine) | the DType layer | stays |
+| `Logic/np.find_common_type.cs` | 10 | 2 | D (a dtype routine) | the DType layer | stays |
+| `Logic/np.min_scalar_type.cs` | 0 | 1 | D (a dtype routine) | the DType layer | stays |
+| `Logic/np.type_checks.cs` | 15 | 2 | D (dtype routines: issctype, isdtype, sctype2char, ...) | the DType layer | stays |
+| `Manipulation/np.asscalar.cs` | 1 | 0 | C (the C# T against the dtype) | the facade | stays |
+| `Matrixlib/NDMatrix.Construction.cs` | 8 | 0 | D | the class | stays |
+| `Matrixlib/NDMatrix.Indexing.cs` | 3 | 0 | D | the class | stays |
+| `Matrixlib/NDMatrix.Methods.cs` | 1 | 0 | D | the class | stays |
+| `Matrixlib/NDMatrix.Operators.cs` | 12 | 0 | D (numpy.matrix's defmatrix.py statements) | the class | stays |
+| `Matrixlib/NDMatrix.Reductions.cs` | 2 | 0 | D | the class | stays |
+| `Matrixlib/NDMatrix.cs` | 1 | 0 | D | the class | stays |
+| `Operations/Elementwise/NDArray.TextComparison.cs` | 0 | 1 | C (the operators' text route) | the operators (P1c) | stays |
+| `Polynomial/Package/np.polynomial.polyutils.cs` | 1 | 1 | D (the package's port; the numeric hit is a PolyNumberKind test) | numpy.polynomial | stays |
+| `RandomSampling/np.random.multinomial.cs` | 1 | 0 | A (np.random's own statement) | np.random (outside both) | stays |
+| `Statistics/np.nanmean.cs` | 1 | 0 | C (the matrix rule's result dtype) | the facade's class boundary (P7) | stays |
+| `Statistics/np.nanstd.cs` | 1 | 0 | C (the matrix rule's result dtype) | the facade's class boundary (P7) | stays |
+| `Statistics/np.nanvar.cs` | 1 | 0 | C (the matrix rule's result dtype) | the facade's class boundary (P7) | stays |
 
 ### P6. The engine stops calling np.*
 
