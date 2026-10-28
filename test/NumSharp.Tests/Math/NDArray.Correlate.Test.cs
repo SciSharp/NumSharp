@@ -201,8 +201,10 @@ namespace NumSharp.Tests.Math
         [TestMethod]
         public void Correlate_BadMode_Throws()
         {
+            // NumPy 2.4.2: ValueError, the exact text (no .NET " (Parameter 'mode')" suffix).
             Action act = () => np.correlate(np.array(new double[] { 1, 2 }), np.array(new double[] { 1 }), "bogus");
-            act.Should().Throw<ArgumentException>().WithMessage("mode must be one of 'valid', 'same', or 'full' (got 'bogus')*");
+            act.Should().ThrowExactly<ValueError>().Which.Message.Should()
+                .Be("mode must be one of 'valid', 'same', or 'full' (got 'bogus')");
         }
 
         [TestMethod]
@@ -210,7 +212,109 @@ namespace NumSharp.Tests.Math
         {
             // NumPy's parser is case-sensitive: 'VALID' is a near-miss, not an alias.
             Action act = () => np.correlate(np.array(new double[] { 1, 2 }), np.array(new double[] { 1 }), "VALID");
-            act.Should().Throw<ArgumentException>().WithMessage("Use one of 'valid', 'same', or 'full' for convolve/correlate mode*");
+            act.Should().ThrowExactly<ValueError>().Which.Message.Should()
+                .Be("Use one of 'valid', 'same', or 'full' for convolve/correlate mode");
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2's <c>correlatemode_parser</c> decides by the FIRST character: one that names a mode, followed by
+        ///     anything but that mode's exact name (another case, a suffix, a prefix, a trailing newline or NUL), is its
+        ///     own near-miss text, which does not quote the argument.
+        /// </summary>
+        [TestMethod]
+        public void Correlate_ModeNearMisses_AreTheParsersOwnText()
+        {
+            foreach (string mode in new[] { "Valid", "valid ", "v", "s", "f", "fu", "Same", "FULL", "same\n", "valid\0" })
+            {
+                Action act = () => np.correlate(np.array(new double[] { 1, 2 }), np.array(new double[] { 1 }), mode);
+                act.Should().ThrowExactly<ValueError>().Which.Message.Should()
+                    .Be("Use one of 'valid', 'same', or 'full' for convolve/correlate mode", "mode {0} is a near miss",
+                        mode.Replace("\0", "\\0").Replace("\n", "\\n"));
+            }
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2: a mode whose first character names no mode (the empty text included) is
+        ///     <c>string_converter_helper</c>'s text with the argument in Python's <c>repr</c> — double quotes around a text
+        ///     holding a single quote, escapes for controls, printable non-ASCII characters (an astral one included) raw.
+        /// </summary>
+        [TestMethod]
+        public void Correlate_BadMode_QuotesTheArgumentAsPythonRepr()
+        {
+            var cases = new (string Mode, string Got)[]
+            {
+                ("it's", "(got \"it's\")"),
+                ("a\"b'c", "(got 'a\"b\\'c')"),
+                ("", "(got '')"),
+                ("x", "(got 'x')"),
+                ("\n", "(got '\\n')"),
+                ("\t", "(got '\\t')"),
+                ("\0", "(got '\\x00')"),
+                ("\u007f", "(got '\\x7f')"),
+                ("\u00e9", "(got '\u00e9')"),
+                ("\U0001F600", "(got '\U0001F600')"),
+                ("\U00010000", "(got '\U00010000')"),
+            };
+            foreach (var (mode, got) in cases)
+            {
+                Action act = () => np.correlate(np.array(new double[] { 1, 2 }), np.array(new double[] { 1 }), mode);
+                act.Should().ThrowExactly<ValueError>().Which.Message.Should()
+                    .Be("mode must be one of 'valid', 'same', or 'full' " + got, "NumPy quotes the argument as {0}", got);
+            }
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2: <c>mode=None</c> reaches the converter's integer branch, which cannot read it — TypeError
+        ///     <c>convolve/correlate mode not understood</c>, raised while the arguments are parsed, so before the depth
+        ///     check of a 0-d operand. NumSharp's null mode is that None (it was a NullReferenceException).
+        /// </summary>
+        [TestMethod]
+        public void Correlate_NullMode_IsNumPysNoneTypeError()
+        {
+            Action act = () => np.correlate(np.array(new double[] { 1, 2 }), np.array(new double[] { 1 }), null);
+            act.Should().ThrowExactly<TypeError>().Which.Message.Should().Be("convolve/correlate mode not understood");
+
+            Action zeroD = () => np.correlate(NDArray.Scalar(1.0), np.array(new double[] { 1 }), null);
+            zeroD.Should().ThrowExactly<TypeError>().Which.Message.Should().Be("convolve/correlate mode not understood");
+
+            Action instance = () => np.array(new double[] { 1, 2 }).correlate(np.array(new double[] { 1 }), null);
+            instance.Should().ThrowExactly<TypeError>().Which.Message.Should().Be("convolve/correlate mode not understood");
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2 encodes the mode to UTF-8 before its parser reads it, so a lone surrogate fails with CPython's
+        ///     <c>UnicodeEncodeError</c>, even after a letter that names a mode.
+        /// </summary>
+        [TestMethod]
+        public void Correlate_LoneSurrogateMode_IsUnicodeEncodeError()
+        {
+            var cases = new (string Mode, string Text)[]
+            {
+                ("\ud800", "'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed"),
+                ("v\ud800", "'utf-8' codec can't encode character '\\ud800' in position 1: surrogates not allowed"),
+                ("\udc00\ud800", "'utf-8' codec can't encode characters in position 0-1: surrogates not allowed"),
+            };
+            foreach (var (mode, text) in cases)
+            {
+                Action act = () => np.correlate(np.array(new double[] { 1, 2 }), np.array(new double[] { 1 }), mode);
+                act.Should().ThrowExactly<UnicodeEncodeError>().Which.Message.Should().Be(text);
+            }
+        }
+
+        /// <summary>
+        ///     NumPy 2.4.2 parses np.correlate's mode with its arguments, before the operands are read: an empty, a 0-d and a
+        ///     two-dimensional operand all report a bad mode first.
+        /// </summary>
+        [TestMethod]
+        public void Correlate_ModeIsParsedBeforeTheOperands()
+        {
+            var operands = new[] { np.array(new double[0]), NDArray.Scalar(1.0), np.zeros(new Shape(2L, 2L)) };
+            foreach (var a in operands)
+            {
+                Action act = () => np.correlate(a, np.array(new double[] { 1, 0.5 }), "bogus");
+                act.Should().ThrowExactly<ValueError>().Which.Message.Should()
+                    .Be("mode must be one of 'valid', 'same', or 'full' (got 'bogus')", "an operand of shape {0}", a.Shape);
+            }
         }
 
         [TestMethod]

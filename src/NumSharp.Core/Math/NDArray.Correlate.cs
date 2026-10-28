@@ -20,15 +20,16 @@ namespace NumSharp
         /// output is reversed in that case (<c>_pyarray_revert</c>). The kernel is read forward. Float bit-parity notes are
         /// in <c>np.correlate.cs</c>.
         /// </remarks>
-        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
-        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
-        /// <exception cref="ValueError"><c>object of too small depth for desired array</c> (a 0-d operand) or <c>object too
+        /// <exception cref="ValueError">First an unknown <paramref name="mode"/> (NumPy's two texts, the bad argument in
+        ///     Python's <c>repr</c>); then <c>object of too small depth for desired array</c> (a 0-d operand) or <c>object too
         ///     deep for desired array</c> (two or more dimensions), <c>first array argument cannot be empty</c> /
         ///     <c>second array argument cannot be empty</c>, or — for a fixed-width string operand, after every check
         ///     above — <c>data type must provide an itemsize</c>.</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal (a
-        ///     <c>StringDType</c> first operand, or a <c>U</c> one beside it), or Python's error from the first product of the
-        ///     OBJECT fallback (<c>can't multiply sequence by non-int of type 'float'</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
+        ///     understood</c>. A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal (a <c>StringDType</c>
+        ///     first operand, or a <c>U</c> one beside it), or Python's error from the first product of the OBJECT fallback
+        ///     (<c>can't multiply sequence by non-int of type 'float'</c>).</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         // Scope: the facade keeps its scope over the call, so the weaver roots this array and v at the public entry (the

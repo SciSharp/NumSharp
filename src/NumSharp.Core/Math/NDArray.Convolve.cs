@@ -24,14 +24,15 @@ namespace NumSharp
         /// "swap if v longer" needs no output reversal. See <c>np.correlate.cs</c> for the
         /// float bit-parity notes (both share the same kernel).
         /// </remarks>
-        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
-        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
         /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
-        ///     the length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
+        ///     the length swap), then an unknown <paramref name="mode"/> (NumPy's two texts, the bad argument in Python's
+        ///     <c>repr</c>), <c>object too deep for desired array</c> for an operand of two or more dimensions, or — for a
         ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c> (NumPy's
         ///     result allocation for the string type number).</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's
-        ///     legacy-only descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
+        ///     understood</c>. A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's legacy-only
+        ///     descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         // Scope: the facade keeps its scope over the call, so the weaver roots this array and v at the public entry (the

@@ -152,14 +152,17 @@ namespace NumSharp
         /// is NumPy's: the two emptiness texts (on the operands as given) come before the mode, and the mode before the
         /// depth check. Both functions share one kernel; see <see cref="correlate"/> for its bit parity.
         /// </remarks>
-        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
-        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
         /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given, before
-        ///     the length swap), <c>object too deep for desired array</c> for an operand of two or more dimensions (a
-        ///     <c>numpy.matrix</c> operand included, as in NumPy), or — for a fixed-width string operand, after every check
-        ///     above — <c>data type must provide an itemsize</c>.</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's
-        ///     legacy-only descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
+        ///     the length swap), then an unknown <paramref name="mode"/> (<c>Use one of 'valid', 'same', or 'full' for
+        ///     convolve/correlate mode</c> when its first letter names a mode, else <c>mode must be one of 'valid', 'same', or
+        ///     'full' (got 'x')</c> with the argument in Python's <c>repr</c>), <c>object too deep for desired array</c> for
+        ///     an operand of two or more dimensions (a <c>numpy.matrix</c> operand included, as in NumPy), or — for a
+        ///     fixed-width string operand, after every check above — <c>data type must provide an itemsize</c>.</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (CPython's UTF-8 encoding
+        ///     error, raised before the mode is read).</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
+        ///     understood</c>. A <c>StringDType</c> operand (after the emptiness checks and the swap): NumPy's legacy-only
+        ///     descriptor refusal, or Python's error from the first product of the OBJECT fallback.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         public static NDArray convolve(NDArray a, NDArray v, string mode = "full")

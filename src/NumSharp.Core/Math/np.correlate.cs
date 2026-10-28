@@ -48,14 +48,17 @@ namespace NumSharp
         /// <see cref="Backends.TensorEngine.Correlate2"/>. A <c>numpy.matrix</c> operand is two-dimensional, so it is
         /// refused as too deep, as in NumPy.</para>
         /// </remarks>
-        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two mode texts).</exception>
-        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
-        /// <exception cref="ValueError"><c>object of too small depth for desired array</c> (a 0-d operand) or <c>object too
-        ///     deep for desired array</c> (two or more dimensions), <c>first array argument cannot be empty</c> /
-        ///     <c>second array argument cannot be empty</c>, or — for a fixed-width string operand, after every check
-        ///     above — <c>data type must provide an itemsize</c>.</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal, or Python's error
-        ///     from the first product of the OBJECT fallback.</exception>
+        /// <exception cref="ValueError">First an unknown <paramref name="mode"/> (<c>Use one of 'valid', 'same', or 'full' for
+        ///     convolve/correlate mode</c> when its first letter names a mode, else <c>mode must be one of 'valid', 'same', or
+        ///     'full' (got 'x')</c> with the argument in Python's <c>repr</c>); then <c>object of too small depth for desired
+        ///     array</c> (a 0-d operand) or <c>object too deep for desired array</c> (two or more dimensions), <c>first array
+        ///     argument cannot be empty</c> / <c>second array argument cannot be empty</c>, or — for a fixed-width string
+        ///     operand, after every check above — <c>data type must provide an itemsize</c>.</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (CPython's UTF-8 encoding
+        ///     error, raised before the mode is read).</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
+        ///     understood</c>, before any operand check. A <c>StringDType</c> operand: NumPy's legacy-only descriptor
+        ///     refusal, or Python's error from the first product of the OBJECT fallback.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         public static NDArray correlate(NDArray a, NDArray v, string mode = "valid")

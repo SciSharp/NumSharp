@@ -283,17 +283,18 @@ namespace NumSharp
         /// <param name="mode"><c>valid</c> (the default), <c>same</c> or <c>full</c>, matched exactly.</param>
         /// <returns>A fresh 1-D array of the operands' common dtype, of <c>max(n1, n2) - min(n1, n2) + 1</c>,
         ///     <c>max(n1, n2)</c> or <c>n1 + n2 - 1</c> elements.</returns>
-        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/>, with NumPy's two texts: <c>Use one of
-        ///     'valid', 'same', or 'full' for convolve/correlate mode</c> for a string with the right first letter, <c>mode must
-        ///     be one of 'valid', 'same', or 'full' (got '…')</c> for any other.</exception>
-        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
-        /// <exception cref="ValueError">An operand that is not one-dimensional (<c>object of too small depth for desired
-        ///     array</c> for a 0-d one, <c>object too deep for desired array</c> for two or more dimensions, the first
-        ///     operand first), an empty one (<c>first array argument cannot be empty</c> / <c>second array argument cannot
-        ///     be empty</c>), or a fixed-width string operand after those checks (<c>data type must provide an
-        ///     itemsize</c>).</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal, or Python's
-        ///     error from the first product of its OBJECT fallback.</exception>
+        /// <exception cref="ValueError">First an unknown <paramref name="mode"/>, with NumPy's two texts: <c>Use one of
+        ///     'valid', 'same', or 'full' for convolve/correlate mode</c> for a text whose first letter names a mode,
+        ///     <c>mode must be one of 'valid', 'same', or 'full' (got 'x')</c> with the argument in Python's <c>repr</c> for
+        ///     any other. Then an operand that is not one-dimensional (<c>object of too small depth for desired array</c> for
+        ///     a 0-d one, <c>object too deep for desired array</c> for two or more dimensions, the first operand first), an
+        ///     empty one (<c>first array argument cannot be empty</c> / <c>second array argument cannot be empty</c>), or a
+        ///     fixed-width string operand after those checks (<c>data type must provide an itemsize</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate: CPython's UTF-8
+        ///     encoding error, raised before the mode is read.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>): <c>convolve/correlate mode not
+        ///     understood</c>. A <c>StringDType</c> operand: NumPy's legacy-only descriptor refusal, or Python's error from
+        ///     the first product of its OBJECT fallback.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes (an
         ///     object array, which NumSharp does not have).</exception>
         /// <remarks>NumPy's function is C (<c>multiarraymodule.c</c>), so the call is an engine member; np.convolve's Python
@@ -312,12 +313,11 @@ namespace NumSharp
         /// <param name="v">The second one-dimensional sequence (conjugated for a complex common dtype).</param>
         /// <param name="mode"><c>valid</c> (the default), <c>same</c> or <c>full</c>, matched exactly.</param>
         /// <returns>A fresh 1-D array of the operands' common dtype (lengths as for <see cref="Correlate"/>).</returns>
-        /// <exception cref="ArgumentException">An unknown <paramref name="mode"/> (NumPy's two texts, as for
-        ///     <see cref="Correlate"/>).</exception>
-        /// <exception cref="NullReferenceException">A null <paramref name="mode"/>.</exception>
-        /// <exception cref="ValueError">An operand that is not one-dimensional, an empty one, or a fixed-width string one
-        ///     (the texts and order of <see cref="Correlate"/>).</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand's refusal or first-product error.</exception>
+        /// <exception cref="ValueError">An unknown <paramref name="mode"/>, then an operand that is not one-dimensional, an
+        ///     empty one, or a fixed-width string one (the texts and order of <see cref="Correlate"/>).</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (<c>convolve/correlate mode not understood</c>), or a
+        ///     <c>StringDType</c> operand's refusal or first-product error.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy computes.</exception>
         /// <remarks>NumPy's function is C, so the call is an engine member; the numpy.matrix boundary stays with
         ///     <c>np.correlate</c>.</remarks>

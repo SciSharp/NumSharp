@@ -22,11 +22,12 @@ namespace NumSharp
         /// <param name="mode"><c>full</c>, <c>same</c> or <c>valid</c>.</param>
         /// <returns>A fresh 1-D array of the operands' common dtype: the discrete linear convolution.</returns>
         /// <exception cref="ValueError"><c>a cannot be empty</c> / <c>v cannot be empty</c> (on the operands as given,
-        ///     before the swap), then the correlation's own errors (<see cref="Backends.TensorEngine.Correlate"/>: the mode
-        ///     comes AFTER these checks here, as NumPy parses it inside <c>multiarray.correlate</c>).</exception>
-        /// <exception cref="System.ArgumentException">An unknown <paramref name="mode"/>.</exception>
-        /// <exception cref="System.NullReferenceException">A null <paramref name="mode"/>.</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand's refusal or first-product error.</exception>
+        ///     before the swap), then the correlation's own errors (<see cref="Backends.TensorEngine.Correlate"/>: an unknown
+        ///     mode comes AFTER these checks here, as NumPy parses it inside <c>multiarray.correlate</c>).</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate (after the emptiness
+        ///     checks).</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>, after the emptiness checks), or
+        ///     a <c>StringDType</c> operand's refusal or first-product error.</exception>
         /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy
         ///     computes.</exception>
         /// <remarks>The 0-d promotions and the reversed view are temporaries the [NDScoped] weaver releases when the call

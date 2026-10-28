@@ -2,6 +2,8 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using NumSharp.Backends.Printing;
+using NumSharp.Backends.Strings;
 using NumSharp.Utilities;
 using SRCS = System.Runtime.CompilerServices;
 
@@ -46,26 +48,68 @@ namespace NumSharp.Backends
         internal enum SlidingMode { Valid = 0, Same = 1, Full = 2 }
 
         /// <summary>
-        /// Parse a convolve/correlate mode string exactly like NumPy's correlatemode_parser
-        /// (numpy/_core/src/multiarray/conversion_utils.c): case-SENSITIVE exact match, with
-        /// NumPy's two distinct near-miss messages reproduced verbatim.
+        ///     NumPy's <c>PyArray_CorrelatemodeConverter</c> (numpy/_core/src/multiarray/conversion_utils.c), which parses
+        ///     np.correlate's and np.convolve's <c>mode</c> while their C function reads its arguments, for the two kinds of
+        ///     argument a C# string carries: a <c>str</c> goes through <c>string_converter_helper</c> (encoded to UTF-8
+        ///     first, then <c>correlatemode_parser</c>), and <c>None</c> through the integer branch, which cannot read it.
         /// </summary>
+        /// <param name="mode">The <c>mode=</c> argument; null is NumPy's <c>None</c>.</param>
+        /// <returns>The mode.</returns>
+        /// <exception cref="TypeError">A null <paramref name="mode"/>: <c>convolve/correlate mode not understood</c>.</exception>
+        /// <exception cref="UnicodeEncodeError">A text holding a lone surrogate, which CPython cannot encode to UTF-8
+        ///     (<c>'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed</c>). The encoding
+        ///     comes before the parser, so <c>"v\ud800"</c> fails here too, at position 1.</exception>
+        /// <exception cref="ValueError">A text whose first character is <c>v</c>, <c>s</c> or <c>f</c> in either case but
+        ///     which is not exactly <c>valid</c>, <c>same</c> or <c>full</c>: <c>Use one of 'valid', 'same', or 'full' for
+        ///     convolve/correlate mode</c>. Any other text, the empty one included: <c>mode must be one of 'valid',
+        ///     'same', or 'full' (got 'x')</c>, with the argument in Python's <c>repr</c> (<c>(got "it's")</c>,
+        ///     <c>(got '\n')</c>).</exception>
+        /// <remarks>
+        ///     <para>The match is case-SENSITIVE: <c>'Valid'</c> and <c>'VALID'</c> are near misses, not aliases.</para>
+        ///     <para>NumPy also takes the integers 0, 1 and 2 (any other integer is <c>integer convolve/correlate mode must
+        ///     be 0, 1, or 2</c>); NumSharp's <c>mode</c> parameters are strings, so that branch has no counterpart.</para>
+        /// </remarks>
         internal static SlidingMode ParseSlidingMode(string mode)
         {
-            switch (mode)
-            {
-                case "valid": return SlidingMode.Valid;
-                case "same": return SlidingMode.Same;
-                case "full": return SlidingMode.Full;
-            }
+            // The converter's integer branch: None is not an int, and NumPy replaces the conversion's own TypeError with
+            // this text.
+            if (mode is null)
+                throw new TypeError("convolve/correlate mode not understood");
 
-            // A near-miss (right first letter, wrong case/spelling) gets NumPy's parser message;
-            // anything else gets the string-converter message that quotes the input.
-            char c0 = mode.Length > 0 ? mode[0] : '\0';
-            if (c0 == 'v' || c0 == 'V' || c0 == 's' || c0 == 'S' || c0 == 'f' || c0 == 'F')
-                throw new ArgumentException("Use one of 'valid', 'same', or 'full' for convolve/correlate mode", nameof(mode));
-            throw new ArgumentException($"mode must be one of 'valid', 'same', or 'full' (got '{mode}')", nameof(mode));
+            // string_converter_helper encodes the text to UTF-8 before the parser runs (PyUnicode_AsUTF8AndSize): a lone
+            // surrogate fails there with CPython's error, whatever the first character is.
+            NDUtf8.GetByteCount(mode);
+
+            // correlatemode_parser: the first character picks the mode, and the whole text must then be its exact name
+            // (NumPy's length check plus strcmp over the UTF-8 bytes, which a C# string comparison equals: an embedded NUL
+            // makes the lengths differ). A first character that names no mode, or an empty text, returns -1 without an
+            // error of its own, and the helper reports the argument.
+            if (mode.Length >= 1)
+            {
+                switch (mode[0])
+                {
+                    case 'v':
+                    case 'V':
+                        return mode == "valid" ? SlidingMode.Valid : throw NearMissModeError();
+                    case 's':
+                    case 'S':
+                        return mode == "same" ? SlidingMode.Same : throw NearMissModeError();
+                    case 'f':
+                    case 'F':
+                        return mode == "full" ? SlidingMode.Full : throw NearMissModeError();
+                }
+            }
+            throw new ValueError($"mode must be one of 'valid', 'same', or 'full' (got {PyRepr.Str(mode)})");
         }
+
+        /// <summary>
+        ///     <c>correlatemode_parser</c>'s own error, for a text whose first character names a mode but which is not that
+        ///     mode's exact name (another case, a suffix, a prefix of the name).
+        /// </summary>
+        /// <returns>The error to throw: <c>Use one of 'valid', 'same', or 'full' for convolve/correlate mode</c>, which does
+        ///     not quote the argument.</returns>
+        private static ValueError NearMissModeError()
+            => new ValueError("Use one of 'valid', 'same', or 'full' for convolve/correlate mode");
 
         /// <summary>
         /// Core sliding multiply-accumulate. <paramref name="data"/> and <paramref name="kernel"/>

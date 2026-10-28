@@ -25,11 +25,12 @@ namespace NumSharp.Backends
         ///     complex dtype, and the result reversed when the operands were swapped. False for <c>PyArray_Correlate</c>
         ///     (np.convolve's <c>multiarray.correlate</c>), which does neither.</param>
         /// <returns>A fresh 1-D array of the common dtype.</returns>
-        /// <exception cref="System.ArgumentException">An unknown <paramref name="mode"/> (NumPy's two texts).</exception>
-        /// <exception cref="System.NullReferenceException">A null <paramref name="mode"/>.</exception>
-        /// <exception cref="ValueError">An operand that is not one-dimensional, an empty operand, or a fixed-width string
-        ///     operand (NumPy's texts, in its order).</exception>
-        /// <exception cref="TypeError">A <c>StringDType</c> operand's refusal or first-product error.</exception>
+        /// <exception cref="ValueError">An unknown <paramref name="mode"/> (NumPy's two texts, see
+        ///     <see cref="SlidingDot.ParseSlidingMode"/>), then an operand that is not one-dimensional, an empty operand, or a
+        ///     fixed-width string operand (NumPy's texts, in its order).</exception>
+        /// <exception cref="UnicodeEncodeError">A <paramref name="mode"/> holding a lone surrogate.</exception>
+        /// <exception cref="TypeError">A null <paramref name="mode"/> (NumPy's <c>None</c>), or a <c>StringDType</c>
+        ///     operand's refusal or first-product error.</exception>
         /// <exception cref="System.NotSupportedException">A <c>StringDType</c> operand whose OBJECT product NumPy
         ///     computes.</exception>
         /// <remarks>The materialized operands, the conjugate, and the first result of a reversed product are temporaries:
