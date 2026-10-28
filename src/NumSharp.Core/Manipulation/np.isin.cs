@@ -29,18 +29,18 @@ namespace NumSharp
         /// <exception cref="InvalidOperationException"><c>kind='table'</c> with a range wider than the dtype's maximum
         ///     (NumPy's RuntimeError text).</exception>
         /// <exception cref="UnicodeDecodeError">A string operand on NumPy's sort path whose concatenation decodes <c>S</c> text
-        ///     holding a byte that is not ASCII into <c>U</c> (see <c>IsinEngine.IsinText</c>).</exception>
+        ///     holding a byte that is not ASCII into <c>U</c> (see <c>DefaultEngine.IsinText</c>).</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> set whose NA object is a sequence, held by an NA
-        ///     cell (NumPy broadcasts the comparison against it; see <c>IsinEngine.IsinVString</c>).</exception>
+        ///     cell (NumPy broadcasts the comparison against it; see <c>DefaultEngine.IsinVString</c>).</exception>
         // The woven boundary scope reclaims every intermediate this call tree creates — the ravels,
-        // the promoted casts, the sort/table/hash machinery inside IsinEngine's helpers — and the
+        // the promoted casts, the sort/table/hash machinery inside the engine's isin helpers — and the
         // yielded reshape view is the only survivor. The helpers stay scope-free on purpose.
         [NDScoped]
         public static NDArray isin(NDArray element, NDArray test_elements,
             bool assume_unique = false, bool invert = false, string kind = null)
         {
             using var plain = NDMatrixBoundary.PlainFor(element, test_elements);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            return IsinEngine.Isin(element, test_elements, assume_unique, invert, kind);
+            return element.TensorEngine.Isin(element, test_elements, assume_unique, invert, kind);
         }
     }
 }

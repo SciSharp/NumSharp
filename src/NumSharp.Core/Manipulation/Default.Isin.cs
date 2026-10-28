@@ -7,7 +7,7 @@ using NumSharp.Backends.Kernels;
 using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 // =============================================================================
-// IsinEngine.cs - np.isin after its facade's class boundary (numpy/lib/_arraysetops_impl.py, isin / _isin)
+// Default.Isin.cs - DefaultEngine's np.isin, after the facade's class boundary (numpy/lib/_arraysetops_impl.py, isin / _isin)
 // =============================================================================
 //
 // WHAT NUMPY DOES
@@ -17,39 +17,31 @@ using SysUnsafe = System.Runtime.CompilerServices.Unsafe;
 //   len(ar1) ** 0.145, or an operand with objects: StringDType) and the SORT path (np.unique of each operand, one
 //   concatenate, a stable argsort and the adjacent-equality step).
 //
-// HOW THIS CLASS ANSWERS
-//   StringDType and fixed-width text run NumPy's own statements (IsinVString in IsinEngine.VString.cs, IsinText here).
+// HOW THIS FILE ANSWERS
+//   StringDType and fixed-width text run NumPy's own statements (IsinVString in Default.Isin.VString.cs, IsinText here).
 //   Every other dtype pair takes NumPy's path decision (NumPyPath). The table method and the loop path run as one-pass
 //   kernels (TableMembership, LoopMembership), whose answer is NumPy's: the exact membership. The sort path runs NumPy's
 //   statements where they are not the exact membership (SortPathFlat: a lossy concatenation, assume_unique). Everything
 //   else, and each pair a kernel declines, computes the exact membership in result_type(ar1, ar2) by a hash set, a
 //   counting table or a sorted search (ComputeMembership), an exact uint64 / signed pair included.
 //
-// An internal operation class (the np-layer dtype plan's D1: NumPy writes isin in Python), moved from the public np.isin
-// by P2. It sits beside the facade, not under Backends/, because its statements call the public np.* functions NumPy's
+// DefaultEngine's override of TensorEngine.Isin (TensorEngine.ArraySetOps.cs), moved from the public np.isin by the
+// np-layer dtype plan's P2 into the internal operation class IsinEngine, and made these DefaultEngine partials by its
+// phase PE (E1: NumPy writes isin in Python, and such a function is a TensorEngine member that DefaultEngine implements).
+// The file sits beside the facade, not under Backends/, because its statements call the public np.* functions NumPy's
 // call (np.ravel, np.unique, np.concatenate, np.argsort, np.equal, np.searchsorted, ...), which ratchet R2 counts under
-// Backends/.
+// Backends/. Its private helpers keep their names: none is shared with another DefaultEngine member, so no overload set
+// changed.
 // =============================================================================
 
-namespace NumSharp
+namespace NumSharp.Backends
 {
-    /// <summary>
-    ///     NumPy's <c>numpy.isin</c> (<c>numpy/lib/_arraysetops_impl.py</c>) after its facade's class boundary: the
-    ///     <c>kind</c> check, the text and <c>StringDType</c> routes (NumPy's loop and sort statements) and the numeric
-    ///     membership.
-    /// </summary>
-    /// <remarks>
-    ///     An internal operation class (the np-layer dtype plan's D1: NumPy writes isin in Python), moved from the public
-    ///     <c>np.isin</c> by P2; the facade keeps its signature, documentation, class boundary and one call here. It sits
-    ///     beside the facade, not under <c>Backends/</c>, because its statements call public np.* functions, which ratchet R2
-    ///     counts under <c>Backends/</c>.
-    /// </remarks>
-    internal static partial class IsinEngine
+    public partial class DefaultEngine
     {
         /// <summary>
-        ///     <c>isin(element, test_elements, assume_unique, invert, kind)</c>: the <c>kind</c> check, then the
-        ///     <c>StringDType</c> route, the text route or the numeric membership, the answer shaped like
-        ///     <paramref name="element"/>.
+        ///     DefaultEngine's <see cref="TensorEngine.Isin"/>: <c>isin(element, test_elements, assume_unique, invert,
+        ///     kind)</c>, the <c>kind</c> check, then the <c>StringDType</c> route, the text route or the numeric
+        ///     membership, the answer shaped like <paramref name="element"/>.
         /// </summary>
         /// <param name="element">The tested values (not null; the result has their shape).</param>
         /// <param name="test_elements">The set (not null; flattened).</param>
@@ -69,10 +61,12 @@ namespace NumSharp
         ///     ASCII beside <c>U</c> text.</exception>
         /// <exception cref="NotSupportedException">A <c>StringDType</c> set whose NA object is a sequence, held by an NA cell
         ///     (see <see cref="IsinVString"/>).</exception>
-        /// <remarks>Covered by <c>[NDScopedCovered]</c>: its only caller is the <c>[NDScoped]</c> np.isin, whose scope
-        ///     releases the ravels, the promoted casts and the sort / table / hash work arrays.</remarks>
-        [NDScopedCovered]
-        internal static NDArray Isin(NDArray element, NDArray test_elements, bool assume_unique, bool invert, string kind)
+        /// <remarks>A public entry point since the plan's phase PE, so it owns its scope (it was <c>[NDScopedCovered]</c>
+        ///     under np.isin's): the ravels, the promoted casts and the sort / table / hash work arrays are released here,
+        ///     the answer's view escapes.</remarks>
+        [NDScoped]
+        public override NDArray Isin(NDArray element, NDArray test_elements, bool assume_unique = false, bool invert = false,
+            string kind = null)
         {
             if (kind != null && kind != "sort" && kind != "table")
                 throw new ValueError($"Invalid kind: '{kind}'. Please use None, 'sort' or 'table'.");
@@ -1206,7 +1200,7 @@ namespace NumSharp
         private static (BigInteger Min, BigInteger Max) TableBounds(NDArray ar2)
         {
             using NDArray min = np.amin(ar2), max = np.amax(ar2);
-            return (PythonInt(min.GetAtIndex(0)), PythonInt(max.GetAtIndex(0)));
+            return (IsinPythonInt(min.GetAtIndex(0)), IsinPythonInt(max.GetAtIndex(0)));
         }
 
         /// <summary>
@@ -1216,7 +1210,7 @@ namespace NumSharp
         /// <param name="value">A boxed element of a bool, integer or char array.</param>
         /// <returns>Its value.</returns>
         /// <exception cref="InvalidCastException">A boxed value of another kind (no caller passes one).</exception>
-        private static BigInteger PythonInt(object value) => value switch
+        private static BigInteger IsinPythonInt(object value) => value switch
         {
             bool b => b ? BigInteger.One : BigInteger.Zero,
             char c => new BigInteger((int)c),
