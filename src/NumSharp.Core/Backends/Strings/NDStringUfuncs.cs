@@ -835,18 +835,22 @@ namespace NumSharp.Backends.Strings
         /// <param name="operands">The einsum operands.</param>
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
         /// <param name="casting">The <c>casting=</c> rule (already validated).</param>
+        /// <param name="out">The <c>out=</c> array, or null: a text out sends the call here too, and NumPy's iterator
+        ///     takes the out into its common dtype and reads and writes it under <paramref name="casting"/>.</param>
+        /// <exception cref="DTypePromotionError">No common dtype for the operands and the out (numbers beside a
+        ///     StringDType out).</exception>
         /// <exception cref="TypeError">An operand cannot reach the loop descriptor under <paramref name="casting"/>, the
         ///     bool zero NumPy initialises its output with cannot reach the output descriptor by a 'safe' cast, or the loop
         ///     has no string sum-of-products (<c>invalid data type for einsum</c>).</exception>
-        internal static void ThrowIfEinsum(NDArray[] operands, DType dtype, string casting)
+        internal static void ThrowIfEinsum(NDArray[] operands, DType dtype, string casting, NDArray @out = null)
         {
             // A StringDType request is text too (NumPy loops it like S / U and finds no sum of products).
-            bool any = IsTextRequest(dtype);
+            bool any = IsTextRequest(dtype) || (@out is not null && IsText(@out));
             foreach (var op in operands)
                 any |= IsText(op);
             if (!any)
                 return;
-            throw EinsumError(operands, dtype, casting);
+            throw EinsumError(operands, dtype, casting, @out);
         }
 
         /// <summary>
@@ -859,12 +863,19 @@ namespace NumSharp.Backends.Strings
         /// <param name="operands">The einsum operands.</param>
         /// <param name="dtype">The <c>dtype=</c> request, or null.</param>
         /// <param name="casting">The <c>casting=</c> rule.</param>
+        /// <param name="out">The <c>out=</c> array, or null. Given, it joins the common dtype (no <c>dtype=</c>), is
+        ///     read into the loop descriptor and written back from it under <paramref name="casting"/> after the
+        ///     operands' casts (NpyIter's READWRITE operand), and receives the bool zero itself.</param>
         /// <returns>The exception to throw (never null).</returns>
-        internal static Exception EinsumError(NDArray[] operands, DType dtype, string casting)
+        /// <exception cref="DTypePromotionError">No common dtype for the operands and the out (raised, not
+        ///     returned).</exception>
+        internal static Exception EinsumError(NDArray[] operands, DType dtype, string casting, NDArray @out = null)
         {
             var rule = DTypeCasting.ParseCasting(casting);
             bool unsized = IsStringRequest(dtype) && dtype.itemsize == 0;
-            DType loop = dtype ?? DTypePromotion.ResultType(operands);
+            DType loop = dtype ?? (@out is null
+                ? DTypePromotion.ResultType(operands)
+                : DTypePromotion.ResultType(Array.ConvertAll(Append(operands, @out), a => (object)a)));
             for (int i = 0; i < operands.Length; i++)
             {
                 var from = operands[i].dtype;
@@ -875,13 +886,41 @@ namespace NumSharp.Backends.Strings
                         $"according to the rule '{casting}'");
             }
 
-            var output = unsized ? dtype.Meta.default_descr() : loop;
+            if (@out is not null)
+            {
+                // The out is the iterator's last operand, READWRITE: the read cast, then the write cast.
+                var od = @out.dtype;
+                var target = !unsized ? loop : od.Meta == dtype.Meta ? od : DTypePromotion.CastDescrToDType(od, dtype.Meta);
+                if (!DTypeCasting.CanCastTypeTo(od, target, rule))
+                    return new TypeError(
+                        $"Iterator operand {operands.Length} dtype could not be cast from {od.ToString(true)} to " +
+                        $"{target.ToString(true)} according to the rule '{casting}'");
+                if (!DTypeCasting.CanCastTypeTo(target, od, rule))
+                    return new TypeError(
+                        $"Iterator requested dtype could not be cast from {target.ToString(true)} to {od.ToString(true)}, " +
+                        $"the operand {operands.Length} dtype, according to the rule '{casting}'");
+            }
+
+            // The bool zero is assigned into the out itself when one is given, else into the allocated output.
+            var output = @out?.dtype ?? (unsized ? dtype.Meta.default_descr() : loop);
             if (!DTypeCasting.CanCastTypeTo(DType.Boolean, output, NPY_CASTING.NPY_SAFE_CASTING))
                 // NumPy's PyArray_AssignRawScalar of the bool zero into the output raises TypeError, like the operand
                 // cast above (np.copyto keeps the house InvalidCastException for its own scalar casts).
                 return new TypeError(
                     $"Cannot cast scalar from dtype('bool') to {output.ToString(true)} according to the rule 'safe'");
             return new TypeError("invalid data type for einsum");
+        }
+
+        /// <summary>The einsum operands followed by <c>out=</c>, the iterator's operand list.</summary>
+        /// <param name="operands">The einsum operands.</param>
+        /// <param name="out">The <c>out=</c> array.</param>
+        /// <returns>A new array of the operands and the out, in that order.</returns>
+        private static NDArray[] Append(NDArray[] operands, NDArray @out)
+        {
+            var all = new NDArray[operands.Length + 1];
+            Array.Copy(operands, all, operands.Length);
+            all[operands.Length] = @out;
+            return all;
         }
 
         /// <summary>

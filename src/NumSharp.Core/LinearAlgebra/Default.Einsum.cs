@@ -69,17 +69,25 @@ namespace NumSharp.Backends
                 return view;
             }
 
-            // Text (an operand, or a string dtype= request) has no sum-of-products: after the parse and the view path
-            // above (which hands text back as a view, as NumPy does), NumPy's operand casts, its bool-zero output fill
-            // and its loop lookup refuse it, in that order.
-            Backends.Strings.NDStringUfuncs.ThrowIfEinsum(operands, dtype, casting);
+            // From here NumPy's c_einsum runs ONE iterator over the operands and out= (NpyIter_AdvancedNew with
+            // NPY_ITER_COMMON_DTYPE, out READWRITE). It takes in the out's write flag first, before any dtype is
+            // resolved: a read-only out raises NpyIter's text, not np.copyto's at the end.
+            if (@out is not null)
+                NumSharpException.ThrowIfNotWriteable(@out.Shape, "operand array with iterator write flag set");
+
+            // Text (an operand, a string dtype= request, or a text out=) has no sum-of-products: after the parse and
+            // the view path above (which hands text back as a view, as NumPy does), NumPy's common dtype, its
+            // operand casts, the out's casts, its bool-zero output fill and its loop lookup refuse it, in that order.
+            Backends.Strings.NDStringUfuncs.ThrowIfEinsum(operands, dtype, casting, @out);
 
             // einsum accumulates in the operands' promoted dtype (NEP50 result_type), NOT np.sum's
             // widened accumulator: einsum('ij->i', int32) is int32, where np.sum would give int64.
-            // A dtype= override forces it. EVERY operand must reach the loop dtype under the casting
-            // rule — which is what makes casting='no' reject mixed dtypes — with NumPy's iterator
-            // wording verbatim.
-            NPTypeCode computeType = dtype?.GetTypeCode() ?? np.result_type(operands);
+            // A dtype= override forces it. With out= and no dtype= the iterator's common dtype takes the out in
+            // too (NPY_ITER_COMMON_DTYPE over every operand): int8 operands with an int64 out are summed in int64.
+            // EVERY operand must reach the loop dtype under the casting rule — which is what makes casting='no'
+            // reject mixed dtypes — with NumPy's iterator wording verbatim.
+            NPTypeCode computeType = dtype?.GetTypeCode()
+                ?? (@out is null ? np.result_type(operands) : np.result_type(WithOut(operands, @out)));
             for (int i = 0; i < operands.Length; i++)
             {
                 if (operands[i].typecode != computeType && !np.can_cast(operands[i].typecode, computeType, casting))
@@ -87,6 +95,23 @@ namespace NumSharp.Backends
                         $"Iterator operand {i} dtype could not be cast from " +
                         $"dtype('{operands[i].typecode.AsNumpyDtypeName()}') to " +
                         $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+            }
+
+            // The out is the iterator's last operand, READWRITE: NpyIter checks the read cast (out -> loop) and then
+            // the write cast (loop -> out) under the same rule, before anything is computed.
+            if (@out is not null && @out.typecode != computeType)
+            {
+                if (!np.can_cast(@out.typecode, computeType, casting))
+                    throw new TypeError(
+                        $"Iterator operand {operands.Length} dtype could not be cast from " +
+                        $"dtype('{@out.typecode.AsNumpyDtypeName()}') to " +
+                        $"dtype('{computeType.AsNumpyDtypeName()}') according to the rule '{casting}'");
+                if (!np.can_cast(computeType, @out.typecode, casting))
+                    throw new TypeError(
+                        $"Iterator requested dtype could not be cast from " +
+                        $"dtype('{computeType.AsNumpyDtypeName()}') to " +
+                        $"dtype('{@out.typecode.AsNumpyDtypeName()}'), the operand {operands.Length} dtype, " +
+                        $"according to the rule '{casting}'");
             }
 
             var terms = new List<(NDArray Array, string Term)>(operands.Length);
@@ -640,6 +665,21 @@ namespace NumSharp.Backends
             if (optimize is null || optimize is false)
                 return;
             np.ResolveOptimize(optimize);
+        }
+
+        /// <summary>
+        ///     The operands followed by <c>out=</c>: the arrays NumPy's einsum iterator resolves its common dtype over
+        ///     when no <c>dtype=</c> is given.
+        /// </summary>
+        /// <param name="operands">The einsum operands.</param>
+        /// <param name="out">The <c>out=</c> array (not null).</param>
+        /// <returns>A new array of the operands and the out, in that order.</returns>
+        private static NDArray[] WithOut(NDArray[] operands, NDArray @out)
+        {
+            var all = new NDArray[operands.Length + 1];
+            Array.Copy(operands, all, operands.Length);
+            all[operands.Length] = @out;
+            return all;
         }
     }
 }
