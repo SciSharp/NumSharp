@@ -5,9 +5,10 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
         /// <summary>
-        ///     NumPy's <c>np.angle</c> body: <c>arctan2(z.imag, z.real)</c> for a complex input and <c>arctan2(0, z)</c>
-        ///     (a weak Python int 0) for a real one, scaled by <c>180 / pi</c> in place when <paramref name="deg"/> is set.
-        ///     The facade applies the <c>numpy.matrix</c> rule first and calls this for everything else.
+        ///     DefaultEngine's <see cref="TensorEngine.Angle(NDArray, bool)"/>, NumPy's <c>np.angle</c> body:
+        ///     <c>arctan2(z.imag, z.real)</c> for a complex input and <c>arctan2(0, z)</c> (a weak Python int 0) for a real
+        ///     one, scaled by <c>180 / pi</c> in place when <paramref name="deg"/> is set. The facade applies the
+        ///     <c>numpy.matrix</c> rule first and calls this for everything else.
         /// </summary>
         /// <param name="z">The input (any dtype; text is refused as NumPy's <c>arctan2</c> refuses it).</param>
         /// <param name="deg">Return degrees instead of radians.</param>
@@ -19,12 +20,13 @@ namespace NumSharp.Backends
         ///     <para>Moved from <c>np.angle</c> by the np-layer dtype plan's P0 pilot, statement for statement; the facade's
         ///     <c>np.arctan2</c> / <c>np.multiply</c> calls became the engine members they forward to (the operands here are
         ///     never matrices or chararrays: the facade decides the class first, and the lanes, casts and scalars below are
-        ///     plain arrays).</para>
+        ///     plain arrays). The plan's phase PE (E1) made it this override of a <c>TensorEngine</c> member; it was an
+        ///     internal static of DefaultEngine.</para>
         ///     <para>The real path computes <c>arctan2</c> in float64 and casts to the tier: its only values are +0, pi and
         ///     NaN, so the cast is exact and matches NumPy computing at the tier (verified against NumPy 2.4.2).</para>
         /// </remarks>
         [NDScoped] // the lanes, the float64 cast, the 0-d zero and the float64 angle before the tier cast are this call's own
-        internal static NDArray Angle(NDArray z, bool deg)
+        public override NDArray Angle(NDArray z, bool deg = false)
         {
             // NumPy's angle of a non-complex input is arctan2(0, z), which has no string loop: the Python int 0 is the
             // weak _PyLongDType in the StringDType refusal, the fixed-width classes take the legacy resolver's text.

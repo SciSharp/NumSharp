@@ -22,7 +22,7 @@ namespace NumSharp
         ///     with NumPy's per-dtype float tier: bool/int32+/float64/complex -&gt; float64, int8/uint8/float16
         ///     -&gt; float16, int16/uint16/float32 -&gt; float32.
         /// </returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.angle.html. The facade holds only the matrix boundary; NumPy's body is <see cref="DefaultEngine.Angle"/>.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.angle.html. The facade holds only the matrix boundary; NumPy's body is the engine's <see cref="TensorEngine.Angle(NDArray, bool)"/>.</remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
         /// <exception cref="TypeError">Text: <c>arctan2</c> has no string loop (NumPy's no-loop text for <c>StringDType</c>, the legacy resolver's text for <c>S</c> / <c>U</c>).</exception>
         [NDScoped]
@@ -31,9 +31,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(z))
                 return NDMatrixBoundary.Wrapped((z, deg), static s => angle(s.z, s.deg));
-            // NumPy's angle body (the complex test, arctan2 and the degree scaling, the text refusals) is
-            // DefaultEngine.Angle's: the facade holds only the class rule above.
-            return DefaultEngine.Angle(z, deg);
+            // NumPy's angle body (the complex test, arctan2 and the degree scaling, the text refusals) is the
+            // engine member's: the facade holds only the class rule above.
+            return z.TensorEngine.Angle(z, deg);
         }
     }
 }
