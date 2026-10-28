@@ -83,7 +83,7 @@ namespace NumSharp.Backends.Strings
             OrderResolver.Resolve(order, src.Shape); // validates the order character (C/F/A/K)
 
             var from = src.dtype;
-            var to = AdaptDescriptorToArray(from, dtype);
+            var to = DTypePromotion.AdaptDescriptorToArray(from, dtype);
 
             // "If the memory layout matches and, data types are equivalent, ... and if the cast says view are possible,
             // we can skip the copy." — PyArray_SafeCast(dtype, self->descr, NO_CASTING) with a view offset.
@@ -155,23 +155,6 @@ namespace NumSharp.Backends.Strings
                     throw new ValueError(
                         $"casting must be one of 'no', 'equiv', 'safe', 'same_kind', 'unsafe', '{SameValue}' (got '{casting}')");
             }
-        }
-
-        /// <summary>
-        ///     NumPy's <c>PyArray_AdaptDescriptorToArray</c> for an astype request: a SIZED descriptor is used as given; an
-        ///     unsized string descriptor (<c>S0</c>/<c>U0</c>, i.e. the class) becomes the instance the cast from the array's
-        ///     descriptor resolves to (<see cref="DTypePromotion.CastDescrToDType"/>).
-        /// </summary>
-        /// <param name="from">The array's descriptor.</param>
-        /// <param name="requested">The requested descriptor.</param>
-        /// <returns>The descriptor the result is allocated with.</returns>
-        /// <exception cref="TypeError">No cast exists from <paramref name="from"/> to the requested class.</exception>
-        internal static DType AdaptDescriptorToArray(DType from, DType requested)
-        {
-            // descr_is_legacy_parametric_instance: an unsized flexible descriptor stands for its class.
-            if (requested.itemsize == 0 && requested.Meta is StringDTypeMeta)
-                return DTypePromotion.CastDescrToDType(from, requested.Meta);
-            return requested;
         }
 
         /// <summary>

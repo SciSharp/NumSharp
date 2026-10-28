@@ -362,6 +362,32 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     NumPy's <c>PyArray_AdaptDescriptorToArray(arr, NULL, descr)</c> (<c>array_coercion.c</c>): the descriptor an
+        ///     array is cast, iterated or viewed with when <paramref name="requested"/> is asked for. A sized descriptor is
+        ///     used as given; an unsized string descriptor (<c>'S'</c> / <c>'U'</c>, NumPy's legacy parametric instance
+        ///     standing for its class) becomes the instance a cast from the array's descriptor resolves to
+        ///     (<see cref="CastDescrToDType"/>): <c>'U'</c> over <c>&lt;U3</c> stays <c>&lt;U3</c>, over <c>|S3</c> is
+        ///     <c>&lt;U3</c>, over int64 is <c>&lt;U21</c>.
+        /// </summary>
+        /// <param name="arrayDescr">The array's descriptor.</param>
+        /// <param name="requested">The requested descriptor.</param>
+        /// <returns><paramref name="requested"/> itself, or the instance the cast from <paramref name="arrayDescr"/> to its
+        ///     class resolves.</returns>
+        /// <exception cref="TypeError">No cast exists from the array's class to the requested one (<c>cannot cast dtype %S
+        ///     to %S.</c>).</exception>
+        /// <remarks>
+        ///     One function for every caller that adapts a request to an array: <c>astype</c>, np.nditer's <c>op_dtypes</c>
+        ///     and numpy.ma's <c>astype</c>, each of which had kept its own copy of these lines.
+        /// </remarks>
+        internal static DType AdaptDescriptorToArray(DType arrayDescr, DType requested)
+        {
+            // descr_is_legacy_parametric_instance: an unsized flexible descriptor stands for its class.
+            if (requested.itemsize == 0 && requested.Meta is StringDTypeMeta)
+                return CastDescrToDType(arrayDescr, requested.Meta);
+            return requested;
+        }
+
+        /// <summary>
         ///     NumPy's <c>PyArray_CastDescrToDType</c>: the instance of <paramref name="givenDType"/> that can represent
         ///     <paramref name="descr"/> — the descriptor itself when already of that class, the class default when the
         ///     class is not parametric, else whatever the registered cast resolves (a datetime keeps its unit when cast

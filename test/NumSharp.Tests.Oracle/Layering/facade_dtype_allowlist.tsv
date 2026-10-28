@@ -13,7 +13,6 @@ APIs/np.loadtxt.Sinks.cs	24	0
 APIs/np.loadtxt.cs	2	0
 APIs/np.memoryview.cs	2	16
 APIs/np.nditer.Typed.cs	0	1
-APIs/np.nditer.cs	10	15
 APIs/np.savetxt.cs	1	1
 APIs/np.tofile.cs	5	6
 APIs/np.vectorize.cs	0	2

@@ -681,7 +681,7 @@ namespace NumSharp
         {
             // The descriptor the new array is allocated with (an unsized string request takes the data's width, NumPy's
             // PyArray_AdaptDescriptorToArray), which is the dtype `__array_finalize__` converts the fill to.
-            var to = NDStringCasting.AdaptDescriptorToArray(_data.dtype, dtype);
+            var to = DTypePromotion.AdaptDescriptorToArray(_data.dtype, dtype);
             // ndarray.astype(copy=False) of an equivalent dtype returns the array ITSELF: no new array, no `__array_finalize__`.
             bool sameArray = !copy && DTypeCasting.GetCastInfo(to, _data.dtype, null, out long viewOffset) == NPY_CASTING.NPY_NO_CASTING
                              && viewOffset != ArrayMethod.NoView;
