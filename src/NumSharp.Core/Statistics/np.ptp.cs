@@ -33,8 +33,10 @@ namespace NumSharp
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
             // NumPy's ptp is _methods._ptp: subtract(maximum.reduce(a, axis, out, keepdims), minimum.reduce(a, axis,
-            // keepdims), out). The whole function, its text routes included, is the engine's: TensorEngine.Ptp.
-            return a.TensorEngine.Ptp(a, axis, @out, keepdims);
+            // keepdims), out). The whole function, its text routes included, is the engine's: TensorEngine.Ptp. EngineOf,
+            // not a.TensorEngine: the body raises the ArgumentNullException for a null a, so the dispatch must not
+            // dereference it first.
+            return EngineOf(a).Ptp(a, axis, @out, keepdims);
         }
 
         /// <summary>
@@ -61,8 +63,9 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(a))
                 return NDMatrixBoundary.Wrapped((a, axis, @out, keepdims), static s => ptp(s.a, s.axis, s.@out, s.keepdims), @out);
-            // NumPy's ptp with a tuple axis (maximum.reduce's tuple checks first) is the engine's too: TensorEngine.Ptp.
-            return a.TensorEngine.Ptp(a, axis, @out, keepdims);
+            // NumPy's ptp with a tuple axis (maximum.reduce's tuple checks first) is the engine's too: TensorEngine.Ptp,
+            // through EngineOf so a null a reaches the body's ArgumentNullException.
+            return EngineOf(a).Ptp(a, axis, @out, keepdims);
         }
     }
 }
