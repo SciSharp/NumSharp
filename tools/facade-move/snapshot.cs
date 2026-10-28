@@ -57,6 +57,8 @@
 // index array or a boolean mask) and np.insert's values (an array, or any object: a number, a string, a bool, null, a C#
 // array, an NDArray passed as object), and np.isin's test set test_elements (the operand's own values, sets of other
 // dtypes, sizes, ranges and layouts that reach NumPy's table, loop and sort paths) and its algorithm name kind, and
+// the sort family's kind (np.sort / np.argsort's sort kinds, np.partition / np.argpartition's select kind), stable,
+// order, kth (an int, an int[] or an index array) and np.lexsort's key list built from the operand, and
 // np.average / np.average_returned's weights (of the operand's shape, along one axis or two in either order, a 0-d, zero
 // sums, other dtypes, the forms NumPy refuses) and axis tuple (single axes, both orders of a pair, the empty tuple, a
 // repeated and an out-of-range axis), and np.convolve / np.correlate's second sequence v (the operand's copy, other dtypes
@@ -314,6 +316,14 @@ static class Snapshot
         // np.polyint's integration constants k: an NDArray (null, a 0-d, one value, five, two, integers, text) or the C#
         // double of its convenience overload. Its order m takes the IntArg role.
         PolyintK, PolyintKDouble,
+        // The sort family (np.sort / np.argsort / np.partition / np.argpartition / np.lexsort and the ndarray methods sort /
+        // argsort / partition / argpartition): the sort kind of sort / argsort and the select kind of partition /
+        // argpartition (the names NumPy parses and the ones it refuses), the keyword-only stable, the order (a field name,
+        // which every NumSharp dtype refuses), kth as a C# int, an int[] and an index array (positions inside the axis,
+        // negative ones, out of range, unsorted, repeated, empty, and the index arrays NumPy refuses), and np.lexsort's key
+        // list (built from the operand: it alone, two keys, keys of other dtypes, a mismatched shape, none; see
+        // MakeLexKeys).
+        SortKind, PartitionKind, Stable, SortOrder, Kth, KthSeq, KthArray, LexKeys,
         Default, Unsupported,
     }
 
@@ -365,6 +375,18 @@ static class Snapshot
     /// <returns>True for a parameter of a public static np.isin overload.</returns>
     private static bool IsIsin(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "isin";
+
+    /// <summary>
+    ///     Whether a parameter belongs to the sort family - np.sort, np.argsort, np.partition, np.argpartition, np.lexsort
+    ///     and NDArray's sort, argsort, partition and argpartition - whose <c>kind</c> / <c>stable</c> / <c>order</c> /
+    ///     <c>kth</c> / <c>keys</c> roles are theirs alone: np.isin names a parameter <c>kind</c>, and np.copy /
+    ///     np.ravel / np.reshape name an <c>order</c> with other meanings, so their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of one of the nine public members.</returns>
+    private static bool IsSortFamily(ParameterInfo p) =>
+        (p.Member.DeclaringType == typeof(np) && p.Member.Name is "sort" or "argsort" or "partition" or "argpartition" or "lexsort")
+        || (p.Member.DeclaringType == typeof(NDArray) && p.Member.Name is "sort" or "argsort" or "partition" or "argpartition");
 
     /// <summary>
     ///     Whether a parameter belongs to np.convolve / np.correlate or their NDArray members, whose <c>v</c> / <c>mode</c>
@@ -438,6 +460,8 @@ static class Snapshot
                 : n == "values" && IsInsertOrDelete(p) ? Role.InsertValues
                 // np.isin's test set.
                 : n == "test_elements" && IsIsin(p) ? Role.IsinTest
+                // np.partition / np.argpartition and the ndarray methods' index array of positions.
+                : n == "kth" && IsSortFamily(p) ? Role.KthArray
                 : n == "q" ? Role.QArray
                 : n == "bins" ? Role.BinsArray
                 : p.HasDefaultValue ? Role.Default : Role.Unsupported;
@@ -501,8 +525,19 @@ static class Snapshot
             if (n == "obj" && (t == typeof(int[]) || t == typeof(long[]))) return Role.InsertObjSeq;
             if (n == "value" && t == typeof(object)) return Role.InsertValue;
         }
-        // np.isin's algorithm name (only its: np.sort's, np.argsort's and np.partition's kind keep their defaults).
+        // np.isin's algorithm name (only its: the sort family's kind takes the roles below).
         if (n == "kind" && t == typeof(string) && IsIsin(p)) return Role.IsinKind;
+        // The sort family: the sort kind of sort / argsort, the select kind of partition / argpartition, stable, order
+        // (an object for sort / argsort, a string for the partitions: one role, field names), and kth as an int / int[].
+        if (IsSortFamily(p))
+        {
+            if (n == "kind" && t == typeof(string))
+                return p.Member.Name is "partition" or "argpartition" ? Role.PartitionKind : Role.SortKind;
+            if (n == "stable" && t == typeof(bool?)) return Role.Stable;
+            if (n == "order" && (t == typeof(object) || t == typeof(string))) return Role.SortOrder;
+            if (n == "kth" && t == typeof(int)) return Role.Kth;
+            if (n == "kth" && t == typeof(int[])) return Role.KthSeq;
+        }
         // np.nditer's arguments (only its; its order and casting take the general roles below and above).
         if (IsNditer(p))
         {
@@ -597,6 +632,72 @@ static class Snapshot
                 // capitalized name (the check is case-sensitive).
                 foreach (var s in new[] { null, "sort", "table", "x", "Sort" })
                     Add(s ?? "null", () => s);
+                break;
+            case Role.SortKind:
+                // The default (None) first, the four names NumPy documents, then what its sortkind_parser reads from the
+                // first character alone (a capital, one letter, a name it only starts) and what it refuses (another first
+                // letter, the empty string).
+                foreach (var s in new[] { null, "quicksort", "heapsort", "stable", "mergesort", "Q", "s", "spam", "timsort", "x", "" })
+                    Add(s is null ? "null" : s.Length == 0 ? "empty" : s, () => s);
+                break;
+            case Role.PartitionKind:
+                // The default first, then null (NumPy's None, which the select-kind converter refuses only as text) and the
+                // strings it refuses: a sort kind, a capital, another word.
+                foreach (var s in new[] { "introselect", null, "quicksort", "Introselect", "x" })
+                    Add(s ?? "null", () => s);
+                break;
+            case Role.Stable:
+                // The default (None) first, then both values: with a kind given either one is refused.
+                Add("null", () => (bool?)null);
+                Add("true", () => (bool?)true);
+                Add("false", () => (bool?)false);
+                break;
+            case Role.SortOrder:
+            {
+                // The default (None) first, then a field name and, for sort / argsort's object order, a list of names:
+                // every NumSharp dtype has no fields, so each is NumPy's refusal.
+                Add("null", () => null);
+                Add("f0", () => "f0");
+                if (p.ParameterType == typeof(object))
+                    Add("[f0,f1]", () => new[] { "f0", "f1" });
+                break;
+            }
+            case Role.Kth:
+                // A position inside every axis of the pool first, then the first, the last (negative), the second axis
+                // position of a (3, 4) operand, one past every pool axis and its negative.
+                foreach (var k in new[] { 1, 0, -1, 2, 99, -99 })
+                    Add(k.ToString(CultureInfo.InvariantCulture), () => k);
+                break;
+            case Role.KthSeq:
+                // One position first, then two sorted, two unsorted, a repeated one, none (NumPy's empty intp array: no
+                // partition at all), a negative one with the first, one out of range, and null.
+                foreach (var seq in new[]
+                         {
+                             new[] { 1 }, new[] { 0, 2 }, new[] { 2, 0 }, new[] { 1, 1 }, Array.Empty<int>(), new[] { -1, 0 },
+                             new[] { 99 },
+                         })
+                    Add("[" + string.Join(",", seq) + "]", () => seq.ToArray());
+                Add("null", () => null);
+                break;
+            case Role.KthArray:
+                // An int64 index first, then two, unsorted int32 ones, a 0-d index, a uint8 one, a uint64 index past int64
+                // (NumPy's modular cast to intp makes it negative), an empty index array, and the forms NumPy refuses: a
+                // boolean index, a float index, a two-dimensional index ("object too deep"), and null.
+                Add("i64[1]", () => np.array(new long[] { 1 }));
+                Add("i64[0,2]", () => np.array(new long[] { 0, 2 }));
+                Add("i32[2,0]", () => np.array(new[] { 2, 0 }));
+                Add("0d_i64_1", () => np.array(1L));
+                Add("u8[1]", () => np.array(new byte[] { 1 }));
+                Add("u64[2^63]", () => np.array(new ulong[] { 1UL << 63 }));
+                Add("i64[]", () => np.array(Array.Empty<long>()));
+                Add("bool[T]", () => np.array(new[] { true }));
+                Add("f64[1.0]", () => np.array(new[] { 1.0 }));
+                Add("2d_i64", () => np.array(new long[] { 1 }).reshape(new Shape(1, 1)));
+                Add("null", () => null);
+                break;
+            case Role.LexKeys:
+                // Built from the operand (MakeLexKeys); the factory here is never called. The base is the operand alone.
+                Add(LexKeysVariantLabels[0], () => null);
                 break;
             case Role.NditerOps:
             case Role.NditerOpAxes:
@@ -1230,6 +1331,13 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.lexsort's key list carries the operand too (MakeLexKeys).
+            if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "keys" && IsSortFamily(ps[i]))
+            {
+                roles[i] = Role.LexKeys;
+                sawArray = true;
+                continue;
+            }
             roles[i] = Classify(ps[i], !sawArray && ps[i].ParameterType == typeof(NDArray));
             if (ps[i].ParameterType == typeof(NDArray)) sawArray = true;
         }
@@ -1269,6 +1377,7 @@ static class Snapshot
             Role.NditerItershape => NditerItershapeVariantLabels.Length - 1,
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels.Length - 1,
             Role.EinsumOps => EinsumOpsVariantLabels.Length - 1,
+            Role.LexKeys => LexKeysVariantLabels.Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -1374,6 +1483,7 @@ static class Snapshot
             Role.NditerItershape => NditerItershapeVariantLabels[v],
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels[v],
             Role.EinsumOps => EinsumOpsVariantLabels[v],
+            Role.LexKeys => LexKeysVariantLabels[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -1400,6 +1510,7 @@ static class Snapshot
                     : roles[i] == Role.NditerOps ? MakeNditerOps(NditerOpsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
+                    : roles[i] == Role.LexKeys ? MakeLexKeys(LexKeysVariantLabels[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -1468,6 +1579,9 @@ static class Snapshot
                         break;
                     case Role.EinsumOps:
                         argv[p] = MakeEinsumOps(EinsumOpsVariantLabels[v], operand);
+                        break;
+                    case Role.LexKeys:
+                        argv[p] = MakeLexKeys(LexKeysVariantLabels[v], operand);
                         break;
                     case Role.NditerOpAxes:
                         argv[p] = MakeNditerOpAxes(NditerOpAxesVariantLabels[v], operand);
@@ -2640,6 +2754,53 @@ static class Snapshot
             case "triple": return new[] { operand, operand.copy(), operand.copy() };
             case "none": return Array.Empty<NDArray>();
             default: throw new ArgumentException("unknown einsum operand-list variant " + label);
+        }
+    }
+
+    /// <summary>The variants of np.lexsort's key list (MakeLexKeys); the first is the base.</summary>
+    private static readonly string[] LexKeysVariantLabels = { "one", "pair", "neg", "int32", "text", "mismatch", "zero_d", "nullkey", "none" };
+
+    /// <summary>
+    ///     Builds np.lexsort's key list from a pool operand: the operand alone, the operand twice, the operand after its
+    ///     negation (a second key that reorders every tie of the first), an int32 ramp of the operand's shape and a U5
+    ///     text key of it (keys of other dtypes, the text one sorted by its strings), a key of another shape ("all keys need
+    ///     to be the same shape"), a 0-d key, a null entry, and no key ("need sequence of keys with len > 0").
+    /// </summary>
+    /// <param name="label">The variant (<see cref="LexKeysVariantLabels"/>).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh key list (its first entry is the operand itself, but for "none").</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeLexKeys(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        switch (label)
+        {
+            case "one": return new[] { operand };
+            case "pair": return new[] { operand, operand.copy() };
+            case "neg":
+            {
+                // The negation computes in the operand's dtype; a dtype negation refuses (bool, text) leaves a copy, which
+                // still exercises the two-key passes.
+                NDArray second;
+                try { second = np.negative(operand); }
+                catch { second = operand.copy(); }
+                return new[] { operand, second };
+            }
+            case "int32": return new[] { operand, np.arange(size).astype(np.dtype("int32")).reshape(new Shape(dims)) };
+            case "text":
+            {
+                var words = new string[size];
+                for (long i = 0; i < size; i++)
+                    words[i] = ((size - i) % 3).ToString(CultureInfo.InvariantCulture);
+                return new[] { operand, np.array(words).astype(np.dtype("U5")).reshape(new Shape(dims)) };
+            }
+            case "mismatch": return new[] { operand, np.arange(size + 1).astype(np.dtype("int64")) };
+            case "zero_d": return new[] { operand, np.array(2.0) };
+            case "nullkey": return new[] { operand, null };
+            case "none": return Array.Empty<NDArray>();
+            default: throw new ArgumentException("unknown lexsort key-list variant " + label);
         }
     }
 
