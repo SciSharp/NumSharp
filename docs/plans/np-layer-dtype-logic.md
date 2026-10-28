@@ -17,7 +17,8 @@ now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two o
 carry NumPy's `out=` (the reducelike loop rule, the reduce prologue, `_mean` / `_var`'s statement order),
 numpy.matrix's reductions hold no text line, and six divergences found on the way got their fix commits (D4); the public
 np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 has
-landed eighteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
+landed twenty-eight families (2026-10-29): of K3's text lines only np.evaluate's two are left, its engine member being
+declared in `TensorEngine.cs`, and np.fft.RawFft's one (E3). P4's three D4 divergences are fixed (2026-10-29). On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled,
 then resumed it the same day beside PE and P3, with P4 (np.emath, the seventeenth family, came first). Later that day the owner kept the array object
 out of the engine: `TensorEngine` holds the functions that compute values, while creation, conversion, views, joins and
 selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `Shape` (D1). PE's E6, E4, E1, E5, E7
@@ -562,6 +563,12 @@ the first family under the revised D1:
 - Their names collide with the ufunc members (`sqrt`, `log`, `power`, ...), so they take the namespace as a prefix:
   `EmathSqrt`, `EmathLog`, `EmathPower`, ...
 
+The rest of the list moved on 2026-10-29 (np.radians / np.degrees, np.sinc, np.i0, np.diff, np.ediff1d, np.digitize,
+np.unwrap, np.cross, np.nanargmax / np.nanargmin, np.interp: the state log). Left: np.evaluate's two text lines, the
+positional operands' refusal. They run before the keyword checks that `BuildEvaluateOptions` does in the facade, so
+moving them alone would reorder the errors, and moving both means a `TensorEngine.Evaluate` that takes NumPy's
+keywords, declared in `TensorEngine.cs`.
+
 ### PE. The engine layout
 
 The owner decided it on 2026-10-28 (D1); the rule is [§1](#1-what-out-of-np-has-to-mean)'s "Which O". This phase
@@ -677,7 +684,8 @@ The gates are §6's, plus three rules:
 
 ### P4. numpy.polynomial and numpy.ma (K5, 61 lines in 14 files)
 
-- [x] (2026-10-28, `39ae0ffb`; the D4 fixes the twin names are open, see the state log) The legacy facades
+- [x] (2026-10-28, `39ae0ffb`; the D4 fixes the twin names landed 2026-10-29, `fb9b62a0` to `1b0bd94d`, see the state
+      log) The legacy facades
       `np.polyval`, `np.polyint`, `np.polyarithmetic`, `np.poly` and `poly1d` move their bodies into
       `TensorEngine` members in `TensorEngine.Polynomial.cs`, after `lib/_polynomial_impl.py` (D1). The package internals
       (`NDPolySeries`, `NDPolyCalc`, `NDPolyVander`, `NDPolyEval`,
@@ -730,6 +738,72 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P2's nineteenth to twenty-eighth families and P4's D4 fixes.** Commits on `strings`, developed in a
+  scratch worktree and landed by fast-forward. The referees: the snapshot (`DOTNET_TieredCompilation=0` under
+  `NUMSHARP_DEBUG_GUARD_PAGES=1`), each family's unit tests on net10.0 and net8.0, its oracle tier where it has one, and
+  for P4 `twin_poly.py` (each snapshot line of the seven legacy functions rebuilt in NumPy 2.4.2, recorded with
+  `SNAPSHOT_BYTES=1`).
+  - The moves, each byte-identical on its snapshot, R1's row gone (np.nanargmax.cs's reduced), R2 unchanged; each member
+    declared abstract and documented in full in the partial of its NumPy file, `DefaultEngine`'s override beside the
+    facade (it calls np.*), the facade keeping its class boundaries and calling `np.EngineOf(operand)`; no moved name is
+    declared in another `DefaultEngine` or `TensorEngine` file (an unqualified np.* call inside a moved body is
+    qualified `np.`):
+    - `2a335bac` np.radians / np.degrees: `Radians` / `Degrees` (`TensorEngine.Umath.cs`, NumPy's ufuncs of those names,
+      which deg2rad / rad2deg alias), `Backends/Default/Math/Default.RadiansDegrees.cs`; 24,216 calls.
+    - `be34c571` np.sinc: `Sinc` (`TensorEngine.FunctionBase.cs`), `Math/Default.Sinc.cs`, the fused pass; 234 calls.
+    - `0a09203b` np.i0: `I0`, `Math/Default.I0.cs`; the per-precision cephes kernels stay in np.i0.cs (np.kaiser shares the
+      double one), their delegates internal; 234 calls.
+    - `5b4f10a1` np.diff: `Diff(a, n, axis, prepend, append)`, `Math/Default.Diff.cs` with the stencil helpers (np.DiffAxis
+      stays np's: Default.Trapezoid imports np's statics); 774 calls.
+    - `b3d0fff2` np.ediff1d: `Ediff1d(ary, to_end, to_begin)` (`TensorEngine.ArraySetOps.cs`), `Math/Default.Ediff1d.cs`
+      over np.diff's helpers; 234 calls.
+    - `51d13591` np.digitize: `Digitize(x, bins, right)`, `Sorting_Searching_Counting/Default.Digitize.cs`; 1,920 calls.
+    - `d221d740` np.unwrap: `Unwrap(p, discont, axis, object period)`. NumPy's `period` is one keyword whose Python type
+      (float or int) picks the float or the integer path, so one member serves both facades (a boxed double or null, a
+      boxed long or int); `Math/Default.Unwrap.cs`; 775 calls (the tool reaches the double overload; unwrap.jsonl and the
+      unit tests hold the integer one).
+    - `7c9bc5fc` np.cross: `Cross` (`TensorEngine.Numeric.cs`), `LinearAlgebra/Default.Cross.cs`; 2,646 calls;
+      products.jsonl passes.
+    - `dcb3623b` np.nanargmax / np.nanargmin: `NanArgMax` / `NanArgMin` (`TensorEngine.NanFunctions.cs`),
+      `Sorting_Searching_Counting/Default.NanArgMax.cs`. The out= pair `NanArgWriteOut` / `ValidateNanArgOut` stays np's
+      (np.argmax calls it), internal, so R1's row goes from 2 text / 15 numeric lines to 0 / 9 (its dtype switch). The
+      `long` overloads convert the member's 0-d index, where they ran the flat ArgMax kernels: 6,612 calls over both
+      overloads, identical; nanreduce.jsonl's 1,900 nanargmax / nanargmin cases pass.
+    - `2c25668e` the snapshot tool reaches np.interp (both overloads were SKIP): xp and fp are fixed arrays (a ramp in
+      several dtypes and layouts, repeated, decreasing and NaN points, complex and text values, the shapes NumPy
+      refuses), the fills a double or a Complex, the period seven values; 30,720 calls. `135c91e7` np.interp:
+      `Interp(x, xp, fp, object left, object right, period)`, NumPy's fills being Python floats or complexes (a complex
+      fill reaches the real loop only to be refused), `Math/Default.Interp.cs`; 30,720 calls identical.
+  - P4's D4 fixes. Before them the twin agreed on 5,590 lines, 683 differed and 1,516 raised the same type with another
+    text; at no step did a line that agreed before differ:
+    - `fb9b62a0` NumPy measures a coefficient array with `len()`, its first axis, where the members read `size`:
+      np.polyval of an N-D p evaluates row by row, broadcast against x (it raised IndexError), np.polyint divides by
+      `arange(len(p), 0, -1)` and measures k by `len()`, np.polyadd / np.polysub pad by the first axes' difference (an
+      N-D operand then meets np.concatenate's rank error), np.polydiv loops `len(u) - len(v) + 1` times. +1,712 lines.
+    - `264e35cf` (found beside the next) np.polydiv forms `w = u[0] + v[0]`, so rows that do not broadcast raise first,
+      u's row first; in np.result_type's dtype, because NumSharp's + takes a 0-d operand as weak. +42.
+    - `d9778991` np.polydiv's `q[k] = d` is a scalar setitem: a d with dimensions raises `setting an array element with a
+      sequence.` (a complex slot `only 0-dimensional arrays can be converted to Python scalars`), probed over the float
+      and complex destination and source dtypes; the complex path had read one element of the row. +252.
+    - `21b5c845` np.poly / np.roots of a 0-d array or null raise `dispatcher for __array_function__ did not return an
+      iterable`: their dispatchers return the argument itself, which NumPy iterates before the body runs. The facades
+      raise it; `TensorEngine.Poly` stays poly's body and takes a 0-d input as one root, as `np.poly.__wrapped__` does.
+      The [Misaligned] test that pinned the old answers became a test of NumPy's. +34 (np.roots: its 36 0-d lines).
+    - `4935fc54` (found by the twin after the first fix) the pad's zeros take the operand's dtype descriptor, NumPy's
+      `zeros(diff, a1.dtype)`: a text type code met NumSharp's fixed-width NotSupportedException. +84.
+    - `1b0bd94d` np.polyval's N-D path computes each statement in NumPy's dtype, passed explicitly: with the operators a
+      0-d x was weak (an int8 p with a 0-d int64 x gave int8). +30.
+    - `01783d66` the members' docs. After: 7,744 lines agree, 12 differ, 32 have another text: the char proxy's class
+      name (20), np.polymul's StringDType object product (10, NumPy computes Python objects) and a text of its legacy
+      descriptor refusal (12), and two complex128 lines of NaN and inf whose imaginary NaN has the other sign (NumSharp's
+      complex add / multiply NaN residual, OpenBugs.NaNOperandOrder).
+  - Gates: the polynomial and roots unit tests (203) on both frameworks; FuzzCorpusTests.Poly, the matrix-operand,
+    relayout and surface tiers and linalg_parity on both (their open-gap replays unchanged: 330 + 10 matrix-operand and
+    20 relayout carved cases still diverge); the post-fix baseline (8,455 calls with np.roots) identical after the rebase.
+  - Not done: np.evaluate's text lines (see P2). Found on the way, outside this work: np.argmax's out= contract still
+    sits in its facade (P5), and the 1-D np.polyval path computes its first `0 * x` in result_type(p, x), which differs
+    from NumPy for a real x holding inf with a complex p (NaN + NaNj against NaN + 0j); no snapshot line reaches it.
 
 - **2026-10-29, PE: E2 done.** `36a1f084` on `strings`, landed by fast-forward:
   - The internal operation class `LinalgEngine` (`LinearAlgebra/linalg/LinalgEngine*.cs`) became the public

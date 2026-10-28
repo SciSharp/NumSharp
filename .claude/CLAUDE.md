@@ -2607,7 +2607,8 @@ Decimal (no NumPy analog) rides the same fused expression through the decimal→
 `sinc` fuzz tier is **HOST-PINNED** to win-amd64 (`RunHostLibmCorpus` — `Inconclusive` off-Windows), like the sibling
 `unary` tier. **Perf (NPY/NS, Release, best-of, warm):** **≈1.5–2.5× at 100K and 10M** (f64/int 2.2–2.5×, f32
 ~1.5–2.0× — the single-pass fusion halves NumPy's memory traffic); at 1K sinc sits at the per-op NDIter-setup floor
-(~parity), sin being the dominant cost on both sides there. See `Math/np.sinc.cs`.
+(~parity), sin being the dominant cost on both sides there. See `Math/np.sinc.cs` (the facade) and
+`Math/Default.Sinc.cs` (`TensorEngine.Sinc`, DefaultEngine's fused pass; np-layer dtype plan, P2).
 
 **NaN operand order of float add / multiply — a win-amd64 pin (2026-10-03).** When BOTH operands of a float32 /
 float64 add or multiply are NaN, the result is one operand's NaN, and the COMPILED LOOP picks which: x86
@@ -5134,7 +5135,9 @@ introselect (`Utilities/QuickSelect.cs`, the median/percentile primitive), the s
   its exact value), then up-cast. NumSharp's single `Complex` absorbs NumPy's complex64 cells (int8/16, uint8/16 —
   values identical, width documented; those four dtypes are excluded from the fuzz tier and unit-test-pinned).
   0-d leaks `ndarray.sort()`'s own `axis -1 is out of bounds for array of dimension 0`, exactly as NumPy leaks it.
-  See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs` (the facades) and
+  See `Sorting_Searching_Counting/np.{partition,argpartition,lexsort,nanargmax,sort_complex}.cs` (the facades),
+  `Default.NanArgMax.cs` (`TensorEngine.NanArgMax` / `NanArgMin`: the axis check, the text route, `_replace_nan` and
+  the arg reduction; np.argmax's out= pair stays in np.nanargmax.cs) and
   `Default.{Sort,LexSort}.cs` (DefaultEngine's `TensorEngine.Sort` / `SortInPlace` / `ArgSort` / `Partition` /
   `PartitionInPlace` / `ArgPartition` / `LexSort`, over the AxisSort / AxisPartition kernels; np-layer dtype plan,
   phase PE, E5).
@@ -5493,8 +5496,9 @@ is special-cased only to dodge the `alpha == 0` division. Formulae, verbatim fro
 (kaiser uses `arange(0, M)`): bartlett `where(n≤0, 1+n/(M-1), 1-n/(M-1))`; hanning `0.5+0.5·cos(πn/(M-1))`;
 hamming `0.54+0.46·cos(πn/(M-1))`; blackman `0.42+0.5·cos(πn/(M-1))+0.08·cos(2πn/(M-1))`; kaiser
 `i0(β·√(1-((n-α)/α)²))/i0(β)` with `α=(M-1)/2` and `i0` the cephes Chebyshev modified-Bessel routine
-NumPy's `np.i0` uses (internal `np.BesselI0` scalar helper, the `_i0_1`/`_i0_2`/`_chbevl` port; **not**
-exposed as a public `np.i0` — kaiser is its only consumer).
+NumPy's `np.i0` uses (the internal `np.BesselI0` scalar helper, the `_i0_1`/`_i0_2`/`_chbevl` port, which the
+public `np.i0` runs too: `TensorEngine.I0`, `Math/Default.I0.cs`, one cephes kernel per float width in
+`Math/np.i0.cs`).
 
 **BIT-IDENTICAL to NumPy 2.4.2** (verified across 152 `(M, beta)` cases + the differential-fuzz `windows`
 tier): the elementwise transform is built as an **`np.evaluate` fused expression in NumPy's exact
