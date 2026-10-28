@@ -16,9 +16,10 @@ now P1d. P1c done (2026-10-24): the six operator files hold no dtype line, two o
 (`a6b25a7e`, `f37f3f17`). P1d done (2026-10-24): `ReduceAdd`, `ReduceProduct`, `ReduceMean`, `ReduceVar` and `ReduceStd`
 carry NumPy's `out=` (the reducelike loop rule, the reduce prologue, `_mean` / `_var`'s statement order),
 numpy.matrix's reductions hold no text line, and six divergences found on the way got their fix commits (D4); the public
-np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 is
-under way: sixteen families by 2026-10-28, np.emath next. Progress goes into the [§9 state log](#9-state-log), newest
-entry first.
+np.sum / np.prod / np.mean / np.var / np.std keep no `out=` keyword until the owner's one-signature decision. P2 has
+landed sixteen families. On 2026-10-28 the owner deferred the rest of P2 while the engine layout was being settled, and
+picks the next work from P3 to P7; when P2 resumes, np.emath comes first. Progress goes into the
+[§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves becomes a `TensorEngine` member. Those NumPy writes in Python are declared in partial files named after
@@ -487,7 +488,8 @@ was working around, which gets its own fix first (D4). The pilot's `np.angle` is
 `np.searchsorted` 8, `np.cov` 8, `GufuncGuard` 7, `np.gradient` 6, `np.linalg` 5, `np.array_equal` 5, `np.insert` 5,
 `np.isin` (VString) 5, `np.average` 5, then the files of four lines or fewer.
 
-The next family, np.emath, is the first to land under the revised D1:
+The rest of P2 is deferred (the owner, 2026-10-28; see the State). When it resumes, np.emath comes first, as the first
+family under the revised D1:
 - Its members go to `TensorEngine.Scimath.cs`, after `numpy/lib/_scimath_impl.py`, and `DefaultEngine` implements them.
 - Their names collide with the ufunc members (`sqrt`, `log`, `power`, ...), so they take the namespace as a prefix:
   `EmathSqrt`, `EmathLog`, `EmathPower`, ...
@@ -641,7 +643,9 @@ open question of installing an overriding engine for every array.
   - **Found:** all ten `_umath_linalg` members shipped in 0.70.0 as public virtual `TensorEngine` members; the evaluation
     the owner answered named four (Cholesky, Det, Inv, Solve). So E2 breaks all ten. `System.Math` is used 148 times in
     35 engine files, which rules out a member named `Math`.
-  - Next in P2: np.emath, the first family under the revised D1 (`TensorEngine.Scimath.cs`, members prefixed `Emath`).
+  - Next: the owner picks the next work from P3 to P7; the rest of P2 stays deferred, as the owner told the P2 session
+    on 2026-10-28. When P2 resumes, np.emath is the first family under the revised D1 (`TensorEngine.Scimath.cs`,
+    members prefixed `Emath`).
 - **2026-10-28, P2's sixteenth family: np.nditer's dtype code moved into the iterator engine and the DType layer
   (`NDIterRef.CurrentView`, `DTypePromotion.AdaptDescriptorToArray`); five D4 fixes on the way.** Commits on `strings`,
   developed in a scratch worktree and landed by fast-forward. D1: NumPy writes np.nditer in C, so its dtype code goes
