@@ -76,7 +76,9 @@ namespace NumSharp.Backends
             if (p.ndim == 0)
                 throw new TypeError("iteration over a 0-d array");
 
-            long n = p.size;
+            // NumPy's `for pv in p` takes len(p) coefficients: the first axis, each coefficient a row of p.shape[1:] for an
+            // N-D p (p's size would count every element).
+            long n = p.Shape.dimensions[0];
             // No coefficients — NumPy's loop never runs, so the result is zeros_like(x) (a string x included).
             if (n == 0)
                 return np.zeros_like(x);
@@ -92,6 +94,17 @@ namespace NumSharp.Backends
             if (Backends.Strings.NDStringUfuncs.IsText(p))
                 throw Backends.Strings.NDStringUfuncs.NoLoop("add", x.dtype,
                     p.ndim == 1 ? Backends.Strings.NDStringArrays.ScalarDescr(p.Storage.GetAtIndex(0)) : p.dtype);
+
+            // An N-D p: each coefficient is a row that NumPy's `y = y * x + pv` broadcasts against x, so the result takes
+            // the broadcast shape (rows that do not broadcast with x raise the add's error) and the dtype each step
+            // promotes to. NumPy's statements, literally: the fixed-dtype loop below assumes y keeps x's shape.
+            if (p.ndim > 1)
+            {
+                NDArray yy = np.zeros_like(x);
+                for (long k = 0; k < n; k++)
+                    yy = yy * x + p[k.ToString()];
+                return yy;
+            }
 
             // Horner accumulates `y = y*x + p[k]`. NumPy lets `y` (starting at zeros_like(x)) grow in
             // dtype as wider coefficients arrive; the fixed common dtype below is bit-identical because
@@ -127,9 +140,10 @@ namespace NumSharp.Backends
             else
             {
                 kk = np.atleast_1d(k);
-                if (kk.size == 1 && m > 1)
+                // NumPy measures k with len(): its first axis (an N-D k's rows are its constants).
+                if (kk.Shape.dimensions[0] == 1 && m > 1)
                     kk = kk["0"] * np.ones(new Shape(m), NPTypeCode.Double);
-                if (kk.size < m)
+                if (kk.Shape.dimensions[0] < m)
                     throw new ValueError("k must be a scalar or a rank-1 array of length 1 or >m.");
             }
 
@@ -149,11 +163,12 @@ namespace NumSharp.Backends
                 throw Backends.Strings.NDStringUfuncs.NotSupportedForInputTypes("divide");
 
             // Integrate once per order: prepend the term-wise integral p / [len, len-1, ..., 1] and
-            // append the constant k[i]. Division by the int64 arange floats the whole result.
+            // append the constant k[i]. Division by the int64 arange floats the whole result. len is NumPy's len(): the
+            // first axis, so an N-D p meets the division's broadcast (or the concatenation's rank) error as in NumPy.
             NDArray result = p;
             for (int i = 0; i < m; i++)
             {
-                long len = result.size;
+                long len = result.Shape.dimensions[0];
                 NDArray divided = np.true_divide(result, np.arange(len, 0L, -1L));
                 NDArray kElem = kk[$"{i}:{i + 1}"];
                 result = np.concatenate(new[] { divided, kElem }, 0);
@@ -182,7 +197,9 @@ namespace NumSharp.Backends
         {
             a1 = np.atleast_1d(a1);
             a2 = np.atleast_1d(a2);
-            long diff = a2.size - a1.size;
+            // NumPy's diff = len(a2) - len(a1): the first axes. The 1-D zeros it pads with meet an N-D operand in
+            // np.concatenate's rank error; equal first axes go straight to the operator's broadcast.
+            long diff = a2.Shape.dimensions[0] - a1.Shape.dimensions[0];
 
             if (diff > 0)
                 a1 = np.concatenate(new[] { np.zeros(new Shape(diff), a1.typecode), a1 }, 0);
@@ -232,8 +249,9 @@ namespace NumSharp.Backends
             v = np.atleast_1d(v) + 0.0;
 
             NPTypeCode w = np.result_type(u["0"], v["0"]);              // common type of `u[0] + v[0]`
-            long m = u.size - 1;
-            long n = v.size - 1;
+            // NumPy's m = len(u) - 1, n = len(v) - 1: the first axes (an N-D operand's rows).
+            long m = u.Shape.dimensions[0] - 1;
+            long n = v.Shape.dimensions[0] - 1;
             NDArray scale = 1.0 / v["0"];
 
             long qlen = Math.Max(m - n + 1, 1);
