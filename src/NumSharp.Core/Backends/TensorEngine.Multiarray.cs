@@ -1,5 +1,5 @@
-// The C functions of NumPy's _multiarray_umath that compute (np.dot and np.lexsort so far; Appendix D of
-// docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
+// The C functions of NumPy's _multiarray_umath that compute (np.dot, np.lexsort and np.unravel_index so far; Appendix D
+// of docs/plans/np-layer-dtype-logic.md lists the rest). The C functions of the array object (np.array,
 // np.copyto, np.concatenate, ...) are not engine members.
 
 using System;
@@ -50,5 +50,35 @@ namespace NumSharp
         /// <remarks>New in 0.71.0 (the np-layer dtype plan, phase PE, E5): the public <c>np.lexsort</c> applies its class
         ///     boundaries and calls this.</remarks>
         public abstract NDArray LexSort(NDArray[] keys, int axis = -1);
+
+        /// <summary>
+        ///     NumPy's <c>np.unravel_index(indices, shape, order='C')</c> (<c>arr_unravel_index</c>,
+        ///     <c>numpy/_core/src/multiarray/compiled_base.c</c>), the whole call: the coordinates of each flat index in an
+        ///     array of dimensions <paramref name="shape"/>.
+        /// </summary>
+        /// <param name="indices">An integer (or bool) array of flat indices, of any rank and layout. Read as int64: a uint64
+        ///     index at or past 2^63 wraps negative and is out of bounds, as NumPy's same_kind cast to intp makes it.</param>
+        /// <param name="shape">The dimensions to unravel into. An empty shape (NumPy's <c>()</c>) is legal: its one valid
+        ///     index is 0, and only a 0-d index array may use it.</param>
+        /// <param name="order"><c>'C'</c> (row-major, the default) or <c>'F'</c> (column-major), in either case.</param>
+        /// <returns>One int64 array per dimension of <paramref name="shape"/>, each of <paramref name="indices"/>' shape:
+        ///     the columns of one interleaved buffer of shape <c>indices.shape + (len(shape),)</c> laid out along the
+        ///     indices' iteration order, so every array is a strided view of that shared buffer. A 0-d
+        ///     <paramref name="indices"/> gives NumPy's scalars instead (fresh read-only 0-d arrays); an empty
+        ///     <paramref name="shape"/> with a 0-d index gives an empty array.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indices"/> or <paramref name="shape"/> is null.</exception>
+        /// <exception cref="ValueError">In NumPy's order: an order letter that is not C / F / A / K in either case; a
+        ///     product of the dimensions that overflows int64 or is exactly -1 (<c>dimensions are too large; ...</c>); then,
+        ///     after the <see cref="TypeError"/>, an <c>'A'</c> or <c>'K'</c> order (<c>only 'C' or 'F' order is
+        ///     permitted</c>); the first index outside <c>[0, prod(shape))</c> in the iteration order (<c>index N is out of
+        ///     bounds for array with size M</c>); and, for an empty <paramref name="shape"/>, an index array of rank 1 or more
+        ///     (<c>multiple indices are not supported for 0d arrays</c>, after the indices).</exception>
+        /// <exception cref="TypeError"><paramref name="indices"/> is neither integer nor bool (<c>only int indices
+        ///     permitted</c>).</exception>
+        /// <exception cref="NotSupportedException">Runtime code generation is unavailable (the IL kernel cannot be
+        ///     emitted).</exception>
+        /// <remarks>New in 0.71.0 (the np-layer dtype plan): the public <c>np.unravel_index(NDArray, int[], char)</c> computes
+        ///     a <c>numpy.matrix</c> operand as a plain array and calls this.</remarks>
+        public abstract NDArray<long>[] UnravelIndex(NDArray indices, int[] shape, char order = 'C');
     }
 }

@@ -66,7 +66,7 @@ Indexing/np.select.cs	3	10
 Indexing/np.take.FancyAxis.cs	0	1
 Indexing/np.take.cs	3	4
 Indexing/np.take_along_axis.cs	1	9
-Indexing/np.unravel_index.cs	0	2
+Indexing/np.unravel_index.cs	0	1
 LinearAlgebra/np.kron.cs	1	0
 Logic/np.can_cast.cs	1	80
 Logic/np.common_type.cs	1	6
