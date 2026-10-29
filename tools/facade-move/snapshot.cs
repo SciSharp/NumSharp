@@ -111,6 +111,12 @@
 // address with its byte length, the generic overload's typed C# array of the operand's values (instantiated for every
 // element type NumSharp stores) - see BufferForms, with the count, the byte offset, the address overloads' byte length and
 // the dtype as a descriptor, an NPTypeCode or a name varied; its ReadOnlySpan overloads cannot be called by reflection),
+// np.fromstring's (its TEXT is the operand: the pool's own value sequence - integers, Python float reprs with inf / nan /
+// -0.0, or the text pool's strings - joined by ", " or " ", or with unmatched data after it, as a str or as UTF-8 bytes,
+// one with an embedded NUL; see TextSourceForms), np.fromfile's (its FILE: a stream or a temporary file holding the
+// operand's C-order bytes or that text, a stream that cannot seek, a missing file; the stream's final position joins the
+// outcome) and NDArray.tofile's (its sink, a MemoryStream or a temporary file, whose bytes join the outcome), with the
+// separator, the count, the offset and tofile's format varied,
 // np.where's x / y given as C# values (WhereScalar) and np.extract's arr
 // and ndarray.real / imag's setters' value (the second operand's role), and - through the item-selection wiring, built
 // from the pool operand - np.take_along_axis / np.put_along_axis's indices and values (AlongIndicesLabels,
@@ -467,6 +473,11 @@ static class Snapshot
         // from that buffer (BufferLengthLabels: never past its end, the memory being the tool's); the count, the byte offset
         // and the dtype as a descriptor, an NPTypeCode or a name take their own variants.
         BufferOperand, BufferLength, BufferCount, BufferOffset, BufferDType, BufferTypeCode, BufferDTypeName,
+        // np.fromstring / np.fromfile take no array either: the first is read from a TEXT (a str or its bytes), the second
+        // from a FILE (a stream or a path), each built in Call from the pool operand (TextSourceForms, FileSourceForms).
+        // NDArray.tofile writes into a SINK (a MemoryStream or a temporary file) whose bytes join the outcome. Their
+        // separator, np.fromfile's offset, tofile's format take their own variants; the count takes np.frombuffer's.
+        TextSource, FileSource, IoSep, ToFileFormat, SinkStream, SinkFile,
         // np.where's x / y given as a C# value (its object overloads): NumPy's array_like - a Python int / float / complex /
         // bool / str, a NumPy scalar, a 0-d array, a C# array - which np.where converts as NDArray.FromPythonOperand does.
         WhereScalar,
@@ -1701,6 +1712,21 @@ static class Snapshot
     private static bool IsFromBuffer(ParameterInfo p) => p.Member is MethodInfo m && IsFromBuffer(m);
 
     /// <summary>
+    ///     Whether an overload reads or writes NumPy's text and binary files through a C# value the tool builds: np.fromstring
+    ///     (NumPy's <c>PyArray_FromString</c>), np.fromfile (<c>PyArray_FromFile</c>) or NDArray.tofile (<c>PyArray_ToFile</c>).
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for one of the three.</returns>
+    private static bool IsFileIO(MethodInfo m) =>
+        (m.DeclaringType == typeof(np) && m.Name is "fromstring" or "fromfile")
+        || (m.DeclaringType == typeof(NDArray) && m.Name == "tofile");
+
+    /// <summary>Whether a parameter belongs to one of the file functions (<see cref="IsFileIO(MethodInfo)"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True when its method is np.fromstring, np.fromfile or NDArray.tofile.</returns>
+    private static bool IsFileIO(ParameterInfo p) => p.Member is MethodInfo m && IsFileIO(m);
+
+    /// <summary>
     ///     The shapes the constructor family runs on (its operand pool): 0-d, a vector, a matrix, an empty vector, an empty
     ///     axis between others, a unit matrix, a 3-D shape, a negative dim alone and after a positive one (NumPy's
     ///     "negative dimensions are not allowed"), and two dims whose float64 byte count overflows (NumPy's "array is too
@@ -2330,6 +2356,20 @@ static class Snapshot
             if (n == "dtype" && t == typeof(DType)) return Role.BufferDType;
             if (n == "dtype" && t == typeof(NPTypeCode)) return Role.BufferTypeCode;
             if (n == "dtype" && t == typeof(string)) return Role.BufferDTypeName;
+        }
+        // The file functions' own parameters (only theirs; np.fromstring's / np.fromfile's first parameter is the operand,
+        // set in RunOverload, and their like= keeps its default): the separator, the count, np.fromfile's offset, the dtype
+        // (np.frombuffer's variants: numeric, non-native, fixed-width and unsized strings, StringDType), NDArray.tofile's
+        // format and its sink (a stream or a file name).
+        if (IsFileIO(p))
+        {
+            if (n == "dtype" && t == typeof(DType)) return Role.BufferDType;
+            if (n == "sep" && t == typeof(string)) return Role.IoSep;
+            if (n == "count" && t == typeof(long)) return Role.BufferCount;
+            if (n == "offset" && t == typeof(long)) return Role.BufferOffset;
+            if (n == "format" && t == typeof(string)) return Role.ToFileFormat;
+            if (n == "stream" && t == typeof(Stream) && p.Member.Name == "tofile") return Role.SinkStream;
+            if (n == "fid" && t == typeof(string)) return Role.SinkFile;
         }
         // np.where's x / y as a C# value (only its object overloads: its NDArray x / y take the second-operand role below).
         if (IsWhere(p) && n is "x" or "y" && t == typeof(object))
@@ -3022,6 +3062,38 @@ static class Snapshot
             case Role.BufferLength:
                 // Built from the buffer in Call (MakeBufferLength); the factory here is never called.
                 Add(BufferLengthLabels[0], () => null);
+                break;
+            case Role.IoSep:
+            {
+                // The separator, by a label without a comma (the case id's variant list is comma-separated): np.fromstring's
+                // base is ',' (its default, null, is the removed binary mode, every line of which would be the same
+                // refusal), np.fromfile's and NDArray.tofile's their default ''. Then the others NumPy reads: the empty
+                // separator (binary), a space (any whitespace run), ', ', a newline, null (NumPy's None: a TypeError for
+                // np.fromfile and tofile; np.fromstring's omitted sep), one that never matches, and a NUL ("embedded null
+                // character").
+                var seps = new (string Label, string Value)[]
+                {
+                    ("comma", ","), ("empty", ""), ("space", " "), ("comma_space", ", "), ("newline", "\n"),
+                    ("null", null), ("x", "x"), ("nul", "\0"),
+                };
+                string baseLabel = p.Member.Name == "fromstring" ? "comma" : "empty";
+                foreach (var (label, value) in seps.Where(sp => sp.Label == baseLabel).Concat(seps.Where(sp => sp.Label != baseLabel)))
+                    Add(label, () => value);
+                break;
+            }
+            case Role.ToFileFormat:
+                // NDArray.tofile's format: its default '%s' first, then the conversions NumPy's % operator applies to each
+                // item, a literal with no conversion, two conversions, a lone '%' and null.
+                foreach (var fmt in new[] { "%s", "%d", "%.3f", "%e", "%x", "%5.1f", "abc", "%s%s", "%", "null" })
+                {
+                    string value = fmt == "null" ? null : fmt;
+                    Add(fmt, () => value);
+                }
+                break;
+            case Role.SinkStream:
+            case Role.SinkFile:
+                // Built per call in Call (a fresh MemoryStream, a temporary file name); the factory here is never called.
+                Add("sink", () => null);
                 break;
             case Role.BufferCount:
                 // Every element of the buffer first, then none, one, a few, more than any pool operand's bytes hold, and
@@ -3791,6 +3863,14 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.fromstring's text and np.fromfile's file, built per call from the pool operand (TryMakeTextSource,
+            // TryMakeFileSource).
+            if (i == 0 && !instance && IsFileIO(m) && m.Name is "fromstring" or "fromfile")
+            {
+                roles[i] = m.Name == "fromstring" ? Role.TextSource : Role.FileSource;
+                sawArray = true;
+                continue;
+            }
             // np.histogramdd's sequence form: its NDArray[] sample is built from the pool operand (its columns), and the
             // NDArray parameters after it (weights) keep their own roles.
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "sample")
@@ -3860,7 +3940,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -3882,6 +3962,11 @@ static class Snapshot
         bool buffer = operandIndex < 0 && bufferIndex >= 0;
         if (buffer)
             operandIndex = bufferIndex;
+        // np.fromstring's is its text, np.fromfile's its file.
+        int sourceIndex = Array.FindIndex(roles, r => r is Role.TextSource or Role.FileSource);
+        bool source = operandIndex < 0 && sourceIndex >= 0;
+        if (source)
+            operandIndex = sourceIndex;
         var none = Array.Empty<(int, int)>();
 
         // The number of non-base variants per parameter (0 for the operand and for parameters kept at their default).
@@ -3893,6 +3978,8 @@ static class Snapshot
             Role.CtorShape => 0,
             Role.BufferOperand => 0,
             Role.BufferLength => BufferLengthLabels.Length - 1,
+            Role.TextSource or Role.FileSource => 0,
+            Role.SinkStream or Role.SinkFile => 0,
             Role.Out => OutVariantLabels.Length,
             Role.Weights => WeightVariantLabels.Length,
             Role.Where => WhereVariantLabels.Length,
@@ -3980,6 +4067,22 @@ static class Snapshot
                 pairDtypes = dtypes;
             }
         }
+        if (source)
+        {
+            // A text or a file takes every form its parameter type admits ("layout:form"). The text depends on the pool's
+            // value SEQUENCE only (numbers, or the text pool's strings), so np.fromstring runs on one numeric and one text
+            // pool; np.fromfile's binary file holds the operand's own bytes, so it runs on every dtype.
+            string[] forms = roles[operandIndex] == Role.TextSource ? TextSourceForms(ps[operandIndex]) : FileSourceForms(ps[operandIndex]);
+            string[] WithSourceForms(string[] layouts) => layouts.SelectMany(l => forms.Select(f => l + ":" + f)).ToArray();
+            fullLayouts = WithSourceForms(fullLayouts);
+            reducedLayouts = WithSourceForms(reducedLayouts);
+            pairLayouts = WithSourceForms(pairLayouts);
+            if (roles[operandIndex] == Role.TextSource)
+            {
+                dtypes = new[] { "float64", "U5" };
+                pairDtypes = dtypes;
+            }
+        }
         // A host operand form the pool operand does not have (Call returns null) produces no line; an overload whose host
         // parameter no pool operand fits (np.array<T>(T[,,,,]): no pool operand has rank 5) reports that once.
         int produced = 0;
@@ -4020,6 +4123,280 @@ static class Snapshot
 
         if (produced == 0)
             yield return $"{signature}\tSKIP no pool operand has a host form this parameter takes";
+    }
+
+    /// <summary>
+    ///     The text of the special numeric pool (<see cref="Special"/>) as Python writes each float (<c>repr</c>): the text
+    ///     np.fromstring and np.fromfile read for a special layout of a numeric pool. The replay builds the same strings from
+    ///     the same floats.
+    /// </summary>
+    private static readonly string[] SpecialNumberText =
+    {
+        "3.5", "inf", "-0.0", "nan", "2.25", "-1.5", "-inf", "0.0", "7.75", "-2.0", "1e+300", "-6.5", "4.0", "1e-300",
+        "-3.25", "8.0", "9.5", "-0.0", "nan", "10.0", "11.5", "-8.0", "12.0", "-9.5",
+    };
+
+    /// <summary>
+    ///     The items of the pool operand as TEXT: its value sequence, not its dtype's rendering - the integers of
+    ///     <see cref="Plain"/>, the Python float reprs of <see cref="Special"/> (<see cref="SpecialNumberText"/>), or a text
+    ///     pool's strings - as many as the operand holds. The replay rebuilds the same items from its own copy of the
+    ///     sequences.
+    /// </summary>
+    /// <param name="dt">The pool dtype (a text pool reads its strings; any other its numbers).</param>
+    /// <param name="baseLayout">The pool layout (a <c>_special</c> layout reads the special sequence).</param>
+    /// <param name="size">The operand's element count.</param>
+    /// <returns>The items.</returns>
+    private static string[] PoolTextItems(string dt, string baseLayout, long size)
+    {
+        bool special = baseLayout.EndsWith("_special", StringComparison.Ordinal);
+        bool text = dt is "S5" or "U5" or "T";
+        IEnumerable<string> items = text
+            ? (special ? SpecialText : PlainText)
+            : special ? SpecialNumberText : Plain.Select(v => ((long)v).ToString(CultureInfo.InvariantCulture));
+        return items.Take((int)size).ToArray();
+    }
+
+    /// <summary>
+    ///     The forms np.fromstring's text takes, by its parameter's type: a <c>string</c> or its UTF-8 <c>byte[]</c>, each
+    ///     <c>comma</c> (the items joined by ", "), <c>space</c> (by " "), <c>tail</c> (", " with unmatched data after the
+    ///     last item), and for the bytes <c>nul</c> (an embedded NUL after the first item, where NumPy's C string ends);
+    ///     <c>null</c> once.
+    /// </summary>
+    /// <param name="p">The text parameter.</param>
+    /// <returns>The form names.</returns>
+    private static string[] TextSourceForms(ParameterInfo p) =>
+        p.ParameterType == typeof(byte[])
+            ? new[] { "comma", "space", "tail", "nul", "null" }
+            : new[] { "comma", "space", "tail", "null" };
+
+    /// <summary>
+    ///     Builds np.fromstring's text: <paramref name="form"/> (<see cref="TextSourceForms"/>) of the pool operand's items
+    ///     (<see cref="PoolTextItems"/>), or false for a form built only once.
+    /// </summary>
+    /// <param name="t">The text parameter's type (<c>string</c> or <c>byte[]</c>).</param>
+    /// <param name="form">The form.</param>
+    /// <param name="dt">The pool dtype.</param>
+    /// <param name="baseLayout">The pool layout.</param>
+    /// <param name="operand">The pool operand (its size).</param>
+    /// <param name="value">Receives the text.</param>
+    /// <returns>Whether the form exists for this operand.</returns>
+    /// <exception cref="ArgumentException">An unknown form (a bug in the tool).</exception>
+    private static bool TryMakeTextSource(Type t, string form, string dt, string baseLayout, NDArray operand, out object value)
+    {
+        value = null;
+        if (form == "null")
+            return dt == "float64" && baseLayout == "0d";
+        string text = SourceText(form, PoolTextItems(dt, baseLayout, operand.size));
+        value = t == typeof(byte[]) ? Encoding.UTF8.GetBytes(text) : text;
+        return true;
+    }
+
+    /// <summary>The text of a text form (<see cref="TextSourceForms"/>, <see cref="FileSourceForms"/>) over the items.</summary>
+    /// <param name="form">The form: comma, space, tail or nul (a text file's <c>text</c> is comma).</param>
+    /// <param name="items">The items.</param>
+    /// <returns>The text.</returns>
+    /// <exception cref="ArgumentException">An unknown form (a bug in the tool).</exception>
+    private static string SourceText(string form, string[] items) => form switch
+    {
+        "comma" or "text" or "textfile" => string.Join(", ", items),
+        "space" => string.Join(" ", items),
+        "tail" => string.Join(", ", items) + ", junk",
+        "nul" => items.Length == 0 ? "\0" : items[0] + "\0, " + string.Join(", ", items.Skip(1)),
+        _ => throw new ArgumentException("unknown text form " + form),
+    };
+
+    /// <summary>
+    ///     The forms np.fromfile's file takes, by its parameter's type: for a <see cref="Stream"/>, <c>bin</c> (a
+    ///     MemoryStream of the operand's C-order bytes), <c>text</c> (one of its items as text, joined by ", "),
+    ///     <c>unseekable</c> (the bytes behind a stream that cannot seek: NumSharp reads it, NumPy cannot) and <c>null</c>;
+    ///     for a file name, <c>binfile</c> and <c>textfile</c> (a temporary file of the same bytes or text), <c>missing</c> (a
+    ///     name no file has) and <c>null</c>.
+    /// </summary>
+    /// <param name="p">The file parameter.</param>
+    /// <returns>The form names.</returns>
+    private static string[] FileSourceForms(ParameterInfo p) =>
+        p.ParameterType == typeof(Stream)
+            ? new[] { "bin", "text", "unseekable", "null" }
+            : new[] { "binfile", "textfile", "missing", "null" };
+
+    /// <summary>
+    ///     The temporary directory of the file forms and sinks, made on first use (a run over other names makes none) and
+    ///     deleted when the process exits; its files are rewritten per call. Its random name never reaches an outcome: the
+    ///     only file name an outcome can carry is the missing file's (<see cref="MissingFileName"/>).
+    /// </summary>
+    private static readonly Lazy<string> FileIODirLazy = new(() =>
+    {
+        string dir = Directory.CreateTempSubdirectory("numsharp-snapshot-").FullName;
+        // Best effort: a file still open at exit (none is: every stream the tool opens is closed by its call or here)
+        // would leave the directory behind, which costs nothing but disk.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        };
+        return dir;
+    });
+
+    /// <summary>The temporary directory of the file forms and sinks (<see cref="FileIODirLazy"/>).</summary>
+    private static string FileIODir => FileIODirLazy.Value;
+
+    /// <summary>
+    ///     The name of np.fromfile's <c>missing</c> form: relative (to the working directory, the repo root) and fixed,
+    ///     because FileNotFoundException's text carries it and two runs must give the same line; the replay asks NumPy
+    ///     for the same name.
+    /// </summary>
+    private const string MissingFileName = "numsharp-snapshot-no-such-file.bin";
+
+    /// <summary>
+    ///     Builds np.fromfile's file: <paramref name="form"/> (<see cref="FileSourceForms"/>) of the pool operand, or false
+    ///     when the operand has no such form (a StringDType operand has no bytes; a text form exists for the numeric float64
+    ///     and the U5 pool only, as np.fromstring's text: its items depend on the pool's sequence, not its dtype; a form is
+    ///     built once).
+    /// </summary>
+    /// <param name="t">The file parameter's type (<see cref="Stream"/> or <c>string</c>).</param>
+    /// <param name="form">The form.</param>
+    /// <param name="dt">The pool dtype.</param>
+    /// <param name="baseLayout">The pool layout.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="value">Receives the stream or the file name.</param>
+    /// <returns>Whether the form exists for this operand.</returns>
+    /// <exception cref="ArgumentException">An unknown form (a bug in the tool).</exception>
+    private static bool TryMakeFileSource(Type t, string form, string dt, string baseLayout, NDArray operand, out object value)
+    {
+        value = null;
+        bool onceSlot = dt == "float64" && baseLayout == "0d";
+        switch (form)
+        {
+            case "null":
+                return onceSlot;
+            case "missing":
+                if (!onceSlot)
+                    return false;
+                value = MissingFileName;
+                return true;
+        }
+        byte[] bytes;
+        if (form is "text" or "textfile")
+        {
+            if (dt is not ("float64" or "U5"))
+                return false;
+            bytes = Encoding.UTF8.GetBytes(SourceText(form, PoolTextItems(dt, baseLayout, operand.size)));
+        }
+        else
+        {
+            bytes = BufferBytesOf(operand);
+            if (bytes is null)
+                return false;
+        }
+        switch (form)
+        {
+            case "bin":
+            case "text":
+                value = new MemoryStream(bytes, writable: false);
+                return true;
+            case "unseekable":
+                value = new ForwardOnlyStream(bytes);
+                return true;
+            case "binfile":
+            case "textfile":
+            {
+                string name = Path.Combine(FileIODir, "source.bin");
+                File.WriteAllBytes(name, bytes);
+                value = name;
+                return true;
+            }
+            default:
+                throw new ArgumentException("unknown file form " + form);
+        }
+    }
+
+    /// <summary>
+    ///     The bytes a sink received, for the outcome: <c> WROTE &lt;hash&gt;/&lt;length&gt;</c> (the first 16 hex digits of
+    ///     their SHA-256), read from the MemoryStream or the temporary file (then deleted), or <c> WROTE none</c> when the
+    ///     call created no file.
+    /// </summary>
+    /// <param name="sink">The MemoryStream or the file name the call received.</param>
+    /// <returns>The suffix.</returns>
+    private static string WrittenBytes(object sink)
+    {
+        byte[] bytes;
+        if (sink is MemoryStream ms)
+        {
+            bytes = ms.ToArray();
+        }
+        else if (sink is string name && File.Exists(name))
+        {
+            bytes = File.ReadAllBytes(name);
+            File.Delete(name);
+        }
+        else
+        {
+            return " WROTE none";
+        }
+        return $" WROTE {Convert.ToHexString(SHA256.HashData(bytes)).Substring(0, 16).ToLowerInvariant()}/{bytes.Length}";
+    }
+
+    /// <summary>
+    ///     A read-only stream over bytes that cannot seek (NumPy's np.fromfile needs a seekable file descriptor; NumSharp
+    ///     reads such a stream), reporting how far it was read as its position.
+    /// </summary>
+    private sealed class ForwardOnlyStream : Stream
+    {
+        /// <summary>The bytes.</summary>
+        private readonly byte[] _bytes;
+
+        /// <summary>The next byte to read.</summary>
+        private int _next;
+
+        /// <summary>A stream over <paramref name="bytes"/>, from their first byte.</summary>
+        /// <param name="bytes">The bytes (not copied).</param>
+        public ForwardOnlyStream(byte[] bytes) => _bytes = bytes;
+
+        /// <inheritdoc/>
+        public override bool CanRead => true;
+
+        /// <inheritdoc/>
+        public override bool CanSeek => false;
+
+        /// <inheritdoc/>
+        public override bool CanWrite => false;
+
+        /// <inheritdoc/>
+        /// <exception cref="NotSupportedException">Always: the stream cannot seek.</exception>
+        public override long Length => throw new NotSupportedException();
+
+        /// <summary>How many bytes were read (setting it is refused: the stream cannot seek).</summary>
+        /// <exception cref="NotSupportedException">On a set.</exception>
+        public override long Position
+        {
+            get => _next;
+            set => throw new NotSupportedException();
+        }
+
+        /// <inheritdoc/>
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int n = Math.Min(count, _bytes.Length - _next);
+            Array.Copy(_bytes, _next, buffer, offset, n);
+            _next += n;
+            return n;
+        }
+
+        /// <inheritdoc/>
+        public override void Flush() { }
+
+        /// <inheritdoc/>
+        /// <exception cref="NotSupportedException">Always.</exception>
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        /// <inheritdoc/>
+        /// <exception cref="NotSupportedException">Always.</exception>
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        /// <inheritdoc/>
+        /// <exception cref="NotSupportedException">Always.</exception>
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>
@@ -4341,6 +4718,14 @@ static class Snapshot
             && !TryMakeBufferOperand(ps[operandIndex].ParameterType, layout.Substring(formAt + 1), dt, baseLayout, operand,
                 out operandArg, out bufferLength))
             return null;
+        // np.fromstring's text and np.fromfile's file ("layout:form" as a host operand's); a form this operand does not have
+        // makes no line at all.
+        if (operandIndex >= 0 && roles[operandIndex] == Role.TextSource
+            && !TryMakeTextSource(ps[operandIndex].ParameterType, layout.Substring(formAt + 1), dt, baseLayout, operand, out operandArg))
+            return null;
+        if (operandIndex >= 0 && roles[operandIndex] == Role.FileSource
+            && !TryMakeFileSource(ps[operandIndex].ParameterType, layout.Substring(formAt + 1), dt, baseLayout, operand, out operandArg))
+            return null;
         string inBefore = HashOf(operand);
         var argv = new object[ps.Length];
         NDArray outArray = null;
@@ -4364,6 +4749,8 @@ static class Snapshot
                     : roles[i] == Role.AssignArg ? MakeAssignArg(ps[i], AssignArgLabels(ps[i])[0], operand)
                     : roles[i] == Role.SpaceStop ? MakeSpaceValue(ps[i].ParameterType, layout, start: false)
                     : roles[i] == Role.BufferLength ? MakeBufferLength(BufferLengthLabels[0], bufferLength)
+                    : roles[i] == Role.SinkStream ? new MemoryStream()
+                    : roles[i] == Role.SinkFile ? Path.Combine(FileIODir, "sink.bin")
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -4517,6 +4904,13 @@ static class Snapshot
         {
             outcome = "EXC " + Describe(e);
         }
+        // A sink's bytes (NDArray.tofile), written before a refusal too, and a read stream's final position (np.fromfile
+        // leaves a file where its read stopped), join the outcome.
+        int sinkIndex = Array.FindIndex(roles, r => r is Role.SinkStream or Role.SinkFile);
+        if (sinkIndex >= 0)
+            outcome += WrittenBytes(argv[sinkIndex]);
+        if (operandIndex >= 0 && roles[operandIndex] == Role.FileSource && operandArg is Stream read)
+            outcome += " POS " + read.Position.ToString(CultureInfo.InvariantCulture);
         string inAfter = HashOf(operand);
         if (inAfter != inBefore)
             outcome += " MUTATED in=" + inAfter;
