@@ -487,9 +487,10 @@ namespace NumSharp.Backends
             // float64 UNLESS a complex dtype forces complex128 — the only way a real-input geomspace enters the
             // complex domain. Every other dtype (float32/float16/int) still computes float64 then casts at the end.
             if (dtype != null && dtype.GetTypeCode() == NPTypeCode.Complex)
-                return GeomspaceComplexCore(new Complex(start, 0.0), new Complex(stop, 0.0), num, endpoint, dtype);
+                return GeomspaceComplexCore(new Complex(start, 0.0), new Complex(stop, 0.0), num, endpoint, dtype, axis);
 
-            NDArray ret = GeomspaceRealCore(start, stop, num, endpoint);
+            // NumPy's tail: `if axis != 0: result = moveaxis(result, 0, axis)`, then `result.astype(dtype, copy=False)`.
+            NDArray ret = SpacingAxisView(GeomspaceRealCore(start, stop, num, endpoint), axis);
             return CastSpacingResult(ret, dtype);
         }
 
@@ -505,7 +506,26 @@ namespace NumSharp.Backends
             ValidateSampleCount(num);
             ValidateSpacingAxis(axis);
 
-            return GeomspaceComplexCore(start, stop, num, endpoint, dtype);
+            return GeomspaceComplexCore(start, stop, num, endpoint, dtype, axis);
+        }
+
+        /// <summary>
+        ///     NumPy's geomspace tail <c>if axis != 0: result = _nx.moveaxis(result, 0, axis)</c> on a 1-D result: a view of
+        ///     the same buffer, which the final <c>result.astype(dtype, copy=False)</c> returns as it is when the dtype
+        ///     already matches - so <c>np.geomspace(1, 1000, 4, axis=-1)</c> does not own its data, where axis 0 does.
+        /// </summary>
+        /// <param name="result">The fresh 1-D result. Ownership transfers in: it is returned itself for axis 0, and disposed
+        ///     when the view replaces it (the view keeps the buffer alive).</param>
+        /// <param name="axis">The destination, already validated (0 or -1).</param>
+        /// <returns><paramref name="result"/> for axis 0; otherwise a new alias of its buffer that does not own it.</returns>
+        private static NDArray SpacingAxisView(NDArray result, int axis)
+        {
+            if (axis == 0)
+                return result;
+            // moveaxis of a 1-D array is the same layout over the same buffer; only the ownership flag tells them apart.
+            var view = new NDArray(result.Storage.Alias()) { TensorEngine = result.TensorEngine };
+            result.Dispose();
+            return view;
         }
 
         /// <summary>
@@ -606,14 +626,17 @@ namespace NumSharp.Backends
         /// <param name="num">Number of samples (already validated non-negative).</param>
         /// <param name="endpoint">Whether <paramref name="stop"/> is the final sample.</param>
         /// <param name="dtype">The requested output dtype (null → complex128); applied as the final cast.</param>
-        /// <returns>A fresh, owning array of length <paramref name="num"/> in the requested dtype.</returns>
+        /// <param name="axis">The validated moveaxis destination (0 or -1): -1 makes the complex128 result NumPy's view
+        ///     (<see cref="SpacingAxisView"/>) before the cast.</param>
+        /// <returns>A fresh array of length <paramref name="num"/> in the requested dtype; it does not own its buffer when
+        ///     <paramref name="axis"/> is -1 and no cast copies it, as NumPy's moveaxis view does not.</returns>
         /// <remarks>
         ///     Accurate but not byte-reproducible (see the class comment). Follows NumPy's exact operation order:
         ///     result[0]=start_r / result[-1]=stop_r are set, THEN the whole array is multiplied by out_sign — so the
         ///     endpoints become <c>start_r*out_sign</c> / <c>stop_r*out_sign</c> (not necessarily the original inputs,
-        ///     since complex divide-then-multiply is not exact), matching NumPy.
+        ///     since complex divide-then-multiply is not exact), matching NumPy; then the moveaxis and the cast.
         /// </remarks>
-        private static NDArray GeomspaceComplexCore(Complex start, Complex stop, long num, bool endpoint, DType dtype)
+        private static NDArray GeomspaceComplexCore(Complex start, Complex stop, long num, bool endpoint, DType dtype, int axis)
         {
             // sign(z) = z / |z| (NumPy 2.x complex sign); z != 0 guaranteed by the caller.
             Complex outSign = start / Complex.Abs(start);
@@ -648,6 +671,8 @@ namespace NumSharp.Backends
                 }
             }
 
+            // NumPy's tail: the moveaxis view for axis != 0, then astype(dtype, copy=False).
+            result = SpacingAxisView(result, axis);
             return CastSpacingResult(result, dtype);
         }
 

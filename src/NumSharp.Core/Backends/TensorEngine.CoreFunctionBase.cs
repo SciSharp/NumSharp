@@ -103,9 +103,11 @@ namespace NumSharp
         ///     as the <see cref="Geomspace(Complex, Complex, long, bool, DType, int)"/> overload does (its interior differs
         ///     from the real path's); a text dtype is refused, as NumPy refuses it (below); any other dtype casts the
         ///     float64 result (an integer dtype truncates toward zero).</param>
-        /// <param name="axis">The destination of NumPy's trailing moveaxis: a no-op for the 1-D result, but only 0 and -1
-        ///     are in range.</param>
-        /// <returns>A new 1-D array of <paramref name="num"/> samples that owns its buffer.</returns>
+        /// <param name="axis">The destination of NumPy's trailing moveaxis: the same values for the 1-D result, but only 0
+        ///     and -1 are in range, and -1 returns NumPy's moveaxis view.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples. With <paramref name="axis"/> -1 it is NumPy's
+        ///     <c>moveaxis</c> view, which does not own its buffer, unless the final cast to <paramref name="dtype"/> copies
+        ///     it; otherwise it owns its buffer.</returns>
         /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>, NumPy's first check),
         ///     then (after the text dtypes) a negative <paramref name="num"/> (<c>Number of samples, -1, must be
         ///     non-negative.</c>).</exception>
@@ -139,8 +141,11 @@ namespace NumSharp
         /// <param name="endpoint">Whether <paramref name="stop"/> is the last sample.</param>
         /// <param name="dtype">The result dtype, or null for complex128; a real dtype drops the imaginary parts in the
         ///     final cast, as NumPy's <c>astype</c> does; a text dtype is refused, as NumPy refuses it (below).</param>
-        /// <param name="axis">Only 0 and -1 are in range (NumPy's trailing moveaxis of the 1-D result).</param>
-        /// <returns>A new 1-D array of <paramref name="num"/> samples that owns its buffer.</returns>
+        /// <param name="axis">Only 0 and -1 are in range (NumPy's trailing moveaxis of the 1-D result); -1 returns NumPy's
+        ///     moveaxis view.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples. With <paramref name="axis"/> -1 it is NumPy's
+        ///     <c>moveaxis</c> view, which does not own its buffer, unless the final cast to <paramref name="dtype"/> copies
+        ///     it; otherwise it owns its buffer.</returns>
         /// <exception cref="ValueError">A zero end (<c>Geometric sequence cannot include zero</c>), then (after the text
         ///     dtypes) a negative <paramref name="num"/>.</exception>
         /// <exception cref="DTypePromotionError">A <c>StringDType</c> <paramref name="dtype"/>: no common DType with the

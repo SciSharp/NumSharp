@@ -196,5 +196,32 @@ namespace NumSharp.Tests.Creation
             new Action(() => np.geomspace(0.0, 1000.0, 4, dtype: T))
                 .Should().Throw<ValueError>().WithMessage("Geometric sequence cannot include zero");
         }
+
+        // ------------------------------------------------------------------------------------- the axis' moveaxis view
+
+        /// <summary>
+        ///     geomspace ends with <c>if axis != 0: result = moveaxis(result, 0, axis)</c> and <c>result.astype(dtype,
+        ///     copy=False)</c>: axis -1 returns a view that does not own its data unless the dtype cast copies it. NumSharp
+        ///     always returned an owner.
+        /// </summary>
+        [TestMethod]
+        public void Geomspace_AxisMinusOne_IsNumPysMoveaxisView()
+        {
+            var c1 = new System.Numerics.Complex(1, 0);
+            var c1000 = new System.Numerics.Complex(1000, 0);
+            // np.geomspace(1.0, 1000.0, 4, axis=-1).flags.owndata -> False (values [1, 10, 100, 1000], as axis 0)
+            var a = np.geomspace(1.0, 1000.0, 4, axis: -1);
+            a.flags.owndata.Should().BeFalse();
+            a.Should().BeOfValues(1.0, 10.0, 100.0, 1000.0);
+            np.geomspace(1.0, 1000.0, 4, axis: 0).flags.owndata.Should().BeTrue();
+            // the dtype already the result's: no copy (float64 for real ends, complex128 for complex ones)
+            np.geomspace(1.0, 1000.0, 4, dtype: np.float64, axis: -1).flags.owndata.Should().BeFalse();
+            np.geomspace(1.0, 1000.0, 4, dtype: np.complex128, axis: -1).flags.owndata.Should().BeFalse();
+            np.geomspace(c1, c1000, 4, axis: -1).flags.owndata.Should().BeFalse();
+            np.geomspace(1.0, 1000.0, 0, axis: -1).flags.owndata.Should().BeFalse();
+            // a cast copies: np.geomspace(1.0, 1000.0, 4, dtype=np.float32, axis=-1).flags.owndata -> True
+            np.geomspace(1.0, 1000.0, 4, dtype: np.float32, axis: -1).flags.owndata.Should().BeTrue();
+            np.geomspace(c1, c1000, 4, dtype: np.float64, axis: -1).flags.owndata.Should().BeTrue();
+        }
     }
 }
