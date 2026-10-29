@@ -79,24 +79,8 @@ namespace NumSharp
         public static NDArray ones(Shape shape, DType dtype, string device = null)
         {
             ValidateDevice(device);
-            if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
-                return OnesOfText(shape, dtype);
-            return WithLaneSharingDescr(OnesCore(shape, dtype?.GetTypeCode() ?? NPTypeCode.Double), dtype);
+            return NDArray.Ones(shape, dtype);
         }
-
-        /// <summary>
-        ///     <c>np.ones</c> for a string dtype — NumPy's <c>empty</c> + <c>copyto(a, 1, casting='unsafe')</c>: the number one
-        ///     written as its <c>str()</c>, <c>'1'</c>, into every element (<see cref="Backends.Strings.NDStringArrays.Full"/>
-        ///     with the Python int 1).
-        /// </summary>
-        /// <param name="shape">The dimensions (a fresh dense layout is kept, a view's re-laid out in C order).</param>
-        /// <param name="dtype">The string dtype (sized or not).</param>
-        /// <returns>The new string array.</returns>
-        private static NDArray OnesOfText(Shape shape, DType dtype)
-            => dtype.Meta is VStringDTypeMeta
-                ? Backends.Strings.NDVStringMove.Full(shape, 1L, dtype) // the int 1 cast: '1' (coerce does not apply to a cast)
-                : Backends.Strings.NDStringArrays.Full(shape, 1L, dtype);
-
 
         /// <summary>
         ///     Return a new array of given shape and type, filled with ones.
@@ -106,58 +90,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape)
         {
-            return OnesCore(shape, NPTypeCode.Double);
-        }
-
-        /// <summary>
-        ///     The storage-lane core behind every public <c>ones(..., dtype)</c> overload (which all take the single
-        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>) and <c>ones_like</c>.
-        /// </summary>
-        /// <param name="shape">Shape of the new array. A dense layout (C, F or a KEEPORDER permutation at offset 0) is
-        ///     kept, which is how <c>ones_like(a, order='K')</c> gets <c>a</c>'s memory order; any view layout is re-laid out
-        ///     in C order (<see cref="Shape.ForFreshAllocation"/>).</param>
-        /// <param name="typeCode">The desired data-type for the array.</param>
-        /// <returns>A fresh, owned, writeable array of <paramref name="shape"/>'s dimensions with every element one.</returns>
-        /// <exception cref="ValueError">A dimension is negative, or the byte count overflows (<see cref="AllocationGuard"/>).</exception>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        private static NDArray OnesCore(Shape shape, NPTypeCode typeCode)
-        {
-            object one = null;
-            switch (typeCode)
-            {
-                case NPTypeCode.Complex:
-                    one = new Complex(1d, 0d);
-                    break;
-                case NPTypeCode.Half:
-                    one = (Half)1;
-                    break;
-                case NPTypeCode.SByte:
-                    one = (sbyte)1;
-                    break;
-                case NPTypeCode.String:
-                    one = "1";
-                    break;
-                case NPTypeCode.Char:
-                    // Char is NumSharp's uint16-like numeric dtype. Numeric one is U+0001;
-                    // the printable character '1' is 0x0031 and violates the uint16 oracle.
-                    one = (char)1;
-                    break;
-                default:
-                    one = Converts.ChangeType((byte)1, typeCode);
-                    break;
-            }
-
-            // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
-            // dimension guard has to be explicit here — see np.full.
-            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
-
-            // The storage constructor installs the shape as given, so the fresh-layout rule of the allocating funnel has
-            // to be applied here: a view's Shape (np.ones(x.Shape) for x = a[::4]) would otherwise address past the
-            // `size`-element buffer, and a read-only source's Shape would make the new array read-only. It must be the
-            // storage constructor, as in np.full: the public wrap constructor new NDArray(IArraySlice, Shape) reads
-            // dimensions only (NumPy's ndarray(shape, buffer=...)), which would turn the kept F / KEEPORDER layout of
-            // ones_like(a, order='K') into C order.
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, one), shape.ForFreshAllocation()));
+            return UnmanagedStorage.OnesCore(shape, NPTypeCode.Double);
         }
 
         /// <summary>
@@ -171,26 +104,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, char order, DType dtype = null)
         {
-            char physical = OrderResolver.Resolve(order);
-            var orderedShape = Shape.Adopt(shape.dimensions, physical);
-            if (Backends.Strings.NDStringStorage.IsString(dtype) || dtype?.Meta is VStringDTypeMeta)
-                return OnesOfText(orderedShape, dtype);
-            return WithLaneSharingDescr(OnesCore(orderedShape, dtype?.GetTypeCode() ?? NPTypeCode.Double), dtype);
-        }
-
-        /// <summary>
-        ///     Labels a FRESH array that a creation routine allocated by storage lane with the lane-sharing C-type class the
-        ///     caller asked for (<c>np.ones(3, np.longdouble)</c> reports <c>'g'</c>, Windows' <c>np.full(2, 7, np.intc)</c>
-        ///     <c>'i'</c>, as NumPy's do); any other dtype leaves the array as allocated.
-        /// </summary>
-        /// <param name="fresh">The array just created, which nothing else references yet.</param>
-        /// <param name="dtype">The requested dtype, or null.</param>
-        /// <returns><paramref name="fresh"/> itself.</returns>
-        /// <remarks>Footgun: never pass an array other code holds a view of — relabelling its storage changes their dtype too.</remarks>
-        internal static NDArray WithLaneSharingDescr(NDArray fresh, DType dtype)
-        {
-            fresh.Storage.AdoptLaneSharingDescr(dtype);
-            return fresh;
+            return NDArray.Ones(shape, order, dtype);
         }
     }
 }

@@ -42,10 +42,10 @@ namespace NumSharp
                 using var fcopy = this.copy('F');
                 // A lane-sharing C-type class (np.longdouble, Windows' np.intc) is not on the buffer: the copy keeps it, as
                 // NumPy's flatten keeps the descriptor.
-                return np.WithLaneSharingDescr(new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
+                return WithLaneSharingDescr(new NDArray(new UnmanagedStorage(fcopy.Array, Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
             }
 
-            return np.WithLaneSharingDescr(new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
+            return WithLaneSharingDescr(new NDArray(new UnmanagedStorage(Storage.CloneData(), Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
         }
 
         /// <summary>
@@ -68,7 +68,7 @@ namespace NumSharp
             using var ordered = new NDArray(dtype, layout, false);
             NumSharp.Backends.Iteration.NDIter.Copy(ordered.Storage, Storage);
             // The result over the buffer keeps a lane-sharing C-type class, as the 'C' / 'F' paths do.
-            return np.WithLaneSharingDescr(new NDArray(new UnmanagedStorage(ordered.Array, Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
+            return WithLaneSharingDescr(new NDArray(new UnmanagedStorage(ordered.Array, Shape.Vector(size))) { TensorEngine = TensorEngine }, dtype);
         }
     }
 }

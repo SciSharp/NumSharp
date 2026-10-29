@@ -56,36 +56,7 @@ namespace NumSharp
                 return NDCharArrayBoundary.Kept((a, fill_value, dtype, order, device), static s => full_like(s.a, s.fill_value, s.dtype, s.order, s.device));
             }
             ValidateDevice(device);
-            // NumPy's *_like contract preserves a.dtype unless dtype= is explicitly supplied.
-            // fill_value is CAST into that dtype; its CLR type never selects the result dtype.
-            var typeCode = dtype != null ? dtype.GetTypeCode() : a.typecode;
-            // PyArray_NewLikeArray's layout: order='K' keeps a's axis permutation, not merely C-or-F.
-            var shape = Shape.NewLikeLayout(a.Shape, order, (long[])a.Shape.dimensions.Clone());
-
-            // A string result (a's dtype, or a requested one — unsized means one character, NumPy's empty_like) is
-            // `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: the copy truncates / converts the value.
-            var resultDescr = dtype ?? a.dtype;
-            // A fill value with dimensions broadcasts into empty_like's layout through the same copyto
-            // (np.full_like(f3, [1, 2, 3]) is [1., 2., 3.]; a StringDType fill value is parsed per element).
-            if (IsBroadcastFillValue(fill_value))
-                return FullFromArrayFill(shape, fill_value, resultDescr);
-            if (resultDescr.Meta is VStringDTypeMeta)
-                return Backends.Strings.NDVStringMove.Full(shape, fill_value, resultDescr);
-            if (Backends.Strings.NDStringStorage.IsString(resultDescr))
-                return Backends.Strings.NDStringArrays.Full(shape, fill_value, resultDescr);
-
-            // Allocates from shape.size directly (not via UnmanagedStorage.Allocate), so the
-            // dimension guard has to be explicit here — see np.full.
-            AllocationGuard.CheckDimensions(shape.dimensions, typeCode);
-
-            // NumPy's `res = empty_like(...); copyto(res, fill_value, casting='unsafe')`: a Python int is range-checked in
-            // the result's dtype (np.full_like(int8_array, 1000) raises), a Python float / complex cast unsafely, and None
-            // (a null) is NaN / nan+nanj / False, or int(None)'s TypeError when there is an element to write. The result is
-            // labelled with a lane-sharing C-type class when that is the dtype (a's np.longdouble, or a requested np.intc),
-            // as NumPy's empty_like keeps the descriptor.
-            return WithLaneSharingDescr(
-                new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, FullFillElement(fill_value, typeCode, shape.size)), shape)),
-                resultDescr);
+            return NDArray.FullLike(a, fill_value, dtype, order);
         }
     }
 }

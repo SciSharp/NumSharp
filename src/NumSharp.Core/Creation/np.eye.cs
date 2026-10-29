@@ -32,45 +32,7 @@ namespace NumSharp
         public static NDArray eye(int N, int? M = null, int k = 0, DType dtype = null, char order = 'C', string device = null)
         {
             ValidateDevice(device);
-            int cols = M ?? N;
-            if (N < 0)
-                throw new ArgumentException($"negative dimensions are not allowed (N={N})", nameof(N));
-            if (cols < 0)
-                throw new ArgumentException($"negative dimensions are not allowed (M={cols})", nameof(M));
-
-            char physical = OrderResolver.Resolve(order);
-
-            var resolvedType = dtype ?? DType.Double;
-            var m = np.zeros(Shape.Matrix(N, cols), resolvedType);
-            if (N == 0 || cols == 0)
-                return physical == 'F' ? m.copy('F') : m;
-
-            // Diagonal element count: rows where 0 <= i < N and 0 <= i+k < cols
-            int rowStart = Math.Max(0, -k);
-            int rowEnd = Math.Min(N, cols - k);
-            if (rowEnd <= rowStart)
-                return physical == 'F' ? m.copy('F') : m;
-
-            var typeCode = resolvedType.GetTypeCode();
-            object one;
-            switch (typeCode)
-            {
-                case NPTypeCode.Complex: one = new System.Numerics.Complex(1d, 0d); break;
-                case NPTypeCode.Half:    one = (Half)1; break;
-                case NPTypeCode.SByte:   one = (sbyte)1; break;
-                case NPTypeCode.String:  one = "1"; break;
-                case NPTypeCode.Char:    one = (char)1; break;
-                default:                 one = Converts.ChangeType((byte)1, typeCode); break;
-            }
-
-            // Flat index of element (i, i+k) in row-major (N, cols) layout = i*cols + (i+k).
-            // `flat` is an owning view wrapper around `m`'s storage — used only to drive
-            // SetAtIndex over the diagonal, never returned.
-            using var flat = m.flat;
-            for (int i = rowStart; i < rowEnd; i++)
-                flat.SetAtIndex(one, (long)i * cols + (i + k));
-
-            return physical == 'F' ? m.copy('F') : m;
+            return NDArray.Eye(N, M, k, dtype, order);
         }
     }
 }
