@@ -5192,7 +5192,12 @@ families, the string oracle with no layout excuse for them, `Indexing/IndexSearc
 - **ravel_multi_index** is `arr_ravel_multi_index`: the result is its iterator's ALLOCATE output (KEEPORDER over the
   coordinate arrays: an F pair gives F, a mixed pair C; it was always C), the checks run in NumPy's order (order letter,
   modes, ravel strides, count, dtypes, broadcast with the iterator's text), `dims=()` gives 0, a zero dimension raises
-  `cannot unravel if shape has zero entries (is empty).` in every mode, the errors are ValueError.
+  `cannot unravel if shape has zero entries (is empty).` in every mode, the errors are ValueError. Its body is the
+  engine member `TensorEngine.RavelMultiIndex` (2026-10-29, `TensorEngine.Multiarray.cs`, implemented in
+  `Indexing/Default.RavelMultiIndex.cs` with NumPy's `astype_anyint`, which np.unravel_index's member shares and which
+  asks the descriptor's kind); its `mode` is NumPy's mode object (a string for every axis, a sequence of strings, None:
+  `np.ConvertClipmodeSequence(object, int)`), and a null coordinate array is NumPy's None
+  (`TypeError: only int indices permitted`; it leaked a NullReferenceException).
 - **The order converter** is NumPy's `PyArray_OrderConverter` once (`OrderResolver.Convert`; `Resolve` raises its texts):
   `order must be one of 'C', 'F', 'A', or 'K' (got 'Q')` and a creation function's `only 'C' or 'F' order is permitted`
   are ValueErrors (they were ArgumentExceptions with drifted texts), and every letter is accepted in lowercase (np.nditer

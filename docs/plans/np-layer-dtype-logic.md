@@ -61,7 +61,7 @@ names a non-native dtype). R1 has no batch 6 row left. Batch 9, the computing fu
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
-has its first six parts and the seventh's first half done (2026-10-29): np.where's body is `NDArray.Where` in
+is done (2026-10-29): np.where's body is `NDArray.Where` in
 `NDArray.Multiarray.cs` (every engine
 np.where call, the fixed-width text route's included, calls it), np.real / np.imag's are `NDArray.RealPart` / `ImagPart`
 in the new `NDArray.TypeCheck.cs` with ndarray.imag's setter, ndarray.conjugate's is `NDArray.Conjugate`, np.extract's,
@@ -72,12 +72,15 @@ np.fill_diagonal's and np.r_ / np.c_'s indexer's are `NDArray.Ix`, `NDArray.Fill
 `NDArray.PutAlongAxis` and `NDArray.ApplyAlongAxis` in the new `NDArray.ShapeBase.cs`, np.indices' are
 `NDArray.Indices` / `NDArray.IndicesSparse` in `NDArray.Numeric.cs`, np.diag's and np.diagflat's `NDArray.Diag` /
 `NDArray.DiagFlat` in `NDArray.TwoDimBase.cs`, np.mgrid's and np.ogrid's `NDArray.MGrid` / `NDArray.OGrid` in
-`NDArray.IndexTricks.cs`, and the divergences a replay of
+`NDArray.IndexTricks.cs`, np.ravel_multi_index's, a function that computes, the engine member
+`TensorEngine.RavelMultiIndex` (`TensorEngine.Multiarray.cs`, with NumPy's `astype_anyint`, which np.unravel_index's
+member shares), and the divergences a replay of
 their snapshot through NumPy found are fixed per D4 (np.where's result dtype and order, np.select's broadcast and cast
 texts, np.piecewise's constants, np.delete's error axis, np.broadcast_shapes' pair, np.pad's check order, values and
 computations, np.ix_'s result object, np.r_'s matrix copy and Python int entries, np.fill_diagonal's value conversion,
 np.apply_along_axis's text scalar width, np.indices' allocation order, arange refusals and sparse views, the slice
-fields' Python numbers, np.mgrid / np.ogrid's nd_grid statements). P5 is done
+fields' Python numbers, np.mgrid / np.ogrid's nd_grid statements, np.ravel_multi_index's null coordinate array);
+R1 has no batch 7 row left. P5 is done
 (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
@@ -878,7 +881,10 @@ first, as it did for np.fft.
    `aa7b3f77`): np.indices (`Numeric`) and np.diag / np.diagflat (`TwoDimBase`), with the D4 fix the replay found
    (`408644f1`); np.diag's StringDType route asks `HasReferences`. Seventh part, first half, done (`c89c5dc3`,
    `646a15a0`, `4a634a37`, `dc1ce4f6`): np.mgrid / np.ogrid (`IndexTricks`), with the D4 fixes the replay found
-   (`e0d2f1ef`, `6f0f2e33`, before the move); their mesh dtype asks `result_type`. Left: np.ravel_multi_index.
+   (`e0d2f1ef`, `6f0f2e33`, before the move); their mesh dtype asks `result_type`. Second half done (`ac239976`,
+   `61128970`, `b85c03c0`, `a60ec561`): np.ravel_multi_index (`TensorEngine.RavelMultiIndex`, `Multiarray`, with
+   `astype_anyint`), with the D4 fix the replay found (`eb82d855`, before the move); `astype_anyint` asks the
+   descriptor's kind. Batch 7 is done.
 8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
    object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
    `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
@@ -1126,6 +1132,49 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 7, seventh part, second half (np.ravel_multi_index) - batch 7 is done.** Five commits on
+  `strings` from the parallel session (developed in the scratch worktree on `c98a8245` and landed by fast-forward). The
+  D4 fix comes before the move, so the move is pure over NumPy's statements. R1: 2 numeric lines leave with the move
+  (np.ravel_multi_index.cs 0 / 1, its int64 in-place test; np.unravel_index.cs 0 / 1, `astype_anyint`): batch 7 has no
+  row left (43 files, 39 text and 291 numeric lines). R2: unchanged (the engine file sits beside the facade).
+  - `ac239976`: the snapshot tool reaches np.ravel_multi_index (its three overloads were SKIP). The array overloads'
+    coordinate list carries the pool operand (role `RavelCoords`, 12 variants: the operand twice, with a C- and an
+    F-ordered int64 ramp, a 0-d coordinate, a broadcast row, a vector that does not broadcast, a bool and a float array,
+    too few and too many, none, a null entry); dims, mode and modes take roles of their own (`RavelDims`, `RavelMode`,
+    `RavelModes`; the order is np.unravel_index's `UnravelOrder`), and the scalar overload's coordinate tuple is its
+    operand (`RavelScalarCoords`, 11 labels). 29,106 cases, the same with and without `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+    Replayed through NumPy 2.4.2 on Windows and on Linux (28,354 cases, the char and decimal pools skipped): 315
+    diverged, all one class.
+  - `eb82d855` (D4, before the move): a null coordinate array is NumPy's None, which `astype_anyint` refuses:
+    `TypeError: only int indices permitted`, in the list's order after the count, mode, order and dims checks, where
+    NumSharp leaked a NullReferenceException. The 315; no replay case differs after it, on Windows or Linux.
+  - `61128970`, the move: np.ravel_multi_index's array body is the abstract `TensorEngine.RavelMultiIndex` in
+    `TensorEngine.Multiarray.cs`, implemented in `Indexing/Default.RavelMultiIndex.cs` beside the facade - the null
+    checks, the order, the modes, the ravel strides and the count, then the old body, statement for statement - with
+    `BroadcastCoordinates`, `HasDims`, `ExecuteRavelMultiIndex`, `ValidateRavelInputs` and `astype_anyint`
+    (`ThrowIfNotIntIndices`), which `Default.UnravelIndex.cs` now calls as DefaultEngine's own. The member's mode is an
+    `object`, NumPy's mode argument (a string for every axis, a sequence of strings, None), so the two public array
+    overloads share it; `np.ConvertClipmodeSequence(object, int)` is NumPy's `PyArray_ConvertClipmodeSequence` for it
+    (another object: `TypeError: clipmode not understood`). The scalar overload stays the facade's (`RavelStrides` and
+    `ThrowIfZeroDimension` become internal). Snapshot of np.ravel_multi_index and np.unravel_index (38,178 cases)
+    byte-identical, sorted; the rebind check found nothing.
+  - `b85c03c0`, the conversion: `astype_anyint` asks the descriptor - kind `'b'`, `'i'` or `'u'`, NumPy's
+    `PyArray_ISINTEGER || PyArray_ISBOOL` - where it listed Boolean, Char and the integer NPTypeCodes; the two in-place
+    read tests keep the NPTypeCode (they ask about the storage lane the kernel reads). Snapshot byte-identical.
+  - `a60ec561`: a unit test calls the engine member with NumPy's mode objects the public overloads cannot pass (a list
+    of strings, a None entry, a float, an object, the wrong length, an empty dims), each with NumPy 2.4.2's probed
+    answer.
+  - Perf (two pinned P-cores; before the move / after the conversion / NumPy, us, best of four interleaved runs): small
+    (2,) int64 coordinates 0.544 / 0.556 / 1.111, 1K int64 2.84 / 2.77 / 4.98, 100K int64 210.7 / 211.7 / 462.6, 100K
+    int32 (the cast route) 284.7 / 285.7 / 501.5, 100K with modes (wrap, clip) 196.5 / 194.9 / 371.1, 0-d (NumPy's
+    scalar) 0.482 / 0.493 / 1.081, the scalar overload 0.032 / 0.032 / 1.611: every cell within the runs' spread; NPY/NS
+    1.8 to 50.
+  - Core's warnings unchanged (712 in a `--no-incremental -v n` build; the two NDW012 of the moved body moved with it).
+  - Gates: NumSharp.Tests (20,854 on net10.0, 20,853 on net8.0) and NumSharp.Tests.Oracle (414 on both) pass
+    (`TestCategory!=OpenBugs&TestCategory!=HighMemory`, at `b85c03c0`), and so do the layering ratchets; after
+    `a60ec561` its test class and the index-conversion tests (50) on both frameworks.
+  - Next: batch 8 (the indexers, the coordinator's), 9b and 10.
 
 - **2026-10-29, P3: batch 7, seventh part, first half (np.mgrid, np.ogrid).** Six commits on `strings` from the parallel
   session (developed in the scratch worktree on top of the sixth part, rebased onto `a0bf3516` and landed by
