@@ -250,16 +250,15 @@ namespace NumSharp.Backends
         ///     integer (its uint16 storage). A null entry of np.ravel_multi_index's coordinate list used to leak a
         ///     NullReferenceException; NumPy's <c>None</c> there becomes a 0-d object array, which this same check refuses, in
         ///     the list's order (np.unravel_index refuses a null index array with ArgumentNullException first).
+        ///     <para>The test is NumPy's <c>PyArray_ISINTEGER(ret) || PyArray_ISBOOL(ret)</c> asked of the descriptor: its
+        ///     kind is <c>'i'</c> or <c>'u'</c> (every integer class, NumSharp's char among them) or <c>'b'</c>; a float,
+        ///     complex, decimal, text or datetime descriptor is none of them.</para>
         /// </remarks>
         private static void ThrowIfNotIntIndices(NDArray indices)
         {
             // A null entry is NumPy's None: astype_anyint converts it to a 0-d object array, which is not integer.
-            if (indices is not null)
-            {
-                NPTypeCode t = indices.typecode;
-                if (t == NPTypeCode.Boolean || t == NPTypeCode.Char || t.IsInteger())
-                    return;
-            }
+            if (indices is not null && indices.dtype.kind is 'b' or 'i' or 'u')
+                return;
             throw new TypeError("only int indices permitted");
         }
     }
