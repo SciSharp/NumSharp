@@ -29,7 +29,10 @@ the max / min keywords are members; numpy.linalg and numpy.fft are the `TensorEn
 sub-engines (`LinalgEngine` / `FftEngine`, defaults `DefaultLinalgEngine` / `DefaultFftEngine`; E3 on 2026-10-29), so
 PE is done. P3's design is written ([§7](#p3-the-array-object-and-values-entering-storage-k4-153-lines-in-52-files));
 batch 1, the `DType` element slots, is done (`95b7167e`, 2026-10-29), and the np.arange divergence its gate found is
-fixed per D4: np.arange is NumPy's `PyArray_ArangeObj` through the slots (`8be47c75`). P5 is done (2026-10-29): its six
+fixed per D4: np.arange is NumPy's `PyArray_ArangeObj` through the slots (`8be47c75`). Batch 2, item selection, is done
+(`f5547943`, `ac49b5b7`): the bodies of np.take, np.put, np.putmask, np.place, np.repeat, np.choose, np.compress and
+np.resize are `UnmanagedStorage` members, ndarray.resize's is `UnmanagedStorage.Resize`, and each chooses its
+reference-holding route by one `HasReferences` decision. P5 is done (2026-10-29): its six
 families and, handed over by the coordinator, the lines first assigned to PE (np.argmax's out= pair, np.unravel_index,
 np.packbits / np.unpackbits, np.bincount, and the text lines of np.kron and np.median) are engine members or engine
 partials, and the two divergences found on the way are fixed per D4 (np.argmax / np.argmin check a text operand's
@@ -758,7 +761,9 @@ first, as it did for np.fft.
    np.arange's ramps, `nonzero` against np.nonzero) beside the paths they come from.
 2. **Item selection** (10 files, 57 lines): np.take, np.put, np.putmask, np.place, np.repeat, np.choose, np.compress,
    np.resize and the ndarray members into `UnmanagedStorage.ItemSelection.cs`; the `StringDType` routes behind one
-   `HasReferences` decision per function.
+   `HasReferences` decision per function. Done (`f5547943`, `ac49b5b7`): ndarray.resize's body went to
+   `UnmanagedStorage.Reshaping.cs` (NumPy's `PyArray_Resize`, `shape.c`), and np.take.FancyAxis.cs's index line goes
+   with batch 8 (mapping.c's fancy indexing).
 3. **Assignment** (6 files, 46 lines): np.copyto (three files), ndarray.fill, np.concatenate's text path and the store
    behind the indexers into `UnmanagedStorage.Assign.cs`; the text casts through the casting impls.
 4. **Coercion** (6 files, 71 lines): np.array, np.asarray, np.asanyarray, the string-array overload, `NDArray.Scalar`
@@ -1004,6 +1009,35 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: batch 2 (item selection).** Three commits on `strings`, landed by fast-forward:
+  - `f5547943`, the pure move. Into `Indexing/UnmanagedStorage.ItemSelection.cs` (new; NumPy's `item_selection.c`,
+    `compiled_base.c`'s `arr_place` and `fromnumeric.py`'s resize), as internal static members with their helpers:
+    `TakeFrom`, `PutTo`, `PutMaskCore`, `PlaceCore`, `Repeat` (both overloads' bodies), `ChooseCore`, `Compress` (the
+    body) and `ResizeRepeating` (np.resize's body: the same tiling memory work as np.repeat, so its statements sit
+    beside it although they are Python in NumPy). ndarray.resize's body went into
+    `Backends/Unmanaged/UnmanagedStorage.Reshaping.cs` as `Resize` (NumPy's `PyArray_Resize`): it calls no np.*, so
+    it is under `Backends/` already. `ItemSelection.cs` stays beside its facades because its statements call np.*
+    (C3; P6 moves it down). The facades keep the class boundaries, `PlainFor`'s region, the C# null checks and their
+    argument conversions; `OperandRootsTests` finds `PlaceCore` / `PutMaskCore` on `UnmanagedStorage`.
+    Gates: the snapshot of the 14 targets byte-identical to the parent's (144,451 lines, the tool taught their
+    arguments in `bfb19bf6`); a check that no unqualified name of the moved code binds to an `UnmanagedStorage`
+    member; R1 56 -> 2 lines in the nine files; R2 and the doc warnings unchanged; NumSharp.Tests and
+    NumSharp.Tests.Oracle green on net10.0 and net8.0.
+  - `d7f5f62d`: NativeAllocationChokepointTests' pin for bincount's counting table names
+    `Default.Bincount.cs`, where `81074517` moved it; the oracle suite failed on every run since. Found by this
+    batch's gate run.
+  - `ac49b5b7`, the conversion. The ten route decisions ask `HasReferences` of the descriptor NumPy tests
+    (`PyDataType_REFCHK`: `self` for take, put, putmask, place, compress and resize, `ret` for repeat, the common
+    descriptor for choose, `PyArray_ClearBuffer`'s for ndarray.resize) instead of the storage's `IsVString` (or, for
+    np.choose, the class of its string descriptor). Snapshot byte-identical (its pools hold 14,260 `StringDType`
+    cases); both suites green on both frameworks.
+  - What the batch leaves, by mechanism: the values' conversion into the target's descriptor (`PutValuesLikeNumPy`'s
+    `StringDType` store; np.putmask's and np.place's list overloads, R1's two remaining lines) goes with batch 4
+    (`Pack` through `setitem`); the masks' text -> bool cast and `PlaceValuesLikeNumPy`'s text conversions with
+    batch 3 (the casting impls); np.choose's text promotion with the weak literals (`DTypePromotion`); the index-kind
+    tests stay.
+  - Next: batch 3 (assignment).
 
 - **2026-10-29, P5: done.** Commits on `strings`, developed in the scratch worktree and landed by fast-forward, with
   P2's referees (the snapshot under `DOTNET_TieredCompilation=0` and `NUMSHARP_DEBUG_GUARD_PAGES=1`, each family's
