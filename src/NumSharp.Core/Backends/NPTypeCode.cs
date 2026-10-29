@@ -11,7 +11,21 @@ namespace NumSharp
     /// <summary>
     ///     Represents all available types in numpy.
     /// </summary>
-    /// <remarks>The int values of the enum are a copy of <see cref="TypeCode"/> excluding types not available in numpy.</remarks>
+    /// <remarks>
+    ///     <para>The int values of the enum are a copy of <see cref="TypeCode"/> excluding types not available in numpy.</para>
+    ///     <para>
+    ///         Two values are NumSharp's own: <see cref="NPTypeCode.Half"/> takes 16, which is <see cref="TypeCode.DateTime"/>
+    ///         (so <see cref="NPTypeCodeExtensions.GetTypeCode(Type)"/> returns <see cref="NPTypeCode.Empty"/> for
+    ///         <see cref="System.DateTime"/>), and <see cref="NPTypeCode.Complex"/> takes 128. The values are not NumPy's type
+    ///         numbers, though a few coincide: a descriptor reports its type number through <see cref="DType.type_num"/>
+    ///         (<see cref="NPY_TYPES"/>).
+    ///     </para>
+    ///     <para>
+    ///         NumPy's other dtypes are listed after <see cref="NPTypeCode.Complex"/>, commented out, in two groups: the ones
+    ///         that need a storage lane of their own, each with the value it would take and what has to change before it is
+    ///         uncommented, and the NumPy classes that store in one of the lanes above, which stay commented.
+    ///     </para>
+    /// </remarks>
     public enum NPTypeCode
     {
         /// <summary>A null reference.</summary>
@@ -49,6 +63,12 @@ namespace NumSharp
 
         /// <summary>A floating point type representing values ranging from approximately 1.5 x 10 -45 to 3.4 x 10 38 with a precision of 7 digits.</summary>
         Single = 13, // 0x0000000D
+
+        /// <summary>
+        ///     An alias of <see cref="NPTypeCode.Single"/> (the same value, 13), not a type of its own: code that switches on
+        ///     <see cref="NPTypeCode"/> cannot tell the two apart. .NET does not specify which name <c>ToString()</c> returns
+        ///     for a shared value; on .NET 10 both print <c>"Single"</c>.
+        /// </summary>
         Float = 13, // 0x0000000D
 
         /// <summary>A floating point type representing values ranging from approximately 5.0 x 10 -324 to 1.7 x 10 308 with a precision of 15-16 digits.</summary>
@@ -65,6 +85,161 @@ namespace NumSharp
 
         /// <summary>A complex number type with two 64-bit floating point components (real and imaginary).</summary>
         Complex = 128, //0x00000080
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // NumPy's other type codes, commented out.
+        //
+        // NumPy 2.4.2 numbers its dtypes with NPY_TYPES (numpy/_core/include/numpy/ndarraytypes.h), which
+        // Creation/np.dtype.cs mirrors byte for byte. The members above cover NumPy's bool, the sized integers, float16,
+        // float32, float64, complex128 and str_ (String is NPY_UNICODE's slot); Char and Decimal are NumSharp's own. The
+        // rest follow in two groups.
+        //
+        // Group 1 needs a storage lane of its own. Before uncommenting one of its members:
+        //   - Keep the value at 17 or in 19..127. DTypeRegistry._byCode and the pythonnet package's _dtypeStrings cache
+        //     are 129-slot arrays indexed by the value, and NpFunc sizes every dispatch table to the largest value + 1.
+        //     The free values below 17 (1 and 2) misbehave: GetComputingType answers Double for every value below Single
+        //     (its rule for bool and the integers), and GetTypeCode(Type) casts System.TypeCode.DBNull (2) straight to
+        //     NPTypeCode.
+        //   - Give it a SizeOf case, or exclude it in StackedMemoryPool: that class's type initializer calls SizeOf on
+        //     every member (Enum.GetValues), so a member without a case makes every ArraySlice.Scalar and
+        //     UnmanagedStorage.Scalar call throw TypeInitializationException for the rest of the process.
+        //   - Extend IsNumerical's hard-coded ranges (3..16 and 128) if the type is a number.
+        //   - Register its DType class with this code in DTypeRegistry, and teach every switch over NPTypeCode: the
+        //     extension methods below, InfoOf, Converts, the promotion tables of Logic/np.find_common_type.cs and the
+        //     kernels. Each of them throws for a code it does not know (most with NotSupportedException), so a missed
+        //     switch fails only at run time.
+        //
+        // Group 2 lists NumPy classes that store in one of the lanes above, written as aliases to name that lane. They
+        // stay commented: an alias has its lane's value (LongDouble == Double), so the code cannot carry the class (the
+        // DType descriptor does), and .NET does not specify which of two names Enum.ToString returns, while type-code
+        // names reach error texts and kernel cache keys.
+        //
+        // Not listed: NPY_CHAR (24), NumPy's deprecated one-byte string type number, which raises when used (the
+        // character 'c' still spells S1; it is not NumSharp's Char); the sentinels NPY_NTYPES_LEGACY, NPY_NOTYPE (whose
+        // role Empty plays), NPY_USERDEF and NPY_NTYPES_ABI_COMPATIBLE; and the macros and characters that name one of
+        // these numbers (NPY_INT8 .. NPY_COMPLEX256, NPY_INTP, NPY_DEFAULT_INT, 'n' / 'N' and 'p' / 'P').
+        // ---------------------------------------------------------------------------------------------------------------
+
+        // ---- Group 1: dtypes that need a storage lane of their own ----
+
+        // /// <summary>
+        // ///     NumPy's <c>complex64</c> (<c>NPY_CFLOAT</c> = 14, character <c>'F'</c>): a float32 real part and a float32
+        // ///     imaginary part, 8 bytes per element.
+        // /// </summary>
+        // /// <remarks>
+        // ///     Needs an element struct first: .NET has no single-precision complex type. Until then NumSharp has one
+        // ///     complex width, so a result NumPy types complex64 comes back as complex128, and <c>np.complex64</c> /
+        // ///     <c>np.csingle</c> throw (issue #569). 17 is the one free value below <see cref="NPTypeCode.String"/>; it
+        // ///     keeps the numeric codes in one block (3..17, plus <see cref="NPTypeCode.Complex"/>), so
+        // ///     <see cref="NPTypeCodeExtensions.IsNumerical"/> only widens its first range.
+        // /// </remarks>
+        // Complex64 = 17, // 0x00000011
+
+        // /// <summary>
+        // ///     NumPy's <c>datetime64</c> (<c>NPY_DATETIME</c> = 21, character <c>'M'</c>): an int64 count of ticks since
+        // ///     1970-01-01T00:00, the tick unit and its multiple held by the descriptor (<c>M8[ns]</c>, <c>M8[5s]</c>);
+        // ///     <see cref="long.MinValue"/> is NaT.
+        // /// </summary>
+        // /// <remarks>
+        // ///     Stage C of docs/plans/dtype-system.md (NumPy's semantics: docs/plans/datetime64.md). Until then the
+        // ///     <c>DateTime64DType</c> class has no storage (its TypeCode is <see cref="NPTypeCode.Empty"/>): its
+        // ///     descriptors parse, print, promote and cast-check, and no array holds one. The value is not
+        // ///     <see cref="TypeCode.DateTime"/> (16, taken by <see cref="NPTypeCode.Half"/>): <see cref="System.DateTime"/>
+        // ///     keeps mapping to <see cref="NPTypeCode.Empty"/>, and <see cref="NumSharp.DateTime64"/> counts .NET's
+        // ///     100 ns ticks since 0001-01-01, not NumPy's units.
+        // /// </remarks>
+        // DateTime64 = 19, // 0x00000013
+
+        // /// <summary>
+        // ///     NumPy's <c>timedelta64</c> (<c>NPY_TIMEDELTA</c> = 22, character <c>'m'</c>): an int64 count of ticks of
+        // ///     the descriptor's unit (<c>m8[ms]</c>); <see cref="long.MinValue"/> is NaT.
+        // /// </summary>
+        // /// <remarks>
+        // ///     Stage C, with DateTime64: one family for dispatch (NumPy's <c>PyTypeNum_ISDATETIME</c>), two dtypes for
+        // ///     arithmetic (a datetime minus a datetime is a timedelta). NumPy's scalar hierarchy puts
+        // ///     <c>timedelta64</c> under <c>signedinteger</c>, so it is an <c>np.number</c>, and <c>datetime64</c>
+        // ///     directly under <c>generic</c>: <see cref="NPTypeCodeExtensions.IsNumerical"/> has to answer for each.
+        // /// </remarks>
+        // TimeDelta64 = 20, // 0x00000014
+
+        // /// <summary>
+        // ///     NumPy's <c>object_</c> (<c>NPY_OBJECT</c> = 17, character <c>'O'</c>): each element is a reference to an
+        // ///     arbitrary object (a <c>PyObject*</c>, 8 bytes on a 64-bit host), and operations call the elements' own
+        // ///     operators.
+        // /// </summary>
+        // /// <remarks>
+        // ///     Needs storage NumSharp does not have: its buffers are unmanaged memory, which cannot hold managed
+        // ///     references, so an object lane needs GC handles or a managed side array, and every kernel needs a loop that
+        // ///     dispatches per element.
+        // /// </remarks>
+        // Object = 21, // 0x00000015
+
+        // /// <summary>
+        // ///     NumPy's <c>void</c> (<c>NPY_VOID</c> = 20, character <c>'V'</c>): N raw bytes per element, either opaque
+        // ///     (<c>V8</c>) or a structured record whose named, typed fields the descriptor lays out.
+        // /// </summary>
+        // /// <remarks>
+        // ///     The element size is the descriptor's itemsize, so <see cref="NPTypeCodeExtensions.SizeOf"/> has no answer
+        // ///     for the code and StackedMemoryPool has to skip it. NumSharp has no structured dtypes yet (np.load refuses
+        // ///     .npy files with fields).
+        // /// </remarks>
+        // Void = 22, // 0x00000016
+
+        // ---- Group 2: NumPy classes stored in one of the lanes above (they stay commented, see the header) ----
+
+        // /// <summary>
+        // ///     NumPy's <c>longdouble</c> (<c>NPY_LONGDOUBLE</c> = 13, character <c>'g'</c>): C <c>long double</c>, 8 bytes
+        // ///     where it is <c>double</c> (MSVC, Apple arm64) and 16 bytes elsewhere (x87 80-bit extended on x86-64 Linux
+        // ///     and macOS, IEEE binary128 on aarch64 Linux). NumSharp gives every host the 8-byte form and stores it in
+        // ///     the Double lane; a lane of its own would need an extended-precision struct, which .NET lacks.
+        // /// </summary>
+        // LongDouble = Double,
+
+        // /// <summary>
+        // ///     NumPy's <c>clongdouble</c> (<c>NPY_CLONGDOUBLE</c> = 16, character <c>'G'</c>): a complex of two long
+        // ///     doubles, 16 or 32 bytes by platform; NumSharp stores it as complex128, in the Complex lane.
+        // /// </summary>
+        // CLongDouble = Complex,
+
+        // /// <summary>
+        // ///     NumPy's <c>bytes_</c> (<c>NPY_STRING</c> = 18, character <c>'S'</c>): fixed-width byte strings, the width
+        // ///     being the itemsize. Stage D keeps <c>bytes_</c> and <c>str_</c> (<c>'U'</c>, <c>NPY_UNICODE</c> = 19) in
+        // ///     the String lane as two DType classes and adds StringDType to it (decision D4 of
+        // ///     docs/plans/strings-phase1-completion.md).
+        // /// </summary>
+        // Bytes = String,
+
+        // /// <summary>
+        // ///     NumPy's <c>StringDType</c> (<c>NPY_VSTRING</c> = 2056, character <c>'T'</c>, NEP 55): variable-width UTF-8
+        // ///     text, one 16-byte cell per element that holds a short text inline and otherwise refers to text stored
+        // ///     elsewhere (the array's arena or the heap).
+        // /// </summary>
+        // StringDType = String,
+
+        // NumPy's C integer classes. On each platform two of the three signed C ints are int32 and int64 themselves and
+        // the third is a class of its own over one of those widths: intc on Windows (where C long is 32-bit), longlong on
+        // Linux and macOS. DType.type_num reports the host's numbers.
+
+        // /// <summary>NumPy's <c>intc</c> (<c>NPY_INT</c> = 5, character <c>'i'</c>): C <c>int</c>, 32-bit everywhere.</summary>
+        // IntC = Int32,
+
+        // /// <summary>NumPy's <c>uintc</c> (<c>NPY_UINT</c> = 6, character <c>'I'</c>): C <c>unsigned int</c>.</summary>
+        // UIntC = UInt32,
+
+        // /// <summary>
+        // ///     NumPy's <c>long</c> (<c>NPY_LONG</c> = 7, character <c>'l'</c>): C <c>long</c>, 64-bit on Linux and macOS,
+        // ///     32-bit on Windows, where the alias would be Int32.
+        // /// </summary>
+        // Long = Int64,
+
+        // /// <summary>NumPy's <c>ulong</c> (<c>NPY_ULONG</c> = 8, character <c>'L'</c>): C <c>unsigned long</c>, UInt32 on Windows.</summary>
+        // ULong = UInt64,
+
+        // /// <summary>NumPy's <c>longlong</c> (<c>NPY_LONGLONG</c> = 9, character <c>'q'</c>): C <c>long long</c>, 64-bit everywhere.</summary>
+        // LongLong = Int64,
+
+        // /// <summary>NumPy's <c>ulonglong</c> (<c>NPY_ULONGLONG</c> = 10, character <c>'Q'</c>): C <c>unsigned long long</c>.</summary>
+        // ULongLong = UInt64,
     }
 
     public static class NPTypeCodeExtensions
