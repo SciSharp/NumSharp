@@ -24,7 +24,6 @@ Casting/NDArray.byteswap.cs	1	1
 Casting/NDArray.getfield.cs	1	0
 Casting/NDArray.tobytes.cs	1	0
 Creation/NDArray.Scalar.cs	5	0
-Creation/np.arange.cs	0	18
 Creation/np.array.cs	5	3
 Creation/np.array.string.cs	1	0
 Creation/np.asanyarray.cs	4	0

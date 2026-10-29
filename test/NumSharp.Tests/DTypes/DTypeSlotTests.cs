@@ -143,6 +143,8 @@ namespace NumSharp.Tests.DTypes
                 foreach (var slot in new[] { "setitem", "getitem", "copyswapn", "nonzero" })
                     Overrides(slot).Should().Be(m.HasStorage, $"{m.Name}.{slot}");
                 Overrides("fill").Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.fill");
+                // NumPy's funcs->fill != NULL, the test np.arange makes before it computes anything
+                m.HasFill.Should().Be(m is LegacyBuiltinDTypeMeta, $"{m.Name}.HasFill");
             }
         }
 
@@ -572,8 +574,8 @@ namespace NumSharp.Tests.DTypes
         ///     <c>fill</c> is NumPy's arithmetic, element for element: an integer class wraps through C's promotion (a 64-bit
         ///     product, truncated; uint64 modular), float32 and float64 compute in their own precision, float16 in float32 with
         ///     one rounding per element (a tie to even at 0.2998), complex its two parts apart. Expected values are
-        ///     <c>np.arange</c>'s results in NumPy 2.4.2 (floats as raw bits); NumSharp's <c>np.arange</c> agrees on the
-        ///     integer ramps.
+        ///     <c>np.arange</c>'s results in NumPy 2.4.2 (floats as raw bits), and NumSharp's <c>np.arange</c>, which fills
+        ///     through this slot, agrees wherever it can express the call.
         /// </summary>
         [TestMethod]
         public void Fill_IsNumPysArangeArithmetic()
@@ -587,15 +589,14 @@ namespace NumSharp.Tests.DTypes
             FillMatches(np.uint32, new uint[] { 4294967290, 4294967295, 4, 9 }, () => np.arange(4294967290L, 4294967310L, 5, np.uint32));
             FillMatches(np.int64, new[] { 9223372036854775797, 9223372036854775802, 9223372036854775807, -9223372036854775804 });
             FillMatches(np.uint64, new ulong[] { 18446744073709551605, 18446744073709551610, 18446744073709551615, 4 });
-            // np.arange(0.1, 0.55, 0.1, dtype=...): NumSharp's np.arange computes these ramps in double today, so only
-            // NumPy's bytes are the reference here
-            FillMatches(np.float32, new uint[] { 1036831949, 1045220557, 1050253722, 1053609165, 1056964608 });
-            FillMatches(np.float16, new ushort[] { 11878, 12902, 13516, 13926, 14336 });
+            FillMatches(np.float32, new uint[] { 1036831949, 1045220557, 1050253722, 1053609165, 1056964608 },
+                () => np.arange(0.1, 0.55, 0.1, np.float32));
+            FillMatches(np.float16, new ushort[] { 11878, 12902, 13516, 13926, 14336 }, () => np.arange(0.1, 0.55, 0.1, np.float16));
             FillMatches(np.float64, new ulong[]
             {
                 4591870180066957722, 4596373779694328218, 4599075939470750516, 4600877379321698714, 4602678819172646912,
                 4603579539098121011, 4604480259023595111, 4605380978949069210, 4606281698874543309,
-            });
+            }, () => np.arange(0.1, 1.0, 0.1));
             // np.arange(0.1+0.2j, 0.1+1.2j, 0.1+0.1j): the real and imaginary progressions apart
             FillMatches(np.complex128, new ulong[]
             {

@@ -5802,6 +5802,108 @@ def gen_weak_scalar():
     return cases
 
 
+# ---- arange_full: np.arange as NumPy's PyArray_ArangeObj (np-layer dtype plan, P3's D4 fix) ---------------------
+#
+# NumPy's arange computes its length with Python's arithmetic on the bounds (_calc_length: (stop - start) / step,
+# an underflowed quotient counted by its sign, the ceiling range-checked against npy_intp), stores start and
+# start + step through the dtype's setitem, and fills the rest with the dtype's fill function: start + i * delta in
+# the dtype's own arithmetic, delta being the difference of the two stored elements. The creation tier's arange cases
+# are all arange(0, 7, 1); this tier holds what that cannot see: float ramps (68 % of random float64 calls differ when
+# the ramp is computed as start + i * step in double, 92 % of float32), float16's float32 fill, the integer ramps that
+# wrap past their first two elements, fractional steps into integer dtypes, Python-int bounds past 2**53, the
+# underflow and divide-by-inf lengths, the 2**63 boundary (an empty array on x86), and NumPy's errors in NumPy's order.
+# params: start / stop / step as _ct_scalar_param literals - three floats replay through NumSharp's
+# (double, double, double, DType) overload, three ints through its (long, long, long) overload (int64) - and dtype (a
+# NumPy dtype name; absent for NumPy's discovery). Errors whose text follows the platform C long (an int32 or wider
+# store past 2**31) are not generated.
+
+def gen_arange_full():
+    import warnings
+    rng = np.random.default_rng(20261029)
+    cases = []
+    n = 0
+    nan, inf = float("nan"), float("inf")
+
+    def emit(tag, start, stop, step, dtype=None):
+        """Run np.arange(start, stop, step, dtype=...) and record its array, or NumPy's error type and text."""
+        nonlocal n
+        params = {"start": _ct_scalar_param(start), "stop": _ct_scalar_param(stop), "step": _ct_scalar_param(step)}
+        if dtype is not None:
+            params["dtype"] = dtype
+        cid = f"arange_full/{tag}/{n}"
+        layout = f"arange/{tag}"
+        n += 1
+        try:
+            with np.errstate(all="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = np.arange(start, stop, step, dtype=None if dtype is None else np.dtype(dtype))
+        except Exception as ex:
+            cases.append(_error_case("arange_full", params, [], ex, layout, cid=cid))
+            return
+        cases.append(_case("arange_full", params, [], _arr_expected(r), layout, "arange", cid=cid))
+
+    # A. float ramps: random bounds and steps of a few decimals, then the classic decimal steps, a constant ramp past
+    # 2**53 (start + step rounds back to start, so delta is 0), a tiny step, a negative step, subnormal-scale bounds.
+    for dt in [None, "float64", "float32", "float16", "complex128"]:
+        for _ in range(60):
+            start = round(float(rng.uniform(-10, 10)), int(rng.integers(0, 4)))
+            step = round(float(rng.uniform(0.01, 2.0)), int(rng.integers(1, 4))) or 0.1
+            if rng.integers(0, 2):
+                step = -step
+            count = int(rng.integers(1, 41))
+            stop = start + step * count + float(rng.uniform(-0.5, 0.5)) * step
+            emit(f"float/{dt}", start, stop, step, dt)
+        for start, stop, step in [(0.1, 2.0, 0.3), (0.1, 1.0, 0.1), (0.0, 1.0, 0.1), (-1.0, 1.0, 0.25),
+                                  (1e16, 1e16 + 4, 1.0), (0.0, 1e-14, 1e-15), (5.0, 0.0, -1.5), (-3.0, 3.0, 1.5),
+                                  (0.5, 3.0, 0.75), (1e-300, 1e-299, 1e-300), (1e5, 1e5 + 3, 1.0)]:
+            emit(f"float/{dt}/fixed", start, stop, step, dt)
+
+    # B. integer dtypes over float bounds: fractional steps (delta = int(start + step) - int(start) in the dtype) ...
+    for dt in ["int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64"]:
+        for start, stop, step in [(0.0, 7.0, 1.0), (0.0, 5.0, 0.5), (5.0, 0.0, -0.5), (0.5, 5.0, 1.0),
+                                  (-3.7, 4.0, 1.3), (1.0, 2.0, 0.3), (0.0, 10.0, 2.5), (9.9, 0.0, -2.2)]:
+            if dt.startswith("u") and min(start, start + step) < 0:
+                continue                                   # a negative store: its error is section D's
+            emit(f"int/{dt}", start, stop, step, dt)
+    # ... and C's integer fill wrapping past the first two elements (start and start + step themselves fit)
+    for dt, (start, stop, step) in [("int8", (100.0, 150.0, 10.0)), ("uint8", (250.0, 260.0, 2.0)),
+                                    ("int16", (32760.0, 32780.0, 5.0)), ("uint16", (65530.0, 65540.0, 3.0)),
+                                    ("int32", (2147483640.0, 2147483660.0, 5.0)),
+                                    ("uint32", (4294967290.0, 4294967310.0, 5.0)),
+                                    ("int8", (-100.0, -150.0, -10.0)), ("uint8", (5.0, -5.0, -2.0)),
+                                    ("int16", (-32760.0, -32780.0, -7.0)), ("uint16", (3.0, -9.0, -3.0))]:
+        emit(f"wrap/{dt}", start, stop, step, dt)
+    # bool: defined for at most two elements (BOOL_fill raises past them); the stores take the truth of the value
+    for start, stop, step in [(0.0, 2.0, 1.0), (0.5, 2.0, 1.0), (1.0, 2.0, 1.0), (0.0, 1.0, 1.0), (-1.0, 1.0, 1.0),
+                              (0.0, 3.0, 1.0), (2.0, 0.0, -1.0)]:
+        emit("bool", start, stop, step, "bool")
+
+    # C. Python ints: exact differences and sums, the correctly rounded true division, int64 at every magnitude
+    for start, stop, step in [(0, 7, 1), (-5, 5, 3), (10, 0, -3), (2**60, 2**60 + 3, 1), (-2**62, 2**62, 2**61),
+                              (2**53 + 1, 2**53 + 10, 2), (-2**63, -2**63 + 5, 2), (2**63 - 6, 2**63 - 1, 2),
+                              (0, 1, 2**62), (0, 2**63 - 1, 2**62), (5, 5, 1), (7, 3, 1), (-7, 3, -1),
+                              (-2**63, 0, 1), (0, 2**62, 1), (0, 10, 0)]:
+        emit("int64", start, stop, step)
+
+    # D. the length's own cases and errors, in NumPy's order (the dtype's fill function is checked first)
+    for tag, (start, stop, step, dt) in [
+            ("zero_step", (0.0, 5.0, 0.0, None)), ("zero_step_int8", (0.0, 5.0, 0.0, "int8")),
+            ("nan_stop", (0.0, nan, 1.0, None)), ("nan_start", (nan, 5.0, 1.0, None)), ("nan_step", (0.0, 5.0, nan, None)),
+            ("inf_stop", (0.0, inf, 1.0, None)), ("inf_start", (-inf, 0.0, 1.0, "int8")),
+            ("inf_step", (0.0, 5.0, inf, None)), ("neg_inf_step", (0.0, 5.0, -inf, None)),
+            ("underflow", (0.0, 1e-320, 1e300, None)), ("underflow_neg", (0.0, -1e-320, 1e300, None)),
+            ("two_pow_63", (0.0, 2.0**63, 1.0, None)), ("two_pow_63_neg", (0.0, -2.0**63, -1.0, None)),
+            ("two_pow_64", (0.0, 2.0**64, 1.0, None)), ("too_big", (0.0, 2.0**62, 1.0, None)),
+            ("text_U", (0.0, 5.0, 1.0, "U3")), ("text_S_zero_step", (0.0, 5.0, 0.0, "S3")), ("text_T", (0.0, 5.0, 1.0, "T")),
+            ("start_overflow_int8", (300.0, 310.0, 1.0, "int8")), ("next_overflow_int8", (120.0, 140.0, 10.0, "int8")),
+            ("next_overflow_int8_neg", (-120.0, -140.0, -10.0, "int8")),
+            ("start_negative_uint8", (-1.0, 3.0, 1.0, "uint8")), ("start_negative_uint16", (-2.0, 3.0, 1.0, "uint16")),
+            ("next_overflow_int16", (32760.0, 32800.0, 10.0, "int16")), ("one_overflowing_float16", (1e5, 1e5 + 1, 1.0, "float16")),
+            ("empty_int8", (5.0, 0.0, 1.0, "int8")), ("empty_text", (5.0, 0.0, 1.0, "U3"))]:
+        emit(f"edge/{tag}", start, stop, step, dt)
+    return cases
+
+
 # ---- power_fast: np.power's float loops and NumPy's zero-exponent-step fast path (plan api-parameter-parity X13) --
 #
 # NumPy's DOUBLE_power / FLOAT_power take 1/x, 1, sqrt(x), x, x*x for an exponent of -1, 0, 0.5, 1, 2 when the
@@ -24354,6 +24456,9 @@ def main():
     elif mode == "power_fast":
         # np.power's float loops: NumPy's zero-exponent-step fast path on every route, float16's powf, float_power (X13).
         write_jsonl(os.path.join(corpus_dir, "power_fast.jsonl"), gen_power_fast())
+    elif mode == "arange_full":
+        # np.arange as NumPy's PyArray_ArangeObj: float / integer / Python-int ramps, the length's edges, its errors.
+        write_jsonl(os.path.join(corpus_dir, "arange_full.jsonl"), gen_arange_full())
     elif mode == "errors":
         cases = gen_errors()
         write_jsonl(os.path.join(corpus_dir, "errors.jsonl"), cases)

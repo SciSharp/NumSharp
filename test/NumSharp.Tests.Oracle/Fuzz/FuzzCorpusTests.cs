@@ -1131,6 +1131,17 @@ namespace NumSharp.Tests.Fuzz
         [TestCategory("FuzzMatrix")]
         public void PowerFast() => RunCorpus("power_fast.jsonl");
 
+        /// <summary>
+        ///     np.arange as NumPy's <c>PyArray_ArangeObj</c> (np-layer dtype plan P3's D4 fix): float ramps (start + i * delta
+        ///     in the dtype's own arithmetic, delta the difference of the two stored elements; float16 in float32), integer
+        ///     ramps that wrap past their first two elements, fractional steps into integer dtypes, Python-int bounds past
+        ///     2**53, the underflow and divide-by-inf lengths, the 2**63 boundary, and NumPy's errors in NumPy's order.
+        /// </summary>
+        /// <remarks>Zero excuses: <see cref="MisalignedRegistry"/> never classifies an <c>arange_full</c> case.</remarks>
+        [TestMethod]
+        [TestCategory("FuzzMatrix")]
+        public void ArangeFull() => RunCorpus("arange_full.jsonl");
+
         // Seeded random fuzzer corpus (offline-generated; reproducible from its seed).
         [TestMethod]
         [TestCategory("FuzzMatrix")]
@@ -1285,6 +1296,7 @@ namespace NumSharp.Tests.Fuzz
             ["copyto_full.jsonl"] = 12000,
             ["weak_scalar.jsonl"] = 29500,   // NEP 50 weak scalars, the long-array vector loops (15,050 at delivery) and the stores (section S: 30,351 with it)
             ["power_fast.jsonl"] = 7500,
+            ["arange_full.jsonl"] = 450,   // np.arange as PyArray_ArangeObj: 475 at delivery
             ["decimal_astype.jsonl"] = 17,
             ["decimal_binary.jsonl"] = 78,
             ["decimal_manip.jsonl"] = 28,

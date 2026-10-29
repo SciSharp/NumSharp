@@ -594,16 +594,23 @@ public class ArangeBattleTests
 
     #region Error Cases
 
+    /// <summary>
+    ///     A zero step is NumPy's ZeroDivisionError, raised by Python's true division of the difference by the step:
+    ///     <c>division by zero</c> for Python ints (np.arange(0, 10, 0)).
+    /// </summary>
     [TestMethod]
-    public void Arange_ZeroStep_ThrowsArgumentException()
+    public void Arange_ZeroStep_RaisesZeroDivisionError()
     {
-        new Action(() => np.arange(0, 10, 0)).Should().Throw<ArgumentException>();
+        new Action(() => np.arange(0, 10, 0)).Should().Throw<DivideByZeroException>().WithMessage("division by zero");
     }
 
+    /// <summary>
+    ///     A zero step over Python floats is <c>float division by zero</c> (np.arange(0.0, 10.0, 0.0)).
+    /// </summary>
     [TestMethod]
-    public void Arange_ZeroStepFloat_ThrowsArgumentException()
+    public void Arange_ZeroStepFloat_RaisesZeroDivisionError()
     {
-        new Action(() => np.arange(0.0, 10.0, 0.0)).Should().Throw<ArgumentException>();
+        new Action(() => np.arange(0.0, 10.0, 0.0)).Should().Throw<DivideByZeroException>().WithMessage("float division by zero");
     }
 
     #endregion

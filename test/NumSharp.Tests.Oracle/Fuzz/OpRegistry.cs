@@ -673,6 +673,8 @@ namespace NumSharp.Tests.Fuzz
                 // ---- deterministic creation --------------------------------------------
                 case "arange": return np.arange(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["step"].GetDouble(), FuzzCorpus.DtypeToTC(p["dtype"].GetString()));
+                // np.arange as NumPy's PyArray_ArangeObj (arange_full.jsonl): float / int ramps, the length's edges, errors.
+                case "arange_full": return ApplyArangeFull(p);
                 case "linspace": return np.linspace(p["start"].GetDouble(), p["stop"].GetDouble(),
                     p["num"].GetInt32(), p["endpoint"].GetBoolean(),
                     FuzzCorpus.DtypeToTC(p["dtype"].GetString()));

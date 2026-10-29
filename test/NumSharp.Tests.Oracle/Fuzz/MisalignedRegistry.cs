@@ -388,6 +388,11 @@ namespace NumSharp.Tests.Fuzz
             // branches below would otherwise excuse the one-ULP x*x-vs-pow difference the tier exists to pin.
             if (c.Op == "power_fast")
                 return null;
+            // arange_full.jsonl (np.arange as NumPy's PyArray_ArangeObj: float ramps in the dtype's own arithmetic, wrapping
+            // integer ramps, Python-int bounds, the length's edges and errors) is held to ZERO excuses, its error cases
+            // included: a float ramp computed as start + i * step in double is exactly what the tier exists to catch.
+            if (c.Op == "arange_full")
+                return null;
             // surface.jsonl (gen_surface_oracle.py: the APIs the coverage inventory listed as available but unproven —
             // np.linalg's Array-API forms, the histogram family, the memory predicates, the text formatters, the ndarray
             // members and the finfo / iinfo / dtype / flags / poly1d attributes) is held to ZERO excuses, its error cases

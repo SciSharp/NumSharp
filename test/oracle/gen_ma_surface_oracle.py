@@ -1009,7 +1009,6 @@ GAPS = {
     "MS19": "np.ma.ndenumerate has no compressed parameter (NumPy's compressed=False yields masked entries too)",
     "MS20": "creation wrappers lack NumPy parameters: ma.arange dtype= and a lone float stop, ma.zeros / ones / empty "
             "order=, ma.indices sparse=",
-    "MS21": "ma.arange with a zero step raises ArgumentException('step can't be 0'); NumPy raises ZeroDivisionError",
     "MS22": "ma.frombuffer requires the WHOLE buffer to be a multiple of the item size before count / offset select a "
             "range; NumPy checks the selected range (count=0 is an empty array, a short range 'buffer is smaller than "
             "requested size')",
@@ -1095,8 +1094,6 @@ def _gap_of(c):
     if (op == "arange" and ("dtype" in p or (len(p["args"]) == 1 and not isinstance(p["args"][0], int)))) \
             or (op in ("zeros", "ones", "empty") and "order" in p) or (op == "indices" and "sparse" in p):
         return "MS20"
-    if op == "arange" and c.get("error", {}).get("type") == "ZeroDivisionError":
-        return "MS21"
     if op == "frombuffer" and p.get("dtype") == "complex128" and p["count"] >= 0 and 0 <= p["offset"] <= 24:
         return "MS22"
     if op == "nonzero" and err:

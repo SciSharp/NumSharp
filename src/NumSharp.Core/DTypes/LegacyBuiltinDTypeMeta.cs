@@ -196,6 +196,10 @@ namespace NumSharp
         }
 
         /// <inheritdoc/>
+        /// <remarks>Every numeric class has NumPy's fill function (bool's raises once called for more than two elements).</remarks>
+        internal override bool HasFill => true;
+
+        /// <inheritdoc/>
         /// <remarks>
         ///     NumPy's <c>@NAME@_fill</c>, operation for operation: an integer class takes <c>delta</c> in its own type and
         ///     computes <c>start + i * delta</c> in C's promotion (a 64-bit product, wrapping, then stored truncated; uint64

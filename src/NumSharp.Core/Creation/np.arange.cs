@@ -13,220 +13,40 @@ namespace NumSharp
         /// Values are generated within the half-open interval [start, stop)
         /// (in other words, the interval including start but excluding stop).
         /// </summary>
-        /// <param name="start">Start of interval. The interval includes this value.</param>
-        /// <param name="stop">End of interval. The interval does not include this value.</param>
-        /// <param name="step">Spacing between values. Default is 1.</param>
+        /// <param name="start">Start of interval, a Python float. The interval includes this value.</param>
+        /// <param name="stop">End of interval, a Python float. The interval does not include this value.</param>
+        /// <param name="step">Spacing between values, a Python float. Default is 1.</param>
         /// <param name="dtype">
         ///     The dtype of the output array — one descriptor parameter, like NumPy's <c>dtype</c>: a C# <see cref="Type"/>, an
         ///     <see cref="NPTypeCode"/>, a NumPy dtype string (<c>"f4"</c>) or a <see cref="DType"/> all convert implicitly.
-        ///     If null, infers from inputs (int64 for integers, float64 for floats).
+        ///     If null, NumPy's discovery from Python floats: float64.
         /// </param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of evenly spaced values.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arange.html</remarks>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>; the length is NaN (<c>arange: cannot
+        ///     compute length</c>) or past npy_intp (<c>Maximum allowed size exceeded</c>); the array is past the byte limit; or
+        ///     a NaN is stored into an integer dtype.</exception>
+        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
+        ///     division by zero</c>).</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a text dtype (<c>arange() not supported for inputs with
+        ///     DType ...</c>), or bool with more than two elements.</exception>
+        /// <exception cref="OverflowException"><paramref name="start"/> or <paramref name="start"/> + <paramref name="step"/>
+        ///     does not fit an integer dtype (<c>Python integer 300 out of bounds for int8</c>).</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no NumSharp storage yet (datetime64,
+        ///     timedelta64).</exception>
+        /// <remarks>
+        ///     NumPy's <c>PyArray_ArangeObj</c> (<see cref="UnmanagedStorage.ArangeObj(double, double, double, DType)"/>): the
+        ///     length is <c>ceil((stop - start) / step)</c> in float arithmetic, the first two elements are <c>start</c> and
+        ///     <c>start + step</c> stored into the dtype, and the rest are <c>start + i * delta</c> computed in the dtype's
+        ///     own arithmetic, with <c>delta</c> the difference of the two stored elements. So <c>np.arange(0.1, 2, 0.3)[3]</c>
+        ///     is <c>1.0000000000000002</c>, a float32 ramp is computed in float32 and a float16 ramp in float32 rounded per
+        ///     element, as in NumPy; an integer ramp wraps in the dtype past its first two elements.
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.arange.html
+        /// </remarks>
         public static NDArray arange(double start, double stop, double step, DType dtype, string device = null)
         {
             ValidateDevice(device);
-            return WithLaneSharingDescr(ArangeCore(start, stop, step, dtype?.GetTypeCode() ?? NPTypeCode.Empty), dtype);
-        }
-
-        /// <summary>
-        /// Return evenly spaced values within a given interval.
-        ///
-        /// Values are generated within the half-open interval [start, stop)
-        /// (in other words, the interval including start but excluding stop).
-        /// </summary>
-        /// <param name="start">Start of interval. The interval includes this value.</param>
-        /// <param name="stop">End of interval. The interval does not include this value.</param>
-        /// <param name="step">Spacing between values. Default is 1.</param>
-        /// <param name="dtype">The type of the output array. If Empty, infers from inputs (int64 for integers, float64 for floats).</param>
-        /// <returns>Array of evenly spaced values.</returns>
-        /// <remarks>
-        ///     The storage-lane core behind every public <c>arange(..., dtype)</c> overload (which all take the single
-        ///     <see cref="DType"/> descriptor parameter, like NumPy's <c>dtype=</c>).
-        ///     https://numpy.org/doc/stable/reference/generated/numpy.arange.html
-        /// </remarks>
-        private static NDArray ArangeCore(double start, double stop, double step, NPTypeCode dtype)
-        {
-            if (Math.Abs(step) < 1e-15)
-                throw new ArgumentException("step can't be 0", nameof(step));
-
-            // NumPy formula: length = ceil((stop - start) / step)
-            // This works for both positive and negative step
-            double tmp_len = (stop - start) / step;
-
-            // Handle empty array cases:
-            // - Positive step with start >= stop
-            // - Negative step with start <= stop
-            // - Division resulting in negative or zero
-            if (tmp_len <= 0)
-            {
-                var emptyType = dtype == NPTypeCode.Empty ? NPTypeCode.Double : dtype;
-                return new NDArray(emptyType, Shape.Vector(0), false);
-            }
-
-            long length = (long)Math.Ceiling(tmp_len);
-
-            // Infer dtype if not specified - default to float64 for this overload
-            if (dtype == NPTypeCode.Empty)
-                dtype = NPTypeCode.Double;
-
-            // NumPy parity: arange(..., dtype=bool) is only supported when the result has at most
-            // length 2 — BOOL_fill (arraytypes.c.src) is invoked to populate index >= 2 and always
-            // raises TypeError. Lengths 0/1/2 are computed directly and are legal.
-            if (dtype == NPTypeCode.Boolean && length > 2)
-                throw new TypeError("arange() is only supported for booleans when the result has at most length 2.");
-
-            var nd = new NDArray(dtype, Shape.Vector(length), false);
-
-            // NumPy's fill algorithm:
-            // 1. Cast start to target dtype: start_t
-            // 2. Cast (start + step) to target dtype: next_t
-            // 3. Compute delta in target dtype: delta_t = next_t - start_t
-            // 4. Fill: buffer[i] = start_t + i * delta_t
-            //
-            // This is why arange(0, 5, 0.5, int32) returns [0,0,0,0,0,0,0,0,0,0]:
-            //   start_t = 0, next_t = int(0.5) = 0, delta_t = 0
-            //
-            // And arange(5, 0, -0.5, int32) returns [5,4,3,2,1,0,-1,-2,-3,-4]:
-            //   start_t = 5, next_t = int(4.5) = 4, delta_t = -1
-            unsafe
-            {
-                switch (dtype)
-                {
-                    case NPTypeCode.Boolean:
-                    {
-                        var addr = (bool*)nd.Unsafe.Address;
-                        bool start_t = start != 0;
-                        bool next_t = (start + step) != 0;
-                        // For bool, delta doesn't make sense, just alternate
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (i % 2 == 0) ? start_t : next_t;
-                        break;
-                    }
-                    case NPTypeCode.Byte:
-                    {
-                        var addr = (byte*)nd.Unsafe.Address;
-                        byte start_t = (byte)start;
-                        byte delta_t = (byte)((byte)(start + step) - start_t);
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (byte)(start_t + i * delta_t);
-                        break;
-                    }
-                    case NPTypeCode.SByte:
-                    {
-                        var addr = (sbyte*)nd.Unsafe.Address;
-                        sbyte start_t = (sbyte)start;
-                        sbyte delta_t = (sbyte)((sbyte)(start + step) - start_t);
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (sbyte)(start_t + i * delta_t);
-                        break;
-                    }
-                    case NPTypeCode.Int16:
-                    {
-                        var addr = (short*)nd.Unsafe.Address;
-                        short start_t = (short)start;
-                        short delta_t = (short)((short)(start + step) - start_t);
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (short)(start_t + i * delta_t);
-                        break;
-                    }
-                    case NPTypeCode.UInt16:
-                    {
-                        var addr = (ushort*)nd.Unsafe.Address;
-                        ushort start_t = (ushort)start;
-                        ushort delta_t = (ushort)((ushort)(start + step) - start_t);
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (ushort)(start_t + i * delta_t);
-                        break;
-                    }
-                    case NPTypeCode.Int32:
-                    {
-                        var addr = (int*)nd.Unsafe.Address;
-                        int start_t = (int)start;
-                        int delta_t = (int)(start + step) - start_t;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (int)(start_t + i * delta_t);
-                        break;
-                    }
-                    case NPTypeCode.UInt32:
-                    {
-                        var addr = (uint*)nd.Unsafe.Address;
-                        uint start_t = (uint)start;
-                        uint delta_t = (uint)((uint)(start + step) - start_t);
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (uint)(start_t + i * delta_t);
-                        break;
-                    }
-                    case NPTypeCode.Int64:
-                    {
-                        var addr = (long*)nd.Unsafe.Address;
-                        long start_t = (long)start;
-                        long delta_t = (long)(start + step) - start_t;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = start_t + i * delta_t;
-                        break;
-                    }
-                    case NPTypeCode.UInt64:
-                    {
-                        var addr = (ulong*)nd.Unsafe.Address;
-                        ulong start_t = (ulong)start;
-                        ulong delta_t = (ulong)(start + step) - start_t;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = start_t + (ulong)i * delta_t;
-                        break;
-                    }
-                    case NPTypeCode.Char:
-                    {
-                        var addr = (char*)nd.Unsafe.Address;
-                        char start_t = (char)start;
-                        int delta_t = (char)(start + step) - start_t;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (char)(start_t + i * delta_t);
-                        break;
-                    }
-                    // Float types use direct calculation (no integer truncation)
-                    case NPTypeCode.Half:
-                    {
-                        var addr = (Half*)nd.Unsafe.Address;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (Half)(start + i * step);
-                        break;
-                    }
-                    case NPTypeCode.Single:
-                    {
-                        var addr = (float*)nd.Unsafe.Address;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (float)(start + i * step);
-                        break;
-                    }
-                    case NPTypeCode.Double:
-                    {
-                        var addr = (double*)nd.Unsafe.Address;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = start + i * step;
-                        break;
-                    }
-                    case NPTypeCode.Decimal:
-                    {
-                        var addr = (decimal*)nd.Unsafe.Address;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = (decimal)(start + i * step);
-                        break;
-                    }
-                    case NPTypeCode.Complex:
-                    {
-                        var addr = (System.Numerics.Complex*)nd.Unsafe.Address;
-                        for (long i = 0; i < length; i++)
-                            addr[i] = new System.Numerics.Complex(start + i * step, 0);
-                        break;
-                    }
-                    default:
-                        throw new NotSupportedException($"dtype {dtype} is not supported");
-                }
-            }
-
-            return nd;
+            return UnmanagedStorage.ArangeObj(start, stop, step, dtype);
         }
 
         #endregion
@@ -240,6 +60,11 @@ namespace NumSharp
         /// <param name="dtype">The dtype of the output array (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of evenly spaced values from 0 to stop-1.</returns>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>; the length is NaN or past npy_intp; or
+        ///     the array is past the byte limit.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a text dtype, or bool with more than two elements.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no NumSharp storage yet (datetime64,
+        ///     timedelta64).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arange.html</remarks>
         public static NDArray arange(double stop, DType dtype, string device = null)
             => arange(0, stop, 1, dtype, device);
@@ -252,6 +77,13 @@ namespace NumSharp
         /// <param name="dtype">The dtype of the output array (a <see cref="Type"/>, <see cref="NPTypeCode"/>, dtype string or <see cref="DType"/> — all convert implicitly).</param>
         /// <param name="device">Target device. Only <c>"cpu"</c> and <c>null</c> are accepted (Array-API parity).</param>
         /// <returns>Array of evenly spaced values.</returns>
+        /// <exception cref="ValueError"><paramref name="device"/> is not <c>"cpu"</c>; the length is NaN or past npy_intp; or
+        ///     the array is past the byte limit.</exception>
+        /// <exception cref="TypeError"><paramref name="dtype"/> is a text dtype, or bool with more than two elements.</exception>
+        /// <exception cref="OverflowException"><paramref name="start"/> or <paramref name="start"/> + 1 does not fit an integer
+        ///     dtype.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="dtype"/> has no NumSharp storage yet (datetime64,
+        ///     timedelta64).</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arange.html</remarks>
         public static NDArray arange(double start, double stop, DType dtype, string device = null)
             => arange(start, stop, 1, dtype, device);
@@ -265,6 +97,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="stop">End of interval (exclusive).</param>
         /// <returns>Array of evenly spaced float values.</returns>
+        /// <exception cref="ValueError">The length is NaN or past npy_intp, or the array is past the byte limit.</exception>
         public static NDArray arange(float stop)
             => arange(0f, stop, 1f);
 
@@ -273,6 +106,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="stop">End of interval (exclusive).</param>
         /// <returns>Array of evenly spaced double values.</returns>
+        /// <exception cref="ValueError">The length is NaN or past npy_intp, or the array is past the byte limit.</exception>
         public static NDArray arange(double stop)
             => arange(0d, stop, 1d);
 
@@ -283,6 +117,9 @@ namespace NumSharp
         /// <param name="stop">End of interval (exclusive).</param>
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <returns>Array of evenly spaced float values.</returns>
+        /// <exception cref="ValueError">The length is NaN or past npy_intp, or the array is past the byte limit.</exception>
+        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
+        ///     division by zero</c>).</exception>
         public static NDArray arange(float start, float stop, float step = 1)
             => arange(start, stop, step, NPTypeCode.Single);
 
@@ -293,6 +130,9 @@ namespace NumSharp
         /// <param name="stop">End of interval (exclusive).</param>
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <returns>Array of evenly spaced double values.</returns>
+        /// <exception cref="ValueError">The length is NaN or past npy_intp, or the array is past the byte limit.</exception>
+        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: float
+        ///     division by zero</c>).</exception>
         public static NDArray arange(double start, double stop, double step = 1)
             => arange(start, stop, step, NPTypeCode.Double);
 
@@ -301,6 +141,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="stop">End of interval (exclusive).</param>
         /// <returns>Array of evenly spaced int64 values.</returns>
+        /// <exception cref="ValueError">The array is past the byte limit (<c>array is too big</c>).</exception>
         /// <remarks>NumPy 2.x returns int64 for integer arange.</remarks>
         public static NDArray arange(int stop)
             => arange(0L, (long)stop, 1L);
@@ -312,6 +153,9 @@ namespace NumSharp
         /// <param name="stop">End of interval (exclusive).</param>
         /// <param name="step">Spacing between values. Default is 1.</param>
         /// <returns>Array of evenly spaced int64 values.</returns>
+        /// <exception cref="ValueError">The array is past the byte limit (<c>array is too big</c>).</exception>
+        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: division by
+        ///     zero</c>).</exception>
         /// <remarks>NumPy 2.x returns int64 for integer arange.</remarks>
         public static NDArray arange(int start, int stop, int step = 1)
             => arange((long)start, (long)stop, (long)step);
@@ -321,6 +165,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="stop">End of interval (exclusive).</param>
         /// <returns>Array of evenly spaced int64 values.</returns>
+        /// <exception cref="ValueError">The array is past the byte limit (<c>array is too big</c>).</exception>
         /// <remarks>NumPy 2.x returns int64 for integer arange.</remarks>
         public static NDArray arange(long stop)
             => arange(0L, stop, 1L);
@@ -328,13 +173,22 @@ namespace NumSharp
         /// <summary>
         /// Return evenly spaced values within a given interval.
         /// </summary>
-        /// <param name="start">Start of interval (inclusive).</param>
-        /// <param name="stop">End of interval (exclusive).</param>
-        /// <param name="step">Spacing between values. Default is 1.</param>
+        /// <param name="start">Start of interval (inclusive), a Python int.</param>
+        /// <param name="stop">End of interval (exclusive), a Python int.</param>
+        /// <param name="step">Spacing between values, a Python int. Default is 1.</param>
         /// <returns>Array of evenly spaced int64 values.</returns>
-        /// <remarks>NumPy 2.x returns int64 for integer arange.</remarks>
+        /// <exception cref="DivideByZeroException"><paramref name="step"/> is zero (NumPy's <c>ZeroDivisionError: division by
+        ///     zero</c>).</exception>
+        /// <exception cref="ValueError">The array is past the byte limit (<c>array is too big</c>).</exception>
+        /// <remarks>
+        ///     NumPy 2.x returns int64 for integer arange. NumPy's <c>PyArray_ArangeObj</c> over Python ints
+        ///     (<see cref="UnmanagedStorage.ArangeObj(long, long, long, DType)"/>): the length is the ceiling of Python's
+        ///     correctly rounded <c>(stop - start) / step</c> and the elements are exact at every magnitude
+        ///     (<c>np.arange(2**60, 2**60 + 3)</c> has three); a quotient whose ceiling is exactly <c>2**63</c> gives an empty
+        ///     array, as NumPy's on x86.
+        /// </remarks>
         public static NDArray arange(long start, long stop, long step = 1)
-            => arange(start, stop, step, NPTypeCode.Int64);
+            => UnmanagedStorage.ArangeObj(start, stop, step, null);
 
         #endregion
     }

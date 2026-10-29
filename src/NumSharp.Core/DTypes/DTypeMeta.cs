@@ -436,6 +436,16 @@ namespace NumSharp
         internal virtual unsafe bool fill(DType descr, byte* buffer, long length) => false;
 
         /// <summary>
+        ///     Whether this class defines <see cref="fill"/>: NumPy's <c>PyArray_ArrFuncs.fill != NULL</c>, the test
+        ///     <c>PyArray_ArangeObj</c> makes before it computes anything (<c>arange() not supported for inputs with DType
+        ///     ...</c> when it fails). True for the numeric classes; false for the text classes and the classes without
+        ///     storage.
+        /// </summary>
+        /// <remarks>A class that overrides <see cref="fill"/> overrides this too; the two answer one question, asked before
+        ///     the array exists (this) and while filling it (<see cref="fill"/>'s false).</remarks>
+        internal virtual bool HasFill => false;
+
+        /// <summary>
         ///     NumPy's <c>PyArray_ArrFuncs.nonzero</c> (a slot <c>StringDType</c> defines too): the truth of one element as
         ///     <c>np.nonzero</c>, <c>np.argwhere</c>, <c>np.count_nonzero</c> and <c>np.trim_zeros</c> read it.
         /// </summary>

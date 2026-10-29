@@ -612,6 +612,7 @@ python test/oracle/gen_oracle.py mean_loops       # np.mean as NumPy's _mean: la
 python test/oracle/gen_oracle.py nanmean          # np.nanmean as NumPy's nanmean: NaN patterns, dtype= for every loop, fills, empties
 python test/oracle/gen_oracle.py clip_ufunc       # np.clip as a ufunc: broadcast bounds, out=, where=, overlap, the float loop
 python test/oracle/gen_oracle.py power_fast       # np.power's float loops: the stride-0 fast path on every route, float16 powf, float_power
+python test/oracle/gen_oracle.py arange_full      # np.arange as PyArray_ArangeObj: float / int / Python-int ramps, the length's edges, errors
 python test/oracle/gen_oracle.py weak_scalar      # NEP 50 Python scalars: comparisons + binary ufuncs, every route, long-array vector loops, stores
 python test/oracle/gen_oracle.py reduce_kwargs    # reductions through their NumPy-shaped overload: out=, where=, axis forms, prologue errors
 python test/oracle/gen_oracle.py minmax_kwargs    # the max / min family with out= / initial= / where=: loops, casts, fills, run cuts, errors
@@ -1740,6 +1741,34 @@ where= routes called pow for a 0-d exponent; a `(1,) ** (1,)` call took the fast
 pow; a column exponent never took it; float16 took the fast path or a double bridge; float_power took np.power's fast
 path. **Planted bugs:** 13 edits to the step decision, the exponent handling and the kernels. The tier kills all 13;
 before section I, two survived (plan finding 27).
+
+### np.arange as NumPy's `PyArray_ArangeObj` (`arange_full` tier) — 2026-10-29
+
+`arange_full.jsonl` (`gen_oracle.py arange_full`, 475 cases, floor 450) gates np.arange as NumPy 2.4.2's
+`PyArray_ArangeObj` (`ctors.c`; np-layer dtype plan, P3's D4 fix):
+- the length is `ceil((stop - start) / step)` in Python's arithmetic on the bounds (a float division, or a Python int's
+  correctly rounded true division), an underflowed quotient of a nonzero difference counted by its sign, the ceiling
+  range-checked against npy_intp;
+- `start` and `start + step` are stored through the dtype's `setitem`, the rest by its `fill`: `start + i * delta` in the
+  dtype's own arithmetic, `delta` the difference of the two stored elements (float32 in float32, float16 in float32
+  rounded per element, complex by parts, integers in C's promotion, wrapping).
+
+**Sections:** A (355: float ramps for the discovered dtype, float64, float32, float16 and complex128 — 60 random bounds
+and steps each, plus the classic decimal steps, a constant ramp past 2**53, a 1e-15 step, subnormal-scale bounds, a
+float16 overflow to inf), B (77: integer dtypes over float bounds — fractional steps that make `delta` 0 or round it
+away, and ramps that wrap past their first two elements; bool's two-element limit), C (16: Python-int bounds through
+the `(long, long, long)` overload — exact past 2**53, the 2**63 quotient that NumPy's x86 cast makes an empty array, a
+zero step), D (27: the length's edges and NumPy's errors in NumPy's order — the dtype's fill function first,
+ZeroDivisionError, NaN, past npy_intp, past the byte limit, the stores' OverflowErrors).
+
+**Bit-exact, 0 excused.** `MisalignedRegistry` returns null for the `arange_full` op. The generator leaves out the stores
+whose error text follows the platform C long (an int32 or wider store past 2**31).
+
+**What it replaced:** 272 of the 475 cases fail on the parent (`95b7167e`), whose np.arange computed every float ramp as
+`start + i * step` in double (68 % of random float64 calls, 92 % of float32 and 91 % of float16 differ from NumPy that
+way), took the `long` bounds through double (`np.arange(2**60, 2**60 + 3)` was empty), wrapped an out-of-range `start`
+or `start + step` instead of raising NumPy's OverflowError, refused a zero step and any step below 1e-15 with its own
+ArgumentException, and refused text dtypes with its own error.
 
 ### The array-object oracle (`view_flags` / `out_flags` / `shape_args` / `array_args` tiers) — 2026-10-07
 

@@ -24,7 +24,7 @@ namespace NumSharp.Tests
     //   * Crashes or refusals where NumPy computes: corrcoef of one variable (MS33), convolve of a 0-d operand (MS35),
     //     frombuffer of a buffer whose length is not a multiple of the item size (MS22), notmasked_edges of a 0-d array
     //     with an axis (MS26).
-    //   * Refusals NumPy makes and NumSharp does not, and error types / texts: MS6, MS8, MS21, MS23, MS24, MS27, MS28, MS30,
+    //   * Refusals NumPy makes and NumSharp does not, and error types / texts: MS6, MS8, MS23, MS24, MS27, MS28, MS30,
     //     MS32.
     //   * Reporting: the result FORM — an all-False mask dropped to nomask (MS1, MS2), masked_object's kept all-False mask
     //     (MS9); flatnotmasked_edges of an empty array (MS25).
@@ -42,6 +42,8 @@ namespace NumSharp.Tests
     // and the generator's rules for the fixed ids are dropped (MS35's remaining 0-d convolve cases are MS1's class).
     // MS15 (minimum_fill_value / maximum_fill_value of a dtype) was fixed by cb3a4186 (2026-10-13) and returned to the
     // gate on 2026-10-15, when the numpy.char phase-2 replay of the carved gaps found its 12 cells matching.
+    // MS21 (ma.arange's zero step) was fixed on 2026-10-29, when np.arange became NumPy's PyArray_ArangeObj: a zero step
+    // is Python's ZeroDivisionError, and its two cells returned to the gate.
     //
     // Every expected value below is NumPy 2.4.2's answer for the same call. EXPECTED (when fixed): each test passes;
     // remove its [OpenBugs], move it next to its API's tests, and drop the gap's rule from the generator's _gap_of so the
@@ -275,15 +277,16 @@ namespace NumSharp.Tests
         }
 
         /// <summary>
-        ///     <c>ma.arange(0, 10, 0)</c>: NumPy raises ZeroDivisionError; NumSharp raises ArgumentException("step can't be
-        ///     0") (gap MS21).
+        ///     FIXED (2026-10-29, np.arange as NumPy's PyArray_ArangeObj): <c>ma.arange(0, 10, 0)</c> raises NumPy's
+        ///     ZeroDivisionError, Python's <c>division by zero</c> of the length's true division; it raised
+        ///     ArgumentException("step can't be 0") (gap MS21).
         /// </summary>
-        [TestMethod, OpenBugs(IssueUrl = "ma-surface-MS21")]
+        [TestMethod]
         public void MaSurface_Arange_ZeroStep_RaisesDivideByZero()
         {
             Action act = () => np.ma.arange(0, 10, 0);
 
-            act.Should().Throw<DivideByZeroException>();
+            act.Should().Throw<DivideByZeroException>().WithMessage("division by zero");
         }
 
         /// <summary>
