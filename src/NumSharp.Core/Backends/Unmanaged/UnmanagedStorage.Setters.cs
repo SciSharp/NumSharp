@@ -586,7 +586,7 @@ namespace NumSharp.Backends
             // incompatible smaller value through and then copied it PARTIALLY — e.g.
             // a[0] = [1,2] into a (4,) row wrote [1,2,_,_]. NumPy raises a ValueError here, which the rule above raised
             // with NumPy's text, so the (stripped) value is known to broadcast: broadcast_to only builds the stride-0 view.
-            NDArray broadcasted = np.broadcast_to(vForBc, subShape);
+            NDArray broadcasted = NDArray.BroadcastTo(vForBc, subShape);   // np.broadcast_to's body for an array source
 
             // A valid broadcast that needs stretching (value smaller than the region, or a
             // different but compatible rank) -> copy through the iterator, which honours the

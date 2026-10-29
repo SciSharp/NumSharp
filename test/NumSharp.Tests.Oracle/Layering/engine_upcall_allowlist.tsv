@@ -4,7 +4,6 @@
 # rerun the test with NUMSHARP_WRITE_LAYERING_ALLOWLIST=1 and commit.
 # path<TAB>computations<TAB>structural[<TAB># reason]
 Backends/Default/Indexing/Default.Argwhere.cs	0	1
-Backends/Default/Indexing/Default.BooleanMask.cs	0	2
 Backends/Default/Indexing/Default.FlatNonZero.cs	0	1
 Backends/Default/Indexing/Default.NonZero.cs	0	1
 Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
@@ -35,7 +34,6 @@ Backends/Iterators/NDIterCasting.cs	0	2
 Backends/Kernels/BinaryKernel.cs	0	1
 Backends/Kernels/ComparisonRun.cs	0	1
 Backends/Kernels/ILKernelGenerator.Polynomial.Typing.cs	0	1
-Backends/NDArray.Container.cs	0	1
 Backends/NDArray.PythonLiteral.cs	0	2
 Backends/NDArray.cs	0	2
 Backends/Strings/NDCharObjectPath.Mod.cs	0	1
@@ -50,5 +48,4 @@ Backends/Strings/NDVStringReduction.cs	0	4
 Backends/Strings/NDVStringStatistics.Quantile.cs	0	3
 Backends/Strings/NDVStringStatistics.cs	0	1
 Backends/TensorEngine.LinearAlgebra.cs	0	3
-Backends/Unmanaged/UnmanagedStorage.Setters.cs	0	1
 Backends/Unmanaged/VStringArraySlice.cs	0	1

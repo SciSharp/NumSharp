@@ -58,7 +58,9 @@ namespace NumSharp
             // NumSharp's Char arrays are character vectors: a string is searched as its characters (the legacy semantics
             // these NumSharp-only arrays keep), not as NumPy's 0-d text array (np.asanyarray("abc") is <U3), which a char
             // array has no comparison with.
-            var scalar = value is string text && typecode == NPTypeCode.Char ? NDArray.FromString(text) : np.asanyarray(value);
+            // np.asanyarray's body (the array object's coercion; a numpy.matrix or chararray value is used as it is, which
+            // the comparison below reads as the plain array either way).
+            var scalar = value is string text && typecode == NPTypeCode.Char ? NDArray.FromString(text) : AnyArrayFromObject(value, null, 'K');
 
             // `comparison` IS using-bound: operator== always allocates a fresh bool
             // NDArray sized broadcast(this, scalar); after the engine's Any reads it, the buffer
