@@ -46,5 +46,84 @@ namespace NumSharp.Tests.Creation
                 .Should().Throw<ArgumentException>().WithMessage("Device not understood. Only \"cpu\" is allowed, but received: cuda*");
             np.linspace(0.0, 1.0, 3, device: "cpu").Should().BeShaped(3);
         }
+
+        // --------------------------------------------------------------------------------------------- one sample
+
+        /// <summary>The float64 samples of an array, as raw bits (a NaN's bits and a zero's sign are the point).</summary>
+        /// <param name="a">A float64 array.</param>
+        /// <returns>Its elements' bit patterns in C order.</returns>
+        private static long[] Bits(NDArray a)
+        {
+            a.typecode.Should().Be(NPTypeCode.Double);
+            var values = a.ToArray<double>();
+            var bits = new long[values.Length];
+            for (int i = 0; i < values.Length; i++)
+                bits[i] = BitConverter.DoubleToInt64Bits(values[i]);
+            return bits;
+        }
+
+        /// <summary>
+        ///     One sample is NumPy's ramp value <c>0 * (stop - start) + start</c>, not <c>start</c>: a NaN when an end is
+        ///     infinite or NaN, and +0.0 for a start of -0.0 (NumSharp wrote <c>start</c>).
+        /// </summary>
+        [TestMethod]
+        public void Linspace_OneSample_IsTheRampTimesDeltaPlusStart()
+        {
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);   // Python's float('nan')
+            // np.linspace(1, inf, 1) -> [nan]: 0 * inf is the CPU's default NaN (its sign is the host's, so only NaN-ness
+            // is asserted); with endpoint=False too (the step is delta / 1), where the float64 result is NumPy's view.
+            double.IsNaN(np.linspace(1.0, double.PositiveInfinity, 1).GetDouble(0)).Should().BeTrue();
+            double.IsNaN(np.linspace(double.PositiveInfinity, 1.0, 1).GetDouble(0)).Should().BeTrue();
+            double.IsNaN(np.linspace(double.NegativeInfinity, double.PositiveInfinity, 1).GetDouble(0)).Should().BeTrue();
+            var viewed = np.linspace(1.0, double.PositiveInfinity, 1, endpoint: false);
+            double.IsNaN(viewed.GetDouble(0)).Should().BeTrue();
+            viewed.flags.owndata.Should().BeFalse();
+            // np.linspace(1, nan, 1).view(np.int64) -> [0x7ff8000000000000]: 0 * nan keeps the NaN's bits
+            Bits(np.linspace(1.0, nan, 1)).Should().Equal(0x7FF8000000000000);
+            // np.linspace(-0.0, 1, 1) -> [0.0] (+0.0: 0 * 1 + -0.0), with and without the endpoint
+            Bits(np.linspace(-0.0, 1.0, 1)).Should().Equal(0L);
+            Bits(np.linspace(-0.0, 1.0, 1, endpoint: false)).Should().Equal(0L);
+            Bits(np.linspace(-0.0, -0.0, 1)).Should().Equal(0L);
+            // the integer dtypes floor NumPy's value, then cast: NaN -> int32's minimum (x86's cvttsd2si), as NumPy's astype
+            np.linspace(1.0, double.PositiveInfinity, 1, dtype: np.int32).Should().BeOfValues(int.MinValue);
+            np.linspace(-1.5, 3.0, 1, dtype: np.int16).Should().BeOfValues((short)-2);
+            np.linspace(1.0, double.PositiveInfinity, 1, dtype: np.@bool).Should().BeOfValues(true);
+        }
+
+        /// <summary>logspace's one exponent is linspace's, so an infinite or NaN stop gives NaN (NumSharp gave base ** start).</summary>
+        [TestMethod]
+        public void Logspace_OneSample_IsPowerOfTheLinspaceValue()
+        {
+            double nan = BitConverter.Int64BitsToDouble(0x7FF8000000000000);
+            // np.logspace(0, inf, 1) -> [nan]; np.logspace(0, nan, 1).view(np.int64) -> [0x7ff8000000000000]
+            double.IsNaN(np.logspace(0.0, double.PositiveInfinity, 1).GetDouble(0)).Should().BeTrue();
+            double.IsNaN(np.logspace(0.0, double.PositiveInfinity, 1, endpoint: false).GetDouble(0)).Should().BeTrue();
+            Bits(np.logspace(0.0, nan, 1)).Should().Equal(0x7FF8000000000000);
+            // finite ends: base ** start, as before
+            Bits(np.logspace(2.0, 3.0, 1)).Should().Equal(BitConverter.DoubleToInt64Bits(100.0));
+        }
+
+        // ------------------------------------------------------------------------------- a step that underflows to 0
+
+        /// <summary>
+        ///     NumPy's gh-5437 branch: when <c>delta / div</c> underflows to zero, NumPy computes <c>(i / div) * delta +
+        ///     start</c>, which keeps a subnormal range spread out; NumSharp computed <c>start + i * 0</c>, a constant run.
+        /// </summary>
+        [TestMethod]
+        public void Linspace_UnderflowingStep_SpreadsTheSubnormalRange()
+        {
+            // np.linspace(0, 1e-322, 50).view(np.int64)
+            Bits(np.linspace(0.0, 1e-322, 50)).Should().Equal(
+                0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 7, 7, 8, 8, 9, 9, 9, 10, 10, 11, 11, 11, 12, 12, 13, 13, 13,
+                14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20);
+            // np.linspace(0, 1e-322, 50, endpoint=False).view(np.int64)
+            Bits(np.linspace(0.0, 1e-322, 50, endpoint: false)).Should().Equal(
+                0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13,
+                14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20);
+            // np.linspace(5e-324, 0, 7).view(np.int64): a negative step that rounds to -0.0 takes the branch too
+            Bits(np.linspace(5e-324, 0.0, 7)).Should().Equal(1, 1, 1, 1, 0, 0, 0);
+            // a subnormal step that does not underflow keeps i * step + start: np.linspace(1e-320, 2e-320, 49)[:6]
+            Bits(np.linspace(1e-320, 2e-320, 49)).Should().StartWith(new long[] { 2024, 2066, 2108, 2150, 2192, 2234 });
+        }
     }
 }

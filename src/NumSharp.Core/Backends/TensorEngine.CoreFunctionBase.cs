@@ -51,9 +51,11 @@ namespace NumSharp
         ///     width.
         /// </exception>
         /// <remarks>
-        ///     <c>np.linspace</c> calls this member of the default engine. An override must keep the floor of the integer
-        ///     dtypes and the exact last sample: they are NumPy's results, which code ported from NumPy reads (an integer
-        ///     grid's last value, a range's exact end).
+        ///     <c>np.linspace</c> calls this member of the default engine. An override must keep NumPy's arithmetic, which
+        ///     code ported from NumPy reads: the floor of the integer dtypes, the exact last sample, one sample as
+        ///     <c>0 * (stop - start) + start</c> (a NaN when an end is infinite or NaN, +0.0 for a start of -0.0), and a
+        ///     step that underflows to zero replaced by <c>(i / div) * (stop - start) + start</c> (NumPy's gh-5437 branch,
+        ///     which keeps a subnormal range spread out).
         /// </remarks>
         public abstract NDArray Linspace(double start, double stop, long num, bool endpoint = true, DType dtype = null, string device = null);
 

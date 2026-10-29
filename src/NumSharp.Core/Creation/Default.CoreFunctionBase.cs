@@ -6,6 +6,7 @@
 
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -32,7 +33,14 @@ namespace NumSharp.Backends
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="typeCode">The type of the output array.</param>
+        /// <returns>A new 1-D array of <paramref name="num"/> samples; a float64 result whose NumPy counterpart is a view
+        ///     (<see cref="TensorEngine.Linspace"/>) is an alias that does not own its buffer.</returns>
+        /// <exception cref="ArgumentException"><paramref name="typeCode"/> is <see cref="NPTypeCode.Empty"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="typeCode"/> has no fixed-size storage lane (the text
+        ///     lane), or no fill below.</exception>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        ///     <para>Each sample is NumPy's float64 ramp value (<see cref="LinspaceValue"/>), floored for an integer type,
+        ///     then converted in one typed loop per storage lane.</para></remarks>
         private static NDArray LinspaceCore(double start, double stop, long num, bool endpoint, NPTypeCode typeCode)
         {
             if (typeCode == NPTypeCode.Empty)
@@ -48,33 +56,20 @@ namespace NumSharp.Backends
 
             NDArray ret = new NDArray(typeCode, new Shape(num), false);
 
-            // Handle num <= 1 edge cases to avoid division by zero
             if (num == 0)
                 return ret;
 
-            if (num == 1)
-            {
-                ret.SetAtIndex(Converts.ChangeType(floorInteger ? Math.Floor(start) : start, typeCode), 0);
-                // NumPy's div = endpoint ? num-1 : num. endpoint=false makes div = 1 > 0, so its
-                // scalar in-place branch runs (y *= step on the arange-reshape view) and the float64
-                // result is that VIEW (owndata=False, probed 2.4.2); endpoint=true (div=0) takes the
-                // rebinding `y = y * delta` branch and owns. Other dtypes rebind via astype and own.
-                if (!endpoint && typeCode == NPTypeCode.Double)
-                {
-                    var view = new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
-                    ret.Dispose();
-                    return view;
-                }
-                return ret;
-            }
-
-            double step = (stop - start) / (endpoint ? num - 1.0 : num);
+            // NumPy's quantities: delta = stop - start, and div = num - 1 with the endpoint, num without. One sample with
+            // the endpoint has div 0 and no step; LinspaceValue takes NumPy's branch for it (0 * delta + start), so the
+            // division here may give an infinity or a NaN that is never read.
+            double delta = stop - start;
+            double div = endpoint ? num - 1.0 : num;
+            double step = delta / div;
 
             double Sample(long i)
             {
-                // NumPy overwrites y[-1] with stop before the optional integer floor/cast, avoiding
-                // accumulated endpoint drift.
-                double value = endpoint && i == num - 1 ? stop : start + i * step;
+                // NumPy's float64 ramp value, then the floor NumPy applies before an integer cast.
+                double value = LinspaceValue(i, num, endpoint, start, stop, delta, div, step);
                 return floorInteger ? Math.Floor(value) : value;
             }
 
@@ -222,11 +217,17 @@ namespace NumSharp.Backends
                          for (long i = 0; i < num; i++) addr[i] = Converts.ToDouble(Sample(i));
                     }
 
+                    // One sample with the endpoint: NumPy's div is 0, so it takes the rebinding `y = y * delta` branch
+                    // and its result owns its buffer (probed 2.4.2).
+                    if (div == 0)
+                        return ret;
+
                     // NumPy's float64 linspace is a reshape-VIEW of its internal arange buffer
                     // mutated in place (y *= step; y += start), and astype(float64, copy=False)
                     // returns that view verbatim — so the result reports OWNDATA=False (probed
-                    // 2.4.2; num >= 2 here, so div > 0 and the in-place branch is always the one
-                    // NumPy took). Every other dtype rebinds through a real astype copy and owns.
+                    // 2.4.2; div > 0 here — two or more samples, or one without the endpoint — so the
+                    // in-place branch is the one NumPy took). Every other dtype rebinds through a real
+                    // astype copy and owns.
                     var view = new NDArray(ret.Storage.Alias()) { TensorEngine = ret.TensorEngine };
                     ret.Dispose();
                     return view;
@@ -292,10 +293,12 @@ namespace NumSharp.Backends
         /// <param name="base">The base raised to each exponent.</param>
         /// <returns>A fresh, C-contiguous, owning float64 array of length <paramref name="num"/>.</returns>
         /// <remarks>
-        ///     The endpoint is written as <c>base ** stop</c> directly (NumPy overwrites <c>y[-1] = stop</c> before the
-        ///     power), avoiding accumulated <c>start + i*step</c> drift. Addition/multiplication commute bit-for-bit
-        ///     with NumPy's <c>arange*step + start</c>, and <see cref="Math.Pow(double,double)"/> is the same
-        ///     <c>ucrtbase</c> routine NumPy's <c>npy_pow</c> calls on win-amd64, so the float64 result is byte-exact.
+        ///     The exponents are NumPy's linspace values (<see cref="LinspaceValue"/>): the endpoint is <c>stop</c>
+        ///     itself (NumPy overwrites <c>y[-1] = stop</c> before the power), a single exponent is <c>0 * delta + start</c>
+        ///     (NaN for an infinite or NaN stop, so <c>base ** y</c> is NaN too), and a step that underflows to zero takes
+        ///     NumPy's <c>(i / div) * delta + start</c>. Addition/multiplication commute bit-for-bit with NumPy's
+        ///     <c>arange*step + start</c>, and <see cref="Math.Pow(double,double)"/> is the same <c>ucrtbase</c> routine
+        ///     NumPy's <c>npy_pow</c> calls on win-amd64, so the float64 result is byte-exact.
         /// </remarks>
         private static NDArray LogspaceCore(double start, double stop, long num, bool endpoint, double @base)
         {
@@ -305,29 +308,60 @@ namespace NumSharp.Backends
             if (num == 0)
                 return ret;
 
-            if (num == 1)
-            {
-                // NumPy: linspace(start, stop, 1) == [start] for either endpoint, so logspace == [base ** start].
-                ret.SetAtIndex(Math.Pow(@base, start), 0);
-                return ret;
-            }
-
-            // div is num-1 when the endpoint is included (so stop lands exactly on the last sample), else num.
-            double step = (stop - start) / (endpoint ? num - 1.0 : num);
+            // NumPy's logspace is power(base, linspace(start, stop, num, endpoint)): the linspace quantities, with div 0
+            // (one exponent and the endpoint) handled by LinspaceValue before the step is read.
+            double delta = stop - start;
+            double div = endpoint ? num - 1.0 : num;
+            double step = delta / div;
 
             unsafe
             {
                 double* addr = (double*)ret.Address;
                 for (long i = 0; i < num; i++)
-                {
-                    // Exponent: `stop` verbatim on the last sample under endpoint (matches NumPy's y[-1]=stop),
-                    // else the evenly-spaced `start + i*step`.
-                    double y = endpoint && i == num - 1 ? stop : start + i * step;
-                    addr[i] = Math.Pow(@base, y);
-                }
+                    addr[i] = Math.Pow(@base, LinspaceValue(i, num, endpoint, start, stop, delta, div, step));
             }
 
             return ret;
+        }
+
+        /// <summary>
+        ///     Sample <paramref name="i"/> of NumPy's float64 linspace ramp, the value NumPy's statements leave in
+        ///     <c>y[i]</c> before an integer dtype's floor and the final cast. Shared by <see cref="LinspaceCore"/> and
+        ///     <see cref="LogspaceCore"/> (whose exponents are NumPy's linspace).
+        /// </summary>
+        /// <param name="i">The sample's index, in <c>[0, num)</c>.</param>
+        /// <param name="num">The number of samples, at least 1.</param>
+        /// <param name="endpoint">Whether the last of two or more samples is <paramref name="stop"/>.</param>
+        /// <param name="start">The first end.</param>
+        /// <param name="stop">The second end.</param>
+        /// <param name="delta"><c>stop - start</c>.</param>
+        /// <param name="div"><c>num - 1</c> with the endpoint, <c>num</c> without.</param>
+        /// <param name="step"><c>delta / div</c>; not read when <paramref name="div"/> is 0.</param>
+        /// <returns>The sample as NumPy computes it.</returns>
+        /// <remarks>
+        ///     NumPy's branches, each observable in the result:
+        ///     <list type="bullet">
+        ///       <item><description>two or more samples with the endpoint: the last is <paramref name="stop"/> itself
+        ///       (<c>y[-1] = stop</c>), so no rounding of the ramp reaches it;</description></item>
+        ///       <item><description>one sample with the endpoint (<paramref name="div"/> 0, no step): <c>y = y * delta;
+        ///       y += start</c>, so <c>0 * delta + start</c> - a NaN when an end is infinite or NaN, and +0.0 for a start of
+        ///       -0.0 (one sample without the endpoint gives the same value through the step, which is delta);</description></item>
+        ///       <item><description>a step that underflows to zero (gh-5437: a subnormal delta over many samples):
+        ///       <c>y /= div; y *= delta</c>, so <c>(i / div) * delta + start</c>, which keeps the spread
+        ///       <c>i * step</c> loses;</description></item>
+        ///       <item><description>otherwise <c>i * step + start</c>.</description></item>
+        ///     </list>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] // called once per sample from the fill loops
+        private static double LinspaceValue(long i, long num, bool endpoint, double start, double stop, double delta, double div, double step)
+        {
+            if (endpoint && num > 1 && i == num - 1)
+                return stop;
+            if (div == 0)
+                return i * delta + start;
+            if (step == 0)
+                return i / div * delta + start;
+            return start + i * step;
         }
 
         /// <summary>
