@@ -537,7 +537,9 @@ Quick reference for common pairs:
 | `float16` | `float32` | `float32` | higher precision wins |
 | any | `complex128` | `complex128` | complex absorbs |
 
-For full 15×15 promotion rules see `np.find_common_type` (`src/NumSharp.Core/Logic/np.find_common_type.cs`). Tests in `test/NumSharp.Tests/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
+For any pair, ask `np.promote_types(a, b)` or `np.result_type(...)`; the full 15×15 table is `_nptypemap_arr_arr` in `src/NumSharp.Core/Logic/np.find_common_type.cs`. Tests in `test/NumSharp.Tests/Casting/DtypeConversionMatrixTests.cs` verify every pair against NumPy 2.4.2.
+
+`np.find_common_type` is not this rule. It is NumPy 1.26.4's older function (deprecated in 1.25, removed in 2.0), ported as it was: the arrays' type is the first entry of the list `?bBhHiIlLqQefdgFDGO` that every array type casts to safely, and a scalar type changes it only when it is of a higher kind. So `np.find_common_type(new[] { np.int8 }, new[] { np.int64 })` is int8, where `np.result_type(np.int8, np.int64)` is int64.
 
 For the deeper story on how NumPy 2.x promotion differs from NumPy 1.x, see [NumPy Compliance](compliance.md).
 

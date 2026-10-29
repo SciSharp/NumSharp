@@ -592,123 +592,86 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
+        ///     The storage code of the dtype a NumPy type character names: NumPy's <c>PyArray_DescrFromType(c)</c>, then that
+        ///     descriptor's lane. It IS <c>np.dtype(c.ToString()).GetTypeCode()</c>, so the character table cannot drift away
+        ///     from the parser (a hand-written switch here once read <c>'D'</c> as float64 and Windows' <c>'l'</c> as int64).
         /// </summary>
+        /// <param name="typeCode">
+        ///     A NumPy type character: an <see cref="NPY_TYPECHAR"/> member, or a valid character that has none, cast to the
+        ///     enum (<c>(NPY_TYPECHAR)'n'</c>, <c>(NPY_TYPECHAR)'p'</c>).
+        /// </param>
+        /// <returns>
+        ///     The <see cref="NPTypeCode"/> NumSharp stores the dtype in, resolved for THIS host like C itself:
+        ///     <see cref="NPY_TYPECHAR.NPY_LONGLTR"/> is <see cref="NPTypeCode.Int32"/> on Windows and
+        ///     <see cref="NPTypeCode.Int64"/> on Linux and macOS. <c>'g'</c> and <c>'G'</c> come back as
+        ///     <see cref="NPTypeCode.Double"/> and <see cref="NPTypeCode.Complex"/>, the lanes <c>np.longdouble</c> and
+        ///     <c>np.clongdouble</c> use.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        ///     A KIND letter is not a type character. <see cref="NPY_TYPECHAR.NPY_UNSIGNEDLTR"/> (<c>'u'</c>) is refused, as
+        ///     <c>np.dtype('u')</c> is in NumPy, and <see cref="NPY_TYPECHAR.NPY_COMPLEXLTR"/> has the value of
+        ///     <see cref="NPY_TYPECHAR.NPY_CHARLTR"/>, so it is read as NumPy's one-byte string <c>S1</c> (refused), never as
+        ///     complex. Use <see cref="NPY_TYPECHAR.NPY_CDOUBLELTR"/> for complex128.
+        /// </para>
+        /// <para>
+        ///     Being the parser's answer, it reads every value the way <c>np.dtype</c> reads that one character, including
+        ///     values that are no type character: a control character below <c>'\x18'</c> is a TYPE NUMBER to NumPy
+        ///     (<c>np.dtype('\x0c')</c> is float64), so <c>((NPY_TYPECHAR)0).ToTypeCode()</c> is
+        ///     <see cref="NPTypeCode.Boolean"/>, not a refusal. Validate the value first when it comes from outside.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="typeCode"/> is outside 0..0xFFFF, so it is no UTF-16 character.</exception>
+        /// <exception cref="NotSupportedException">
+        ///     NumPy does not know the character ("data type 'u' not understood"); NumSharp has no such dtype (complex64
+        ///     <c>'F'</c>, bytes <c>'S'</c>/<c>'a'</c>/<c>'c'</c>, str <c>'U'</c>, void <c>'V'</c>, object <c>'O'</c>, StringDType
+        ///     <c>'T'</c>); or the dtype has no storage lane yet (datetime64 <c>'M'</c>, timedelta64 <c>'m'</c>).
+        /// </exception>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]
         public static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
         {
-            switch (typeCode)
-            {
-                case NPY_TYPECHAR.NPY_BOOLLTR:
-                    return NPTypeCode.Boolean;
-
-                case NPY_TYPECHAR.NPY_BYTELTR:
-                    return NPTypeCode.SByte;
-
-                case NPY_TYPECHAR.NPY_UBYTELTR:
-                    //case NPY_TYPECHAR.NPY_CHARLTR: //char has been deprecated in favor of string.
-                    return NPTypeCode.Byte;
-
-                case NPY_TYPECHAR.NPY_SHORTLTR:
-                    return NPTypeCode.Int16;
-
-                case NPY_TYPECHAR.NPY_USHORTLTR:
-                    return NPTypeCode.UInt16;
-
-                case NPY_TYPECHAR.NPY_INTLTR:
-                    return NPTypeCode.Int32;
-
-                case NPY_TYPECHAR.NPY_UINTLTR:
-                    return NPTypeCode.UInt32;
-
-                case NPY_TYPECHAR.NPY_LONGLTR:
-                case NPY_TYPECHAR.NPY_INTPLTR:
-                case NPY_TYPECHAR.NPY_LONGLONGLTR:
-                    return NPTypeCode.Int64;
-
-                case NPY_TYPECHAR.NPY_UINTPLTR:
-                case NPY_TYPECHAR.NPY_ULONGLTR:
-                case NPY_TYPECHAR.NPY_UNSIGNEDLTR:
-                case NPY_TYPECHAR.NPY_ULONGLONGLTR:
-                    return NPTypeCode.UInt64;
-
-                case NPY_TYPECHAR.NPY_HALFLTR:
-                    return NPTypeCode.Half;
-
-                case NPY_TYPECHAR.NPY_FLOATLTR:
-                case NPY_TYPECHAR.NPY_CFLOATLTR:
-                    return NPTypeCode.Single;
-
-                case NPY_TYPECHAR.NPY_DOUBLELTR:
-                case NPY_TYPECHAR.NPY_CDOUBLELTR:
-                case NPY_TYPECHAR.NPY_LONGDOUBLELTR:
-                    return NPTypeCode.Double;
-
-                case NPY_TYPECHAR.NPY_STRINGLTR:
-                case NPY_TYPECHAR.NPY_STRINGLTR2:
-                case NPY_TYPECHAR.NPY_UNICODELTR:
-                    return NPTypeCode.Char;
-
-                case NPY_TYPECHAR.NPY_VOIDLTR:
-                    return NPTypeCode.Empty;
-
-                case NPY_TYPECHAR.NPY_COMPLEXLTR:
-                    return NPTypeCode.Complex;
-
-                    return NPTypeCode.Decimal;
-
-                default:
-                    throw new NotSupportedException($"NPY_TYPECHAR of type {typeCode} is not supported.");
-            }
+            int c = (int)typeCode;
+            // A value past char.MaxValue would wrap in the (char) cast to an unrelated character and resolve silently.
+            if ((uint)c > char.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, "A NumPy type character is one UTF-16 code unit (0..0xFFFF).");
+            // GetTypeCode, not the typecode property: a datetime descriptor parses but has no storage lane, and the property
+            // would answer Empty (NumSharp's "infer" sentinel) where the method refuses.
+            return np.dtype(((char)c).ToString()).GetTypeCode();
         }
 
         /// <summary>
-        ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
+        ///     NumPy's type character for the dtype stored in <paramref name="typeCode"/>: that lane's descriptor character,
+        ///     exactly the <c>np.dtype(...).char</c> NumPy reports on this host.
         /// </summary>
+        /// <param name="typeCode">The storage code.</param>
+        /// <returns>
+        ///     The character as an <see cref="NPY_TYPECHAR"/>. Platform-dependent for the 32- and 64-bit integers: int32 is
+        ///     <see cref="NPY_TYPECHAR.NPY_LONGLTR"/> on Windows and <see cref="NPY_TYPECHAR.NPY_INTLTR"/> elsewhere, int64
+        ///     <see cref="NPY_TYPECHAR.NPY_LONGLONGLTR"/> on Windows and <see cref="NPY_TYPECHAR.NPY_LONGLTR"/> elsewhere.
+        ///     <see cref="NPTypeCode.Complex"/> is <see cref="NPY_TYPECHAR.NPY_CDOUBLELTR"/> (not the kind letter
+        ///     <see cref="NPY_TYPECHAR.NPY_COMPLEXLTR"/>) and <see cref="NPTypeCode.String"/> is
+        ///     <see cref="NPY_TYPECHAR.NPY_UNICODELTR"/>. For every dtype <c>np.dtype</c> can parse,
+        ///     <see cref="ToTypeCode(NPY_TYPECHAR)"/> of the result is <paramref name="typeCode"/> again.
+        /// </returns>
+        /// <exception cref="ArgumentException"><paramref name="typeCode"/> is <see cref="NPTypeCode.Empty"/>: no dtype, so no character.</exception>
+        /// <exception cref="NotSupportedException">
+        ///     <paramref name="typeCode"/> is one of NumSharp's own dtypes (<see cref="NPTypeCode.Decimal"/>,
+        ///     <see cref="NPTypeCode.Char"/>): NumPy has no such dtype, so no NumPy character names it. Do not substitute their
+        ///     descriptors' own <see cref="DType.@char"/>: it borrows NumPy characters of OTHER dtypes (decimal reports <c>'q'</c>,
+        ///     C <c>long long</c>; char reports <c>'c'</c>, NumPy's <c>S1</c>), so NumPy-facing code would read a decimal as an
+        ///     int64.
+        /// </exception>
         [DebuggerNonUserCode]
         [MethodImpl(OptimizeAndInline)]
         public static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
         {
-            switch (typeCode)
-            {
-                case NPTypeCode.Empty:
-                    return NPY_TYPECHAR.NPY_VOIDLTR;
-                case NPTypeCode.Boolean:
-                    return NPY_TYPECHAR.NPY_BOOLLTR;
-                case NPTypeCode.Char:
-                    return NPY_TYPECHAR.NPY_CHARLTR;
-                case NPTypeCode.SByte:
-                    return NPY_TYPECHAR.NPY_BYTELTR;
-                case NPTypeCode.Byte:
-                    return NPY_TYPECHAR.NPY_UBYTELTR;
-                case NPTypeCode.Int16:
-                    return NPY_TYPECHAR.NPY_SHORTLTR;
-                case NPTypeCode.UInt16:
-                    return NPY_TYPECHAR.NPY_USHORTLTR;
-                case NPTypeCode.Int32:
-                    return NPY_TYPECHAR.NPY_INTLTR;
-                case NPTypeCode.UInt32:
-                    return NPY_TYPECHAR.NPY_UINTLTR;
-                case NPTypeCode.Int64:
-                    return NPY_TYPECHAR.NPY_LONGLTR;
-                case NPTypeCode.UInt64:
-                    return NPY_TYPECHAR.NPY_ULONGLTR;
-                case NPTypeCode.Half:
-                    return NPY_TYPECHAR.NPY_HALFLTR;
-                case NPTypeCode.Single:
-                    return NPY_TYPECHAR.NPY_FLOATLTR;
-                case NPTypeCode.Double:
-                    return NPY_TYPECHAR.NPY_DOUBLELTR;
-                case NPTypeCode.Decimal:
-                    return NPY_TYPECHAR.NPY_LONGLONGLTR;
-                case NPTypeCode.String:
-                    return NPY_TYPECHAR.NPY_STRINGLTR;
-                case NPTypeCode.Complex:
-                    return NPY_TYPECHAR.NPY_COMPLEXLTR;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(typeCode), typeCode, null);
-            }
+            var descr = DType.From(typeCode);
+            // NumSharp numbers its own dtypes in NumPy's user-defined range (NPY_USERDEF and up), as NumPy numbers a registered
+            // user dtype; that range is exactly the set no NumPy character can name.
+            if (descr.num >= (int)NPY_TYPES.NPY_USERDEF)
+                throw new NotSupportedException($"NumSharp's {descr.name} dtype has no NumPy type character: NumPy has no {descr.name} dtype.");
+            return (NPY_TYPECHAR)descr.@char;
         }
 
         public static int CompareTo(this NPTypeCode left, NPTypeCode right)
@@ -736,7 +699,17 @@ namespace NumSharp
 
         /// <summary>
         ///     Returns the equivalent numpy's name, e.g. <see cref="NPTypeCode.Int32"/> is np.int32, therefore the return is "int32".
+        ///     Error texts quote it as <c>dtype('…')</c>, so it is the NumPy name a NumPy user would see for that data.
         /// </summary>
+        /// <param name="typeCode">The storage code.</param>
+        /// <returns>
+        ///     NumPy's dtype name; <c>"str"</c> for <see cref="NPTypeCode.String"/> (NumPy's <c>np.dtype('U').name</c>; NumPy
+        ///     has no dtype named <c>"string"</c>); <c>""</c> for <see cref="NPTypeCode.Empty"/>. NumSharp's own dtypes answer
+        ///     with the NumPy dtype they stand in for: <see cref="NPTypeCode.Char"/> is <c>"uint16"</c> (it promotes and computes
+        ///     as uint16) and <see cref="NPTypeCode.Decimal"/> is <c>"float64"</c>, so a decimal array reads as float64 in a
+        ///     NumPy-worded error.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="typeCode"/> is not a defined storage code.</exception>
         public static string AsNumpyDtypeName(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -774,7 +747,8 @@ namespace NumSharp
                 case NPTypeCode.Decimal:
                     return "float64";
                 case NPTypeCode.String:
-                    return "string";
+                    // NumPy's str_ dtype is named "str" (np.dtype('U').name); NumPy has no dtype called "string".
+                    return "str";
                 case NPTypeCode.Complex:
                     return "complex128";
                 default:

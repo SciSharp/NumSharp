@@ -109,6 +109,23 @@
     </None>
   </ItemGroup>
 
+  <!-- np.find_common_type oracle: NumPy 1.26.4, the last NumPy with the function (2.0 removed it), replayed by
+       np_find_common_type_numpy1264_tests. Regenerate from a numpy==1.26.4 environment:
+       python test/oracle/gen_find_common_type_oracle.py -->
+  <ItemGroup>
+    <None Update="Logic\corpus\find_common_type.numpy1264.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- np.asanyarray(object[]) oracle: the dtype NumPy 2.4.2's array coercion gives mixed scalars, in every order,
+       replayed by np_asanyarray_mixed_scalars_tests. Regenerate: python test/oracle/gen_asanyarray_mixed_oracle.py -->
+  <ItemGroup>
+    <None Update="Creation\corpus\asanyarray_mixed.numpy242.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- ndarray.flags / ndarray.setflags oracle: real NumPy 2.4.2 flag records + verbatim errors,
        replayed by FlagsOracleTests (no Python in CI). Regenerate: python test/oracle/gen_flags_oracle.py -->
   <ItemGroup>

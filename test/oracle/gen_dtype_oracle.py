@@ -48,8 +48,10 @@ strings, bytes, void, object); and the metadata=None TypeError (C#'s null means 
 
 Regenerate:  python test/oracle/gen_dtype_oracle.py   (requires numpy==2.4.2)
 """
+import ast
 import itertools
 import json
+import operator
 import os
 import re
 import sys
@@ -203,6 +205,66 @@ def struct_fields(text, typedef_name):
     return names
 
 
+def _c_value(expr, env):
+    """A C enumerator's value expression: integer and character literals, names already defined (earlier members and
+    integer #defines), unary minus and the binary operators | & + - << >> *. Anything else is an error, so a header that
+    grows a new construct fails the generator instead of recording a wrong value."""
+    # A C character literal is its code ('?' -> 63); Python reads the same literal, escapes included.
+    text = re.sub(r"'(?:\\.|[^'\\])'", lambda m: str(ord(ast.literal_eval(m.group(0)))), expr)
+    tree = ast.parse(text.strip(), mode="eval")
+    ops = {ast.BitOr: operator.or_, ast.BitAnd: operator.and_, ast.Add: operator.add, ast.Sub: operator.sub,
+           ast.LShift: operator.lshift, ast.RShift: operator.rshift, ast.Mult: operator.mul}
+
+    def ev(n):
+        if isinstance(n, ast.Expression):
+            return ev(n.body)
+        if isinstance(n, ast.Constant) and isinstance(n.value, int):
+            return n.value
+        if isinstance(n, ast.Name):
+            return env[n.id]
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
+            return -ev(n.operand)
+        if isinstance(n, ast.BinOp) and type(n.op) in ops:
+            return ops[type(n.op)](ev(n.left), ev(n.right))
+        raise ValueError(f"unsupported C enumerator expression: {expr!r}")
+
+    return ev(tree)
+
+
+def c_enums(text):
+    """Every NAMED enum of a C header, `enum NAME { ... };` and `typedef enum { ... } NAME;`, as
+    {name: [[member, value], ...]} in declaration order, with values as C assigns them (an enumerator without `=` is the
+    previous one plus 1, the first 0). Preprocessor lines inside a body are dropped, so members a `#if` guards for
+    NumPy 2.4's feature version are recorded: they exist in the NumPy that generates this corpus."""
+    code = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    code = re.sub(r"//[^\n]*", " ", code)
+    defines = {m.group(1): int(m.group(2)) for m in re.finditer(r"^\s*#\s*define\s+(\w+)\s+(-?\d+)\s*$", code, re.M)}
+
+    def members_of(body):
+        body = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("#"))
+        env = dict(defines)
+        out = []
+        nxt = 0
+        for item in body.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            name, _, expr = item.partition("=")
+            name = name.strip()
+            value = _c_value(expr, env) if expr.strip() else nxt
+            env[name] = value
+            out.append([name, value])
+            nxt = value + 1
+        return out
+
+    enums = {}
+    for m in re.finditer(r"\benum\s+(\w+)\s*\{([^{}]*)\}\s*;", code):
+        enums[m.group(1)] = members_of(m.group(2))
+    for m in re.finditer(r"\btypedef\s+enum\s*\{([^{}]*)\}\s*(\w+)\s*;", code):
+        enums[m.group(2)] = members_of(m.group(1))
+    return enums
+
+
 def members():
     """The `members` record: every name NumPy defines for numpy.dtype and the DType class."""
     api = open(os.path.join(NUMPY_SRC, "numpy", "_core", "include", "numpy", "dtype_api.h"), encoding="utf-8").read()
@@ -238,6 +300,7 @@ def members():
          dtype_public=public, dtype_dunders=dunders, dtypemeta_own=meta_own, dtypes_module=module,
          dt_slots=slots, dtypemeta_fields=meta_fields, dtype_slot_fields=slot_fields, dt_flags=flags,
          struct_fields=struct_records,
+         c_enums=c_enums(types_h),
          byteorder_macros={"NPY_LITTLE": "<", "NPY_BIG": ">", "NPY_NATIVE": "=", "NPY_SWAP": "s", "NPY_IGNORE": "|",
                            "NPY_NATBYTE": native, "NPY_OPPBYTE": swapped})
 

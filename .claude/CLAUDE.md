@@ -2317,7 +2317,10 @@ or for a parametric class cast both operands to it and take `common_instance`), 
 literals are WEAK (`result_type(int8_dtype, 300)` → `int8`, `+ 1.5` → `float64`, lone literal → int64/float64/complex128).
 For the storage builtins `CommonDType` IS the frozen `np._nptypemap_arr_arr` table (deferring to the larger type number,
 as NumPy does), so every two-operand answer the `dtype_text` tier gates is unchanged; the three internal engines
-(`np._FindCommonType*`, `NDExprTypeRules.PromoteStrong`, `NDIterCasting.PromoteTypes`) are deliberately untouched.
+(`np._FindCommonType(NDArray, NDArray)` — binary-operator promotion —, `NDExprTypeRules.PromoteStrong`,
+`NDIterCasting.PromoteTypes`) are deliberately untouched. The LIST forms of `np._FindCommonType` are
+`np.find_common_type`'s NumPy 1.26.4 port since 2026-10-29 (the paragraph "The C enums, the type characters and
+find_common_type" below).
 `DTypeCasting` is `PyArray_CanCastTypeTo`/`CheckCastSafety`/`GetCastInfo`/`EquivTypes`/`MinCastSafety` over the impl
 table: the builtin impls encode the old `np.can_cast` rules exactly (same class → `equiv`, `promote(from,to)==to` →
 `safe`, kind-order `b<u<i<f<c` → `same_kind`, else `unsafe`; Char↔UInt16 are distinct classes, never `equiv`), and the
@@ -2394,10 +2397,10 @@ Python's `str(KeyError)`), `metadata` + `np.dtype(dtype, align, copy, metadata)`
 `dtype('<i4')`, former surface gap SU17; errors quote the whole string, `None` is TypeError), `isnative` is `PyArray_ISNBO`,
 `repr` takes the short form whenever the stored byte order is explicit, `ensure_canonical` returns a FRESH native copy
 (never the singleton: `np.result_type(np.dtype('>f8')).isbuiltin` is 0), `promote_types`' fast path is pointer identity.
-**Gate:** `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (4,683
-records each: NumPy's member names incl. the C slots parsed from the headers and the fields of the structs `ArrayMethod`,
+**Gate:** `test/oracle/gen_dtype_oracle.py` → `test/NumSharp.Tests/DTypes/corpus/dtype_oracle.{llp64,lp64}.jsonl` (6,496
+records each: NumPy's member names incl. the C slots parsed from the headers, the C enums of `ndarraytypes.h` and the fields of the structs `ArrayMethod`,
 `ArrayMethodContext` and `DatetimeMetaData` port (`StructPorts`, each unported field listed with its reason), 1,014 descriptors × every attribute + str /
-repr / len / `d[0]`, 98 errors, 784 comparison pairs, 812 promotions, 33 classes, 1,941 casting resolutions), one file per
+repr / len / `d[0]`, 98 errors, 784 comparison pairs, 812 promotions, 33 classes, 1,941 casting resolutions, 1,813 dtype strings), one file per
 C `long` model (Windows NumPy / Linux NumPy under WSL — regenerate both), replayed by `DTypes/DTypeOracleTests.cs`, which
 picks the host's model; 8/8 planted bugs killed. Exemptions are listed with reasons and self-retire (each must stay
 absent / divergent): the dunders C# has no use for (`__bool__`, pickle, typing, `__mul__`/`__rmul__` sub-arrays), the
@@ -2405,6 +2408,39 @@ unported slots (`setitem`, `getitem`, `finalize_descr`, `get_constant`, ArrFuncs
 classes (`Complex64DType`, `StrDType`, `BytesDType`, `StringDType`, `ObjectDType`, `VoidDType`), the C-integer /
 long-double classes NumPy keeps apart and NumSharp collapses, the datetime `type` (Stage C), and the asymmetric
 `M8[1000ms] == M8[s]` (trap 4).
+
+**The C enums, the type characters and find_common_type (2026-10-29).**
+- **`NPY_TYPECHAR`** (`Creation/np.dtype.cs`) is NumPy 2.4.2's `ndarraytypes.h` enum member for member: `NPY_VSTRINGLTR =
+  'T'` (NEP 55), `NPY_DEPRECATED_STRINGLTR2 = 'a'` (was `NPY_STRINGLTR2`), and no `NPY_INTPLTR` / `NPY_UINTPLTR` (NumPy 2.0
+  moved intp from `'p'` to `'n'`; `'p'` / `'P'` / `'n'` / `'N'` parse but have no member: cast the character,
+  `(NPY_TYPECHAR)'n'`). The kind letters share values with type characters as in C (`'b'` is the bool kind and int8,
+  `'c'` the complex kind and NumPy's `S1`): compare values, never names (`ToString()` of a shared value is unspecified).
+- **`NPTypeCode.ToTypeCode(NPY_TYPECHAR)` IS `np.dtype(c).GetTypeCode()`.** It was a switch that read `'F'` / `'D'` as
+  float32 / float64 and Windows' `'l'` as int64; it now reads every character as the parser does (`'D'` complex128, `'F'`
+  refused, `'l'` by the C `long` model, a control character below `'\x18'` a type number). **`ToTYPECHAR`** is the lane's
+  descriptor character (`'D'` for complex128, never the kind letter `'c'`). NumSharp's decimal and char have no NumPy
+  character and REFUSE (`NotSupportedException`): their descriptors' own `char` borrows other dtypes' letters (decimal
+  `'q'`, char `'c'`), which made `find_common_type` rank a decimal as int64.
+- **The header gate.** The oracle's `members` record carries every C enum of `ndarraytypes.h` (`c_enums`, parsed from
+  `refs/numpy`), and `DTypeOracleTests.CEnums_MirrorNumPysHeader` holds the mirrored ones (`NPY_TYPES`, `NPY_TYPECHAR`,
+  `NPY_SCALARKIND`, `NPY_ORDER`, `NPY_CASTING`, `NPY_DATETIMEUNIT`) to NumPy's names, values and order. Self-retiring
+  exemptions: NumSharp's `NPY_ORDER` numbering (K = 0 … A = 3 where NumPy has A = -1 … K = 2: renumbering changes what
+  `default(NPY_ORDER)` means), NumPy 2.4's `NPY_SAME_VALUE_CASTING` and `_NPY_ERROR_OCCURRED_IN_CAST`, the six enums
+  NumSharp takes as strings (`NPY_SORTKIND`, `NPY_SELECTKIND`, `NPY_SEARCHSIDE`, `NPY_CLIPMODE`, `NPY_CORRELATEMODE`) or
+  lacks (`NPY_BUSDAY_ROLL`).
+- **`np.find_common_type` is NumPy 1.26.4's** (`Logic/np.find_common_type.cs`; deprecated in 1.25, removed in 2.0). Each
+  list's maximum is the FIRST candidate of `?bBhHiIlLqQefdgFDGO` every entry casts to safely (a search, not a promotion:
+  `[i1, u1, f2]` is float16 where the left-to-right `promote_types` chain gives float32), a scalar type of the same or a
+  lower kind never moves it (`([i1], [i8])` is int8, `np.result_type(i1, i8)` int64), and a scalar maximum of a HIGHER kind goes to
+  `_find_common_coerce` (`find_common_type([u1], [i2])` is int16; it read NumPy 2's NEP 50 array-scalar table and kept
+  uint8, and the NDArray form `np._FindCommonType(NDArray[])` threw OverflowException for a uint16 array with an int16 0-d
+  array). A list holding decimal or char promotes by NumSharp's table (NumPy has no such dtype). Gate: `Logic/corpus/find_common_type.numpy1264.jsonl` (11,291 cases from a numpy==1.26.4 environment,
+  `test/oracle/gen_find_common_type_oracle.py`; 15,696 of the full matrix's 66,443 cases were wrong before).
+- **`np.asanyarray(object[])` of mixed scalars** promotes element by element like NumPy's `handle_promotion`, so the
+  result follows element ORDER (`[i1, u1, f2]` is float32, `[f2, i1, u1]` float16; 18 dtype sets of the 13 shared dtypes
+  are order-sensitive), and a float16 among other types converts (the BCL `Convert` threw: `Half` is not
+  `IConvertible`). 12,020 of 19,032 orderings of 2-4 dtypes were wrong or threw before. Gate:
+  `Creation/corpus/asanyarray_mixed.numpy242.jsonl` (2,917 orderings, `test/oracle/gen_asanyarray_mixed_oracle.py`).
 
 **Stage B landed (2026-09-09): `DType` is the ONE dtype spelling, end to end.** **`NDArray.dtype` returns `DType`**
 (`Storage.Descr` — NumPy's `PyArrayObject.descr`: the class singleton for a builtin lane, so `a.dtype == b.dtype` /

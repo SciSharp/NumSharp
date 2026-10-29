@@ -347,38 +347,39 @@ public class AuditV2_CastingRandomUtilities
     //   unsafe choice — any consumer that round-trips loses Decimal identity.
     //   Additional collateral collisions: NPY_CHARLTR == NPY_COMPLEXLTR ('c')
     //   and NPY_BYTELTR == NPY_GENBOOLLTR ('b').
+    //
+    //   FIXED (2026-10-29, the NumPy 2.4.2 type-character fix): NumPy has no
+    //   decimal or char dtype, so no NumPy character names them, and ToTYPECHAR
+    //   now refuses both (NotSupportedException) instead of handing out the
+    //   character of another dtype. The identity can no longer be lost silently,
+    //   and every NumPy dtype round-trips (DTypes/NpyTypeCharTests). These tests
+    //   used to look the PUBLIC methods up with BindingFlags.NonPublic, so they
+    //   failed on null before reaching the mapping; they call them directly now.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.65")]
+
+    /// <summary>
+    ///     Decimal has no NumPy character: <see cref="NPTypeCodeExtensions.ToTYPECHAR"/> refuses it rather than answering
+    ///     int64's 'q', so a round trip fails loudly instead of returning <see cref="NPTypeCode.Int64"/>.
+    /// </summary>
+    [TestMethod]
     public void T1_65_Decimal_TypecharRoundTripLosesIdentity()
     {
-        var asType = typeof(NPTypeCodeExtensions);
-        var toTypechar = asType.GetMethod("ToTYPECHAR", BindingFlags.NonPublic | BindingFlags.Static);
-        var toTypecode = asType.GetMethod("ToTypeCode", BindingFlags.NonPublic | BindingFlags.Static);
-        toTypechar.Should().NotBeNull();
-        toTypecode.Should().NotBeNull();
-
-        var ch = toTypechar!.Invoke(null, new object[] { NPTypeCode.Decimal });
-        var rt = (NPTypeCode)toTypecode!.Invoke(null, new object[] { ch! })!;
-
-        rt.Should().Be(NPTypeCode.Decimal,
-            "Decimal -> TYPECHAR -> NPTypeCode round-trip must preserve identity; currently maps to NPY_LONGLONGLTR -> Int64");
+        Action act = () => NPTypeCode.Decimal.ToTYPECHAR();
+        act.Should().Throw<NotSupportedException>("NumPy has no decimal dtype, so no NumPy character names it");
+        NPTypeCode.Int64.ToTYPECHAR().ToTypeCode().Should().Be(NPTypeCode.Int64, "the character int64 owns maps back to int64");
     }
 
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-T1.65")]
+    /// <summary>
+    ///     Char has no NumPy character either: 'c' is NumPy's one-byte string S1, so <see cref="NPTypeCodeExtensions.ToTYPECHAR"/>
+    ///     refuses Char, and 'c' maps to no NumSharp dtype (it used to come back as complex through the colliding kind letter).
+    /// </summary>
+    [TestMethod]
     public void T1_65_Char_TypecharRoundTripLosesIdentity()
     {
-        // Collateral collision: NPY_CHARLTR ('c') == NPY_COMPLEXLTR ('c').
-        // Char -> 'c' -> ToTypeCode('c') hits the NPY_COMPLEXLTR case first and
-        // resolves to Complex.
-        var asType = typeof(NPTypeCodeExtensions);
-        var toTypechar = asType.GetMethod("ToTYPECHAR", BindingFlags.NonPublic | BindingFlags.Static);
-        var toTypecode = asType.GetMethod("ToTypeCode", BindingFlags.NonPublic | BindingFlags.Static);
-
-        var ch = toTypechar!.Invoke(null, new object[] { NPTypeCode.Char });
-        var rt = (NPTypeCode)toTypecode!.Invoke(null, new object[] { ch! })!;
-
-        rt.Should().Be(NPTypeCode.Char,
-            "Char -> TYPECHAR -> NPTypeCode round-trip must preserve identity (NPY_CHARLTR collides with NPY_COMPLEXLTR)");
+        Action act = () => NPTypeCode.Char.ToTYPECHAR();
+        act.Should().Throw<NotSupportedException>("NumPy has no char dtype ('c' is S1)");
+        Action c = () => NPY_TYPECHAR.NPY_CHARLTR.ToTypeCode();
+        c.Should().Throw<NotSupportedException>("'c' is NumPy's S1, which NumSharp cannot store; it is never complex128");
     }
 
     // -----------------------------------------------------------------------
@@ -415,6 +416,9 @@ public class AuditV2_CastingRandomUtilities
     //   No runtime test possible — this is a static-analysis defect that
     //   could be enforced via a roslyn analyzer if desired. Documented here
     //   for completeness.
+    //
+    //   FIXED (2026-10-29): ToTypeCode is the parser's answer now
+    //   (np.dtype(c).GetTypeCode()), so the switch and its dead line are gone.
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
@@ -424,25 +428,26 @@ public class AuditV2_CastingRandomUtilities
     //   NPY_CHARLTR == NPY_COMPLEXLTR (both 'c').
     //   Causes ambiguous ToString() and breaks switch-by-name. Surfaced by
     //   the T1.65 roundtrip tests above.
+    //
+    //   RESOLVED (2026-10-29): the shared values are NumPy's own (a kind letter
+    //   reuses a type character; ndarraytypes.h has the same pairs), so the
+    //   mirror keeps them and the enum documents that ToString() of a shared
+    //   value is unspecified (compare values, never names). The defect callers
+    //   could observe was ToTYPECHAR(Complex) answering the complex KIND letter
+    //   'c', NumPy's S1 type: it answers 'D' now. This test used to look the
+    //   public method up as non-public and failed on null.
     // -----------------------------------------------------------------------
-    [TestMethod, OpenBugs(IssueUrl = "audit-v2-new-typechar-collisions")]
+
+    /// <summary>
+    ///     The colliding values are NumPy's and stay; what the mappings hand out is each dtype's own type character:
+    ///     complex128 is 'D' (not the complex kind letter 'c'), int8 is 'b'.
+    /// </summary>
+    [TestMethod]
     public void NEW_NDTypechar_EnumValueCollisions()
     {
-        // The enum is internal, so we go through ToString() which surfaces the
-        // collision symptom.
-        var asType = typeof(NPTypeCodeExtensions);
-        var toTypechar = asType.GetMethod("ToTYPECHAR", BindingFlags.NonPublic | BindingFlags.Static);
-
-        var charLtr = toTypechar!.Invoke(null, new object[] { NPTypeCode.Char })!.ToString();
-        var cmplLtr = toTypechar!.Invoke(null, new object[] { NPTypeCode.Complex })!.ToString();
-        var sbyteLtr = toTypechar!.Invoke(null, new object[] { NPTypeCode.SByte })!.ToString();
-
-        // Both 'c' map to a single underlying value — collision is observable.
-        charLtr.Should().NotBe(cmplLtr,
-            "NPY_CHARLTR and NPY_COMPLEXLTR share value 'c' — must split into distinct values");
-        // SByte should yield NPY_BYTELTR ('b'); collision with NPY_GENBOOLLTR
-        // results in unstable ToString().
-        sbyteLtr.Should().NotContain("GENBOOL",
-            "SByte ToTYPECHAR should resolve to NPY_BYTELTR, not NPY_GENBOOLLTR (kind code)");
+        ((char)NPTypeCode.Complex.ToTYPECHAR()).Should().Be('D');
+        ((char)NPTypeCode.SByte.ToTYPECHAR()).Should().Be('b');
+        ((int)NPY_TYPECHAR.NPY_CHARLTR).Should().Be((int)NPY_TYPECHAR.NPY_COMPLEXLTR, "NumPy's header shares 'c' between the S1 type and the complex kind");
+        ((int)NPY_TYPECHAR.NPY_BYTELTR).Should().Be((int)NPY_TYPECHAR.NPY_GENBOOLLTR, "NumPy's header shares 'b' between the int8 type and the bool kind");
     }
 }

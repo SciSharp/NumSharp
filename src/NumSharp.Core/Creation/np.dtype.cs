@@ -178,7 +178,7 @@ namespace NumSharp
             Add("g",  typeof(double));   // long double collapses to double
             // complex — NumSharp only has complex128 (System.Numerics.Complex = 2 × float64).
             // complex64 ('F', 'c8', 'complex64') is NOT supported and throws NotSupportedException
-            // via _unsupported_numpy_codes below — users must explicitly opt into complex128.
+            // via _unsupported_numpy_typechars / _unsupported_numpy_names below — users must explicitly opt into complex128.
             Add("D",  typeof(Complex));
             Add("G",  typeof(Complex));  // long-double complex collapses to complex128
 
@@ -199,7 +199,7 @@ namespace NumSharp
             Add("float64",    typeof(double));
             Add("double",     typeof(double));
             Add("float",      typeof(double)); // NumPy: np.dtype('float') → float64
-            // Note: "complex64" is NOT in the map — it's in _unsupported_numpy_codes so
+            // Note: "complex64" is NOT in the map — it's in _unsupported_numpy_names so
             // accessing it throws NotSupportedException. NumSharp only has complex128.
             Add("complex128", typeof(Complex));
             Add("cdouble",    typeof(Complex));  // np.cdouble, the C name of complex128 (in NumPy's sctypeDict)
@@ -816,14 +816,35 @@ namespace NumSharp
         }
     }
 
+    /// <summary>
+    ///     NumPy's <c>NPY_SCALARKIND</c> enum (<c>numpy/_core/include/numpy/ndarraytypes.h</c>, NumPy 2.4.2): the kind of a
+    ///     scalar for the LEGACY value-based casting of NumPy 1.x, the answer of <c>PyArray_ScalarKind</c> that
+    ///     <c>PyArray_CanCoerceScalar</c> reads. The same members, order and values as the header.
+    /// </summary>
+    /// <remarks>
+    ///     NumPy 2 keeps it in its C API for compatibility only: NEP 50 promotion never asks for a scalar's kind, and neither
+    ///     does NumSharp, whose promotion is the NEP 50 tables (<see cref="np.result_type(DType[])"/>). It is mirrored so
+    ///     code ported from NumPy's C API compiles; nothing in NumSharp reads it. NumPy's <c>NPY_NSCALARKINDS</c> define is
+    ///     <c>NPY_OBJECT_SCALAR + 1</c>.
+    /// </remarks>
     public enum NPY_SCALARKIND
     {
+        /// <summary>Not a scalar (an array of one or more dimensions): <c>PyArray_CanCoerceScalar</c> then requires a safe cast.</summary>
         NPY_NOSCALAR = -1,
+        /// <summary>A bool scalar.</summary>
         NPY_BOOL_SCALAR,
+        /// <summary>
+        ///     A non-negative integer: every unsigned integer scalar, and a signed one whose sign bit is clear. It may be coerced
+        ///     to signed and unsigned integer types.
+        /// </summary>
         NPY_INTPOS_SCALAR,
+        /// <summary>A negative signed integer, which may not be coerced to an unsigned integer type.</summary>
         NPY_INTNEG_SCALAR,
+        /// <summary>A floating-point scalar.</summary>
         NPY_FLOAT_SCALAR,
+        /// <summary>A complex scalar.</summary>
         NPY_COMPLEX_SCALAR,
+        /// <summary>An object scalar, also NumPy's default kind for every other builtin type: it coerces only by a safe cast.</summary>
         NPY_OBJECT_SCALAR
     };
 
@@ -916,10 +937,10 @@ namespace NumSharp
         NPY_NTYPES_LEGACY = 24,
         /// <summary>Sentinel: "no type" (a deliberately high, stable value so appending dtypes does not move it).</summary>
         NPY_NOTYPE = 25,
-        /// <summary>Sentinel: the count of types excluding the 1.6 additions (shares value 21 with <see cref="NPY_DATETIME"/>).</summary>
-        NPY_NTYPES_ABI_COMPATIBLE = 21,
         /// <summary>The first user-defined type number — everything at or above is a registered user dtype (NumSharp's Decimal/Char live here).</summary>
         NPY_USERDEF = 256,
+        /// <summary>Sentinel: the count of types excluding the 1.6 additions (shares value 21 with <see cref="NPY_DATETIME"/>).</summary>
+        NPY_NTYPES_ABI_COMPATIBLE = 21,
         /// <summary>NEP 55 variable-width <c>StringDType</c> — the first non-legacy-layout dtype (reserved; Stage D).</summary>
         NPY_VSTRING = 2056,
 
@@ -932,55 +953,134 @@ namespace NumSharp
     }
 
     /// <summary>
-    ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types
+    ///     NumPy's <c>NPY_TYPECHAR</c> enum (<c>numpy/_core/include/numpy/ndarraytypes.h</c>, NumPy 2.4.2): the one-character
+    ///     type codes of the builtin dtypes (<see cref="DType.@char"/>, the strings <c>np.dtype('d')</c> parses) followed by the
+    ///     dtype KIND letters (<see cref="DType.kind"/>). Byte-identical to the header: the same members, in the same order,
+    ///     with the same values, so <c>(char)NPY_TYPECHAR.NPY_CDOUBLELTR</c> is <c>'D'</c> exactly as in C.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    ///     <b>Several members share a value, as in C</b>, because a kind letter reuses a type character:
+    ///     <see cref="NPY_GENBOOLLTR"/> is <see cref="NPY_BYTELTR"/> (<c>'b'</c>), <see cref="NPY_SIGNEDLTR"/> is
+    ///     <see cref="NPY_INTLTR"/> (<c>'i'</c>), <see cref="NPY_FLOATINGLTR"/> is <see cref="NPY_FLOATLTR"/> (<c>'f'</c>) and
+    ///     <see cref="NPY_COMPLEXLTR"/> is <see cref="NPY_CHARLTR"/> (<c>'c'</c>). The CHARACTER is the identity: compare
+    ///     values, never names. <c>ToString()</c> of a shared value is either name (.NET leaves the choice unspecified; on
+    ///     .NET 10 <c>'b'</c> prints <c>NPY_GENBOOLLTR</c>), and a <c>switch</c> can list only one member of each pair.
+    /// </para>
+    /// <para>
+    ///     <b>Valid type characters without a member.</b> <c>'p'</c>/<c>'P'</c> (pointer-sized integers) and <c>'n'</c>/<c>'N'</c>
+    ///     (NumPy 2's <c>intp</c>/<c>uintp</c>, the size of <c>size_t</c>) are accepted by <c>np.dtype</c> but have no member:
+    ///     NumPy 2.0 removed <c>NPY_INTPLTR</c>/<c>NPY_UINTPLTR</c> when <c>intp</c> moved from <c>'p'</c> to <c>'n'</c>, and
+    ///     defines all four explicitly in <c>arraytypes.c.src</c>. Cast the character to reach them:
+    ///     <c>((NPY_TYPECHAR)'n').ToTypeCode()</c>.
+    /// </para>
+    /// <para>
+    ///     <b>Platform-dependent meaning.</b> <see cref="NPY_LONGLTR"/>/<see cref="NPY_ULONGLTR"/> name C <c>long</c>: 32-bit on
+    ///     Windows, 64-bit on Linux and macOS. So <c>np.int32</c>'s character is <c>'l'</c> on Windows and <c>'i'</c> elsewhere,
+    ///     and <c>np.int64</c>'s is <c>'q'</c> on Windows and <c>'l'</c> elsewhere; use
+    ///     <see cref="NPTypeCodeExtensions.ToTypeCode(NPY_TYPECHAR)"/> and <see cref="NPTypeCodeExtensions.ToTYPECHAR"/> rather
+    ///     than fixed pairs.
+    /// </para>
+    /// <para>
+    ///     A character naming a dtype NumSharp cannot store (<see cref="NPY_CFLOATLTR"/> complex64, the string and void kinds,
+    ///     <see cref="NPY_OBJECTLTR"/>, <see cref="NPY_VSTRINGLTR"/>) is still a member, so code ported from NumPy compiles and
+    ///     the refusal happens where NumSharp meets the dtype (<see cref="np.dtype(string, bool, bool, System.Collections.Generic.IReadOnlyDictionary{string, object})"/>).
+    ///     NumSharp's own <see cref="NPTypeCode.Decimal"/> and <see cref="NPTypeCode.Char"/> have no character here: NumPy has
+    ///     no such dtypes.
+    /// </para>
+    /// </remarks>
+    /// <remarks>https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types</remarks>
     public enum NPY_TYPECHAR
     {
+        /// <summary><c>'?'</c>: bool (<see cref="NPTypeCode.Boolean"/>).</summary>
         NPY_BOOLLTR = '?',
+        /// <summary><c>'b'</c>: C <c>signed char</c>, int8 (<see cref="NPTypeCode.SByte"/>). Same value as the kind letter <see cref="NPY_GENBOOLLTR"/>.</summary>
         NPY_BYTELTR = 'b',
+        /// <summary><c>'B'</c>: C <c>unsigned char</c>, uint8 (<see cref="NPTypeCode.Byte"/>).</summary>
         NPY_UBYTELTR = 'B',
+        /// <summary><c>'h'</c>: C <c>short</c>, int16 (<see cref="NPTypeCode.Int16"/>).</summary>
         NPY_SHORTLTR = 'h',
+        /// <summary><c>'H'</c>: C <c>unsigned short</c>, uint16 (<see cref="NPTypeCode.UInt16"/>).</summary>
         NPY_USHORTLTR = 'H',
+        /// <summary><c>'i'</c>: C <c>int</c> (<c>np.intc</c>), always 32-bit (<see cref="NPTypeCode.Int32"/>). Same value as the kind letter <see cref="NPY_SIGNEDLTR"/>.</summary>
         NPY_INTLTR = 'i',
+        /// <summary><c>'I'</c>: C <c>unsigned int</c> (<c>np.uintc</c>), always 32-bit (<see cref="NPTypeCode.UInt32"/>).</summary>
         NPY_UINTLTR = 'I',
+        /// <summary><c>'l'</c>: C <c>long</c> (<c>np.long</c>): int32 on Windows, int64 on Linux and macOS.</summary>
         NPY_LONGLTR = 'l',
+        /// <summary><c>'L'</c>: C <c>unsigned long</c> (<c>np.ulong</c>): uint32 on Windows, uint64 on Linux and macOS.</summary>
         NPY_ULONGLTR = 'L',
+        /// <summary><c>'q'</c>: C <c>long long</c> (<c>np.longlong</c>), always 64-bit (<see cref="NPTypeCode.Int64"/>).</summary>
         NPY_LONGLONGLTR = 'q',
+        /// <summary><c>'Q'</c>: C <c>unsigned long long</c> (<c>np.ulonglong</c>), always 64-bit (<see cref="NPTypeCode.UInt64"/>).</summary>
         NPY_ULONGLONGLTR = 'Q',
+        /// <summary><c>'e'</c>: float16 (<see cref="NPTypeCode.Half"/>).</summary>
         NPY_HALFLTR = 'e',
+        /// <summary><c>'f'</c>: float32 (<see cref="NPTypeCode.Single"/>). Same value as the kind letter <see cref="NPY_FLOATINGLTR"/>.</summary>
         NPY_FLOATLTR = 'f',
+        /// <summary><c>'d'</c>: float64 (<see cref="NPTypeCode.Double"/>).</summary>
         NPY_DOUBLELTR = 'd',
+        /// <summary><c>'g'</c>: C <c>long double</c>; NumSharp stores it as float64 (<see cref="NPTypeCode.Double"/>), Windows' form on every host.</summary>
         NPY_LONGDOUBLELTR = 'g',
+        /// <summary><c>'F'</c>: complex64. NumSharp has no complex64, so <c>np.dtype('F')</c> refuses it.</summary>
         NPY_CFLOATLTR = 'F',
+        /// <summary><c>'D'</c>: complex128 (<see cref="NPTypeCode.Complex"/>).</summary>
         NPY_CDOUBLELTR = 'D',
+        /// <summary><c>'G'</c>: C <c>long double</c> complex; NumSharp stores it as complex128 (<see cref="NPTypeCode.Complex"/>).</summary>
         NPY_CLONGDOUBLELTR = 'G',
+        /// <summary><c>'O'</c>: object (Python objects). Not supported by NumSharp.</summary>
         NPY_OBJECTLTR = 'O',
+        /// <summary><c>'S'</c>: fixed-width bytes (<c>np.bytes_</c>, <c>|S5</c>). Not supported by NumSharp.</summary>
         NPY_STRINGLTR = 'S',
-        NPY_STRINGLTR2 = 'a',
+        /// <summary><c>'a'</c>: the deprecated alias of <see cref="NPY_STRINGLTR"/>; NumPy 2 accepts it with a DeprecationWarning ("Use the 'S' alias instead").</summary>
+        NPY_DEPRECATED_STRINGLTR2 = 'a',
+        /// <summary><c>'U'</c>: fixed-width Unicode (<c>np.str_</c>, <c>&lt;U5</c>), the slot of <see cref="NPTypeCode.String"/>. Not supported by <c>np.dtype</c>.</summary>
         NPY_UNICODELTR = 'U',
+        /// <summary><c>'V'</c>: void (raw bytes and structured records). Not supported by NumSharp.</summary>
         NPY_VOIDLTR = 'V',
+        /// <summary><c>'M'</c>: datetime64. Parses to the generic-unit descriptor, which has no NumSharp storage yet.</summary>
         NPY_DATETIMELTR = 'M',
+        /// <summary><c>'m'</c>: timedelta64. Parses to the generic-unit descriptor, which has no NumSharp storage yet.</summary>
         NPY_TIMEDELTALTR = 'm',
+        /// <summary>
+        ///     <c>'c'</c>: NumPy's one-byte string, <c>np.dtype('c')</c> = <c>S1</c> (<c>np.typecodes['Character']</c>). Not
+        ///     NumSharp's <see cref="NPTypeCode.Char"/>, and not complex: the complex KIND letter <see cref="NPY_COMPLEXLTR"/>
+        ///     shares the value.
+        /// </summary>
         NPY_CHARLTR = 'c',
 
         /*
-         * No Descriptor, just a define -- this let's
-         * Python users specify an array of integers
-         * large enough to hold a pointer on the
-         * platform
+         * New non-legacy DTypes
          */
-        NPY_INTPLTR = 'p',
-        NPY_UINTPLTR = 'P',
+
+        /// <summary><c>'T'</c>: NEP 55's variable-width <c>StringDType</c>. Not supported by NumSharp.</summary>
+        NPY_VSTRINGLTR = 'T',
+
+        /*
+         * Note, we removed `NPY_INTPLTR` due to changing its definition
+         * to 'n', rather than 'p'.  On any typical platform this is the
+         * same integer.  'n' should be used for the `np.intp` with the same
+         * size as `size_t` while 'p' remains pointer sized.
+         *
+         * 'p', 'P', 'n', and 'N' are valid and defined explicitly
+         * in `arraytypes.c.src`.
+         */
 
         /*
          * These are for dtype 'kinds', not dtype 'typecodes'
          * as the above are for.
          */
+
+        /// <summary>Kind letter <c>'b'</c>: booleans (<c>np.dtype(bool).kind</c>). Shares its value with the type character <see cref="NPY_BYTELTR"/>.</summary>
         NPY_GENBOOLLTR = 'b',
+        /// <summary>Kind letter <c>'i'</c>: signed integers. Shares its value with the type character <see cref="NPY_INTLTR"/>.</summary>
         NPY_SIGNEDLTR = 'i',
+        /// <summary>Kind letter <c>'u'</c>: unsigned integers. Not a type character: <c>np.dtype('u')</c> is "data type 'u' not understood".</summary>
         NPY_UNSIGNEDLTR = 'u',
+        /// <summary>Kind letter <c>'f'</c>: floating point. Shares its value with the type character <see cref="NPY_FLOATLTR"/>.</summary>
         NPY_FLOATINGLTR = 'f',
-        NPY_COMPLEXLTR = 'c'
+        /// <summary>Kind letter <c>'c'</c>: complex. Shares its value with the type character <see cref="NPY_CHARLTR"/> (<c>S1</c>), so as a TYPE character it names bytes, not complex.</summary>
+        NPY_COMPLEXLTR = 'c',
     };
 
 }

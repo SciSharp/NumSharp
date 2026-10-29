@@ -18,8 +18,10 @@ namespace NumSharp.Tests.DTypes
     ///     against <see cref="DType"/>, <see cref="DTypeMeta"/>, <see cref="DTypeFlags"/>, <c>np.dtypes</c> and the other
     ///     NumPy structs the DTypes folder ports (<see cref="ArrayMethod"/>, <see cref="ArrayMethodContext"/>,
     ///     <see cref="DatetimeMetaData"/>): every member
-    ///     NumPy names must exist here under NumPy's exact spelling, and every probed value, error, comparison, promotion,
-    ///     class attribute and casting resolution must equal NumPy's. No Python runs at test time.
+    ///     NumPy names must exist here under NumPy's exact spelling, the C enums NumSharp mirrors (<see cref="NPY_TYPES"/>,
+    ///     <see cref="NPY_TYPECHAR"/>, ...) must have the members, values and order of NumPy's headers, and every probed
+    ///     dtype string, value, error, comparison, promotion, class attribute and casting resolution must equal NumPy's.
+    ///     No Python runs at test time.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -323,6 +325,144 @@ namespace NumSharp.Tests.DTypes
                     problems.Add($"numpy.dtypes.{name}: no np.dtypes member '{name}'");
                 }
             }
+
+            AssertNoProblems(problems);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // NumPy's C enums
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     The C enums of NumPy's <c>ndarraytypes.h</c> that a NumSharp enum of the same name mirrors. A mirror must hold
+        ///     every NumPy member under NumPy's name and value, in NumPy's order, and nothing else, so a mirror that falls
+        ///     behind the header fails <see cref="CEnums_MirrorNumPysHeader"/> (as <see cref="NPY_TYPECHAR"/> had: it kept
+        ///     NumPy 1.x's <c>NPY_INTPLTR</c>/<c>NPY_UINTPLTR</c> and lacked NumPy 2's <c>NPY_VSTRINGLTR</c>).
+        /// </summary>
+        private static readonly Dictionary<string, Type> EnumPorts = new(StringComparer.Ordinal)
+        {
+            ["NPY_TYPES"] = typeof(NPY_TYPES),
+            ["NPY_TYPECHAR"] = typeof(NPY_TYPECHAR),
+            ["NPY_SCALARKIND"] = typeof(NPY_SCALARKIND),
+            ["NPY_ORDER"] = typeof(NPY_ORDER),
+            ["NPY_CASTING"] = typeof(NPY_CASTING),
+            ["NPY_DATETIMEUNIT"] = typeof(NPY_DATETIMEUNIT),
+        };
+
+        /// <summary>
+        ///     The <c>ndarraytypes.h</c> enums no NumSharp enum mirrors, and why. Each must stay without a NumSharp enum of its
+        ///     name: adding one turns the test red until its entry moves to <see cref="EnumPorts"/>.
+        /// </summary>
+        private static readonly Dictionary<string, string> NotPortedEnums = new(StringComparer.Ordinal)
+        {
+            ["NPY_SORTKIND"] = "np.sort / np.argsort take NumPy's kind strings ('quicksort', 'stable', ...)",
+            ["NPY_SELECTKIND"] = "np.partition takes NumPy's kind string 'introselect'",
+            ["NPY_SEARCHSIDE"] = "np.searchsorted takes NumPy's side strings 'left' / 'right'",
+            ["NPY_CLIPMODE"] = "np.take / np.put / np.choose take NumPy's mode strings 'raise' / 'wrap' / 'clip'",
+            ["NPY_CORRELATEMODE"] = "np.correlate / np.convolve take NumPy's mode strings 'valid' / 'same' / 'full'",
+            ["NPY_BUSDAY_ROLL"] = "NumSharp has no business-day functions (np.busday_offset)",
+        };
+
+        /// <summary>The shared reason of the four <see cref="NPY_ORDER"/> divergences.</summary>
+        private const string NpyOrderNumbering =
+            "NumSharp numbers NPY_ORDER from NPY_KEEPORDER = 0 to NPY_ANYORDER = 3, NumPy from NPY_ANYORDER = -1 to NPY_KEEPORDER = 2; " +
+            "renumbering changes what default(NPY_ORDER) means (K today, C under NumPy's values), so it needs an audit of every use";
+
+        /// <summary>
+        ///     Members of a mirrored enum that knowingly differ from NumPy (absent, or another value), and why. Each must still
+        ///     differ: matching NumPy turns the test red until its entry is removed.
+        /// </summary>
+        private static readonly Dictionary<(string Enum, string Member), string> EnumMemberDivergences = new()
+        {
+            [("NPY_ORDER", "NPY_ANYORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_CORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_FORTRANORDER")] = NpyOrderNumbering,
+            [("NPY_ORDER", "NPY_KEEPORDER")] = NpyOrderNumbering,
+            [("NPY_CASTING", "_NPY_ERROR_OCCURRED_IN_CAST")] = "a NumSharp cast that fails throws; no call returns NumPy's -1 sentinel",
+            [("NPY_CASTING", "NPY_SAME_VALUE_CASTING")] = "NumPy 2.4's 'same_value' casting is not implemented",
+        };
+
+        /// <summary>
+        ///     Members of a mirrored enum with no NumPy counterpart, and why. Each must stay absent from NumPy's header: if
+        ///     NumPy gains the name, the test turns red so the two meanings are reconciled.
+        /// </summary>
+        private static readonly Dictionary<(string Enum, string Member), string> EnumExtensions = new()
+        {
+            [("NPY_TYPES", "NUMSHARP_DECIMAL")] = "NumSharp's decimal dtype, numbered in NumPy's user-defined range",
+            [("NPY_TYPES", "NUMSHARP_CHAR")] = "NumSharp's char dtype, numbered in NumPy's user-defined range",
+        };
+
+        /// <summary>
+        ///     Every named enum of NumPy's <c>ndarraytypes.h</c> (the <c>c_enums</c> of the <c>members</c> record, which the
+        ///     generator reads from the header with C's value rules) is mirrored by the NumSharp enum of its name, with NumPy's
+        ///     members, values and declaration order and only the listed extensions, or is listed as not mirrored.
+        /// </summary>
+        [TestMethod]
+        public void CEnums_MirrorNumPysHeader()
+        {
+            var m = Of("members").Single();
+            var problems = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var numSharpEnums = typeof(DType).Assembly.GetTypes().Where(t => t.IsEnum).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+
+            foreach (var en in m.GetProperty("c_enums").EnumerateObject())
+            {
+                seen.Add(en.Name);
+                var numpy = en.Value.EnumerateArray().Select(p => (Name: p[0].GetString(), Value: p[1].GetInt64())).ToList();
+                if (!EnumPorts.TryGetValue(en.Name, out var port))
+                {
+                    if (!NotPortedEnums.ContainsKey(en.Name))
+                        problems.Add($"enum {en.Name}: a NumPy enum this test does not map (add it to EnumPorts or NotPortedEnums)");
+                    else if (numSharpEnums.Contains(en.Name))
+                        problems.Add($"enum {en.Name} now has a NumSharp mirror: move it from NotPortedEnums to EnumPorts");
+                    continue;
+                }
+
+                // An enum's fields come back from reflection in declaration (metadata) order, aliases included.
+                var mine = port.GetFields(BindingFlags.Public | BindingFlags.Static)
+                    .Select(f => (Name: f.Name, Value: Convert.ToInt64(f.GetRawConstantValue(), CultureInfo.InvariantCulture)))
+                    .ToList();
+                var mineByName = mine.ToDictionary(x => x.Name, x => x.Value, StringComparer.Ordinal);
+                var numpyNames = numpy.Select(x => x.Name).ToHashSet(StringComparer.Ordinal);
+
+                foreach (var (name, value) in numpy)
+                {
+                    bool present = mineByName.TryGetValue(name, out long mineValue);
+                    if (EnumMemberDivergences.ContainsKey((en.Name, name)))
+                    {
+                        if (present && mineValue == value)
+                            problems.Add($"{en.Name}.{name} now matches NumPy ({value}): remove it from EnumMemberDivergences");
+                    }
+                    else if (!present)
+                        problems.Add($"{en.Name}.{name} = {value}: missing from the NumSharp enum");
+                    else if (mineValue != value)
+                        problems.Add($"{en.Name}.{name}: NumSharp value {mineValue}, NumPy {value}");
+                }
+
+                foreach (var (name, _) in mine)
+                {
+                    bool extension = EnumExtensions.ContainsKey((en.Name, name));
+                    if (numpyNames.Contains(name))
+                    {
+                        if (extension)
+                            problems.Add($"{en.Name}.{name} is now NumPy's own name: remove it from EnumExtensions");
+                    }
+                    else if (!extension)
+                        problems.Add($"{en.Name}.{name}: not a member of NumPy's {en.Name} (removed from NumPy, or misspelled)");
+                }
+
+                // Order, over the members both sides have and agree on.
+                var compared = numpy.Select(p => p.Name)
+                    .Where(n => mineByName.ContainsKey(n) && !EnumMemberDivergences.ContainsKey((en.Name, n)))
+                    .ToList();
+                var comparedSet = compared.ToHashSet(StringComparer.Ordinal);
+                var mineOrder = mine.Select(x => x.Name).Where(comparedSet.Contains).ToList();
+                if (!compared.SequenceEqual(mineOrder, StringComparer.Ordinal))
+                    problems.Add($"{en.Name}: out of NumPy's order: NumPy [{string.Join(", ", compared)}], NumSharp [{string.Join(", ", mineOrder)}]");
+            }
+
+            foreach (var mapped in EnumPorts.Keys.Concat(NotPortedEnums.Keys).Where(k => !seen.Contains(k)))
+                problems.Add($"{mapped} is mapped here, but the oracle no longer records it");
 
             AssertNoProblems(problems);
         }
