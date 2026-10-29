@@ -25,9 +25,9 @@ selection or assignment by position stay on `NDArray`, `UnmanagedStorage` and `S
 and E2 are done (2026-10-28 / 29): `TensorEngine.cs` is split into partial files named after NumPy's sources, eleven of
 the twelve operation classes are `TensorEngine` members implemented by `DefaultEngine` (or, for np.insert / np.delete,
 internal members of `NDArray`), np.diagonal's view left the engine for `NDArray` and `Shape`, and the sort family and
-the max / min keywords are members; numpy.linalg is the `TensorEngine.Linalg` sub-engine (`LinalgEngine`, default
-`DefaultLinalgEngine`), and E3 is open. Progress goes into the
-[§9 state log](#9-state-log), newest entry first.
+the max / min keywords are members; numpy.linalg and numpy.fft are the `TensorEngine.Linalg` and `TensorEngine.Fft`
+sub-engines (`LinalgEngine` / `FftEngine`, defaults `DefaultLinalgEngine` / `DefaultFftEngine`; E3 on 2026-10-29), so
+PE is done. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -618,10 +618,12 @@ Where the operation classes and `DefaultEngine`'s Python-level statics go (E1):
   - Ten members leave `TensorEngine`: Cholesky, Det, Slogdet, Eig, Eigh, Inv, Solve, Lstsq, Qr and Svd. All ten shipped
     in 0.70.0 as public virtual members, so the move goes under Breaking Changes.
   - The products (Dot, Matmul, Inner, Vdot, Vecdot, Matvec, Vecmat) stay on `TensorEngine`: they are NumPy's C core.
-- [ ] **E3, `TensorEngine.Fft`.**
-  - A public abstract `FftEngine` holds numpy.fft's 18 functions. A public `DefaultFftEngine` holds the `_raw_fft`
-    statements of `Fourier/np.fft.RawFft.cs`, over `protected virtual` c2c / r2c / c2r kernels split out of
-    `PocketFFTDriver.Execute`.
+- [x] **E3, `TensorEngine.Fft`.** Done 2026-10-29 (`1b0ba640`, §9): `FftEngine` (numpy.fft's 16 computing functions)
+      with `DefaultFftEngine` over three `protected virtual` kernels; `fftshift` / `ifftshift` stay facades over the
+      array object.
+  - A public abstract `FftEngine` holds numpy.fft's 16 functions that compute (Appendix D: the two shifts roll the array
+    object). A public `DefaultFftEngine` holds the `_raw_fft` statements of `Fourier/np.fft.RawFft.cs`, over
+    `protected virtual` c2c / r2c / c2r kernels, each a call into `PocketFFTDriver.Execute` with its kind fixed.
   - `np.fft` (`FourierModule`) stays the facade.
   - An MKL, FFTW or cuFFT package derives from `DefaultFftEngine` and overrides the kernels.
 - [x] **E4, members that already exist** (done 2026-10-28, `df3a30c5`) move to the partial file of their NumPy Python
@@ -898,6 +900,32 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, PE: E3 done, so PE is.** `1b0ba640` on `strings`, landed by fast-forward:
+  - numpy.fft's statements were the `np.fft` module object's own method bodies (`FourierModule`). They are now the
+    public `DefaultFftEngine` (`Fourier/DefaultFftEngine*.cs`, beside the facades for ratchet R2; `np.fft.RawFft.cs`
+    moved in by git mv), and the public abstract `FftEngine` (`Backends/FftEngine.cs`) is the contract: numpy.fft's 16
+    functions that compute, NumPy's names, order and defaults. `fftshift` / `ifftshift` stay facades over np.roll
+    (Appendix D); the E3 text's "18 functions" was corrected to Appendix D's 16.
+  - `_raw_fft` ends in the kernel of its kind: `C2CKernel` (fft / ifft), `R2CKernel` (rfft_n_even / rfft_n_odd),
+    `C2RKernel` (irfft), each one call into `PocketFFTDriver.Execute` with `isReal` / `isForward` fixed (the driver,
+    public since 0.70.0, is unchanged). A kernel receives what NumPy's statements resolved: the length, the normalized
+    axis, the factor in the operand's real dtype, the checked out, and the two flags NumPy's loop selection needs (a
+    float32 / float16 call, a factor that is NumPy's integer 1). `TensorEngine.Fft` (beside `Linalg`) holds the assigned
+    engine or the shared default; null restores it; fftfreq / rfftfreq read the default engine's.
+  - Decided on the way: nested calls follow `DefaultLinalgEngine`'s rule (the np.fft facade where NumPy calls its module
+    function: hfft's irfft, ihfft's rfft, rfft2's rfftn, irfft2's irfftn); the N-D transforms keep running the engine's
+    own `_raw_fft` per axis, because only the statements carry a float32 operand's precision across NumSharp's
+    complex128 intermediate. hfft's facade keeps its class boundary in front of the call (the member's np.conjugate
+    would keep a matrix). The facades without a temporary of their own drop `[NDScoped]`; the members own it.
+  - Gates: the fft snapshot (138,720 calls) byte-identical to the parent `aee2e626` (the tool commit that taught it
+    np.fft); a 64-call null-operand, out= and numpy.matrix / chararray probe identical to the parent; a reflection diff
+    showing `FourierModule` and `PocketFFTDriver` unchanged, `TensorEngine.Fft` and the two new types; the build's
+    3,216 warning lines and 215 unresolved crefs unchanged; `FftSubEngineTests` (5: the default, a probe subclass
+    reached by all 16 functions for arrays created before the assignment, the nested compositions, a kernel provider
+    seeing the resolved arguments and returning its result, out= through the kernel); ratchet R1 lost the
+    `Fourier/np.fft.RawFft.cs` row.
+  - Next: P3 (its design section first).
 
 - **2026-10-29, P2's nineteenth to twenty-eighth families and P4's D4 fixes.** Commits on `strings`, developed in a
   scratch worktree and landed by fast-forward. The referees: the snapshot (`DOTNET_TieredCompilation=0` under

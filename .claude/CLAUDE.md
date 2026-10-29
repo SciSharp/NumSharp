@@ -1173,6 +1173,12 @@ assign it) or replaces numpy.linalg's statements. The ten kernels were public vi
 (`Cholesky`, `Det`, `Slogdet`, `Eig`, `Eigh`, `Inv`, `Solve`, `Lstsq`, `Qr`, `Svd`); phase PE's E2 of the np-layer
 dtype plan moved them.
 
+numpy.fft has the third settable property, `TensorEngine.Fft` (`Backends/FftEngine.cs`, numpy.fft's 16 computing
+functions as the abstract `FftEngine`; default `DefaultFftEngine`, NumPy's `_pocketfft.py` / `_helper.py` statements over
+three `protected virtual` kernels `C2CKernel` / `R2CKernel` / `C2RKernel` that run the managed pocketfft port; null
+restores the default). It needs no `Blas`: an MKL / FFTW / cuFFT provider overrides the kernels of a `DefaultFftEngine`
+subclass and assigns it (phase PE's E3).
+
 Three rules the review pinned, all with a reproduction (`docs/stale-docs/GEMM_PARITY.md` §9): read `Blas` into
 a **local** before calling it (test-then-call on a settable property was ~2 % NREs under concurrent
 `Disable()`); a failed `OpenBlasEngine.Enable` is a **no-op** (it used to unload the working library first,
@@ -5542,8 +5548,11 @@ portable only because ucrtbase, glibc and Apple agree on its sizes' twiddles (gr
 A larger corpus size can turn host-pinned.
 
 The facade is the `np.random` house shape — a lowercase property `np.fft` returning `FourierModule`,
-so `np.fft.fft(x)` ports Python verbatim. Only **three 1-D kernels** do real work (`c2c`/`r2c`/`c2r`
-in `PocketFFTDriver.Execute`); every N-D/2-D form composes 1-D transforms over `_raw_fftnd`, and
+so `np.fft.fft(x)` ports Python verbatim. Each `FourierModule` function but the two shifts is one call into the
+**`TensorEngine.Fft` sub-engine** (`Backends/FftEngine.cs`; the default `DefaultFftEngine` in
+`Fourier/DefaultFftEngine*.cs` holds NumPy's statements; hfft keeps its class boundary in the facade). Only **three 1-D
+kernels** do real work — `DefaultFftEngine`'s `protected virtual` `C2CKernel`/`R2CKernel`/`C2RKernel`, each a call into
+`PocketFFTDriver.Execute` (`c2c`/`r2c`/`c2r`); every N-D/2-D form composes 1-D transforms over `_raw_fftnd`, and
 `hfft`/`ihfft` are compositions of `irfft`/`rfft` + `np.conjugate` + the norm swap (as NumPy defines
 them). The **strided all-but-axis driver** (`PocketFFTDriver.cs`, port of `_pocketfft_umath.cpp`)
 does `copy_input` (gather `min(nin,n)` strided elements, zero-pad) → `plan.Exec(buf, fct, dir)` →
@@ -5557,7 +5566,7 @@ large-prime lengths), `.Plan.cs` (dispatch: mixed-radix when `largest_prime_fact
 cost-compare vs Bluestein, + a bounded 64-entry plan cache that is **bit-neutral** — NumPy's build
 has `POCKETFFT_CACHE_SIZE==0`, so caching only saves twiddle setup).
 
-**Layer-3 semantics are ported verbatim** (`np.fft.RawFft.cs`, port of `_pocketfft.py`; all probed
+**Layer-3 semantics are ported verbatim** (`DefaultFftEngine.RawFft.cs`, port of `_pocketfft.py`; all probed
 against 2.4.2): the norm factor `fct` (forward `None/backward→1`, `ortho→1/√n`, `forward→1/n`; the
 inverse swaps direction FIRST, so `ifft` divides by `n`); `n<1` → `ValueError("Invalid number of FFT
 data points ({n}) specified.")`; `n` truncates/zero-pads; `rfft` output `n//2+1`; `irfft`/`hfft`
@@ -5600,7 +5609,9 @@ ido>1: n=49/98/121/143/259/…, latent because the corpus n-sweep was only {4,12
 `Fuzz/corpus/fft.jsonl` (2,000 cases, floor 1,700; n-sweep now includes the perfect squares
 9/25/49/64/121/169 to gate every mixed-radix codelet's ido>1 branch pass3/5/7/8/11/passg — the bug
 class above; `OpRegistry` all 16 transforms + 4 helpers, `gen_oracle.gen_fft`, `MisalignedRegistry` F1) +
-**330** `Fourier`-namespace unit tests. See `Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper,RawFft}.cs`
+**330** `Fourier`-namespace unit tests (+ `FftSubEngineTests`, the sub-engine). See
+`Fourier/np.fft.{cs,Standard,Real,Hermitian,Helper}.cs` (facades),
+`Fourier/DefaultFftEngine{,.Standard,.Real,.Hermitian,.Helper,.RawFft,.Kernels}.cs`, `Backends/FftEngine.cs`
 + `Fourier/PocketFFT*.cs` (+ `*.Single.cs`); issues **#114** / **#569**.
 
 ### Polynomial package (`np.polynomial.*`) — evaluation family (U3)
@@ -7419,7 +7430,7 @@ code gives NumPy's text.
 | einsum | `LinearAlgebra/np.einsum.cs` (the facade), `Backends/TensorEngine.EinsumFunc.cs` (the abstract `Einsum`), `LinearAlgebra/Default.Einsum.cs` (DefaultEngine's: the checks, the view path, the pairwise fold over the matrix products), `LinearAlgebra/EinsumSubscripts.cs` (port of `einsum.cpp`'s parser) |
 | `np.linalg` module | `LinearAlgebra/linalg/np.linalg.cs` (the module class) and `np.linalg.{solve,inv,det,eig,svd,qr,cholesky,lstsq,norm,multi_dot,matrix_power,arrayapi}.cs` (facades: the class boundary and one call); NumPy's Python statements in `LinearAlgebra/linalg/DefaultLinalgEngine*.cs` beside them (the `TensorEngine.Linalg` sub-engine's default: `_assert_*` / `_commonType`, one partial per facade file; the `_umath_linalg` gufuncs are its `protected virtual` kernels, `Backends/Default/LinearAlgebra/DefaultLinalgEngine.Kernels.cs`; the contract is `Backends/LinalgEngine.cs`); np.dot's whole call `Backends/Default/Math/BLAS/Default.Dot*.cs` (`TensorEngine.Dot(x, y, out)`, the N-D route's per-dtype dot functions in `Default.Dot.NDMD.cs`); `Exceptions/LinAlgError.cs` |
 | Window functions | `Math/np.windows.cs` (bartlett/blackman/hamming/hanning/kaiser + the internal cephes `BesselI0`; fused via `np.evaluate`) |
-| Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs), `Fourier/np.fft.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
+| Fourier / FFT (`np.fft.*`) | `Fourier/np.fft.cs` (`FourierModule` facade), `Fourier/np.fft.{Standard,Real,Hermitian,Helper}.cs` (the 18 funcs: one call each into `TensorEngine.Fft`, the shifts over np.roll), `Backends/FftEngine.cs` (the sub-engine's contract, 16 members), `Fourier/DefaultFftEngine{,.Standard,.Real,.Hermitian,.Helper}.cs` (NumPy's statements), `Fourier/DefaultFftEngine.RawFft.cs` (layer-3 port: `_raw_fft`/`_raw_fftnd`/`_cook_nd_args`/`_swap_direction`), `Fourier/DefaultFftEngine.Kernels.cs` (the `protected virtual` c2c / r2c / c2r kernels), `Fourier/PocketFFTDriver.cs` (strided 1-D driver + FFTPACK packing), `Fourier/PocketFFT.{Twiddle,Complex,Real,Bluestein,Plan}.cs` (managed pocketfft engine); companion accessors `Math/np.{conjugate,real,imag,angle}.cs`. Design + parity ledger: `docs/FFT_PARITY.md` |
 | numpy.polynomial evaluation (`np.polynomial.*`) | `Polynomial/Package/np.polynomial{,.polynomial,.chebyshev,.legendre,.laguerre,.hermite,.hermite_e}.cs` (facades), `Polynomial/Package/NDPolyEval.cs` (NumPy's Python layer), `NDPolyEval.FromRoots.cs` (`polyvalfromroots`: NumPy's statements, the product-form rule, the object / str paths), `Backends/Kernels/ILKernelGenerator.Polynomial.cs` (step tables incl. the root product + `PyScalar`), `.Typing.cs` (NEP 50 per node, peeling), `.Emitter.cs` (typed emitter), `.Lanes.cs` (vector lane kinds for every dtype pair), `.ConstPool.cs` (weak-value regions), `.Eval.cs` (dispatcher/part/stage kernels, `PolyRootForm`). Plan + measurements: `docs/plans/numpy-polynomial.md` (U3); benchmark `benchmark/polynomial/` |
 | numpy.polynomial additive family + polyutils (U1) | `Polynomial/Package/np.polynomial.polyutils.cs` (`PolyUtilsModule` facade, incl. the generic tuple overloads), `Polynomial/Package/NDPolyNumber.cs` (`PolyNumber`: Python / NumPy-scalar / ndarray operand + NumPy's operator dispatch), `Polynomial/Package/NDPolySeries.cs` (as_series/trimseq/trimcoef/getdomain/mapparms/mapdomain/{p}add/sub/line/constants + the `PyNum` machine-number lane), `Backends/Kernels/Direct/DirectILKernelGenerator.PolySeries.cs` (trim/combine/tolerance/cast/scalarmath IL kernels + the fused mapparms kernel), CPython arithmetic in `ILKernelGenerator.Polynomial.cs` (`PyScalar`: `IntTrueDivide`, `ComplexQuotient`, NaN-priority `Float*`/`Complex*` helpers). Oracle `polyseries.jsonl` via `OpRegistry.PolySeries.cs` |
 | numpy.polynomial calculus family (U4) | `Polynomial/Package/NDPolyCalc.cs` (`{p}der`/`{p}int` driver: NumPy's prologue, one-buffer orchestration, the integral's lbnd correction, NumPy's result layouts, `PyVal1D`), `Backends/Kernels/Direct/DirectILKernelGenerator.PolyCalculus.cs` (`PolyCalcRoutines` recurrence tables + the per-(basis, direction, dtypes) whole-array kernel: load/convert/scale stage, recurrence stage, column blocks). Oracle `polycalc.jsonl` via `OpRegistry.PolySeries.cs`; benchmark `benchmark/polynomial/polycalc_*` |

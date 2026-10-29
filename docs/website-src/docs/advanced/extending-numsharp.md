@@ -152,6 +152,8 @@ The heaviest extension: change *which* implementation computes an operation. Num
 
 `np.linalg` has a second property on the same engine, `TensorEngine.Linalg` (a `LinalgEngine`, by default `DefaultLinalgEngine`): NumPy's `numpy.linalg` statements around ten kernels (`CholeskyKernel`, `SvdKernel`, ...) that ask `Blas`. A LAPACK library needs only `Blas`. To compute a factorisation another way while NumPy's argument checks, dtype rules and result layouts stay, derive from `DefaultLinalgEngine`, override its `protected virtual` kernel, and assign the instance to `TensorEngine.Linalg`; assigning `null` restores the default. Both properties sit on the cached engine, so an assignment reaches arrays that already exist.
 
+`np.fft` has the third, `TensorEngine.Fft` (an `FftEngine`, by default `DefaultFftEngine`): NumPy's `numpy.fft` statements around three kernels, `C2CKernel`, `R2CKernel` and `C2RKernel`, that run NumSharp's managed pocketfft port. To compute the transforms with MKL, FFTW or cuFFT while NumPy's length, norm, axis and `out=` checks and the N-D, real and Hermitian compositions stay, derive from `DefaultFftEngine`, override the kernels, and assign the instance to `TensorEngine.Fft`; `null` restores the default.
+
 ---
 
 ## 6. Weave lifetime at build time (`NumSharp.Build`)
