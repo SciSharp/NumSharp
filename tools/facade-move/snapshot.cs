@@ -115,6 +115,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using NumSharp;
+using NDExpr = NumSharp.Backends.Iteration.NDExpr;
 
 if (args.Length < 2)
 {
@@ -385,8 +386,23 @@ static class Snapshot
         // for, an object - a C# int / double / bool, a string (a char array searches its characters), null, NaN, a C#
         // int[] and an NDArray, so the comparison's broadcast and its refusals are reached.
         ContainsValue,
+        // np.evaluate: the expression, built over the operand (an embedded leaf, NDExpr.Arr; the positional overload's
+        // NDExpr.Input(0) over an operand list holding the operand alone): the identity and a computed child, and every
+        // root reduction the engine runs itself or delegates (sum, ptp, nanmin / nanmax, argmax / argmin, any / all), flat,
+        // along axis 0 and with keepdims (see EvalExprVariantLabels and MakeEvalExpr).
+        EvalExpr, EvalExprPositional, EvalOperands,
         Default, Unsupported,
     }
+
+    /// <summary>
+    ///     Whether a parameter belongs to a public static np.evaluate overload, whose <c>expr</c> (an
+    ///     <see cref="NDExpr"/> built over the operand) and <c>operands</c> (the positional overload's operand list) carry
+    ///     the operand: the first <see cref="NDArray"/> parameter after them is <c>out</c>, never the operand.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of np.evaluate.</returns>
+    private static bool IsEvaluate(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "evaluate";
 
     /// <summary>
     ///     Whether a parameter is NDArray.Contains's <c>value</c>: other members name an object parameter <c>value</c> with
@@ -1364,6 +1380,13 @@ static class Snapshot
                 // Built from the operand (MakeLexKeys); the factory here is never called. The base is the operand alone.
                 Add(LexKeysVariantLabels[0], () => null);
                 break;
+            case Role.EvalExpr:
+            case Role.EvalExprPositional:
+            case Role.EvalOperands:
+                // Built from the operand (MakeEvalExpr; the operand list is the operand alone); the factory here is never
+                // called. The base expression is the identity of the operand.
+                Add(role == Role.EvalOperands ? "one" : EvalExprVariantLabels[0], () => null);
+                break;
             case Role.ItemArg:
                 // Built by MakeItemArg (from the operand where a value must fit it); the factory here is never called.
                 Add(ItemArgLabels(p)[0], () => null);
@@ -2234,6 +2257,22 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.evaluate's expression carries the operand (MakeEvalExpr): an embedded NDExpr.Arr leaf, or NDExpr.Input(0)
+            // when the overload takes a positional operand list, which then holds the operand alone.
+            if (ps[i].ParameterType == typeof(NDExpr) && ps[i].Name == "expr" && IsEvaluate(ps[i]))
+            {
+                roles[i] = ps.Any(q => q.Name == "operands" && q.ParameterType == typeof(NDArray[]))
+                    ? Role.EvalExprPositional
+                    : Role.EvalExpr;
+                sawArray = true;
+                continue;
+            }
+            if (ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "operands" && IsEvaluate(ps[i]))
+            {
+                roles[i] = Role.EvalOperands;
+                sawArray = true;
+                continue;
+            }
             // np.einsum's operand list carries the operand too (MakeEinsumOps).
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "operands" && IsEinsum(ps[i]))
             {
@@ -2295,6 +2334,8 @@ static class Snapshot
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels.Length - 1,
             Role.EinsumOps => EinsumOpsVariantLabels.Length - 1,
             Role.LexKeys => LexKeysVariantLabels.Length - 1,
+            Role.EvalExpr or Role.EvalExprPositional => EvalExprVariantLabels.Length - 1,
+            Role.EvalOperands => 0,
             Role.ItemArg => ItemArgLabels(ps[i]).Length - 1,
             Role.AssignArg => AssignArgLabels(ps[i]).Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
@@ -2403,6 +2444,7 @@ static class Snapshot
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels[v],
             Role.EinsumOps => EinsumOpsVariantLabels[v],
             Role.LexKeys => LexKeysVariantLabels[v],
+            Role.EvalExpr or Role.EvalExprPositional => EvalExprVariantLabels[v],
             Role.ItemArg => ItemArgLabels(ps[p])[v],
             Role.AssignArg => AssignArgLabels(ps[p])[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
@@ -2432,6 +2474,9 @@ static class Snapshot
                     : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
                     : roles[i] == Role.LexKeys ? MakeLexKeys(LexKeysVariantLabels[0], operand)
+                    : roles[i] == Role.EvalExpr ? MakeEvalExpr(EvalExprVariantLabels[0], operand, positional: false)
+                    : roles[i] == Role.EvalExprPositional ? MakeEvalExpr(EvalExprVariantLabels[0], operand, positional: true)
+                    : roles[i] == Role.EvalOperands ? new[] { operand }
                     : roles[i] == Role.ItemArg ? MakeItemArg(ps[i], ItemArgLabels(ps[i])[0], operand)
                     : roles[i] == Role.AssignArg ? MakeAssignArg(ps[i], AssignArgLabels(ps[i])[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
@@ -2512,6 +2557,10 @@ static class Snapshot
                     case Role.AssignArg:
                         argv[p] = MakeAssignArg(ps[p], AssignArgLabels(ps[p])[v], operand);
                         break;
+                    case Role.EvalExpr:
+                    case Role.EvalExprPositional:
+                        argv[p] = MakeEvalExpr(EvalExprVariantLabels[v], operand, positional: roles[p] == Role.EvalExprPositional);
+                        break;
                     case Role.NditerOpAxes:
                         argv[p] = MakeNditerOpAxes(NditerOpAxesVariantLabels[v], operand);
                         break;
@@ -2562,6 +2611,15 @@ static class Snapshot
         try
         {
             object result = Invoke(m, instance, operand, argv);
+            // np.evaluate with a where= mask and no out= leaves the masked-off elements of its fresh result uninitialized
+            // (NumPy's ufunc rule), so their bytes differ from run to run: zero them first, and the line depends only on the
+            // elements the call defines.
+            if (result is NDArray fresh && outArray is null && m.DeclaringType == typeof(np) && m.Name == "evaluate")
+            {
+                int whereIndex = Array.FindIndex(ps, q => q.Name == "where");
+                if (whereIndex >= 0 && argv[whereIndex] is NDArray mask)
+                    np.copyto(fresh, 0, casting: "unsafe", where: np.logical_not(mask));
+            }
             outcome = Render(result, outArray);
             if (outArray is not null && !ReferenceEquals(result, outArray))
                 outcome += " OUT " + HashOf(outArray);
@@ -3720,6 +3778,60 @@ static class Snapshot
     /// <param name="operand">The pool operand.</param>
     /// <returns>A fresh key list (its first entry is the operand itself, but for "none").</returns>
     /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    /// <summary>The variants of np.evaluate's expression, the base first (see <see cref="MakeEvalExpr"/>).</summary>
+    private static readonly string[] EvalExprVariantLabels =
+    {
+        "arr", "arr*2", "sum", "sum_ax0", "ptp", "ptp_ax0", "ptp_kd", "ptp(arr*2)", "nanmin", "nanmin_ax0", "nanmax",
+        "nanmax_ax0_kd", "nanmin(arr*2)", "argmax", "argmax_ax0", "argmax_ax0_kd", "argmin", "argmin_ax0",
+        "argmax(arr*2)", "argmax(arr*2)_ax0", "argmin(arr*2)_ax0_kd", "any", "all_ax0",
+    };
+
+    /// <summary>
+    ///     Builds np.evaluate's expression over the operand: the identity ("arr"), a computed child ("arr*2", the operand
+    ///     times a weak 2), and the root reductions over the leaf or the computed child - sum, ptp, nanmin / nanmax,
+    ///     argmax / argmin, any / all - flat, along axis 0 ("_ax0") and with keepdims ("_kd"). The delegating kinds (ptp,
+    ///     nanmin / nanmax, argmax / argmin) reach the engine's own reductions over the materialized child, the leaf forms of
+    ///     argmax / argmin its streamed leaf route.
+    /// </summary>
+    /// <param name="label">One of <see cref="EvalExprVariantLabels"/>.</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <param name="positional">Build over <c>NDExpr.Input(0)</c> (the positional overload, whose operand list holds the
+    ///     operand) instead of an embedded <c>NDExpr.Arr(operand)</c>.</param>
+    /// <returns>The expression.</returns>
+    /// <exception cref="ArgumentException">An unknown label.</exception>
+    private static NDExpr MakeEvalExpr(string label, NDArray operand, bool positional)
+    {
+        NDExpr leaf = positional ? NDExpr.Input(0) : NDExpr.Arr(operand);
+        NDExpr twice = leaf * 2;
+        return label switch
+        {
+            "arr" => leaf,
+            "arr*2" => twice,
+            "sum" => NDExpr.Sum(leaf),
+            "sum_ax0" => NDExpr.Sum(leaf, 0),
+            "ptp" => NDExpr.Ptp(leaf),
+            "ptp_ax0" => NDExpr.Ptp(leaf, 0),
+            "ptp_kd" => NDExpr.Ptp(leaf, true),
+            "ptp(arr*2)" => NDExpr.Ptp(twice),
+            "nanmin" => NDExpr.NanMin(leaf),
+            "nanmin_ax0" => NDExpr.NanMin(leaf, 0),
+            "nanmax" => NDExpr.NanMax(leaf),
+            "nanmax_ax0_kd" => NDExpr.NanMax(leaf, 0, true),
+            "nanmin(arr*2)" => NDExpr.NanMin(twice),
+            "argmax" => NDExpr.ArgMax(leaf),
+            "argmax_ax0" => NDExpr.ArgMax(leaf, 0),
+            "argmax_ax0_kd" => NDExpr.ArgMax(leaf, 0, true),
+            "argmin" => NDExpr.ArgMin(leaf),
+            "argmin_ax0" => NDExpr.ArgMin(leaf, 0),
+            "argmax(arr*2)" => NDExpr.ArgMax(twice),
+            "argmax(arr*2)_ax0" => NDExpr.ArgMax(twice, 0),
+            "argmin(arr*2)_ax0_kd" => NDExpr.ArgMin(twice, 0, true),
+            "any" => NDExpr.Any(leaf),
+            "all_ax0" => NDExpr.All(leaf, 0),
+            _ => throw new ArgumentException($"unknown np.evaluate expression variant {label}"),
+        };
+    }
+
     private static NDArray[] MakeLexKeys(string label, NDArray operand)
     {
         long[] dims = operand.Shape.Dimensions;
