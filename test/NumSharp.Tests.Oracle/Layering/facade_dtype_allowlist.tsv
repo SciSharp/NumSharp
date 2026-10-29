@@ -33,7 +33,6 @@ Indexing/np.fill_diagonal.cs	3	0
 Indexing/np.indices.cs	0	3
 Indexing/np.ix_.cs	0	2
 Indexing/np.ndenumerate.cs	0	1
-Indexing/np.piecewise.cs	0	7
 Indexing/np.place.cs	1	0
 Indexing/np.put_along_axis.cs	2	1
 Indexing/np.putmask.cs	1	0
