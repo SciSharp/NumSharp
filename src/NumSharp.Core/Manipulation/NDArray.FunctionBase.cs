@@ -1058,14 +1058,19 @@ namespace NumSharp
         /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
         /// <returns>A fresh array without the listed positions (duplicates remove once).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>: NumPy's IndexError, naming the
+        ///     deletion axis for a one-element list and the keep mask's axis 0 for a longer one.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
         [NDScopedCovered]
         internal static NDArray Delete(NDArray arr, int[] obj, int? axis)
         {
+            var ctx = PrepareAxisContext(arr, axis);
+            // NumPy's np.asarray(obj) of one integer is its single-value path (`obj.size == 1 and obj.dtype.kind in "ui"`):
+            // the scalar deletion, whose bounds error names the deletion axis.
+            if (obj.Length == 1)
+                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj[0], ctx.axis));
             var longs = new long[obj.Length];
             for (int i = 0; i < obj.Length; i++) longs[i] = obj[i];
-            var ctx = PrepareAxisContext(arr, axis);
             return WithSourceOrder(arr, DeleteIndexArray(ctx.work, longs, ctx.axis));
         }
 
@@ -1079,12 +1084,16 @@ namespace NumSharp
         /// <param name="axis">The axis to delete along; <c>null</c> deletes from the flattened array.</param>
         /// <returns>A fresh array without the listed positions (duplicates remove once).</returns>
         /// <exception cref="AxisError"><paramref name="axis"/> is out of bounds.</exception>
-        /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException">A position outside <c>[-N, N)</c>: NumPy's IndexError, naming the
+        ///     deletion axis for a one-element list and the keep mask's axis 0 for a longer one.</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c> (see the number overload).</remarks>
         [NDScopedCovered]
         internal static NDArray Delete(NDArray arr, long[] obj, int? axis)
         {
             var ctx = PrepareAxisContext(arr, axis);
+            // One integer is NumPy's single-value path (see the int[] overload).
+            if (obj.Length == 1)
+                return WithSourceOrder(arr, DeleteSingleIndex(ctx.work, obj[0], ctx.axis));
             return WithSourceOrder(arr, DeleteIndexArray(ctx.work, (long[])obj.Clone(), ctx.axis));
         }
 
@@ -1297,7 +1306,9 @@ namespace NumSharp
         ///     The caller passes an array it owns (a copy of the user's).</param>
         /// <param name="axis">The normalized axis.</param>
         /// <returns>A fresh array without the indexed sub-arrays.</returns>
-        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>.</exception>
+        /// <exception cref="IndexOutOfRangeException">An index is outside <c>[-N, N)</c>: NumPy's text of its
+        ///     <c>keep[obj,] = False</c>, the first such index as given, on the keep mask's axis 0 whatever
+        ///     <paramref name="axis"/> is (<c>index 3 is out of bounds for axis 0 with size 3</c>).</exception>
         /// <remarks>Covered by <c>[NDScopedCovered]</c>: its callers are the <c>[NDScoped]</c> <c>delete</c>
         ///     overloads and the covered <see cref="DeleteSlice"/>, so the dense path's keep mask is released by the
         ///     caller's scope, exceptions included.</remarks>
@@ -1309,13 +1320,14 @@ namespace NumSharp
             if (indices.Length == 0)
                 return DuplicateArray(arr);
 
-            // Normalize + bounds-check.
+            // Normalize + bounds-check. NumPy checks these indices as the fancy index of `keep[obj,] = False`, a 1-D mask
+            // of the deletion axis's length, so its error names that mask's axis 0, not the deletion axis.
             for (int k = 0; k < indices.Length; k++)
             {
                 long idx = indices[k];
                 if (idx < -N || idx >= N)
                     throw new IndexOutOfRangeException(
-                        $"index {indices[k]} is out of bounds for axis {axis} with size {N}");
+                        $"index {indices[k]} is out of bounds for axis 0 with size {N}");
                 if (idx < 0) idx += N;
                 indices[k] = idx;
             }
