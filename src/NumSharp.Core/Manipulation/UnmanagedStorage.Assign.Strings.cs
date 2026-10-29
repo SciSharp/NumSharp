@@ -48,8 +48,9 @@ namespace NumSharp.Backends
         /// </remarks>
         private static unsafe void CopytoAssignStrings(NDArray dst, NDArray src, NDArray @where, NPY_CASTING casting)
         {
-            // A StringDType operand has its own route: its cells move only through the allocators (np.copyto.VString.cs).
-            if (src.Storage.IsVString || dst.Storage.IsVString)
+            // A reference-holding operand (PyDataType_REFCHK of either descriptor, as PyArray_GetDTypeTransferFunction asks;
+            // StringDType) has its own route: its cells move only through the allocators (UnmanagedStorage.Assign.VString.cs).
+            if (src.dtype.Meta.HasReferences || dst.dtype.Meta.HasReferences)
             {
                 CopytoAssignVStrings(dst, src, @where, casting);
                 return;

@@ -59,7 +59,7 @@ namespace NumSharp.Backends
 
             // The up-front cast of AssignRawScalar ("a different dtype than 'dst' ... more than one element ... not REFCHK").
             long size = dst.size;
-            NDArray none = size > 1 && !dst.Storage.IsVString ? NDArray.NoneForStore(dst.dtype) : null;
+            NDArray none = size > 1 && !dst.dtype.Meta.HasReferences ? NDArray.NoneForStore(dst.dtype) : null;
             try
             {
                 // broadcast_strides(..., "where mask", ...) of the masked assignment.
@@ -478,7 +478,7 @@ namespace NumSharp.Backends
             // value per selected element rather than once up front; the StringDType copy does exactly that over a 0-d array
             // of the number, after the descriptor rule (every number casts safely; 'no' / 'equiv' refuse) and the mask's
             // checks. The number's str() is what each element receives.
-            if (dst.Storage.IsVString)
+            if (dst.dtype.Meta.HasReferences)
             {
                 using var number = new NDArray((DType)srcType, Shape.NewScalar(), false);
                 Buffer.MemoryCopy(srcData, (byte*)number.Address, srcType.SizeOf(), srcType.SizeOf());

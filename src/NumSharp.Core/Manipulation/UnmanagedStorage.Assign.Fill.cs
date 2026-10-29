@@ -40,8 +40,9 @@ namespace NumSharp.Backends
             // NumPy (convert.c :: PyArray_FillWithScalar): writeability is checked FIRST, through the same
             // guard every other write path uses.
             NumSharpException.ThrowIfNotWriteable(self.Shape);
-            // A StringDType array stores the value through its setitem once, then into every element (NDVStringMove.Fill).
-            if (self.Storage.IsVString)
+            // A StringDType array stores the value through its setitem once, then into every element (NDVStringMove.Fill):
+            // raw_array_assign_scalar's transfer of a reference-holding descriptor (PyDataType_REFCHK) copies each string.
+            if (self.dtype.Meta.HasReferences)
             {
                 Backends.Strings.NDVStringMove.Fill(self, value);
                 return;

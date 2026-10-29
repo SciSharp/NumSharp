@@ -52,7 +52,7 @@ namespace NumSharp.Backends
 
             // AssignArray: a redundant self-copy (the same cells, an equal descriptor, the same layout) returns before every
             // check, the read-only one included.
-            if (!scalar && src.Storage.IsVString && dst.Storage.IsVString && from.Equals(to)
+            if (!scalar && from.Meta.HasReferences && to.Meta.HasReferences && from.Equals(to)
                 && FirstCell(src) == FirstCell(dst) && SameLayout(src.Shape, dst.Shape))
                 return;
 
@@ -62,7 +62,7 @@ namespace NumSharp.Backends
             if (!DTypeCasting.CanCastTypeTo(from, to, casting))
                 throw NDStringCasting.InvalidCast(from, to, casting, scalar);
 
-            if (!dst.Storage.IsVString)
+            if (!to.Meta.HasReferences)
             {
                 // A StringDType source into another dtype (the rule passed): NumPy's remaining checks, then the conversion of
                 // exactly the elements its transfer converts.
@@ -87,7 +87,7 @@ namespace NumSharp.Backends
 
             // The source in the destination's descriptor: a StringDType source is copied as it is (the copy core applies the
             // NA rules between two StringDType descriptors), any other one is converted.
-            NDArray value = src.Storage.IsVString ? src : src.astype(to, true, 'K', "unsafe");
+            NDArray value = from.Meta.HasReferences ? src : src.astype(to, true, 'K', "unsafe");
             try
             {
                 if (@where is null)
