@@ -27,7 +27,8 @@ the twelve operation classes are `TensorEngine` members implemented by `DefaultE
 internal members of `NDArray`), np.diagonal's view left the engine for `NDArray` and `Shape`, and the sort family and
 the max / min keywords are members; numpy.linalg and numpy.fft are the `TensorEngine.Linalg` and `TensorEngine.Fft`
 sub-engines (`LinalgEngine` / `FftEngine`, defaults `DefaultLinalgEngine` / `DefaultFftEngine`; E3 on 2026-10-29), so
-PE is done. Progress goes into the [§9 state log](#9-state-log), newest entry first.
+PE is done. P3's design is written ([§7](#p3-the-array-object-and-values-entering-storage-k4-153-lines-in-52-files)),
+its batches open. Progress goes into the [§9 state log](#9-state-log), newest entry first.
 
 **The engine layout (the owner's decision of 2026-10-28, D1 in [§5](#5-decisions-for-the-owner)).** Every NumPy function
 NumSharp moves that computes values becomes a `TensorEngine` member. Those NumPy writes in Python are declared in
@@ -670,21 +671,111 @@ The gates are §6's, plus three rules:
 
 ### P3. The array object and values entering storage (K4, 153 lines in 52 files)
 
-- [ ] **Design first**, as its own section of this plan before any code:
-  - NumPy's `setitem` / `getitem` slots on `DTypeMeta` (`PyArray_Pack`), implemented by each class (the numeric
-    builtins by the current `NPTypeCode` switches, the text classes by `Backends/Strings`), and the slots the same
-    files need beside them: `fill` (np.arange), the byte-order copy NumPy calls `copyswapn` (np.frombuffer, np.fromfile,
-    the `.npy` reader), the zero fill (`get_fill_zero_loop`);
-  - one coercion path for array creation, `UnmanagedStorage.Coercion.cs` (the `array_coercion.c` port that today lives
-    in `Polynomial/Package/NDPolySequence.cs`);
-  - the array object's homes for the functions P3 moves ([§1](#1-what-out-of-np-has-to-mean),
-    [Appendix D](#appendix-d-where-every-numpy-function-lives)): `UnmanagedStorage.Assign.cs`, `.ItemSelection.cs`,
-    `.Ctors.cs`, `.Buffer.cs`, and the `NDArray` partials named after NumPy's source files.
-- [ ] Then creation (`np.array`, `np.asarray`, `np.full`, `np.ones`, `np.frombuffer`, ...), assignment (`np.copyto`,
-      `np.place`, `np.put`, `np.putmask`, `fill`, the indexers), IO (`np.loadtxt`, `np.fromfile`, `np.tofile`, the text
-      codecs): each body into its array-object home, each dtype line into the `DType` slots. No `TensorEngine` member is
-      added, except for the two K4 files that compute: `np.vander` (`TensorEngine.TwoDimBase.cs`) and `np.trim_zeros`
-      (`TensorEngine.FunctionBase.cs`).
+- [x] **Design first** (2026-10-29, at `1fcb4663`): below, with the per-file table in
+      [Appendix E](#appendix-e-p3s-lines-by-file).
+- [ ] Then the batches of the design, in its order.
+
+**P3's design (2026-10-29).** P3 owns the R1 lines of 80 facade files (P5's classification): 702 lines, 469 numeric and
+233 text. K4 adds 20 text lines in nine files R1 does not scan (the text readers of `IO/TextReading/`,
+`IO/PyLiteral.cs`, `DTypes/StringDTypeMeta.cs`, two `RandomSampling/` files, `Utilities/PyUnicode.cs`). A script sorts
+each line by the mechanism NumPy uses for the same decision (`classify_p3.py`, over R1's own line dump; a guide, each
+batch re-reads its lines):
+
+| Mechanism | Lines (text) | NumPy | Where it goes |
+|---|---|---|---|
+| typed dispatch | 301 (0) | none: the descriptor carries the item size, the slots carry the per-type code | moves with its body into the array object's storage partial (B); keyed on `TypeCode`, the storage discriminator |
+| the storage class asked by name | 89 (89) | the descriptor's fields and slots | the slot that answers the question (item size, `HasReferences`, `copyswapn`) |
+| reference-holding moves | 69 (69) | `PyDataType_REFCHK` chooses the within-dtype transfer function | one `HasReferences` decision per array-object function, routing to the `StringDType` moves that exist |
+| index kind | 64 (0) | `prepare_index`'s `PyArray_ISBOOL` and integer checks | stays (C): the role of an index operand, not the values of the array |
+| dtype= requests | 43 (0) | `if dtype is not None and arr.dtype != dtype` | moves with its body (A) |
+| per-dtype values | 37 (0) | a Python value stored (`1`, `0`) or read (`float(a)`) | `setitem` / `getitem` |
+| stored Python values | 28 (26) | `setitem`, through `PyArray_Pack` | `setitem` |
+| text casts | 23 (23) | the casting impls' `resolve_descriptors` and loops | the `CastingImpl` objects of `DTypes/` |
+| weak literals | 11 (0) | `result_type` with Python scalars (NEP 50) | `DTypePromotion`'s weak path |
+| codecs and Python-object helpers | 10 (10) | the IO code's own codec calls | stays with the IO code (not a dtype decision) |
+| discovery | 7 (7) | `discover_descr_from_pyobject` | that slot (it exists), through the coercion path |
+| truth | 3 (3) | ArrFuncs `nonzero` | `nonzero` |
+| element reads | 2 (2) | `getitem` | `getitem` |
+| ufunc refusals | 2 (2) | the ufunc's type resolution | np.vander becomes a member (batch 9) |
+| not classified | 13 | | read in its batch |
+
+**The slots.** On `DTypeMeta`, NumPy's names; internal until a user-defined DType needs them public.
+- `setitem(DType descr, object value, byte* item)` and `getitem(DType descr, byte* item)`, NEP 42's slots 7 and 8
+  (`PyArrayDTypeMeta_SetItem` / `GetItem`):
+  - the numeric builtins by today's `PyArray_Pack` port, `ReductionInitial.PackStore` and `Box`, which move from
+    `Backends/Default/Math/Reduction/` into `LegacyBuiltinDTypeMeta`;
+  - `S` / `U` by `NDStringStorage.WriteElement` and the element reader of `UnmanagedStorage.Strings.cs`;
+  - `StringDType` through its allocator (`SetVStringItem`, `NDVStringMove.StoreScalar`).
+  `PyArray_Pack` itself (a known scalar, a 0-d array's cast, discovery, then `setitem`) becomes
+  `UnmanagedStorage.Coercion.cs`'s `Pack`.
+- `copyswapn`, the legacy ArrFuncs slot that `PyArray_FromBuffer`'s byte-swapped reads, `PyArray_FromFile` and the
+  `.npy` reader still call: by item size for numbers (by half for complex), per 4-byte unit for `U`, nothing for `S`.
+  `StringDType` has none: NumPy refuses a buffer for a dtype that holds references.
+- `fill`, ArrFuncs (`PyArray_Arange` fills through it): the builtins' ramps of np.arange; null for the text classes,
+  which is NumPy's refusal.
+- `nonzero`, ArrFuncs (`StringDType` defines it too): the truth `np.argwhere` and np.trim_zeros read, today
+  `NDStringTruth`'s nonzero flavor.
+- `HasReferences` (exists; `VStringDTypeMeta` answers true) with `get_clear_loop` / `get_fill_zero_loop` (exist, null
+  for every class): the question NumPy's `PyDataType_REFCHK` asks. `StringDType`'s clear loop is the allocator's free.
+- The casting impls (exist as `CastingImpl`; their `get_strided_loop` is unused): the text casts' refusals
+  (`NDStringCasting.InvalidCast`, `NDStringCopy.ThrowIfCannotConvert`) and loops (`NDTextConversion.Convert`,
+  `NDStringTruth`'s cast flavor) become `StringCastingImpls` / `VStringCastingImpls`' `resolve_descriptors` and loops,
+  reached through `DTypeCasting`.
+
+A slot replaces a test of the dtype's name, never a typed kernel. It runs once per call or once per Python value, as
+NumPy's do; bulk moves keep their IL kernels.
+
+**The homes** ([Appendix D](#appendix-d-where-every-numpy-function-lives)):
+- `UnmanagedStorage.ItemSelection.cs` (`item_selection.c`, `compiled_base.c`'s `arr_place`),
+  `UnmanagedStorage.Assign.cs` (`array_assign_array.c`, `array_assign_scalar.c`, `PyArray_CopyObject`),
+  `UnmanagedStorage.Coercion.cs` (`array_coercion.c`), `UnmanagedStorage.Ctors.cs` (`ctors.c`),
+  `UnmanagedStorage.Buffer.cs` (exists; `PyArray_FromBuffer`), and a new `UnmanagedStorage.Mapping.cs` for the typed
+  fetch and store of `mapping.c` the indexers dispatch today.
+- The `NDArray` partials named after NumPy's sources (`NDArray.Multiarray.cs`, `.FunctionBase.cs`, `.Numeric.cs`,
+  `.ShapeBase.cs`, `.TwoDimBase.cs`, `.IndexTricks.cs`, `.ArrayPad.cs`, `.TypeCheck.cs`, ...): NumPy's statements of the
+  functions that are Python in NumPy.
+- A partial stays beside its facades while its statements call np.*, as `DefaultEngine`'s did (C3; R2 counts np.* calls
+  under `Backends/`). P6 moves it under `Backends/Unmanaged/`.
+- R1 learns the home names: Appendix D's `NDArray.<NumPy source>.cs` partials hold NumPy's statements (A), so the
+  scanner leaves them out, as the names of the `Default.*.cs` partials beside the facades leave those out.
+  `NDArray.FunctionBase.cs`'s hand pin (`32478d0c`) goes with that.
+
+**The batches**, in order. Each is a pure move first, then the slot conversion as its own commit; snapshot-identical
+(§6), the family's string-oracle sections green, R1 down, R2 not up. The snapshot tool learns each family's arguments
+first, as it did for np.fft.
+1. **Slots.** `setitem`, `getitem`, `copyswapn`, `fill` and `nonzero` declared on `DTypeMeta` and implemented by every
+   class from today's code, no caller yet. Gate: a matrix over every class (a store read back, a double swap,
+   np.arange's ramps, `nonzero` against np.nonzero) beside the paths they come from.
+2. **Item selection** (10 files, 57 lines): np.take, np.put, np.putmask, np.place, np.repeat, np.choose, np.compress,
+   np.resize and the ndarray members into `UnmanagedStorage.ItemSelection.cs`; the `StringDType` routes behind one
+   `HasReferences` decision per function.
+3. **Assignment** (6 files, 46 lines): np.copyto (three files), ndarray.fill, np.concatenate's text path and the store
+   behind the indexers into `UnmanagedStorage.Assign.cs`; the text casts through the casting impls.
+4. **Coercion** (6 files, 71 lines): np.array, np.asarray, np.asanyarray, the string-array overload, `NDArray.Scalar`
+   and the implicit conversions from C# arrays into `UnmanagedStorage.Coercion.cs`, with `NDPolySequence.cs`'s port and
+   `NDStringArrays`' text collection; discovery through `discover_descr_from_pyobject`, stores through `setitem`.
+5. **Constructors** (6 files, 60 lines): np.empty, np.zeros, np.ones, np.full and their `_like` forms, np.ndarray,
+   np.eye's ones and np.arange (through `fill`) into `UnmanagedStorage.Ctors.cs`.
+6. **Buffers and IO** (12 files, 175 lines): np.frombuffer into `UnmanagedStorage.Buffer.cs` (`copyswapn` for a
+   non-native descriptor); np.fromfile, np.fromstring, ndarray.tofile, tobytes, getfield and byteswap; np.loadtxt's
+   converters into `IO/TextReading/` (NumPy's `textreading/conversions.c`: a converter per type, the generic one through
+   `setitem`).
+7. **NumPy's Python functions of the array object** (22 files, 152 lines) into their `NDArray` homes: np.where,
+   np.select, np.piecewise, np.extract and np.delete's rest; np.pad (`ArrayPad`); np.r_, np.ix_ and np.fill_diagonal
+   (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`); np.take_along_axis and np.put_along_axis
+   (`ShapeBase`); np.real and np.imag (`TypeCheck`); np.asarray_chkfinite; np.mgrid, np.ogrid, np.apply_along_axis and
+   np.ravel_multi_index's lines.
+8. **The indexers** (8 files, 98 lines; `Selection/NDArray.Indexing.*.cs`, NumPy's `mapping.c`; already the array
+   object): the `StringDType` routes behind `HasReferences`, the typed fetch / store switches into
+   `UnmanagedStorage.Mapping.cs`. The index-kind tests stay.
+9. **The computing functions in P3's files** (5 files, 30 lines) become `TensorEngine` members (Appendix D):
+   np.linspace, np.logspace and np.geomspace (`TensorEngine.CoreFunctionBase.cs`), np.vander
+   (`TensorEngine.TwoDimBase.cs`), np.trim_zeros (`TensorEngine.FunctionBase.cs`).
+10. **What stays** (5 files, 13 lines, and the index-kind tests of the other batches), listed by R1 after P3 with its
+    reason: the C# conversions (`NDArray.Implicit.ValueTypes.cs`, `NDArray.ToString.cs`: a C# cast is not a NumPy
+    statement; they call `getitem` and the coercion path), the DType layer's own files (`np.dtype.cs`, `np.dtypes.cs`)
+    and the typed iterator's type check (`np.ndenumerate.cs`); outside R1, the IO codecs, the Python-object helpers,
+    `DTypes/`' own slot code and np.random's text refusals.
 
 ### P4. numpy.polynomial and numpy.ma (K5, 61 lines in 14 files)
 
@@ -900,6 +991,25 @@ candidate.
 ---
 
 ## 9. State log
+
+- **2026-10-29, P3: the design.** Written into P3's section and Appendix E, before any code (the plan's rule):
+  - Scope at `1fcb4663`: R1 counts 702 lines (469 numeric, 233 text) in P3's 80 facade files; K4 adds 20 text lines in
+    nine files R1 does not scan. `classify_p3.py` (scratchpad `p3/`) sorts each line of R1's own dump by the mechanism
+    NumPy uses for the same decision: typed dispatch 301, the storage class asked by name 89, reference-holding moves
+    69, index kind 64, dtype= requests 43, per-dtype values 37, stored Python values 28, text casts 23, weak literals
+    11, codecs 10, discovery 7, truth 3, element reads 2, ufunc refusals 2, unclassified 13.
+  - The slots: `setitem` / `getitem` (NEP 42's 7 and 8, from today's `PyArray_Pack` port and the text stores),
+    `copyswapn`, `fill` and `nonzero` (the legacy ArrFuncs NumPy still calls), `HasReferences` with the clear and
+    zero-fill loops made live, and the casting impls' loops for the text casts. A slot replaces a test of the dtype's
+    name, never a typed kernel.
+  - The homes: Appendix D's `UnmanagedStorage` partials (with a new `.Mapping.cs` for the indexers' typed fetch and
+    store) and the `NDArray` partials named after NumPy's sources; a partial stays beside its facades while it calls
+    np.* (C3); R1 learns the home names and leaves those partials out.
+  - Ten batches: the slots first; then item selection, assignment, coercion, the constructors, buffers and IO, NumPy's
+    Python functions of the array object, the indexers, the computing functions in P3's files (np.linspace /
+    np.logspace / np.geomspace, np.vander, np.trim_zeros as `TensorEngine` members), and what stays (13 lines in five
+    files, the index-kind tests, the IO codecs).
+  - Next: batch 1 (the slots).
 
 - **2026-10-29, PE: E3 done, so PE is.** `1b0ba640` on `strings`, landed by fast-forward:
   - numpy.fft's statements were the `np.fft` module object's own method bodies (`FourierModule`). They are now the
@@ -2764,3 +2874,104 @@ The memory and layout work under these members:
   slots, P3): 12 (NumSharp 9);
 - dtype routines (the DType layer; `iscomplexobj`, `isrealobj` and `datetime_as_string` included): 14 (NumSharp 12);
 - other: 11 (NumSharp 3), numpy.matrix's asmatrix and bmat, printoptions, LinAlgError, the utilities and the test runners, of which NumSharp has the first three.
+
+## Appendix E. P3's lines by file
+
+R1's lines of P3's 80 facade files at `1fcb4663` (`LayeringScanner`'s own dump), each sorted by `classify_p3.py` into
+the mechanism NumPy uses for the same decision (the table of P3's design names them), and the batch of the design that
+moves the file. Then the nine files with K4 text lines that R1 does not scan.
+
+| File | numeric | text | Lines decide | Batch |
+|---|---|---|---|---|
+| `Indexing/np.choose.cs` | 7 | 7 | class 4, refs 3, weak 2, index 1, other 1, request 1, typed 1, value 1 | 2 |
+| `Indexing/np.compress.cs` | 1 | 0 | index 1 | 2 |
+| `Indexing/np.place.cs` | 2 | 9 | cast 4, class 3, index 2, refs 2 | 2 |
+| `Indexing/np.put.cs` | 0 | 2 | refs 2 | 2 |
+| `Indexing/np.putmask.cs` | 2 | 4 | index 2, refs 2, cast 1, class 1 | 2 |
+| `Indexing/np.take.FancyAxis.cs` | 1 | 0 | index 1 | 2 |
+| `Indexing/np.take.cs` | 4 | 3 | class 2, other 2, index 1, refs 1, value 1 | 2 |
+| `Manipulation/NDArray.resize.cs` | 0 | 3 | refs 3 | 2 |
+| `Manipulation/np.repeat.cs` | 9 | 2 | typed 9, refs 2 | 2 |
+| `Manipulation/np.resize.cs` | 0 | 1 | refs 1 | 2 |
+| `Creation/np.concatenate.Strings.cs` | 0 | 4 | class 3, cast 1 | 3 |
+| `Creation/np.concatenate.cs` | 2 | 0 | request 2 | 3 |
+| `Manipulation/NDArray.fill.cs` | 1 | 3 | setitem 2, class 1, refs 1 | 3 |
+| `Manipulation/np.copyto.Strings.cs` | 2 | 15 | cast 12, nonzero 2, index 1, other 1, setitem 1 | 3 |
+| `Manipulation/np.copyto.VString.cs` | 0 | 7 | refs 6, cast 1 | 3 |
+| `Manipulation/np.copyto.cs` | 5 | 7 | class 5, request 3, cast 2, other 2 | 3 |
+| `Casting/Implicit/NDArray.Implicit.Array.cs` | 48 | 3 | typed 48, discover 1, getitem 1, setitem 1 | 4 |
+| `Creation/NDArray.Scalar.cs` | 0 | 5 | refs 2, setitem 2, class 1 | 4 |
+| `Creation/np.array.cs` | 3 | 5 | setitem 3, typed 2, class 1, discover 1, request 1 | 4 |
+| `Creation/np.array.string.cs` | 0 | 1 | setitem 1 | 4 |
+| `Creation/np.asanyarray.cs` | 0 | 4 | discover 2, setitem 2 | 4 |
+| `Creation/np.asarray.cs` | 0 | 2 | class 1, discover 1 | 4 |
+| `Creation/np.arange.cs` | 18 | 0 | typed 15, request 2, index 1 | 5 |
+| `Creation/np.eye.cs` | 4 | 1 | typed 4, class 1 | 5 |
+| `Creation/np.full.cs` | 3 | 8 | refs 4, setitem 3, class 2, request 2 | 5 |
+| `Creation/np.full_like.cs` | 1 | 4 | refs 2, class 1, request 1, setitem 1 | 5 |
+| `Creation/np.ndarray.cs` | 1 | 10 | class 6, refs 4, request 1 | 5 |
+| `Creation/np.ones.cs` | 4 | 6 | refs 4, typed 4, class 1, setitem 1 | 5 |
+| `APIs/np.fromfile.cs` | 0 | 6 | class 3, codec 2, refs 1 | 6 |
+| `APIs/np.fromstring.cs` | 0 | 2 | class 1, refs 1 | 6 |
+| `APIs/np.loadtxt.Parsers.cs` | 15 | 0 | typed 15 | 6 |
+| `APIs/np.loadtxt.Sinks.cs` | 0 | 24 | refs 8, codec 5, setitem 5, class 3, discover 2, other 1 | 6 |
+| `APIs/np.loadtxt.cs` | 0 | 2 | class 1, other 1 | 6 |
+| `APIs/np.savetxt.cs` | 1 | 1 | class 1, value 1 | 6 |
+| `APIs/np.tofile.cs` | 6 | 5 | typed 4, codec 3, value 2, class 1, getitem 1 | 6 |
+| `Casting/NDArray.byteswap.cs` | 1 | 1 | class 1, value 1 | 6 |
+| `Casting/NDArray.getfield.cs` | 0 | 1 | class 1 | 6 |
+| `Casting/NDArray.tobytes.cs` | 0 | 1 | refs 1 | 6 |
+| `Creation/np.frombuffer.Strings.cs` | 0 | 4 | class 3, refs 1 | 6 |
+| `Creation/np.frombuffer.cs` | 93 | 12 | typed 85, class 12, request 8 | 6 |
+| `APIs/np.where.cs` | 8 | 2 | request 4, index 3, class 2, other 1 | 7 |
+| `Creation/np.asarray_chkfinite.cs` | 1 | 0 | value 1 | 7 |
+| `Creation/np.mgrid.cs` | 1 | 0 | request 1 | 7 |
+| `Creation/np.ogrid.cs` | 1 | 0 | request 1 | 7 |
+| `Creation/np.r_.cs` | 8 | 1 | weak 5, request 2, class 1, index 1 | 7 |
+| `Indexing/np.diag.cs` | 0 | 1 | refs 1 | 7 |
+| `Indexing/np.extract.cs` | 1 | 0 | index 1 | 7 |
+| `Indexing/np.fill_diagonal.cs` | 0 | 3 | refs 2, setitem 1 | 7 |
+| `Indexing/np.indices.cs` | 3 | 0 | request 3 | 7 |
+| `Indexing/np.ix_.cs` | 2 | 0 | index 2 | 7 |
+| `Indexing/np.piecewise.cs` | 7 | 0 | value 6, index 1 | 7 |
+| `Indexing/np.put_along_axis.cs` | 1 | 2 | refs 2, index 1 | 7 |
+| `Indexing/np.ravel_multi_index.cs` | 1 | 0 | index 1 | 7 |
+| `Indexing/np.select.cs` | 10 | 3 | weak 4, class 3, index 3, request 3 | 7 |
+| `Indexing/np.take_along_axis.cs` | 9 | 1 | typed 8, index 1, refs 1 | 7 |
+| `Manipulation/NDArray.FunctionBase.cs` | 8 | 7 | refs 5, typed 3, value 3, class 2, index 2 | 7 |
+| `Manipulation/np.apply_along_axis.cs` | 1 | 0 | request 1 | 7 |
+| `Manipulation/np.delete.cs` | 20 | 0 | typed 20 | 7 |
+| `Manipulation/np.pad.cs` | 33 | 12 | typed 23, class 7, value 5, setitem 4, index 2, request 2, other 1, refs 1 | 7 |
+| `Math/NDArray.ComplexAccessors.cs` | 2 | 1 | value 2, class 1 | 7 |
+| `Math/np.imag.cs` | 1 | 0 | value 1 | 7 |
+| `Math/np.real.cs` | 1 | 0 | value 1 | 7 |
+| `Selection/NDArray.Indexing.Masking.cs` | 0 | 3 | class 2, refs 1 | 8 |
+| `Selection/NDArray.Indexing.PrepareIndex.cs` | 12 | 0 | typed 8, index 2, other 2 | 8 |
+| `Selection/NDArray.Indexing.Selection.Getter.cs` | 41 | 1 | index 22, typed 19, class 1 | 8 |
+| `Selection/NDArray.Indexing.Selection.Setter.cs` | 23 | 2 | typed 16, index 7, class 2 | 8 |
+| `Selection/NDArray.Indexing.Selection.cs` | 4 | 0 | value 3, other 1 | 8 |
+| `Selection/NDArray.Indexing.Strings.cs` | 3 | 1 | index 3, setitem 1 | 8 |
+| `Selection/NDArray.Indexing.VString.cs` | 0 | 5 | refs 4, class 1 | 8 |
+| `Selection/NDArray.Indexing.cs` | 1 | 2 | class 2, index 1 | 8 |
+| `Creation/np.geomspace.cs` | 1 | 0 | request 1 | 9 |
+| `Creation/np.linspace.cs` | 23 | 0 | typed 16, value 6, request 1 | 9 |
+| `Creation/np.logspace.cs` | 1 | 0 | request 1 | 9 |
+| `Creation/np.vander.cs` | 0 | 3 | ufunc 2, refs 1 | 9 |
+| `Manipulation/np.trim_zeros.cs` | 0 | 2 | class 1, nonzero 1 | 9 |
+| `Casting/Implicit/NDArray.Implicit.ValueTypes.cs` | 3 | 4 | cast 2, class 2, value 2, index 1 | stays |
+| `Casting/NDArray.ToString.cs` | 1 | 0 | value 1 | stays |
+| `Creation/np.dtype.cs` | 2 | 0 | request 2 | stays |
+| `DTypes/np.dtypes.cs` | 0 | 2 | class 2 | stays |
+| `Indexing/np.ndenumerate.cs` | 1 | 0 | typed 1 | stays |
+
+| File (not scanned by R1) | K4 text lines | Lines decide | Batch |
+|---|---|---|---|
+| `DTypes/StringDTypeMeta.cs` | 2 | discover 2 (the slot's own code) | stays |
+| `IO/PyLiteral.cs` | 2 | codec 2 (Python's float repr) | stays |
+| `IO/TextReading/LoadTxtSources.cs` | 1 | codec 1 (a Python type name) | stays |
+| `IO/TextReading/TextIOCodec.Incremental.cs` | 3 | codec 3 | stays |
+| `IO/TextReading/TextIOCodec.Unicode.cs` | 1 | codec 1 | stays |
+| `IO/TextReading/TextIOCodec.cs` | 4 | codec 4 | stays |
+| `RandomSampling/BoundedIntegers.Broadcast.cs` | 3 | ufunc 2, class 1 (np.random's own refusals) | stays |
+| `RandomSampling/SeedSequence.cs` | 2 | class 2 (a Python type name) | stays |
+| `Utilities/PyUnicode.cs` | 2 | codec 2 (the Unicode database) | stays |
