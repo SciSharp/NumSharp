@@ -380,9 +380,10 @@ namespace NumSharp
             }
             else if (fancy && Storage.IsVString)
             {
-                // PyDataType_REFCHK: MapIter allocates the result-shaped temporary and PyArray_CopyObject fills it, so the
-                // list is bounded by the result's rank and must broadcast to its shape with AssignArray's text.
-                long[] resultDims = AdvancedResultDims(key);
+                // PyDataType_REFCHK: MapIter allocates the result-shaped temporary and PyArray_CopyObject fills it — before
+                // MapIter checks the index values, so the result's shape comes from the prepared index, not from a gather —
+                // and the list is bounded by the result's rank and must broadcast to its shape with AssignArray's text.
+                long[] resultDims = MapIterResultDims(Shape, prepared);
                 Backends.UnmanagedStorage.ThrowIfSequenceExceedsDims(value, resultDims.Length);
                 var filled = AnyArrayFromObject(value, Storage.Descr, 'K');
                 ThrowIfCannotAssignInto(filled, resultDims);
@@ -390,21 +391,6 @@ namespace NumSharp
                 return;
             }
             this[key] = AnyArrayFromObject(value, Storage.Descr, 'K');
-        }
-
-        /// <summary>
-        ///     The shape an ADVANCED index gives as a getter (<c>a[key].shape</c>): MapIter's result shape, read from the same
-        ///     index applied to a one-byte array of this array's shape (no element of this array is read or copied).
-        /// </summary>
-        /// <param name="key">The index tuple (validated already).</param>
-        /// <returns>The result's dimensions.</returns>
-        /// <remarks>The proxy and its selection are this call's own: the caller's <see cref="NDScopedAttribute"/> scope
-        ///     reclaims them. A byte proxy, not this array: a <c>StringDType</c> getter duplicates every selected string.</remarks>
-        [NDScopedCovered] // caller: the [NDScoped] SetItemConverted
-        private long[] AdvancedResultDims(object[] key)
-        {
-            var proxy = new NDArray(NPTypeCode.Byte, new Shape(Shape.dimensions), false);
-            return proxy[key].Shape.dimensions;
         }
 
         /// <summary>

@@ -106,5 +106,25 @@ namespace NumSharp.Tests.Selection
             f.__setitem__(new long[] { 0, 1 }, new object[] { L(1, 2) });
             f.ToArray<double>().Should().Equal(1, 2, 0, 0);
         }
+
+        /// <summary>
+        ///     NumPy fills a StringDType store's temporary BEFORE MapIter checks the index values: a list that does not
+        ///     broadcast to the result is the broadcast error even through an out-of-bounds index, which raises only for a list
+        ///     that fits. The result's shape comes from the index, never from a gather.
+        /// </summary>
+        [TestMethod]
+        public void ListIntoAStringDTypeFancyIndex_IsCheckedBeforeTheIndexValues()
+        {
+            var T = np.dtypes.StringDType();
+            Action rows = () => np.zeros(new Shape(3, 4), T).__setitem__(new long[] { 0, 99 }, L("a", "b"));
+            rows.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (2,) into shape (2,4)");
+            Action fits = () => np.zeros(new Shape(3, 4), T).__setitem__(new long[] { 0, 99 }, L("a", "b", "c", "d"));
+            fits.Should().Throw<IndexError>().WithMessage("index 99 is out of bounds for axis 0 with size 3");
+            Action withInteger = () => np.zeros(new Shape(3, 4), T).__setitem__(L(new long[] { 0, 99 }, 0), L("a", "b", "c"));
+            withInteger.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (3,) into shape (2,)");
+            Action columns = () => np.zeros(new Shape(3, 4), T).__setitem__(L(Slice.All, new long[] { 0, 9 }),
+                new object[] { L("a", "b"), L("a", "b"), L("a", "b"), L("a", "b") });
+            columns.Should().Throw<ValueError>().WithMessage("could not broadcast input array from shape (4,2) into shape (3,2)");
+        }
     }
 }

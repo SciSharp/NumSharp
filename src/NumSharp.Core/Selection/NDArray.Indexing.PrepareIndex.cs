@@ -577,6 +577,113 @@ namespace NumSharp
             }
         }
 
+        /// <summary>
+        ///     The shape of an ADVANCED index's result as NumPy's MapIter builds it (<c>mapiter_fill_info</c> and
+        ///     <c>PyArray_MapIterSwapAxes</c>): the advanced block — the broadcast of every index array, a 0-d bool's length 1
+        ///     or 0 included — placed where the advanced entries stand when they are consecutive (integers count as advanced
+        ///     entries there), else in front, among the dims the slices, the new axes and the ellipsis keep.
+        /// </summary>
+        /// <param name="shape">The shape the index was prepared against.</param>
+        /// <param name="prepared">What <see cref="PrepareIndex"/> returned for an index with an advanced entry.</param>
+        /// <returns>The result's dimensions.</returns>
+        /// <remarks>
+        ///     Computed from the prepared index alone: no index VALUE is read, so no bounds check runs. NumPy fills a
+        ///     <c>StringDType</c> store's temporary of this shape (<c>PyArray_CopyObject</c>, its broadcast error) BEFORE
+        ///     MapIter checks the index values, so <c>t[[0, 99]] = ["a", "b", "c"]</c> is the broadcast error, not the
+        ///     IndexError; a gather on a proxy array would raise the IndexError first. The index arrays broadcast together
+        ///     (<see cref="PrepareIndex"/> checked it). A slice written as an integer (<c>"2"</c>, NumSharp's notation) is the
+        ///     integer it names.
+        /// </remarks>
+        internal static long[] MapIterResultDims(Shape shape, PreparedIndex prepared)
+        {
+            var dims = shape.dimensions;
+            var kept = new List<long>();          // the dims the non-advanced entries keep, in order
+            var block = new List<long[]>();       // the advanced entries' index-array shapes
+            int axis = 0, consec = 0;
+            // NumPy's consec_status: -1 no advanced entry yet, 0 inside the block, 1 after it, 2 not consecutive.
+            int status = -1;
+            foreach (var op in prepared.Ops)
+            {
+                bool advanced;
+                switch (op.Kind)
+                {
+                    case IndexKind.Fancy:
+                    case IndexKind.ZeroDBool:
+                    case IndexKind.Integer:
+                        advanced = true;
+                        break;
+                    case IndexKind.Slice when op.Slice.IsIndex:
+                        advanced = true;              // an integer written as a slice
+                        break;
+                    default:
+                        advanced = false;
+                        break;
+                }
+                if (advanced)
+                {
+                    if (status == -1)
+                    {
+                        consec = kept.Count;
+                        status = 0;
+                    }
+                    else if (status == 1)
+                        status = 2;
+                }
+                else if (status == 0)
+                    status = 1;
+
+                switch (op.Kind)
+                {
+                    case IndexKind.Fancy:
+                        block.Add(op.Array.Shape.dimensions);
+                        axis += 1;
+                        break;
+                    case IndexKind.ZeroDBool:
+                        block.Add(op.Array.Shape.dimensions);   // its (1,) / (0,) index: the block's last dim times 1 or 0
+                        break;
+                    case IndexKind.Integer:
+                        axis += 1;
+                        break;
+                    case IndexKind.Slice when op.Slice.IsIndex:
+                        axis += 1;
+                        break;
+                    case IndexKind.Slice:
+                        kept.Add(op.Slice.ToSliceDef(dims[axis]).Count);
+                        axis += 1;
+                        break;
+                    case IndexKind.NewAxis:
+                        kept.Add(1);
+                        break;
+                    case IndexKind.Ellipsis:
+                        for (long k = 0; k < op.Value; k++)
+                            kept.Add(dims[axis + k]);
+                        axis += (int)op.Value;
+                        break;
+                }
+            }
+
+            // The block: the index arrays broadcast right-aligned (an axis takes the length that is not 1).
+            int blockNdim = 0;
+            foreach (var d in block)
+                blockNdim = Math.Max(blockNdim, d.Length);
+            var blockDims = new long[blockNdim];
+            for (int k = 0; k < blockNdim; k++)
+                blockDims[k] = 1;
+            foreach (var d in block)
+                for (int k = 0; k < d.Length; k++)
+                    if (d[k] != 1)
+                        blockDims[blockNdim - d.Length + k] = d[k];
+
+            int at = status == 2 ? 0 : consec;
+            var result = new long[kept.Count + blockNdim];
+            for (int k = 0; k < at; k++)
+                result[k] = kept[k];
+            System.Array.Copy(blockDims, 0, result, at, blockNdim);
+            for (int k = at; k < kept.Count; k++)
+                result[blockNdim + k] = kept[k];
+            return result;
+        }
+
         private static bool DimsEqual(long[] a, long[] b)
         {
             if (a.Length != b.Length) return false;
