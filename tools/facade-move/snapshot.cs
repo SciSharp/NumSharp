@@ -81,7 +81,10 @@
 // crops, zero pads, the odd and even lengths the real transforms tell apart, the lengths NumPy refuses), norm (the three
 // names, None and a near miss), the N-D lengths s (one or two axes, -1, an empty and a refused length, more lengths than
 // axes) and fftfreq / rfftfreq's window length n (an int, a long, or a double NumPy refuses), spacing d and device, the
-// axis / axes taking the general roles; an overload with a required
+// axis / axes taking the general roles, and np.nan_to_num's fill values and np.real_if_close's tol, and
+// np.unravel_index's dimensions (empty, zero, negative and overflowing ones), order (C / F in either case, A / K, a
+// refused letter) and the scalar overload's flat index, np.packbits / np.unpackbits' bitorder and count and np.bincount's
+// minlength; an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -354,6 +357,12 @@ static class Snapshot
         // scalar path and the copyto composition are both reached) and np.real_if_close's tol (a multiple of the
         // dtype's eps above 1, an absolute bound otherwise).
         NanToNumFill, RealIfCloseTol,
+        // The C functions of numpy._core.multiarray whose arguments the general roles do not read: np.unravel_index's
+        // dimensions (an int[]: empty, zero, negative and overflowing ones included), its order (a char: C / F in either
+        // case, the A / K NumPy refuses after its other checks, a letter it refuses first) and the scalar overload's flat
+        // index; np.packbits / np.unpackbits' bitorder (NumPy's two prefix rules) and unpackbits' count (none, truncating,
+        // padding, negative trims and an over-long trim); np.bincount's minlength.
+        UnravelShape, UnravelOrder, UnravelFlat, PackBitOrder, UnpackCount, BincountMinLength,
         Default, Unsupported,
     }
 
@@ -478,6 +487,18 @@ static class Snapshot
     /// <returns>True for a parameter of a public static np.nan_to_num or np.real_if_close overload.</returns>
     private static bool IsTypeCheckFill(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name is "nan_to_num" or "real_if_close";
+
+    /// <summary>
+    ///     Whether a parameter belongs to np.unravel_index, np.packbits / np.unpackbits or np.bincount, whose
+    ///     <c>shape</c> / <c>order</c> / <c>index</c>, <c>bitorder</c> / <c>count</c> and <c>minlength</c> roles are
+    ///     theirs alone: np.unravel_index's order defaults to C (the general <see cref="Role.Order"/> starts at K, which
+    ///     NumPy refuses there), and no other target names these parameters.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.unravel_index, np.packbits, np.unpackbits or np.bincount
+    ///     overload.</returns>
+    private static bool IsMultiarrayIndexing(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name is "unravel_index" or "packbits" or "unpackbits" or "bincount";
 
     /// <summary>
     ///     Classifies a parameter.
@@ -630,6 +651,17 @@ static class Snapshot
         {
             if (n is "nan" or "posinf" or "neginf" && t == typeof(object)) return Role.NanToNumFill;
             if (n == "tol" && t == typeof(double)) return Role.RealIfCloseTol;
+        }
+        // np.unravel_index's dimensions, order and flat index, np.packbits / np.unpackbits' bitorder and count, and
+        // np.bincount's minlength (only theirs; before the general Order rule below, whose base K NumPy refuses here).
+        if (IsMultiarrayIndexing(p))
+        {
+            if (n == "shape" && t == typeof(int[])) return Role.UnravelShape;
+            if (n == "order" && t == typeof(char)) return Role.UnravelOrder;
+            if (n == "index" && t == typeof(long)) return Role.UnravelFlat;
+            if (n == "bitorder" && t == typeof(string)) return Role.PackBitOrder;
+            if (n == "count" && t == typeof(long?)) return Role.UnpackCount;
+            if (n == "minlength" && t == typeof(int)) return Role.BincountMinLength;
         }
         // np.interp's fills and period (only its).
         if (IsInterp(p))
@@ -1224,6 +1256,52 @@ static class Snapshot
                 foreach (var v in new[] { 100.0, 1e6, 1.0, 1e-20, 0.0, -1.0 })
                     Add(v.ToString("R", CultureInfo.InvariantCulture), () => v);
                 break;
+            case Role.UnravelShape:
+                // A product of 90,000 first (every non-negative index of the pool's operands is in range, the uint8 /
+                // uint16 wraps of -1 included), then small ones (most of the pool's indices out of range: the error that
+                // names the first one in NumPy's iteration order), the empty shape (only 0-d indices), a zero dimension,
+                // NumPy's -1 overflow sentinel, two negative dimensions (a positive product: the divmod kernel), one negative
+                // dimension (no valid index), an overflowing product, seventeen dimensions (the reciprocal kernel's heap
+                // table) and a single one.
+                foreach (var dims in new[]
+                         {
+                             new[] { 300, 300 }, new[] { 3, 4 }, new[] { 2, 3, 4 }, Array.Empty<int>(), new[] { 0, 3 },
+                             new[] { -1 }, new[] { -30, -30 }, new[] { -2, 3 }, new[] { int.MaxValue, int.MaxValue, 3 },
+                             Enumerable.Repeat(2, 17).ToArray(), new[] { 1 },
+                         })
+                    Add("[" + string.Join(",", dims) + "]", () => (int[])dims.Clone());
+                break;
+            case Role.UnravelOrder:
+                // C (the default) first, then F, both in lower case, the A and K NumPy refuses after its other checks, and a
+                // letter its argument parse refuses first.
+                foreach (var o in new[] { 'C', 'F', 'c', 'f', 'A', 'K', 'Z' })
+                    Add(o.ToString(), () => o);
+                break;
+            case Role.UnravelFlat:
+                // An index inside (90,000 =) 300 x 300 first, then the bounds of that shape on both sides, a negative index
+                // and long.MaxValue.
+                foreach (var v in new[] { 5L, 0L, 299L, 89999L, 90000L, -1L, long.MaxValue })
+                    Add(v.ToString(CultureInfo.InvariantCulture), () => v);
+                break;
+            case Role.PackBitOrder:
+                // big (the default) first, then little, NumPy's prefix forms (packbits reads the "little" / "big" prefix,
+                // unpackbits the first character only, so "l" and "b" split the two), the empty string, None and a
+                // capitalized name both refuse.
+                foreach (var o in new[] { "big", "little", "littlefoo", "bigx", "l", "b", "", null, "Big" })
+                    Add(o is null ? "null" : "'" + o + "'", () => o);
+                break;
+            case Role.UnpackCount:
+                // None (every bit) first, then zero, a count that truncates, one byte's worth, counts that pad with zeros,
+                // negative trims and a trim longer than the bits.
+                Add("null", () => (long?)null);
+                foreach (var v in new[] { 0L, 3L, 8L, 13L, 100L, -1L, -8L, -100L })
+                    Add(v.ToString(CultureInfo.InvariantCulture), () => (long?)v);
+                break;
+            case Role.BincountMinLength:
+                // 0 (the default) first, then lengths below and above the pool's largest value, and a negative one.
+                foreach (var v in new[] { 0, 1, 5, 20, -1 })
+                    Add(v.ToString(CultureInfo.InvariantCulture), () => v);
+                break;
             case Role.InterpPeriod:
                 // None first, then periods smaller and larger than the points' span, a fraction, a negative one (NumPy takes
                 // its absolute value), zero (refused) and NaN.
@@ -1511,11 +1589,28 @@ static class Snapshot
     private static readonly string[] SlidingPairLayouts = { "1d", "long1d", "0d", "c2d" };
 
     /// <summary>
+    ///     The 1-D layouts np.bincount adds to the general pool (phase A): the plain prefix's magnitudes, contiguous, every
+    ///     other element and reversed. The general pool's 1-D operands hold negative values, which a signed dtype refuses
+    ///     at once and an unsigned one wraps into a bin count of up to 2^32 (an array of 32 GB), so only these reach the
+    ///     counting and weighted kernels for every integer dtype.
+    /// </summary>
+    private static readonly string[] BincountLayouts = { "nonneg1d", "nonneg1d_strided", "nonneg1d_reversed" };
+
+    /// <summary>The reduced pool of np.bincount (phase B, where weights and minlength vary): the magnitude layouts, an
+    ///     empty 1-D operand (the early zeros), a 0-d and a 2-D one (NumPy's two depth errors). The general pool's 1-D
+    ///     operand is left out: its uint32 form would size a 32 GB result for every variant.</summary>
+    private static readonly string[] BincountReducedLayouts = { "nonneg1d", "nonneg1d_strided", "nonneg1d_reversed", "empty1d", "0d", "c2d" };
+
+    /// <summary>The small pool of np.bincount (phase C).</summary>
+    private static readonly string[] BincountPairLayouts = { "nonneg1d", "empty1d", "0d" };
+
+    /// <summary>
     ///     The operand layouts of the three phases for an overload: the general pools; for np.searchsorted /
     ///     NDArray.searchsorted, pools of 1-D haystacks (every other operand of the general pools fails NumPy's 1-D check
     ///     before anything else is read, so the varied keys, sides and sorters would never reach the search); for
     ///     np.convolve / np.correlate and their NDArray members, the same 1-D layouts and a 24-element one (a general pool's
-    ///     2-D operand fails their depth check first); for np.linalg, pools of square matrices, stacks and rectangles
+    ///     2-D operand fails their depth check first); for np.bincount, the general pool and 1-D operands of non-negative
+    ///     values (<see cref="BincountLayouts"/>); for np.linalg, pools of square matrices, stacks and rectangles
     ///     (<see cref="LinalgLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
@@ -1525,9 +1620,11 @@ static class Snapshot
             ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
             : m.Name is "convolve" or "correlate" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray))
                 ? (Layouts.Concat(SortedLayouts).Append("long1d").ToArray(), SlidingReducedLayouts, SlidingPairLayouts)
-                : m.DeclaringType == typeof(np.linalg)
-                    ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
-                    : (Layouts, ReducedLayouts, PairLayouts);
+                : m.Name == "bincount" && m.DeclaringType == typeof(np)
+                    ? (Layouts.Concat(BincountLayouts).ToArray(), BincountReducedLayouts, BincountPairLayouts)
+                    : m.DeclaringType == typeof(np.linalg)
+                        ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
+                        : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
@@ -1966,6 +2063,11 @@ static class Snapshot
             // np.convolve / np.correlate's long sequence: the whole 24-value prefix, so a product of it with a long kernel
             // reaches the vector regimes of NumPy's dot functions (ddot from 16 terms, zdotu from 8).
             case "long1d": return Values(24);
+            // np.bincount's 1-D operands of valid bins (BincountLayouts): the plain prefix's magnitudes, contiguous, every
+            // other element of twelve, and reversed.
+            case "nonneg1d": return Magnitudes(dt, 6);
+            case "nonneg1d_strided": return Magnitudes(dt, 12)["::2"];
+            case "nonneg1d_reversed": return Magnitudes(dt, 6)["::-1"];
             // np.linalg's square matrices, stacks and rectangles (LinalgLayouts). The plain prefixes give nonsingular
             // matrices (sq3's determinant is 48, sq3s's 1, sq2's 2, the stack's 48 and -472).
             case "sq3": return Values(9).reshape(new Shape(3, 3));
@@ -2040,6 +2142,19 @@ static class Snapshot
                 return np.array(values).astype(np.dtype(dt));
         }
     }
+
+    /// <summary>
+    ///     The plain sequence's magnitudes (3, 1, 2, 0, 5, 4, 7, ...) in a dtype: np.bincount's valid bins for every integer
+    ///     dtype. A dtype without a numeric value of its own (text, char, decimal, complex) takes the plain values
+    ///     (<see cref="Build"/>): np.bincount refuses it before it reads an element.
+    /// </summary>
+    /// <param name="dt">The dtype name.</param>
+    /// <param name="count">How many values.</param>
+    /// <returns>A fresh 1-D array.</returns>
+    private static NDArray Magnitudes(string dt, int count) =>
+        dt is "S5" or "U5" or "T" or "decimal" or "complex128" or "char"
+            ? Build(dt, count, special: false)
+            : np.array(Plain.Take(count).Select(Math.Abs).ToArray()).astype(np.dtype(dt));
 
     /// <summary>np.sort of a 1-D array, or null when NumSharp's np.sort refuses its dtype.</summary>
     /// <param name="values">The values.</param>
