@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Numerics;
 
 namespace NumSharp
 {
@@ -236,6 +237,14 @@ namespace NumSharp
         ///     parse into its dtype.</exception>
         public void __setitem__(object key, object value)
         {
+            // None, a Python int past every C# integer and a Python list have no literal array of their own here (NumPy's
+            // coercion would discover an object array for them): NumPy converts them with THIS array's descriptor, after
+            // the index, which SetItemConverted reproduces.
+            if (value is null || value is BigInteger || IsPythonListValue(value))
+            {
+                SetItemConverted(ItemKey(key), value);
+                return;
+            }
             var arr = SetItemValue(value);
             try
             {
@@ -278,6 +287,130 @@ namespace NumSharp
         /// <returns>The value as an array, or null.</returns>
         private static NDArray SetItemValue(object value)
             => value is null ? null : FromPythonOperand(value);
+
+        /// <summary>
+        ///     Whether a <c>__setitem__</c> value is a Python list or tuple: an <c>object[]</c>, a C# tuple, a <c>List</c> or
+        ///     any other enumerable that is not a string, bytes, an <see cref="NDArray"/> or a C# array of a NumSharp dtype
+        ///     (an <c>int[]</c> or <c>double[,]</c> stands for an ndarray of that dtype, NumSharp's house map, and keeps the
+        ///     array route).
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>True for a Python sequence.</returns>
+        /// <remarks>The difference is NumPy's: a list stored into one element is the dtype's setitem's to answer (an integer
+        ///     dtype raises <c>int()</c>'s TypeError, StringDType stores <c>str(list)</c>), an ndarray the array's
+        ///     (<c>setting an array element with a sequence.</c>, <c>str(ndarray)</c>).</remarks>
+        private static bool IsPythonListValue(object value)
+            => value is System.Runtime.CompilerServices.ITuple
+               || (value is IEnumerable && value is not string && value is not byte[] && value is not NDArray
+                   && (value is not System.Array array || array.GetType().GetElementType().GetTypeCode() == NPTypeCode.Empty));
+
+        /// <summary>
+        ///     <c>__setitem__</c> of a value NumPy converts with this array's descriptor (None, a Python int past every C#
+        ///     integer, a Python list): NumPy's <c>array_assign_subscript</c> order — the writeability, the index
+        ///     (<c>prepare_index</c>: its entries, its rank, a boolean index's shape, an integer's bounds), the value's
+        ///     conversion, then the store, which checks an index array's values.
+        /// </summary>
+        /// <param name="key">The index tuple (<see cref="ItemKey"/>).</param>
+        /// <param name="value">null (None), a <see cref="BigInteger"/>, or a Python sequence (<see cref="IsPythonListValue"/>).</param>
+        /// <exception cref="ValueError">The array is read-only (first), or the value does not fit the selection.</exception>
+        /// <exception cref="IndexError">The index is invalid (before the value is converted), or an index array's value is
+        ///     out of bounds (after it).</exception>
+        /// <exception cref="ArgumentNullException">An entry of the key is null.</exception>
+        /// <exception cref="TypeError">The value does not convert: <c>int()</c>'s text for None or a list into an integer
+        ///     dtype, <c>must be real number, not list</c> for complex.</exception>
+        /// <exception cref="OverflowException">A Python int an integer dtype cannot hold (NumPy's OverflowError, LP64
+        ///     texts).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     <b>The conversion.</b> A full integer index (NumPy's <c>index_type == HAS_INTEGER</c>: one integer or 0-d integer
+        ///     array per axis) packs the value into its one element with the dtype's <see cref="DTypeMeta.setitem"/>
+        ///     (<c>array_assign_item</c> → <c>PyArray_Pack</c>), so a list is the setitem's to answer. None and a Python int
+        ///     are packed the same way for any selection: <c>PyArray_FromAny(value, descr)</c> of a scalar is that pack into a
+        ///     0-d array, which the store broadcasts — before it looks at the selection, so an empty selection still raises
+        ///     (<c>int32[False] = None</c> is the TypeError). A list into a selection of several elements becomes the array
+        ///     NumSharp's coercion makes of it, cast by the store.
+        ///     </para>
+        ///     <para>
+        ///     <b>The order.</b> The index is validated by <see cref="PrepareIndex"/> without its index-array value scan:
+        ///     NumPy bounds-checks those values in its MapIter, after the conversion (<c>int32[[0, 99]] = 2**70</c> is the
+        ///     OverflowError, <c>float64[[0, 99]] = 2**70</c> the IndexError).
+        ///     </para>
+        ///     <para>Until 2026-10-29 a Python int past every C# integer raised <c>NotSupportedException</c> ("Unable to resolve
+        ///     asanyarray for type BigInteger"), a list into one element of an integer array raised the sequence ValueError and
+        ///     into a StringDType element stored <c>'[1 2]'</c>, and None was converted before the index was checked (or not at
+        ///     all for an empty selection).</para>
+        /// </remarks>
+        [NDScoped]
+        private void SetItemConverted(object[] key, object value)
+        {
+            ThrowIfNotWriteable();
+            // A null entry is the setter's own C# refusal (ArgumentNullException; NumPy's None is Slice.NewAxis), raised there
+            // before the value is looked at.
+            if (System.Array.IndexOf(key, null) >= 0)
+            {
+                this[key] = null;
+                return;
+            }
+            var prepared = PrepareIndex(Shape, StoreIndexEntries(key), scanFancyBounds: false);
+            if (prepared.Flags == IndexType.Integer || value is null || value is BigInteger)
+            {
+                // PyArray_Pack into a 0-d array of this array's own descriptor (the scope reclaims it after the store).
+                this[key] = PackForStore(value);
+                return;
+            }
+            this[key] = SetItemValue(value);
+        }
+
+        /// <summary>
+        ///     The index tuple <see cref="PrepareIndex"/> validates for a store: the entries the setter reads, in NumPy's terms.
+        ///     A key the basic indexer takes (<see cref="TryBasicIndex"/>: a lone string of slice notation holds the WHOLE
+        ///     index, <c>"..., 0"</c>) is its parsed slices, an integer slice (<see cref="Slice.Index(long)"/>) given back as
+        ///     the integer it is, so that a full integer index is classified as one; any other key is
+        ///     <see cref="NormalizeIndexInputs"/>' form of a copy (it rewrites its argument in place, and the setter
+        ///     re-normalizes the caller's own key).
+        /// </summary>
+        /// <param name="key">The caller's index tuple (not modified).</param>
+        /// <returns>A new tuple for <see cref="PrepareIndex"/>.</returns>
+        /// <exception cref="ArgumentException">A lone string is not slice notation (the basic indexer's own refusal).</exception>
+        private static object[] StoreIndexEntries(object[] key)
+        {
+            if (!TryBasicIndex(key, out Slice[] slices))
+                return NormalizeIndexInputs((object[])key.Clone());
+            var entries = new object[slices.Length];
+            for (int i = 0; i < slices.Length; i++)
+                // (object) on the integer branch: Slice converts implicitly from an integer, so without it the conditional's
+                // natural type is Slice and the integer would be turned back into a slice.
+                entries[i] = slices[i] is { IsIndex: true, Start: long index } ? (object)index : slices[i];
+            return entries;
+        }
+
+        /// <summary>
+        ///     A new 0-d array of this array's descriptor holding <paramref name="value"/> packed by the dtype's
+        ///     <see cref="DTypeMeta.setitem"/> (NumPy's <c>PyArray_Pack</c>).
+        /// </summary>
+        /// <param name="value">The Python value (None, an int, a list, ...).</param>
+        /// <returns>The 0-d array; the caller owns it.</returns>
+        /// <exception cref="TypeError">See <see cref="SetItemConverted"/>.</exception>
+        /// <exception cref="OverflowException">See <see cref="SetItemConverted"/>.</exception>
+        /// <exception cref="ValueError">The dtype's setitem refuses the value (a sequence into a fixed-width text or float
+        ///     dtype).</exception>
+        private unsafe NDArray PackForStore(object value)
+        {
+            var descr = Storage.Descr;
+            var packed = new NDArray(descr, Shape.Scalar);
+            try
+            {
+                // The element is the 0-d array's only one; a StringDType element allocates through the array's own buffer.
+                descr.Meta.setitem(descr, value, (byte*)packed.Storage.Address, packed.Storage.InternalArray);
+                return packed;
+            }
+            catch
+            {
+                // The pack refused the value: the temporary never reaches the caller.
+                packed.Dispose();
+                throw;
+            }
+        }
 
         #endregion
     }

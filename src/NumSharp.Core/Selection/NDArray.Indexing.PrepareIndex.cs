@@ -97,11 +97,21 @@ namespace NumSharp
         ///     as NumPy's <c>prepare_index</c>. Throws the NumPy error (IndexError) for every structurally
         ///     invalid combination — too-many-indices, a boolean array whose axis size does not match the
         ///     array, more than one ellipsis, or a non-integer/boolean array index — and returns the typed
-        ///     op list + <see cref="IndexType"/> for valid ones. No bounds checking of integer index VALUES
-        ///     (NumPy defers that to the gather), and no gather is performed here.
+        ///     op list + <see cref="IndexType"/> for valid ones. No gather is performed here.
         /// </summary>
-        [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches (mask nonzero components + aliases are scope-reclaimed)
-        internal static PreparedIndex PrepareIndex(Shape shape, object[] raw)
+        /// <param name="shape">The indexed array's shape.</param>
+        /// <param name="raw">The normalized index tuple (<see cref="NormalizeIndexInputs"/>).</param>
+        /// <param name="scanFancyBounds">Whether the VALUES of the integer index arrays are bounds-checked here (true, the
+        ///     getter and setter dispatch: a malformed index must not reach a kernel). A store that converts its value with
+        ///     the array's descriptor passes false: NumPy checks those values only in the MapIter, after the value's
+        ///     conversion (<c>int32[[0, 99]] = 2**70</c> is the OverflowError, <c>float64[[0, 99]] = 2**70</c> the
+        ///     IndexError), and the store itself checks them afterwards.</param>
+        /// <returns>The classified op list, NumPy's <c>index_type</c> and the dimensions.</returns>
+        /// <exception cref="IndexError">NumPy's <c>prepare_index</c> texts: an invalid entry, too many indices, a boolean
+        ///     index of the wrong shape, an integer (or, with <paramref name="scanFancyBounds"/>, an index-array value) out of
+        ///     bounds, index arrays that do not broadcast together.</exception>
+        [NDScopedCovered] // only callers: the [NDScoped] FetchIndices(object[]) / SetIndices(object[], values) dispatches and NDArray.ValidateStoreIndex (mask nonzero components + aliases are scope-reclaimed)
+        internal static PreparedIndex PrepareIndex(Shape shape, object[] raw, bool scanFancyBounds = true)
         {
             int arrayNdim = shape.NDim;
             var dims = shape.dimensions;
@@ -192,7 +202,8 @@ namespace NumSharp
                         usedNdim = arrayNdim; fancyNdim = arrayNdim;
                         // mirrors NumPy's `break` out of the parse loop
                         return FinishPrepare(ops, indexType, ref usedNdim, ref newNdim, ref fancyNdim,
-                                             arrayNdim, dims, ellipsisPos, ellipsisSeen, indexNdim, brokeOnFullBool: true);
+                                             arrayNdim, dims, ellipsisPos, ellipsisSeen, indexNdim, brokeOnFullBool: true,
+                                             scanFancyBounds);
                     }
 
                     if (arr.ndim == 0)
@@ -244,7 +255,8 @@ namespace NumSharp
             }
 
             return FinishPrepare(ops, indexType, ref usedNdim, ref newNdim, ref fancyNdim,
-                                 arrayNdim, dims, ellipsisPos, ellipsisSeen, indexNdim, brokeOnFullBool: false);
+                                 arrayNdim, dims, ellipsisPos, ellipsisSeen, indexNdim, brokeOnFullBool: false,
+                                 scanFancyBounds);
         }
 
         /// <summary>
@@ -252,9 +264,26 @@ namespace NumSharp
         ///     ellipsis, raise the too-many-indices error, the 0-d <c>a[()]</c> special-case, the
         ///     HAS_SCALAR_ARRAY cleanup, and the boolean-array dimensionality check.
         /// </summary>
+        /// <param name="ops">The walked ops (the ellipsis' fill is resolved in place).</param>
+        /// <param name="indexType">The walk's index type.</param>
+        /// <param name="usedNdim">The source axes the index consumed.</param>
+        /// <param name="newNdim">The result's basic axes.</param>
+        /// <param name="fancyNdim">The advanced block's rank.</param>
+        /// <param name="arrayNdim">The source array's rank.</param>
+        /// <param name="dims">The source array's dimensions.</param>
+        /// <param name="ellipsisPos">The ellipsis' op position, or -1.</param>
+        /// <param name="ellipsisSeen">Whether the index held an ellipsis.</param>
+        /// <param name="indexNdim">The number of entries in the index.</param>
+        /// <param name="brokeOnFullBool">Whether the walk stopped at a single full boolean mask.</param>
+        /// <param name="scanFancyBounds">Whether the integer index arrays' values are bounds-checked (see
+        ///     <see cref="PrepareIndex"/>).</param>
+        /// <returns>The prepared index.</returns>
+        /// <exception cref="IndexError">Too many indices, a boolean index of the wrong shape, an out-of-bounds integer or
+        ///     index-array value, index arrays that do not broadcast together (NumPy's texts).</exception>
         private static PreparedIndex FinishPrepare(List<IndexOp> ops, IndexType indexType,
             ref int usedNdim, ref int newNdim, ref int fancyNdim,
-            int arrayNdim, long[] dims, int ellipsisPos, bool ellipsisSeen, int indexNdim, bool brokeOnFullBool)
+            int arrayNdim, long[] dims, int ellipsisPos, bool ellipsisSeen, int indexNdim, bool brokeOnFullBool,
+            bool scanFancyBounds)
         {
             if (!brokeOnFullBool)
             {
@@ -333,7 +362,7 @@ namespace NumSharp
                                     $"{dims[axis]} but size of corresponding boolean axis is {op.Value}");
                             break;
                         case IndexKind.Fancy:                                   // integer array (Value == -1): value bounds
-                            if (!advancedBlockEmpty)                            // skipped for an empty broadcast result
+                            if (!advancedBlockEmpty && scanFancyBounds)         // skipped for an empty broadcast result
                                 ScanFancyBounds(op.Array, dims[axis], axis);
                             break;
                         case IndexKind.Integer:                                 // scalar int / 0-d array: value bounds

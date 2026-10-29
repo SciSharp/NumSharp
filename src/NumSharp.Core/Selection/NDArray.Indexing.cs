@@ -104,6 +104,13 @@ namespace NumSharp
                     SetMasked(mask, value);
                     return;
                 }
+                // A full integer index through a 0-d integer array (a[np.array(1)] on a 1-D array) is NumPy's element
+                // store, not advanced indexing: the value is packed into the one element (array_assign_item).
+                if (TryScalarArrayItemIndex(key, out Slice[] itemSlices))
+                {
+                    AssignThroughView(Storage.GetView(itemSlices), value, itemIndex: true);
+                    return;
+                }
                 SetAdvanced(key, value);
             }
         }
@@ -113,21 +120,26 @@ namespace NumSharp
         ///     <c>this[params Slice[]]</c>, and that index as slices: a <see cref="Slice"/>[] passed as the whole tuple; ONE
         ///     string, read as slice notation (<see cref="Slice.ParseSlices"/>: comma-separated entries); or entries that are
         ///     each a <see cref="Slice"/>, a string (ONE slice, the implicit <c>string</c> → <see cref="Slice"/> conversion)
-        ///     or an integer of a type C# converts implicitly to <see cref="int"/> or <see cref="long"/> (an integer
+        ///     or an integer of a type C# converts implicitly to <see cref="int"/> or <see cref="long"/>, or a
+        ///     <see cref="ulong"/> / <see cref="nuint"/> that fits a <see cref="long"/> (an integer
         ///     <see cref="Slice.Index(long)"/>).
         /// </summary>
         /// <param name="key">The index tuple (not <c>null</c>).</param>
         /// <param name="slices">The index as slices when the result is true: the caller's own <see cref="Slice"/>[] when
         ///     it passed one (as the typed indexer received it), else a new array.</param>
         /// <returns>True for a basic index; false when an entry is anything else (an index array, a mask, a C# bool, a
-        ///     C# tuple, a <see cref="ulong"/>, a floating-point number, <c>null</c>), which the general path serves.</returns>
+        ///     C# tuple, a <see cref="ulong"/> past <see cref="long.MaxValue"/>, a floating-point number, <c>null</c>), which
+        ///     the general path serves.</returns>
         /// <exception cref="ArgumentException">A lone string is not slice notation.</exception>
         /// <remarks>
         ///     Shared by every indexer that keeps the basic-index meaning of the old typed indexers (<see cref="NDArray{T}"/>'s
-        ///     override, <see cref="NDListArray"/>'s ids). <see cref="ulong"/> and <see cref="nuint"/> are left out because no
-        ///     implicit conversion takes them to <see cref="long"/>: C# sent them to the general indexer, whose
-        ///     <see cref="ulong"/> case stays theirs. A <see cref="char"/> is an integer here, as C#'s <c>char</c> →
-        ///     <c>int</c> conversion made it.
+        ///     override, <see cref="NDListArray"/>'s ids). A <see cref="char"/> is an integer here, as C#'s <c>char</c> →
+        ///     <c>int</c> conversion made it. A <see cref="ulong"/> or <see cref="nuint"/> is NumPy's uint64 index, a basic
+        ///     integer like any other (NumPy's <c>a[np.uint64(1)]</c> is the view <c>a[1]</c>) — since 2026-10-29; no implicit
+        ///     conversion takes them to <see cref="long"/>, so C# had sent them to the general indexer, whose single-entry
+        ///     ulong case read the element through <c>GetData</c>: a COPY for a string array, and a setter that missed NumPy's
+        ///     one-element store (<c>u5[np.uint64(0)] = np.zeros(1, 'U5')</c> raises "setting an array element with a
+        ///     sequence"). One past <see cref="long.MaxValue"/> keeps the general path: it addresses no element.
         /// </remarks>
         internal static bool TryBasicIndex(object[] key, out Slice[] slices)
         {
@@ -148,6 +160,9 @@ namespace NumSharp
                     case long i64:
                         slices = new[] { Slice.Index(i64) };
                         return true;
+                    case ulong u64 when u64 <= long.MaxValue:
+                        slices = new[] { Slice.Index((long)u64) };
+                        return true;
                     case string notation:
                         slices = Slice.ParseSlices(notation);
                         return true;
@@ -161,7 +176,9 @@ namespace NumSharp
             // general path must see the caller's entries unchanged.
             foreach (object entry in key)
             {
-                if (entry is not (Slice or string or int or long or short or ushort or sbyte or byte or uint or char or nint))
+                if (entry is not (Slice or string or int or long or short or ushort or sbyte or byte or uint or char or nint)
+                    && !(entry is ulong u64 && u64 <= long.MaxValue)
+                    && !(entry is nuint unative && unative <= long.MaxValue))
                 {
                     slices = null;
                     return false;
@@ -179,6 +196,9 @@ namespace NumSharp
                     long i64 => Slice.Index(i64),
                     char ch => Slice.Index(ch),
                     nint native => Slice.Index((long)native),
+                    // ulong / nuint were validated above to fit a long.
+                    ulong u64 => Slice.Index((long)u64),
+                    nuint unative => Slice.Index((long)unative),
                     // sbyte, byte, short, ushort, uint (validated above): each widens to long without loss.
                     _ => Slice.Index(Convert.ToInt64(key[i], CultureInfo.InvariantCulture)),
                 };
@@ -235,7 +255,61 @@ namespace NumSharp
                 view.SetVStringItem(value, view.Shape.offset);
                 return;
             }
+            // An ARRAY with dimensions stored into one element is the dtype's setitem's to answer (array_assign_item ->
+            // PyArray_Pack -> setitem, NumPy 2.4.2's arraytypes.c.src): bool takes a one-element array's truth, complex
+            // raises "only 0-dimensional arrays can be converted to Python scalars", a fixed-width text dtype refuses the
+            // sequence ("setting an array element with a sequence", no period), StringDType stores the array's str(), the
+            // other dtypes raise "setting an array element with a sequence.". The view copy below refused every dtype alike.
+            if (itemIndex && value is not null && value.ndim >= 1)
+            {
+                unsafe
+                {
+                    byte* item = (byte*)view.Address + view.Shape.offset * view.Descr.itemsize;
+                    view.Descr.Meta.setitem(view.Descr, value, item, view.InternalArray);
+                }
+                return;
+            }
             target.Storage.SetData(value, new int[0]);
+        }
+
+        /// <summary>
+        ///     Whether an index tuple is a full integer index holding a 0-d integer ARRAY: one entry per axis, each an integer
+        ///     scalar or a 0-d integer array, at least one of them an array (an all-scalar key is <see cref="TryBasicIndex"/>'s).
+        ///     NumPy's <c>prepare_index</c> cleans <c>HAS_SCALAR_ARRAY</c> off such an index (<c>index_type ==
+        ///     HAS_INTEGER</c>), so its assignment is <c>array_assign_item</c>: the value packed into one element.
+        /// </summary>
+        /// <param name="key">The index tuple.</param>
+        /// <param name="slices">The index as integer slices, when the result is true.</param>
+        /// <returns>True for such an index of this array.</returns>
+        /// <remarks>With fewer entries than axes the 0-d array keeps NumPy's <c>HAS_SCALAR_ARRAY</c> (an ellipsis is
+        ///     appended), which is advanced indexing: those keys are not this method's.</remarks>
+        private bool TryScalarArrayItemIndex(object[] key, out Slice[] slices)
+        {
+            slices = null;
+            if (key.Length != ndim || ndim == 0)
+                return false;
+            bool sawArray = false;
+            var parsed = new Slice[key.Length];
+            for (int i = 0; i < key.Length; i++)
+            {
+                switch (key[i])
+                {
+                    case NDArray nd when nd.ndim == 0 && IsIntegerArrayType(nd.typecode):
+                        // The 0-d array's value, read as the integer NumPy's PyArray_PyIntAsIntp makes of it.
+                        parsed[i] = Slice.Index(Convert.ToInt64(nd.GetValue(0), CultureInfo.InvariantCulture));
+                        sawArray = true;
+                        break;
+                    default:
+                        if (!TryAsIntegerScalar(key[i], out long integer))
+                            return false;
+                        parsed[i] = Slice.Index(integer);
+                        break;
+                }
+            }
+            if (!sawArray)
+                return false;
+            slices = parsed;
+            return true;
         }
 
         ///// <summary>
