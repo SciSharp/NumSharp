@@ -25,7 +25,12 @@ namespace NumSharp.Backends
             // samples (issubdtype(dtype, integer) is false: no floor) and its final astype formats them, so
             // np.linspace(0, 1, 5, dtype='U5') is ['0.0', '0.25', '0.5', '0.75', '1.0'].
             if (dtype != null && dtype.GetTypeCode() == NPTypeCode.String)
-                return CastSpacingResult(LinspaceCore(start, stop, num, endpoint, NPTypeCode.Double), dtype);
+            {
+                // The cast to text always copies (float64 is never a text dtype), so the float64 samples - a view of
+                // the fill's buffer for two or more samples - are released here, whatever astype does.
+                using NDArray samples = LinspaceCore(start, stop, num, endpoint, NPTypeCode.Double);
+                return samples.astype(dtype, false);
+            }
             return LinspaceCore(start, stop, num, endpoint, dtype?.GetTypeCode() ?? NPTypeCode.Double);
         }
 
