@@ -190,12 +190,22 @@ public class PiecewiseTests
         act.Should().Throw<IndexError>().WithMessage("list index out of range");
     }
 
+    /// <summary>
+    ///     A null function is Python's None, a constant like any other: NumPy stores <c>y[cond] = None</c>, NaN into a
+    ///     float array (NumSharp refused it with an ArgumentNullException until the P3 batch 7 replay).
+    /// </summary>
     [TestMethod]
-    public void Piecewise_NullFuncEntry_Throws()
+    public void Piecewise_NullFuncEntry_IsPythonsNone()
     {
+        // np.piecewise(np.linspace(-2.5, 2.5, 6), [x < 0], [None]) -> [nan, nan, nan, 0, 0, 0]
         var x = np.linspace(-2.5, 2.5, 6);
-        Action act = () => np.piecewise(x, new[] { x < 0 }, new object[] { null });
-        act.Should().Throw<ArgumentNullException>();
+        var r = np.piecewise(x, new[] { x < 0 }, new object[] { null }).ToArray<double>();
+        double.IsNaN(r[0]).Should().BeTrue();
+        double.IsNaN(r[1]).Should().BeTrue();
+        double.IsNaN(r[2]).Should().BeTrue();
+        r[3].Should().Be(0);
+        r[4].Should().Be(0);
+        r[5].Should().Be(0);
     }
 
     // ---- overloads: bare-array & scalar-bool condlist promotion --------------

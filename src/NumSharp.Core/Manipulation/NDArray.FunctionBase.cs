@@ -2206,8 +2206,11 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A scalar constant does not fit <paramref name="x"/>'s integer dtype.</exception>
-        /// <exception cref="TypeError">A complex constant into a non-complex <paramref name="x"/>.</exception>
+        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
+        /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
+        ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
+        /// <exception cref="ValueError">A float NaN or a text that is not a number into a number dtype.</exception>
         /// <exception cref="IndexError">An empty condition list ("list index out of range").</exception>
         internal static NDArray Piecewise(NDArray x, NDArray[] condlist, object[] funclist, object[] args)
         {
@@ -2231,8 +2234,11 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A scalar constant does not fit <paramref name="x"/>'s integer dtype.</exception>
-        /// <exception cref="TypeError">A complex constant into a non-complex <paramref name="x"/>.</exception>
+        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
+        /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
+        ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
+        /// <exception cref="ValueError">A float NaN or a text that is not a number into a number dtype.</exception>
         /// <exception cref="IndexError">A 0-d condlist ("too many indices for array") or an empty first axis ("index 0 is out
         ///     of bounds for axis 0 with size 0").</exception>
         /// <remarks>The row views the promotion indexes out of the caller's array are this call's own and are disposed on
@@ -2267,8 +2273,11 @@ namespace NumSharp
         /// <param name="args">Extra arguments for the <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A new array of <paramref name="x"/>'s shape and dtype.</returns>
         /// <exception cref="ValueError">The function count is neither the condition count nor one more.</exception>
-        /// <exception cref="OverflowException">A scalar constant does not fit <paramref name="x"/>'s integer dtype.</exception>
-        /// <exception cref="TypeError">A complex constant into a non-complex <paramref name="x"/>.</exception>
+        /// <exception cref="OverflowException">A Python int constant outside <paramref name="x"/>'s integer dtype ("Python
+        ///     integer 1000 out of bounds for int8"), a float infinity into an integer dtype.</exception>
+        /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/> (Python's
+        ///     <c>int()</c> / <c>float()</c> texts), a None constant into an integer one.</exception>
+        /// <exception cref="ValueError">A float NaN or a text that is not a number into a number dtype.</exception>
         internal static NDArray Piecewise(NDArray x, bool condlist, object[] funclist, object[] args)
         {
             // isscalar(condlist) => condlist = [condlist] => a single 0-d bool condition (all / nothing).
@@ -2321,12 +2330,16 @@ namespace NumSharp
         /// <param name="funclist">One function per condition, or one more (the default).</param>
         /// <param name="args">Extra arguments for <c>Func&lt;NDArray, object[], NDArray&gt;</c> entries.</param>
         /// <returns>A fresh array of <paramref name="x"/>'s shape and dtype, owned by the caller.</returns>
-        /// <exception cref="ValueError">The function count is neither <c>condlist.Length</c> nor one more.</exception>
-        /// <exception cref="OverflowException">A scalar function does not fit <paramref name="x"/>'s integer dtype.</exception>
-        /// <exception cref="TypeError">A complex scalar function targets a non-complex <paramref name="x"/>.</exception>
+        /// <exception cref="ValueError">The function count is neither <c>condlist.Length</c> nor one more; or a constant
+        ///     NumPy's store refuses (a float NaN, a text that is not a number, into a number dtype).</exception>
+        /// <exception cref="OverflowException">A constant does not fit <paramref name="x"/>'s integer dtype.</exception>
+        /// <exception cref="TypeError">A complex constant into an integer or float <paramref name="x"/>, a None constant into
+        ///     an integer one.</exception>
+        /// <exception cref="IndexError">A condition that does not fit <paramref name="x"/> (NumPy's boolean-index text),
+        ///     raised before its constant is converted.</exception>
         /// <remarks>
         /// Every temporary this creates (the bool condition aliases, the default's "otherwise" mask, the
-        /// coerced scalar constants, and the result itself when a later step throws) is disposed before
+        /// packed scalar constants, and the result itself when a later step throws) is disposed before
         /// it returns, so a call leaves no buffer for the finalizer to reclaim.
         /// </remarks>
         private static NDArray PiecewiseCore(NDArray x, NDArray[] condlist, object[] funclist, object[] args)
@@ -2449,124 +2462,59 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Assign a constant "function" (the <c>not callable(func)</c> branch of NumPy's loop) into
-        ///     the selected slots. An <see cref="NDArray"/> is a strong value (broadcast / placed,
-        ///     unsafe-cast). A C# scalar is a weak python scalar: a float truncates into an integer
-        ///     target, an out-of-range integer raises <see cref="OverflowException"/>, and a complex into
-        ///     a non-complex target raises <see cref="TypeError"/> — matching NumPy's <c>y[cond] = scalar</c>.
+        ///     Assign a constant "function" (the <c>not callable(func)</c> branch of NumPy's loop) into the selected slots:
+        ///     NumPy's <c>y[cond] = func</c>. The boolean index is prepared first, so a condition that does not fit
+        ///     <paramref name="y"/> raises its IndexError before the value is looked at; then the value is converted into
+        ///     <paramref name="y"/>'s dtype by <c>PyArray_FromAny(func, y.dtype, FORCECAST)</c>.
         /// </summary>
+        /// <param name="y">The result being filled (writeable, fresh).</param>
+        /// <param name="cond">The condition's bool mask.</param>
+        /// <param name="func">The constant: an <see cref="NDArray"/> (strong: broadcast or placed into the selection and
+        ///     cast), or any other value, which goes in as the Python value it stands for (<see cref="FromPythonOperand"/>):
+        ///     a C# number is a Python int / float / complex (a Python int range-checked, a float truncated and checked into
+        ///     an integer dtype, a complex refused by <c>int()</c> / <c>float()</c> and stored by its truth into bool, by its
+        ///     <c>str()</c> into text), a <c>bool</c> a Python bool, a string a Python str (parsed into a number dtype),
+        ///     <see cref="Half"/> / <c>char</c> NumPy scalars (cast, as the FromAny route casts them: <c>np.float16(300)</c>
+        ///     into int8 is 44), null Python's None (NaN, <c>nan+nanj</c>, False, <c>'None'</c>, or int()'s TypeError), a C#
+        ///     array or collection a Python list (one value per selected slot, or one for all).</param>
+        /// <exception cref="IndexError">The mask does not fit <paramref name="y"/>.</exception>
+        /// <exception cref="OverflowException">A Python int outside an integer dtype, or a float infinity into one.</exception>
+        /// <exception cref="TypeError">A complex value into an integer or float dtype, None into an integer one.</exception>
+        /// <exception cref="ValueError">A float NaN or a non-number text into a number dtype, or a sequence whose length is
+        ///     neither 1 nor the number of selected slots.</exception>
+        /// <remarks>
+        ///     NumSharp's mask setter (<see cref="SetMasked"/>) keeps NumPy's order: it checks the mask, then packs a marked
+        ///     Python scalar with <c>PyArray_Pack</c>'s rules (<see cref="PackForStore(NDArray, NPTypeCode, bool)"/>), so the
+        ///     constant only has to arrive as that mark. The value array <see cref="FromPythonOperand"/> makes is this call's
+        ///     and is released once its value is stored.
+        /// </remarks>
         private static void AssignConstant(NDArray y, NDArray<bool> cond, object func)
         {
             switch (func)
             {
-                case null:
-                    // A null "function" is a caller bug (NumPy would build an object array — a dtype
-                    // NumSharp lacks). The same treatment np.select gives a null choice.
-                    throw new ArgumentNullException(nameof(func), "funclist entries must not be null.");
-
                 case NDArray arr:
                     // Strong: broadcast (size 1) or place (exact length) into the selection, unsafe-cast
-                    // to y's dtype — exactly NumPy's `y[cond] = ndarray`.
+                    // to y's dtype - exactly NumPy's `y[cond] = ndarray`.
                     y[cond] = arr;
                     return;
 
                 default:
-                    // A weak python scalar. Validate it the way NumPy's scalar boolean assignment does,
-                    // then let the boolean-mask setter cast it into y's dtype (float -> int truncates,
-                    // an in-range int is exact). The 0-d wrapper is released once its value is scattered.
-                    // Disposing is safe ONLY because `func` is never an NDArray here (that case returned
-                    // above): asanyarray hands back an EXISTING array for NDArray input, but for every
-                    // other input CoerceScalarConstant mints a fresh one.
-                    using (var scalar = CoerceScalarConstant(func, y.typecode))
-                        y[cond] = scalar;
+                    // A Python value (None included: the setter stores None's setitem value). FromPythonOperand mints a fresh
+                    // array for every input but an NDArray (handled above), so disposing it never touches a caller's array.
+                    using (var value = func is null ? null : FromPythonOperand(func))
+                        y[cond] = value;
                     return;
             }
-        }
-
-        /// <summary>
-        ///     Validate a weak (python-scalar) constant against <paramref name="target"/> the way NumPy's
-        ///     <c>y[cond] = scalar</c> does and wrap it as a 0-d <see cref="NDArray"/>. Into a non-bool
-        ///     integer target: a float is truncated toward zero and the truncated value must fit
-        ///     (<c>127.9 -> 127</c> stores, <c>128.0</c> raises, NaN/inf raise), an integer must fit its
-        ///     inclusive range (else <see cref="OverflowException"/> "Python integer N out of bounds for
-        ///     …", reusing the NEP50 machinery). A complex into a non-complex target raises
-        ///     <see cref="TypeError"/> (NumPy: <c>float() argument … not 'complex'</c>). A bool / float /
-        ///     complex / decimal target needs no range check (the setter's cast handles it).
-        /// </summary>
-        private static NDArray CoerceScalarConstant(object value, NPTypeCode target)
-        {
-            bool integerTarget = target is NPTypeCode.Byte or NPTypeCode.SByte or NPTypeCode.Int16
-                or NPTypeCode.UInt16 or NPTypeCode.Char or NPTypeCode.Int32 or NPTypeCode.UInt32
-                or NPTypeCode.Int64 or NPTypeCode.UInt64;
-
-            switch (value)
-            {
-                case bool:
-                    return NDArray.Scalar(value);   // 0/1 always fits an integer/bool target
-
-                case sbyte or byte or short or ushort or int or uint or long or char:
-                    if (integerTarget)
-                        NDExprTypeRules.CheckIntLiteralFits(Convert.ToInt64(value), target);
-                    return NDArray.Scalar(value);
-
-                case ulong u:
-                    if (integerTarget)
-                    {
-                        if (target == NPTypeCode.UInt64) { /* any ulong fits uint64 */ }
-                        else if (u <= long.MaxValue) NDExprTypeRules.CheckIntLiteralFits((long)u, target);
-                        else throw new OverflowException(
-                            $"Python integer {u} out of bounds for {target.AsNumpyDtypeName()}");
-                    }
-                    return NDArray.Scalar(value);
-
-                case Half or float or double:
-                    if (integerTarget)
-                        CheckFloatFitsInteger(value is Half h ? (double)h : Convert.ToDouble(value), target);
-                    return NDArray.Scalar(value);
-
-                case System.Numerics.Complex when target != NPTypeCode.Complex:
-                    // NumPy raises this exact TypeError coercing a python complex into a real array.
-                    throw new TypeError("float() argument must be a string or a real number, not 'complex'");
-
-                default:
-                    // System.Numerics.Complex-into-complex, decimal, and any other array_like: let asanyarray + the
-                    // setter's cast handle it (no weak-scalar range check applies).
-                    return np.asanyarray(value);
-            }
-        }
-
-        /// <summary>
-        ///     NumPy's float-scalar-into-integer rule: truncate toward zero and require the truncated
-        ///     value to fit <paramref name="target"/> (NaN/inf never do). Reuses the same
-        ///     <see cref="NDExprTypeRules.CheckIntLiteralFits"/> that names the truncated integer in the
-        ///     message; only the out-of-<c>long</c> tails are handled locally.
-        /// </summary>
-        private static void CheckFloatFitsInteger(double d, NPTypeCode target)
-        {
-            if (double.IsNaN(d) || double.IsInfinity(d))
-                throw new OverflowException(
-                    $"cannot assign non-finite float {d} to integer dtype {target.AsNumpyDtypeName()}");
-
-            double t = Math.Truncate(d);
-            if (t >= -9223372036854775808.0 && t < 9223372036854775808.0)
-            {
-                NDExprTypeRules.CheckIntLiteralFits((long)t, target);
-                return;
-            }
-            if (target == NPTypeCode.UInt64 && t >= 0.0 && t <= 18446744073709551615.0)
-                return;   // fits uint64 but not long
-            throw new OverflowException(
-                $"Python integer {t} out of bounds for {target.AsNumpyDtypeName()}");
         }
 
         /// <summary>
         ///     The fused single-pass fast path for the SCALAR-funclist case. Fires only when every
         ///     function is a C# scalar constant, <paramref name="x"/> and every effective condition are
         ///     C-contiguous offset-0 at <paramref name="x"/>'s shape, and <paramref name="x"/>'s dtype is
-        ///     SIMD-eligible (the 1/2/4/8-byte numerics). Coerces the scalars into <paramref name="x"/>'s
-        ///     dtype (the same weak-scalar validation the composition uses — a float truncates, an
-        ///     out-of-range integer raises, a complex-into-real raises) and delegates to one IL kernel
-        ///     (<see cref="DirectILKernelGenerator.GetPiecewiseScalarKernel"/>) that seeds each element
+        ///     SIMD-eligible (the 1/2/4/8-byte numerics). Packs the scalars into <paramref name="x"/>'s
+        ///     dtype (the conversion the composition's store applies - a float truncates, an
+        ///     out-of-range integer raises, a complex-into-int raises) and delegates to one IL kernel
+        ///     (<see cref="Backends.Kernels.DirectILKernelGenerator.GetPiecewiseScalarKernel"/>) that seeds each element
         ///     with 0 and overlays each condition's scalar forward, so the last true condition wins.
         ///     Returns false (leaving <paramref name="result"/> null) for any callable / NDArray func,
         ///     non-contiguous or broadcast operand, or non-SIMD dtype, so the caller uses the composition.
@@ -2599,13 +2547,13 @@ namespace NumSharp
                 if (!PiecewiseShapeEquals(c.Shape, x.Shape)) return false;
             }
 
-            // Every function must be a plain C# scalar constant. A callable, an NDArray func, or a null
-            // declines to the composition (which handles callables and array funcs).
+            // Every function must be ONE C# number or a text (a Python str, parsed into x's number dtype). A
+            // callable, an NDArray func, a null (Python's None) or a C# array / collection (a Python list, one value per
+            // selected slot) declines to the composition, which stores each through the mask setter.
             for (int i = 0; i < funclist.Length; i++)
             {
                 object f = funclist[i];
-                if (f is null || f is NDArray
-                    || f is Func<NDArray, NDArray> || f is Func<NDArray, object[], NDArray>)
+                if (!(IsStoreScalar(f) || f is string))
                     return false;
             }
 
@@ -2615,11 +2563,13 @@ namespace NumSharp
 
             int elemSize = Utilities.InfoOf.GetSize(dtype);
 
-            // Coerce the n condition scalars PLUS the seed into a small STACK buffer of x's dtype (n+1
+            // Pack the n condition scalars PLUS the seed into a small STACK buffer of x's dtype (n+1
             // slots; funcVals[n] is the seed). The seed is the default function where one was given, else
-            // 0 (piecewise's zeros_like default). This is the SAME weak-scalar validation the
-            // composition's AssignConstant applies — an out-of-range integer / complex-into-real raises
-            // here, before any kernel work — and it folds the default in WITHOUT the ~any(condlist) pass.
+            // 0 (piecewise's zeros_like default). This is the SAME conversion the composition's store
+            // applies (NumPy's PyArray_FromAny of each constant, in funclist order, the default last) - an
+            // out-of-range integer / complex-into-int raises here, before any kernel work - and it folds
+            // the default in WITHOUT the ~any(condlist) pass. Every mask fits x here, so NumPy's
+            // index-before-value order cannot show.
             byte* fvals = stackalloc byte[checked((n + 1) * elemSize)];
             for (int k = 0; k < n; k++)
                 WriteCoercedScalar(fvals + k * elemSize, funclist[k], dtype, elemSize);
@@ -2641,24 +2591,25 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Validate a weak scalar (<see cref="CoerceScalarConstant"/>) and copy its cast-to-dtype
-        ///     bytes into <paramref name="dst"/>. Shared by the fused kernel's condition-scalar and seed
-        ///     writes.
+        ///     Convert one constant into <paramref name="dtype"/> the way NumPy's <c>y[cond] = func</c> does
+        ///     (<c>PyArray_FromAny(func, y.dtype, FORCECAST)</c>, <see cref="AsStoreValue"/>) and copy its bytes into
+        ///     <paramref name="dst"/>. Shared by the fused kernel's condition-scalar and seed writes.
         /// </summary>
         /// <param name="dst">Destination for exactly one <paramref name="dtype"/> element.</param>
-        /// <param name="value">A plain C# scalar constant (the fused path admits no NDArray or callable).</param>
-        /// <param name="dtype">The target dtype (x's dtype).</param>
+        /// <param name="value">One C# number or a text (the fused path admits nothing else).</param>
+        /// <param name="dtype">The target dtype (x's dtype, a number dtype).</param>
         /// <param name="elemSize">The byte width of <paramref name="dtype"/>.</param>
-        /// <exception cref="OverflowException">An integer target cannot hold the (truncated) value.</exception>
-        /// <exception cref="TypeError">A complex value targets a non-complex dtype.</exception>
+        /// <exception cref="OverflowException">A Python int outside an integer dtype, or a float infinity into one.</exception>
+        /// <exception cref="TypeError">A complex value into an integer or float dtype.</exception>
+        /// <exception cref="ValueError">A float NaN or a non-number text into a number dtype.</exception>
         private static unsafe void WriteCoercedScalar(byte* dst, object value, NPTypeCode dtype, int elemSize)
         {
-            // Both 0-d temporaries are this call's own: CoerceScalarConstant mints a fresh wrapper (value
-            // is never an NDArray here) and astype(copy: true) always allocates. Once the bytes are copied
-            // out, nothing refers to them, so release both instead of leaving them to the finalizer.
-            using var scalar = CoerceScalarConstant(value, dtype);   // validated 0-d
-            using var coerced = scalar.astype(dtype);                 // cast to x's dtype
-            Buffer.MemoryCopy((byte*)coerced.Storage.Address + coerced.Shape.offset * elemSize,
+            // AsStoreValue packs a number or a text into a NEW 0-d array of exactly the destination dtype (a Python scalar by
+            // PyArray_Pack's rules, a NumPy scalar - Half, char, decimal - by a cast); once its bytes are copied out nothing
+            // refers to it.
+            using var packed = AsStoreValue(value, dtype);
+            System.Diagnostics.Debug.Assert(packed.typecode == dtype, "AsStoreValue packs a number into its destination dtype");
+            Buffer.MemoryCopy((byte*)packed.Storage.Address + packed.Shape.offset * elemSize,
                 dst, elemSize, elemSize);
         }
 
