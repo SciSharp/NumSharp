@@ -106,7 +106,10 @@
 // produces no line), with np.full's fill value (CtorFillLabels: C# numbers of every kind, text, bytes, None, a Python int
 // past every C# integer, NaN and -0.0, 0-d and broadcast arrays, a C# array), np.eye's M and k, the creation order (C
 // first: NumPy's creation functions refuse A and K) and np.ndarray's buffer, offset and strides varied; the _like forms'
-// fill value and shape= take the same variants), np.frombuffer's (which takes no array either: its operand is a
+// fill value and shape= take the same variants), np.indices / np.indices_sparse's (their operand is the grid's SHAPE as a
+// constructor's, from IndicesShapeLabels - the constructor shapes and the lengths a dtype's arange decides on - with every
+// dtype over every shape; a sparse grid's overflowing shape produces no line), np.diag / np.diagflat's diagonal k (np.eye's
+// variants), np.frombuffer's (which takes no array either: its operand is a
 // BUFFER holding the pool operand's C-order bytes in the C# form its first parameter takes - a byte[], NumSharp's MemoryView
 // of the operand itself, an ArraySegment / a Memory of bytes inside a larger array, a Memory over unmanaged memory, an
 // address with its byte length, the generic overload's typed C# array of the operand's values (instantiated for every
@@ -488,8 +491,9 @@ static class Snapshot
         // The constructor family (np.empty / np.zeros / np.ones / np.full / np.eye / np.identity / np.ndarray) takes no
         // array: its operand is a SHAPE (CtorShapeLabels; np.eye's N and np.identity's n are its first dim), built in Call
         // in the C# form of the parameter (MakeCtorShape). The fill value of np.full / np.full_like, the shape= of the _like
-        // forms (base: the prototype's own), np.eye's M and k, the creation order (C first, unlike the general Order role:
-        // NumPy's creation functions refuse A and K), and np.ndarray's buffer, byte offset and byte strides.
+        // forms (base: the prototype's own), np.eye's M and k (whose variants np.diag / np.diagflat's k take too), the
+        // creation order (C first, unlike the general Order role: NumPy's creation functions refuse A and K), and
+        // np.ndarray's buffer, byte offset and byte strides.
         CtorShape, CtorFill, CtorShapeArg, EyeM, EyeK, CtorOrder, NdBuffer, NdOffset, NdStrides,
         // np.frombuffer takes no array: its operand is a BUFFER, its first parameter (a byte[], a MemoryView, an
         // ArraySegment / a Memory of bytes, an address, a typed C# array), built in Call from the pool operand's C-order
@@ -1959,6 +1963,20 @@ static class Snapshot
     private static bool IsLike(ParameterInfo p) => p.Member.Name.EndsWith("_like", StringComparison.Ordinal);
 
     /// <summary>
+    ///     Whether an overload is np.indices or np.indices_sparse (NumPy's <c>indices</c> in <c>_core/numeric.py</c>, its
+    ///     <c>sparse=False</c> and <c>sparse=True</c> forms), which take no array: their operand is the grid's SHAPE, built
+    ///     as a constructor's (<see cref="TryMakeCtorShape"/>) from their own pool (<see cref="IndicesShapeLabels"/>).
+    /// </summary>
+    /// <param name="m">The overload.</param>
+    /// <returns>True for a public static overload of one of the two names on np.</returns>
+    /// <remarks>
+    ///     Kept apart from <see cref="IsCtor(MethodInfo)"/>: the constructor family's own parameter roles (the fill value,
+    ///     the creation order, np.eye's k) must not reach np.indices, whose only other parameter is the dtype.
+    /// </remarks>
+    private static bool IsIndices(MethodInfo m) =>
+        m.DeclaringType == typeof(np) && m.Name is "indices" or "indices_sparse";
+
+    /// <summary>
     ///     Whether an overload is np.frombuffer (NumPy's <c>PyArray_FromBuffer</c>, <c>ctors.c</c>), which takes no array: its
     ///     operand is the buffer its first parameter names (<see cref="BufferForms"/>).
     /// </summary>
@@ -2009,6 +2027,16 @@ static class Snapshot
         { "()", "(3,)", "(2,3)", "(0,)", "(2,0,3)", "(1,1)", "(4,1,2)", "(-1,)", "(2,-3)", "(2147483648,2147483648)" };
 
     /// <summary>
+    ///     The grids np.indices / np.indices_sparse run on: the constructor shapes (<see cref="CtorShapeLabels"/>: the empty
+    ///     tuple, empty and unit axes, negative dims - which NumPy's dense form refuses in <c>empty</c> and its sparse form
+    ///     reshapes into an empty axis - and two dims whose byte count overflows), then the lengths the dtype's
+    ///     <c>arange</c> decides on: a (2, 2) grid, whose aranges stay within the two elements a bool arange allows, and a
+    ///     (200,) one, whose arange wraps in int8. Every dtype runs over every shape (phase B takes them all).
+    /// </summary>
+    private static readonly string[] IndicesShapeLabels =
+        { "()", "(3,)", "(2,3)", "(0,)", "(2,0,3)", "(1,1)", "(4,1,2)", "(-1,)", "(2,-3)", "(2147483648,2147483648)", "(2,2)", "(200,)" };
+
+    /// <summary>
     ///     A constructor's shape operand in its parameter's C# form: an int (a 1-D shape's length; np.eye's N and
     ///     np.identity's n take the first dim of any shape), an int[] / long[] of the dims, or a <see cref="Shape"/>.
     /// </summary>
@@ -2016,7 +2044,7 @@ static class Snapshot
     /// <param name="label">The shape label (<see cref="CtorShapeLabels"/>).</param>
     /// <param name="value">Receives the boxed value.</param>
     /// <returns>False when the shape has no value in this form (a 0-d or 2-D shape as an int, a dim past int as an int /
-    ///     int[]); the call is then not made.</returns>
+    ///     int[]), or when np.indices_sparse would allocate it (a dim past 2**24); the call is then not made.</returns>
     private static bool TryMakeCtorShape(ParameterInfo p, string label, out object value)
     {
         string inner = label.Trim('(', ')');
@@ -2026,6 +2054,11 @@ static class Snapshot
         Type t = p.ParameterType;
         bool fitsInt = dims.All(d => d >= int.MinValue && d <= int.MaxValue);
         value = null;
+        // np.indices_sparse builds one arange per dim before anything could refuse the grid (NumPy's sparse=True has no
+        // empty((N,) + dimensions) to raise "array is too big"), so the overflowing shape would allocate a 2**31-element
+        // arange on both sides: 16 GiB. The dense form raises in its allocation first and keeps the shape.
+        if (p.Member.Name == "indices_sparse" && dims.Any(d => d > 1 << 24))
+            return false;
         if (t == typeof(int))
         {
             // np.eye's N / np.identity's n: the first dim of any shape; a creation function's int shape: a 1-D shape only.
@@ -2746,6 +2779,11 @@ static class Snapshot
         // tensordot's axis count: varied around their defaults (out of range included; a ddof past the count makes the
         // divisor 0).
         if (n is "offset" or "axis1" or "axis2" or "ddof" or "ind" or "axes" && t == typeof(int)) return Role.IntArg;
+        // np.diag / np.diagflat's diagonal k, the same diagonal as np.eye's (0 the main one, a positive value above, a
+        // negative one below): np.eye's variants, so the 1-D branch builds matrices padded on either side and far past the
+        // vector, and the 2-D branch reads diagonals beyond either corner.
+        if (n == "k" && t == typeof(int) && p.Member is MethodInfo km && km.DeclaringType == typeof(np) && km.Name is "diag" or "diagflat")
+            return Role.EyeK;
         // np.cov's nullable ddof (null = bias's default).
         if (n == "ddof" && t == typeof(int?)) return Role.Ddof;
         // The gufuncs' axes= list, matmul's nullable keepdims and its casting rule.
@@ -4064,6 +4102,20 @@ static class Snapshot
     private static readonly string[] SaveTxtPairLayouts = { "c2d", "1d" };
 
     /// <summary>
+    ///     The 1-D layouts np.diag / np.diagflat add to the general pool (phase A): a vector read every other element and one
+    ///     read backwards, whose stride the diagonal scatter follows (the general pool's 1-D operands are contiguous).
+    /// </summary>
+    private static readonly string[] DiagExtraLayouts = { "strided1d", "reversed1d" };
+
+    /// <summary>The reduced pool of np.diag / np.diagflat (phase B, where k varies): the 1-D operands np.diag builds a matrix
+    ///     from first - contiguous, empty, strided and reversed - then the general reduced pool, whose 2-D operands np.diag
+    ///     reads a diagonal of and np.diagflat ravels.</summary>
+    private static readonly string[] DiagReducedLayouts = { "1d", "empty1d", "strided1d", "reversed1d", "c2d", "f2d", "0d", "empty", "3d" };
+
+    /// <summary>The small pool of np.diag / np.diagflat (phase C).</summary>
+    private static readonly string[] DiagPairLayouts = { "1d", "c2d", "0d" };
+
+    /// <summary>
     ///     The 1-D layouts np.bincount adds to the general pool (phase A): the plain prefix's magnitudes, contiguous, every
     ///     other element and reversed. The general pool's 1-D operands hold negative values, which a signed dtype refuses
     ///     at once and an unsigned one wraps into a bin count of up to 2^32 (an array of 32 GB), so only these reach the
@@ -4097,7 +4149,9 @@ static class Snapshot
     ///     values (<see cref="BincountLayouts"/>); for np.choose and NDArray.choose, the general pool and the same
     ///     non-negative 1-D operands (index arrays whose indices mostly name a choice); for np.linalg, pools of square
     ///     matrices, stacks and rectangles (<see cref="LinalgLayouts"/>); for np.savetxt, the general pool in phase A and
-    ///     the 1-D and 2-D layouts it writes when another parameter varies (<see cref="SaveTxtReducedLayouts"/>).
+    ///     the 1-D and 2-D layouts it writes when another parameter varies (<see cref="SaveTxtReducedLayouts"/>); for np.ix_
+    ///     and np.r_ / np.c_, the general pool with 1-D operands first in phase B; for np.diag and np.diagflat, the general
+    ///     pool and a strided and a reversed vector, 1-D operands first in phase B (<see cref="DiagReducedLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>The layouts of phase A, phase B and phase C.</returns>
@@ -4120,6 +4174,8 @@ static class Snapshot
                                 ? (Layouts, IndexTricksReducedLayouts, IndexTricksPairLayouts)
                                 : m.Name == "savetxt" && m.DeclaringType == typeof(np)
                                     ? (Layouts, SaveTxtReducedLayouts, SaveTxtPairLayouts)
+                                : m.DeclaringType == typeof(np) && m.Name is "diag" or "diagflat"
+                                    ? (Layouts.Concat(DiagExtraLayouts).ToArray(), DiagReducedLayouts, DiagPairLayouts)
                                     : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
@@ -4158,7 +4214,8 @@ static class Snapshot
             }
             // A constructor's operand when it takes no array: its shape (np.eye's N, np.identity's n), built per call from
             // the shape label in the parameter's C# form (TryMakeCtorShape). A _like form's prototype is the general operand.
-            if (i == 0 && !instance && IsCtor(m) && ps[0].ParameterType != typeof(NDArray))
+            // np.indices / np.indices_sparse's dimensions are such a shape too.
+            if (i == 0 && !instance && (IsCtor(m) || IsIndices(m)) && ps[0].ParameterType != typeof(NDArray))
             {
                 roles[i] = Role.CtorShape;
                 sawArray = true;
@@ -4378,9 +4435,12 @@ static class Snapshot
         if (ctor)
         {
             // A constructor takes no pool operand: its pools are shapes, one stand-in dtype label ("shape"), the first five
-            // shapes for phase B and the first three for phase C.
-            fullLayouts = CtorShapeLabels;
-            reducedLayouts = fullLayouts.Take(5).ToArray();
+            // shapes for phase B and the first three for phase C. np.indices' grids are tiny and a dtype's arange decides on
+            // the later ones (a bool arange of more than two elements, an int8 one that wraps), so its phase B takes them
+            // all.
+            bool grid = IsIndices(m);
+            fullLayouts = grid ? IndicesShapeLabels : CtorShapeLabels;
+            reducedLayouts = grid ? fullLayouts : fullLayouts.Take(5).ToArray();
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "shape" };
             pairDtypes = dtypes;
