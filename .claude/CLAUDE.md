@@ -7081,8 +7081,8 @@ Reverse interop (NumPy reading NumSharp, the direction byte-equality can't cover
 manual gate `python test/oracle/verify_npy_interop.py`.
 
 **`np.savetxt(fname, X, fmt='%.18e', delimiter=' ', newline='\n', header='', footer='', comments='# ',
-encoding=None)`** is a port of NumPy 2.4.2's `_npyio_impl.py::savetxt` (`APIs/np.savetxt.cs`), **byte-for-byte
-identical to NumPy's own output**. A 1-D array writes one value per line (NumPy's `atleast_2d(X).T`, `ncol=1`);
+encoding=None)`** is a port of NumPy 2.4.2's `_npyio_impl.py::savetxt` (the overloads in `APIs/np.savetxt.cs`, the
+body in `IO/SaveTxtIO.cs` since 2026-10-29), **byte-for-byte identical to NumPy's own output**. A 1-D array writes one value per line (NumPy's `atleast_2d(X).T`, `ncol=1`);
 a 2-D array writes a row per line; 0-D / ≥3-D raise `ValueError("Expected 1D or 2D array, got {n}D array
 instead")`. Each row is `format % tuple(row)` where `format` is the single spec joined `ncol` times by
 `delimiter`, a caller-supplied multi-`%` string (delimiter then ignored), or the list/tuple of specs joined —
@@ -7109,14 +7109,24 @@ Reads any layout (C/F/strided/transposed/negative-stride/broadcast/sliced) in lo
 (NPY/NS):** file-to-file **~2.1×**, `%d`/`%g` **3–25×** (NumPy's `savetxt` is a pure-Python per-row loop).
 **Two deliberate divergences** (`[Misaligned]`): `%d`/`%i`/`%u` on **inf** raises `System.OverflowException`
 where NumPy raises `OverflowError` (message identical; NumSharp has no `OverflowError` type — nan still raises
-`ValueError` verbatim), and the AttributeError renders a C# `string[]` as a Python list repr. Gate:
-`IO/SaveTxtTests.cs` (probed against NumPy 2.4.2). See `APIs/np.savetxt.cs`,
+`ValueError` verbatim), and the AttributeError renders a C# `string[]` as a Python list repr. **A null string argument
+is Python's None** (2026-10-29), refused where NumPy's statements meet it: `fmt` at once (`ValueError("invalid fmt:
+None")`), `delimiter` only where the specs are joined with it (`AttributeError("'NoneType' object has no attribute
+'join'")`; a multi-`%` format never reads it), `header` / `footer` at `len()` (`TypeError("object of type 'NoneType' has
+no len()")`; the footer's after the rows are written), `comments` / `newline` in their concatenations (`TypeError("can
+only concatenate str (not \"NoneType\") to str")`; a real row's becomes NumPy's `Mismatch between array dtype ...`, a
+complex row's stays the plain TypeError, an empty array writes nothing and does not fail), and a null entry of a spec
+list is `str.join`'s `TypeError("sequence item {i}: expected str instance, NoneType found")`. Gate:
+`IO/SaveTxtTests.cs` (probed against NumPy 2.4.2). See `APIs/np.savetxt.cs`, `IO/SaveTxtIO.cs`,
 `Backends/Printing/PrintfFormatter.cs`.
 
 **`np.loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None,
 unpack=False, ndmin=0, encoding=None, max_rows=None, quotechar=None)`** is the reader complement — a port of NumPy
 2.4.2's `_npyio_impl.py::loadtxt` → `_read` plus its C text reader (`textreading/{tokenize.cpp,conversions.c,
-str_to_int.c,rows.c}`), in `APIs/np.loadtxt.cs`. Round-trips `np.savetxt` (byte-exact values). The C reader always
+str_to_int.c,rows.c}`): the overloads in `APIs/np.loadtxt.cs`, the body (since 2026-10-29) in
+`IO/TextReading/LoadTxtReader.cs` (`_read`'s checks, the configuration, `read_rows`), `LoadTxtReader.Conversions.cs` (the
+field parsers of `conversions.c` / `str_to_int.c`) and `LoadTxtReader.Sinks.cs` (one sink per dtype class), one
+`internal static partial class LoadTxtReader`. Round-trips `np.savetxt` (byte-exact values). The C reader always
 yields a 2-D `(rows, cols)` array; **`ndmin` then squeezes size-1 axes** (so a single row/col → 1-D, a lone value →
 0-d) or expands. The **tokenizer** is a faithful port: `delimiter=None` splits on **runs of whitespace** (leading/
 trailing stripped, blank/comment-only lines → 0 fields → skipped) while an explicit single-char delimiter (incl. `' '`)
@@ -7137,12 +7147,15 @@ NaN→`+qNaN 0x7FF8…`), **complex** is `to_complex_int` with the imaginary uni
 for exactly `.gz`; universal newlines), open **`Stream`**, **`TextReader`**, or **`IEnumerable<string>`** (lines,
 embedded newlines split). Errors
 are NumPy-verbatim: `ValueError("the number of columns changed from {a} to {b} at row {n}; …")`, `ValueError("could
-not convert string '{tok}' to {dtype} at row {r}, column {c}.")` (**row 0-based, column 1-based**), `ValueError(
+not convert string '{tok}' to {dtype} at row {r}, column {c}.")` (**row 0-based, column 1-based**; `{dtype}` is `str`
+of the requested descriptor, `rows.c`'s `%S`, so a non-native one reads `>i4`), `ValueError(
 "invalid column index {k} at row {n} with {c} columns")`, `ValueError("Illegal value of ndmin keyword: …")`,
 `TypeError` for a multi-char/newline delimiter. A float16 field is NumPy's `npy_to_generic`: `PyArray_Pack` of the field's
 str, i.e. Python's `float()` (underscores between digits, Unicode digits and Unicode whitespace accepted, which float32 /
 float64's own parser refuses) rounded once by `npy_double_to_half`; an ASCII field without `_` takes the shared double
-parser. An unsized `U` / `S` with `max_rows=0` is `_read`'s empty chunk list: `ValueError("need at least one array to
+parser, any other goes through the class's `setitem` slot (`DTypeMeta.setitem`, NumPy's `PyArray_Pack`), and so does a
+converter's value (`npy_to_generic_with_converter`). An unsized `U` / `S` (the descriptor's kind and size, `_read`'s
+`dtype.kind in 'SUM'` test) with `max_rows=0` is `_read`'s empty chunk list: `ValueError("need at least one array to
 concatenate")`. **Deliberate divergence:** the empty-input `UserWarning` is not emitted (NumSharp has no warnings module;
 the array is still the correct empty result). Gate: `IO/LoadTxtTests.cs`, `IO/TextReaderPortTests.cs` (probed against
 NumPy 2.4.2) and the text I/O oracle tier's loadtxt / ltfields / lttokens sections (20,883 cases). See `APIs/np.loadtxt.cs`.
@@ -7176,7 +7189,9 @@ NumPy 2.4.2) and the text I/O oracle tier's loadtxt / ltfields / lttokens sectio
 **Text I/O for `StringDType`, and Python's codecs (strings phase 1, P1.7c, 2026-10-15).** `np.loadtxt` / `np.savetxt` /
 `ndarray.tofile` / `np.fromfile` / `np.fromstring` handle NEP 55 `StringDType` as NumPy does, and every text encoding
 goes through a port of CPython's own codec layer. Plan `docs/plans/strings-phase1-completion.md` (P1.7c and the closing
-pass); code in `IO/TextReading/` and `APIs/np.{loadtxt,loadtxt.Sinks,loadtxt.Parsers,savetxt,tofile,fromfile}.cs`.
+pass); code in `IO/TextReading/` (loadtxt's body: `LoadTxtReader{,.Conversions,.Sinks}.cs`, the parsers and sinks that
+were `APIs/np.loadtxt.{Parsers,Sinks}.cs` until 2026-10-29), `IO/SaveTxtIO.cs` and `APIs/np.{loadtxt,savetxt,tofile,
+fromfile}.cs`.
 - **loadtxt's pipeline** (NumPy's `_read` + `textreading/`):
   - the Python-level checks run in NumPy's order. `comments` are Python objects as in NumPy: a non-iterable is
     `'int' object is not iterable` before the ndmin check; a `null` element is `str.split(None, 1)[0]` (IndexError on a
@@ -7610,6 +7625,7 @@ code gives NumPy's text.
 | Kernel shared infra | `Backends/Kernels/{VectorMethodCache,ScalarMethodCache,KernelOp,StrideDetector,SimdMatMul.*}.cs` |
 | .npy/.npz format (NEP-01) | `IO/NpyFormat.cs` (port of NumPy's `_format_impl.py`), `IO/NpzFile.cs` (lazy archive), `IO/PyLiteral.cs` (header parser ≙ `ast.literal_eval`), `APIs/np.{save,load}.cs` |
 | Raw array files and bytes | `IO/ArrayFileIO.cs` (NumPy's `PyArray_FromFile` / `PyArray_FromString` / `PyArray_ToFile`, the bodies of np.fromfile / np.fromstring / ndarray.tofile; their facades are `APIs/np.{fromfile,fromstring,tofile}.cs`), `IO/TextReading/NumPyTextScan*.cs` (the C scanners), `Backends/Unmanaged/UnmanagedStorage.Buffer.cs` (np.frombuffer's `PyArray_FromBuffer`), `UnmanagedStorage.Convert.cs` (`ToBytes`, ndarray.tobytes' `PyArray_ToString`), `UnmanagedStorage.Byteswap.cs` (ndarray.byteswap's `PyArray_Byteswap`), `Utilities/NDByteOrder.cs` (the byte-order kernels behind `DTypeMeta.copyswapn`) |
+| Text arrays (np.loadtxt / np.savetxt) | `IO/TextReading/LoadTxtReader.cs` (np.loadtxt's body: `_read`'s checks, the configuration, `read_rows`), `LoadTxtReader.Conversions.cs` (the field parsers of `conversions.c` / `str_to_int.c`), `LoadTxtReader.Sinks.cs` (one sink per dtype class), `IO/TextReading/LoadTxtTokenizer.cs` (`tokenize.cpp`), `IO/TextReading/{LoadTxtSources,PyDataSource}.cs` (the line sources, NumPy's `DataSource`), `IO/SaveTxtIO.cs` (np.savetxt's body), `Backends/Printing/{PercentFormat,PrintfFormatter}.cs` (CPython's `%` operator); facades `APIs/np.{loadtxt,savetxt}.cs` |
 | float32 NumPy-exact math (exp/log/sin/cos) | `Utilities/NDFloatMath.cs`, `Utilities/NDFloatMath.Simd.cs` |
 | Type info | `Utilities/InfoOf.cs` |
 | Generic NDArray | `Generics/NDArray\`1.cs` |

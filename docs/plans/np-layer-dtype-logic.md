@@ -44,16 +44,20 @@ Python list). Batch 5, constructors, is done (`8bbd4e4c`, `e23cef2b`): the bodie
 and np.ones are `NDArray.Numeric.cs` members, np.eye's is `NDArray.Eye` in `NDArray.TwoDimBase.cs`, np.ndarray's is
 `UnmanagedStorage.ArrayNew` in `UnmanagedStorage.Ctors.cs` beside the storage-lane fills, the ones are the Python
 int 1 converted by the class's `setitem`, and the divergences a replay of their snapshot through NumPy found are
-fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 6's first part, np.frombuffer, is done (`87263eb9`,
+fixed per D4 (`f048ad69`, `4d1a0d02`, `253b8f45`). Batch 6, buffers and IO, is done, in three parts. The first, np.frombuffer (`87263eb9`,
 `ebff0b12`): its body is NumPy's `PyArray_FromBuffer` in `UnmanagedStorage.Buffer.cs` (one member for the buffers
 np.ndarray takes, one for an address, one for a span), its REFCHK asks `HasReferences` and a non-native descriptor is
 decoded by the class's `copyswapn`; the replay's divergences were fixed first (`32bfa4a7`, `271f24d0`), so the move
-took one body instead of seven copies. Its second part is done too (`f41dab51`, `2b775799`, `1c5a20be`, `0edc1edc`):
-the bodies of np.fromfile, np.fromstring and ndarray.tofile are `IO/ArrayFileIO.cs` (NumPy's `PyArray_FromFile`,
+took one body instead of seven copies. The second (`f41dab51`, `2b775799`, `1c5a20be`, `0edc1edc`): the bodies of
+np.fromfile, np.fromstring and ndarray.tofile are `IO/ArrayFileIO.cs` (NumPy's `PyArray_FromFile`,
 `PyArray_FromString`, `PyArray_ToFile`), tobytes' and byteswap's are `UnmanagedStorage` members, their dtype questions
 are class slots (`HasScanFunc`, `HasFromStr`, the `NPY_LIST_PICKLE` flag, and `copyswapn`, which ndarray.byteswap now
-swaps through), and the three divergences the replay found were fixed first (`79fe2630`, `c4c072d1`, `ac8ed7a4`);
-np.loadtxt's converters are left. Batch 9, the computing functions in P3's files, is done
+swaps through), and the three divergences the replay found were fixed first (`79fe2630`, `c4c072d1`, `ac8ed7a4`).
+The third (`06320e8b`, `d1ce3bef`): np.loadtxt's body - `_read`'s checks, `read_rows`, the converters and
+the sinks - is `IO/TextReading/LoadTxtReader{,.Conversions,.Sinks}.cs`, np.savetxt's is `IO/SaveTxtIO.cs`, a
+converter's value is stored through the class's `setitem` (NumPy's `npy_to_generic`), and the two divergences the
+replay found were fixed first (`222cfcb5`: savetxt's null arguments are None; `d92bd08f`: loadtxt's conversion error
+names a non-native dtype). R1 has no batch 6 row left. Batch 9, the computing functions in P3's files, is done
 (2026-10-29): np.linspace / np.logspace / np.geomspace are `TensorEngine` members in `TensorEngine.CoreFunctionBase.cs`,
 np.vander in `TensorEngine.TwoDimBase.cs`, np.trim_zeros in `TensorEngine.FunctionBase.cs`, and the six divergences a
 replay of their snapshot through NumPy found are fixed per D4. Batch 7, NumPy's Python functions of the array object,
@@ -845,8 +849,14 @@ first, as it did for np.fft.
    and byteswap into `UnmanagedStorage.Convert.cs` / the new `UnmanagedStorage.Byteswap.cs`, getfield converted where it
    is. The text readers' refusals ask `HasScanFunc` / `HasFromStr`, tofile's binary refusal the `NPY_LIST_PICKLE` flag,
    and ndarray.byteswap swaps through `copyswapn`, which gained a fused copy-and-swap pass and a strided kernel. R1: 16
-   text and 7 numeric lines left. Left: np.loadtxt's converters with np.savetxt's two lines (R1: 26 text and 16 numeric
-   lines in np.loadtxt.Sinks.cs, np.loadtxt.Parsers.cs, np.loadtxt.cs and np.savetxt.cs).
+   text and 7 numeric lines left.
+   Third part done, so batch 6 is done (`0f092c78`, `222cfcb5`, `d92bd08f`, `06320e8b`, `d1ce3bef`), the D4 fixes before
+   the move: np.loadtxt's body into `IO/TextReading/LoadTxtReader{,.Conversions,.Sinks}.cs` (`_read`'s checks,
+   `read_rows`, the converters, the sinks) and np.savetxt's into `IO/SaveTxtIO.cs`, the facades keeping their overloads
+   and the source / target handling. A converter's value, and a float16 field, are stored through the class's
+   `setitem` (NumPy's `npy_to_generic` / `npy_to_generic_with_converter`); the sinks stay one per DType class, as
+   NumPy's converters are one per type number. R1: 26 text and 16 numeric lines left (np.loadtxt.cs,
+   np.loadtxt.Parsers.cs, np.loadtxt.Sinks.cs, np.savetxt.cs).
 7. **NumPy's Python functions of the array object** (22 files, 152 lines) into their `NDArray` homes: np.where,
    np.select, np.piecewise, np.extract and np.delete's rest; np.pad (`ArrayPad`); np.r_, np.ix_ and np.fill_diagonal
    (`IndexTricks`); np.indices (`Numeric`); np.diag (`TwoDimBase`); np.take_along_axis and np.put_along_axis
@@ -1112,6 +1122,61 @@ candidate.
 
 ## 9. State log
 
+- **2026-10-29, P3: batch 6, third part (np.loadtxt, np.savetxt) - batch 6 is done.** Five commits on `strings`: the
+  tool commit landed first (`0f092c78`), the others were developed in the scratch worktree on it, rebased onto
+  `dbc282ed` (batch 7's sixth part) and landed by fast-forward. `06320e8b`'s message names the savetxt fix by its
+  first hash, `d9917927` (now `222cfcb5`). R1: 26 text and 16 numeric lines leave (np.loadtxt.cs 2 / 0,
+  np.loadtxt.Parsers.cs 0 / 15, np.loadtxt.Sinks.cs 23 / 0, np.savetxt.cs 1 / 1): batch 6 has no row left. R2:
+  unchanged (the new homes are under `IO/`).
+  - `0f092c78`: the snapshot tool reaches np.loadtxt and np.savetxt (each overload was one SKIP line). np.loadtxt's
+    SOURCE is the operand: the pool's value sequence written as rows of text (a 0-d operand one field, a 1-D one a
+    column, an N-D one its first axis' rows) in the C# form its first parameter takes - a temporary file, also
+    gzip-compressed, a missing one, a byte stream, a TextReader, a list of lines - plain, comma-separated, with comments,
+    with blank lines, with a ragged last row, quoted. np.savetxt writes X (the pool operand) into a sink whose bytes join
+    the outcome: a temporary file, a MemoryStream, a StringWriter (new `Role.SinkWriter`). Every other parameter takes
+    variants by function and name (`Role.TextIOArg`: comments, delimiter, converters from a menu the replay names alike,
+    skiprows, usecols, ndmin, encoding, max_rows, quotechar; fmt, newline, header, footer), savetxt's fmt list is built
+    from X's columns, and savetxt's phase B / C pools are the layouts it writes (a 0-d or 3-D X is refused first: with the
+    general pools 41,228 of its 70,254 lines repeated that refusal). np.loadtxt 48,839 lines, np.savetxt 49,428: batch 6's
+    snapshot is 298,015 lines. The other names' lines are byte-identical, the new ones identical over two runs and under
+    `NUMSHARP_DEBUG_GUARD_PAGES=1`.
+  - The replay of the new lines through NumPy 2.4.2 (`replay6c.py`): 98,267 lines, 1,576 C#-only (the char and decimal
+    pools, C# null sources); 85,490 identical or in the documented non-native class (2,498 lines: NumPy's result compared
+    as a native copy, with NumPy's own flags - a first run compared the copy's flags and flagged 1,298 squeezed results that
+    were no difference), 11,201 differing, two faults fixed per D4 before the move:
+    - `222cfcb5`: np.savetxt's string arguments are Python's None when null, refused where NumPy's statements meet the
+      None - fmt at once (`invalid fmt: None`), delimiter where it is joined (AttributeError; a multi-`%` format never
+      reads it), header / footer at `len()`, comments / newline in their concatenations (a real row's TypeError becomes
+      NumPy's Mismatch, a complex row's stays plain), a footer's error after every row was written; a None spec in a list
+      is `str.join`'s TypeError. NumSharp wrote the file, printed `invalid fmt: ` or threw NullReferenceException.
+      11,001 lines.
+    - `d92bd08f`: np.loadtxt's conversion error names a non-native dtype by its type string (`... to >i4 at row 0,
+      column 2.`), NumPy's `%S` of the field's descriptor; NumSharp named the native lane. 200 lines.
+    After them the replay has 0 differing lines: 96,691 identical (2,498 of them in the non-native class), 1,576 skipped.
+  - `06320e8b`, the pure move: np.loadtxt's body - its "config" and "read_rows" regions (`_read`'s checks,
+    `read_rows`) and the whole of np.loadtxt.Parsers.cs (the numeric field parsers, NumPy's `conversions.c` /
+    `str_to_int.c`) and np.loadtxt.Sinks.cs (the sinks) - becomes `IO/TextReading/LoadTxtReader{,.Conversions,.Sinks}.cs`,
+    one `internal static partial class LoadTxtReader`, so the three partials keep their cross-references; np.savetxt's
+    "internals" region becomes `IO/SaveTxtIO.cs`. The facades keep their overloads, docs and source / target handling.
+    The members the facades call became internal; np's `CI` was spelled out at its one use. Snapshot byte-identical.
+  - `d1ce3bef`, the conversion: a converter's value is stored by the class's `setitem` (NumPy's
+    `npy_to_generic_with_converter`: `PyArray_Pack`), called with the native twin of a non-native request because the
+    sink writes the native lane; a float16 field outside the ASCII fast path is the float16 class's `setitem` (NumPy's
+    `npy_to_generic`); the unsized-string test is the descriptor's kind and size (`_read`'s `dtype.kind in 'SUM'`);
+    savetxt's complex test reads the kind (`np.iscomplexobj`), its Python-object rows ask `HasReferences`. Kept on
+    purpose: the sinks chosen per DType class (NumPy's `get_from_ucs4_function` switches on the type number), the strict
+    parsers per lane, the Mismatch text naming the lane. Snapshot byte-identical, and identical under guard pages.
+  - Gates: Core's warnings unchanged (15,720); the text I/O tests (134) and the text I/O oracle tier pass; the D4 tests are
+    NumPy-probed and fail on their parents (`IO/SaveTxtTests.cs` `NullStringArguments_AreNone_NumPysErrorsAtNumPysPoints`,
+    `IO/LoadTxtTests.cs` `ConversionError_NamesTheRequestedDescriptor`). The four suites on the stack rebased onto
+    `30fa03d0`: NumSharp.Tests 20,833 / 20,832 and the oracle suite 414 / 414 passed on net10.0 / net8.0 (11 and 2
+    skipped), Release, `TestCategory!=OpenBugs&TestCategory!=HighMemory`; after the second rebase, onto `dbc282ed`, the
+    build, the Layering ratchets (7) and NumSharp.Tests (20,839 / 20,838) passed again.
+  - Next: batch 8 (the indexers), 9b and 10; batch 7's seventh part (np.mgrid / np.ogrid, np.ravel_multi_index) is the
+    parallel session's. Two findings for the owner: np.median of complex128 data with a NaN returns the middle mean where NumPy returns the NaN
+    element (62 cases of batch 7's np.pad replay); a C# int literal in an operator's no-loop TypeError is named int32 where
+    NumPy names the Python int int64 (78 cases of batch 7's np.apply_along_axis replay; the known C#-literal typing).
+
 - **2026-10-29, P3: batch 7, sixth part (np.indices, np.diag).** Five commits on `strings` from the parallel session
   (developed in the scratch worktree on top of the fifth part and landed by fast-forward). R1: 1 text and 3 numeric
   lines leave (np.diag.cs 1 / 0, np.indices.cs 0 / 3; neither file has a row now); R2: unchanged (the homes are under
@@ -1147,6 +1212,7 @@ candidate.
   - Core's doc warnings 3,829 -> 3,828 (the D4).
   - Gates: NumSharp.Tests 20,837 / 20,836 passed on net10.0 / net8.0 (11 skipped) and the oracle suite 414 / 414 (2 skipped), Release, `TestCategory!=OpenBugs&TestCategory!=HighMemory`. Of the 6 new tests (`Indexing/np.indices.NumPyPort.Test.cs`, NumPy-probed on Windows and Linux), 5 fail on the parent of `408644f1`; the sixth pins the values the arange route assigns, which equal the old cast's.
   - Left for batch 7: the lines of np.mgrid, np.ogrid and np.ravel_multi_index.
+
 - **2026-10-29, P3: batch 7, fifth part (np.take_along_axis, np.put_along_axis, np.apply_along_axis).** Five commits on
   `strings` from the parallel session (developed in the scratch worktree on `6f1da8dd`, rebased onto `0f092c78`,
   batch 6c's tool commit, and landed by fast-forward). R1: 3 text and 11 numeric lines leave (np.put_along_axis.cs 2 / 1,
