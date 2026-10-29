@@ -161,7 +161,10 @@ namespace NumSharp
             // stride of n+1 walks it — the same arithmetic NumPy's flat-slice uses.
             long start = k >= 0 ? k : absK * n;
 
-            if (v1d.Storage.IsVString)
+            // The descriptor answers which inputs cannot take the raw strided-store kernel below: the ones whose elements
+            // hold references (NumPy's PyDataType_REFCHK; StringDType, whose cells point into the array's allocator), as
+            // np.fill_diagonal's and the item-selection family's HasReferences decisions do.
+            if (v1d.dtype.Meta.HasReferences)
             {
                 // A StringDType input: the diagonal of MARKS receives v's element numbers, and the marked elements of the
                 // fresh '' matrix receive the strings (never the raw strided-store kernel below).
