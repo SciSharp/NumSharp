@@ -646,14 +646,25 @@ namespace NumSharp
         ///     the same way).</returns>
         /// <exception cref="TypeError">A text chunk whose reduction NumPy refuses (its texts, from the reductions).</exception>
         /// <exception cref="NotSupportedException">An unknown mode (the caller validated it).</exception>
-        /// <remarks>Numbers take two shortcuts that give NumPy's values: a flat reduction for a 1-D chunk, and the mean as
-        ///     <c>sum / n</c> (see the body); text takes NumPy's statement as it is.</remarks>
+        /// <remarks>
+        ///     <para>
+        ///     NumPy's statement runs on the chunk VIEW itself, whatever its layout: a reduction's order follows the view's
+        ///     memory order (an F-ordered padded array reduces its axis-0 chunks along their contiguous runs), and the mean
+        ///     of an integer chunk is <c>_mean</c>'s float64 sum and division. Both used to be rewritten - a contiguous copy
+        ///     of a 3-D chunk first, and the mean as <c>sum(chunk) / n</c> in the CHUNK's dtype, which wrapped an unsigned
+        ///     sum before the division (<c>np.pad(uint64 [3, 2**64 - 1, 2**64 - 4, 5], 1, 'mean')</c> padded with 1 where
+        ///     NumPy pads with 2**63).
+        ///     </para>
+        ///     <para>
+        ///     One shortcut stays, because it gives NumPy's values: a 1-D chunk reduces flat (one run either way), and the 0-d
+        ///     statistic broadcasts into the pad area as the (1,) one does.
+        ///     </para>
+        /// </remarks>
         private static NDArray StatReduce(NDArray chunk, int axis, string mode)
         {
             // Text takes NumPy's statement exactly (np.amax / np.amin / np.mean / np.median with the axis and
-            // keepdims=True): the numeric shortcuts below rewrite the call (a flat reduction, the mean as sum / n), which
-            // changes the answer for text — np.mean of StringDType text reaches the divide's no-loop refusal, a flat one
-            // the str / int refusal, the mean rewritten as sum / n yet another text (probed against 2.4.2).
+            // keepdims=True): a flat reduction changes the answer for text — np.mean of StringDType text reaches the
+            // divide's no-loop refusal, a flat one the str / int refusal (probed against 2.4.2).
             if (chunk.typecode == NPTypeCode.String)
                 return mode switch
                 {
@@ -664,8 +675,7 @@ namespace NumSharp
                     _ => throw new NotSupportedException($"stat mode '{mode}'"),
                 };
 
-            // 1D fast path: no-axis variants are 100×+ faster than axis+keepdims
-            // for np.mean (DefaultEngine.Mean axis-path perf bug).  Returns 0-D,
+            // 1-D: the flat reduction of the one run (the same order and value as the axis form); a 0-d statistic, which
             // broadcasts identically.
             if (chunk.ndim == 1 && axis == 0)
             {
@@ -678,49 +688,15 @@ namespace NumSharp
                 }
             }
 
-            // N-D path. Two pre-emptive workarounds for DefaultEngine bugs:
-            //
-            //  1. np.mean(arr, axis, keepdims) on N-D arrays is ~100× slower
-            //     than np.sum(arr, axis, keepdims) (DefaultEngine.Mean axis-path
-            //     reflection-loop bug). Compute as sum/N instead.
-            //
-            //  2. Axis reductions on sliced/non-contig 3D+ views are ~20× slower
-            //     than on contiguous arrays (the strided reduction inner loop
-            //     does mod/div per element for outer-axis reductions). The 2D
-            //     non-contig case has near-identical perf to contig, so the
-            //     materialisation is only worth it from ndim ≥ 3.
-            NDArray src = chunk;
-            bool ownsSrc = false;
-            if (chunk.ndim >= 3 && !chunk.Shape.IsContiguous)
+            // stat_func(chunk, axis=axis, keepdims=True) on the view itself.
+            switch (mode)
             {
-                src = chunk.copy();
-                ownsSrc = true;
+                case "maximum": return np.amax(chunk, axis: axis, keepdims: true);
+                case "minimum": return np.amin(chunk, axis: axis, keepdims: true);
+                case "mean": return np.mean(chunk, axis, true);
+                case "median": return np.median(chunk, axis: axis, keepdims: true);
+                default: throw new NotSupportedException($"stat mode '{mode}'");
             }
-            try
-            {
-                switch (mode)
-                {
-                    case "maximum": return np.amax(src, axis: axis, keepdims: true);
-                    case "minimum": return np.amin(src, axis: axis, keepdims: true);
-                    case "mean":
-                    {
-                        using var sum = np.sum(src, axis: axis, keepdims: true);
-                        long n = src.Shape.dimensions[axis];
-                        // Promote sum to float for the divide if it isn't already.
-                        if (IsIntegerDtype(sum.GetTypeCode))
-                        {
-                            using var asF = sum.astype(typeof(double));
-                            using var divisor = NDArray.Scalar((double)n, NPTypeCode.Double);
-                            return asF / divisor;
-                        }
-                        using var divisorF = NDArray.Scalar((double)n, sum.GetTypeCode);
-                        return sum / divisorF;
-                    }
-                    case "median":  return np.median(src, axis: axis, keepdims: true);
-                    default: throw new NotSupportedException($"stat mode '{mode}'");
-                }
-            }
-            finally { if (ownsSrc) src.Dispose(); }
         }
 
         /// <summary>
@@ -784,6 +760,7 @@ namespace NumSharp
             // widths of 0 included, and text on either side refuses there. Checked before any ramp is computed: the
             // padded array of a call that raises is discarded in NumPy too, so the order of the work is unobservable.
             ThrowIfLinearRampText(array, endValues, ndim);
+            DType computeType = LinearRampComputeType(array, endValues);
             var (padded, originalSlice) = _PadSimple(array, padPairs, fillValue: null);
 
             for (int axis = 0; axis < ndim; axis++)
@@ -797,16 +774,16 @@ namespace NumSharp
                     var (leftEdge, rightEdge) = _GetEdges(roi, axis, (left, right));
                     try
                     {
-                        // Build coefficients (width,) reshaped to broadcast across non-axis dims.
+                        // Each side is one np.linspace over the whole edge (NumPy's any_step_zero is decided per call).
                         if (left > 0)
                         {
-                            using var ramp = BuildLinearRamp(leftEdge, axis, left, endPairs[axis, 0], padded.GetTypeCode, reverse: false);
+                            using var ramp = BuildLinearRamp(leftEdge, axis, left, endPairs[axis, 0], computeType, padded.GetTypeCode, reverse: false);
                             var padSlices = _SliceAtAxis(new Slice(0, left), axis, padded.ndim);
                             AssignSliceValue(roi, padSlices, ramp);
                         }
                         if (right > 0)
                         {
-                            using var ramp = BuildLinearRamp(rightEdge, axis, right, endPairs[axis, 1], padded.GetTypeCode, reverse: true);
+                            using var ramp = BuildLinearRamp(rightEdge, axis, right, endPairs[axis, 1], computeType, padded.GetTypeCode, reverse: true);
                             long axisLen = roi.Shape.dimensions[axis];
                             var padSlices = _SliceAtAxis(new Slice(axisLen - right, axisLen), axis, padded.ndim);
                             AssignSliceValue(roi, padSlices, ramp);
@@ -992,87 +969,118 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Build a linear ramp of length <paramref name="width"/> along
-        ///     <paramref name="axis"/>, blending <paramref name="edge"/> (a
-        ///     1-thick slice with axis-dim=1) toward scalar
-        ///     <paramref name="endValue"/>.  Uses a scalar <c>np.linspace(0,1)</c>
-        ///     reshaped to broadcast along non-axis dims, then computes the
-        ///     ramp via existing SIMD-accelerated binary ops.
-        ///
-        ///     Mirrors NumPy <c>_get_linear_ramps</c> (which uses a vectorized
-        ///     <c>np.linspace</c> with array bounds; ours is scalar so we
-        ///     express the same formula as one broadcast multiply + add).
+        ///     The dtype NumPy's <c>np.linspace</c> computes a ramp in: <c>_array_converter(start, stop).result_type(
+        ///     ensure_inexact=True)</c>, the start's class or descriptor, the edge's descriptor and the abstract Python float.
         /// </summary>
-        [NDScopedCovered] // only caller: PadLinearRamp ← [NDScoped] PadImpl (coefReshaped view is scope-reclaimed)
-        private static NDArray BuildLinearRamp(NDArray edge, int axis, long width, object endValue,
-            NPTypeCode dtype, bool reverse)
+        /// <param name="array">The input (its descriptor is every edge's: the edges are slices of the padded array).</param>
+        /// <param name="endValues">The <c>end_values</c> argument as given (null for NumPy's default 0).</param>
+        /// <returns>The computation dtype: float64 for an integer or bool input with NumPy scalar starts (the default 0 is an
+        ///     <c>np.int64</c>, a float or a pair <c>np.float64</c>s), the input's own float dtype with Python-scalar starts
+        ///     (<c>tolist()</c>'s weak values: a float16 input then computes in float16), complex128 where either side is
+        ///     complex.</returns>
+        /// <remarks>Every start comes from ONE <c>np.array(end_values)</c>, so one dtype serves every axis and side. Two
+        ///     NumSharp dtypes without a NumPy class: <c>char</c> promotes as its uint16 proxy (an integer), <c>decimal</c>
+        ///     computes in decimal (exact, no promotion).</remarks>
+        private static DType LinearRampComputeType(NDArray array, object endValues)
         {
-            // Coefficient vector: np.linspace(0, 1, width, endpoint=False) has shape (width,)
-            // ramp[k] = end + coef[k] * (edge - end)  →  end at k=0, edge - step at k=width-1
-            // For the right side we want the reversed ramp (edge-step nearest original,
-            // end at far end) which means coef reversed along axis.
-            NDArray coef = np.linspace(0.0, 1.0, width, endpoint: false);
-            if (reverse)
-            {
-                // Reverse along the only axis (axis 0 of the (width,) coef).
-                var rc = coef[new Slice(null, null, -1)];
-                coef.Dispose();
-                coef = rc.copy(); // materialize so subsequent reshape/broadcast see contig stride
-                rc.Dispose();
-            }
+            if (array.typecode == NPTypeCode.Decimal)
+                return np.@decimal;
+            var (startDescr, strong) = LinearRampEndValuesArray(endValues);
+            object start = strong ? startDescr : WeakStartClass(startDescr);
+            DType edge = array.typecode == NPTypeCode.Char ? np.uint16 : array.dtype;
+            return DTypePromotion.ResultType(start, edge, DTypeRegistry.PyFloat);
+        }
 
-            // Reshape coef to (1, ..., width, ..., 1) at axis position.
+        /// <summary>
+        ///     NumPy's <c>np.linspace(start=end_value, stop=edge.squeeze(axis), num=width, endpoint=False,
+        ///     dtype=padded.dtype, axis=axis)</c> inside <c>_get_linear_ramps</c>, statement for statement, the right ramp
+        ///     reversed along the axis.
+        /// </summary>
+        /// <param name="edge">The 1-thick edge slice (the axis kept at length 1: it broadcasts as NumPy's squeezed stop).</param>
+        /// <param name="axis">The padded axis.</param>
+        /// <param name="width">The pad width on this side (at least 1; NumPy's zero-width linspace is empty).</param>
+        /// <param name="endValue">The start: a boxed NumPy scalar, or a <see cref="PyListItem"/> Python scalar.</param>
+        /// <param name="computeType">The linspace's computation dtype (<see cref="LinearRampComputeType"/>).</param>
+        /// <param name="dtype">The padded array's dtype (linspace's <c>dtype=</c>).</param>
+        /// <param name="reverse">Reverse along <paramref name="axis"/> (the right ramp).</param>
+        /// <returns>The ramp of <paramref name="dtype"/>: <paramref name="width"/> long along <paramref name="axis"/>, the
+        ///     edge's extent elsewhere (a reversed view for the right side).</returns>
+        /// <exception cref="NotSupportedException">An integer input with a complex start: NumPy's <c>floor</c> of the complex
+        ///     ramp has no loop (NumPy raises its TypeError).</exception>
+        /// <remarks>
+        ///     <para>
+        ///     The arithmetic is linspace's, in <paramref name="computeType"/>: <c>delta = stop - start</c>, <c>step = delta /
+        ///     num</c>, <c>y = arange(num) * step + start</c> - except that when ANY element of <c>step</c> is zero (a stop equal
+        ///     to the start, or a difference that underflows), NumPy computes the whole call as <c>arange(num) / num * delta +
+        ///     start</c> (its subnormal guard, gh-5437). The two orders round differently, so the test runs over the whole edge
+        ///     like NumPy's. An integer <paramref name="dtype"/> floors the ramp before the cast (<c>linspace(0, -3, 2,
+        ///     endpoint=False)</c> is <c>[0, -2]</c>); a bool one only casts (a nonzero ramp value is True).
+        ///     </para>
+        ///     <para>
+        ///     The previous form computed <c>start + (k / num) * delta</c>, which rounds otherwise: <c>np.pad([0.7, 1.3, 2.9],
+        ///     3, 'linear_ramp')</c> differed in the last bit, and a bool input failed on the bool subtract.
+        ///     </para>
+        /// </remarks>
+        [NDScopedCovered] // only caller: PadLinearRamp ← [NDScoped] Pad (every intermediate is disposed here as well)
+        private static NDArray BuildLinearRamp(NDArray edge, int axis, long width, object endValue,
+            DType computeType, NPTypeCode dtype, bool reverse)
+        {
+            NPTypeCode work = computeType.typecode;
+            // linspace's operands in its loop dtype: np.subtract(stop, start, dtype=dt) casts both, and the Python int num of
+            // `delta / div` / `y /= div` is a weak operand of the same loop.
+            using var start = NDArray.Scalar(NumSharp.Utilities.Converts.ChangeType(UnwrapPyListItem(endValue), work), work);
+            using var div = NDArray.Scalar(NumSharp.Utilities.Converts.ChangeType(width, work), work);
+            using var delta = np.subtract(edge, start, dtype: computeType);
+            using var step = delta / div;
+
+            // y = arange(0, num, dtype=dt), laid along the axis (NumPy reshapes it to (num, 1, ...) and moves axis 0 to `axis`
+            // at the end: the same elementwise products).
             int ndim = edge.ndim;
-            var coefShape = new long[ndim];
-            for (int i = 0; i < ndim; i++) coefShape[i] = i == axis ? width : 1L;
-            var coefReshaped = coef.reshape(Shape.Adopt(coefShape));
+            var yShape = new long[ndim];
+            for (int i = 0; i < ndim; i++) yShape[i] = i == axis ? width : 1L;
+            using var counts = np.arange(width);
+            using var countsTyped = counts.astype(computeType);
+            using var y = countsTyped.reshape(Shape.Adopt(yShape));
 
-            // Arithmetic dtype selection — must preserve the source dtype's
-            // structure (especially Complex's imaginary component).  For integer
-            // dtypes we promote to double for precision and cast back at the
-            // end (matching NumPy's linspace(dtype=int) truncate-cast semantics).
-            // For floating / complex source we compute in the source dtype so
-            // imaginary parts and float32 precision are preserved.
-            bool isInteger = IsIntegerDtype(dtype);
-            NPTypeCode workType = isInteger ? NPTypeCode.Double : dtype;
-            using var endNd = NDArray.Scalar(
-                NumSharp.Utilities.Converts.ChangeType(endValue, workType), workType);
-
-            NDArray edgeWork = edge.GetTypeCode == workType ? edge : edge.astype(NumSharp.NPTypeCodeExtensions.AsType(workType));
-            try
+            // any_step_zero over the whole call: the subnormal guard's order for every element, or the plain one for all.
+            bool anyStepZero;
+            using (var zero = step == 0)
+                anyStepZero = np.any(zero);
+            NDArray scaled;
+            if (anyStepZero)
             {
-                // ramp = end + coef * (edge - end)
-                using var diff = edgeWork - endNd;
-                using var scaled = coefReshaped * diff;
-                NDArray ramp = scaled + endNd;
-                coef.Dispose();
-                if (!ReferenceEquals(edgeWork, edge)) edgeWork.Dispose();
+                using var fraction = y / div;
+                scaled = fraction * delta;
+            }
+            else
+            {
+                scaled = y * step;
+            }
 
-                // NumPy linear_ramp uses np.linspace(..., dtype=padded.dtype).  For an
-                // INTEGER destination dtype np.linspace floors toward -inf before casting
-                // — NOT C-style truncation toward zero.  e.g. linspace(0, -3, 2, F) has
-                // samples [0, -1.5] and yields [0, -2] (floor), not [0, -1] (truncate).
-                // Float / complex destinations keep the fractional value (no floor).
-                if (ramp.GetTypeCode != dtype)
+            NDArray ramp;
+            using (scaled)
+                ramp = scaled + start;
+
+            // linspace(dtype=padded.dtype): an integer dtype floors, then every dtype casts (bool: nonzero is True).
+            if (ramp.GetTypeCode != dtype)
+            {
+                NDArray toCast = ramp;
+                if (IsIntegerDtype(dtype) || dtype == NPTypeCode.Char)
                 {
-                    NDArray toCast = ramp;
-                    if (isInteger)
-                    {
-                        var floored = np.floor(ramp);
-                        ramp.Dispose();
-                        toCast = floored;
-                    }
-                    var cast = toCast.astype(NumSharp.NPTypeCodeExtensions.AsType(dtype));
-                    if (!ReferenceEquals(toCast, cast)) toCast.Dispose();
-                    return cast;
+                    toCast = np.floor(ramp);
+                    ramp.Dispose();
                 }
+                var cast = toCast.astype(NumSharp.NPTypeCodeExtensions.AsType(dtype));
+                if (!ReferenceEquals(toCast, cast)) toCast.Dispose();
+                ramp = cast;
+            }
+
+            if (!reverse)
                 return ramp;
-            }
-            catch
-            {
-                if (!ReferenceEquals(edgeWork, edge)) edgeWork.Dispose();
-                throw;
-            }
+            // right_ramp[_slice_at_axis(slice(None, None, -1), axis)]: a reversed view, which keeps the ramp's buffer alive.
+            var reversed = ramp[_SliceAtAxis(new Slice(null, null, -1), axis, ndim)];
+            ramp.Dispose();
+            return reversed;
         }
 
         // ---------------------------- helpers (1:1 with NumPy) ----------------------------

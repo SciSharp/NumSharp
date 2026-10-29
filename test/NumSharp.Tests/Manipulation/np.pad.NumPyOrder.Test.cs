@@ -185,5 +185,49 @@ namespace NumSharp.Tests.Manipulation
             nan.Should().ThrowExactly<ValueError>().WithMessage("index can't contain negative values");
         }
 
+        /// <summary>The statistics are <c>np.mean</c> / <c>np.median</c> of the chunk: float64 for integers, then the cast.</summary>
+        [TestMethod]
+        public void Statistics_AreNumPysReductions()
+        {
+            // np.pad(np.array([3, 2**64-1, 2**64-4, 5], np.uint64), 1, 'mean') -> the float64 mean 2**63 (no uint64 wrap)
+            np.pad(np.array(new ulong[] { 3, ulong.MaxValue, ulong.MaxValue - 3, 5 }), 1, "mean").ToArray<ulong>()
+                .Should().Equal(9223372036854775808UL, 3UL, ulong.MaxValue, ulong.MaxValue - 3, 5UL, 9223372036854775808UL);
+            // np.pad(np.array([[1, 2], [3, 4]], np.uint8), ((0, 0), (1, 1)), 'mean') -> the means 1.5 / 3.5 round to even
+            np.pad(np.array(new byte[,] { { 1, 2 }, { 3, 4 } }), new int[,] { { 0, 0 }, { 1, 1 } }, "mean").ToArray<byte>()
+                .Should().Equal((byte)2, (byte)1, (byte)2, (byte)2, (byte)4, (byte)3, (byte)4, (byte)4);
+            // np.pad(np.array([True, False, False]), 1, 'mean') -> a float mean cast to bool
+            np.pad(np.array(new[] { true, false, false }), 1, "mean").ToArray<bool>().Should().Equal(true, true, false, false, true);
+        }
+
+        /// <summary><c>'linear_ramp'</c> is linspace's arithmetic: <c>k * ((edge - end) / num) + end</c>.</summary>
+        [TestMethod]
+        public void LinearRamp_IsLinspacesArithmetic()
+        {
+            // np.pad([0.7, 1.3, 2.9], 3, 'linear_ramp'): bit for bit
+            var r = np.pad(np.array(new[] { 0.7, 1.3, 2.9 }), 3, "linear_ramp").ToArray<double>().Select(BitConverter.DoubleToInt64Bits);
+            r.Should().Equal(0L, 0x3FCDDDDDDDDDDDDDL, 0x3FDDDDDDDDDDDDDDL, 0x3FE6666666666666L, 0x3FF4CCCCCCCCCCCDL,
+                0x4007333333333333L, 0x3FFEEEEEEEEEEEEFL, 0x3FEEEEEEEEEEEEEFL, 0L);
+
+            // np.pad([[2.9], [0.0]], ((0, 0), (3, 0)), 'linear_ramp'): the zero step of row 1 sends the whole call through
+            // NumPy's subnormal guard, (k / num) * delta, which rounds row 0 otherwise than with a nonzero step ([[2.9], [0.5]])
+            var guarded = np.pad(np.array(new[,] { { 2.9 }, { 0.0 } }), new int[,] { { 0, 0 }, { 3, 0 } }, "linear_ramp");
+            guarded["0"].ToArray<double>().Select(BitConverter.DoubleToInt64Bits)
+                .Should().Equal(0L, 0x3FEEEEEEEEEEEEEEL, 0x3FFEEEEEEEEEEEEEL, 0x4007333333333333L);
+            var plain = np.pad(np.array(new[,] { { 2.9 }, { 0.5 } }), new int[,] { { 0, 0 }, { 3, 0 } }, "linear_ramp");
+            plain["0"].ToArray<double>().Select(BitConverter.DoubleToInt64Bits)
+                .Should().Equal(0L, 0x3FEEEEEEEEEEEEEFL, 0x3FFEEEEEEEEEEEEFL, 0x4007333333333333L);
+
+            // np.pad([True, False, True], 2, 'linear_ramp'): computed in float64, then cast (no bool subtract)
+            np.pad(np.array(new[] { true, false, true }), 2, "linear_ramp").ToArray<bool>()
+                .Should().Equal(false, true, true, false, true, true, false);
+            np.pad(np.array(new[] { true, false, true }), 2, "linear_ramp", end_values: 5).ToArray<bool>()
+                .Should().Equal(true, true, true, false, true, true, true);
+
+            // A 2-D end_values array's tolist() values are WEAK: a float16 input computes in float16
+            var half = np.pad(np.array(new Half[,] { { (Half)0.7, (Half)1.3 }, { (Half)2, (Half)3 } }), 3, "linear_ramp",
+                end_values: np.array(new double[,] { { 0.1, 0.2 }, { 0.3, 0.4 } }));
+            half["4"].ToArray<Half>().Select(h => (double)h).Should().Equal(
+                0.300048828125, 0.8662109375, 1.4326171875, 2.0, 3.0, 2.1328125, 1.2666015625, 0.39990234375);
+        }
     }
 }
