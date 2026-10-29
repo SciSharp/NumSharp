@@ -1,5 +1,5 @@
-// NumPy's numpy/lib/_polynomial_impl.py (the legacy np.poly* functions) as DefaultEngine's members: each function's
-// statements as its np.* facade held them. The file sits beside the facades while its statements call np.*: ratchet R2
+// NumPy's numpy/lib/_polynomial_impl.py (the legacy np.poly* functions and np.roots) as DefaultEngine's members: each
+// function's statements as its np.* facade held them. The file sits beside the facades while its statements call np.*: ratchet R2
 // counts np.* calls against every file under Backends/ (the np-layer dtype plan, C3); it moves under Backends/Default/
 // in P6.
 
@@ -337,5 +337,54 @@ namespace NumSharp.Backends
                 default: return NPTypeCode.Double;
             }
         }
+
+        /// <inheritdoc />
+        [NDScoped] // reclaims the ravel/nonzero/strip/astype chain and the companion-matrix + eigvals intermediates
+        public override NDArray Roots(NDArray p)
+        {
+            p = np.atleast_1d(p);
+            if (p.ndim != 1)
+                throw new ValueError("Input must be a rank-1 array.");
+            // Text coefficients: the non-zero ones are the non-empty strings (their truth), and the stripped run is parsed
+            // by `p.astype(float)` below, as in NumPy.
+            // Indices of the non-zero coefficients (over the flattened array).
+            NDArray nonZero = np.nonzero(np.ravel(p))[0];
+            if (nonZero.size == 0)
+                return np.array(new double[0]);   // all zeros -> no roots (empty float64)
+
+            long first = nonZero.GetAtIndex<long>(0);
+            long last = nonZero.GetAtIndex<long>((int)(nonZero.size - 1));
+
+            // Trailing zeros are roots at 0; strip both leading and trailing zeros.
+            long trailing = p.size - last - 1;
+            p = p[$"{first}:{last + 1}"];
+
+            // A non-floating coefficient array is promoted to float (NumPy: `p.astype(float)`).
+            if (!IsFloatingOrComplex(p.typecode))
+                p = p.astype(NPTypeCode.Double);
+
+            long n = p.size;
+            NDArray rootsArr;
+            if (n > 1)
+            {
+                // Companion matrix: ones on the sub-diagonal, first row = -p[1:] / p[0].
+                NDArray a = np.diag(np.ones(new Shape(n - 2), p.typecode), -1);
+                a["0, :"] = np.negative(p["1:"]) / p["0"];
+                rootsArr = np.linalg.eigvals(a);
+            }
+            else
+            {
+                rootsArr = np.array(new double[0]);
+            }
+
+            // Tack the zero-roots onto the back.
+            return np.hstack(rootsArr, np.zeros(new Shape(trailing), rootsArr.typecode));
+        }
+
+        /// <summary>NumPy's <c>issubclass(dtype.type, (floating, complexfloating))</c>.</summary>
+        /// <param name="t">The coefficients' dtype.</param>
+        /// <returns>True for float16, float32, float64 and complex128.</returns>
+        private static bool IsFloatingOrComplex(NPTypeCode t)
+            => t == NPTypeCode.Half || t == NPTypeCode.Single || t == NPTypeCode.Double || t == NPTypeCode.Complex;
     }
 }

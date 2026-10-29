@@ -1,5 +1,5 @@
 // The functions of numpy/lib/_polynomial_impl.py that compute (the legacy np.poly* API): poly, polyval, polyint,
-// polyadd, polysub, polymul and polydiv. NumPy writes them in Python; here each is an engine member that DefaultEngine
+// polyadd, polysub, polymul, polydiv and roots. NumPy writes them in Python; here each is an engine member that DefaultEngine
 // implements with NumPy's statements. The numpy.polynomial package (Polynomial/Package) is its own port and is not on
 // the engine.
 
@@ -114,5 +114,19 @@ namespace NumSharp
         ///     statement <c>w = u[0] + v[0]</c> raises the add's error, u's row first.</exception>
         /// <exception cref="IndexError">An empty u or v (<c>u[0]</c> / <c>v[0]</c>).</exception>
         public abstract (NDArray q, NDArray r) Polydiv(NDArray u, NDArray v);
+
+        /// <summary>
+        ///     NumPy's <c>np.roots(p)</c>: the roots of the polynomial with coefficients <paramref name="p"/> (highest
+        ///     degree first), the eigenvalues of its companion matrix after the leading and trailing zeros are stripped
+        ///     (each trailing zero a root at 0).
+        /// </summary>
+        /// <param name="p">The coefficients, 1-D after <c>atleast_1d</c>. This is roots' body: a 0-d input is one
+        ///     coefficient here, while the np.roots facade refuses it first with NumPy's dispatcher TypeError.</param>
+        /// <returns>The roots: complex128 or float64 (LAPACK's eigenvalues), with the zero roots appended; an empty
+        ///     float64 array for no non-zero coefficient or a single one.</returns>
+        /// <exception cref="ValueError">p is not rank 1 (<c>Input must be a rank-1 array.</c>), or a text coefficient
+        ///     between the first and last non-empty one does not parse as a float.</exception>
+        /// <exception cref="System.NotSupportedException">Two or more non-zero coefficients and no LAPACK backend.</exception>
+        public abstract NDArray Roots(NDArray p);
     }
 }

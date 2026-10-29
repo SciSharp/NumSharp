@@ -102,7 +102,6 @@ Matrixlib/NDMatrix.Reductions.cs	0	2
 Matrixlib/NDMatrix.cs	0	1
 Operations/Elementwise/NDArray.TextComparison.cs	1	0
 Polynomial/Package/np.polynomial.polyutils.cs	1	1
-Polynomial/np.roots.cs	0	1
 RandomSampling/np.random.multinomial.cs	0	1
 Selection/NDArray.Indexing.Masking.cs	3	0
 Selection/NDArray.Indexing.PrepareIndex.cs	0	12
