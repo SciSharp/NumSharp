@@ -30,10 +30,6 @@ namespace NumSharp
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)
             if (NDMatrixBoundary.Sees(x))
                 return NDMatrixBoundary.Wrapped((x, @out), static s => isposinf(s.x, s.@out), @out);
-            if (x.typecode == NPTypeCode.Complex)
-                throw new TypeError(
-                    "This operation is not supported for complex128 values because it would be ambiguous.");
-
             return x.TensorEngine.IsPosInf(x, typeof(bool), @out, null);
         }
     }

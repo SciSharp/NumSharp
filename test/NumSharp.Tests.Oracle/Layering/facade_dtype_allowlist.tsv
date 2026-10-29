@@ -71,8 +71,6 @@ LinearAlgebra/np.kron.cs	1	0
 Logic/np.can_cast.cs	1	80
 Logic/np.common_type.cs	1	6
 Logic/np.find_common_type.cs	2	10
-Logic/np.isneginf.cs	0	1
-Logic/np.isposinf.cs	0	1
 Logic/np.isreal_iscomplex.cs	0	3
 Logic/np.min_scalar_type.cs	1	0
 Logic/np.type_checks.cs	2	15
