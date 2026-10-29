@@ -117,8 +117,11 @@
 // AlongValuesLabels), np.fill_diagonal's val (FillDiagValueLabels), np.select's condition list, choice list and default
 // (np.select has no array parameter: all three come from the pool operand) and np.piecewise's condition list in its
 // NDArray[] and bare forms, its function list from a fixed menu NumPy names alike (negate, square, a callable of the
-// extra args, constants) and its extra args, and np.delete's boolean-mask obj (a C# bool[]); an overload with a required
-// parameter of another kind is reported once as SKIP. An int
+// extra args, constants) and its extra args, np.delete's boolean-mask obj (a C# bool[]), and np.pad's pad_width in each
+// C# form (an int, an int[], an int[,] built from the operand's rank, a (before, after) tuple, a dict), its mode (every
+// name NumPy has, one it refuses, two callables from a menu NumPy names alike, null), its constant_values / end_values /
+// stat_length / reflect_type and a callable's kwargs (PadArgLabels); an overload with a required parameter of another
+// kind is reported once as SKIP. An int
 // axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -538,7 +541,7 @@ static class Snapshot
          && p.Member.Name is "take" or "put" or "putmask" or "place" or "repeat" or "choose" or "compress" or "resize")
         || (p.Member.DeclaringType == typeof(NDArray)
             && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize")
-        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p);
+        || IsAlongAxis(p) || IsFillDiagonal(p) || IsSelect(p) || IsPiecewise(p) || IsPad(p);
 
     /// <summary>Whether a parameter belongs to np.select, whose condition list, choice list and default are all built from
     ///     the pool operand (<see cref="SelectCondLabels"/>, <see cref="SelectChoiceLabels"/>, <see cref="SelectDefaultLabels"/>):
@@ -574,6 +577,14 @@ static class Snapshot
     private static bool IsFillDiagonal(ParameterInfo p) =>
         p.Member.DeclaringType == typeof(np) && p.Member.Name == "fill_diagonal";
 
+    /// <summary>Whether a parameter belongs to np.pad, whose <c>pad_width</c> (each C# form), <c>mode</c> (a name or a
+    ///     callable), <c>constant_values</c> / <c>end_values</c> / <c>stat_length</c>, <c>reflect_type</c> and the callable's
+    ///     <c>kwargs</c> take <see cref="PadArgLabels"/> through the item-selection wiring (<see cref="MakePadArg"/>).</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.pad overload.</returns>
+    private static bool IsPad(ParameterInfo p) =>
+        p.Member.DeclaringType == typeof(np) && p.Member.Name == "pad";
+
     /// <summary>
     ///     The variant labels of an item-selection parameter (<see cref="Role.ItemArg"/>), the base first, or null for a
     ///     parameter the family's roles do not read (its <c>a</c> / <c>arr</c> operand, <c>axis</c>, <c>out</c>,
@@ -597,6 +608,8 @@ static class Snapshot
                 : n == "funclist" ? PiecewiseFuncLabels
                 : n == "args" ? PiecewiseArgsLabels
                 : null;
+        if (IsPad(p))
+            return PadArgLabels(p);
         if (IsAlongAxis(p) || IsFillDiagonal(p)) return null;
         if (n == "indices" && t == typeof(NDArray)) return ItemIndicesLabels;
         if (n == "index" && t == typeof(long)) return ItemIndexLabels;
@@ -767,6 +780,235 @@ static class Snapshot
     ///     a Python int: the C# int converts to its weak literal array).</summary>
     private static readonly Func<NDArray, object[], NDArray> PiecewiseAddArg =
         (v, a) => a.Length == 0 ? v : v + (int)a[0];
+
+    /// <summary>np.pad's integer pad_width (both sides of every axis): one first, none, three, and a negative width
+    ///     (NumPy's ValueError).</summary>
+    private static readonly string[] PadWidthIntLabels = { "1", "0", "3", "-1" };
+
+    /// <summary>np.pad's <c>int[]</c> pad_width (an array of shape (n,), which <c>_as_pairs</c> broadcasts to (ndim, 2)): a
+    ///     before / after pair first, one width, two zeros, a negative width, three widths (NumPy's broadcast error), none,
+    ///     and null (NumPy's None: an object array, "`pad_width` must be of integral type.").</summary>
+    private static readonly string[] PadWidthArrayLabels = { "{1,2}", "{2}", "{0,0}", "{1,-1}", "{1,2,3}", "{}", "null" };
+
+    /// <summary>np.pad's <c>int[,]</c> pad_width, built from the operand's rank: one (before, after) row per axis first,
+    ///     one row for every axis, zeros, a negative width, one row too many (NumPy's broadcast error), and null.</summary>
+    private static readonly string[] PadWidthTableLabels = { "rows", "one_row", "zeros", "neg", "extra_row", "null" };
+
+    /// <summary>np.pad's <c>(before, after)</c> pad_width: (1, 2) first, none, before only, a negative before.</summary>
+    private static readonly string[] PadWidthTupleLabels = { "(1,2)", "(0,0)", "(3,0)", "(-1,1)" };
+
+    /// <summary>np.pad's dict pad_width (NumPy 2.3+): axis 0 by one first, the last axis by (1, 2), two axes, an axis past
+    ///     every rank (NumPy's IndexError), a negative width, a bool width (an int to Python's match), a float width
+    ///     (NumPy's assert_never), none, and null.</summary>
+    private static readonly string[] PadWidthDictLabels =
+        { "{0:1}", "{-1:(1,2)}", "{0:(2,0),-1:1}", "{5:1}", "{0:-1}", "{0:true}", "{0:2.5}", "{}", "null" };
+
+    /// <summary>np.pad's mode names: 'constant' (the default) first, then every other mode NumPy has, a name it refuses,
+    ///     and null (NumPy's None, which it refuses the same way).</summary>
+    private static readonly string[] PadModeLabels =
+    {
+        "constant", "edge", "linear_ramp", "maximum", "mean", "median", "minimum", "reflect", "symmetric", "wrap", "empty",
+        "bogus", "null",
+    };
+
+    /// <summary>np.pad's callable modes: one that writes 7 into each vector's pad area (the base), one that writes its
+    ///     kwargs' "v" (7 without it), and null (NumPy's None).</summary>
+    private static readonly string[] PadFuncLabels = { "fill7", "fill_kw", "null" };
+
+    /// <summary>np.pad's constant_values: not given (null) first, a Python int, a float, an int past int8, a complex, a
+    ///     str, a bool, a (before, after) pair, one pair per axis (built from the operand's rank) and a 0-d array.</summary>
+    private static readonly string[] PadConstantLabels = { "null", "5", "2.5", "1000", "c128", "x", "true", "(1,2)", "rows", "0d_5" };
+
+    /// <summary>np.pad's end_values (linear_ramp): not given first, a Python int, a float, a (before, after) pair, a str.</summary>
+    private static readonly string[] PadEndLabels = { "null", "5", "2.5", "(1,2)", "x" };
+
+    /// <summary>np.pad's stat_length (the statistic modes): not given (the whole axis) first, one, a (before, after) pair,
+    ///     zero (NumPy's "stat_length of 0 yields no value for padding" for maximum / minimum), a negative length (its
+    ///     ValueError), and one longer than every axis.</summary>
+    private static readonly string[] PadStatLabels = { "null", "1", "(1,2)", "0", "-1", "100" };
+
+    /// <summary>np.pad's reflect_type: 'even' (the default) first, 'odd', a value NumPy reads as even, and null.</summary>
+    private static readonly string[] PadReflectLabels = { "even", "odd", "bogus", "null" };
+
+    /// <summary>The kwargs np.pad hands a callable mode: none first, then {"v": 9}.</summary>
+    private static readonly string[] PadKwargsLabels = { "null", "v9" };
+
+    /// <summary>The labels of an np.pad parameter (<see cref="IsPad"/>), the base first, or null for its operand.</summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>The labels <see cref="MakePadArg"/> builds, or null.</returns>
+    private static string[] PadArgLabels(ParameterInfo p)
+    {
+        Type t = p.ParameterType;
+        return p.Name switch
+        {
+            "pad_width" when t == typeof(int) => PadWidthIntLabels,
+            "pad_width" when t == typeof(int[]) => PadWidthArrayLabels,
+            "pad_width" when t == typeof(int[,]) => PadWidthTableLabels,
+            "pad_width" when t == typeof((int, int)) => PadWidthTupleLabels,
+            "pad_width" when t == typeof(IDictionary<int, object>) => PadWidthDictLabels,
+            "mode" when t == typeof(string) => PadModeLabels,
+            "mode" when t == typeof(np.PadFunc) => PadFuncLabels,
+            "constant_values" => PadConstantLabels,
+            "end_values" => PadEndLabels,
+            "stat_length" => PadStatLabels,
+            "reflect_type" => PadReflectLabels,
+            "kwargs" => PadKwargsLabels,
+            _ => null,
+        };
+    }
+
+    /// <summary>np.pad's callable that writes 7 into each vector's pad area (NumPy's
+    ///     <c>def f(v, w, iaxis, kw): v[:w[0]] = 7; v[v.shape[0] - w[1]:] = 7</c>, each side only when it is wider than 0).</summary>
+    private static readonly np.PadFunc PadFill7 = (v, w, axis, kw) => PadFillSides(v, w, 7);
+
+    /// <summary>np.pad's callable that writes its kwargs' "v" (7 without one) into each vector's pad area (NumPy's
+    ///     <c>kw.get('v', 7)</c>).</summary>
+    private static readonly np.PadFunc PadFillKw = (v, w, axis, kw) =>
+        PadFillSides(v, w, kw is IDictionary<string, object> d && d.TryGetValue("v", out var value) && value is int i ? i : 7);
+
+    /// <summary>Writes a Python int (the C# int's weak literal array, packed by the store as NumPy packs a Python int) into
+    ///     the first <c>before</c> and the last <c>after</c> elements of a 1-D vector.</summary>
+    /// <param name="v">The vector (a view into the padded array).</param>
+    /// <param name="w">The (before, after) widths.</param>
+    /// <param name="value">The value.</param>
+    private static void PadFillSides(NDArray v, (int before, int after) w, int value)
+    {
+        long len = v.Shape.Dimensions[^1];
+        if (w.before > 0)
+            v[$":{w.before}"] = value;
+        if (w.after > 0)
+            v[$"{len - w.after}:"] = value;
+    }
+
+    /// <summary>
+    ///     Builds an np.pad argument for an operand (see the label sets above).
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand: the per-axis tables take its rank.</param>
+    /// <returns>The argument: an int, a C# array, a tuple, a dictionary, a string, a callable, a boxed value, an array, or
+    ///     null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakePadArg(ParameterInfo p, string label, NDArray operand)
+    {
+        Type t = p.ParameterType;
+        int ndim = Math.Max(operand.ndim, 1);
+        int[,] Table(Func<int, (int before, int after)> row, int rows)
+        {
+            var table = new int[rows, 2];
+            for (int i = 0; i < rows; i++)
+                (table[i, 0], table[i, 1]) = row(i);
+            return table;
+        }
+        switch (p.Name)
+        {
+            case "pad_width" when t == typeof(int):
+                return int.Parse(label, CultureInfo.InvariantCulture);
+            case "pad_width" when t == typeof(int[]):
+                return label switch
+                {
+                    "{1,2}" => new[] { 1, 2 },
+                    "{2}" => new[] { 2 },
+                    "{0,0}" => new[] { 0, 0 },
+                    "{1,-1}" => new[] { 1, -1 },
+                    "{1,2,3}" => new[] { 1, 2, 3 },
+                    "{}" => Array.Empty<int>(),
+                    "null" => null,
+                    _ => throw new ArgumentException("unknown pad_width array variant " + label),
+                };
+            case "pad_width" when t == typeof(int[,]):
+                return label switch
+                {
+                    "rows" => Table(i => (i + 1, i % 2), ndim),
+                    "one_row" => Table(i => (1, 2), 1),
+                    "zeros" => Table(i => (0, 0), ndim),
+                    "neg" => Table(i => (i == 0 ? -1 : 1, 1), ndim),
+                    "extra_row" => Table(i => (1, 1), ndim + 1),
+                    "null" => null,
+                    _ => throw new ArgumentException("unknown pad_width table variant " + label),
+                };
+            case "pad_width" when t == typeof((int, int)):
+                return label switch
+                {
+                    "(1,2)" => (1, 2),
+                    "(0,0)" => (0, 0),
+                    "(3,0)" => (3, 0),
+                    "(-1,1)" => (-1, 1),
+                    _ => throw new ArgumentException("unknown pad_width tuple variant " + label),
+                };
+            case "pad_width" when t == typeof(IDictionary<int, object>):
+                return label switch
+                {
+                    "{0:1}" => new Dictionary<int, object> { [0] = 1 },
+                    "{-1:(1,2)}" => new Dictionary<int, object> { [-1] = (1, 2) },
+                    "{0:(2,0),-1:1}" => new Dictionary<int, object> { [0] = (2, 0), [-1] = 1 },
+                    "{5:1}" => new Dictionary<int, object> { [5] = 1 },
+                    "{0:-1}" => new Dictionary<int, object> { [0] = -1 },
+                    "{0:true}" => new Dictionary<int, object> { [0] = true },
+                    "{0:2.5}" => new Dictionary<int, object> { [0] = 2.5 },
+                    "{}" => new Dictionary<int, object>(),
+                    "null" => null,
+                    _ => throw new ArgumentException("unknown pad_width dict variant " + label),
+                };
+            case "mode" when t == typeof(string):
+                return label == "null" ? null : label;
+            case "mode":
+                return label switch
+                {
+                    "fill7" => PadFill7,
+                    "fill_kw" => PadFillKw,
+                    "null" => null,
+                    _ => throw new ArgumentException("unknown pad callable variant " + label),
+                };
+            case "constant_values":
+                return label switch
+                {
+                    "null" => null,
+                    "5" => 5,
+                    "2.5" => 2.5,
+                    "1000" => 1000,
+                    "c128" => new Complex(1, 2),
+                    "x" => "x",
+                    "true" => true,
+                    "(1,2)" => (1, 2),
+                    "rows" => Table(i => (i + 1, -(i + 1)), ndim),
+                    "0d_5" => np.array(5L),
+                    _ => throw new ArgumentException("unknown constant_values variant " + label),
+                };
+            case "end_values":
+                return label switch
+                {
+                    "null" => null,
+                    "5" => 5,
+                    "2.5" => 2.5,
+                    "(1,2)" => (1, 2),
+                    "x" => "x",
+                    _ => throw new ArgumentException("unknown end_values variant " + label),
+                };
+            case "stat_length":
+                return label switch
+                {
+                    "null" => null,
+                    "1" => 1,
+                    "(1,2)" => (1, 2),
+                    "0" => 0,
+                    "-1" => -1,
+                    "100" => 100,
+                    _ => throw new ArgumentException("unknown stat_length variant " + label),
+                };
+            case "reflect_type":
+                return label == "null" ? null : label;
+            case "kwargs":
+                return label switch
+                {
+                    "null" => null,
+                    "v9" => new Dictionary<string, object> { ["v"] = 9 },
+                    _ => throw new ArgumentException("unknown kwargs variant " + label),
+                };
+            default:
+                throw new ArgumentException($"no np.pad variants for {p.Name}");
+        }
+    }
 
     /// <summary>
     ///     Builds an np.select / np.piecewise argument for an operand (see the label sets above).
@@ -977,6 +1219,8 @@ static class Snapshot
             return MakeFillDiagValue(label, operand);
         if (IsSelect(p) || IsPiecewise(p))
             return MakeSelectArg(p, label, operand);
+        if (IsPad(p))
+            return MakePadArg(p, label, operand);
         if (n == "indices")
             return label switch
             {
