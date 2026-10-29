@@ -21,13 +21,7 @@ namespace NumSharp
         public static NDArray union1d(NDArray ar1, NDArray ar2)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text: NumPy's statement below runs unchanged — the concatenation formats numbers into text and decodes bytes
-            // beside str, and np.unique sorts the text (CanonicalizeSetOpNaN leaves a text result as it is).
-            // Boundary scope: the ravel views, the concatenate buffer and unique's internals are
-            // reclaimed at exit; only the final (possibly NaN-canonicalised) array is yielded.
-            // NumPy: unique(concatenate((ar1, ar2), axis=None)) — axis=None flattens both operands.
-            // NumPy's unique-sort canonicalises a surviving float32/float64 NaN; match it (see np.setops.cs).
-            return CanonicalizeSetOpNaN(np.unique(np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0)));
+            return np.EngineOf(ar1).Union1d(ar1, ar2);
         }
     }
 }

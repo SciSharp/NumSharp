@@ -89,7 +89,6 @@ Manipulation/np.packbits.cs	0	11
 Manipulation/np.pad.cs	12	33
 Manipulation/np.repeat.cs	2	9
 Manipulation/np.resize.cs	1	0
-Manipulation/np.setops.cs	0	2
 Manipulation/np.trim_zeros.cs	2	0
 Math/NDArray.ComplexAccessors.cs	1	2
 Math/np.conjugate.cs	0	1

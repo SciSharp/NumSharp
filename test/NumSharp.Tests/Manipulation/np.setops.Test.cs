@@ -213,7 +213,8 @@ namespace NumSharp.Tests.Manipulation
         }
 
         // ---- NaN canonicalization (NumPy's float sort rewrites EVERY surviving NaN to the positive
-        //      canonical quiet NaN for float32/float64; float16/complex128 preserve). See np.setops.cs.
+        //      canonical quiet NaN for float32/float64; float16/complex128 preserve). See
+        //      DefaultEngine.CanonicalizeSetOpNaN (Manipulation/Default.SetOps.cs).
         //      NumSharp's sort yields .NET's negative NaN and unique preserves payloads, so these ops
         //      apply a NaN-canonicalization pass to stay bit-identical to NumPy 2.4.2. -----------------
         private const ulong CanonNanF64 = 0x7FF8000000000000UL;   // bits np.sort produces for any f64 NaN

@@ -22,33 +22,7 @@ namespace NumSharp
         public static NDArray setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false)
         {
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text runs the statements below unchanged: np.unique and np.sort order the text, the concatenation formats
-            // numbers and decodes bytes as NumPy's does, and the text != builds the flags.
-            // Boundary scope: the unique/ravel/concatenate/sort temps and the flag masks are
-            // reclaimed at exit; only the surviving-values array is yielded.
-
-            if (!assume_unique)
-            {
-                ar1 = np.unique(ar1);
-                ar2 = np.unique(ar2);
-            }
-
-            // concatenate((ar1, ar2), axis=None) — flattens both.
-            NDArray aux = np.concatenate((np.ravel(ar1), np.ravel(ar2)), 0);
-            if (aux.size == 0)
-                return aux;
-
-            aux = np.sort(aux);
-
-            // flag = concatenate(([True], aux[1:] != aux[:-1], [True]))
-            NDArray trueOne = np.array(new[] { true });
-            NDArray neq = aux["1:"] != aux[":-1"];
-            NDArray flag = np.concatenate((trueOne, neq, trueOne), 0);
-
-            // return aux[flag[1:] & flag[:-1]]  — values appearing exactly once survive
-            NDArray sel = flag["1:"] & flag[":-1"];
-            // aux came from np.sort; NumPy's sort canonicalises a surviving float32/float64 NaN (see np.setops.cs).
-            return CanonicalizeSetOpNaN(aux[sel]);
+            return np.EngineOf(ar1).Setxor1d(ar1, ar2, assume_unique);
         }
     }
 }

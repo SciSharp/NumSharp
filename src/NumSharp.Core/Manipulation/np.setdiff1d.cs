@@ -30,24 +30,7 @@ namespace NumSharp
             if (!assume_unique && NDCharArrayBoundary.Sees(ar1))
                 return NDCharArrayBoundary.Wrapped((ar1, ar2, assume_unique), static s => setdiff1d(s.ar1, s.ar2, s.assume_unique));
             using var plain = NDMatrixBoundary.PlainFor(ar1, ar2);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // Text runs the statements below unchanged: np.unique sorts the text and np.isin runs NumPy's _isin over it.
-            // Boundary scope: the unique/ravel temps and the isin membership mask are reclaimed
-            // at exit; only the selected-values array is yielded.
-
-            if (assume_unique)
-            {
-                ar1 = np.ravel(ar1);
-            }
-            else
-            {
-                ar1 = np.unique(ar1);
-                ar2 = np.unique(ar2);
-            }
-
-            // ar1[isin(ar1, ar2, assume_unique=True, invert=True)] — keep only the values absent from ar2.
-            NDArray mask = np.isin(ar1, ar2, assume_unique: true, invert: true);
-            // ar1 came from np.unique; NumPy canonicalises a surviving float32/float64 NaN (see np.setops.cs).
-            return CanonicalizeSetOpNaN(ar1[mask]);
+            return np.EngineOf(ar1).Setdiff1d(ar1, ar2, assume_unique);
         }
     }
 }

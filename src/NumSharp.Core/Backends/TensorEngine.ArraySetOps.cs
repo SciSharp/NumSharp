@@ -181,5 +181,52 @@ namespace NumSharp
         ///     <c>same_kind</c> (NumPy's TypeError text).</exception>
         /// <exception cref="TypeError">Text or bool, which subtract has no loop for (NumPy's texts).</exception>
         public abstract NDArray Ediff1d(NDArray ary, object to_end = null, object to_begin = null);
+
+        /// <summary>
+        ///     NumPy's <c>np.union1d(ar1, ar2)</c>, <c>unique(concatenate((ar1, ar2), axis=None))</c>: the sorted unique
+        ///     values found in either flattened operand.
+        /// </summary>
+        /// <param name="ar1">The first operand, flattened.</param>
+        /// <param name="ar2">The second operand, flattened.</param>
+        /// <returns>A new 1-D array in the concatenation's promoted dtype; a surviving float32 / float64 NaN is NumPy's
+        ///     canonical positive quiet NaN, as NumPy's sort leaves it.</returns>
+        /// <exception cref="UnicodeDecodeError">A <c>U</c> union over <c>S</c> text holding a byte that is not
+        ///     ASCII.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no
+        ///     common DType with.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose sort compares a None-like NA.</exception>
+        public abstract NDArray Union1d(NDArray ar1, NDArray ar2);
+
+        /// <summary>
+        ///     NumPy's <c>np.setxor1d(ar1, ar2, assume_unique=False)</c>: the sorted values found in exactly one of the
+        ///     operands (each made unique first unless <paramref name="assume_unique"/>).
+        /// </summary>
+        /// <param name="ar1">The first operand.</param>
+        /// <param name="ar2">The second operand.</param>
+        /// <param name="assume_unique">Whether both operands are already unique (their values then are not made
+        ///     unique; a repeated value is then not exclusive).</param>
+        /// <returns>A new 1-D array; a surviving float32 / float64 NaN is NumPy's canonical positive quiet NaN.</returns>
+        /// <exception cref="UnicodeDecodeError">A <c>U</c> result over <c>S</c> text holding a byte that is not
+        ///     ASCII.</exception>
+        /// <exception cref="DTypePromotionError">A <c>StringDType</c> operand beside a class the concatenation finds no
+        ///     common DType with.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose sort compares a None-like NA.</exception>
+        public abstract NDArray Setxor1d(NDArray ar1, NDArray ar2, bool assume_unique = false);
+
+        /// <summary>
+        ///     NumPy's <c>np.setdiff1d(ar1, ar2, assume_unique=False)</c>: the values of <paramref name="ar1"/> not in
+        ///     <paramref name="ar2"/>, <c>ar1[isin(ar1, ar2, assume_unique=True, invert=True)]</c> after making both
+        ///     unique (or only flattening ar1 when <paramref name="assume_unique"/>).
+        /// </summary>
+        /// <param name="ar1">The values to keep or drop.</param>
+        /// <param name="ar2">The values to drop.</param>
+        /// <param name="assume_unique">Whether both operands are already unique (the result is then in ar1's order, its
+        ///     duplicates kept).</param>
+        /// <returns>A new 1-D array in <paramref name="ar1"/>'s dtype, sorted unless <paramref name="assume_unique"/>;
+        ///     a surviving float32 / float64 NaN is NumPy's canonical positive quiet NaN.</returns>
+        /// <exception cref="UnicodeDecodeError">The membership test's sort path decodes <c>S</c> text holding a byte that
+        ///     is not ASCII.</exception>
+        /// <exception cref="ValueError">A <c>StringDType</c> array whose sort compares a None-like NA.</exception>
+        public abstract NDArray Setdiff1d(NDArray ar1, NDArray ar2, bool assume_unique = false);
     }
 }
