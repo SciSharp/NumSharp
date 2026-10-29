@@ -1404,5 +1404,163 @@ namespace NumSharp
             return np.concatenate(chunks.ToArray(), axis);
         }
 
+        // ----------------------------------------------------------------------------------------------------------------
+        // np.extract and np.asarray_chkfinite (P3's batch 7): NumPy's statements after the facades' class boundaries and
+        // null checks. The kernel namespace is named in full.
+        // ----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        ///     NumPy's <c>numpy.extract</c> (<c>lib/_function_base_impl.py</c>) after the facade's class boundaries and null
+        ///     checks: <c>take(ravel(arr), nonzero(ravel(condition))[0])</c>, the elements of <paramref name="arr"/> whose
+        ///     flat position holds a truthy <paramref name="condition"/> element.
+        /// </summary>
+        /// <param name="condition">The mask, any dtype (NumPy's nonzero truth) and any shape (raveled).</param>
+        /// <param name="arr">The source, any shape (raveled).</param>
+        /// <returns>A new 1-D array of <paramref name="arr"/>'s dtype.</returns>
+        /// <exception cref="IndexOutOfRangeException">A truthy <paramref name="condition"/> element lies past the end of
+        ///     <paramref name="arr"/> (NumPy's IndexError from take's raise mode).</exception>
+        /// <remarks>
+        ///     Two routes: the fused IL kernel for a contiguous bool mask over a contiguous source of fixed-size elements
+        ///     (<see cref="TryExtractFast"/>), NumPy's own chain (flatnonzero, then take) for everything else.
+        /// </remarks>
+        [NDScoped] // reclaims the ravel view/copy handed to take (and the flatnonzero indices on the throw path)
+        internal static NDArray Extract(NDArray condition, NDArray arr)
+        {
+            // Fast path: bool cond + contig source/cond + cond.size <= arr.size.
+            // The kernel walks the mask and gathers from src in one pass with no
+            // intermediate indices materialisation.
+            if (TryExtractFast(condition, arr, out var fast))
+                return fast;
+
+            // Generic path: flatnonzero handles non-bool / 0-d / strided cond
+            // correctly (includes ravel internally); take handles non-contig arr
+            // and OOB-True via its RAISE mode.
+            var indices = np.flatnonzero(condition);
+            try
+            {
+                var flatArr = np.ravel(arr);
+                return np.take(flatArr, indices);
+            }
+            finally
+            {
+                indices.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Fused fast path for <c>np.extract</c>. Skips index materialisation
+        ///     and runs a single IL kernel (popcount + SIMD bit-scan + cpblk) on
+        ///     the bool mask + contig source. Returns <c>false</c> when the
+        ///     preconditions aren't met so the caller falls back to the generic
+        ///     path (flatnonzero → take).
+        /// </summary>
+        /// <param name="condition">The mask; only a C-contiguous bool array qualifies.</param>
+        /// <param name="arr">The source; only a C-contiguous array of fixed-size elements qualifies (a StringDType source
+        ///     holds pointers and takes the generic path).</param>
+        /// <param name="result">The extracted elements when the fast path ran, otherwise <c>null</c>.</param>
+        /// <returns>Whether the fast path ran.</returns>
+        /// <exception cref="IndexOutOfRangeException">The mask is longer than <paramref name="arr"/> and holds a true
+        ///     element past its end (NumPy's IndexError text from take).</exception>
+        /// <exception cref="InvalidOperationException">The gather wrote another count than the popcount (a kernel defect).</exception>
+        private static unsafe bool TryExtractFast(NDArray condition, NDArray arr, out NDArray result)
+        {
+            result = null;
+            // A StringDType source takes the generic path (ravel + np.take, whose StringDType gather duplicates the cells);
+            // this kernel copies elements as raw bytes.
+            if (arr.Storage.IsVString) return false;
+            if (condition.GetTypeCode != NPTypeCode.Boolean) return false;
+
+            // Materialise to a contig 1-D view of the bool mask and source. The
+            // raveled views share storage with their parents when contig; otherwise
+            // they allocate a fresh contig copy (which we Dispose at the end).
+            // For non-contig parents the generic path is already correct and not
+            // markedly slower than copying, so we skip the fast path there.
+            if (!condition.Shape.IsContiguous) return false;
+            if (!arr.Shape.IsContiguous) return false;
+
+            long maskSize = condition.size;
+            long arrSize = arr.size;
+
+            // OOB-True detection: if cond is longer than arr, any True at index
+            // >= arr.size triggers an out-of-range read. We mirror NumPy's
+            // IndexError. Cheap check: popcount the tail. If it's >0, raise.
+            long effectiveScan = Math.Min(maskSize, arrSize);
+
+            var countKernel = Backends.Kernels.DirectILKernelGenerator.GetArgwhereCountKernel(typeof(bool));
+            var filterKernel = Backends.Kernels.DirectILKernelGenerator.GetFilterAxisKernel(arr.dtypesize);
+            if (countKernel == null || filterKernel == null) return false;
+
+            byte* maskPtr = (byte*)condition.Storage.Address + condition.Shape.offset;
+
+            if (maskSize > arrSize)
+            {
+                long tailTrues = countKernel(maskPtr + arrSize, maskSize - arrSize);
+                if (tailTrues > 0)
+                    throw new IndexOutOfRangeException(
+                        $"index {arrSize} is out of bounds for axis 0 with size {arrSize}");
+            }
+
+            // Pass 1: popcount mask over the effective scan range.
+            long count = countKernel(maskPtr, effectiveScan);
+
+            // Allocate result: shape (count,) with arr's dtype, C-contig.
+            result = new NDArray(arr.dtype, new Shape(count), false); // descriptor: a string's width
+
+            if (count == 0)
+                return true;
+
+            // Pass 2: fused gather.
+            byte* srcPtr = (byte*)arr.Storage.Address + arr.Shape.offset * arr.dtypesize;
+            byte* dstPtr = (byte*)result.Storage.Address;
+            long written = filterKernel(
+                srcPtr, maskPtr, effectiveScan,
+                outerSize: 1, srcOuterStride: 0, dstOuterStride: 0,
+                innerSize: arr.dtypesize,
+                dstPtr);
+
+            // Sanity: the popcount and the kernel walk the same mask, so written
+            // must equal count. A mismatch indicates kernel-corruption.
+            if (written != count)
+                throw new InvalidOperationException(
+                    $"extract: filter kernel wrote {written}, expected {count}");
+
+            return true;
+        }
+
+        /// <summary>
+        ///     NumPy's <c>numpy.asarray_chkfinite</c> (<c>lib/_function_base_impl.py</c>) after the facade's class
+        ///     boundaries and null check: <c>a = asarray(a, dtype=dtype, order=order)</c>, then a ValueError when a
+        ///     floating or complex result holds an infinity or a NaN.
+        /// </summary>
+        /// <param name="a">The array.</param>
+        /// <param name="dtype">The requested dtype, or <c>null</c> to keep <paramref name="a"/>'s.</param>
+        /// <param name="order">'C', 'F', 'A' or 'K', as np.asarray takes it.</param>
+        /// <returns>np.asarray's result: <paramref name="a"/> itself when it already has the dtype and layout asked for,
+        ///     otherwise a converted copy.</returns>
+        /// <exception cref="ValueError">The result holds an infinity or a NaN ("array must not contain infs or NaNs").</exception>
+        /// <remarks>
+        ///     The finiteness scan is one fused SIMD pass (<c>FiniteScan.IsAllFinite</c>) and runs only for NumPy's
+        ///     <c>typecodes['AllFloat']</c> (<see cref="IsFloatFamily"/>): integers, bool, char and decimal cannot hold a
+        ///     non-finite value. np.asarray's own errors (a dtype it cannot cast to, an order letter) come first.
+        /// </remarks>
+        internal static NDArray AsarrayChkfinite(NDArray a, DType dtype, char order)
+        {
+            var arr = np.asarray(a, dtype, order);
+
+            if (IsFloatFamily(arr.typecode) && !Backends.Kernels.FiniteScan.IsAllFinite(arr))
+                throw new ValueError("array must not contain infs or NaNs");
+
+            return arr;
+        }
+
+        /// <summary>
+        ///     True for the dtypes NumPy checks for finiteness (its <c>typecodes['AllFloat']</c>: the real
+        ///     and complex floating kinds). Decimal is excluded — it has no NumPy analog and, being exact,
+        ///     can never represent inf/NaN.
+        /// </summary>
+        /// <param name="tc">The array's storage lane.</param>
+        /// <returns>True for float16, float32, float64 and complex128.</returns>
+        private static bool IsFloatFamily(NPTypeCode tc)
+            => tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex;
     }
 }

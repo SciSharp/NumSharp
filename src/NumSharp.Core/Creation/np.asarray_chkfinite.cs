@@ -1,6 +1,5 @@
 using System;
 using System.Numerics;
-using NumSharp.Backends.Kernels;
 
 namespace NumSharp
 {
@@ -34,20 +33,8 @@ namespace NumSharp
             if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
-            var arr = asarray(a, dtype, order);
-
-            if (IsFloatFamily(arr.typecode) && !FiniteScan.IsAllFinite(arr))
-                throw new ValueError("array must not contain infs or NaNs");
-
-            return arr;
+            // NumPy's numpy.asarray_chkfinite: the statements are the array object's (NDArray.FunctionBase.cs)
+            return NDArray.AsarrayChkfinite(a, dtype, order);
         }
-
-        /// <summary>
-        ///     True for the dtypes NumPy checks for finiteness (its <c>typecodes['AllFloat']</c>: the real
-        ///     and complex floating kinds). Decimal is excluded — it has no NumPy analog and, being exact,
-        ///     can never represent inf/NaN.
-        /// </summary>
-        private static bool IsFloatFamily(NPTypeCode tc)
-            => tc == NPTypeCode.Half || tc == NPTypeCode.Single || tc == NPTypeCode.Double || tc == NPTypeCode.Complex;
     }
 }
