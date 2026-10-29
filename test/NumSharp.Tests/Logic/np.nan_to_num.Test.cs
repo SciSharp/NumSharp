@@ -193,5 +193,72 @@ namespace NumSharp.Tests.Logic
             Assert.AreEqual(0, r.size);
             Assert.AreEqual(typeof(double), r.dtype);
         }
+
+        /// <summary>
+        ///     NumPy's nan_to_num writes each fill with <c>copyto(d, fill, where=...)</c>, whose same_kind cast refuses text
+        ///     into a float array: a str fill raises NumPy's TypeError text (np.copyto's house InvalidCastException here),
+        ///     never a number parse, even for numeric text and even where no element is non-finite (the cast is checked
+        ///     before the mask). A non-inexact input never meets the fills. Probed against numpy 2.4.2; until 0.71.0 the text
+        ///     was parsed (".NET's FormatException", "1.5" filled 1.5).
+        /// </summary>
+        [TestMethod]
+        public void nan_to_num_TextFill_IsTheCopytoCastRefusal()
+        {
+            NDArray Special(string dt) =>
+                np.array(new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, 1.0 }).astype(np.dtype(dt));
+            foreach (var (dt, real) in new[] { ("float64", "float64"), ("float32", "float32"), ("float16", "float16"), ("complex128", "float64") })
+            {
+                foreach (var (fill, width) in new[] { ("x", 1), ("1.5", 3), ("", 1), ("inf", 3) })
+                {
+                    string text = $"Cannot cast scalar from dtype('<U{width}') to dtype('{real}') according to the rule 'same_kind'";
+                    Action nan = () => np.nan_to_num(Special(dt), nan: fill);
+                    nan.Should().Throw<InvalidCastException>().WithMessage(text);
+                    Action posinf = () => np.nan_to_num(Special(dt), posinf: fill);
+                    posinf.Should().Throw<InvalidCastException>().WithMessage(text);
+                    Action neginf = () => np.nan_to_num(Special(dt), neginf: fill);
+                    neginf.Should().Throw<InvalidCastException>().WithMessage(text);
+                }
+            }
+
+            Action finite = () => np.nan_to_num(np.array(new[] { 1.0, 2.0 }), nan: "x");
+            finite.Should().Throw<InvalidCastException>()
+                .WithMessage("Cannot cast scalar from dtype('<U1') to dtype('float64') according to the rule 'same_kind'");
+            var ints = np.nan_to_num(np.array(new long[] { 1, 2 }), nan: "x");
+            Assert.IsTrue(Enumerable.SequenceEqual(ints.Data<long>(), new long[] { 1, 2 }));
+        }
+
+        /// <summary>
+        ///     The refusal comes from the statement that meets the fill, after the earlier statements wrote: with
+        ///     <c>copy=False</c> the NaN is already replaced when the +inf fill's text is refused (NumPy's order: NaN, +inf,
+        ///     -inf). Probed against numpy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void nan_to_num_TextFill_RefusedAfterTheEarlierFillsWrote()
+        {
+            var x = np.array(new[] { double.NaN, double.PositiveInfinity });
+            Action act = () => np.nan_to_num(x, copy: false, nan: 7.0, posinf: "x");
+            act.Should().Throw<InvalidCastException>();
+            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<double>(), new[] { 7.0, double.PositiveInfinity }));
+        }
+
+        /// <summary>
+        ///     A complex fill is refused as text is (complex -> float is not same_kind): NumPy's TypeError text for a float64
+        ///     destination (NumPy names complex64 for a float32 / float16 one; NumSharp has one complex width). A char fill
+        ///     is NumSharp's uint16 code unit, which NumPy's uint16 scalar fills as its value. Probed against numpy 2.4.2.
+        /// </summary>
+        [TestMethod]
+        public void nan_to_num_ComplexFill_IsRefused_CharFill_IsItsCodeUnit()
+        {
+            var x = np.array(new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, 1.0 });
+            foreach (var cx in new[] { x, x.astype(np.complex128) })
+            {
+                Action complexFill = () => np.nan_to_num(cx, nan: new Complex(1, 2));
+                complexFill.Should().Throw<InvalidCastException>()
+                    .WithMessage("Cannot cast scalar from dtype('complex128') to dtype('float64') according to the rule 'same_kind'");
+            }
+
+            var r = np.nan_to_num(x, nan: 'a', posinf: 'b', neginf: 'c');
+            Assert.IsTrue(Enumerable.SequenceEqual(r.Data<double>(), new[] { 97.0, 98.0, 99.0, 1.0 }));
+        }
     }
 }

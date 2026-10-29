@@ -18,8 +18,10 @@ namespace NumSharp
         ///     itself (writes go through to shared memory).
         /// </param>
         /// <param name="nan">
-        ///     Value(s) used to fill NaN. A scalar (int/float/bool) or an array_like (<see cref="NDArray"/> or
-        ///     a C# array) broadcast position-wise. <c>null</c> (default) fills NaN with <c>0.0</c>.
+        ///     Value(s) used to fill NaN. A real scalar (int/float/bool/char/float16) or an array_like
+        ///     (<see cref="NDArray"/> or a C# array) broadcast position-wise. <c>null</c> (default) fills NaN with
+        ///     <c>0.0</c>. Cast same_kind into the real dtype, as NumPy's <c>copyto</c> casts it: text and complex
+        ///     fills are refused.
         /// </param>
         /// <param name="posinf">
         ///     Value(s) used to fill +Inf. <c>null</c> (default) fills with the largest finite value
@@ -47,6 +49,11 @@ namespace NumSharp
         ///     </para>
         /// </remarks>
         /// <exception cref="ValueError">A <c>numpy.matrix</c> operand whose result cannot be a matrix: more than two axes longer than 1 (<c>shape too large to be a matrix.</c>).</exception>
+        /// <exception cref="InvalidCastException">On an inexact input, a text or complex fill (or a complex / text array
+        ///     fill): NumPy's <c>copyto</c> refusal (<c>Cannot cast scalar from dtype('&lt;U1') to dtype('float64')
+        ///     according to the rule 'same_kind'</c>, NumPy's TypeError text), raised at the statement that meets the fill;
+        ///     or a scalar fill of a type that does not convert to a number.</exception>
+        /// <exception cref="ValueError">An array fill that does not broadcast into <paramref name="x"/>.</exception>
         public static NDArray nan_to_num(NDArray x, bool copy = true, object nan = null, object posinf = null, object neginf = null)
         {
             // a numpy.matrix operand comes back as a matrix, as from NumPy (NDMatrixBoundary)

@@ -32,11 +32,11 @@ namespace NumSharp.Backends
             // Real dtype of the values being replaced (float64 for complex128) — drives the finfo limits.
             NPTypeCode realTc = tc == NPTypeCode.Complex ? NPTypeCode.Double : tc;
 
-            bool anyArrayFill = IsArrayFill(nan) || IsArrayFill(posinf) || IsArrayFill(neginf);
+            bool anyCompositionFill = IsCompositionFill(nan) || IsCompositionFill(posinf) || IsCompositionFill(neginf);
 
             // Fast fused path: scalar fills into a contiguous target. Complex rides the Double kernel
             // over the raw interleaved buffer (real & imag each get the same scalar fill).
-            if (!anyArrayFill && work.Shape.IsContiguous && work.Shape.Offset == 0)
+            if (!anyCompositionFill && work.Shape.IsContiguous && work.Shape.Offset == 0)
                 RunNanToNumFused(work, tc, realTc, nan, posinf, neginf);
             else
                 RunNanToNumComposition(work, tc, realTc, nan, posinf, neginf);
@@ -44,9 +44,17 @@ namespace NumSharp.Backends
             return work;
         }
 
-        // A fill is "array-valued" when it is an NDArray or a C# array; everything else (int/float/bool/
-        // null) is a scalar the fused kernel can bake into a register.
-        private static bool IsArrayFill(object o) => o is NDArray || (o is not null && o.GetType().IsArray);
+        /// <summary>
+        ///     Whether a fill needs NumPy's <c>copyto</c> composition rather than the fused kernel: an array (an NDArray or
+        ///     a C# array), text, or a complex number. Text and complex fills cannot be baked into the kernel's register:
+        ///     NumPy's <c>copyto(d, fill, where=...)</c> refuses to cast them same_kind into a float array, and raises at the
+        ///     statement that meets the fill, after the earlier fills were written.
+        /// </summary>
+        /// <param name="o">The fill argument (null is NumPy's default).</param>
+        /// <returns>True for an NDArray, a C# array, a string or a <see cref="System.Numerics.Complex"/>; false for null
+        ///     and the real scalars (a C# number, bool, char or float16).</returns>
+        private static bool IsCompositionFill(object o) =>
+            o is NDArray || o is string || o is System.Numerics.Complex || (o is not null && o.GetType().IsArray);
 
         // The finfo(realdtype).max / .min pair NumPy uses for the default +Inf / -Inf fills.
         private static (double max, double min) NanToNumFiniteRange(NPTypeCode realTc) => realTc switch
@@ -56,10 +64,20 @@ namespace NumSharp.Backends
             _ => (double.MaxValue, double.MinValue) // Double (also complex128's real dtype)
         };
 
+        /// <summary>
+        ///     A real scalar fill as the double the fused kernel and the composition's 0-d fill are made from: NumPy's
+        ///     <c>copyto</c> of a Python number or a real NumPy scalar into a float array.
+        /// </summary>
+        /// <param name="o">The fill: null (0.0, NumPy's <c>nan=0.0</c>), a float16, a char (NumSharp's uint16 code unit,
+        ///     which NumPy's uint16 fills as its value), or any other <see cref="IConvertible"/> number or bool.</param>
+        /// <returns>The fill's value.</returns>
+        /// <exception cref="InvalidCastException">A fill of a type that does not convert to a number.</exception>
         private static double FillToDouble(object o) => o switch
         {
             null => 0.0,
             Half h => (double)h,
+            // Convert.ToDouble refuses a char ("Invalid cast from 'Char' to 'Double'"); NumPy's uint16 97 fills 97.0.
+            char c => c,
             _ => Convert.ToDouble(o)
         };
 
@@ -128,14 +146,36 @@ namespace NumSharp.Backends
             np.copyto(dest, negArr, where: np.isneginf(dest));
         }
 
+        /// <summary>
+        ///     A fill as the array the composition's <c>copyto</c> statements write: a real fill cast to the destination's
+        ///     real dtype up front (NumPy's <c>copyto</c> casts it same_kind, which a real number or array always passes),
+        ///     a text or complex fill left as it is, so <c>np.copyto</c> refuses it as NumPy's <c>copyto</c> does.
+        /// </summary>
+        /// <param name="fill">The fill argument: null, an NDArray, a C# array, a string, a complex number or a real
+        ///     scalar.</param>
+        /// <param name="def">NumPy's default for a null fill (0.0, or the real dtype's largest / smallest finite value).</param>
+        /// <param name="realTc">The destination's real dtype (float64 for a complex128 input).</param>
+        /// <returns>A 0-d or broadcastable array: in <paramref name="realTc"/> for a real fill; a <c>U</c> array for text
+        ///     (NumPy's str), a complex128 0-d array for a complex number, the array itself for a complex or text
+        ///     array.</returns>
+        /// <exception cref="InvalidCastException">A scalar fill of a type that does not convert to a number.</exception>
         private static NDArray NanToNumFillArray(object fill, double def, NPTypeCode realTc)
         {
             NDArray arr;
             if (fill is null) arr = NDArray.Scalar(def);
             else if (fill is NDArray nd) arr = nd;
+            // NumPy's str fill is a U array whose same_kind cast into a float array copyto refuses ("Cannot cast scalar
+            // from dtype('<U1') to dtype('float64') according to the rule 'same_kind'"): the text is never parsed.
+            else if (fill is string s) return (NDArray)s;
+            // A complex fill: copyto refuses complex -> float the same way (NumPy names complex64 for a float32 / float16
+            // destination; NumSharp has one complex width).
+            else if (fill is System.Numerics.Complex c) return NDArray.Scalar(c);
             else if (fill is Array a) arr = np.array(a);
             else arr = NDArray.Scalar(FillToDouble(fill));
-            // Cast the fill to the destination dtype up front (NumPy's copyto casts fill -> d.dtype).
+            // A complex or text array keeps its dtype too, for the same refusal; a real fill is cast to the destination
+            // dtype up front (NumPy's copyto casts fill -> d.dtype).
+            if (arr.typecode == NPTypeCode.Complex || Backends.Strings.NDStringUfuncs.IsText(arr))
+                return arr;
             return arr.typecode == realTc ? arr : arr.astype(realTc);
         }
 
