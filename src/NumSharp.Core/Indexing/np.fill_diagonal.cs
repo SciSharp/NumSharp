@@ -11,10 +11,14 @@ namespace NumSharp
         /// <param name="a">Array whose diagonal is to be filled; it is modified in place.</param>
         /// <param name="val">
         ///     Value(s) to write into the diagonal. A scalar is repeated; a sequence is raveled
-        ///     and then <b>tiled cyclically</b> (and truncated) to the diagonal's length. <c>null</c> is
-        ///     Python's <c>None</c>: NaN (NumPy's positive <c>NPY_NAN</c>) for a float array, <c>nan+nanj</c>
-        ///     for complex, <c>False</c> for bool, <c>'None'</c> (truncated) for <c>S</c> / <c>U</c>, a
-        ///     <c>StringDType</c>'s NA object or <c>'None'</c>.
+        ///     and then <b>tiled cyclically</b> (and truncated) to the diagonal's length. It is converted to
+        ///     <paramref name="a"/>'s dtype first, as NumPy's flat assignment converts it: a C# number or a str by the
+        ///     dtype's setitem (a Python int range-checked, never wrapped; a str parsed by Python's <c>int()</c> /
+        ///     <c>float()</c> / <c>complex()</c>; into <c>S</c> / <c>U</c> its <c>str()</c>), an <c>object[]</c> or
+        ///     collection (a Python list) item by item the same way, an <see cref="NDArray"/> or typed C# array by an
+        ///     unsafe cast. <c>null</c> is Python's <c>None</c>: NaN (NumPy's positive <c>NPY_NAN</c>) for a float
+        ///     array, <c>nan+nanj</c> for complex, <c>False</c> for bool, <c>'None'</c> (truncated) for <c>S</c> /
+        ///     <c>U</c>, a <c>StringDType</c>'s NA object or <c>'None'</c>.
         /// </param>
         /// <param name="wrap">
         ///     For tall matrices the diagonal "wraps" after N columns and continues on the row
@@ -26,10 +30,14 @@ namespace NumSharp
         ///     — all verbatim NumPy <c>ValueError</c> texts.
         /// </exception>
         /// <exception cref="ArgumentNullException"><paramref name="a"/> is null.</exception>
-        /// <exception cref="TypeError"><paramref name="val"/> is null (<c>None</c>) and <paramref name="a"/> is an integer (or
-        ///     <c>decimal</c>) array — Python's <c>int(None)</c>, raised even for an empty diagonal.</exception>
+        /// <exception cref="TypeError"><paramref name="val"/> is null (<c>None</c>), or a list holds one, and
+        ///     <paramref name="a"/> is an integer (or <c>decimal</c>) array — Python's <c>int(None)</c>; or a complex
+        ///     value into a real array. Like every conversion error, raised even for an empty diagonal.</exception>
         /// <exception cref="ValueError">A <c>StringDType(coerce=False)</c> array given a value that is not text
-        ///     (<c>None</c> included).</exception>
+        ///     (<c>None</c> included); a str that is not a number of a numeric array's kind (<c>invalid literal for
+        ///     int() with base 10: 'x'</c>); a float NaN into an integer array.</exception>
+        /// <exception cref="OverflowException">A Python int (alone or in a list) out of an integer array's range
+        ///     (<c>Python integer 300 out of bounds for int8</c>).</exception>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.fill_diagonal.html
         ///     <para>
@@ -37,7 +45,7 @@ namespace NumSharp
         ///     <c>a.flat[:end:step] = val</c>, and flat-iterator assignment repeats a short
         ///     right-hand side rather than raising: probed on a 6×6, <c>[1,2,3,4]</c> fills the
         ///     diagonal as <c>[1,2,3,4,1,2]</c>, while an over-long value list is truncated and
-        ///     an <b>empty</b> one is a silent no-op. <see cref="resize(NDArray,int[])"/> already
+        ///     an <b>empty</b> one is a silent no-op. <see cref="resize(NDArray, Shape)"/> already
         ///     implements exactly that cyclic-tile-or-truncate rule, so it supplies the values.
         ///     </para>
         ///     <para>

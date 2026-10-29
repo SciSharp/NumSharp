@@ -8,7 +8,7 @@ namespace NumSharp
         /// <param name="args">
         ///     N 1-D sequences of integer or boolean type. A boolean sequence is interpreted as a mask for
         ///     the corresponding dimension (equivalent to passing <see cref="nonzero"/> of it). Accepts
-        ///     anything <see cref="asanyarray"/> understands — <see cref="NDArray"/>, C# arrays, collections,
+        ///     anything <see cref="asanyarray(in object, DType, string)"/> understands — <see cref="NDArray"/>, C# arrays, collections,
         ///     tuples.
         /// </param>
         /// <returns>
