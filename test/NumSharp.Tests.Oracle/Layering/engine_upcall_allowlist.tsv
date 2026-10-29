@@ -9,7 +9,7 @@ Backends/Default/Indexing/Default.FlatNonZero.cs	0	2
 Backends/Default/Indexing/Default.NonZero.cs	0	2
 Backends/Default/Indexing/Default.Trace.cs	0	1	# np.trace's body moved by P1b: np.ascontiguousarray(diag) before the sum until P6 gives the engine its own copy (the out= route's np.copyto went with P1d: ReduceAdd's out operand)
 Backends/Default/LinearAlgebra/GufuncGuard.cs	0	1	# moved from the np layer by P2: Deliver's np.copyto stores a gufunc's answer into out= until P6 gives the engine its own copy
-Backends/Default/LinearAlgebra/LinAlgEmpty.cs	7	25
+Backends/Default/LinearAlgebra/LinAlgEmpty.cs	0	25
 Backends/Default/Logic/Default.LogicalReduction.Keywords.cs	0	1	# WriteLogicalToOut moved from np.all by P1b: np.copyto(out, reduced, 'unsafe') stores the bool result into out= until P6 gives the engine its own copy
 Backends/Default/Logic/Default.LogicalReduction.cs	0	2
 Backends/Default/Math/BLAS/Default.Dot.NDMD.cs	0	1
@@ -84,6 +84,6 @@ Backends/Strings/NDVStringMove.cs	2	7
 Backends/Strings/NDVStringReduction.cs	0	12
 Backends/Strings/NDVStringStatistics.Quantile.cs	22	12
 Backends/Strings/NDVStringStatistics.cs	4	2
-Backends/TensorEngine.LinearAlgebra.cs	1	5
+Backends/TensorEngine.LinearAlgebra.cs	0	5
 Backends/Unmanaged/UnmanagedStorage.Setters.cs	0	1
 Backends/Unmanaged/VStringArraySlice.cs	0	1

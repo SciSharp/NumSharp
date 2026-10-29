@@ -195,9 +195,15 @@ namespace NumSharp.Backends
             if (a.typecode != NPTypeCode.Complex)
                 return a;
 
+            // The copy is a fresh C-contiguous buffer of a.size elements: each is conjugated in place, in memory order.
             var result = a.copy();
-            foreach (ref Complex z in np.nditer<Complex>(result, writeable: true))
-                z = Complex.Conjugate(z);
+            unsafe
+            {
+                var p = (Complex*)result.Address;
+                long n = result.size;
+                for (long i = 0; i < n; i++)
+                    p[i] = Complex.Conjugate(p[i]);
+            }
 
             return result;
         }

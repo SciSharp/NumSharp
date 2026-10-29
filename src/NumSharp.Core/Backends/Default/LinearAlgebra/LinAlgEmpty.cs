@@ -174,7 +174,7 @@ namespace NumSharp.Backends
             if (n == 0 && m > 0)
             {
                 using var squares = Abs2(b);
-                using var running = np.cumsum(squares, 0);
+                using var running = squares.TensorEngine.ReduceCumAdd(squares, 0);
                 // The last row of the running sums is each column's sequential sum (a copy, so `running` can go).
                 using var last = running[Slice.Index(m - 1)];
                 resids = last.copy();
@@ -197,14 +197,15 @@ namespace NumSharp.Backends
         {
             if (b.typecode == NPTypeCode.Complex)
             {
-                using var re = np.real(b);
-                using var im = np.imag(b);
-                using var re2 = np.multiply(re, re);
-                using var im2 = np.multiply(im, im);
-                return np.add(re2, im2);
+                // np.real / np.imag of a complex array: views of its real and imaginary lanes.
+                using var re = new NDArray(b.Storage.AliasComplexLane(imaginary: false));
+                using var im = new NDArray(b.Storage.AliasComplexLane(imaginary: true));
+                using var re2 = re.TensorEngine.Multiply(re, re);
+                using var im2 = im.TensorEngine.Multiply(im, im);
+                return re2.TensorEngine.Add(re2, im2);
             }
             using var d = b.astype(NPTypeCode.Double);
-            return np.multiply(d, d);
+            return d.TensorEngine.Multiply(d, d);
         }
 
         /// <summary>
