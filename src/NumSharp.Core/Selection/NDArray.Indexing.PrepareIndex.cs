@@ -22,6 +22,17 @@ namespace NumSharp
         //  the op list is Phase D; Phase C wires PrepareIndex purely as the validation gate.)
         // ───────────────────────────────────────────────────────────────────────────────────────
 
+        /// <summary>
+        ///     NumPy's IndexError text for an index entry that is neither an integer, a slice, an ellipsis, a new axis nor an
+        ///     index array (<c>prepare_index</c>, mapping.c, for an input that was not an array: a float, a float16, a decimal,
+        ///     a complex number, text that is not slice notation). An ARRAY of a non-index dtype has its own text
+        ///     (<see cref="ThrowIfNotIndexArrayDtype"/>).
+        /// </summary>
+        /// <remarks>NumPy names the forms with backticks and adds nothing: the type of the refused entry is not in the
+        ///     text (NumSharp's used to quote with apostrophes and end with <c>(got 'Double')</c>).</remarks>
+        internal const string InvalidIndexMessage =
+            "only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices";
+
         /// <summary>NumPy <c>HAS_*</c> index classification bitmask (mapping.h). Values match NumPy.</summary>
         [Flags]
         internal enum IndexType
@@ -107,11 +118,12 @@ namespace NumSharp
             {
                 object obj = raw[gi];
 
-                // Normalize a string slice-notation item to a Slice (NumSharp extension; one axis).
+                // Normalize a string slice-notation item to a Slice (NumSharp extension; one axis). Text that is not slice
+                // notation is what NumPy makes of any str: a non-index entry, refused with its general text.
                 if (obj is string s)
                 {
                     try { obj = new Slice(s); }
-                    catch { throw new IndexError($"only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer or boolean arrays are valid indices (got '{s}')"); }
+                    catch { throw new IndexError(InvalidIndexMessage); }
                 }
 
                 switch (obj)
@@ -146,7 +158,9 @@ namespace NumSharp
                         continue;
                 }
 
-                // Integer scalar (only when the array is not 0-d, matching NumPy's array_ndims!=0 guard).
+                // Integer scalar (only when the array is not 0-d, matching NumPy's array_ndims!=0 guard). On a 0-d array an
+                // integer goes on to AsIndexArray, which makes it NumPy's PyArray_FROM_O 0-d integer array: an array scalar
+                // that consumes an axis, so the post-walk check reports "too many indices" (not an invalid entry).
                 if (arrayNdim != 0 && TryAsIntegerScalar(obj, out long ival))
                 {
                     indexType |= IndexType.Integer;
@@ -393,9 +407,22 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Coerce a scalar index item to a long (NumPy <c>PyArray_PyIntAsIntp</c> on a non-array).
-        ///     Returns false for items that are arrays or otherwise not plain integer scalars.
+        ///     Coerce a scalar index item to a long (NumPy <c>PyArray_PyIntAsIntp</c> on a non-array): the C# integer kinds
+        ///     only, the Python int they stand for. A <see cref="char"/> is an integer here, as C#'s <c>char</c> →
+        ///     <c>int</c> conversion makes it for the basic indexer (<see cref="TryBasicIndex"/>).
         /// </summary>
+        /// <param name="obj">The index entry.</param>
+        /// <param name="value">The integer, when the result is true; a <see cref="ulong"/> past <see cref="long.MaxValue"/>
+        ///     wraps (it is out of bounds for every axis, which the bounds check then reports).</param>
+        /// <returns>True for an integer scalar; false for everything else, which the caller hands to
+        ///     <see cref="AsIndexArray"/>.</returns>
+        /// <remarks>
+        ///     A floating-point, float16, decimal or complex scalar is NOT an integer, whatever its value: NumPy's
+        ///     <c>PyArray_PyIntAsIntp</c> refuses it, and the entry is then the invalid index of
+        ///     <see cref="InvalidIndexMessage"/>. Until 2026-10-29 this accepted a <see cref="Half"/> and any
+        ///     <see cref="IConvertible"/>, so a double was rounded to an integer: <c>a[0.6, ":"]</c> silently returned row 1
+        ///     and <c>a[1.5, ":"]</c> reported index 2 out of bounds.
+        /// </remarks>
         private static bool TryAsIntegerScalar(object obj, out long value)
         {
             switch (obj)
@@ -408,21 +435,24 @@ namespace NumSharp
                 case ushort us: value = us; return true;
                 case uint ui: value = ui; return true;
                 case ulong ul: value = unchecked((long)ul); return true;
-                case Half h: value = Converts.ToInt64(h); return true;
-                case Complex _: value = 0; return false;          // complex is not a plain integer index
-                case NDArray _: value = 0; return false;          // arrays handled separately
-                case Array _: value = 0; return false;            // int[]/long[] are fancy, not scalar
-                case IConvertible c:
-                    try { value = c.ToInt64(CultureInfo.InvariantCulture); return true; }
-                    catch { value = 0; return false; }
+                case char c: value = c; return true;
+                case nint n: value = n; return true;
+                case nuint nu: value = unchecked((long)nu); return true;
                 default: value = 0; return false;
             }
         }
 
         /// <summary>
-        ///     Resolve a non-scalar index item to its index <see cref="NDArray"/> (NumPy
-        ///     <c>PyArray_FROM_O</c>), or raise NumPy's invalid-index IndexError.
+        ///     Resolve an index item that is not an integer, slice, ellipsis, new axis or bool to its index
+        ///     <see cref="NDArray"/> (NumPy <c>PyArray_FROM_O</c>), or raise NumPy's invalid-index IndexError.
         /// </summary>
+        /// <param name="obj">The index entry.</param>
+        /// <returns>The entry as an array: itself for an <see cref="NDArray"/>, an array over an <c>int[]</c> /
+        ///     <c>long[]</c>, and for an integer scalar the 0-d int64 array <c>PyArray_FROM_O</c> makes of a Python int
+        ///     (reached only on a 0-d array, where the integer branch is skipped: the array scalar then counts as an
+        ///     indexed axis, so the caller reports "too many indices").</returns>
+        /// <exception cref="IndexError">Any other entry (a float, a float16, a decimal, a complex number, an object):
+        ///     <see cref="InvalidIndexMessage"/>, NumPy's text for an input that was not an array.</exception>
         private static NDArray AsIndexArray(object obj)
         {
             switch (obj)
@@ -431,9 +461,9 @@ namespace NumSharp
                 case int[] ia: return np.array(ia, copy: false);
                 case long[] la: return np.array(la, copy: false);
                 default:
-                    throw new IndexError(
-                        "only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer or " +
-                        $"boolean arrays are valid indices (got '{(obj?.GetType()?.Name ?? "null")}')");
+                    if (TryAsIntegerScalar(obj, out long integer))
+                        return NDArray.Scalar(integer);
+                    throw new IndexError(InvalidIndexMessage);
             }
         }
 

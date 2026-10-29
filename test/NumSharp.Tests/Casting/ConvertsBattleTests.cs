@@ -1363,24 +1363,31 @@ namespace NumSharp.Tests.Casting
         // two tests above are added in the Round 6 region below — they exercise the same
         // dispatch paths and lock in the same rejection.
 
-        // NumPy parity: non-integer indices raise IndexError. NumSharp now throws IndexError
-        // ("only integers, slices (':'), ellipsis ('...'), numpy.newaxis ('None') and integer
-        // or boolean arrays are valid indices") from the Getter/Setter validation switch.
+        // NumPy parity: non-integer indices raise IndexError with prepare_index's text, verbatim (probed 2.4.2:
+        // np.arange(5)[np.float16(2)] and np.arange(5)[2+0j]): backticks, and no type name (NumSharp's used to end with
+        // "(got 'Half')").
 
+        /// <summary>
+        ///     A float16 index is refused with NumPy's exact text: <c>PyArray_PyIntAsIntp</c> does not take a float, whatever its
+        ///     value.
+        /// </summary>
         [TestMethod]
         public void Indexing_HalfIndex_Getter_NotSupported()
         {
             var arr = np.array(new[] { 10, 20, 30, 40, 50 });
             var act = () => arr[(Half)2];
-            act.Should().Throw<IndexError>().WithMessage("*integers*slices*Half*");
+            act.Should().Throw<IndexError>().WithMessage(
+                "only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices");
         }
 
+        /// <summary>A complex index is refused with NumPy's exact text.</summary>
         [TestMethod]
         public void Indexing_ComplexIndex_Getter_NotSupported()
         {
             var arr = np.array(new[] { 10, 20, 30, 40, 50 });
             var act = () => arr[new Complex(2, 0)];
-            act.Should().Throw<IndexError>().WithMessage("*integers*slices*Complex*");
+            act.Should().Throw<IndexError>().WithMessage(
+                "only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices");
         }
 
         #endregion

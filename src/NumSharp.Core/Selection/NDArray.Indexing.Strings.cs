@@ -146,13 +146,20 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     NumPy's <c>prepare_index</c> rank check for a normalized index tuple: every entry consumes one axis — a boolean
-        ///     array as many as its rank, an ellipsis or newaxis none — and more than this array has is an IndexError. The
-        ///     string routes run it before they touch the unit view, whose trailing character axis would otherwise accept one
-        ///     index too many (and before a value is converted, which NumPy does only after the index passed).
+        ///     NumPy's <c>prepare_index</c> walk and rank check for a normalized index tuple, in NumPy's order: each entry is
+        ///     classified as it is reached, a refused entry raising at once (an index array of a non-index dtype, a scalar that
+        ///     is not an integer); after the walk, every entry has consumed its axes — a boolean array as many as its rank, an
+        ///     ellipsis, a new axis or a scalar bool none, anything else one — and more than this array has is an IndexError.
+        ///     The string routes run it before they touch the unit view, whose trailing character axis would otherwise accept
+        ///     one index too many (and before a value is converted, which NumPy does only after the index passed).
         /// </summary>
         /// <param name="normalized">The normalized index tuple.</param>
-        /// <exception cref="IndexError"><c>too many indices for array: array is {n}-dimensional, but {k} were indexed</c>.</exception>
+        /// <exception cref="IndexError"><c>arrays used as indices must be of integer (or boolean) type</c> for an index array
+        ///     of another dtype, <see cref="InvalidIndexMessage"/> for a scalar that is no integer (a float, a float16, a
+        ///     decimal, a complex number), both raised at the entry; then <c>too many indices for array: array is
+        ///     {n}-dimensional, but {k} were indexed</c>.</exception>
+        /// <remarks>Until 2026-10-29 the rank was checked first, so a 0-d string array indexed by a float array or a double
+        ///     reported "too many indices" where NumPy names the refused entry.</remarks>
         private void ThrowIfTooManyIndices(object[] normalized)
         {
             int consumed = 0;
@@ -166,10 +173,23 @@ namespace NumSharp
                     // (s[True] of a 0-d string array is (1,), not "too many indices").
                     case bool:
                         break;
-                    case NDArray nd when nd.typecode == NPTypeCode.Boolean:
-                        consumed += nd.ndim;
+                    case NDArray nd:
+                        // prepare_index refuses an index array of a non-index dtype where it meets it, before any count.
+                        ThrowIfNotIndexArrayDtype(nd);
+                        consumed += nd.typecode == NPTypeCode.Boolean ? nd.ndim : 1;
+                        break;
+                    case Slice:
+                    case string:
+                    // System.Array spelled out: inside NDArray the bare name is the Array property, a constant pattern.
+                    case System.Array:
+                    case null:
+                        consumed++;
                         break;
                     default:
+                        // A scalar entry: an integer consumes an axis (on a 0-d array as NumPy's 0-d integer array, which
+                        // the count below reports); any other scalar is refused where it stands.
+                        if (!TryAsIntegerScalar(entry, out _))
+                            throw new IndexError(InvalidIndexMessage);
                         consumed++;
                         break;
                 }
