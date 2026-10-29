@@ -84,7 +84,9 @@
 // axis / axes taking the general roles, and np.nan_to_num's fill values and np.real_if_close's tol, and
 // np.unravel_index's dimensions (empty, zero, negative and overflowing ones), order (C / F in either case, A / K, a
 // refused letter) and the scalar overload's flat index, np.packbits / np.unpackbits' bitorder and count and np.bincount's
-// minlength; an overload with a required
+// minlength, and the item-selection family's arguments (see ItemArgLabels: index arrays and scalar indices, the clip
+// mode, values, masks, repeat counts, choices, np.compress's condition, whose operand is its second parameter a, and
+// np.resize / ndarray.resize's new shapes; np.choose runs on the non-negative 1-D pools too); an overload with a required
 // parameter of another kind is reported once as SKIP. An int axis
 // starts from its default when it has one. A search function (np.searchsorted) runs on pools of 1-D haystacks: sorted,
 // strided, reversed, unsorted and empty ones beside one 2-D operand; np.convolve / np.correlate run on the same 1-D pools
@@ -363,7 +365,306 @@ static class Snapshot
         // index; np.packbits / np.unpackbits' bitorder (NumPy's two prefix rules) and unpackbits' count (none, truncating,
         // padding, negative trims and an over-long trim); np.bincount's minlength.
         UnravelShape, UnravelOrder, UnravelFlat, PackBitOrder, UnpackCount, BincountMinLength,
+        // The item-selection family (np.take / np.put / np.putmask / np.place / np.repeat / np.choose / np.compress /
+        // np.resize and NDArray's take / put / repeat / choose / compress / resize): every parameter its general roles do
+        // not read - index arrays and scalar indices, the clip mode, values, masks, counts, choices, conditions and new
+        // shapes - takes this one role, its variants chosen by the parameter's name and type (ItemArgLabels) and built
+        // from the operand where they must fit it (MakeItemArg).
+        ItemArg,
         Default, Unsupported,
+    }
+
+    /// <summary>
+    ///     Whether a parameter belongs to the item-selection family - np.take, np.put, np.putmask, np.place, np.repeat,
+    ///     np.choose, np.compress, np.resize and NDArray's take, put, repeat, choose, compress and resize (NumPy's
+    ///     <c>item_selection.c</c>, <c>compiled_base.c</c>'s <c>arr_place</c> / <c>arr_putmask</c> and np.resize) - whose
+    ///     <c>indices</c> / <c>index</c> / <c>mode</c> / <c>values</c> / <c>value</c> / <c>mask</c> / <c>vals</c> /
+    ///     <c>repeats</c> / <c>choices</c> / <c>condition</c> / <c>new_shape</c> roles are theirs alone (see
+    ///     <see cref="ItemArgLabels"/>): np.insert names a parameter <c>values</c> and np.linalg a <c>mode</c> with other
+    ///     meanings, and their snapshots must not change.
+    /// </summary>
+    /// <param name="p">The parameter.</param>
+    /// <returns>True for a parameter of a public static np.* or public instance NDArray overload of the family.</returns>
+    private static bool IsItemSelection(ParameterInfo p) =>
+        (p.Member.DeclaringType == typeof(np)
+         && p.Member.Name is "take" or "put" or "putmask" or "place" or "repeat" or "choose" or "compress" or "resize")
+        || (p.Member.DeclaringType == typeof(NDArray)
+            && p.Member.Name is "take" or "put" or "repeat" or "choose" or "compress" or "resize");
+
+    /// <summary>
+    ///     The variant labels of an item-selection parameter (<see cref="Role.ItemArg"/>), the base first, or null for a
+    ///     parameter the family's roles do not read (its <c>a</c> / <c>arr</c> operand, <c>axis</c>, <c>out</c>,
+    ///     <c>refcheck</c> take the general roles).
+    /// </summary>
+    /// <param name="p">The parameter (of an <see cref="IsItemSelection"/> overload).</param>
+    /// <returns>The labels <see cref="MakeItemArg"/> builds, or null.</returns>
+    private static string[] ItemArgLabels(ParameterInfo p)
+    {
+        Type t = p.ParameterType;
+        string n = p.Name;
+        if (n == "indices" && t == typeof(NDArray)) return ItemIndicesLabels;
+        if (n == "index" && t == typeof(long)) return ItemIndexLabels;
+        if (n == "mode" && t == typeof(string)) return ItemModeLabels;
+        if (n == "value" && t == typeof(object)) return ItemPutValueLabels;
+        if (n == "mask" && t == typeof(NDArray)) return ItemMaskLabels;
+        if (n is "values" or "vals" && t == typeof(NDArray)) return ItemValuesLabels;
+        if (n is "values" or "vals" && t == typeof(Array)) return ItemArrayValuesLabels;
+        if (n == "repeats" && (t == typeof(int) || t == typeof(long))) return ItemRepeatCountLabels;
+        if (n == "repeats" && t == typeof(NDArray)) return ItemRepeatArrayLabels;
+        if (n == "choices" && t == typeof(NDArray[])) return ItemChoiceListLabels;
+        if (n == "choices" && t == typeof(object[])) return ItemChoiceObjectLabels;
+        if (n == "choices" && t == typeof(NDArray)) return ItemChoiceStackLabels;
+        if (n == "condition" && t == typeof(NDArray)) return ItemConditionLabels;
+        if (n == "new_shape" && (t == typeof(Shape) || t == typeof(long[]))) return ItemNewShapeLabels;
+        return null;
+    }
+
+    /// <summary>np.take / np.put's index arrays: positions inside every pool axis, negative ones, one past every axis
+    ///     either way (the clip modes' cases), a 0-d index, none, a 2-D index, the integer dtypes NumPy casts (uint64 under
+    ///     take's same_kind, refused by put's safe rule; uint8), the dtypes it refuses (float, bool, text), a strided view,
+    ///     and null.</summary>
+    private static readonly string[] ItemIndicesLabels =
+    {
+        "i64[1]", "i64[0,2]", "i32[2,0]", "i64[-1]", "i64[99]", "i64[-99]", "0d_i64_1", "i64[]", "2d_i64", "u64[1]",
+        "u8[1]", "f64[1.0]", "bool[T,F]", "i64_strided", "U1[1]", "null",
+    };
+
+    /// <summary>np.take / np.put's scalar index: inside every pool axis first, the first, the last, and one past either
+    ///     end.</summary>
+    private static readonly string[] ItemIndexLabels = { "1", "0", "-1", "99", "-99" };
+
+    /// <summary>The clip mode of np.take / np.put / np.choose: the default first, the other two names, what NumPy's
+    ///     converter reads from the first letter (a lower and a capital letter, a prefix), what it refuses, and null.</summary>
+    private static readonly string[] ItemModeLabels = { "raise", "wrap", "clip", "c", "W", "rais", "x", "empty", "null" };
+
+    /// <summary>np.put's scalar value (the object overload): a Python int, a float, a bool, None, a str, an int past a
+    ///     narrow dtype, a C# array (a sequence) and a 0-d array.</summary>
+    private static readonly string[] ItemPutValueLabels = { "7", "2.5", "true", "null", "x", "300", "f64{1,2}", "0d_5" };
+
+    /// <summary>np.putmask / np.place's masks, built from the operand: alternating True / False of its shape, none, all,
+    ///     an integer and a float mask (their truth), one element too few and too many, a (1, size) reshape, a text mask, a
+    ///     strided view, a broadcast True, and null.</summary>
+    private static readonly string[] ItemMaskLabels =
+        { "alt", "none", "all", "int", "float", "short", "long", "2d", "text", "strided", "bcast", "null" };
+
+    /// <summary>np.put / np.putmask / np.place's value arrays: three int64 values (cycled), one float, none (np.place's
+    ///     refusal, np.putmask's no-op), text, a 2-D array, the operand's own copy, and null.</summary>
+    private static readonly string[] ItemValuesLabels = { "i64[7,8,9]", "f64[2.5]", "i64[]", "U1[x]", "2d_i64", "same", "null" };
+
+    /// <summary>np.putmask / np.place's C# array values: doubles, one int, strings, none, mixed objects, and null.</summary>
+    private static readonly string[] ItemArrayValuesLabels = { "f64{1.5,2.5}", "i32{7}", "str{x}", "i32{}", "obj{1,a}", "null" };
+
+    /// <summary>np.repeat's scalar count: two first, none, one, three, and the negative count NumPy refuses.</summary>
+    private static readonly string[] ItemRepeatCountLabels = { "2", "0", "1", "3", "-1" };
+
+    /// <summary>np.repeat's count arrays, built from the operand: one count (broadcast), one per element (0, 1, 2, ...;
+    ///     the flat call's length), a negative count, two counts (a length NumPy refuses for most operands), the dtypes it
+    ///     casts or refuses (float, uint8, text), a 0-d count, a 2-D count, and null.</summary>
+    private static readonly string[] ItemRepeatArrayLabels =
+        { "i64[2]", "each", "i64[-1]", "i64[1,2]", "f64[2.0]", "u8[2]", "0d_2", "2d", "U1[2]", "null" };
+
+    /// <summary>np.choose's choice lists, built from the operand: three 0-d int64 choices, two copies of the operand,
+    ///     a float and an int choice, two text choices, one choice, none, two that do not broadcast, and null.</summary>
+    private static readonly string[] ItemChoiceListLabels = { "0d3", "same2", "mixed", "text", "one", "empty", "bad", "null" };
+
+    /// <summary>np.choose's object choices: three Python ints, a float beside a str, the operand's copy beside a Python
+    ///     int, none, and null.</summary>
+    private static readonly string[] ItemChoiceObjectLabels = { "ints", "mixed", "arrays", "empty", "null" };
+
+    /// <summary>np.choose's choices as one array whose first axis enumerates them: three values, two stacked copies of
+    ///     the operand, a 0-d array, and null.</summary>
+    private static readonly string[] ItemChoiceStackLabels = { "stack3", "stack_op", "0d", "null" };
+
+    /// <summary>np.compress's conditions, built from the operand: alternating True / False over its size, a short one
+    ///     (NumPy reads the first elements), one element longer with a True past the end, none true, an integer and a
+    ///     float condition, an empty one, a 2-D one, text, and null.</summary>
+    private static readonly string[] ItemConditionLabels =
+        { "alt", "short", "long", "none", "int", "float", "empty", "2d", "text", "null" };
+
+    /// <summary>np.resize / ndarray.resize's new shapes: the operand's own first, then smaller, reshaped, empty, 0-d and
+    ///     larger shapes, and a negative dimension.</summary>
+    private static readonly string[] ItemNewShapeLabels = { "same", "6", "2x3", "0", "scalar", "3x4", "10", "2x-1" };
+
+    /// <summary>
+    ///     Builds an item-selection argument (<see cref="Role.ItemArg"/>) for an operand.
+    /// </summary>
+    /// <param name="p">The parameter, whose name and type select the label set (<see cref="ItemArgLabels"/>).</param>
+    /// <param name="label">The variant.</param>
+    /// <param name="operand">The pool operand (the masks, conditions, per-element counts, the operand-copy choices and
+    ///     values, and the "same" shape are built from it).</param>
+    /// <returns>The argument: an array, a C# number, string, array or shape, or null.</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static object MakeItemArg(ParameterInfo p, string label, NDArray operand)
+    {
+        Type t = p.ParameterType;
+        string n = p.Name;
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        NDArray Alternating(long count) => np.array(Enumerable.Range(0, (int)count).Select(i => i % 2 == 0).ToArray());
+        NDArray Longs(params long[] v) => np.array(v);
+        if (n == "indices")
+            return label switch
+            {
+                "i64[1]" => Longs(1),
+                "i64[0,2]" => Longs(0, 2),
+                "i32[2,0]" => np.array(new[] { 2, 0 }),
+                "i64[-1]" => Longs(-1),
+                "i64[99]" => Longs(99),
+                "i64[-99]" => Longs(-99),
+                "0d_i64_1" => np.array(1L),
+                "i64[]" => np.array(Array.Empty<long>()),
+                "2d_i64" => Longs(0, 1, 1, 0).reshape(new Shape(2, 2)),
+                "u64[1]" => np.array(new ulong[] { 1 }),
+                "u8[1]" => np.array(new byte[] { 1 }),
+                "f64[1.0]" => np.array(new[] { 1.0 }),
+                "bool[T,F]" => np.array(new[] { true, false }),
+                "i64_strided" => Longs(0, 9, 1, 9, 2)["::2"],
+                "U1[1]" => np.array(new[] { "1" }),
+                "null" => null,
+                _ => throw new ArgumentException("unknown indices variant " + label),
+            };
+        if (n == "index")
+            return long.Parse(label, CultureInfo.InvariantCulture);
+        if (n == "mode")
+            return label switch { "empty" => "", "null" => null, _ => label };
+        if (n == "value")
+            return label switch
+            {
+                "7" => 7,
+                "2.5" => 2.5,
+                "true" => true,
+                "null" => null,
+                "x" => "x",
+                "300" => 300,
+                "f64{1,2}" => new[] { 1.0, 2.0 },
+                "0d_5" => np.array(5L),
+                _ => throw new ArgumentException("unknown value variant " + label),
+            };
+        if (n == "mask")
+            return label switch
+            {
+                "alt" => Alternating(size).reshape(new Shape(dims)),
+                "none" => np.zeros(new Shape(dims), np.dtype("bool")),
+                "all" => np.ones(new Shape(dims), np.dtype("bool")),
+                "int" => np.array(Enumerable.Range(0, (int)size).Select(i => (long)(i % 3)).ToArray()).reshape(new Shape(dims)),
+                "float" => np.array(Enumerable.Range(0, (int)size).Select(i => (i % 2) * 0.5).ToArray()).reshape(new Shape(dims)),
+                "short" => Alternating(Math.Max(size - 1, 0)),
+                "long" => Alternating(size + 1),
+                "2d" => Alternating(size).reshape(new Shape(1, size)),
+                "text" => np.array(Enumerable.Range(0, (int)size).Select(i => i % 2 == 0 ? "a" : "").ToArray()).reshape(new Shape(dims)),
+                "strided" => Alternating(2 * size)["::2"],
+                "bcast" => np.broadcast_to(np.array(true), new Shape(dims)),
+                "null" => null,
+                _ => throw new ArgumentException("unknown mask variant " + label),
+            };
+        if (n is "values" or "vals" && t == typeof(NDArray))
+            return label switch
+            {
+                "i64[7,8,9]" => Longs(7, 8, 9),
+                "f64[2.5]" => np.array(new[] { 2.5 }),
+                "i64[]" => np.array(Array.Empty<long>()),
+                "U1[x]" => np.array(new[] { "x" }),
+                "2d_i64" => Longs(7, 8, 9, 10).reshape(new Shape(2, 2)),
+                "same" => operand.copy(),
+                "null" => null,
+                _ => throw new ArgumentException("unknown values variant " + label),
+            };
+        if (n is "values" or "vals")
+            return label switch
+            {
+                "f64{1.5,2.5}" => new[] { 1.5, 2.5 },
+                "i32{7}" => new[] { 7 },
+                "str{x}" => new[] { "x" },
+                "i32{}" => Array.Empty<int>(),
+                "obj{1,a}" => new object[] { 1, "a" },
+                "null" => null,
+                _ => throw new ArgumentException("unknown array values variant " + label),
+            };
+        if (n == "repeats" && t == typeof(int))
+            return int.Parse(label, CultureInfo.InvariantCulture);
+        if (n == "repeats" && t == typeof(long))
+            return long.Parse(label, CultureInfo.InvariantCulture);
+        if (n == "repeats")
+            return label switch
+            {
+                "i64[2]" => Longs(2),
+                "each" => np.array(Enumerable.Range(0, (int)size).Select(i => (long)(i % 3)).ToArray()),
+                "i64[-1]" => Longs(-1),
+                "i64[1,2]" => Longs(1, 2),
+                "f64[2.0]" => np.array(new[] { 2.0 }),
+                "u8[2]" => np.array(new byte[] { 2 }),
+                "0d_2" => np.array(2L),
+                "2d" => Longs(2).reshape(new Shape(1, 1)),
+                "U1[2]" => np.array(new[] { "2" }),
+                "null" => null,
+                _ => throw new ArgumentException("unknown repeats variant " + label),
+            };
+        if (n == "choices" && t == typeof(NDArray[]))
+            return label switch
+            {
+                "0d3" => new[] { np.array(10L), np.array(20L), np.array(30L) },
+                "same2" => new[] { operand.copy(), operand.copy() },
+                "mixed" => new[] { np.array(1.5), np.array(2) },
+                "text" => new[] { np.array("a"), np.array("bb") },
+                "one" => new[] { np.array(7L) },
+                "empty" => Array.Empty<NDArray>(),
+                "bad" => new[] { np.zeros(new Shape(7)), np.zeros(new Shape(7)) },
+                "null" => null,
+                _ => throw new ArgumentException("unknown choice list variant " + label),
+            };
+        if (n == "choices" && t == typeof(object[]))
+            return label switch
+            {
+                "ints" => new object[] { 10, 20, 30 },
+                "mixed" => new object[] { 1.5, "x" },
+                "arrays" => new object[] { operand.copy(), 5 },
+                "empty" => Array.Empty<object>(),
+                "null" => null,
+                _ => throw new ArgumentException("unknown choice object variant " + label),
+            };
+        if (n == "choices")
+            return label switch
+            {
+                "stack3" => Longs(10, 20, 30),
+                "stack_op" => np.stack(new[] { operand.copy(), operand.copy() }),
+                "0d" => np.array(5L),
+                "null" => null,
+                _ => throw new ArgumentException("unknown choice stack variant " + label),
+            };
+        if (n == "condition")
+            return label switch
+            {
+                "alt" => Alternating(size),
+                "short" => np.array(new[] { true, false }),
+                "long" => np.array(Enumerable.Range(0, (int)size + 1).Select(i => i == size || i % 2 == 0).ToArray()),
+                "none" => np.zeros(new Shape(size), np.dtype("bool")),
+                "int" => np.array(Enumerable.Range(0, (int)size).Select(i => (long)(i % 3)).ToArray()),
+                "float" => np.array(Enumerable.Range(0, (int)size).Select(i => (i % 2) * 0.5).ToArray()),
+                "empty" => np.array(Array.Empty<bool>()),
+                "2d" => Alternating(size).reshape(new Shape(1, size)),
+                "text" => np.array(Enumerable.Range(0, (int)size).Select(i => i % 2 == 0 ? "a" : "").ToArray()),
+                "null" => null,
+                _ => throw new ArgumentException("unknown condition variant " + label),
+            };
+        if (n == "new_shape")
+        {
+            long[] shape = label switch
+            {
+                "same" => dims,
+                "6" => new long[] { 6 },
+                "2x3" => new long[] { 2, 3 },
+                "0" => new long[] { 0 },
+                "scalar" => Array.Empty<long>(),
+                "3x4" => new long[] { 3, 4 },
+                "10" => new long[] { 10 },
+                "2x-1" => new long[] { 2, -1 },
+                _ => throw new ArgumentException("unknown new_shape variant " + label),
+            };
+            // A Shape cannot hold a negative dimension; the C# array form passes it as given (ndarray.resize's refusal).
+            return t == typeof(long[]) ? shape : new Shape(shape);
+        }
+        throw new ArgumentException($"no item-selection variants for {n} ({t.Name})");
     }
 
     /// <summary>
@@ -518,6 +819,10 @@ static class Snapshot
             if (n == "k" && t == typeof(NDArray)) return Role.PolyintK;
             if (n == "k" && t == typeof(double)) return Role.PolyintKDouble;
         }
+        // The item-selection family's own parameters (only theirs; its operand, axis, out and refcheck take the general
+        // roles below), before the general array roles would read an index array or a mask as a second operand.
+        if (IsItemSelection(p) && ItemArgLabels(p) is not null)
+            return Role.ItemArg;
         // An NDMatrix parameter (numpy.matrix's out=, typed as the matrix NumPy requires) takes the array roles too; other
         // NDArray subclasses (NDArray<bool> masks, ...) keep falling through, so the snapshots of the np.* and NDArray targets
         // are unchanged by the NDMatrix support.
@@ -829,6 +1134,10 @@ static class Snapshot
             case Role.LexKeys:
                 // Built from the operand (MakeLexKeys); the factory here is never called. The base is the operand alone.
                 Add(LexKeysVariantLabels[0], () => null);
+                break;
+            case Role.ItemArg:
+                // Built by MakeItemArg (from the operand where a value must fit it); the factory here is never called.
+                Add(ItemArgLabels(p)[0], () => null);
                 break;
             case Role.Initial:
                 // None first (no initial: a where= mask then meets NumPy's no-identity error), then C# numbers as Python's int
@@ -1604,14 +1913,22 @@ static class Snapshot
     /// <summary>The small pool of np.bincount (phase C).</summary>
     private static readonly string[] BincountPairLayouts = { "nonneg1d", "empty1d", "0d" };
 
+    /// <summary>The reduced pool of np.choose / NDArray.choose (phase B): a non-negative index array (most of its
+    ///     indices name a choice, so the selection itself runs) beside the general 2-D, 0-d, empty and 3-D operands.</summary>
+    private static readonly string[] ChooseReducedLayouts = { "nonneg1d", "c2d", "0d", "empty", "3d" };
+
+    /// <summary>The small pool of np.choose / NDArray.choose (phase C).</summary>
+    private static readonly string[] ChoosePairLayouts = { "nonneg1d", "c2d", "0d" };
+
     /// <summary>
     ///     The operand layouts of the three phases for an overload: the general pools; for np.searchsorted /
     ///     NDArray.searchsorted, pools of 1-D haystacks (every other operand of the general pools fails NumPy's 1-D check
     ///     before anything else is read, so the varied keys, sides and sorters would never reach the search); for
     ///     np.convolve / np.correlate and their NDArray members, the same 1-D layouts and a 24-element one (a general pool's
     ///     2-D operand fails their depth check first); for np.bincount, the general pool and 1-D operands of non-negative
-    ///     values (<see cref="BincountLayouts"/>); for np.linalg, pools of square matrices, stacks and rectangles
-    ///     (<see cref="LinalgLayouts"/>).
+    ///     values (<see cref="BincountLayouts"/>); for np.choose and NDArray.choose, the general pool and the same
+    ///     non-negative 1-D operands (index arrays whose indices mostly name a choice); for np.linalg, pools of square
+    ///     matrices, stacks and rectangles (<see cref="LinalgLayouts"/>).
     /// </summary>
     /// <param name="m">The overload.</param>
     /// <returns>The layouts of phase A, phase B and phase C.</returns>
@@ -1620,11 +1937,13 @@ static class Snapshot
             ? (Layouts.Concat(SortedLayouts).ToArray(), SortedReducedLayouts, SortedPairLayouts)
             : m.Name is "convolve" or "correlate" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray))
                 ? (Layouts.Concat(SortedLayouts).Append("long1d").ToArray(), SlidingReducedLayouts, SlidingPairLayouts)
-                : m.Name == "bincount" && m.DeclaringType == typeof(np)
-                    ? (Layouts.Concat(BincountLayouts).ToArray(), BincountReducedLayouts, BincountPairLayouts)
-                    : m.DeclaringType == typeof(np.linalg)
-                        ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
-                        : (Layouts, ReducedLayouts, PairLayouts);
+                : m.Name == "choose" && (m.DeclaringType == typeof(np) || m.DeclaringType == typeof(NDArray))
+                    ? (Layouts.Concat(BincountLayouts).ToArray(), ChooseReducedLayouts, ChoosePairLayouts)
+                    : m.Name == "bincount" && m.DeclaringType == typeof(np)
+                        ? (Layouts.Concat(BincountLayouts).ToArray(), BincountReducedLayouts, BincountPairLayouts)
+                        : m.DeclaringType == typeof(np.linalg)
+                            ? (LinalgLayouts, LinalgReducedLayouts, LinalgPairLayouts)
+                            : (Layouts, ReducedLayouts, PairLayouts);
 
     /// <summary>
     ///     Snapshots one overload: phase A over the full operand pool, phase B varying each parameter on the reduced pool,
@@ -1677,6 +1996,13 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.compress's condition comes before the array it selects from: a is the operand, the condition is built
+            // from it (MakeItemArg), so the condition must not take the operand's place.
+            if (!sawArray && ps[i].Name == "condition" && ps[i].ParameterType == typeof(NDArray) && IsItemSelection(ps[i]))
+            {
+                roles[i] = Role.ItemArg;
+                continue;
+            }
             // np.lexsort's key list carries the operand too (MakeLexKeys).
             if (!sawArray && ps[i].ParameterType == typeof(NDArray[]) && ps[i].Name == "keys" && IsSortFamily(ps[i]))
             {
@@ -1724,6 +2050,7 @@ static class Snapshot
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels.Length - 1,
             Role.EinsumOps => EinsumOpsVariantLabels.Length - 1,
             Role.LexKeys => LexKeysVariantLabels.Length - 1,
+            Role.ItemArg => ItemArgLabels(ps[i]).Length - 1,
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[i]).Length - 1,
             _ => variants[i].Count - 1,
         };
@@ -1830,6 +2157,7 @@ static class Snapshot
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels[v],
             Role.EinsumOps => EinsumOpsVariantLabels[v],
             Role.LexKeys => LexKeysVariantLabels[v],
+            Role.ItemArg => ItemArgLabels(ps[p])[v],
             Role.SampleSeq or Role.BinsInts or Role.BinsArrays or Role.BinsObjects or Role.RangeArray => DdLabels(roles[p])[v],
             _ => variants[p][v].Label,
         };
@@ -1857,6 +2185,7 @@ static class Snapshot
                     : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
                     : roles[i] == Role.LexKeys ? MakeLexKeys(LexKeysVariantLabels[0], operand)
+                    : roles[i] == Role.ItemArg ? MakeItemArg(ps[i], ItemArgLabels(ps[i])[0], operand)
                     : IsDdRole(roles[i]) ? MakeDd(roles[i], DdLabels(roles[i])[0], operand, m)
                     : variants[i][0].Make();
             int outParam = -1, outVariant = 0;
@@ -1928,6 +2257,9 @@ static class Snapshot
                         break;
                     case Role.LexKeys:
                         argv[p] = MakeLexKeys(LexKeysVariantLabels[v], operand);
+                        break;
+                    case Role.ItemArg:
+                        argv[p] = MakeItemArg(ps[p], ItemArgLabels(ps[p])[v], operand);
                         break;
                     case Role.NditerOpAxes:
                         argv[p] = MakeNditerOpAxes(NditerOpAxesVariantLabels[v], operand);
