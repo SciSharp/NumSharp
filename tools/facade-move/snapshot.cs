@@ -121,7 +121,8 @@
 // np.where's x / y given as C# values (WhereScalar) and np.extract's arr
 // and ndarray.real / imag's setters' value (the second operand's role), and - through the item-selection wiring, built
 // from the pool operand - np.take_along_axis / np.put_along_axis's indices and values (AlongIndicesLabels,
-// AlongValuesLabels), np.fill_diagonal's val (FillDiagValueLabels), np.select's condition list, choice list and default
+// AlongValuesLabels), np.fill_diagonal's val (FillDiagValueLabels, Python lists included), np.select's condition list,
+// choice list and default
 // (np.select has no array parameter: all three come from the pool operand) and np.piecewise's condition list in its
 // NDArray[] and bare forms, its function list from a fixed menu NumPy names alike (negate, square, a callable of the
 // extra args, constants) and its extra args, np.delete's boolean-mask obj (a C# bool[]), and np.pad's pad_width in each
@@ -680,9 +681,14 @@ static class Snapshot
 
     /// <summary>np.fill_diagonal's val (NumPy's <c>a.flat[...] = val</c>): a Python int first, then a float, a bool, a
     ///     complex, a str, None, an int past int8 and one past every C# integer, a NumPy float16, a C# array (tiled
-    ///     cyclically), an empty one (a no-op), the operand's own copy (raveled and tiled) and a 0-d int64.</summary>
+    ///     cyclically), an empty one (a no-op), the operand's own copy (raveled and tiled), a 0-d int64, and Python lists
+    ///     (object[]: NumPy stores every item by the dtype's setitem) - of ints with one past int8, of a str, of a float
+    ///     and a NaN, of None, and an empty one.</summary>
     private static readonly string[] FillDiagValueLabels =
-        { "7", "2.5", "true", "1+2j", "x", "null", "300", "2**70", "half1.5", "f64{1,2}", "i32{}", "same", "0d_5" };
+    {
+        "7", "2.5", "true", "1+2j", "x", "null", "300", "2**70", "half1.5", "f64{1,2}", "i32{}", "same", "0d_5",
+        "obj{300,2}", "obj{x}", "obj{1.5,nan}", "obj{null}", "obj{}",
+    };
 
     /// <summary>
     ///     Builds an np.take_along_axis / np.put_along_axis argument for an operand: its index array (see
@@ -1273,6 +1279,11 @@ static class Snapshot
         "i32{}" => Array.Empty<int>(),
         "same" => operand.copy(),
         "0d_5" => np.array(5L),
+        "obj{300,2}" => new object[] { 300, 2 },
+        "obj{x}" => new object[] { "x" },
+        "obj{1.5,nan}" => new object[] { 1.5, double.NaN },
+        "obj{null}" => new object[] { null },
+        "obj{}" => Array.Empty<object>(),
         _ => throw new ArgumentException("unknown fill_diagonal value variant " + label),
     };
 
