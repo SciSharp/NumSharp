@@ -76,25 +76,11 @@ namespace NumSharp
         [NDAnchored]
         public static void copyto(NDArray dst, NDArray src, string casting = "same_kind", NDArray @where = null)
         {
-            using var plain = NDMatrixBoundary.PlainFor(dst, src, @where);   // no matrix rule here: a numpy.matrix operand is computed as a plain array (NDMatrixBoundary)
-            // npy_parse_arguments runs PyArray_CastingConverter before anything reads dst or src.
+            // npy_parse_arguments runs PyArray_CastingConverter before anything reads dst or src; the rest of
+            // array_copyto - the matrix region, the null check, the mask's conversion, the assignment - is the array
+            // object's (UnmanagedStorage.Copyto), which the engine's stores call directly.
             NPY_CASTING rule = CopytoCastingConverter(casting);
-
-            if (dst is null)
-                throw new ArgumentNullException(nameof(dst));
-
-            // array_copyto converts the mask (PyArray_FromAny with a bool descr: the 'safe' rule) before
-            // PyArray_AssignArray, so a bad mask wins over a read-only destination and over a bad cast.
-            DefaultEngine.ValidateWhereMask(@where);
-
-            // A null source is Python's None, which PyArray_FromAny makes a 0-d OBJECT array (CopytoNone).
-            if (src is null)
-            {
-                UnmanagedStorage.CopytoNone(dst, @where, rule);
-                return;
-            }
-
-            UnmanagedStorage.CopytoAssignArray(dst, src, @where, rule);
+            UnmanagedStorage.Copyto(dst, src, rule, @where);
         }
 
         /// <summary>

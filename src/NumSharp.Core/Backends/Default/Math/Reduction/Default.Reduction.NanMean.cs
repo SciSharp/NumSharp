@@ -103,7 +103,7 @@ namespace NumSharp.Backends
                 // NumPy's own statements: the mask, the copy with zeros, the count of ~mask, the sum.
                 var mask = engine.IsNan(a);
                 var arr0 = new NDArray(inT, shape.KeepOrder(), false);
-                np.copyto(arr0, a);
+                UnmanagedStorage.Copyto(arr0, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 ZeroWhereMask(arr0, mask);
                 cnt = engine.ReduceAdd(engine.LogicalNot(mask), axis, keepdims, np.int64, @out: null);
                 tot = engine.ReduceAdd(arr0, axis, keepdims, dtype, @out: null);

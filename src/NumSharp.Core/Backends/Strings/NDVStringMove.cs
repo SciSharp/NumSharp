@@ -665,13 +665,13 @@ namespace NumSharp.Backends.Strings
                 }
                 if (fillValue is NDArray nd)
                 {
-                    np.copyto(result, nd, "unsafe");
+                    UnmanagedStorage.Copyto(result, nd, NPY_CASTING.NPY_UNSAFE_CASTING);
                     return result;
                 }
                 using var value = fillValue is string || fillValue is byte[] || fillValue is char
                     ? Backends.UnmanagedStorage.FromAnyScalar(fillValue, null)
                     : np.asanyarray(fillValue);
-                np.copyto(result, value, "unsafe");
+                UnmanagedStorage.Copyto(result, value, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return result;
             }
             catch

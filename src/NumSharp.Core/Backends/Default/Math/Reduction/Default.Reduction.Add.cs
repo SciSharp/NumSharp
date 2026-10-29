@@ -723,7 +723,7 @@ namespace NumSharp.Backends
                 for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
                 result.Storage.Reshape(Shape.Adopt(ks));
             }
-            if (@out is not null) { np.copyto(@out, result); return @out; }
+            if (@out is not null) { UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING); return @out; }
             // A 1-D input reduced along its only axis leaves a 0-d result, which NumPy hands back as a scalar
             // (PyArray_Return) exactly as it does for a non-empty input; this exit returned it writeable
             // (np.sum(np.zeros(0), -1), np.trapezoid of an empty integrand). A no-op for an array result.

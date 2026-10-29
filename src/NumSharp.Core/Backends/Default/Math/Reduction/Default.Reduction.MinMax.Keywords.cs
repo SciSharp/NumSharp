@@ -1539,7 +1539,7 @@ namespace NumSharp.Backends
                 {
                     try
                     {
-                        np.copyto(@out, narrow, casting: "unsafe");
+                        UnmanagedStorage.Copyto(@out, narrow, NPY_CASTING.NPY_UNSAFE_CASTING);
                     }
                     finally
                     {
@@ -1560,7 +1560,7 @@ namespace NumSharp.Backends
                         return fast.MarkReductionScalar();
                     try
                     {
-                        np.copyto(@out, fast);
+                        UnmanagedStorage.Copyto(@out, fast, NPY_CASTING.NPY_SAME_KIND_CASTING);
                     }
                     finally
                     {
@@ -1718,13 +1718,13 @@ namespace NumSharp.Backends
             MaxMinNumPy(one, axis, part, keepdims, initial, null, op);
             if (@out is not null)
             {
-                np.copyto(@out, part);
+                UnmanagedStorage.Copyto(@out, part, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 return @out;
             }
 
             var it = NumPyReduceIterator.Build(a.Shape, flags, keepdims, null, null, false, a.GetTypeCode != loop, np.getbufsize());
             var result = new NDArray(loop, it.ResultDims.Length == 0 ? Shape.Scalar : Shape.Adopt(it.ResultDims, it.ResultStrides), false);
-            np.copyto(result, part);
+            UnmanagedStorage.Copyto(result, part, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return result;
         }
 
@@ -1836,7 +1836,7 @@ namespace NumSharp.Backends
                     // raw_array_assign_scalar: the initial value, cast from the loop dtype into the result's.
                     using var init = new NDArray(loop, Shape.Scalar, false);
                     Buffer.MemoryCopy(seed, (byte*)init.Address, loop.SizeOf(), loop.SizeOf());
-                    np.copyto(result, init, casting: "unsafe");
+                    UnmanagedStorage.Copyto(result, init, NPY_CASTING.NPY_UNSAFE_CASTING);
                 }
                 else if (result.size > 0)
                 {
@@ -1846,7 +1846,7 @@ namespace NumSharp.Backends
                     for (int d = 0; d < flags.Length; d++)
                         first[d] = flags[d] ? (keepdims ? new Slice(0, 1) : Slice.Index(0)) : Slice.All;
                     using var view = flags.Length == 0 ? a.view() : a[first];
-                    np.copyto(result, view, casting: "unsafe");
+                    UnmanagedStorage.Copyto(result, view, NPY_CASTING.NPY_UNSAFE_CASTING);
                     skip = result.size;
                 }
 

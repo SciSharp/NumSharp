@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends
 {
@@ -156,7 +157,7 @@ namespace NumSharp.Backends
             if (!diff.Shape.dimensions.SequenceEqual(@out.Shape.dimensions))
                 throw new ArgumentException(
                     $"out has wrong shape; expected=[{string.Join(",", diff.Shape.dimensions)}] got=[{string.Join(",", @out.Shape.dimensions)}]");
-            np.copyto(@out, diff);
+            UnmanagedStorage.Copyto(@out, diff, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return @out;
         }
     }

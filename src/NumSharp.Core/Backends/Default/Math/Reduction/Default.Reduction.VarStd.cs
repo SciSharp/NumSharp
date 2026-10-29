@@ -474,7 +474,7 @@ namespace NumSharp.Backends
                 }
 
                 dst[rc] = new Slice(start, start + e);
-                np.copyto(ret[dst], part);
+                UnmanagedStorage.Copyto(ret[dst], part, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 part.Dispose();
                 if (!ReferenceEquals(x2c, reused))
                     x2c.Dispose();
@@ -601,7 +601,7 @@ namespace NumSharp.Backends
                 if (d != axis)
                     reduced[k++] = dims[d];
             var ret = AllocateReductionResult(acc.GetTypeCode, reduced, layout, axis);
-            np.copyto(ret, accLogical);
+            UnmanagedStorage.Copyto(ret, accLogical, NPY_CASTING.NPY_SAME_KIND_CASTING);
             if (keepdims)
                 ret.Storage.ExpandDimension(axis);
             VarStdChunkedRuns++;
@@ -752,7 +752,7 @@ namespace NumSharp.Backends
 
             if (square == DeviationSquare.Real && arr.GetTypeCode != xT && xT is NPTypeCode.Single or NPTypeCode.Double)
             {
-                np.copyto(x2, arr, casting: "unsafe");
+                UnmanagedStorage.Copyto(x2, arr, NPY_CASTING.NPY_UNSAFE_CASTING);
                 x2.TensorEngine.Evaluate(NDExpr.Square(NDExpr.Arr(x2) - NDExpr.Arr(mean)), x2);
                 return;
             }
@@ -849,7 +849,7 @@ namespace NumSharp.Backends
                 {
                     // An integer / bool / char sum (an integer or bool dtype=): float64 quotient, unsafe cast back.
                     using var q = a.TensorEngine.Divide(a, divisor);
-                    np.copyto(a, q, casting: "unsafe");
+                    UnmanagedStorage.Copyto(a, q, NPY_CASTING.NPY_UNSAFE_CASTING);
                     break;
                 }
             }
@@ -885,7 +885,7 @@ namespace NumSharp.Backends
                 {
                     // An integer / bool / char sum: the float64 quotients, unsafe cast back (a 0 / 0 NaN is True, INT_MIN).
                     using var q = a.TensorEngine.Divide(a, counts);
-                    np.copyto(a, q, casting: "unsafe");
+                    UnmanagedStorage.Copyto(a, q, NPY_CASTING.NPY_UNSAFE_CASTING);
                     break;
                 }
             }
@@ -924,7 +924,7 @@ namespace NumSharp.Backends
             if ((rt.IsInteger() || rt == NPTypeCode.Boolean || rt == NPTypeCode.Char) && scalarResult)
             {
                 var root = ret.TensorEngine.Sqrt(ret);
-                np.copyto(ret, root, casting: "unsafe");
+                UnmanagedStorage.Copyto(ret, root, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
 

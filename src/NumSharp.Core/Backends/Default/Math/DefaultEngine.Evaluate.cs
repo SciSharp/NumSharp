@@ -1040,7 +1040,7 @@ namespace NumSharp.Backends
 
             // copyto applies the (already-validated) same_kind cast and shape-checks the axis case,
             // matching the axis fold path's `np.copyto(@out, reduced)` tail.
-            np.copyto(@out, computed);
+            UnmanagedStorage.Copyto(@out, computed, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return @out;
         }
 
@@ -1131,7 +1131,7 @@ namespace NumSharp.Backends
             if (axis is null)
                 ValidateFlatReduceOut(@out, materialized.ndim, reduce.Keepdims, ReduceUfuncName(reduce.Kind));
 
-            np.copyto(@out, computed);
+            UnmanagedStorage.Copyto(@out, computed, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return @out;
         }
 
@@ -1266,7 +1266,7 @@ namespace NumSharp.Backends
             if (avg.Axis is null)
                 ValidateFlatReduceOut(@out, avgChildNdim, avg.Keepdims, "average");
 
-            np.copyto(@out, computed);
+            UnmanagedStorage.Copyto(@out, computed, NPY_CASTING.NPY_SAME_KIND_CASTING);
             return @out;
         }
 
@@ -1967,7 +1967,7 @@ namespace NumSharp.Backends
                 reduced = reduced.reshape(Shape.Adopt(kd));
             }
 
-            if (@out is not null) { np.copyto(@out, reduced); return @out; }
+            if (@out is not null) { UnmanagedStorage.Copyto(@out, reduced, NPY_CASTING.NPY_SAME_KIND_CASTING); return @out; }
             return reduced;
         }
 

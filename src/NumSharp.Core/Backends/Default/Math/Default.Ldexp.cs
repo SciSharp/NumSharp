@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -110,7 +111,7 @@ namespace NumSharp.Backends
         {
             if (@out is null)
                 return result; // where= without out= leaves nothing to mask against — return the full result
-            np.copyto(@out, result, "same_kind", where); // same_kind cast + masked write (masked-off keep prior)
+            UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING, where); // same_kind cast + masked write (masked-off keep prior)
             result.Dispose();
             return @out;
         }

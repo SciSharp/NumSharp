@@ -416,7 +416,7 @@ namespace NumSharp.Backends
 
             // Provided output: masked, same_kind-cast write from the temp (validated above), then hand back
             // the caller's array. Dispose the transient temp promptly rather than leaving it to the finalizer.
-            np.copyto(output, temp, "same_kind", where);
+            UnmanagedStorage.Copyto(output, temp, NPY_CASTING.NPY_SAME_KIND_CASTING, where);
             temp.Dispose();
             return output;
         }

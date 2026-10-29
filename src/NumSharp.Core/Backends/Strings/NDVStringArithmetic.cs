@@ -1094,7 +1094,7 @@ namespace NumSharp.Backends.Strings
                 }
                 if (!castOut)
                     return result;
-                np.copyto(@out, result, "same_kind", where);
+                UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_SAME_KIND_CASTING, where);
                 return @out;
             }
             catch

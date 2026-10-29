@@ -141,7 +141,7 @@ namespace NumSharp.Backends.Strings
             {
                 // One element: the first-element copy alone (the fill's round trip through the loop's text is lossless:
                 // the text descriptor is wide enough for every value of the out's type).
-                np.copyto(@out, counts, casting: "unsafe");
+                UnmanagedStorage.Copyto(@out, counts, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
             NDArray outLanes = keepdims ? @out : np.expand_dims(@out, axis);
@@ -149,13 +149,13 @@ namespace NumSharp.Backends.Strings
             var first = new Slice[nd];
             for (int d = 0; d < nd; d++)
                 first[d] = d == axis ? new Slice(0, 1) : Slice.All;
-            np.copyto(outLanes, counts[first], casting: "unsafe");
+            UnmanagedStorage.Copyto(outLanes, counts[first], NPY_CASTING.NPY_UNSAFE_CASTING);
             if (counts.Shape.dimensions[axis] < 2)
                 return;
             // The fill's read of the out into the loop's text, the repeat in that text, the write-back through its cast.
             NDArray text = outLanes.astype(loopText, true, 'K', "unsafe");
             RunLanes(counts, axis, text);
-            np.copyto(outLanes, text, casting: "unsafe");
+            UnmanagedStorage.Copyto(outLanes, text, NPY_CASTING.NPY_UNSAFE_CASTING);
         }
 
         /// <summary>
@@ -174,7 +174,7 @@ namespace NumSharp.Backends.Strings
             if (nd == 0)
             {
                 // A 0-d input reduces over no axis: its one element is the result (the first-element copy alone).
-                np.copyto(@out, counts, casting: "unsafe");
+                UnmanagedStorage.Copyto(@out, counts, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
             // The out with the input's rank (the reduced axis at length 1), as the lane walker visits it.
@@ -184,7 +184,7 @@ namespace NumSharp.Backends.Strings
             var first = new Slice[nd];
             for (int d = 0; d < nd; d++)
                 first[d] = d == axis ? new Slice(0, 1) : Slice.All;
-            np.copyto(outLanes, counts[first], casting: "unsafe");
+            UnmanagedStorage.Copyto(outLanes, counts[first], NPY_CASTING.NPY_UNSAFE_CASTING);
             if (counts.Shape.dimensions[axis] < 2)
                 return;
             RunLanes(counts, axis, outLanes);

@@ -168,7 +168,7 @@ namespace NumSharp.Backends
                 // NumPy's own statements: the mask, the copy with zeros, the count of ~mask.
                 mask = engine.IsNan(a);
                 arr0 = new NDArray(inT, kl, false);
-                np.copyto(arr0, a);
+                UnmanagedStorage.Copyto(arr0, a, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 ZeroWhereMask(arr0, mask);
                 var notMask = engine.LogicalNot(mask);
                 cnt = engine.ReduceAdd(notMask, axis, keepdims: true, dtype: np.int64, @out: null);
@@ -235,7 +235,7 @@ namespace NumSharp.Backends
             // (.NET's double.NaN is the negative one), cast into var's dtype.
             var isbad = engine.LessEqual(dof, NDArray.Scalar(0L));
             if (engine.Any(isbad))
-                np.copyto(var, NDArray.Scalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L)), casting: "unsafe", where: isbad);
+                UnmanagedStorage.Copyto(var, NDArray.Scalar(BitConverter.Int64BitsToDouble(0x7FF8000000000000L)), NPY_CASTING.NPY_UNSAFE_CASTING, isbad);
 
             if (takeSqrt)
                 SqrtLikeNumPy(var, scalarResult);
@@ -286,7 +286,7 @@ namespace NumSharp.Backends
             if (np.can_cast(loopT, arr0.dtype, "same_kind"))
                 engine.Subtract(arr0, avg, null, arr0);
             else
-                np.copyto(arr0, engine.Subtract(arr0, avg), casting: "unsafe");
+                UnmanagedStorage.Copyto(arr0, engine.Subtract(arr0, avg), NPY_CASTING.NPY_UNSAFE_CASTING);
             ZeroWhereMask(arr0, mask);
 
             NDArray sqr;
@@ -317,9 +317,13 @@ namespace NumSharp.Backends
         ///     <c>(250, 400)</c> with every 7th element masked, where <c>np.putmask</c> with one scalar (the route A7 took
         ///     while the masked copy cost 253 µs) takes 22.7 µs. The masked kernel has a C# fallback, so a host without dynamic
         ///     code runs the same statement.
+        ///     <para>It calls the array object's assignment of a weak Python int (<see cref="UnmanagedStorage.CopytoPythonScalar"/>,
+        ///     what np.copyto runs for a C# int) rather than the public np.copyto; <see cref="NDAnchoredAttribute"/> keeps the
+        ///     two operands rooted while the masked kernel reads them, as np.copyto's own attribute did.</para>
         /// </remarks>
+        [NDAnchored]
         private static void ZeroWhereMask(NDArray arr, NDArray mask)
-            => np.copyto(arr, 0, casting: "unsafe", where: mask);
+            => UnmanagedStorage.CopytoPythonScalar(arr, 0, PyScalarKind.Int, NPY_CASTING.NPY_UNSAFE_CASTING, mask);
 
         /// <summary>
         ///     NumPy's <c>_divide_by_count(a, b)</c> for an array divisor: <c>divide(a, b, out=a, casting='unsafe')</c> (and

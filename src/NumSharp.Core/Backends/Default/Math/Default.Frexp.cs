@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
@@ -102,8 +103,8 @@ namespace NumSharp.Backends
             if (out1 is null && out2 is null)
                 return (mant, exp);
             NDArray rm = mant, re = exp;
-            if (out1 is not null) { np.copyto(out1, mant, "same_kind", where); mant.Dispose(); rm = out1; }
-            if (out2 is not null) { np.copyto(out2, exp, "same_kind", where); exp.Dispose(); re = out2; }
+            if (out1 is not null) { UnmanagedStorage.Copyto(out1, mant, NPY_CASTING.NPY_SAME_KIND_CASTING, where); mant.Dispose(); rm = out1; }
+            if (out2 is not null) { UnmanagedStorage.Copyto(out2, exp, NPY_CASTING.NPY_SAME_KIND_CASTING, where); exp.Dispose(); re = out2; }
             return (rm, re);
         }
     }

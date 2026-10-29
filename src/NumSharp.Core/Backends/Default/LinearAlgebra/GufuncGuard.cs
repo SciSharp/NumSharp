@@ -231,7 +231,7 @@ namespace NumSharp.Backends
             if (@out is null)
                 return result.MarkReductionScalar();   // no-op unless 0-d
 
-            np.copyto(@out, result, "unsafe");   // cast already validated
+            UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);   // cast already validated
             return @out;
         }
 

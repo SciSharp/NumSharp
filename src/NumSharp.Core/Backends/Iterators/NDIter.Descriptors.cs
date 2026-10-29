@@ -253,7 +253,7 @@ namespace NumSharp.Backends.Iteration
                     (temps ??= new NDArray[nop])[i] = temp;
 
                     if (read)
-                        np.copyto(temp, original, casting: "unsafe");
+                        UnmanagedStorage.Copyto(temp, original, NPY_CASTING.NPY_UNSAFE_CASTING);
 
                     ReplaceAxisData(i, temp, opAxisMap);
                     CheckContig(i);

@@ -291,7 +291,7 @@ namespace NumSharp.Backends.Strings
                     return ReferenceEquals(result, @out) ? result : result.MarkReductionScalar();
                 // The loop's StringDType result cast into the caller's U out (a reduction validates its output cast with
                 // NumPy's historic unsafe casting).
-                np.copyto(@out, result, "unsafe");
+                UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return @out;
             }
             catch
@@ -693,7 +693,7 @@ namespace NumSharp.Backends.Strings
             try
             {
                 if (initial is NDArray nd && nd.ndim == 0)
-                    np.copyto(packed, nd, "unsafe");
+                    UnmanagedStorage.Copyto(packed, nd, NPY_CASTING.NPY_UNSAFE_CASTING);
                 else
                     packed.Storage.VStringSlice.SetIndex(0, initial);
                 return packed;
@@ -939,7 +939,7 @@ namespace NumSharp.Backends.Strings
         /// <summary>Writes the <c>initial=</c> value into every element of an output whose reduced axis is empty.</summary>
         /// <param name="result">The output.</param>
         /// <param name="initial">The 0-d initial array.</param>
-        private static void FillInitial(NDArray result, NDArray initial) => np.copyto(result, initial, "unsafe");
+        private static void FillInitial(NDArray result, NDArray initial) => UnmanagedStorage.Copyto(result, initial, NPY_CASTING.NPY_UNSAFE_CASTING);
 
         // =============================================================================================================
         // argmax / argmin
@@ -1256,7 +1256,7 @@ namespace NumSharp.Backends.Strings
                 // write-back casts it in (the iterator casts unsafely).
                 result = new NDArray(loopDescr, new Shape((long[])target.Shape.dimensions.Clone()), true);
                 RunCumSum(src, result, ax, loopDescr, inputDescr, fresh: true);
-                np.copyto(target, result, "unsafe");
+                UnmanagedStorage.Copyto(target, result, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return @out;
             }
             catch

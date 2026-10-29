@@ -111,7 +111,7 @@ namespace NumSharp.Backends.Strings
                 }
                 if (!castOut)
                     return result;
-                np.copyto(@out, result, "unsafe", where);
+                UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING, where);
                 return @out;
             }
             catch

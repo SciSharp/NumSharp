@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 using NumSharp.Backends.Sorting;
 using NumSharp.Statistics;
 
@@ -96,7 +97,7 @@ namespace NumSharp.Backends.Strings
                 if (NDStringUfuncs.VStringReduceLoopAnswer(op, a, null, @out) is { } refusal)
                     throw refusal;
                 ReductionArguments.ValidateOperands(a, new bool[a.ndim], keepdims, @out, null, "add");
-                np.copyto(@out, a, "unsafe");
+                UnmanagedStorage.Copyto(@out, a, NPY_CASTING.NPY_UNSAFE_CASTING);
                 ret = @out;
             }
             else
@@ -283,7 +284,7 @@ namespace NumSharp.Backends.Strings
                 r = NDArray.ApplyAlongAxis(row => AsAnyArray(NanMedian1D(row)), axis.Value, work);
                 if (target is not null)
                 {
-                    np.copyto(target, r, "unsafe");
+                    UnmanagedStorage.Copyto(target, r, NPY_CASTING.NPY_UNSAFE_CASTING);
                     return @out;
                 }
             }
@@ -422,7 +423,7 @@ namespace NumSharp.Backends.Strings
                     r = np.moveaxis(r, from, to);
                 }
                 if (target is not null)
-                    np.copyto(target, r, "unsafe");
+                    UnmanagedStorage.Copyto(target, r, NPY_CASTING.NPY_UNSAFE_CASTING);
             }
             if (@out is not null)
                 return @out;
@@ -455,7 +456,7 @@ namespace NumSharp.Backends.Strings
                 var full = new NDArray(line.dtype, qShape.Length == 0 ? Shape.Scalar : Shape.Adopt((long[])qShape.Clone()), true);
                 using (var nanLiteral = NDArray.PythonLiteral(PositiveNaN))
                 using (var na = NDArray.PackForVStringStore(nanLiteral, line.dtype))
-                    np.copyto(full, na, "unsafe");
+                    UnmanagedStorage.Copyto(full, na, NPY_CASTING.NPY_UNSAFE_CASTING);
                 // `[()]` of a 0-d array is its Python object (the NA); of an array it is a VIEW of the whole array (NumPy's
                 // result does not own its data). The caller's scope reclaims `full`; the view keeps its storage.
                 return qShape.Length == 0 ? full.MarkReductionScalar() : full.view();
@@ -629,7 +630,7 @@ namespace NumSharp.Backends.Strings
             {
                 // A text out: the add's output cast lets the value through (written as its str), and the subtract's dtype=
                 // names the out's class, for which no loop takes two Python numbers.
-                np.copyto(target, lerp, "unsafe");
+                UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);
                 string operand = PyClassOf(b).ToString();
                 throw NDStringUfuncs.VStringNoLoop("subtract", new[] { operand, DTypeRegistry.PyFloat.ToString() },
                     target.dtype.Meta.ToString());
@@ -637,7 +638,7 @@ namespace NumSharp.Backends.Strings
             if (!np.can_cast(loop, target.dtype, "same_kind"))
                 throw new TypeError($"Cannot cast ufunc 'add' output from {loop.ToString(true)} to {target.dtype.ToString(true)} " +
                                     "with casting rule 'same_kind'");
-            np.copyto(target, lerp, "unsafe");
+            UnmanagedStorage.Copyto(target, lerp, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
 
@@ -972,7 +973,7 @@ namespace NumSharp.Backends.Strings
         {
             if (value.ndim != 0 || value.typecode != NPTypeCode.String)
             {
-                np.copyto(target, value, "unsafe");
+                UnmanagedStorage.Copyto(target, value, NPY_CASTING.NPY_UNSAFE_CASTING);
                 return;
             }
             object element = value.Storage.GetAtIndex(0);
@@ -993,7 +994,7 @@ namespace NumSharp.Backends.Strings
                 : NDArray.PackForStore(literal, target.dtype, true);
             try
             {
-                np.copyto(target, packed, "unsafe");
+                UnmanagedStorage.Copyto(target, packed, NPY_CASTING.NPY_UNSAFE_CASTING);
             }
             finally
             {

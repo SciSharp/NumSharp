@@ -283,7 +283,7 @@ namespace NumSharp.Backends.Strings
                     NDVStringArithmetic.FillIsNaN(x, flags);
                 if (@out is null)
                     return flags;
-                np.copyto(@out, flags, "unsafe", where);
+                UnmanagedStorage.Copyto(@out, flags, NPY_CASTING.NPY_UNSAFE_CASTING, where);
                 return @out;
             }
             finally

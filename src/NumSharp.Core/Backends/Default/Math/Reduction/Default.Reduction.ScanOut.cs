@@ -1,3 +1,5 @@
+using NumSharp.Backends.Iteration;
+
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
@@ -34,7 +36,7 @@ namespace NumSharp.Backends
                 // NumPy 2.4.2 verbatim (PyUFunc_Accumulate); house IncorrectShapeException stands
                 // in for NumPy's ValueError per the long-standing shape-error convention.
                 throw new IncorrectShapeException("provided out is the wrong size for the accumulation.");
-            np.copyto(@out, result, casting: "unsafe");
+            UnmanagedStorage.Copyto(@out, result, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
 

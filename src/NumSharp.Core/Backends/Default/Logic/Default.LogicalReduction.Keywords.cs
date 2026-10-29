@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends.Iteration;
 using NumSharp.Generic;
 
 namespace NumSharp.Backends
@@ -177,7 +178,7 @@ namespace NumSharp.Backends
                     $"output shape mismatch: expected {reduced.Shape}, got {@out.Shape}",
                     nameof(@out));
 
-            np.copyto(@out, reduced, casting: "unsafe");
+            UnmanagedStorage.Copyto(@out, reduced, NPY_CASTING.NPY_UNSAFE_CASTING);
             return @out;
         }
     }

@@ -2227,7 +2227,7 @@ namespace NumSharp.Backends.Iteration
 
                 // If the data will be read, copy it into the temporary.
                 if ((opFlags[iop] & (NDIterPerOpFlags.READONLY | NDIterPerOpFlags.READWRITE)) != 0)
-                    np.copyto(temp, original);
+                    UnmanagedStorage.Copyto(temp, original, NPY_CASTING.NPY_SAME_KIND_CASTING);
 
                 op[iop] = temp;
 
@@ -2266,7 +2266,7 @@ namespace NumSharp.Backends.Iteration
                 var temp = ops[iop];
                 // NumPy's PyArray_ResolveWritebackIfCopy copies with UNSAFE casting (PyArray_CopyAnyInto): a temporary in
                 // its iteration dtype (an updateifcopy cast) writes back whatever the construction-time rule was.
-                np.copyto(original, temp, casting: "unsafe");
+                UnmanagedStorage.Copyto(original, temp, NPY_CASTING.NPY_UNSAFE_CASTING);
 
                 // The forced-copy temporary has served its purpose: put the user's original
                 // back in the operand slot (NumPy's operands revert to the originals once

@@ -1,5 +1,6 @@
 using System;
 using NumSharp.Backends;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp
 {
@@ -56,7 +57,7 @@ namespace NumSharp
             {
                 o = new NDArray(r.typecode, layout, false);
                 ov = np.transpose(o, layout.DenseAxisOrder());   // C-contiguous over r's (transposed) dims
-                np.copyto(ov, r);
+                UnmanagedStorage.Copyto(ov, r, NPY_CASTING.NPY_SAME_KIND_CASTING);
                 var done = o;
                 o = null;
                 return done;

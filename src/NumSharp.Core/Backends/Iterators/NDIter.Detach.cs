@@ -142,7 +142,7 @@ namespace NumSharp.Backends.Iteration
                 var temp = operands[iop];
                 // UNSAFE casting, as NumPy's PyArray_ResolveWritebackIfCopy (PyArray_CopyAnyInto): an updateifcopy
                 // temporary in its iteration dtype writes back whatever rule the construction checked.
-                np.copyto(original, temp, casting: "unsafe");
+                UnmanagedStorage.Copyto(original, temp, NPY_CASTING.NPY_UNSAFE_CASTING);
 
                 // Same as ResolveWritebacks: the operand slot reverts to the original and the
                 // forced-copy temp is released eagerly instead of leaking to the finalizer.

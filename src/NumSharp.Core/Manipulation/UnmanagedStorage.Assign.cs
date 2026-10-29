@@ -335,6 +335,58 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
+        ///     <c>np.copyto(dst, src, casting, where)</c> after its argument parse - <c>array_copyto</c>'s statements: the
+        ///     mask's conversion, then <c>PyArray_AssignArray</c> (or a None source's object-array refusal). The array object's
+        ///     own assignment for a caller that already holds the casting level: the engine's <c>out=</c> stores, its staged
+        ///     copies and write-backs call this instead of the public <c>np.copyto</c>, which parses the casting name and
+        ///     calls it too.
+        /// </summary>
+        /// <param name="dst">The destination; written in place (any layout, writeable).</param>
+        /// <param name="src">The source, broadcast to <paramref name="dst"/>; null is NumPy's <c>None</c>
+        ///     (<see cref="CopytoNone"/>).</param>
+        /// <param name="casting">The casting level the cast from the source's dtype to the destination's must allow.</param>
+        /// <param name="where">A bool mask broadcast to <paramref name="dst"/> (only the true positions are written), or
+        ///     null for every position.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="dst"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="where"/> is not bool (NumPy's <c>Cannot cast array data from
+        ///     dtype('int64') to dtype('bool') according to the rule 'safe'</c>), checked before anything else reads an
+        ///     operand.</exception>
+        /// <exception cref="ValueError">A read-only destination, or a source / mask that does not broadcast to it.</exception>
+        /// <exception cref="InvalidCastException">The cast is not allowed under <paramref name="casting"/> (a None source's
+        ///     object cast is allowed only under <c>'unsafe'</c>).</exception>
+        /// <exception cref="TypeError">A None source into an integer (or <c>decimal</c>) destination with an element to
+        ///     convert: Python's <c>int(None)</c> (<see cref="CopytoNone"/>).</exception>
+        /// <remarks>
+        ///     <para><b>Matrix region.</b> The text routes of the assignment call public np.* functions (np.any, np.copyto,
+        ///     np.broadcast_to, ...). A caller inside the engine may hold a <c>numpy.matrix</c> or chararray object (a user's
+        ///     <c>out=</c>), so the region np.copyto opens is opened here: those nested calls compute plain, as they do under
+        ///     the public facade (NDMatrixBoundary).</para>
+        ///     <para><b>Operand roots.</b> <see cref="NDAnchoredAttribute"/>, as on the public np.copyto: the kernels read raw
+        ///     addresses, so a temporary <paramref name="src"/> or <paramref name="where"/> the caller passed stays reachable
+        ///     until the copy returns.</para>
+        /// </remarks>
+        [NDAnchored]
+        internal static void Copyto(NDArray dst, NDArray src, NPY_CASTING casting, NDArray @where = null)
+        {
+            using var plain = NDMatrixBoundary.PlainFor(dst, src, @where);   // nested public calls compute plain (NDMatrixBoundary)
+            if (dst is null)
+                throw new ArgumentNullException(nameof(dst));
+
+            // array_copyto converts the mask (PyArray_FromAny with a bool descr: the 'safe' rule) before
+            // PyArray_AssignArray, so a bad mask wins over a read-only destination and over a bad cast.
+            DefaultEngine.ValidateWhereMask(@where);
+
+            // A null source is Python's None, which PyArray_FromAny makes a 0-d OBJECT array (CopytoNone).
+            if (src is null)
+            {
+                CopytoNone(dst, @where, casting);
+                return;
+            }
+
+            CopytoAssignArray(dst, src, @where, casting);
+        }
+
+        /// <summary>
         ///     <c>PyArray_AssignArray</c>: an array source, NumPy's checks in NumPy's order, then the copy.
         /// </summary>
         /// <param name="dst">The destination.</param>

@@ -293,7 +293,7 @@ namespace NumSharp.Backends.Strings
         internal static NDArray CastInto(NDArray @out, NDArray where, Func<NDArray> compute)
         {
             using var temp = compute();
-            np.copyto(@out, temp, "same_kind", where);
+            UnmanagedStorage.Copyto(@out, temp, NPY_CASTING.NPY_SAME_KIND_CASTING, where);
             return @out;
         }
 

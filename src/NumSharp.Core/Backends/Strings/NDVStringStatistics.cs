@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using NumSharp.Backends.Iteration;
 
 namespace NumSharp.Backends.Strings
 {
@@ -197,7 +198,7 @@ namespace NumSharp.Backends.Strings
             {
                 // maximum.reduce(a, axis=(), out=out): the out's shape is the input's; CopyInitialReduceValues copies.
                 ReductionArguments.ValidateOperands(a, new bool[a.ndim], false, @out, null, "maximum");
-                np.copyto(@out, a, "unsafe");
+                UnmanagedStorage.Copyto(@out, a, NPY_CASTING.NPY_UNSAFE_CASTING);
             }
             return SubtractExtremes(@out ?? a, @out is not null || a.ndim > 0, a, a.ndim > 0, @out);
         }

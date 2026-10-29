@@ -245,12 +245,12 @@ namespace NumSharp.Backends
             if (fastOp == PowerStrideZeroOp.One)
             {
                 using var one = NDArray.Scalar(1.0, loop);
-                np.copyto(target, one, casting: "unsafe", where: where);
+                UnmanagedStorage.Copyto(target, one, NPY_CASTING.NPY_UNSAFE_CASTING, where);
             }
             else
             {
                 using var computed = ExecuteUnaryOp(lhs, StrideZeroUnaryOp(fastOp), loop);
-                np.copyto(target, computed, casting: "unsafe", where: where);
+                UnmanagedStorage.Copyto(target, computed, NPY_CASTING.NPY_UNSAFE_CASTING, where);
             }
             return target;
         }
