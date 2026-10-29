@@ -32,7 +32,9 @@
 // np.asmatrix of each operand (a layout asmatrix refuses, the 3-D ones, is SKIP) with an out= variant made a matrix too;
 // "np.r_" and "np.c_" the indexer of the object (np.AxisConcatenator's this[params object[] key]), called on it;
 // "np.mgrid" and "np.ogrid" the indexer of the nd_grid object (np.MGridClass / np.OGridClass), whose key is its operand
-// (GridKeyLabels: the operand label "key/<slices>").
+// (GridKeyLabels: the operand label "key/<slices>"). np.ravel_multi_index's array overloads build their coordinate list
+// from the pool operand (MakeRavelCoords); its scalar overload's coordinate TUPLE is its operand
+// (RavelScalarCoordsLabels: the operand label "coords/[i,j]").
 // Each output line is "<case id> TAB <outcome>":
 //   case id  = the overload's signature | the operand's label | the varied parameter and its value label
 //   outcome  = ARR class dtype (shape) flags hash [is_out] [OUT hash] [MUTATED in=hash]   for an NDArray result
@@ -529,6 +531,15 @@ static class Snapshot
         // (GridKeyLabels: slices as strings, Slice objects, the empty key, entries that are no slice), built in Call
         // (MakeGridKey).
         GridKey,
+        // np.ravel_multi_index: the coordinate list of its array overloads, built from the pool operand (the operand
+        // twice, with a second coordinate array of another dtype, layout or shape, a 0-d one, a bool and a float one,
+        // too few and too many, a null entry, none; RavelCoordsVariantLabels, MakeRavelCoords); its dims (an int[]:
+        // covering every unsigned pool value, small ones, a zero, empty, negative and overflowing ones), its mode (a
+        // string: NumPy's three, the texts its parser refuses, None) and modes (a string[] of one mode per dimension:
+        // mixed, the wrong length, None, a None entry, a bad entry); and its scalar overload's coordinate TUPLE, which
+        // is that overload's operand (RavelScalarCoordsLabels, built in Call by MakeRavelScalarCoords). Its order takes
+        // UnravelOrder.
+        RavelCoords, RavelDims, RavelMode, RavelModes, RavelScalarCoords,
         Default, Unsupported,
     }
 
@@ -1346,6 +1357,79 @@ static class Snapshot
         _ when label.StartsWith("one:", StringComparison.Ordinal) => new object[] { label.Substring("one:".Length) },
         _ => label.Split(',').Cast<object>().ToArray(),
     };
+
+    /// <summary>
+    ///     The coordinate tuples np.ravel_multi_index's scalar overload runs on (its operand, the stand-in dtype label
+    ///     "coords"): inside the base dims (70000, 70000) - an inner point, the origin, the last element -, each bound
+    ///     on each side (a coordinate at the dimension, a negative one, one past the negative dimension), too few and
+    ///     too many coordinates, none, and the int64 extremes (wrap reduces them, clip saturates them). The first five
+    ///     are the reduced pool (phase B), the first three the small one (phase C).
+    /// </summary>
+    private static readonly string[] RavelScalarCoordsLabels =
+    {
+        "[3,4]", "[0,0]", "[69999,69999]", "[70000,0]", "[-1,0]", "[0,-70001]", "[1]", "[1,2,3]", "[]",
+        "[9223372036854775807,0]", "[-9223372036854775808,0]",
+    };
+
+    /// <summary>The coordinate tuple of a <see cref="RavelScalarCoordsLabels"/> label: the <c>long[]</c> the scalar
+    ///     overload takes.</summary>
+    /// <param name="label">The label: the coordinates in brackets, comma-separated, invariant integers.</param>
+    /// <returns>A fresh array of the coordinates.</returns>
+    private static long[] MakeRavelScalarCoords(string label)
+    {
+        string inner = label.Substring(1, label.Length - 2);
+        return inner.Length == 0
+            ? Array.Empty<long>()
+            : inner.Split(',')
+                .Select(v => long.Parse(v, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture))
+                .ToArray();
+    }
+
+    /// <summary>The variants of np.ravel_multi_index's coordinate list (<see cref="MakeRavelCoords"/>); the first is
+    ///     the base.</summary>
+    private static readonly string[] RavelCoordsVariantLabels =
+    {
+        "pair", "int64", "fortran", "zero_d", "row", "mismatch", "bool", "float", "one", "triple", "none", "nullentry",
+    };
+
+    /// <summary>
+    ///     Builds np.ravel_multi_index's coordinate list from a pool operand: the operand twice (the base: two
+    ///     coordinates of its dtype and layout), the operand with a C-ordered and with an F-ordered int64 ramp of its
+    ///     shape (the cast route and the result layout NumPy's iterator picks from mixed layouts), with a 0-d int64 and
+    ///     with an int64 row of its last dimension (broadcasts), with an int64 vector one element longer than the
+    ///     operand (no broadcast), with a bool and with a float64 array of its shape (the bool one is read as 0 / 1,
+    ///     the float one is refused after the operand's check), the operand alone and three times (the count check), no
+    ///     coordinate, and a null entry.
+    /// </summary>
+    /// <param name="label">The variant (<see cref="RavelCoordsVariantLabels"/>).</param>
+    /// <param name="operand">The pool operand.</param>
+    /// <returns>A fresh coordinate list (its first entry is the operand itself, but for "none").</returns>
+    /// <exception cref="ArgumentException">An unknown label (a bug in the tool).</exception>
+    private static NDArray[] MakeRavelCoords(string label, NDArray operand)
+    {
+        long[] dims = operand.Shape.Dimensions;
+        long size = 1;
+        foreach (long d in dims) size *= d;
+        long last = dims.Length == 0 ? 1 : dims[^1];
+        // The ramp values 0, 1, 2, 3, 0, ... are inside every dims variant but the zero and negative ones.
+        NDArray Ramp(long n) => (np.arange(n) % 4L).astype(np.dtype("int64"));
+        switch (label)
+        {
+            case "pair": return new[] { operand, operand };
+            case "int64": return new[] { operand, Ramp(size).reshape(new Shape(dims)) };
+            case "fortran": return new[] { operand, np.asfortranarray(Ramp(size).reshape(new Shape(dims))) };
+            case "zero_d": return new[] { operand, np.array(2L) };
+            case "row": return new[] { operand, Ramp(last) };
+            case "mismatch": return new[] { operand, Ramp(size + 1) };
+            case "bool": return new[] { operand, (Ramp(size) % 2L == 0L).reshape(new Shape(dims)) };
+            case "float": return new[] { operand, Ramp(size).astype(np.dtype("float64")).reshape(new Shape(dims)) };
+            case "one": return new[] { operand };
+            case "triple": return new[] { operand, operand, operand };
+            case "none": return Array.Empty<NDArray>();
+            case "nullentry": return new[] { operand, null };
+            default: throw new ArgumentException("unknown ravel_multi_index coordinate-list variant " + label);
+        }
+    }
 
     /// <summary>
     ///     Builds an np.select / np.piecewise argument for an operand (see the label sets above).
@@ -2669,16 +2753,18 @@ static class Snapshot
         p.Member.DeclaringType == typeof(np) && p.Member.Name is "nan_to_num" or "real_if_close";
 
     /// <summary>
-    ///     Whether a parameter belongs to np.unravel_index, np.packbits / np.unpackbits or np.bincount, whose
-    ///     <c>shape</c> / <c>order</c> / <c>index</c>, <c>bitorder</c> / <c>count</c> and <c>minlength</c> roles are
-    ///     theirs alone: np.unravel_index's order defaults to C (the general <see cref="Role.Order"/> starts at K, which
-    ///     NumPy refuses there), and no other target names these parameters.
+    ///     Whether a parameter belongs to np.unravel_index, np.ravel_multi_index, np.packbits / np.unpackbits or
+    ///     np.bincount, whose <c>shape</c> / <c>order</c> / <c>index</c>, <c>multi_index</c> / <c>coords</c> /
+    ///     <c>dims</c> / <c>mode</c> / <c>modes</c>, <c>bitorder</c> / <c>count</c> and <c>minlength</c> roles are
+    ///     theirs alone: the order of np.unravel_index and np.ravel_multi_index defaults to C (the general <see
+    ///     cref="Role.Order"/> starts at K, which NumPy refuses there), and no other target names these parameters so.
     /// </summary>
     /// <param name="p">The parameter.</param>
-    /// <returns>True for a parameter of a public static np.unravel_index, np.packbits, np.unpackbits or np.bincount
-    ///     overload.</returns>
+    /// <returns>True for a parameter of a public static np.unravel_index, np.ravel_multi_index, np.packbits,
+    ///     np.unpackbits or np.bincount overload.</returns>
     private static bool IsMultiarrayIndexing(ParameterInfo p) =>
-        p.Member.DeclaringType == typeof(np) && p.Member.Name is "unravel_index" or "packbits" or "unpackbits" or "bincount";
+        p.Member.DeclaringType == typeof(np)
+        && p.Member.Name is "unravel_index" or "ravel_multi_index" or "packbits" or "unpackbits" or "bincount";
 
     /// <summary>
     ///     Classifies a parameter.
@@ -2923,13 +3009,17 @@ static class Snapshot
             if (n is "nan" or "posinf" or "neginf" && t == typeof(object)) return Role.NanToNumFill;
             if (n == "tol" && t == typeof(double)) return Role.RealIfCloseTol;
         }
-        // np.unravel_index's dimensions, order and flat index, np.packbits / np.unpackbits' bitorder and count, and
-        // np.bincount's minlength (only theirs; before the general Order rule below, whose base K NumPy refuses here).
+        // np.unravel_index's dimensions, order and flat index, np.ravel_multi_index's dims, mode and modes (its order
+        // is np.unravel_index's), np.packbits / np.unpackbits' bitorder and count, and np.bincount's minlength (only
+        // theirs; before the general Order rule below, whose base K NumPy refuses here).
         if (IsMultiarrayIndexing(p))
         {
             if (n == "shape" && t == typeof(int[])) return Role.UnravelShape;
             if (n == "order" && t == typeof(char)) return Role.UnravelOrder;
             if (n == "index" && t == typeof(long)) return Role.UnravelFlat;
+            if (n == "dims" && t == typeof(int[])) return Role.RavelDims;
+            if (n == "mode" && t == typeof(string)) return Role.RavelMode;
+            if (n == "modes" && t == typeof(string[])) return Role.RavelModes;
             if (n == "bitorder" && t == typeof(string)) return Role.PackBitOrder;
             if (n == "count" && t == typeof(long?)) return Role.UnpackCount;
             if (n == "minlength" && t == typeof(int)) return Role.BincountMinLength;
@@ -3807,6 +3897,47 @@ static class Snapshot
                 foreach (var v in new[] { 5L, 0L, 299L, 89999L, 90000L, -1L, long.MaxValue })
                     Add(v.ToString(CultureInfo.InvariantCulture), () => v);
                 break;
+            case Role.RavelDims:
+                // (70000, 70000) first: every value of the unsigned pools fits (a uint8 / uint16 / char wrap of -1
+                // included), so the raise mode refuses only the negative ones. Then small dimensions (both bounds
+                // reached in wrap and clip), a zero dimension (refused once there is a coordinate to fold), the empty
+                // shape (the count check; no coordinate gives the flat index 0), a product that overflows int64
+                // (refused before the count is checked), negative dimensions (no overflow: their ravel strides are
+                // negative, the raise mode refuses every coordinate, wrap and clip fold them), ones, three dimensions
+                // and a single one.
+                foreach (var dims in new[]
+                         {
+                             new[] { 70000, 70000 }, new[] { 3, 4 }, new[] { 0, 3 }, Array.Empty<int>(),
+                             new[] { int.MaxValue, int.MaxValue, 3 }, new[] { 3, -2 }, new[] { -2, 3 },
+                             new[] { -30, -30 }, new[] { 1, 1 }, new[] { 2, 3, 4 }, new[] { 70000 },
+                         })
+                    Add("[" + string.Join(",", dims) + "]", () => (int[])dims.Clone());
+                break;
+            case Role.RavelMode:
+                // raise (the default) first, then wrap and clip, a misspelling of a mode (its first letter selects one:
+                // NumPy's "Use one of ..." text), a longer word that starts like one, an unknown word and the empty
+                // string (the generic text with the argument's repr), and None (raise).
+                foreach (var mode in new[] { "raise", "wrap", "clip", "Raise", "clipped", "bogus", "", null })
+                    Add(mode is null ? "null" : "'" + mode + "'", () => mode);
+                break;
+            case Role.RavelModes:
+                // One mode per dimension of the base dims, raise first; then mixed modes both ways, None (raise
+                // everywhere), the wrong lengths (one, none, three), a bad entry after a good one, a None entry and a
+                // misspelled entry.
+                foreach (var modes in new[]
+                         {
+                             new[] { "raise", "raise" }, new[] { "wrap", "clip" }, new[] { "clip", "wrap" }, null,
+                             new[] { "raise" }, Array.Empty<string>(), new[] { "raise", "raise", "raise" },
+                             new[] { "wrap", "bogus" }, new[] { null, "clip" }, new[] { "Wrap", "clip" },
+                         })
+                    Add(modes is null ? "null" : "[" + string.Join(",", modes.Select(s => s ?? "null")) + "]",
+                        () => (string[])modes?.Clone());
+                break;
+            case Role.RavelCoords:
+                // Built from the operand (MakeRavelCoords); the factory here is never called. The base is the operand
+                // twice.
+                Add(RavelCoordsVariantLabels[0], () => null);
+                break;
             case Role.PackBitOrder:
                 // big (the default) first, then little, NumPy's prefix forms (packbits reads the "little" / "big" prefix,
                 // unpackbits the first character only, so "l" and "b" split the two), the empty string, None and a
@@ -4300,6 +4431,22 @@ static class Snapshot
                 sawArray = true;
                 continue;
             }
+            // np.ravel_multi_index's coordinate list carries the pool operand (MakeRavelCoords); its scalar overload's
+            // coordinate tuple is that overload's operand, built per call from its label (MakeRavelScalarCoords).
+            if (i == 0 && !instance && IsMultiarrayIndexing(ps[0]) && ps[0].ParameterType == typeof(NDArray[])
+                && ps[0].Name == "multi_index")
+            {
+                roles[i] = Role.RavelCoords;
+                sawArray = true;
+                continue;
+            }
+            if (i == 0 && !instance && IsMultiarrayIndexing(ps[0]) && ps[0].ParameterType == typeof(long[])
+                && ps[0].Name == "coords")
+            {
+                roles[i] = Role.RavelScalarCoords;
+                sawArray = true;
+                continue;
+            }
             // The coercion family's host operand: its first parameter when that is not an NDArray (np.array's C# arrays,
             // strs and scalars, np.asanyarray's object, NDArray.Scalar's value, a conversion operator's C# source). It is
             // built from the pool operand (TryMakeHostOperand), and an NDArray parameter after it (like=) is no operand.
@@ -4403,7 +4550,7 @@ static class Snapshot
             yield return $"{signature}\tSKIP unsupported required parameter {TypeName(ps[unsupported].ParameterType)} {ps[unsupported].Name}";
             yield break;
         }
-        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey ? null : Variants(p, roles[i])).ToArray();
+        var variants = ps.Select((p, i) => roles[i] is Role.Operand or Role.HostOperand or Role.SpacePair or Role.CtorShape or Role.BufferOperand or Role.TextSource or Role.FileSource or Role.GridKey or Role.RavelScalarCoords ? null : Variants(p, roles[i])).ToArray();
         int operandIndex = Array.IndexOf(roles, Role.Operand);
         // A coercion overload's operand is its host operand, built per call from the pool operand.
         int hostIndex = Array.IndexOf(roles, Role.HostOperand);
@@ -4425,6 +4572,11 @@ static class Snapshot
         bool gridKey = operandIndex < 0 && keyIndex >= 0;
         if (gridKey)
             operandIndex = keyIndex;
+        // np.ravel_multi_index's scalar overload's operand is its coordinate tuple.
+        int coordsIndex = Array.IndexOf(roles, Role.RavelScalarCoords);
+        bool ravelScalar = operandIndex < 0 && coordsIndex >= 0;
+        if (ravelScalar)
+            operandIndex = coordsIndex;
         // np.frombuffer's operand is its buffer.
         int bufferIndex = Array.IndexOf(roles, Role.BufferOperand);
         bool buffer = operandIndex < 0 && bufferIndex >= 0;
@@ -4450,6 +4602,8 @@ static class Snapshot
             Role.SpacePair => 0,
             Role.CtorShape => 0,
             Role.GridKey => 0,
+            Role.RavelScalarCoords => 0,
+            Role.RavelCoords => RavelCoordsVariantLabels.Length - 1,
             Role.BufferOperand => 0,
             Role.BufferLength => BufferLengthLabels.Length - 1,
             Role.TextSource or Role.FileSource => 0,
@@ -4538,6 +4692,16 @@ static class Snapshot
             reducedLayouts = fullLayouts;
             pairLayouts = fullLayouts.Take(3).ToArray();
             dtypes = new[] { "key" };
+            pairDtypes = dtypes;
+        }
+        if (ravelScalar)
+        {
+            // np.ravel_multi_index's scalar overload takes no pool operand: its pool is the coordinate tuples, one
+            // stand-in dtype label ("coords"), the first five for phase B and the first three for phase C.
+            fullLayouts = RavelScalarCoordsLabels;
+            reducedLayouts = fullLayouts.Take(5).ToArray();
+            pairLayouts = fullLayouts.Take(3).ToArray();
+            dtypes = new[] { "coords" };
             pairDtypes = dtypes;
         }
         if (buffer)
@@ -5428,6 +5592,7 @@ static class Snapshot
             Role.EinsumSubscripts => EinsumSubscriptsVariantLabels[v],
             Role.EinsumOps => EinsumOpsVariantLabels[v],
             Role.LexKeys => LexKeysVariantLabels[v],
+            Role.RavelCoords => RavelCoordsVariantLabels[v],
             Role.EvalExpr or Role.EvalExprPositional => EvalExprVariantLabels[v],
             Role.ItemArg => ItemArgLabels(ps[p])[v],
             Role.AssignArg => AssignArgLabels(ps[p])[v],
@@ -5445,10 +5610,14 @@ static class Snapshot
         // np.mgrid / np.ogrid's operand is their key: a fresh 0-d array stands in for the same MUTATED check. Its label holds
         // colons, so it is never split into "layout:form".
         bool gridKeyCall = operandIndex >= 0 && roles[operandIndex] == Role.GridKey;
+        // np.ravel_multi_index's scalar overload's operand is its coordinate tuple: a fresh 0-d array stands in too.
+        bool ravelScalarCall = operandIndex >= 0 && roles[operandIndex] == Role.RavelScalarCoords;
         // A host operand's layout is "layout:form" (RunOverload): the pool operand of the layout, then its C# form.
         int formAt = gridKeyCall ? -1 : layout.IndexOf(':');
         string baseLayout = formAt < 0 ? layout : layout.Substring(0, formAt);
-        NDArray operand = spacingCall || ctorCall || gridKeyCall ? np.array(0.0) : MakeOperand(dt, baseLayout);
+        NDArray operand = spacingCall || ctorCall || gridKeyCall || ravelScalarCall
+            ? np.array(0.0)
+            : MakeOperand(dt, baseLayout);
         // A matrix receiver is np.asmatrix's view of the pool operand (0-d -> (1, 1), 1-D -> (1, N)); a layout it refuses
         // (more than two long axes: "shape too large to be a matrix.") has no matrix to call the member on.
         if (matrix && operand is not null)
@@ -5463,6 +5632,8 @@ static class Snapshot
             return null;
         if (gridKeyCall)
             operandArg = MakeGridKey(layout);
+        if (ravelScalarCall)
+            operandArg = MakeRavelScalarCoords(layout);
         if (operandIndex >= 0 && roles[operandIndex] == Role.HostOperand)
         {
             // The coercion family's C# value of the operand; a form this operand does not have makes no line at all.
@@ -5506,6 +5677,7 @@ static class Snapshot
                     : roles[i] == Role.EinsumSubscripts ? MakeEinsumSubscripts(EinsumSubscriptsVariantLabels[0], operand)
                     : roles[i] == Role.EinsumOps ? MakeEinsumOps(EinsumOpsVariantLabels[0], operand)
                     : roles[i] == Role.LexKeys ? MakeLexKeys(LexKeysVariantLabels[0], operand)
+                    : roles[i] == Role.RavelCoords ? MakeRavelCoords(RavelCoordsVariantLabels[0], operand)
                     : roles[i] == Role.EvalExpr ? MakeEvalExpr(EvalExprVariantLabels[0], operand, positional: false)
                     : roles[i] == Role.EvalExprPositional ? MakeEvalExpr(EvalExprVariantLabels[0], operand, positional: true)
                     : roles[i] == Role.EvalOperands ? new[] { operand }
@@ -5588,6 +5760,9 @@ static class Snapshot
                         break;
                     case Role.LexKeys:
                         argv[p] = MakeLexKeys(LexKeysVariantLabels[v], operand);
+                        break;
+                    case Role.RavelCoords:
+                        argv[p] = MakeRavelCoords(RavelCoordsVariantLabels[v], operand);
                         break;
                     case Role.ItemArg:
                         argv[p] = MakeItemArg(ps[p], ItemArgLabels(ps[p])[v], operand);
